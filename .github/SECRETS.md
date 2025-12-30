@@ -2,23 +2,38 @@
 
 This document lists all GitHub Actions secrets required for CI/CD workflows.
 
+## ⚠️ Important: Doppler Migration
+
+**As of December 2025, most secrets have been migrated from GitHub Secrets to Doppler.**
+
+- **Doppler secrets** are fetched at runtime during workflow execution
+- **GitHub Secrets** now only contains `DOPPLER_TOKEN` (bootstrap credential)
+- **GitHub Variables** contains `DOPPLER_PROJECT` and `DOPPLER_CONFIG` (non-sensitive configuration)
+
+To verify all required Doppler secrets are configured, run:
+```bash
+.github/scripts/verify-doppler-secrets.sh
+```
+
 ## Quick Reference
 
-| Secret | Required For | Category |
-|--------|-------------|----------|
-| `VITE_AISHACRM_BACKEND_URL` | docker-release.yml | Frontend Build |
-| `VITE_SUPABASE_URL` | docker-release.yml | Frontend Build |
-| `VITE_SUPABASE_ANON_KEY` | docker-release.yml | Frontend Build |
-| `PROD_VPS_HOST` | docker-release.yml | Deployment |
-| `PROD_VPS_USER` | docker-release.yml | Deployment |
-| `PROD_VPS_SSH_KEY` | docker-release.yml | Deployment |
-| `PROD_VPS_PORT` | docker-release.yml | Deployment (optional, default: 22) |
-| `PROD_MCP_GITHUB_TOKEN` | docker-release.yml | Deployment |
-| `DATABASE_URL` | mcp-audit-test.yml | Database |
-| `SUPABASE_URL` | mcp-audit-test.yml | Database |
-| `SUPABASE_SERVICE_ROLE_KEY` | mcp-audit-test.yml | Database |
-| `TENANT_ID` | mcp-audit-test.yml | Testing |
-| `RUN_MIGRATIONS` | mcp-audit-test.yml | Testing (optional) |
+| Secret | Storage Location | Required For | Category |
+|--------|------------------|-------------|----------|
+| `DOPPLER_TOKEN` | GitHub Secrets | All workflows | Bootstrap |
+| `ADMIN_EMAILS` | **Doppler** | docker-release.yml | Build |
+| `VITE_AISHACRM_BACKEND_URL` | GitHub Variables | docker-release.yml | Frontend Build |
+| `VITE_SUPABASE_URL` | GitHub Variables | docker-release.yml | Frontend Build |
+| `VITE_SUPABASE_ANON_KEY` | GitHub Variables | docker-release.yml | Frontend Build |
+| `PROD_VPS_HOST` | **Doppler** | docker-release.yml | Deployment |
+| `PROD_VPS_USER` | **Doppler** | docker-release.yml | Deployment |
+| `PROD_VPS_SSH_KEY` | **Doppler** | docker-release.yml | Deployment |
+| `PROD_VPS_PORT` | **Doppler** | docker-release.yml | Deployment (optional, default: 22) |
+| `PROD_MCP_GITHUB_TOKEN` | **Doppler** | docker-release.yml | Deployment |
+| `DATABASE_URL` | mcp-audit-test.yml | mcp-audit-test.yml | Database |
+| `SUPABASE_URL` | mcp-audit-test.yml | mcp-audit-test.yml | Database |
+| `SUPABASE_SERVICE_ROLE_KEY` | mcp-audit-test.yml | mcp-audit-test.yml | Database |
+| `TENANT_ID` | mcp-audit-test.yml | mcp-audit-test.yml | Testing |
+| `RUN_MIGRATIONS` | mcp-audit-test.yml | mcp-audit-test.yml | Testing (optional) |
 
 ---
 
@@ -117,17 +132,69 @@ Used for CI/CD test runs:
 
 ## How to Configure
 
+### GitHub Secrets (Bootstrap Only)
+
 1. Go to your GitHub repository
 2. Navigate to **Settings** → **Secrets and variables** → **Actions**
 3. Click **New repository secret**
-4. Add each secret with its name and value
+4. Add `DOPPLER_TOKEN` with your Doppler service token value
+
+### GitHub Variables (Non-Sensitive Config)
+
+1. Go to your GitHub repository
+2. Navigate to **Settings** → **Secrets and variables** → **Actions** → **Variables** tab
+3. Add the following variables:
+   - `DOPPLER_PROJECT` - Your Doppler project name (e.g., `aishacrm`)
+   - `DOPPLER_CONFIG` - Your Doppler config environment (e.g., `prd`, `dev`)
+   - `VITE_AISHACRM_BACKEND_URL`
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+
+### Doppler Secrets (Most Secrets)
+
+1. Install Doppler CLI: https://docs.doppler.com/docs/install-cli
+2. Login: `doppler login`
+3. Select your project and config: `doppler setup`
+4. Add secrets using `doppler secrets set SECRET_NAME=value`
+
+Required Doppler secrets for `docker-release.yml`:
+- `ADMIN_EMAILS`
+- `PROD_VPS_HOST`
+- `PROD_VPS_USER`
+- `PROD_VPS_SSH_KEY` (full PEM key with newlines)
+- `PROD_VPS_PORT`
+- `PROD_MCP_GITHUB_TOKEN`
+
+**Verify all required secrets:**
+```bash
+.github/scripts/verify-doppler-secrets.sh
+```
 
 ## Verifying Secrets
 
+### GitHub Secrets
+
 Secrets show "❓ Unknown" status in audit reports because GitHub doesn't expose their existence for security reasons. To verify:
 
-1. Check **Settings → Secrets → Actions** - secrets should be listed
+1. Check **Settings → Secrets → Actions** - secrets should be listed (only `DOPPLER_TOKEN` should remain)
 2. Run a workflow that uses the secret - it will fail if missing
+3. Check workflow logs for "secret not found" errors
+
+### Doppler Secrets
+
+Use the provided verification script:
+```bash
+# With Doppler CLI configured locally
+.github/scripts/verify-doppler-secrets.sh
+
+# Or with explicit credentials
+DOPPLER_TOKEN=<token> DOPPLER_PROJECT=<project> DOPPLER_CONFIG=<config> .github/scripts/verify-doppler-secrets.sh
+```
+
+The script will:
+- ✓ Check if all 6 required secrets exist in Doppler
+- ✓ Verify secrets are non-empty
+- ✗ Report any missing or empty secrets
 3. Check workflow logs for "secret not found" errors
 
 ## Auto-Provided Secrets
@@ -139,4 +206,4 @@ These are automatically available in all workflows:
 
 ---
 
-*Last updated: 2025-12-20*
+*Last updated: 2025-12-30 (Doppler migration)*
