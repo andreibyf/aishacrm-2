@@ -247,6 +247,7 @@ import braidChainRoutes from "./routes/braidChain.js";
 import braidMetricsRoutes from "./routes/braidMetrics.js";
 import braidGraphRoutes from "./routes/braidGraph.js";
 import { createDeprecationMiddleware } from "./middleware/deprecation.js";
+import { authenticate } from "./middleware/authenticate.js";
 
 // Apply v1 deprecation headers middleware (before routes)
 app.use(createDeprecationMiddleware());
@@ -259,7 +260,7 @@ const measuredPgPool = pgPool;
 app.use("/api/database", createDatabaseRoutes(measuredPgPool));
 app.use("/api/integrations", createIntegrationRoutes(measuredPgPool));
 app.use("/api/telephony", createTelephonyRoutes(measuredPgPool));
-app.use("/api/ai", createAiRoutes(measuredPgPool));
+app.use("/api/ai", authenticate, createAiRoutes(measuredPgPool));
 app.use("/api/mcp", createMcpRoutes(measuredPgPool));
 app.use("/api/devai", devaiRoutes); // Phase 6: Developer AI approvals (superadmin only)
 app.use("/api/accounts", createAccountRoutes(measuredPgPool));
