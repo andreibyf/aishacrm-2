@@ -124,8 +124,8 @@ jobs:
       - name: Install Doppler CLI
         uses: dopplerhq/cli-action@v3
 
-      - name: Fetch secrets from Doppler
-        id: doppler
+      - name: Fetch SSH credentials from Doppler
+        id: doppler-deploy
         run: |
           # VPS deployment secrets for production deployment
           echo "PROD_VPS_HOST=$(doppler secrets get PROD_VPS_HOST --plain)" >> $GITHUB_OUTPUT
@@ -145,10 +145,10 @@ jobs:
       - name: Deploy Compose File to VPS
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ steps.doppler.outputs.PROD_VPS_HOST }}
-          username: ${{ steps.doppler.outputs.PROD_VPS_USER }}
-          key: ${{ steps.doppler.outputs.PROD_VPS_SSH_KEY }}
-          port: ${{ steps.doppler.outputs.PROD_VPS_PORT || 22 }}
+          host: ${{ steps.doppler-deploy.outputs.PROD_VPS_HOST }}
+          username: ${{ steps.doppler-deploy.outputs.PROD_VPS_USER }}
+          key: ${{ steps.doppler-deploy.outputs.PROD_VPS_SSH_KEY }}
+          port: ${{ steps.doppler-deploy.outputs.PROD_VPS_PORT || 22 }}
           source: "docker-compose.prod.yml,nginx-n8n.conf,nginx-proxy/nginx.conf,braid-mcp-node-server/docker-compose.prod.yml,braid-mcp-node-server/.env.example"
           target: "/opt/aishacrm/"
           strip_components: 0
@@ -157,13 +157,14 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         env:
           VERSION_TAG: ${{ github.ref_name }}
-          MCP_GITHUB_TOKEN: ${{ steps.doppler.outputs.PROD_MCP_GITHUB_TOKEN }}
+          MCP_GITHUB_TOKEN: ${{ steps.doppler-deploy.outputs.PROD_MCP_GITHUB_TOKEN }}
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         with:
-          host: ${{ steps.doppler.outputs.PROD_VPS_HOST }}
-          username: ${{ steps.doppler.outputs.PROD_VPS_USER }}
-          key: ${{ steps.doppler.outputs.PROD_VPS_SSH_KEY }}
-          port: ${{ steps.doppler.outputs.PROD_VPS_PORT || 22 }}
-          envs: VERSION_TAG,MCP_GITHUB_TOKEN
+          host: ${{ steps.doppler-deploy.outputs.PROD_VPS_HOST }}
+          username: ${{ steps.doppler-deploy.outputs.PROD_VPS_USER }}
+          key: ${{ steps.doppler-deploy.outputs.PROD_VPS_SSH_KEY }}
+          port: ${{ steps.doppler-deploy.outputs.PROD_VPS_PORT || 22 }}
+          envs: VERSION_TAG,MCP_GITHUB_TOKEN,DOPPLER_TOKEN
           script: |
             set -e  # Exit on any error
             cd /opt/aishacrm
@@ -321,5 +322,5 @@ jobs:
           echo "### 🚀 Deployed to Production VPS" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Version**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Host**: ${{ steps.doppler.outputs.PROD_VPS_HOST }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Host**: ${{ steps.doppler-deploy.outputs.PROD_VPS_HOST }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Time**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
