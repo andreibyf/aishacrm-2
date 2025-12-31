@@ -107,9 +107,20 @@ const createFunctionProxy = (functionName) => {
         }
 
         // Optimize: only send last assistant and last user message to reduce token usage
-        const all = Array.isArray(opts.messages) ? opts.messages : (opts.messages ? [opts.messages] : []);
-        const lastUser = [...all].reverse().find(m => m.role === 'user');
-        const lastAssistant = [...all].reverse().find(m => m.role === 'assistant');
+        // Support both "message" (single string) and "messages" (array) for backward compatibility
+        let allMessages = opts.messages || [];
+        if (!Array.isArray(allMessages)) {
+          allMessages = [allMessages];
+        }
+        
+        // If no messages array but single "message" field is provided, convert it
+        if (allMessages.length === 0 && opts.message) {
+          allMessages = [{ role: 'user', content: String(opts.message).trim() }];
+        }
+        
+        const all = allMessages;
+        const lastUser = [...all].reverse().find(m => m?.role === 'user');
+        const lastAssistant = [...all].reverse().find(m => m?.role === 'assistant');
 
         const messages = [lastAssistant, lastUser].filter(Boolean);
         

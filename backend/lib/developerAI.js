@@ -987,7 +987,7 @@ async function testAisha(args) {
         'x-user-email': 'developer-ai@system.local',
       },
       body: JSON.stringify({
-        message: message,
+        messages: [{ role: 'user', content: message }],  // Fixed: send as messages array
         conversation_id: conversationIdToUse,
       }),
     });
