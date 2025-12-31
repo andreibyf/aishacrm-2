@@ -11,13 +11,31 @@ async function getAuthorizationHeader() {
   if (!isSupabaseConfigured()) return null;
   
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session }, error } = await supabase.auth.getSession();
+    
+    // Handle auth session missing error gracefully (user not logged in)
+    if (error) {
+      if (error.name === 'AuthSessionMissingError' || error.message?.includes('Auth session missing')) {
+        // This is expected when user isn't logged in, don't log as warning
+        if (import.meta.env.DEV) {
+          console.log('[Auth] No session available (user not logged in)');
+        }
+        return null;
+      }
+      // Log other auth errors as warnings
+      if (import.meta.env.DEV) {
+        console.warn('[Auth] Failed to get Supabase session:', error.message);
+      }
+      return null;
+    }
+    
     if (session?.access_token) {
       return `Bearer ${session.access_token}`;
     }
   } catch (err) {
+    // Catch any unexpected errors
     if (import.meta.env.DEV) {
-      console.warn('[Auth] Failed to get Supabase session:', err.message);
+      console.warn('[Auth] Exception getting session:', err?.message || err);
     }
   }
   return null;

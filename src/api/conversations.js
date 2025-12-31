@@ -24,8 +24,11 @@ function resolveTenantId() {
  * @returns {Promise<Object>} Headers object without bearer tokens
  */
 async function getAuthHeaders() {
-  // Do NOT add bearer tokens. Backend uses cookie-based JWT auth.
-  // credentials: 'include' in fetch options sends cookies automatically.
+  // Supabase auth is optional - if user isn't logged in via Supabase,
+  // we rely on cookie-based JWT auth (aisha_access cookie) which is sent automatically
+  // via credentials: 'include' in fetch options
+  
+  // Return empty object - cookies are sent automatically with credentials: 'include'
   return {};
 }
 
@@ -34,7 +37,7 @@ async function getAuthHeaders() {
  * @param {Object} options - Conversation options
  * @param {string} options.agent_name - Agent name (default: 'crm_assistant')
  * @param {Object} options.metadata - Conversation metadata
- * @returns {Promise<Object>} Created conversation
+ * @returns {Promise<Object>}
  */
 export async function createConversation({ agent_name = 'crm_assistant', metadata = {} } = {}) {
   const tenantId = resolveTenantId();

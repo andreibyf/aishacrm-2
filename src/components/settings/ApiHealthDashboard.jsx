@@ -20,9 +20,18 @@ async function getAuthHeaders() {
   const headers = { 'Content-Type': 'application/json' };
   try {
     const { data: { session }, error } = await supabase.auth.getSession();
+    
+    // Handle auth session missing error gracefully
     if (error) {
+      if (error.name === 'AuthSessionMissingError' || error.message?.includes('Auth session missing')) {
+        // Expected when user isn't logged in
+        console.log('[API Health] No session available (user not logged in)');
+        return headers;
+      }
       console.warn('[API Health] Auth session error:', error.message);
+      return headers;
     }
+    
     if (session?.access_token) {
       headers.Authorization = `Bearer ${session.access_token}`;
       console.log('[API Health] Using Supabase bearer token');
@@ -673,14 +682,14 @@ export default function ApiHealthDashboard() {
       }
 
       return {
-        name: 'Contacts - v2 Lifecycle (create/get/update/delete)',
+        name: 'Contacts - v2 Lifecycle (create|get|update|delete)',
         status: 'passed',
         message: 'Create, get, update, and delete all succeeded',
         statusCode: 200,
       };
     } catch (error) {
       return {
-        name: 'Contacts - v2 Lifecycle (create/get/update/delete)',
+        name: 'Contacts - v2 Lifecycle (create|get|update|delete)',
         status: 'failed',
         message: `Network error during lifecycle test: ${error.message}`,
         statusCode: 0,
