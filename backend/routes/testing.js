@@ -476,7 +476,7 @@ export default function createTestingRoutes(_pgPool) {
         { method: 'GET', path: '/api/testing/ping' },
         { method: 'GET', path: '/api/utils/health' },
         { method: 'GET', path: `/api/webhooks?tenant_id={TENANT_ID}` },
-        { method: 'GET', path: '/api/cron/jobs' },
+        { method: 'GET', path: `/api/cron/jobs?tenant_id={TENANT_ID}` },
         // NOTE: Validation endpoint disabled - error handling issues
         // { method: 'GET', path: `/api/validation/check-duplicate?tenant_id={TENANT_ID}&type=account&name=test` },
         
