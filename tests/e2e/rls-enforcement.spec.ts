@@ -26,14 +26,18 @@ test.describe('RLS Enforcement - Black-box', () => {
     const create = await request.post(`${BACKEND_URL}/api/contacts`, {
       data: { tenant_id: tenantA, first_name: 'RLS', last_name: `Test-${rid()}`, email: `rls.${rid()}@example.com`, status: 'active' }
     });
-    expect(create.ok()).toBeTruthy();
+    if (!create.ok()) {
+      console.error('Create contact failed:', create.status(), await create.text());
+    }
+    expect(create.ok(), 'Contact creation should succeed').toBeTruthy();
     const created = await create.json();
-    const id = created?.data?.id || created?.data?.contact?.id || created?.id;
-    expect(id).toBeTruthy();
+    // Response structure: { status: "success", data: { contact: { id: "..." } } }
+    const id = created?.data?.contact?.id || created?.data?.id || created?.id;
+    expect(id, `Contact ID should be truthy, got response: ${JSON.stringify(created)}`).toBeTruthy();
 
     // Try to fetch using another tenant context (if API uses tenant_id query)
     const fetchOther = await request.get(`${BACKEND_URL}/api/contacts/${id}`, { params: { tenant_id: tenantB } });
-    expect([403, 404]).toContain(fetchOther.status());
+    expect([403, 404], `Cross-tenant access should return 403 or 404, got ${fetchOther.status()}`).toContain(fetchOther.status());
 
     // Cleanup
     await request.delete(`${BACKEND_URL}/api/contacts/${id}`, { params: { tenant_id: tenantA } });
@@ -45,10 +49,10 @@ test.describe('RLS Enforcement - Black-box', () => {
     if (!res.ok()) {
       console.error('List contacts failed:', res.status(), await res.text());
     }
-    expect(res.status()).toBe(200); // Explicit success status
+    expect(res.status(), 'List contacts should return 200').toBe(200);
     const body = await res.json();
     const contacts = body?.data?.contacts || [];
-    expect(Array.isArray(contacts)).toBeTruthy();
+    expect(Array.isArray(contacts), 'Contacts should be an array').toBeTruthy();
   });
 
   test('list without tenant_id should be rejected', async ({ request }) => {
@@ -56,10 +60,11 @@ test.describe('RLS Enforcement - Black-box', () => {
     const res = await request.get(`${BACKEND_URL}/api/contacts`, { params: { limit: '5' } }); // No tenant_id
     
     // Should receive 400 (Bad Request) or 401 (Unauthorized)
-    expect([400, 401]).toContain(res.status());
+    expect([400, 401], `Missing tenant_id should return 400 or 401, got ${res.status()}`).toContain(res.status());
     
     const body = await res.json();
-    // Verify error message indicates missing tenant_id
-    expect(body?.error || body?.message || '').toMatch(/tenant/i);
+    // Verify error status and message indicates missing tenant_id
+    expect(body?.status, 'Response should have error status').toBe('error');
+    expect(body?.message || body?.error || '', 'Error message should mention tenant').toMatch(/tenant/i);
   });
 });
