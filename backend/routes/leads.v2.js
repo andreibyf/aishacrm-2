@@ -187,15 +187,31 @@ export default function createLeadsV2Routes() {
         // Text search across name and email fields
         if (searchQuery && searchQuery.trim()) {
           console.log('[V2 Leads] Applying text search:', searchQuery);
-          // Search for the full query across all fields using OR
-          // Use textSearch or match each field with ilike in a single OR clause
-          const searchPattern = `%${searchQuery.trim()}%`;
+          const searchTerm = searchQuery.trim();
+          const searchPattern = `%${searchTerm}%`;
+          
           const orConditions = [
             `first_name.ilike.${searchPattern}`,
             `last_name.ilike.${searchPattern}`,
             `email.ilike.${searchPattern}`,
             `company.ilike.${searchPattern}`
           ];
+          
+          // If search contains a space, also search concatenated first_name + last_name
+          // This handles full name searches like "John Doe" or "Iso Check"
+          if (searchTerm.includes(' ')) {
+            // PostgreSQL: concat(first_name, ' ', last_name) ILIKE '%search%'
+            // PostgREST doesn't support concat directly in filters, so we search for each part
+            const parts = searchTerm.split(/\s+/).filter(p => p.length > 0);
+            if (parts.length >= 2) {
+              // Add condition: first_name matches first part AND last_name matches second part
+              // Format: (first_name.ilike.%Iso%,last_name.ilike.%Check%)
+              const firstPart = `%${parts[0]}%`;
+              const lastPart = `%${parts[parts.length - 1]}%`;
+              orConditions.push(`first_name.ilike.${firstPart},last_name.ilike.${lastPart}`);
+              console.log('[V2 Leads] Added full name search condition for parts:', parts);
+            }
+          }
           
           query = query.or(orConditions.join(','));
           console.log('[V2 Leads] Search OR conditions:', orConditions.join(','));
