@@ -113,6 +113,12 @@ const createFunctionProxy = (functionName) => {
 
         const messages = [lastAssistant, lastUser].filter(Boolean);
         
+        // Safety: Ensure we always have at least one message
+        if (messages.length === 0 && all.length > 0) {
+          // Fallback to the very last message if optimization resulted in empty array
+          messages.push(all[all.length - 1]);
+        }
+        
         const body = {
           messages,
           model: opts.model,
@@ -980,7 +986,7 @@ const OVERRIDE_FUNCTIONS = new Set(['validateAndImport']);
 const functionsProxy = new Proxy({}, {
   get: (target, prop) => {
     // If a direct MCP server URL is configured, allow direct JSON-RPC calls
-    // for MCP-related function names (mcpServer*, mcpHandler, mcpTool*) even in local-dev.
+    // for MCP-related function names (mcpServer*, mcpHandler, mcpTool*), even in local-dev.
     if (MCP_SERVER_URL && (String(prop).startsWith('mcpServer') || String(prop).startsWith('mcpHandler') || String(prop).startsWith('mcpTool') || String(prop).startsWith('mcpToolFinder'))) {
       return async (...args) => {
         try {
