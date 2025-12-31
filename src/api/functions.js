@@ -106,9 +106,13 @@ const createFunctionProxy = (functionName) => {
           logDev(`[processChatCommand] tenantId=${tenantId || 'none'} (source: ${tenantSource || 'none'})`);
         }
 
-        const messages = Array.isArray(opts.messages)
-          ? opts.messages
-          : [{ role: 'user', content: String(opts.message || opts.text || '').trim() }].filter(m => m.content);
+        // Optimize: only send last assistant and last user message to reduce token usage
+        const all = Array.isArray(opts.messages) ? opts.messages : (opts.messages ? [opts.messages] : []);
+        const lastUser = [...all].reverse().find(m => m.role === 'user');
+        const lastAssistant = [...all].reverse().find(m => m.role === 'assistant');
+
+        const messages = [lastAssistant, lastUser].filter(Boolean);
+        
         const body = {
           messages,
           model: opts.model,

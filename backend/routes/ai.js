@@ -745,7 +745,19 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       }
       const executedTools = [];
       let assistantResponded = false;
-      let conversationMessages = [...messages];
+      
+      // OPTIMIZE: Limit incoming messages to prevent token overflow
+      const MAX_INCOMING = 8;
+      const MAX_CHARS = 1500;
+
+      let conversationMessages = (messages || [])
+        .slice(-MAX_INCOMING)
+        .map(m => ({
+          ...m,
+          content: typeof m.content === 'string'
+            ? m.content.slice(0, MAX_CHARS)
+            : m.content
+        }));
 
       // INTENT ROUTING: Classify user's intent for deterministic tool routing
       const lastUserMessage = messages.filter(m => m.role === 'user').slice(-1)[0]?.content || '';
@@ -753,7 +765,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       const intentConfidence = classifiedIntent ? getIntentConfidence(lastUserMessage, classifiedIntent) : 0;
       const entityMentions = extractEntityMentions(lastUserMessage);
       
-      console.log('[Intent Routing - generateAssistantResponse]', {
+      console.log('[Intent Routing]', {
         intent: classifiedIntent || 'NONE',
         confidence: intentConfidence.toFixed(2),
         entities: Object.entries(entityMentions).filter(([_, v]) => v).map(([k]) => k)
@@ -863,17 +875,13 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
             // Generate human-readable summary for better LLM comprehension
             const summary = summarizeToolResult(toolResult, toolName);
             
-            // Send both raw data and summary to LLM
-            const toolContent = typeof toolResult === 'string' 
-              ? toolResult 
-              : JSON.stringify(toolResult);
-            
-            const enhancedContent = `${summary}\n\n--- Raw Data ---\n${toolContent}`;
+            // OPTIMIZE: Send only summary to reduce token usage
+            const safeSummary = (summary || '').slice(0, 1200);
             
             conversationMessages.push({
               role: 'tool',
               tool_call_id: call.id,
-              content: enhancedContent,
+              content: safeSummary,
             });
           }
 
@@ -2005,6 +2013,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
           .from('conversations')
           .select('id')
           .eq('id', conversationId)
+          .eq('tenant_id', tenantRecord?.id)
           .single();
         
         if (!existingConv) {
@@ -2496,7 +2505,7 @@ ${conversationSummary}`;
           try {
             // SECURITY: Pass the access token to unlock tool execution
             // The token is only available after tenant authorization passed above
-            toolResult = await executeBraidTool(toolName, args, tenantRecord, req.user?.email || null, TOOL_ACCESS_TOKEN);
+            toolResult = await executeBraidTool(toolName, args, tenantRecord, req.user?.email, TOOL_ACCESS_TOKEN);
           } catch (err) {
             toolResult = { error: err.message || String(err) };
           }
@@ -2699,7 +2708,7 @@ ${conversationSummary}`;
       
       // Validation
       if (!effectiveTenantId || !entity_type || !entity_id) {
-        console.log('[suggest-next-actions] Validation FAILED:', { effectiveTenantId, entity_type, entity_id });
+        console.log('[suggest_next_actions] Validation FAILED:', { effectiveTenantId, entity_type, entity_id });
         return res.status(400).json({
           error: 'Missing required fields: tenant_id, entity_type, entity_id'
         });
@@ -2885,7 +2894,7 @@ ${conversationSummary}`;
           call_id,
           tool_name,
           data: {
-            message: `CRM Summary: You have exactly ${summary.leads_count} leads, ${summary.contacts_count} contacts, ${summary.accounts_count} accounts, and ${summary.opportunities_count} opportunities.`,
+            message: `CRM Summary: You have exactly ${summary.leads_count} leads, ${summary.contacts_count} contacts, and ${summary.opportunities_count} opportunities.`,
             counts: {
               leads: summary.leads_count,
               contacts: summary.contacts_count,
