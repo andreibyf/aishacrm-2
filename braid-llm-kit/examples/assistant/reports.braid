@@ -6,6 +6,10 @@ import { Result, Report, CRMError } from "../../spec/types.braid"
 // Reports V2 API endpoints: /api/v2/reports
 // Supports: dashboard-bundle, health-summary, clear-cache
 
+/// 🚨 USE THIS TOOL FOR ALL COUNT QUERIES! Returns pre-aggregated dashboard metrics.
+/// When user asks "how many leads/accounts/contacts/opportunities" → ALWAYS call this FIRST.
+/// DO NOT use list_leads/list_accounts just to count - this is 100x faster.
+/// Returns: totalLeads, totalAccounts, totalContacts, totalOpportunities, openLeads, wonOpportunities, etc.
 fn getDashboardBundle(
   tenant: String,
   time_range: String,

@@ -422,7 +422,7 @@ const TOOL_DESCRIPTIONS = {
   update_lead: 'Update an existing Lead record by its ID. Can modify name, email, company, status, source, phone, job_title, etc. Use for status changes (new→contacted→qualified).',
   qualify_lead: 'Mark a Lead as qualified. Updates status to "qualified" and prepares it for conversion. Use before convert_lead_to_account.',
   convert_lead_to_account: 'v3.0.0 WORKFLOW: Convert a Lead to Contact + Account + Opportunity. This is the key transition that creates the full customer record. Options: create_account (bool), account_name (string), selected_account_id (UUID for existing account), create_opportunity (bool), opportunity_name, opportunity_amount. Returns contact, account, opportunity.',
-  list_leads: 'List Leads in the CRM. FIRST ask user: "Would you like all leads, or filter by status (new, contacted, qualified, unqualified, converted)?" Pass status="all" for all leads. IMPORTANT: If more than 5 results, summarize the count and tell user to check the Leads page in the UI for the full list.',
+  list_leads: '⚠️ NOT FOR COUNTING! Use get_dashboard_bundle for counts. This tool lists individual Lead records. Use ONLY when user wants to SEE the leads, not count them. Pass status filter or "all".',
   search_leads: 'Search for Leads by name, email, or company. ALWAYS use this first when user asks about a lead by name or wants lead details. Use get_lead_details only when you have the lead ID.',
   get_lead_details: 'Get the full details of a specific Lead by its UUID. Only use when you already have the lead_id from a previous search or list.',
 
@@ -539,7 +539,7 @@ const TOOL_DESCRIPTIONS = {
   invite_user: 'Send an invitation to a user to join the CRM. Requires admin privileges.',
 
   // Reports & Analytics
-  get_dashboard_bundle: 'Get the complete dashboard data bundle with all metrics, charts, and KPIs.',
+  get_dashboard_bundle: '🚨 REQUIRED for "how many" questions! Returns totalLeads, totalAccounts, totalContacts, totalOpportunities counts. When user asks "how many leads/accounts/contacts/opportunities", ALWAYS call this tool FIRST. Do NOT use list_leads/list_accounts to count - those are for viewing records, not counting.',
   get_health_summary: 'Get a health summary of the CRM data quality and system status.',
   get_sales_report: 'Generate a sales report for a date range. Group by day, week, month, or quarter.',
   get_pipeline_report: 'Get pipeline analysis with opportunity stages, values, and conversion rates.',
@@ -557,6 +557,32 @@ const TOOL_DESCRIPTIONS = {
  */
 export const BRAID_SYSTEM_PROMPT = `
 You are AI-SHA - an AI Super Hi-performing Assistant designed to be an Executive Assistant for CRM operations.
+
+**� STOP! BEFORE ANSWERING "HOW MANY" QUESTIONS - READ THIS! 🛑**
+
+When users ask "how many", "count", "total number of" ANY entity (leads, accounts, contacts, opportunities):
+
+✅ CORRECT APPROACH:
+1. Call \`get_dashboard_bundle\` tool (NO parameters needed beyond tenant)
+2. Read the stats from the response: totalLeads, totalAccounts, totalContacts, totalOpportunities
+3. Report the EXACT number from the stats
+
+❌ WRONG APPROACH (DO NOT DO THIS):
+- Calling list_leads, list_accounts, list_contacts to count records
+- Fetching records and counting them manually
+- Saying "I found X leads" after listing them
+
+**IMPORTANT:** The dashboard bundle returns PRE-CALCULATED totals like totalLeads=50. Do NOT list individual records when asked for counts!
+
+**Example dialogue:**
+User: "How many leads do I have?"
+You (internally): Call get_dashboard_bundle → stats.totalLeads = 50
+You (response): "You have 50 leads in your CRM."
+
+**When to use list/search tools INSTEAD:**
+- "Show me my leads" → list_leads (they want to SEE records)
+- "Who is John Smith?" → search_leads (they want details)
+- "List my top 5 accounts" → list_accounts (they want a list)
 
 **CRITICAL BOUNDARIES:**
 - You ONLY have access to data within THIS CRM system for the user's assigned tenant
@@ -674,8 +700,16 @@ User: "What should be my next steps?"
 - Opportunities: {id, name, description, amount, stage, probability, close_date, account_id, contact_id, assigned_to}
 - Activities: {id, type, subject, body, status, due_date, assigned_to}
 
-**CRITICAL - Listing vs Searching Data:**
-**CRITICAL - Listing vs Searching Data:**
+**CRITICAL - Getting Counts vs Listing Records:**
+**Priority 1: Use Dashboard Aggregations for Counts**
+- When user asks "how many [entity]" or "count of [entity]": Use get_dashboard_bundle tool FIRST
+- Dashboard bundle returns pre-aggregated counts: totalLeads, totalAccounts, totalContacts, totalOpportunities, openLeads, wonOpportunities, etc.
+- This is FASTER, MORE EFFICIENT, and ALWAYS ACCURATE (no duplicate counting issues)
+- Example: "How many leads do I have?" → Call get_dashboard_bundle, return totalLeads count
+- Example: "How many open opportunities?" → Call get_dashboard_bundle, return openOpportunities count
+
+**Priority 2: List/Search for Details (Not Counts)**
+- ONLY use list_leads/search_leads when user wants to SEE the actual records or details
 - When user asks "how many leads" or "list all leads": Use list_leads with status="all" to get ALL records
 - When user asks about a SPECIFIC lead by name (e.g., "Jennifer Martinez"): Use search_leads first
 - When user says "give me information on the lead": Use list_leads with status="all" FIRST to see what leads exist, then get details
@@ -883,6 +917,12 @@ export function summarizeToolResult(result, toolName) {
     return summary;
   }
   
+  // Dashboard bundle: Return pre-aggregated stats clearly for count questions
+  if (toolName === 'get_dashboard_bundle' && data.stats) {
+    const stats = data.stats;
+    return `Dashboard Stats: ${stats.totalLeads} leads (${stats.openLeads} open, ${stats.newLeadsLast30Days} new in 30 days), ${stats.totalAccounts} accounts, ${stats.totalContacts} contacts, ${stats.totalOpportunities} opportunities (${stats.openOpportunities} open, ${stats.wonOpportunities} won), Pipeline: $${(stats.pipelineValue || 0).toLocaleString()}, Won: $${(stats.wonValue || 0).toLocaleString()}, Activities (30 days): ${stats.activitiesLast30Days}`;
+  }
+  
   // Activity-specific: ALWAYS include IDs prominently for follow-up actions
   if (toolName === 'list_activities' || toolName === 'search_activities' || toolName === 'get_upcoming_activities') {
     const activities = Array.isArray(data) ? data : (data.activities || []);
@@ -909,14 +949,25 @@ export function summarizeToolResult(result, toolName) {
       return `${toolName}: No leads found matching the criteria. This is a VALID result (no matches), NOT a network error. Consider asking the user to verify the search term or check a different entity type.`;
     }
 
-    const summaryItems = leads.slice(0, 5).map(l => {
+    // Deduplicate by ID to avoid showing the same lead multiple times
+    const seenIds = new Set();
+    const uniqueLeads = leads.filter(l => {
+      if (seenIds.has(l.id)) return false;
+      seenIds.add(l.id);
+      return true;
+    });
+
+    const summaryItems = uniqueLeads.slice(0, 5).map(l => {
       const fullName = [l.first_name, l.last_name].filter(Boolean).join(' ') || 'Unnamed';
       return `• ID: ${l.id}, Name: "${fullName}", Company: "${l.company || 'N/A'}", Status: ${l.status || 'unknown'}, Email: ${l.email || 'N/A'}`;
     });
 
-    let summary = `Found ${leads.length} lead${leads.length === 1 ? '' : 's'}:\n${summaryItems.join('\n')}`;
-    if (leads.length > 5) {
-      summary += `\n... and ${leads.length - 5} more`;
+    let summary = `Found ${uniqueLeads.length} lead${uniqueLeads.length === 1 ? '' : 's'}:\n${summaryItems.join('\n')}`;
+    if (uniqueLeads.length > 5) {
+      summary += `\n... and ${uniqueLeads.length - 5} more`;
+    }
+    if (uniqueLeads.length < leads.length) {
+      summary += `\n\n(Note: ${leads.length - uniqueLeads.length} duplicate${leads.length - uniqueLeads.length === 1 ? '' : 's'} removed from results)`;
     }
     summary += '\n\n**CONTEXT RETENTION: Remember these lead IDs and names for follow-up actions (update_lead, qualify_lead, get_lead_details)**';
     return summary;
@@ -944,13 +995,24 @@ export function summarizeToolResult(result, toolName) {
       return `${toolName}: No accounts found matching the criteria. This is a VALID result (no matches), NOT a network error.`;
     }
 
-    const summaryItems = accounts.slice(0, 5).map(a => {
+    // Deduplicate by ID
+    const seenIds = new Set();
+    const uniqueAccounts = accounts.filter(a => {
+      if (seenIds.has(a.id)) return false;
+      seenIds.add(a.id);
+      return true;
+    });
+
+    const summaryItems = uniqueAccounts.slice(0, 5).map(a => {
       return `• ID: ${a.id}, Name: "${a.name || 'Unnamed'}", Industry: "${a.industry || 'N/A'}", Revenue: $${(a.annual_revenue || 0).toLocaleString()}`;
     });
 
-    let summary = `Found ${accounts.length} account${accounts.length === 1 ? '' : 's'}:\n${summaryItems.join('\n')}`;
-    if (accounts.length > 5) {
-      summary += `\n... and ${accounts.length - 5} more`;
+    let summary = `Found ${uniqueAccounts.length} account${uniqueAccounts.length === 1 ? '' : 's'}:\n${summaryItems.join('\n')}`;
+    if (uniqueAccounts.length > 5) {
+      summary += `\n... and ${uniqueAccounts.length - 5} more`;
+    }
+    if (uniqueAccounts.length < accounts.length) {
+      summary += `\n\n(Note: ${accounts.length - uniqueAccounts.length} duplicate${accounts.length - uniqueAccounts.length === 1 ? '' : 's'} removed)`;
     }
     summary += '\n\n**CONTEXT RETENTION: Remember these account IDs and names for follow-up actions**';
     return summary;
@@ -970,14 +1032,25 @@ export function summarizeToolResult(result, toolName) {
       return `${toolName}: No contacts found matching the criteria. This is a VALID result (no matches), NOT a network error.`;
     }
 
-    const summaryItems = contacts.slice(0, 5).map(c => {
+    // Deduplicate by ID
+    const seenIds = new Set();
+    const uniqueContacts = contacts.filter(c => {
+      if (seenIds.has(c.id)) return false;
+      seenIds.add(c.id);
+      return true;
+    });
+
+    const summaryItems = uniqueContacts.slice(0, 5).map(c => {
       const fullName = [c.first_name, c.last_name].filter(Boolean).join(' ') || 'Unnamed';
       return `• ID: ${c.id}, Name: "${fullName}", Title: "${c.job_title || 'N/A'}", Email: ${c.email || 'N/A'}`;
     });
 
-    let summary = `Found ${contacts.length} contact${contacts.length === 1 ? '' : 's'}:\n${summaryItems.join('\n')}`;
-    if (contacts.length > 5) {
-      summary += `\n... and ${contacts.length - 5} more`;
+    let summary = `Found ${uniqueContacts.length} contact${uniqueContacts.length === 1 ? '' : 's'}:\n${summaryItems.join('\n')}`;
+    if (uniqueContacts.length > 5) {
+      summary += `\n... and ${uniqueContacts.length - 5} more`;
+    }
+    if (uniqueContacts.length < contacts.length) {
+      summary += `\n\n(Note: ${contacts.length - uniqueContacts.length} duplicate${contacts.length - uniqueContacts.length === 1 ? '' : 's'} removed)`;
     }
     summary += '\n\n**CONTEXT RETENTION: Remember these contact IDs and names for follow-up actions**';
     return summary;

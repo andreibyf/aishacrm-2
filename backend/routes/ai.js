@@ -1964,8 +1964,15 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
   // POST /api/ai/chat - AI chat completion
   router.post('/chat', async (req, res) => {
     try {
+      console.log('[DEBUG /api/ai/chat] req.body:', JSON.stringify(req.body, null, 2));
+
       const { messages = [], model = DEFAULT_CHAT_MODEL, temperature = 0.7, sessionEntities = null, conversation_id: conversationId } = req.body || {};
+
+      console.log('[DEBUG /api/ai/chat] Extracted messages:', messages);
+      console.log('[DEBUG /api/ai/chat] messages.length:', messages?.length, 'isArray:', Array.isArray(messages));
+
       if (!Array.isArray(messages) || messages.length === 0) {
+        console.error('[DEBUG /api/ai/chat] VALIDATION FAILED - messages invalid');
         return res.status(400).json({ status: 'error', message: 'messages array is required' });
       }
 

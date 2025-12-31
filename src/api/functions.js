@@ -108,22 +108,30 @@ const createFunctionProxy = (functionName) => {
 
         // Optimize: only send last assistant and last user message to reduce token usage
         // Support both "message" (single string) and "messages" (array) for backward compatibility
-        let allMessages = opts.messages || [];
+        let allMessages = opts.messages || opts.history || [];
         if (!Array.isArray(allMessages)) {
           allMessages = [allMessages];
         }
         
-        // If no messages array but single "message" field is provided, convert it
-        if (allMessages.length === 0 && opts.message) {
-          allMessages = [{ role: 'user', content: String(opts.message).trim() }];
+        // If no messages array but single "message" or "text" field is provided, convert it
+        if (allMessages.length === 0 && (opts.message || opts.text)) {
+          allMessages = [{ role: 'user', content: String(opts.message || opts.text).trim() }];
         }
         
+        console.log('[DEBUG processChatCommand] opts.message:', opts.message);
+        console.log('[DEBUG processChatCommand] opts.text:', opts.text);
+        console.log('[DEBUG processChatCommand] opts.messages:', opts.messages);
+        console.log('[DEBUG processChatCommand] opts.history:', opts.history);
+        console.log('[DEBUG processChatCommand] allMessages:', allMessages);
+
         const all = allMessages;
         const lastUser = [...all].reverse().find(m => m?.role === 'user');
         const lastAssistant = [...all].reverse().find(m => m?.role === 'assistant');
 
         const messages = [lastAssistant, lastUser].filter(Boolean);
         
+        console.log('[DEBUG processChatCommand] messages to send:', messages);
+
         // Safety: Ensure we always have at least one message
         if (messages.length === 0 && all.length > 0) {
           // Fallback to the very last message if optimization resulted in empty array
