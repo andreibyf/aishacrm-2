@@ -750,6 +750,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       const MAX_INCOMING = 8;
       const MAX_CHARS = 1500;
 
+      const originalMsgCount = (messages || []).length;
       let conversationMessages = (messages || [])
         .slice(-MAX_INCOMING)
         .map(m => ({
@@ -758,6 +759,13 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
             ? m.content.slice(0, MAX_CHARS)
             : m.content
         }));
+
+      // COST GUARD: Log message optimization
+      const cappedMsgCount = conversationMessages.length;
+      const cappedCharCount = conversationMessages.reduce((sum, m) => sum + (m.content?.length || 0), 0);
+      if (cappedMsgCount < originalMsgCount) {
+        console.log('[CostGuard] generateAssistantResponse capped msgs:', { from: originalMsgCount, to: cappedMsgCount, chars: cappedCharCount });
+      }
 
       // INTENT ROUTING: Classify user's intent for deterministic tool routing
       const lastUserMessage = messages.filter(m => m.role === 'user').slice(-1)[0]?.content || '';
@@ -1961,6 +1969,11 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
         return res.status(400).json({ status: 'error', message: 'messages array is required' });
       }
 
+      // COST GUARD: Log incoming message count for optimization tracking
+      const incomingMsgCount = messages.length;
+      const incomingCharCount = messages.reduce((sum, m) => sum + (m.content?.length || 0), 0);
+      console.log('[CostGuard] /api/ai/chat incoming:', { msgs: incomingMsgCount, chars: incomingCharCount });
+
       // Debug logging for conversation ID
       console.log('[AI Chat] conversation_id from request:', conversationId || 'NOT PROVIDED');
 
@@ -2523,11 +2536,12 @@ ${conversationSummary}`;
             full_result: toolResult,
           });
           const summary = summarizeToolResult(toolResult, toolName);
-          const toolContent = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult);
+          // COST GUARD: Only inject summary, cap at 1200 chars to prevent token burn
+          const safeSummary = (summary || '').slice(0, 1200);
           loopMessages.push({
             role: 'tool',
             tool_call_id: call.id,
-            content: `${summary}\n\n--- Raw Data ---\n${toolContent}`
+            content: safeSummary
           });
         }
       }
