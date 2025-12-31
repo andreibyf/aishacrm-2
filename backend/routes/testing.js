@@ -66,17 +66,17 @@ export default function createTestingRoutes(_pgPool) {
   // }
   router.post('/trigger-e2e', async (req, res) => {
     try {
-      const {
-        GITHUB_TOKEN = process.env.GH_TOKEN,
-        GITHUB_REPO_OWNER = process.env.REPO_OWNER || process.env.GITHUB_REPOSITORY_OWNER || 'andreibyf',
-        GITHUB_REPO_NAME = process.env.REPO_NAME || process.env.GITHUB_REPOSITORY_NAME || 'aishacrm-2',
-        GITHUB_WORKFLOW_FILE = process.env.WORKFLOW_FILE || process.env.GITHUB_WORKFLOW_FILE || 'e2e.yml',
-      } = process.env;
+      // Support both GITHUB_TOKEN and GH_TOKEN (Doppler uses GH_TOKEN)
+      const GITHUB_TOKEN = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+      const GITHUB_REPO_OWNER = process.env.GITHUB_REPO_OWNER || process.env.REPO_OWNER || process.env.GITHUB_REPOSITORY_OWNER || 'andreibyf';
+      const GITHUB_REPO_NAME = process.env.GITHUB_REPO_NAME || process.env.REPO_NAME || process.env.GITHUB_REPOSITORY_NAME || 'aishacrm-2';
+      const GITHUB_WORKFLOW_FILE = process.env.GITHUB_WORKFLOW_FILE || process.env.WORKFLOW_FILE || 'e2e.yml';
 
       if (!GITHUB_TOKEN) {
-        return res.status(400).json({
-          status: 'error',
-          message: 'GITHUB_TOKEN is not configured in backend environment',
+        return res.status(503).json({
+          status: 'unavailable',
+          message: 'GitHub integration not configured',
+          configured: false,
         });
       }
 
@@ -144,15 +144,14 @@ export default function createTestingRoutes(_pgPool) {
   // Query params: ref=main, per_page=5, created_after=ISO8601
   router.get('/workflow-status', async (req, res) => {
     try {
-      const {
-        GITHUB_TOKEN,
-        GITHUB_REPO_OWNER = process.env.GITHUB_REPOSITORY_OWNER || 'andreibyf',
-        GITHUB_REPO_NAME = process.env.GITHUB_REPOSITORY_NAME || 'aishacrm-2',
-        GITHUB_WORKFLOW_FILE = process.env.GITHUB_WORKFLOW_FILE || 'e2e.yml',
-      } = process.env;
+      // Support both GITHUB_TOKEN and GH_TOKEN (Doppler uses GH_TOKEN)
+      const GITHUB_TOKEN = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+      const GITHUB_REPO_OWNER = process.env.GITHUB_REPO_OWNER || process.env.GITHUB_REPOSITORY_OWNER || 'andreibyf';
+      const GITHUB_REPO_NAME = process.env.GITHUB_REPO_NAME || process.env.GITHUB_REPOSITORY_NAME || 'aishacrm-2';
+      const GITHUB_WORKFLOW_FILE = process.env.GITHUB_WORKFLOW_FILE || 'e2e.yml';
 
       if (!GITHUB_TOKEN) {
-        return res.status(400).json({ status: 'error', message: 'GITHUB_TOKEN is not configured in backend environment' });
+        return res.status(503).json({ status: 'unavailable', message: 'GitHub integration not configured', configured: false });
       }
 
       const ref = req.query.ref || 'main';
