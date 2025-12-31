@@ -1490,25 +1490,25 @@ export default function AccountsPage() {
                             className="border-slate-600"
                           />
                         </th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                        <th className="px-4 py-3 text-left text-base font-medium text-slate-300">
                           Name
                         </th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                        <th className="px-4 py-3 text-left text-base font-medium text-slate-300">
                           Website
                         </th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                        <th className="px-4 py-3 text-left text-base font-medium text-slate-300">
                           Phone
                         </th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                        <th className="px-4 py-3 text-left text-base font-medium text-slate-300">
                           Industry
                         </th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                        <th className="px-4 py-3 text-left text-base font-medium text-slate-300">
                           Assigned To
                         </th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                        <th className="px-4 py-3 text-left text-base font-medium text-slate-300">
                           Type
                         </th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                        <th className="px-4 py-3 text-left text-base font-medium text-slate-300">
                           Actions
                         </th>
                       </tr>
@@ -1528,10 +1528,10 @@ export default function AccountsPage() {
                               className="border-slate-600"
                             />
                           </td>
-                          <td className="px-4 py-3 text-sm text-slate-300">
+                          <td className="px-4 py-3 text-base text-slate-300">
                             {account.name}
                           </td>
-                          <td className="px-4 py-3 text-sm text-slate-300">
+                          <td className="px-4 py-3 text-base text-slate-300">
                             {account.website
                               ? (
                                 <a
@@ -1545,17 +1545,17 @@ export default function AccountsPage() {
                               )
                               : <span className="text-slate-500">—</span>}
                           </td>
-                          <td className="px-4 py-3 text-sm text-slate-300">
+                          <td className="px-4 py-3 text-base text-slate-300">
                             {account.phone || (
                               <span className="text-slate-500">—</span>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-sm text-slate-300">
+                          <td className="px-4 py-3 text-base text-slate-300">
                             {formatIndustry(account.industry) || (
                               <span className="text-slate-500">—</span>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-sm text-slate-300">
+                          <td className="px-4 py-3 text-base text-slate-300">
                             {assignedToMap[account.assigned_to] ||
                               account.assigned_to || (
                               <span className="text-slate-500">Unassigned</span>

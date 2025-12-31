@@ -363,11 +363,15 @@ export default function DashboardPage() {
             // Fetch fresh data in background (don't block UI)
             (async () => {
               try {
+                const visibleWidgetIds = Object.entries(widgetPreferences)
+                  .filter(([_, pref]) => pref.visible !== false)
+                  .map(([id]) => id);
+                
                 const bundleResp = await cachedRequest(
                   "Dashboard",
                   "bundle",
-                  { tenant_id: tenantFilter.tenant_id || null, include_test_data: !!showTestData },
-                  () => getDashboardBundleFast({ tenant_id: tenantFilter.tenant_id || null, include_test_data: !!showTestData })
+                  { tenant_id: tenantFilter.tenant_id || null, include_test_data: !!showTestData, widgets: visibleWidgetIds },
+                  () => getDashboardBundleFast({ tenant_id: tenantFilter.tenant_id || null, include_test_data: !!showTestData, widgets: visibleWidgetIds })
                 );
                 const bundle = bundleResp?.data || bundleResp;
                 if (bundle?.stats || bundle?.lists) {
@@ -402,11 +406,16 @@ export default function DashboardPage() {
         // Fast path: fetch compact dashboard bundle first (local backend with Redis cache)
         let bundle = null;
         try {
+          // Get visible widget IDs to optimize data fetching (skip data for hidden widgets)
+          const visibleWidgetIds = Object.entries(widgetPreferences)
+            .filter(([_, pref]) => pref.visible !== false)
+            .map(([id]) => id);
+          
           const bundleResp = await cachedRequest(
             "Dashboard",
             "bundle",
-            { tenant_id: tenantFilter.tenant_id || null, include_test_data: !!showTestData },
-            () => getDashboardBundleFast({ tenant_id: tenantFilter.tenant_id || null, include_test_data: !!showTestData })
+            { tenant_id: tenantFilter.tenant_id || null, include_test_data: !!showTestData, widgets: visibleWidgetIds },
+            () => getDashboardBundleFast({ tenant_id: tenantFilter.tenant_id || null, include_test_data: !!showTestData, widgets: visibleWidgetIds })
           );
           // Unwrap common shapes: either { data: {...} } or raw {...}
           bundle = bundleResp?.data || bundleResp;

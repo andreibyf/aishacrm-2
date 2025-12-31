@@ -1709,7 +1709,7 @@ export default function LeadsPage() {
                                 className="border-slate-600"
                               />
                             </td>
-                            <td className="px-4 py-3 text-sm text-slate-300">
+                            <td className="px-4 py-3 text-base text-slate-300">
                               {(() => {
                                 const isB2B = lead.lead_type === 'b2b' || lead.lead_type === 'B2B';
                                 const personName = `${lead.first_name || ''} ${lead.last_name || ''}`.trim();
@@ -1735,14 +1735,14 @@ export default function LeadsPage() {
                               })()}
                             </td>
                             <td
-                              className="px-4 py-3 text-sm text-slate-300"
+                              className="px-4 py-3 text-base text-slate-300"
                               data-testid="lead-email"
                             >
                               {lead.email || (
                                 <span className="text-slate-500">—</span>
                               )}
                             </td>
-                            <td className="px-4 py-3 text-sm">
+                            <td className="px-4 py-3 text-base">
                               <div className="flex items-center gap-2">
                                 <span className="text-slate-300">
                                   {lead.phone || (
@@ -1761,7 +1761,7 @@ export default function LeadsPage() {
                                 )}
                               </div>
                             </td>
-                            <td className="px-4 py-3 text-sm text-slate-300">
+                            <td className="px-4 py-3 text-base text-slate-300">
                               {(() => {
                                 const associatedAccountName = getAssociatedAccountName(lead);
                                 const companyLabel = associatedAccountName || lead.company;
@@ -1784,14 +1784,14 @@ export default function LeadsPage() {
                               })()}
                             </td>
                             <td
-                              className="px-4 py-3 text-sm text-slate-300"
+                              className="px-4 py-3 text-base text-slate-300"
                               data-testid="lead-job-title"
                             >
                               {lead.job_title || (
                                 <span className="text-slate-500">—</span>
                               )}
                             </td>
-                            <td className="px-4 py-3 text-sm">
+                            <td className="px-4 py-3 text-base">
                               <span
                                 className={`font-semibold ${
                                   ageBucket?.color || "text-slate-300"

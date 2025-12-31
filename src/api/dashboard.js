@@ -26,10 +26,10 @@ const RESULT_CACHE_TTL = 5000; // 5 seconds - prevents duplicate calls during in
  * @returns {Promise<Object>} Dashboard data bundle
  */
 export async function getDashboardBundleFast(options = {}) {
-  const { tenant_id, include_test_data = true } = options;
+  const { tenant_id, include_test_data = true, widgets = [] } = options;
   
-  // Create cache key for deduplication
-  const cacheKey = JSON.stringify({ tenant_id, include_test_data });
+  // Create cache key for deduplication (include widgets to separate cache per widget set)
+  const cacheKey = JSON.stringify({ tenant_id, include_test_data, widgets: widgets.sort() });
   
   // Check short-term result cache first (prevents Layout + Dashboard double-fetch)
   const cached = recentResults.get(cacheKey);
@@ -49,7 +49,7 @@ export async function getDashboardBundleFast(options = {}) {
   }
   
   // Create the fetch promise
-  const fetchPromise = _fetchDashboardBundle(tenant_id, include_test_data).then(result => {
+  const fetchPromise = _fetchDashboardBundle(tenant_id, include_test_data, widgets).then(result => {
     // Cache the successful result
     recentResults.set(cacheKey, { data: result, timestamp: Date.now() });
     return result;
@@ -69,7 +69,7 @@ export async function getDashboardBundleFast(options = {}) {
 /**
  * Internal fetch implementation
  */
-async function _fetchDashboardBundle(tenant_id, include_test_data) {
+async function _fetchDashboardBundle(tenant_id, include_test_data, widgets = []) {
 
   try {
     // Call backend /api/reports/dashboard-bundle directly (in-memory cached on server)
@@ -79,6 +79,10 @@ async function _fetchDashboardBundle(tenant_id, include_test_data) {
     }
     if (!include_test_data) {
       queryParams.append('include_test_data', 'false');
+    }
+    // Pass visible widget IDs so backend can skip fetching unused data
+    if (widgets && widgets.length > 0) {
+      queryParams.append('widgets', widgets.join(','));
     }
 
     const url = `${BACKEND_URL}/api/reports/dashboard-bundle?${queryParams}`;

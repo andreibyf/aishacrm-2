@@ -276,10 +276,17 @@ export default function createReportRoutes(_pgPool) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
       
+      // Parse visible widgets to optimize data fetching
+      const widgetsParam = req.query.widgets || '';
+      const visibleWidgets = widgetsParam ? widgetsParam.split(',').map(w => w.trim()).filter(Boolean) : [];
+      const widgetSet = new Set(visibleWidgets);
+      
       // Use redis cache for distributed, persistent caching
       const includeTestData = (req.query.include_test_data ?? 'true') !== 'false';
       const bustCache = req.query.bust_cache === 'true'; // Allow cache bypass for testing
-      const cacheKey = `dashboard:bundle:${tenant_id}:include=${includeTestData ? 'true' : 'false'}`;
+      // Include widgets in cache key to avoid serving wrong dataset
+      const widgetsCacheKey = visibleWidgets.length > 0 ? `:widgets=${visibleWidgets.sort().join('_')}` : '';
+      const cacheKey = `dashboard:bundle:${tenant_id}:include=${includeTestData ? 'true' : 'false'}${widgetsCacheKey}`;
       
       // Try redis cache first (distributed across instances)
       const cacheManager = req.app?.locals?.cacheManager;
@@ -531,7 +538,9 @@ export default function createReportRoutes(_pgPool) {
       })();
 
       // Recent small lists (narrow columns, limited)
-      const recentActivitiesP = (async () => {
+      // OPTIMIZATION: Skip if recentActivities widget is hidden
+      const needsActivities = visibleWidgets.length === 0 || widgetSet.has('recentActivities');
+      const recentActivitiesP = needsActivities ? (async () => {
         try {
           let q = supabase.from('activities').select('id,type,subject,status,created_at,created_date,assigned_to').order('created_at', { ascending: false }).limit(10);
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
@@ -541,7 +550,7 @@ export default function createReportRoutes(_pgPool) {
           const { data } = await q;
           return Array.isArray(data) ? data : [];
         } catch { return []; }
-      })();
+      })() : Promise.resolve([]);
       /**
        * Recent Leads Query (Enhanced for Widgets)
        * Limit: 100 (was 5) - Provides enough data for:
@@ -549,8 +558,10 @@ export default function createReportRoutes(_pgPool) {
        *   - LeadSourceChart: Already aggregated separately but these provide details
        * Fields: email, phone, source, is_test_data added for richer widget context
        * Performance: ~80ms for 100 leads
+       * OPTIMIZATION: Skip if neither leadSourceChart nor leadAgeReport widgets are visible
        */
-      const recentLeadsP = (async () => {
+      const needsLeads = visibleWidgets.length === 0 || widgetSet.has('leadSourceChart') || widgetSet.has('leadAgeReport');
+      const recentLeadsP = needsLeads ? (async () => {
         try {
           let q = supabase.from('leads').select('id,first_name,last_name,company,email,phone,created_date,status,source,is_test_data').order('created_date', { ascending: false }).limit(100);
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
@@ -560,14 +571,16 @@ export default function createReportRoutes(_pgPool) {
           const { data } = await q;
           return Array.isArray(data) ? data : [];
         } catch { return []; }
-      })();
+      })() : Promise.resolve([]);
       /**
        * Recent Opportunities Query (Enhanced for Widgets)
        * Limit: 50 (was 5) - Better sample for SalesPipeline and opportunity widgets
        * Fields: probability, is_test_data added for accurate pipeline calculations
        * Performance: ~60ms for 50 opportunities
+       * OPTIMIZATION: Skip if salesPipeline widget is hidden
        */
-      const recentOppsP = (async () => {
+      const needsOpportunities = visibleWidgets.length === 0 || widgetSet.has('salesPipeline');
+      const recentOppsP = needsOpportunities ? (async () => {
         try {
           let q = supabase.from('opportunities').select('id,name,amount,stage,probability,updated_at,is_test_data').order('updated_at', { ascending: false }).limit(50);
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
@@ -577,7 +590,7 @@ export default function createReportRoutes(_pgPool) {
           const { data } = await q;
           return Array.isArray(data) ? data : [];
         } catch { return []; }
-      })();
+      })() : Promise.resolve([]);
       
       /**
        * Funnel Aggregates from Materialized View
@@ -606,8 +619,10 @@ export default function createReportRoutes(_pgPool) {
        * Returns: { 'website': 9, 'referral': 3, 'other': 18, ... }
        * Performance: ~50ms for 58 leads (SELECT only 1 column)
        * Alternative: Could use GROUP BY in SQL for even better performance
+       * OPTIMIZATION: Skip if leadSourceChart widget is hidden
        */
-      const leadSourcesP = (async () => {
+      const needsLeadSources = visibleWidgets.length === 0 || widgetSet.has('leadSourceChart');
+      const leadSourcesP = needsLeadSources ? (async () => {
         try {
           console.log('[dashboard-bundle] Fetching lead sources for tenant:', tenant_id);
           let q = supabase.from('leads').select('source');
@@ -635,7 +650,7 @@ export default function createReportRoutes(_pgPool) {
           console.error('[dashboard-bundle] Lead sources fetch error:', err);
           return {};
         }
-      })();
+      })() : Promise.resolve({});
 
       // Fetch ALL opportunities for pipeline value calculation
       const allOppsP = (async () => {
