@@ -1233,18 +1233,18 @@ export default function ContactsPage() {
                           />
                         </td>
                         <td className="px-4 py-3">
-                          <span className="text-slate-300 text-sm font-medium">
+                          <span className="text-slate-300 text-base font-medium">
                             {contact.first_name} {contact.last_name}
                           </span>
                         </td>
                         <td className="px-4 py-3">
                           {contact.email
                             ? (
-                              <span className="text-slate-300 text-sm">
+                              <span className="text-slate-300 text-base">
                                 {contact.email}
                               </span>
                             )
-                            : <span className="text-slate-500 text-sm">-</span>}
+                            : <span className="text-slate-500 text-base">-</span>}
                         </td>
                         <td className="px-4 py-3">
                           {contact.phone
@@ -1254,10 +1254,10 @@ export default function ContactsPage() {
                                 phone={contact.phone}
                                 contactName={`${contact.first_name} ${contact.last_name}`}
                                 enableCalling={true}
-                                className="text-slate-300 hover:text-blue-400 text-sm"
+                                className="text-slate-300 hover:text-blue-400 text-base"
                               />
                             )
-                            : <span className="text-slate-500 text-sm">-</span>}
+                            : <span className="text-slate-500 text-base">-</span>}
                         </td>
                         <td className="px-4 py-3">
                           {contact.account_id && account
@@ -1270,36 +1270,36 @@ export default function ContactsPage() {
                                     account.name,
                                   );
                                 }}
-                                className="text-blue-400 hover:text-blue-300 hover:underline text-sm"
+                                className="text-blue-400 hover:text-blue-300 hover:underline text-base"
                               >
                                 {account.name}
                               </button>
                             )
                             : contact.account_name
                             ? (
-                              <span className="text-slate-300 text-sm">
+                              <span className="text-slate-300 text-base">
                                 {contact.account_name}
                               </span>
                             )
-                            : <span className="text-slate-500 text-sm">-</span>}
+                            : <span className="text-slate-500 text-base">-</span>}
                         </td>
                         <td className="px-4 py-3">
                           {contact.job_title
                             ? (
-                              <span className="text-slate-300 text-sm">
+                              <span className="text-slate-300 text-base">
                                 {contact.job_title}
                               </span>
                             )
-                            : <span className="text-slate-500 text-sm">-</span>}
+                            : <span className="text-slate-500 text-base">-</span>}
                         </td>
                         <td className="px-4 py-3">
                           {assignedName
                             ? (
-                              <span className="text-slate-300 text-sm">
+                              <span className="text-slate-300 text-base">
                                 {assignedName}
                               </span>
                             )
-                            : <span className="text-slate-500 text-sm">-</span>}
+                            : <span className="text-slate-500 text-base">-</span>}
                         </td>
                         <td className="px-4 py-3">
                           <Badge
