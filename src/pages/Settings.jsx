@@ -104,6 +104,7 @@ const QaConsole = lazy(() => import("../components/settings/QaConsole"));
 const TenantResolveCacheMonitor = lazy(() => import("../components/settings/TenantResolveCacheMonitor"));
 const LLMActivityMonitor = lazy(() => import("../components/settings/LLMActivityMonitor"));
 const BraidSDKMonitor = lazy(() => import("../components/settings/BraidSDKMonitor"));
+const AiSettings = lazy(() => import("../components/settings/AiSettings"));
 const McpAdmin = lazy(() => import("./McpAdmin"));
 
 export default function SettingsPage() { // Renamed from Settings to SettingsPage as per outline
@@ -232,6 +233,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
         { id: 'performance', label: 'Performance', description: 'System performance metrics', icon: Activity, category: 'monitoring', roles: ['superadmin'] },
         { id: 'cache-monitor', label: 'Cache Monitor', description: 'Tenant cache statistics', icon: Database, category: 'monitoring', roles: ['superadmin'] },
         { id: 'llm-monitor', label: 'LLM Monitor', description: 'AI model usage and costs', icon: Brain, category: 'monitoring', roles: ['superadmin'] },
+        { id: 'ai-settings', label: 'AI Settings', description: 'Configure AI behavior and parameters', icon: Brain, category: 'monitoring', roles: ['superadmin'] },
         { id: 'braid-monitor', label: 'AI Tools Monitor', description: 'Tool metrics and dependency graph', icon: GitBranch, category: 'monitoring', roles: ['superadmin'] },
         { id: 'sync-health', label: 'Sync Health', description: 'Data synchronization status', icon: RefreshCw, category: 'monitoring', roles: ['superadmin'] },
         { id: 'mcp-monitor', label: 'MCP Admin', description: 'MCP server health, memory, queue, and adapters', icon: Server, category: 'monitoring', roles: ['superadmin'] },
@@ -721,6 +723,23 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                     </CardHeader>
                     <CardContent>
                       <LLMActivityMonitor />
+                    </CardContent>
+                  </Card>
+                )}
+
+                {activeTab === 'ai-settings' && isSuperadmin && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Brain className="w-5 h-5 text-blue-400" />
+                        AI Settings
+                      </CardTitle>
+                      <CardDescription>
+                        Configure AI behavior, context limits, temperature, and other parameters
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <AiSettings />
                     </CardContent>
                   </Card>
                 )}

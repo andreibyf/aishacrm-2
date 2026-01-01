@@ -246,6 +246,7 @@ import braidAuditRoutes from "./routes/braidAudit.js";
 import braidChainRoutes from "./routes/braidChain.js";
 import braidMetricsRoutes from "./routes/braidMetrics.js";
 import braidGraphRoutes from "./routes/braidGraph.js";
+import aiSettingsRoutes from "./routes/aiSettings.js";
 import { createDeprecationMiddleware } from "./middleware/deprecation.js";
 import { authenticateRequest } from "./middleware/authenticate.js";
 
@@ -261,6 +262,7 @@ app.use("/api/database", createDatabaseRoutes(measuredPgPool));
 app.use("/api/integrations", createIntegrationRoutes(measuredPgPool));
 app.use("/api/telephony", createTelephonyRoutes(measuredPgPool));
 app.use("/api/ai", authenticateRequest, createAiRoutes(measuredPgPool));
+app.use("/api/ai-settings", authenticateRequest, aiSettingsRoutes); // AI configuration settings
 app.use("/api/mcp", createMcpRoutes(measuredPgPool));
 app.use("/api/devai", devaiRoutes); // Phase 6: Developer AI approvals (superadmin only)
 app.use("/api/accounts", createAccountRoutes(measuredPgPool));
