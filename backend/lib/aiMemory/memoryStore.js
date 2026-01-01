@@ -169,10 +169,25 @@ export async function queryMemory(params) {
     if (entityId) queryBuilder = queryBuilder.eq('entity_id', entityId);
     if (sourceType) queryBuilder = queryBuilder.eq('source_type', sourceType);
     
-    // Vector similarity search using RPC (requires custom SQL function)
-    // For now, fetch all matching chunks and compute similarity in-memory
-    // TODO: Add RPC function for efficient vector search
-    const { data: chunks, error } = await queryBuilder.limit(100); // Pre-filter limit
+    // Vector similarity search strategy:
+    // Current: Fetch filtered chunks and compute cosine similarity in-memory
+    // This works well for up to ~1000 chunks per tenant. For larger datasets,
+    // consider adding a Supabase RPC function using pgvector's <=> operator:
+    //
+    //   CREATE FUNCTION search_memory_chunks(
+    //     p_tenant_id uuid, p_query_embedding vector(1536), p_limit int
+    //   ) RETURNS TABLE(...) AS $$
+    //     SELECT *, 1 - (embedding <=> p_query_embedding) as similarity
+    //     FROM ai_memory_chunks
+    //     WHERE tenant_id = p_tenant_id
+    //     ORDER BY embedding <=> p_query_embedding
+    //     LIMIT p_limit;
+    //   $$ LANGUAGE sql;
+    //
+    // Phase 7 implementation uses in-memory approach for simplicity and control.
+    const { data: chunks, error } = await queryBuilder
+      .select('id, content, source_type, entity_type, entity_id, created_at, metadata, embedding')
+      .limit(100); // Pre-filter limit for in-memory similarity computation
     
     if (error) {
       console.error(`[queryMemory] Query error:`, error);
@@ -183,15 +198,18 @@ export async function queryMemory(params) {
       return [];
     }
     
-    // Compute cosine similarity for each chunk
+    // Compute cosine similarity for each chunk in-memory
     const results = chunks
       .map(chunk => {
-        // Parse embedding from JSON
-        const chunkEmbedding = JSON.parse(chunk.embedding || '[]');
+        // Parse embedding from JSON (stored as JSON array in pgvector column)
+        const chunkEmbedding = typeof chunk.embedding === 'string' 
+          ? JSON.parse(chunk.embedding) 
+          : chunk.embedding || [];
         const similarity = cosineSimilarity(queryEmbedding, chunkEmbedding);
         
         return {
           ...chunk,
+          embedding: undefined, // Don't return embedding to reduce payload
           similarity
         };
       })

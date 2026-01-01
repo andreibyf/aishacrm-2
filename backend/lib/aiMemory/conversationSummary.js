@@ -21,7 +21,8 @@ import { resolveLLMApiKey } from '../aiEngine/keyResolver.js';
 export async function updateConversationSummary(params) {
   const { conversationId, tenantId, assistantMessage } = params;
   
-  if (!process.env.MEMORY_ENABLED === 'true') {
+  // Check if memory system is enabled
+  if (process.env.MEMORY_ENABLED !== 'true') {
     return { success: true, summary: null, reason: 'memory disabled' };
   }
   

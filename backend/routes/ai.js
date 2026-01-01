@@ -663,6 +663,29 @@ ${memoryContext}
               
               console.log(`[AI_MEMORY] Retrieved ${memoryChunks.length} relevant memory chunks for tenant ${tenantRecord?.id}`);
             }
+            
+            // CONVERSATION SUMMARY RETRIEVAL (Phase 7)
+            // Inject rolling summary to reduce token usage from full history
+            try {
+              const { getConversationSummary } = await import('../lib/aiMemory/index.js');
+              const conversationSummary = await getConversationSummary({
+                conversationId: rawConversationId || conversationId,
+                tenantId: tenantRecord?.id
+              });
+              
+              if (conversationSummary && conversationSummary.length > 0) {
+                messages.push({
+                  role: 'system',
+                  content: `**CONVERSATION SUMMARY (prior context):**
+${conversationSummary}
+
+Use this summary for context about prior discussion topics, goals, and decisions.`
+                });
+                console.log(`[AI_MEMORY] Injected conversation summary (${conversationSummary.length} chars) for conversation ${rawConversationId || conversationId}`);
+              }
+            } catch (sumErr) {
+              console.error('[AI_MEMORY] Summary retrieval failed (non-blocking):', sumErr.message);
+            }
           }
         }
       } catch (memErr) {

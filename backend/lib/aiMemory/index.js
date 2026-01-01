@@ -1,9 +1,16 @@
 /**
- * AI MEMORY MODULE
+ * AI MEMORY MODULE (PHASE 7)
  * RAG (Retrieval Augmented Generation) system for Ai-SHA
  * 
  * Provides tenant-scoped memory storage and retrieval using pgvector
  * Stores embeddings of notes, activities, and other content for context-aware conversations
+ * 
+ * Key Components:
+ * - redaction.js: Sanitizes content, removes API keys/tokens/passwords
+ * - chunker.js: Splits long content into overlapping chunks for embedding
+ * - embedder.js: Generates vector embeddings via OpenAI API
+ * - memoryStore.js: CRUD operations for ai_memory_chunks table
+ * - conversationSummary.js: Rolling summaries for conversation context
  */
 
 export { redactSensitive, containsSensitiveData, sanitizeForMemory } from './redaction.js';
@@ -16,6 +23,10 @@ export {
   deleteAllMemory,
   getMemoryStats
 } from './memoryStore.js';
+export {
+  updateConversationSummary,
+  getConversationSummary
+} from './conversationSummary.js';
 
 /**
  * Check if memory system is enabled
@@ -26,8 +37,8 @@ export function isMemoryEnabled() {
 }
 
 /**
- * Get memory configuration
- * @returns {object} - Configuration object
+ * Get memory configuration with environment variable defaults
+ * @returns {object} - Configuration object with all RAG settings
  */
 export function getMemoryConfig() {
   return {
