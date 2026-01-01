@@ -267,3 +267,239 @@ export function updateToolSchemasWithLabels(toolSchemas, labels) {
     return updated;
   });
 }
+
+/**
+ * Check if a user message indicates a need for full CRM context
+ * (asking about CRM workflow, how statuses work, entity relationships, etc.)
+ * @param {string} message - User's message
+ * @returns {boolean} True if full context is needed
+ */
+export function needsFullContextForQuery(message) {
+  if (!message) return false;
+  
+  // Patterns indicating user wants to understand CRM structure/workflow
+  const fullContextPatterns = [
+    /how does (?:the )?(crm|system|workflow|pipeline|sales|lead)/i,
+    /what (?:are|is) (?:the )?(?:different )?(status|statuses|stages|workflow)/i,
+    /explain (?:the )?(crm|system|workflow|pipeline|funnel)/i,
+    /walk me through/i,
+    /what can (?:you|i|we) do/i,
+    /help me (?:understand|learn|get started)/i,
+    /how (?:do i|should i) (?:use|work with)/i,
+    /what (?:entities|modules|features) (?:are|do)/i,
+    /difference between .* and .*/i,
+    /when (?:do i|should i) (?:use|create|convert)/i,
+  ];
+  
+  return fullContextPatterns.some(pattern => pattern.test(message));
+}
+
+/**
+ * Check if this is the first message in a conversation
+ * (no history besides the current user message)
+ * @param {Array} messages - Conversation messages array
+ * @returns {boolean} True if this is the first user message
+ */
+export function isFirstMessage(messages) {
+  if (!Array.isArray(messages)) return true;
+  // Filter to user messages only (exclude system prompt)
+  const userMessages = messages.filter(m => m.role === 'user');
+  return userMessages.length <= 1;
+}
+
+/**
+ * Check if full context should be forced via environment variable
+ * @returns {boolean} True if AI_FORCE_FULL_CONTEXT is enabled
+ */
+export function shouldForceFullContext() {
+  return process.env.AI_FORCE_FULL_CONTEXT === 'true' || process.env.AI_FORCE_FULL_CONTEXT === '1';
+}
+
+/**
+ * Truncate a prompt to a maximum token count (rough estimate: 1 token ≈ 4 chars)
+ * @param {string} prompt - The prompt to truncate
+ * @param {number} maxTokens - Maximum tokens (default 1200)
+ * @returns {string} Truncated prompt
+ */
+export function truncatePromptToTokenLimit(prompt, maxTokens = 1200) {
+  const approxCharsPerToken = 4;
+  const maxChars = maxTokens * approxCharsPerToken;
+  
+  if (prompt.length <= maxChars) return prompt;
+  
+  // Truncate and add ellipsis marker
+  return prompt.substring(0, maxChars - 50) + '\n\n[...context truncated for token efficiency...]';
+}
+
+/**
+ * Generate CONDENSED system prompt enhancement (default for follow-up messages)
+ * Only includes essential terminology mappings, no verbose workflow explanations.
+ * Target: ~400 tokens max.
+ * 
+ * @param {string} basePrompt - Original system prompt
+ * @param {import('pg').Pool} pool - Database pool
+ * @param {string} tenantIdOrSlug - Tenant UUID or text slug
+ * @returns {Promise<string>} Enhanced system prompt with minimal context
+ */
+export async function enhanceSystemPromptCondensed(basePrompt, pool, tenantIdOrSlug) {
+  try {
+    // Dynamically import to avoid circular dependencies
+    const { buildTenantContextDictionary } = await import('./tenantContextDictionary.js');
+    
+    const dictionary = await buildTenantContextDictionary(pool, tenantIdOrSlug);
+    
+    if (dictionary.error) {
+      // Fall back to labels-only enhancement
+      return await enhanceSystemPromptWithLabels(basePrompt, pool, tenantIdOrSlug);
+    }
+    
+    // Generate condensed context (only essential info)
+    let condensedContext = '\n\n**TENANT CONTEXT:**\n';
+    condensedContext += `Tenant: ${dictionary.tenant.name} | Model: ${dictionary.tenant.businessModel}\n`;
+    
+    // Only include custom terminology if any exists
+    if (dictionary.terminology.customizationCount > 0) {
+      condensedContext += '\n**CUSTOM TERMS:**\n';
+      for (const [entityKey, labels] of Object.entries(dictionary.terminology.entities)) {
+        if (labels.isCustomized) {
+          condensedContext += `- "${labels.plural}" → ${entityKey}\n`;
+        }
+      }
+    }
+    
+    // Compact status reference (only key entities)
+    const keyEntities = ['leads', 'opportunities', 'accounts'];
+    condensedContext += '\n**KEY STATUSES:**\n';
+    for (const entity of keyEntities) {
+      const statuses = dictionary.statusCards.entities[entity];
+      if (statuses) {
+        const statusList = Array.isArray(statuses) 
+          ? statuses.map(s => typeof s === 'string' ? s : s.id || s.label).slice(0, 5).join(', ')
+          : String(statuses);
+        condensedContext += `- ${entity}: ${statusList}\n`;
+      }
+    }
+    
+    return truncatePromptToTokenLimit(basePrompt + condensedContext, 1200);
+  } catch (err) {
+    console.error('[entityLabelInjector] Error enhancing with condensed context:', err.message);
+    return basePrompt;
+  }
+}
+
+/**
+ * Determine which system prompt enhancement to use based on context
+ * @param {string} basePrompt - Original system prompt
+ * @param {import('pg').Pool} pool - Database pool
+ * @param {string} tenantIdOrSlug - Tenant UUID or text slug
+ * @param {Object} options - Context options
+ * @param {Array} options.messages - Conversation messages
+ * @param {string} options.userMessage - Current user message
+ * @returns {Promise<string>} Appropriately enhanced system prompt
+ */
+export async function enhanceSystemPromptSmart(basePrompt, pool, tenantIdOrSlug, options = {}) {
+  const { messages = [], userMessage = '' } = options;
+  
+  // Use FULL context for:
+  // 1. First message in conversation
+  // 2. User asking about CRM workflow/structure
+  // 3. AI_FORCE_FULL_CONTEXT env flag
+  const useFullContext = 
+    shouldForceFullContext() ||
+    isFirstMessage(messages) ||
+    needsFullContextForQuery(userMessage);
+  
+  if (useFullContext) {
+    console.log('[SystemPrompt] Using FULL context (first msg, CRM question, or forced)');
+    const fullPrompt = await enhanceSystemPromptWithFullContext(basePrompt, pool, tenantIdOrSlug);
+    // Still apply token cap to full context
+    return truncatePromptToTokenLimit(fullPrompt, 1500); // Slightly higher cap for full context
+  }
+  
+  console.log('[SystemPrompt] Using CONDENSED context (follow-up message)');
+  return await enhanceSystemPromptCondensed(basePrompt, pool, tenantIdOrSlug);
+}
+
+/**
+ * CORE TOOLS: Always available when relevant (should not be removed by hard cap)
+ */
+const CORE_TOOLS = ['fetch_tenant_snapshot', 'suggest_next_actions'];
+
+/**
+ * Tool cap configuration
+ */
+const TOOL_CAP_MIN = 3;
+const TOOL_CAP_MAX = 12;
+const TOOL_CAP_DEFAULT = 8;
+
+/**
+ * Apply hard cap to focused tools, preserving core tools
+ * @param {Array} focusedTools - Array of tool schemas
+ * @param {Object} options - Options
+ * @param {number} options.maxTools - Maximum tools to return (default 8)
+ * @param {Array} options.preserveTools - Tool names to always include (default: CORE_TOOLS)
+ * @param {string} options.intent - Classified intent for logging
+ * @returns {Array} Capped tool schemas
+ */
+export function applyToolHardCap(focusedTools, options = {}) {
+  const { 
+    maxTools = TOOL_CAP_DEFAULT, 
+    preserveTools = CORE_TOOLS,
+    intent = null 
+  } = options;
+  
+  // Clamp maxTools within allowed range
+  const effectiveMax = Math.max(TOOL_CAP_MIN, Math.min(TOOL_CAP_MAX, maxTools));
+  
+  if (!Array.isArray(focusedTools) || focusedTools.length <= effectiveMax) {
+    return focusedTools; // Already within cap
+  }
+  
+  // Separate core tools from others
+  const coreToolsPresent = focusedTools.filter(t => 
+    preserveTools.includes(t.function?.name)
+  );
+  const otherTools = focusedTools.filter(t => 
+    !preserveTools.includes(t.function?.name)
+  );
+  
+  // Calculate how many non-core tools we can include
+  const slotsForOthers = effectiveMax - coreToolsPresent.length;
+  
+  if (slotsForOthers <= 0) {
+    // Only room for core tools
+    console.log('[ToolCap] Hard cap applied: only core tools fit', {
+      original: focusedTools.length,
+      capped: coreToolsPresent.length,
+      maxTools: effectiveMax,
+      intent
+    });
+    return coreToolsPresent;
+  }
+  
+  // Take top N other tools (they're already ordered by relevance from getRelevantToolsForIntent)
+  const selectedOthers = otherTools.slice(0, slotsForOthers);
+  const cappedTools = [...coreToolsPresent, ...selectedOthers];
+  
+  console.log('[ToolCap] Hard cap applied:', {
+    original: focusedTools.length,
+    capped: cappedTools.length,
+    maxTools: effectiveMax,
+    coreKept: coreToolsPresent.map(t => t.function?.name),
+    intent
+  });
+  
+  return cappedTools;
+}
+
+/**
+ * Estimate token count for tool schemas
+ * Rough estimate: 1 token ≈ 4 chars in JSON
+ * @param {Array} tools - Tool schemas
+ * @returns {number} Estimated token count
+ */
+export function estimateToolTokens(tools) {
+  if (!Array.isArray(tools)) return 0;
+  const jsonStr = JSON.stringify(tools);
+  return Math.ceil(jsonStr.length / 4);
+}

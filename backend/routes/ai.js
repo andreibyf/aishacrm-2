@@ -15,7 +15,7 @@ import createAiRealtimeRoutes from './aiRealtime.js';
 import { routeChat } from '../flows/index.js';
 import { resolveLLMApiKey, pickModel, getTenantIdFromRequest, selectLLMConfigForTenant } from '../lib/aiEngine/index.js';
 import { logLLMActivity } from '../lib/aiEngine/activityLogger.js';
-import { enhanceSystemPromptWithFullContext, fetchEntityLabels, updateToolSchemasWithLabels } from '../lib/entityLabelInjector.js';
+import { enhanceSystemPromptWithFullContext, enhanceSystemPromptSmart, fetchEntityLabels, updateToolSchemasWithLabels, isFirstMessage, needsFullContextForQuery, applyToolHardCap } from '../lib/entityLabelInjector.js';
 import { buildTenantContextDictionary, generateContextDictionaryPrompt } from '../lib/tenantContextDictionary.js';
 import { developerChat, isSuperadmin } from '../lib/developerAI.js';
 import { classifyIntent, extractEntityMentions, getIntentConfidence } from '../lib/intentClassifier.js';
@@ -613,18 +613,27 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
 - Only reference data returned by the tools to guarantee tenant isolation
 - When creating activities without a specified assignee, assign them to the current user (${userName || 'yourself'})`;
 
-      // Inject full tenant context dictionary (v3.0.0) - includes terminology, workflows, status cards
-      const systemPrompt = await enhanceSystemPromptWithFullContext(baseSystemPrompt, pgPool, tenantIdentifier);
-
-      const messages = [
-        { role: 'system', content: systemPrompt },
-      ];
-
+      // Build messages array first so we can determine if this is a first message
+      const messageHistory = [];
       for (const row of historyRows || []) {
         if (!row || !row.role) continue;
         if (row.role === 'system') continue;
-        messages.push({ role: row.role, content: row.content });
+        messageHistory.push({ role: row.role, content: row.content });
       }
+      
+      // Get current user message for context detection
+      const currentUserMessage = messageHistory.filter(m => m.role === 'user').pop()?.content || '';
+
+      // Use SMART system prompt: full context for first message/CRM questions, condensed otherwise
+      const systemPrompt = await enhanceSystemPromptSmart(baseSystemPrompt, pgPool, tenantIdentifier, {
+        messages: messageHistory,
+        userMessage: currentUserMessage,
+      });
+
+      const messages = [
+        { role: 'system', content: systemPrompt },
+        ...messageHistory,
+      ];
 
       // AI MEMORY RETRIEVAL (RAG - Phase 7)
       // Query relevant memory chunks based on last user message
@@ -830,6 +839,13 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
         }
         // Low confidence (< 0.7): Use all tools with auto selection
       }
+
+      // HARD CAP: Limit tools to 3-12 to reduce token overhead
+      // Always preserve core tools (fetch_tenant_snapshot, suggest_next_actions)
+      focusedTools = applyToolHardCap(focusedTools, {
+        maxTools: 8,
+        intent: classifiedIntent || 'none',
+      });
 
       for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
         const startTime = Date.now();
@@ -2407,8 +2423,17 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       const tenantName = tenantRecord?.name || tenantRecord?.tenant_id || 'CRM Tenant';
       const baseSystemPrompt = `${buildSystemPrompt({ tenantName })}\n\n${BRAID_SYSTEM_PROMPT}\n\n- ALWAYS call fetch_tenant_snapshot before answering tenant data questions.\n- NEVER hallucinate records; only reference tool data.\n`;
       
-      // Inject full tenant context dictionary (v3.0.0) - includes terminology, workflows, status cards
-      let systemPrompt = await enhanceSystemPromptWithFullContext(baseSystemPrompt, pgPool, tenantIdentifier);
+      // Get current user message for context detection
+      const currentUserMessage = messages.filter(m => m.role === 'user').pop()?.content || '';
+      
+      // Combine request messages and historical messages for first-message detection
+      const allConversationMessages = [...historicalMessages, ...messages.filter(m => m.role !== 'system')];
+      
+      // Use SMART system prompt: full context for first message/CRM questions, condensed otherwise
+      let systemPrompt = await enhanceSystemPromptSmart(baseSystemPrompt, pgPool, tenantIdentifier, {
+        messages: allConversationMessages,
+        userMessage: currentUserMessage,
+      });
 
       // Load tenant context dictionary as an object for deterministic argument normalization.
       // NOTE: The dictionary is already injected into the system prompt, but the backend must
@@ -2638,6 +2663,13 @@ ${conversationSummary}`;
         }
         // Low confidence (< 0.7): Use all tools with auto selection
       }
+
+      // HARD CAP: Limit tools to 3-12 to reduce token overhead
+      // Always preserve core tools (fetch_tenant_snapshot, suggest_next_actions)
+      focusedTools = applyToolHardCap(focusedTools, {
+        maxTools: 8,
+        intent: classifiedIntent || 'none',
+      });
 
       for (let i = 0; i < MAX_TOOL_ITERATIONS; i += 1) {
         const startTime = Date.now();
