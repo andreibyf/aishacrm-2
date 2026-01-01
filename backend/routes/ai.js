@@ -808,16 +808,56 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       // OPTIMIZE: Limit incoming messages to prevent token overflow
       const MAX_INCOMING = 8;
       const MAX_CHARS = 1500;
+      const TOOL_CONTEXT_PREFIX = '[TOOL_CONTEXT]';
 
-      const originalMsgCount = (messages || []).length;
-      let conversationMessages = (messages || [])
-        .slice(-MAX_INCOMING)
-        .map(m => ({
+      // CONTEXT PRESERVATION: Extract tool context messages before slicing
+      // These contain previous tool results that are critical for follow-up questions
+      const allMessages = messages || [];
+      const toolContextMessages = allMessages.filter(
+        m => m.role === 'assistant' && m.content?.startsWith(TOOL_CONTEXT_PREFIX)
+      );
+      const regularMessages = allMessages.filter(
+        m => !(m.role === 'assistant' && m.content?.startsWith(TOOL_CONTEXT_PREFIX))
+      );
+
+      const originalMsgCount = allMessages.length;
+      
+      // Slice regular messages but preserve recent tool context
+      const slicedRegular = regularMessages.slice(-MAX_INCOMING);
+      
+      // Get most recent tool context (if any) - limit to 1 to avoid token bloat
+      const recentToolContext = toolContextMessages.slice(-1);
+      
+      // Combine: system + tool context + regular messages
+      // Insert tool context after system message but before conversation
+      let conversationMessages = slicedRegular.map(m => ({
+        ...m,
+        content: typeof m.content === 'string'
+          ? m.content.slice(0, MAX_CHARS)
+          : m.content
+      }));
+
+      // If we have tool context, inject it after the system message
+      if (recentToolContext.length > 0) {
+        const systemMsg = conversationMessages.find(m => m.role === 'system');
+        const nonSystemMsgs = conversationMessages.filter(m => m.role !== 'system');
+        
+        // Truncate tool context to reasonable size (800 chars)
+        const truncatedToolContext = recentToolContext.map(m => ({
           ...m,
           content: typeof m.content === 'string'
-            ? m.content.slice(0, MAX_CHARS)
+            ? m.content.slice(0, 800)
             : m.content
         }));
+        
+        conversationMessages = [
+          ...(systemMsg ? [systemMsg] : []),
+          ...truncatedToolContext,
+          ...nonSystemMsgs
+        ];
+        
+        console.log('[ContextPreservation] Injected', recentToolContext.length, 'tool context message(s) for follow-up');
+      }
 
       // COST GUARD: Log message optimization
       const cappedMsgCount = conversationMessages.length;
@@ -2299,10 +2339,34 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
           
           // Limit to last 10 messages to avoid token overflow (each message ~100-500 tokens)
           // Full history available in DB, but LLM only needs recent context
-          const recentHistory = historyRows.slice(-10);
-          historicalMessages = recentHistory
+          const TOOL_CONTEXT_PREFIX = '[TOOL_CONTEXT]';
+          
+          // CONTEXT PRESERVATION: Separate tool context from regular messages
+          const toolContextRows = historyRows.filter(
+            row => row.role === 'assistant' && row.content?.startsWith(TOOL_CONTEXT_PREFIX)
+          );
+          const regularRows = historyRows.filter(
+            row => !(row.role === 'assistant' && row.content?.startsWith(TOOL_CONTEXT_PREFIX))
+          );
+          
+          // Take last 10 regular messages + most recent tool context
+          const recentRegular = regularRows.slice(-10);
+          const recentToolContext = toolContextRows.slice(-1);
+          
+          historicalMessages = recentRegular
             .filter(row => row.role && row.content && row.role !== 'system')
             .map(row => ({ role: row.role, content: row.content }));
+          
+          // Inject tool context at the start (after system) if present
+          if (recentToolContext.length > 0) {
+            const toolContextMsg = {
+              role: 'assistant',
+              content: recentToolContext[0].content.slice(0, 800) // Truncate for token budget
+            };
+            historicalMessages.unshift(toolContextMsg);
+            console.log('[ContextPreservation] Preserved tool context from previous turn');
+          }
+          
           console.log('[AI Chat] Loaded', historicalMessages.length, 'historical messages (from', historyRows.length, 'total)');
         }
 
