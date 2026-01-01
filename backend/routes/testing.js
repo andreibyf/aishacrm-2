@@ -445,7 +445,7 @@ export default function createTestingRoutes(_pgPool) {
         { method: 'GET', path: `/api/integrations?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/tenantintegrations?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/synchealths?tenant_id={TENANT_ID}` },
-        { method: 'GET', path: `/api/database/check-volume` },
+        { method: 'GET', path: `/api/database/check-volume?tenant_id={TENANT_ID}` },
         
         // Telephony
         { method: 'GET', path: `/api/telephony/status?tenant_id={TENANT_ID}` },

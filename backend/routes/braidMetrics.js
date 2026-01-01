@@ -152,24 +152,36 @@ router.get('/tools', async (req, res) => {
       return res.status(400).json({ error: `Invalid period. Use: ${validPeriods.join(', ')}` });
     }
 
+    // Map route periods to braid-rt periods
+    const periodMap = { '1h': 'hour', '24h': 'day', '7d': 'week', '30d': 'month' };
+    const braidPeriod = periodMap[period] || 'day';
+
     const supabase = getSupabaseClient();
-    const metrics = await getToolMetrics(supabase, tenantId, period);
+    const result = await getToolMetrics(supabase, tenantId, braidPeriod);
+
+    // Handle error response from getToolMetrics
+    if (result.error) {
+      return res.status(500).json({ error: 'Failed to fetch tool metrics', details: result.error });
+    }
+
+    // Extract tools array from result
+    const tools = result.tools || [];
 
     // Generate summary
     const summary = {
-      totalTools: metrics.length,
-      healthyCount: metrics.filter(t => t.status === 'healthy').length,
-      degradedCount: metrics.filter(t => t.status === 'degraded').length,
-      warningCount: metrics.filter(t => t.status === 'warning').length,
-      criticalCount: metrics.filter(t => t.status === 'critical').length,
-      overallHealth: metrics.length > 0 
-        ? Math.round(metrics.reduce((sum, t) => sum + t.health, 0) / metrics.length) 
+      totalTools: tools.length,
+      healthyCount: tools.filter(t => t.healthStatus === 'healthy').length,
+      degradedCount: tools.filter(t => t.healthStatus === 'degraded').length,
+      warningCount: tools.filter(t => t.healthStatus === 'warning').length,
+      criticalCount: tools.filter(t => t.healthStatus === 'critical').length,
+      overallHealth: tools.length > 0 
+        ? Math.round(tools.reduce((sum, t) => sum + t.healthScore, 0) / tools.length) 
         : 100
     };
 
     res.json({
       period,
-      tools: metrics,
+      tools,
       summary,
       timestamp: new Date().toISOString()
     });
@@ -282,28 +294,31 @@ router.get('/summary', async (req, res) => {
     const supabase = getSupabaseClient();
 
     // Fetch in parallel
-    const [realtime, toolMetrics, auditStats] = await Promise.all([
+    const [realtime, toolMetricsResult, auditStats] = await Promise.all([
       getRealtimeMetrics(tenantId),
-      getToolMetrics(supabase, tenantId, '24h'),
-      getAuditStats(supabase, tenantId, '24h')
+      getToolMetrics(supabase, tenantId, 'day'),
+      getAuditStats(supabase, tenantId, 'day')
     ]);
+
+    // Extract tools array from result
+    const toolMetrics = toolMetricsResult?.tools || [];
 
     // Top 5 most-used tools
     const topTools = toolMetrics
-      .sort((a, b) => b.total - a.total)
+      .sort((a, b) => b.calls - a.calls)
       .slice(0, 5)
-      .map(t => ({ name: t.tool, total: t.total, successRate: t.successRate, health: t.health }));
+      .map(t => ({ name: t.name, total: t.calls, successRate: t.successRate, health: t.healthScore }));
 
     // Tools needing attention (health < 80)
     const problemTools = toolMetrics
-      .filter(t => t.health < 80)
-      .sort((a, b) => a.health - b.health)
+      .filter(t => t.healthScore < 80)
+      .sort((a, b) => a.healthScore - b.healthScore)
       .slice(0, 5)
-      .map(t => ({ name: t.tool, health: t.health, status: t.status, successRate: t.successRate }));
+      .map(t => ({ name: t.name, health: t.healthScore, status: t.healthStatus, successRate: t.successRate }));
 
     // Calculate overall health
     const overallHealth = toolMetrics.length > 0
-      ? Math.round(toolMetrics.reduce((sum, t) => sum + t.health, 0) / toolMetrics.length)
+      ? Math.round(toolMetrics.reduce((sum, t) => sum + t.healthScore, 0) / toolMetrics.length)
       : 100;
 
     // Determine overall status
@@ -324,7 +339,7 @@ router.get('/summary', async (req, res) => {
         score: overallHealth,
         status: overallStatus,
         toolCount: toolMetrics.length,
-        healthyCount: toolMetrics.filter(t => t.health >= 80).length
+        healthyCount: toolMetrics.filter(t => t.healthScore >= 80).length
       },
       timestamp: new Date().toISOString()
     });

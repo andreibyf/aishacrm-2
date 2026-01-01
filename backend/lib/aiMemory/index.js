@@ -28,6 +28,37 @@ export {
   getConversationSummary
 } from './conversationSummary.js';
 
+// Import for wrapper function
+import { getConversationSummary as _getConversationSummary } from './conversationSummary.js';
+
+/**
+ * Retrieve the latest conversation summary for a given conversation/tenant.
+ *
+ * This helper wraps the conversationSummaryStore API to return a plain
+ * summary string. If no summary exists, it returns null. Use this to
+ * inject rolling summaries into system prompts (e.g. in AI chat routes).
+ *
+ * @param {object} params
+ * @param {string} params.conversationId - Conversation UUID
+ * @param {string} params.tenantId - Tenant UUID
+ * @returns {Promise<string|null>}
+ */
+export async function getConversationSummaryFromMemory({ conversationId, tenantId }) {
+  if (!conversationId || !tenantId) {
+    return null;
+  }
+  try {
+    const summary = await _getConversationSummary({ conversationId, tenantId });
+    return summary || null;
+  } catch (err) {
+    console.error(
+      '[getConversationSummaryFromMemory] Error fetching conversation summary:',
+      err?.message || err
+    );
+    return null;
+  }
+}
+
 /**
  * Check if memory system is enabled
  * @returns {boolean} - True if MEMORY_ENABLED=true in environment

@@ -36,6 +36,7 @@ async function fetchWithAuth(endpoint) {
                 sessionStorage.getItem('supabase_access_token');
   
   const response = await fetch(`${BACKEND_URL}${endpoint}`, {
+    credentials: 'include', // Include cookies for session auth
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json'
