@@ -15,7 +15,7 @@ import createAiRealtimeRoutes from './aiRealtime.js';
 import { routeChat } from '../flows/index.js';
 import { resolveLLMApiKey, pickModel, getTenantIdFromRequest, selectLLMConfigForTenant } from '../lib/aiEngine/index.js';
 import { logLLMActivity } from '../lib/aiEngine/activityLogger.js';
-import { enhanceSystemPromptWithFullContext, enhanceSystemPromptSmart, fetchEntityLabels, updateToolSchemasWithLabels, isFirstMessage, needsFullContextForQuery, applyToolHardCap } from '../lib/entityLabelInjector.js';
+import { enhanceSystemPromptSmart, fetchEntityLabels, updateToolSchemasWithLabels, applyToolHardCap } from '../lib/entityLabelInjector.js';
 import { buildTenantContextDictionary, generateContextDictionaryPrompt } from '../lib/tenantContextDictionary.js';
 import { developerChat, isSuperadmin } from '../lib/developerAI.js';
 import { classifyIntent, extractEntityMentions, getIntentConfidence } from '../lib/intentClassifier.js';
@@ -840,11 +840,13 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
         // Low confidence (< 0.7): Use all tools with auto selection
       }
 
-      // HARD CAP: Limit tools to 3-12 to reduce token overhead
-      // Always preserve core tools (fetch_tenant_snapshot, suggest_next_actions)
+      // HARD CAP: Limit tools to 3-20 to reduce token overhead
+      // Always preserve core tools AND any forced tool from intent routing
+      const forcedToolName = toolChoice?.function?.name || null;
       focusedTools = applyToolHardCap(focusedTools, {
-        maxTools: 8,
+        maxTools: 12,
         intent: classifiedIntent || 'none',
+        forcedTool: forcedToolName,
       });
 
       for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
@@ -2664,11 +2666,13 @@ ${conversationSummary}`;
         // Low confidence (< 0.7): Use all tools with auto selection
       }
 
-      // HARD CAP: Limit tools to 3-12 to reduce token overhead
-      // Always preserve core tools (fetch_tenant_snapshot, suggest_next_actions)
+      // HARD CAP: Limit tools to 3-20 to reduce token overhead
+      // Always preserve core tools AND any forced tool from intent routing
+      const forcedToolName = toolChoice?.function?.name || null;
       focusedTools = applyToolHardCap(focusedTools, {
-        maxTools: 8,
+        maxTools: 12,
         intent: classifiedIntent || 'none',
+        forcedTool: forcedToolName,
       });
 
       for (let i = 0; i < MAX_TOOL_ITERATIONS; i += 1) {

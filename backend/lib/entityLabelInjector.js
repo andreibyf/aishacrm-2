@@ -427,26 +427,45 @@ const CORE_TOOLS = ['fetch_tenant_snapshot', 'suggest_next_actions'];
 
 /**
  * Tool cap configuration
+ * Only applied when intent is detected - prevents over-capping general queries
  */
 const TOOL_CAP_MIN = 3;
-const TOOL_CAP_MAX = 12;
-const TOOL_CAP_DEFAULT = 8;
+const TOOL_CAP_MAX = 20; // Raised from 12 to allow more tools when intent is unclear
+const TOOL_CAP_DEFAULT = 12;
 
 /**
  * Apply hard cap to focused tools, preserving core tools
+ * IMPORTANT: Only applies cap when intent is detected. 
+ * When intent is 'none' or null, tools are NOT capped to avoid breaking general queries.
+ * 
  * @param {Array} focusedTools - Array of tool schemas
  * @param {Object} options - Options
- * @param {number} options.maxTools - Maximum tools to return (default 8)
+ * @param {number} options.maxTools - Maximum tools to return (default 12)
  * @param {Array} options.preserveTools - Tool names to always include (default: CORE_TOOLS)
- * @param {string} options.intent - Classified intent for logging
- * @returns {Array} Capped tool schemas
+ * @param {string} options.intent - Classified intent for logging. If 'none' or null, cap is NOT applied.
+ * @param {string} options.forcedTool - Tool that MUST be included (from tool_choice forcing)
+ * @returns {Array} Capped tool schemas (or original if no intent)
  */
 export function applyToolHardCap(focusedTools, options = {}) {
   const { 
     maxTools = TOOL_CAP_DEFAULT, 
     preserveTools = CORE_TOOLS,
-    intent = null 
+    intent = null,
+    forcedTool = null
   } = options;
+  
+  // CRITICAL: Only apply cap when intent is detected
+  // If no intent, user query is ambiguous - provide all tools for best results
+  if (!intent || intent === 'none' || intent === 'NONE') {
+    console.log('[ToolCap] Skipping cap (no intent detected) - providing all', focusedTools.length, 'tools');
+    return focusedTools;
+  }
+  
+  // Build list of tools that MUST be preserved
+  const mustPreserve = new Set(preserveTools);
+  if (forcedTool) {
+    mustPreserve.add(forcedTool);
+  }
   
   // Clamp maxTools within allowed range
   const effectiveMax = Math.max(TOOL_CAP_MIN, Math.min(TOOL_CAP_MAX, maxTools));
@@ -455,37 +474,38 @@ export function applyToolHardCap(focusedTools, options = {}) {
     return focusedTools; // Already within cap
   }
   
-  // Separate core tools from others
-  const coreToolsPresent = focusedTools.filter(t => 
-    preserveTools.includes(t.function?.name)
+  // Separate must-preserve tools from others
+  const mustKeepTools = focusedTools.filter(t => 
+    mustPreserve.has(t.function?.name)
   );
   const otherTools = focusedTools.filter(t => 
-    !preserveTools.includes(t.function?.name)
+    !mustPreserve.has(t.function?.name)
   );
   
-  // Calculate how many non-core tools we can include
-  const slotsForOthers = effectiveMax - coreToolsPresent.length;
+  // Calculate how many non-preserved tools we can include
+  const slotsForOthers = effectiveMax - mustKeepTools.length;
   
   if (slotsForOthers <= 0) {
-    // Only room for core tools
-    console.log('[ToolCap] Hard cap applied: only core tools fit', {
+    // Only room for must-keep tools
+    console.log('[ToolCap] Hard cap applied: only must-keep tools fit', {
       original: focusedTools.length,
-      capped: coreToolsPresent.length,
+      capped: mustKeepTools.length,
       maxTools: effectiveMax,
+      kept: mustKeepTools.map(t => t.function?.name),
       intent
     });
-    return coreToolsPresent;
+    return mustKeepTools;
   }
   
   // Take top N other tools (they're already ordered by relevance from getRelevantToolsForIntent)
   const selectedOthers = otherTools.slice(0, slotsForOthers);
-  const cappedTools = [...coreToolsPresent, ...selectedOthers];
+  const cappedTools = [...mustKeepTools, ...selectedOthers];
   
   console.log('[ToolCap] Hard cap applied:', {
     original: focusedTools.length,
     capped: cappedTools.length,
     maxTools: effectiveMax,
-    coreKept: coreToolsPresent.map(t => t.function?.name),
+    mustKeep: mustKeepTools.map(t => t.function?.name),
     intent
   });
   
