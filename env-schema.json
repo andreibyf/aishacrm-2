@@ -123,6 +123,91 @@
           "syncTo": ["mcp"],
           "description": "GitHub personal access token (for CI/CD and MCP GitHub adapter)"
         },
+        "AI_TOKEN_HARD_CEILING": {
+          "type": "integer",
+          "default": 4000,
+          "minimum": 1000,
+          "maximum": 16000,
+          "required": false,
+          "description": "Total token budget for AI requests (input + reserved output)"
+        },
+        "AI_SYSTEM_PROMPT_CAP": {
+          "type": "integer",
+          "default": 1200,
+          "minimum": 200,
+          "maximum": 4000,
+          "required": false,
+          "description": "Maximum tokens for AI system prompt"
+        },
+        "AI_TOOL_SCHEMA_CAP": {
+          "type": "integer",
+          "default": 800,
+          "minimum": 100,
+          "maximum": 2000,
+          "required": false,
+          "description": "Maximum tokens for AI tool JSON schemas"
+        },
+        "AI_MEMORY_CAP": {
+          "type": "integer",
+          "default": 250,
+          "minimum": 50,
+          "maximum": 1000,
+          "required": false,
+          "description": "Maximum tokens for RAG memory context"
+        },
+        "AI_TOOL_RESULT_CAP": {
+          "type": "integer",
+          "default": 700,
+          "minimum": 100,
+          "maximum": 2000,
+          "required": false,
+          "description": "Maximum tokens for tool result summaries"
+        },
+        "AI_OUTPUT_MAX_TOKENS": {
+          "type": "integer",
+          "default": 350,
+          "minimum": 100,
+          "maximum": 2000,
+          "required": false,
+          "description": "Reserved tokens for AI model output (max_tokens parameter)"
+        },
+        "MEMORY_ENABLED": {
+          "type": "string",
+          "enum": ["true", "false"],
+          "default": "false",
+          "required": false,
+          "description": "Master switch for AI memory/RAG system (must be 'true' to enable)"
+        },
+        "MEMORY_TOP_K": {
+          "type": "integer",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 20,
+          "required": false,
+          "description": "Number of memory chunks to retrieve for RAG"
+        },
+        "MEMORY_MAX_CHUNK_CHARS": {
+          "type": "integer",
+          "default": 300,
+          "minimum": 50,
+          "maximum": 2000,
+          "required": false,
+          "description": "Maximum characters per memory chunk"
+        },
+        "AI_MEMORY_ALWAYS_ON": {
+          "type": "string",
+          "enum": ["true", "false"],
+          "default": "false",
+          "required": false,
+          "description": "Bypass memory pattern matching (for testing, requires MEMORY_ENABLED=true)"
+        },
+        "AI_MEMORY_ALWAYS_OFF": {
+          "type": "string",
+          "enum": ["true", "false"],
+          "default": "false",
+          "required": false,
+          "description": "Force memory off (overrides all other memory settings)"
+        },
         "N8N_API_KEY": {
           "type": "string",
           "sensitive": true,

@@ -1,7 +1,7 @@
 # AiSHA AI Architecture
 
-**Version:** 1.1  
-**Last Updated:** December 26, 2025  
+**Version:** 1.2  
+**Last Updated:** January 1, 2026  
 **Status:** Production  
 **Purpose:** Customer-facing AI Executive Assistant for Aisha CRM
 
@@ -143,20 +143,56 @@ sequenceDiagram
 | **Chat Message** | INSERT user + assistant messages | `backend/routes/ai.js` |
 | **Conversation Delete** | CASCADE deletes all messages | Supabase ON DELETE CASCADE |
 
-### 4. **Token Optimization Strategy**
+### 4. **Token Budget Manager (v3.6.39)**
 
-**Problem:** Sending all messages to LLM = expensive + slow  
-**Solution:** Two-tier approach (v3.3.17)
+**Problem:** Sending all messages + tools + memory to LLM = expensive + slow  
+**Solution:** Centralized budget enforcement with hard caps and smart drop-order
 
-| Operation | Limit | Reason |
-|-----------|-------|--------|
-| **DB Query** | Last 50 messages | Efficient query with index on `created_date` |
-| **LLM Context** | Last 10 messages | ~5 conversation exchanges = sufficient context |
+**Configuration:** `backend/lib/aiBudgetConfig.js` (single source of truth)
 
-**Token Savings:**
-- Before: 50 messages × ~500 tokens = 25,000 tokens/request
-- After: 10 messages × ~500 tokens = 5,000 tokens/request
-- **Savings: ~80% reduction** (~$0.02/request with GPT-4o)
+| Component | Default Cap | Env Override | Purpose |
+|-----------|-------------|--------------|--------|
+| **HARD_CEILING** | 4000 | `AI_TOKEN_HARD_CEILING` | Total token budget (input + reserved output) |
+| **SYSTEM_PROMPT** | 1200 | `AI_SYSTEM_PROMPT_CAP` | Max tokens for system prompt |
+| **TOOL_SCHEMA** | 800 | `AI_TOOL_SCHEMA_CAP` | Max tokens for tool JSON schemas |
+| **MEMORY** | 250 | `AI_MEMORY_CAP` | Max tokens for RAG memory context |
+| **TOOL_RESULT** | 700 | `AI_TOOL_RESULT_CAP` | Max tokens for tool result summaries |
+| **OUTPUT_MAX** | 350 | `AI_OUTPUT_MAX_TOKENS` | Reserved tokens for model output |
+
+**Drop Order (when over budget):**
+```
+1. Memory     → Trim/drop RAG context first (least critical)
+2. Tools      → Reduce tool schemas (keep core + forced tools)
+3. Messages   → Trim conversation history (keep system + last user)
+4. System     → Hard-trim system prompt (last resort)
+```
+
+**Core Tools (never removed):**
+- `fetch_tenant_snapshot`, `search_leads`, `search_contacts`
+- `search_accounts`, `create_activity`, `suggest_next_actions`
+
+**Token Savings (v3.6.39):**
+- Before: ~11,000-12,000 tokens/request
+- After: ~2,000-3,000 tokens/request
+- **Savings: ~75% reduction**
+
+**Budget Enforcement Flow:**
+```javascript
+// In ai.js - both flows
+focusedTools = applyToolHardCap(tools, { maxTools: 12 });
+focusedTools = enforceToolSchemaCap(focusedTools, { forcedTool });
+const budgetResult = applyBudgetCaps({ systemPrompt, messages, tools, memoryText });
+logBudgetSummary(budgetResult.report, budgetResult.actionsTaken);
+// Use budgetResult.messages for API call
+```
+
+**Budget Log Output:**
+```
+[Budget] total=2847, system=423, tools=612, memory=0, history=1812
+[Budget] total=3891, system=423, tools=612, memory=156, history=2700, actions=trimmed_messages_to_5
+```
+
+**Documentation:** See `backend/README-ai-budget.md` for full reference
 
 ### 5. **Known Issues & Cleanup Strategy**
 
@@ -543,7 +579,50 @@ Follow-Up Suggestions:
 id, tenant_id, chunk_text, embedding, metadata, entity_type, entity_id, created_at
 ```
 
-**Flow:**
+### Memory Gating (v3.6.39)
+
+**Problem:** RAG memory is expensive (embedding API + DB queries)  
+**Solution:** Gate memory injection behind explicit trigger patterns
+
+**Configuration:** `backend/lib/aiBudgetConfig.js`
+
+| Setting | Default | Env Override | Purpose |
+|---------|---------|--------------|--------|
+| `enabled` | false | `MEMORY_ENABLED=true` | Master switch (must be true) |
+| `alwaysOn` | false | `AI_MEMORY_ALWAYS_ON=true` | Bypass pattern matching (testing) |
+| `alwaysOff` | false | `AI_MEMORY_ALWAYS_OFF=true` | Force off (overrides all) |
+| `topK` | 3 | `MEMORY_TOP_K` | Number of chunks to retrieve |
+| `maxChunkChars` | 300 | `MEMORY_MAX_CHUNK_CHARS` | Max chars per chunk |
+
+**Gating Precedence:**
+```
+ALWAYS_OFF > MEMORY_ENABLED > ALWAYS_ON > patterns
+```
+
+**Trigger Patterns (memory only queried when matched):**
+- "last time", "previously", "earlier", "before"
+- "remind me", "what did we", "recap", "summary"
+- "what happened", "follow up", "next steps"
+- "discussed", "talked about", "mentioned"
+- "remember when", "do you remember"
+
+**Implementation:** `backend/lib/aiMemory/index.js`
+```javascript
+// Check if memory should be used
+if (shouldUseMemory(userMessage)) {
+  const memoryChunks = await queryMemory({ tenantId, query, topK: 3 });
+  // Inject as system message with UNTRUSTED boundary
+}
+
+// Check if conversation summary should be injected
+if (shouldInjectConversationSummary(userMessage, messageCount)) {
+  const summary = await getConversationSummaryFromMemory({ conversationId, tenantId });
+  // Inject as system message
+}
+```
+
+### Memory Flow
+
 ```
 1. User action generates memory chunk:
    "User asked about next steps for warm lead 'Jack Russel' (awaiting callback). 
@@ -554,21 +633,21 @@ id, tenant_id, chunk_text, embedding, metadata, entity_type, entity_id, created_
 3. Stored with metadata:
    { entity_type: "lead", entity_id: "abc-123", action: "suggest_next_actions", outcome: "activity_created" }
 
-4. Future similar query:
-   "What should I do next?" [warm lead, awaiting callback]
+4. Future similar query (ONLY if trigger pattern matches):
+   "What did we discuss last time?" [warm lead, awaiting callback]
    
-5. RAG search (75%+ similarity):
+5. RAG search (75%+ similarity, limited to topK=3):
    SELECT * FROM ai_memory_chunks 
    WHERE tenant_id = ? AND entity_type = ?
    ORDER BY embedding <=> query_embedding
-   LIMIT 5
+   LIMIT 3
 
-6. Relevant memories used by suggest_next_actions:
-   "In similar scenarios (3 matches), users typically: call back, send recap email, schedule meeting."
+6. Relevant memories injected as UNTRUSTED context
 ```
 
 **Integration Point:**
 - `backend/lib/suggestNextActions.js` → `queryMemory()`
+- `backend/routes/ai.js` → `shouldUseMemory()` + `shouldInjectConversationSummary()`
 - Fallback to rule-based if RAG unavailable
 
 ---

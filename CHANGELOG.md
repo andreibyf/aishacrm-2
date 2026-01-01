@@ -10,13 +10,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - 2026-01-01
 
 ### Added
+- **TokenBudgetManager** - centralized token budget enforcement (`backend/lib/aiBudgetConfig.js`)
+  - Hard ceiling of 4000 tokens (configurable via `AI_TOKEN_HARD_CEILING`)
+  - Component caps: system prompt (1200), tools (800), memory (250), tool results (700)
+  - Smart drop-order: memory → tools → messages → system prompt
+  - Core tools (`fetch_tenant_snapshot`, `suggest_next_actions`, etc.) never removed
+- **Memory Gating** - RAG memory only queried when user explicitly asks for history
+  - Trigger patterns: "last time", "remind me", "what did we discuss", etc.
+  - Gating precedence: `ALWAYS_OFF > MEMORY_ENABLED > ALWAYS_ON > patterns`
+  - Reduced defaults: topK=3 (was 8), maxChunkChars=300 (was 500)
+- `backend/README-ai-budget.md` - comprehensive budget documentation
+- Token budget and memory gating acceptance tests (47 tests)
 - AI token optimization with smart prompt condensing (70% token reduction: 8800 → 2300 tokens)
 - `enhanceSystemPromptSmart()` for condensed vs full context selection
 - `applyToolHardCap()` to limit tools to 3-20 (preserves forced tools)
+- `enforceToolSchemaCap()` for token-based tool schema limiting
+- `applyBudgetCaps()` with drop-order enforcement before model calls
+- `logBudgetSummary()` for one-line budget telemetry
 - `enhanceSystemPromptCondensed()` for follow-up messages (~400 tokens)
 - Phase 7 RAG memory helper (`getConversationSummaryFromMemory()` in aiMemory/index.js)
 - `searchLeadsByStatus`, `searchAccountsByStatus`, `searchOpportunitiesByStage`, `searchContactsByStatus` tools
 - `listAllContacts` tool for retrieving all contacts with full details
+
+### Changed
+- **AI token usage reduced from ~11k-12k to ~2k-3k tokens per interaction** (75% reduction)
+- Budget enforcement applied consistently in both `generateAssistantResponse` and `/api/ai/chat` flows
+- Updated `AI_ARCHITECTURE_AISHA_AI.md` with Token Budget Manager and Memory Gating sections
 
 ### Fixed
 - CodeQL analysis - exclude .http files and api-tests from analysis (REST Client test files)
