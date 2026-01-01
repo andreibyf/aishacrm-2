@@ -129,6 +129,31 @@ fn searchOpportunities(
   };
 }
 
+// Search opportunities by stage - returns full opportunity details for opportunities in a specific stage
+// Use this when user asks about opportunities in a specific pipeline stage
+// Stage values: prospecting, qualification, proposal, negotiation, closed-won, closed-lost
+fn searchOpportunitiesByStage(
+  tenant: String,
+  stage: String,
+  limit: Number
+) -> Result<Array, CRMError> !net {
+  let url = "/api/v2/opportunities";
+  let params = {
+    tenant_id: tenant,
+    stage: stage,
+    limit: limit
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  // Returns full opportunity details including name, amount, stage, probability, etc.
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_opportunities_by_stage", stage: stage }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
 fn getOpportunityForecast(
   tenant: String,
   assigned_to: String

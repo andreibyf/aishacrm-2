@@ -96,6 +96,53 @@ fn searchContacts(
   };
 }
 
+// List all contacts with full details - returns complete contact information
+// Use this when user asks about contacts without specifying an account
+fn listAllContacts(
+  tenant: String,
+  limit: Number
+) -> Result<Array, CRMError> !net {
+  let url = "/api/v2/contacts";
+  let params = {
+    tenant_id: tenant,
+    limit: limit
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  // Returns full contact details including name, email, phone, job title, etc.
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "list_all_contacts" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+// Search contacts by status - returns full contact details for contacts matching a specific status
+// Use this when user asks about contacts with a specific status (e.g. "active contacts", "inactive contacts")
+// Status values: active, inactive, pending, archived
+fn searchContactsByStatus(
+  tenant: String,
+  status: String,
+  limit: Number
+) -> Result<Array, CRMError> !net {
+  let url = "/api/v2/contacts";
+  let params = {
+    tenant_id: tenant,
+    status: status,
+    limit: limit
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  // Returns full contact details including name, email, phone, job title, etc.
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_contacts_by_status", status: status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
 fn deleteContact(
   tenant: String,
   contact_id: String

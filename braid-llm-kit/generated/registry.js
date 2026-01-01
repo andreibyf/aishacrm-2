@@ -1,6 +1,6 @@
 /**
  * AUTO-GENERATED Braid Tool Registry
- * Generated: 2025-12-27T23:28:59.483Z
+ * Generated: 2026-01-01T02:05:03.799Z
  * Source: C:\Users\andre\Documents\GitHub\ai-sha-crm-copy-c872be53\braid-llm-kit\examples\assistant
  * 
  * DO NOT EDIT MANUALLY - Re-run generate-registry.js to update
@@ -13,6 +13,7 @@ export const TOOL_REGISTRY = {
   get_account_details: { file: 'accounts.braid', function: 'getAccountDetails', policy: 'READ_ONLY' },
   list_accounts: { file: 'accounts.braid', function: 'listAccounts', policy: 'READ_ONLY' },
   search_accounts: { file: 'accounts.braid', function: 'searchAccounts', policy: 'READ_ONLY' },
+  search_accounts_by_status: { file: 'accounts.braid', function: 'searchAccountsByStatus', policy: 'READ_ONLY' },
   delete_account: { file: 'accounts.braid', function: 'deleteAccount', policy: 'WRITE_OPERATIONS' },
 
   // activities.braid
@@ -41,6 +42,8 @@ export const TOOL_REGISTRY = {
   update_contact: { file: 'contacts.braid', function: 'updateContact', policy: 'WRITE_OPERATIONS' },
   list_contacts_for_account: { file: 'contacts.braid', function: 'listContactsForAccount', policy: 'READ_ONLY' },
   search_contacts: { file: 'contacts.braid', function: 'searchContacts', policy: 'READ_ONLY' },
+  list_all_contacts: { file: 'contacts.braid', function: 'listAllContacts', policy: 'READ_ONLY' },
+  search_contacts_by_status: { file: 'contacts.braid', function: 'searchContactsByStatus', policy: 'READ_ONLY' },
   delete_contact: { file: 'contacts.braid', function: 'deleteContact', policy: 'WRITE_OPERATIONS' },
   get_contact_details: { file: 'contacts.braid', function: 'getContactDetails', policy: 'READ_ONLY' },
 
@@ -71,6 +74,7 @@ export const TOOL_REGISTRY = {
   list_leads: { file: 'leads.braid', function: 'listLeads', policy: 'READ_ONLY' },
   get_lead_details: { file: 'leads.braid', function: 'getLeadDetails', policy: 'READ_ONLY' },
   search_leads: { file: 'leads.braid', function: 'searchLeads', policy: 'READ_ONLY' },
+  search_leads_by_status: { file: 'leads.braid', function: 'searchLeadsByStatus', policy: 'READ_ONLY' },
 
   // lifecycle.braid
   advance_to_lead: { file: 'lifecycle.braid', function: 'advanceToLead', policy: 'WRITE_OPERATIONS' },
@@ -98,6 +102,7 @@ export const TOOL_REGISTRY = {
   list_opportunities_by_stage: { file: 'opportunities.braid', function: 'listOpportunitiesByStage', policy: 'READ_ONLY' },
   get_opportunity_details: { file: 'opportunities.braid', function: 'getOpportunityDetails', policy: 'READ_ONLY' },
   search_opportunities: { file: 'opportunities.braid', function: 'searchOpportunities', policy: 'READ_ONLY' },
+  search_opportunities_by_stage: { file: 'opportunities.braid', function: 'searchOpportunitiesByStage', policy: 'READ_ONLY' },
   get_opportunity_forecast: { file: 'opportunities.braid', function: 'getOpportunityForecast', policy: 'READ_ONLY' },
   mark_opportunity_won: { file: 'opportunities.braid', function: 'markOpportunityWon', policy: 'WRITE_OPERATIONS' },
 
@@ -162,6 +167,7 @@ export const BRAID_PARAM_ORDER = {
   get_account_details: ['tenant', 'account_id'],
   list_accounts: ['tenant', 'limit', 'offset'],
   search_accounts: ['tenant', 'query', 'limit'],
+  search_accounts_by_status: ['tenant', 'status', 'limit'],
   delete_account: ['tenant', 'account_id'],
   create_activity: ['tenant', 'subject', 'activity_type', 'due_date', 'assigned_to', 'related_to_type', 'related_to_id', 'body'],
   update_activity: ['tenant', 'activity_id', 'updates'],
@@ -184,6 +190,8 @@ export const BRAID_PARAM_ORDER = {
   update_contact: ['tenant', 'contact_id', 'updates'],
   list_contacts_for_account: ['tenant', 'account_id'],
   search_contacts: ['tenant', 'query', 'limit'],
+  list_all_contacts: ['tenant', 'limit'],
+  search_contacts_by_status: ['tenant', 'status', 'limit'],
   delete_contact: ['tenant', 'contact_id'],
   get_contact_details: ['tenant', 'contact_id'],
   list_documents: ['tenant', 'entity_type', 'entity_id', 'limit'],
@@ -208,6 +216,7 @@ export const BRAID_PARAM_ORDER = {
   list_leads: ['tenant', 'status', 'account_id', 'limit'],
   get_lead_details: ['tenant', 'lead_id'],
   search_leads: ['tenant', 'query', 'limit'],
+  search_leads_by_status: ['tenant', 'status', 'limit'],
   advance_to_lead: ['tenant', 'bizdev_source_id', 'notes'],
   advance_to_qualified: ['tenant', 'lead_id', 'qualification_notes'],
   advance_to_account: ['tenant', 'lead_id', 'create_account', 'account_name', 'selected_account_id', 'create_opportunity', 'opportunity_name', 'opportunity_amount'],
@@ -227,6 +236,7 @@ export const BRAID_PARAM_ORDER = {
   list_opportunities_by_stage: ['tenant', 'stage', 'account_id', 'limit'],
   get_opportunity_details: ['tenant', 'opportunity_id'],
   search_opportunities: ['tenant', 'query', 'limit'],
+  search_opportunities_by_stage: ['tenant', 'stage', 'limit'],
   get_opportunity_forecast: ['tenant', 'assigned_to'],
   mark_opportunity_won: ['tenant', 'opportunity_id', 'close_date'],
   get_dashboard_bundle: ['tenant', 'time_range', 'include_forecasts'],
@@ -273,6 +283,7 @@ export const TOOL_DESCRIPTIONS = {
   get_account_details: 'Get details of a specific account details',
   list_accounts: 'List accounts records',
   search_accounts: 'Search for accounts records',
+  search_accounts_by_status: 'Search for accounts by status records',
   delete_account: 'Delete a account record',
   create_activity: 'Create a new activity record',
   update_activity: 'Update an existing activity record',
@@ -295,6 +306,8 @@ export const TOOL_DESCRIPTIONS = {
   update_contact: 'Update an existing contact record',
   list_contacts_for_account: 'List contacts for account records',
   search_contacts: 'Search for contacts records',
+  list_all_contacts: 'List all contacts records',
+  search_contacts_by_status: 'Search for contacts by status records',
   delete_contact: 'Delete a contact record',
   get_contact_details: 'Get details of a specific contact details',
   list_documents: 'List documents records',
@@ -319,6 +332,7 @@ export const TOOL_DESCRIPTIONS = {
   list_leads: 'List leads records',
   get_lead_details: 'Get details of a specific lead details',
   search_leads: 'Search for leads records',
+  search_leads_by_status: 'Search for leads by status records',
   advance_to_lead: 'Advance to lead to the next stage',
   advance_to_qualified: 'Advance to qualified to the next stage',
   advance_to_account: 'Advance to account to the next stage',
@@ -338,6 +352,7 @@ export const TOOL_DESCRIPTIONS = {
   list_opportunities_by_stage: 'List opportunities by stage records',
   get_opportunity_details: 'Get details of a specific opportunity details',
   search_opportunities: 'Search for opportunities records',
+  search_opportunities_by_stage: 'Search for opportunities by stage records',
   get_opportunity_forecast: 'Get details of a specific opportunity forecast',
   mark_opportunity_won: 'Mark opportunity won with a status',
   get_dashboard_bundle: 'Get details of a specific dashboard bundle',
@@ -380,7 +395,7 @@ export const TOOL_DESCRIPTIONS = {
 };
 
 // Summary
-// Total tools: 109
+// Total tools: 114
 // Files scanned: 19
-// Read-only tools: 66
+// Read-only tools: 71
 // Write tools: 43
