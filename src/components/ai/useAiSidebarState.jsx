@@ -131,10 +131,16 @@ export function AiSidebarProvider({ children }) {
     sessionContextRef.current = sessionEntityContext;
   }, [sessionEntityContext]);
 
-  // Create initial conversation on mount
+  // Create initial conversation on mount (requires tenant context)
   useEffect(() => {
     let mounted = true;
     if (!user) return; // Wait for user to be loaded
+    
+    // Require tenant_id - SuperAdmins should assign themselves to a tenant via User Management
+    if (!user.tenant_id) {
+      console.log('[AI Sidebar] Skipping conversation creation - no tenant_id (SuperAdmin can assign themselves to a tenant in User Management)');
+      return;
+    }
 
     (async () => {
       try {
@@ -156,7 +162,7 @@ export function AiSidebarProvider({ children }) {
     })();
 
     return () => { mounted = false; };
-  }, [user]); // Create conversation once user is loaded
+  }, [user]); // Create conversation once user is loaded with tenant context
 
   // Extract entities from AI response data and add to session context
   const extractAndStoreEntities = useCallback((data, entityType) => {
