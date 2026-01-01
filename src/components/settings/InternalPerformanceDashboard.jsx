@@ -329,11 +329,36 @@ export default function InternalPerformanceDashboard({ user }) {
                 {metrics.recentErrors.length > 0 ?
                   <div className="space-y-2">
                     {metrics.recentErrors.map((error, index) =>
-                      <div key={index} className="p-2 bg-red-900/20 rounded border border-red-700/40 text-sm">
-                        <p className="text-red-500 text-xs font-mono">
-                          <span className="font-semibold">{error.function_name || 'Unknown Function'}</span> - {new Date(error.created_date || error.timestamp).toLocaleString()}
-                        </p>
-                        <p className="text-red-400">{error.message}</p>
+                      <div key={index} className="p-3 bg-red-900/20 rounded border border-red-700/40 text-sm">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-red-500 text-xs font-mono flex-1">
+                            <span className="font-semibold">{error.function_name || 'Unknown Function'}</span>
+                          </p>
+                          <div className="flex items-center gap-2">
+                            {/* Status Code Badge */}
+                            <Badge 
+                              variant="outline" 
+                              className={`text-xs ${error.status_code >= 500 ? 'bg-red-700/50 text-red-200 border-red-600' : 'bg-yellow-700/50 text-yellow-200 border-yellow-600'}`}
+                            >
+                              {error.status_code || '???'}
+                            </Badge>
+                            {/* Duration */}
+                            {error.duration_ms != null && (
+                              <span className="text-slate-400 text-xs">{error.duration_ms}ms</span>
+                            )}
+                          </div>
+                        </div>
+                        <p className="text-slate-400 text-xs mb-1">{new Date(error.created_at || error.timestamp).toLocaleString()}</p>
+                        {/* Error message - uses error_message from backend */}
+                        {error.error_message ? (
+                          <p className="text-red-400 mt-1 text-xs bg-red-950/30 px-2 py-1 rounded font-mono break-all">{error.error_message}</p>
+                        ) : (
+                          <p className="text-slate-500 mt-1 text-xs italic">No error message captured</p>
+                        )}
+                        {/* User email if available */}
+                        {error.user_email && (
+                          <p className="text-slate-500 text-xs mt-1">User: {error.user_email}</p>
+                        )}
                       </div>
                     )}
                   </div> :
