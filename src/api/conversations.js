@@ -296,6 +296,42 @@ export function subscribeToConversation(conversationId, callback) {
   };
 }
 
+/**
+ * Submit feedback (thumbs up/down) for an AI message
+ * @param {string} conversationId - Conversation ID
+ * @param {string} messageId - Message ID
+ * @param {'positive'|'negative'|null} rating - Feedback rating (null to clear)
+ * @returns {Promise<Object>} Updated feedback data
+ */
+export async function submitFeedback(conversationId, messageId, rating) {
+  const tenantId = resolveTenantId();
+  const authHeaders = await getAuthHeaders();
+  console.log(`[Conversations API] Submitting feedback for message ${messageId}: ${rating}`);
+  
+  const response = await fetch(
+    `${BACKEND_URL}/api/ai/conversations/${conversationId}/messages/${messageId}/feedback`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-tenant-id': tenantId,
+        ...authHeaders,
+      },
+      credentials: 'include',
+      body: JSON.stringify({ rating }),
+    }
+  );
+
+  if (!response.ok) {
+    console.error(`[Conversations API] Failed to submit feedback: ${response.status} ${response.statusText}`);
+    throw new Error(`Failed to submit feedback: ${response.statusText}`);
+  }
+
+  const result = await response.json();
+  console.log(`[Conversations API] Feedback submitted successfully`, result.data);
+  return result.data;
+}
+
 export default {
   createConversation,
   getConversation,
@@ -305,4 +341,5 @@ export default {
   addMessage,
   subscribeToConversation,
   getWhatsAppConnectURL,
+  submitFeedback,
 };

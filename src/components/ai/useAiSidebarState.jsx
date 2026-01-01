@@ -394,8 +394,13 @@ export function AiSidebarProvider({ children }) {
 
       // Transform backend response format to frontend expected format
       const backendData = result.data || {};
+      
+      // Use backend-generated message ID if available (enables feedback feature)
+      const savedMessageId = backendData.savedMessage?.id || null;
+      const savedUserMessageId = backendData.savedUserMessage?.id || null;
+      
       const assistantMessage = {
-        id: createMessageId(),
+        id: savedMessageId || createMessageId(), // Prefer backend ID for feedback
         role: 'assistant',
         content:
           backendData.response || result.assistantMessage?.content || 'I could not find any details yet, but I am ready to keep helping.',
@@ -520,7 +525,16 @@ export function AiSidebarProvider({ children }) {
       }
 
       setMessages((prev) => {
-        const next = [...prev, assistantMessage];
+        // Update user message with backend-generated ID if available (enables feedback)
+        let updated = prev;
+        if (savedUserMessageId) {
+          const lastUserIdx = prev.findLastIndex(m => m.role === 'user');
+          if (lastUserIdx >= 0) {
+            updated = [...prev];
+            updated[lastUserIdx] = { ...updated[lastUserIdx], id: savedUserMessageId };
+          }
+        }
+        const next = [...updated, assistantMessage];
         messagesRef.current = next;
         return next;
       });
@@ -586,7 +600,8 @@ export function AiSidebarProvider({ children }) {
       suggestions,
       applySuggestion,
       isDeveloperMode,
-      setIsDeveloperMode
+      setIsDeveloperMode,
+      conversationId
     }),
     [
       isOpen,
@@ -605,7 +620,8 @@ export function AiSidebarProvider({ children }) {
       suggestions,
       applySuggestion,
       isDeveloperMode,
-      setIsDeveloperMode
+      setIsDeveloperMode,
+      conversationId
     ]
   );
 

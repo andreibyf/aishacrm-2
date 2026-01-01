@@ -1918,6 +1918,119 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
     }
   });
 
+  // PATCH /api/ai/conversations/:id/messages/:messageId/feedback - Submit feedback for a message
+  router.patch('/conversations/:id/messages/:messageId/feedback', async (req, res) => {
+    const { id, messageId } = req.params;
+    const { rating } = req.body; // 'positive' | 'negative' | null (to clear)
+    let tenantIdentifier = null;
+    let tenantRecord = null;
+
+    try {
+      // Validate rating value
+      if (rating !== null && rating !== 'positive' && rating !== 'negative') {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'rating must be "positive", "negative", or null' 
+        });
+      }
+
+      tenantIdentifier = getTenantId(req);
+      tenantRecord = await resolveTenantRecord(tenantIdentifier);
+
+      if (!tenantRecord?.id) {
+        return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' });
+      }
+
+      // SECURITY: Validate user has access to this tenant
+      const authCheck = validateUserTenantAccess(req, tenantIdentifier, tenantRecord);
+      if (!authCheck.authorized) {
+        console.warn('[AI Security] Feedback blocked - unauthorized tenant access');
+        return res.status(authCheck.status || 403).json({ status: 'error', message: authCheck.error });
+      }
+
+      // Verify conversation belongs to tenant
+      const { data: conv, error: convErr } = await getSupa()
+        .from('conversations')
+        .select('id')
+        .eq('id', id)
+        .eq('tenant_id', tenantRecord.id)
+        .single();
+      if (convErr && convErr.code !== 'PGRST116') throw convErr;
+      if (!conv) {
+        return res.status(404).json({ status: 'error', message: 'Conversation not found' });
+      }
+
+      // Get the message and verify it belongs to this conversation
+      const { data: message, error: msgErr } = await getSupa()
+        .from('conversation_messages')
+        .select('id, conversation_id, metadata')
+        .eq('id', messageId)
+        .eq('conversation_id', id)
+        .single();
+      if (msgErr && msgErr.code !== 'PGRST116') throw msgErr;
+      if (!message) {
+        return res.status(404).json({ status: 'error', message: 'Message not found' });
+      }
+
+      // Build updated metadata with feedback
+      const existingMetadata = parseMetadata(message.metadata);
+      const updatedMetadata = {
+        ...existingMetadata,
+        feedback: rating ? {
+          rating,
+          rated_at: new Date().toISOString(),
+          rated_by: req.user?.id || 'anonymous',
+        } : null, // null clears the feedback
+      };
+
+      // Update the message metadata
+      const { data: updated, error: updateErr } = await getSupa()
+        .from('conversation_messages')
+        .update({ metadata: updatedMetadata })
+        .eq('id', messageId)
+        .select('id, metadata')
+        .single();
+      if (updateErr) throw updateErr;
+
+      await logAiEvent({
+        message: 'AI message feedback submitted',
+        tenantRecord,
+        tenantIdentifier,
+        metadata: {
+          operation: 'submit_feedback',
+          conversation_id: id,
+          message_id: messageId,
+          rating,
+        },
+      });
+
+      res.json({
+        status: 'success',
+        data: {
+          id: updated.id,
+          feedback: updatedMetadata.feedback,
+        },
+      });
+    } catch (error) {
+      console.error('Submit feedback error:', error);
+      await logAiEvent({
+        message: 'AI message feedback failed',
+        tenantRecord,
+        tenantIdentifier,
+        error,
+        metadata: {
+          operation: 'submit_feedback',
+          conversation_id: id,
+          message_id: messageId,
+          rating,
+          request_path: req.originalUrl || req.url,
+          http_status: 500,
+        },
+      });
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   // GET /api/ai/conversations/:id/stream - SSE stream for conversation updates
   router.get('/conversations/:id/stream', async (req, res) => {
     try {
@@ -2125,13 +2238,24 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
         const lastUserMessage = messages[messages.length - 1];
         if (lastUserMessage && lastUserMessage.role === 'user' && lastUserMessage.content) {
           try {
-            await supabase.from('conversation_messages').insert({
-              conversation_id: conversationId,
-              role: 'user',
-              content: lastUserMessage.content,
-              created_date: new Date().toISOString()
-            });
-            console.log('[AI Chat] Persisted user message to conversation');
+            const { data: insertedUserMsg, error: insertErr } = await supabase
+              .from('conversation_messages')
+              .insert({
+                conversation_id: conversationId,
+                role: 'user',
+                content: lastUserMessage.content,
+                created_date: new Date().toISOString()
+              })
+              .select('id')
+              .single();
+            
+            if (insertErr) {
+              console.warn('[AI Chat] Failed to persist user message:', insertErr.message);
+            } else {
+              // Store user message ID for response (enables feedback on user messages too)
+              req.savedUserMessageId = insertedUserMsg?.id;
+              console.log('[AI Chat] Persisted user message to conversation, id:', insertedUserMsg?.id);
+            }
           } catch (insertErr) {
             console.warn('[AI Chat] Failed to persist user message:', insertErr.message);
           }
@@ -2683,6 +2807,7 @@ ${conversationSummary}`;
         model: finalModel,
         tool_interactions: safeToolInteractions,
         savedMessage: savedMessage ? { id: savedMessage.id } : null,
+        savedUserMessage: req.savedUserMessageId ? { id: req.savedUserMessageId } : null,
         classification: {
           intent: classifiedIntent || null, // Full intent code for logging (e.g., LEAD_GET, AI_SUGGEST_NEXT_ACTIONS)
           parserResult: {

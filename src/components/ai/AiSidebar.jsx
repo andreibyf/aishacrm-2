@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { AlertCircle, Building2, CheckSquare, Loader2, Send, Sparkles, Target, TrendingUp, Users, X, Mic, Volume2, Trash2, ClipboardList, BarChart3, ListTodo, Ear, Briefcase, Code } from 'lucide-react';
+import { AlertCircle, Building2, CheckSquare, Loader2, Send, Sparkles, Target, TrendingUp, Users, X, Mic, Volume2, Trash2, ClipboardList, BarChart3, ListTodo, Ear, Briefcase, Code, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useAiSidebarState } from './useAiSidebarState.jsx';
@@ -18,6 +18,7 @@ import { Account, Activity, Contact, Lead, Opportunity, BizDevSource } from '@/a
 import { toast } from 'sonner';
 import { useUser } from '@/components/shared/useUser.js';
 import { isLikelyVoiceGarble, sanitizeMessageText } from '@/lib/ambiguityResolver';
+import { submitFeedback } from '@/api/conversations';
 
 const AISHA_EXECUTIVE_PORTRAIT = '/assets/aisha-executive-portrait.jpg';
 
@@ -223,7 +224,66 @@ const isTelemetryDebugEnabled = () => {
   return false;
 };
 
-function MessageBubble({ message, isWelcomeCard = false }) {
+function MessageBubble({ message, isWelcomeCard = false, conversationId }) {
+  const [feedbackState, setFeedbackState] = useState(message.metadata?.feedback?.rating || null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleFeedback = async (rating) => {
+    if (isSubmitting || !message.id || !conversationId) return;
+    
+    // Toggle off if clicking the same rating
+    const newRating = feedbackState === rating ? null : rating;
+    
+    setIsSubmitting(true);
+    try {
+      await submitFeedback(conversationId, message.id, newRating);
+      setFeedbackState(newRating);
+      toast.success(newRating ? 'Thanks for your feedback!' : 'Feedback cleared');
+    } catch (error) {
+      console.error('Failed to submit feedback:', error);
+      toast.error('Failed to submit feedback');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Feedback buttons component for assistant messages
+  const FeedbackButtons = () => {
+    if (isWelcomeCard || message.role === 'user' || !message.id || !conversationId) {
+      return null;
+    }
+    return (
+      <div className="flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          type="button"
+          className={`h-6 w-6 rounded-full flex items-center justify-center transition-colors ${
+            feedbackState === 'positive' 
+              ? 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-400' 
+              : 'text-slate-400 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30'
+          }`}
+          onClick={() => handleFeedback('positive')}
+          disabled={isSubmitting}
+          title="Good response"
+        >
+          <ThumbsUp className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          className={`h-6 w-6 rounded-full flex items-center justify-center transition-colors ${
+            feedbackState === 'negative' 
+              ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400' 
+              : 'text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30'
+          }`}
+          onClick={() => handleFeedback('negative')}
+          disabled={isSubmitting}
+          title="Poor response"
+        >
+          <ThumbsDown className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    );
+  };
+
   if (isWelcomeCard) {
     return (
       <div className="mb-4 aisha-message assistant">
@@ -321,7 +381,7 @@ function MessageBubble({ message, isWelcomeCard = false }) {
 
   // Assistant message - left aligned with avatar
   return (
-    <div className="mb-4 flex justify-start aisha-message assistant">
+    <div className="mb-4 flex justify-start aisha-message assistant group">
       <div className="flex items-start gap-3 max-w-[85%]">
         {/* AiSHA Avatar */}
         <div className="flex-shrink-0">
@@ -372,6 +432,8 @@ function MessageBubble({ message, isWelcomeCard = false }) {
               </div>
             )}
           </div>
+          {/* Feedback buttons */}
+          <FeedbackButtons />
         </div>
       </div>
     </div>
@@ -393,7 +455,8 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     suggestions,
     applySuggestion,
     isDeveloperMode,
-    setIsDeveloperMode
+    setIsDeveloperMode,
+    conversationId
   } = useAiSidebarState();
   const [draft, setDraft] = useState('');
   const [draftOrigin, setDraftOrigin] = useState('text');
@@ -1604,9 +1667,10 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                     <MessageBubble
                       key={message.id}
                       message={message}
-                    isWelcomeCard={index === 0 && message.role === 'assistant'}
-                  />
-                ))}
+                      isWelcomeCard={index === 0 && message.role === 'assistant'}
+                      conversationId={conversationId}
+                    />
+                  ))}
                   {isSending && (
                     <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                       <Loader2 className="h-4 w-4 animate-spin" />
