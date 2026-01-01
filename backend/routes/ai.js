@@ -1009,17 +1009,19 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
               console.error(`[AI Tool Execution] ${toolName} error:`, toolError);
             }
 
-            executedTools.push({
-              name: toolName,
-              arguments: parsedArgs,
-              result_preview: typeof toolResult === 'string' ? toolResult.slice(0, 500) : JSON.stringify(toolResult).slice(0, 500),
-            });
-
             // Generate human-readable summary for better LLM comprehension
             const summary = summarizeToolResult(toolResult, toolName);
             
             // OPTIMIZE: Send only summary to reduce token usage
             const safeSummary = (summary || '').slice(0, 1200);
+
+            executedTools.push({
+              name: toolName,
+              arguments: parsedArgs,
+              result_preview: typeof toolResult === 'string' ? toolResult.slice(0, 500) : JSON.stringify(toolResult).slice(0, 500),
+              // CRITICAL: Store summary for TOOL_CONTEXT so follow-up questions have readable context
+              summary: safeSummary,
+            });
             
             finalMessages.push({
               role: 'tool',
@@ -1029,10 +1031,12 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
           }
 
           // PERSIST TOOL CONTEXT: Save a hidden context message so follow-up turns can reference tool results
-          // This allows the AI to remember activity IDs, record IDs, etc. from previous tool calls
+          // This allows the AI to remember activity IDs, record IDs, names, etc. from previous tool calls
+          // CRITICAL: Use human-readable summary (not raw JSON) so follow-up questions get useful context
           const toolContextSummary = executedTools.map(t => {
-            const preview = t.result_preview || '';
-            return `[${t.name}] ${preview.substring(0, 300)}`;
+            // Prefer summary (human-readable) over result_preview (raw JSON)
+            const content = t.summary || t.result_preview || '';
+            return `[${t.name}] ${content.substring(0, 600)}`;
           }).join('\n');
 
           if (toolContextSummary) {
@@ -2924,6 +2928,7 @@ ${conversationSummary}`;
           const resultPreview = typeof toolResult === 'string'
             ? toolResult.slice(0, 400)
             : JSON.stringify(toolResult).slice(0, 400);
+          const summary = summarizeToolResult(toolResult, toolName);
 
           toolInteractions.push({
             tool: toolName,
@@ -2931,8 +2936,9 @@ ${conversationSummary}`;
             result_preview: resultPreview,
             // NOTE: full_result is used internally below for entity extraction; it is removed before response.
             full_result: toolResult,
+            // CRITICAL: Store summary for TOOL_CONTEXT so follow-up questions have readable context
+            summary: (summary || '').slice(0, 1200),
           });
-          const summary = summarizeToolResult(toolResult, toolName);
           // COST GUARD: Only inject summary, cap at 1200 chars to prevent token burn
           const safeSummary = (summary || '').slice(0, 1200);
           finalLoopMessages.push({
@@ -2961,6 +2967,35 @@ ${conversationSummary}`;
             .eq('tenant_id', tenantRecord.id)
             .single();
           if (!convErr && convCheck?.id) {
+            // PERSIST TOOL CONTEXT: Save a hidden context message so follow-up turns can reference tool results
+            // This was MISSING from /chat endpoint, causing context loss on follow-up questions
+            if (toolInteractions.length > 0) {
+              const toolContextSummary = toolInteractions.map(t => {
+                // Prefer summary (human-readable) over result_preview (raw JSON)
+                const content = t.summary || t.result_preview || '';
+                return `[${t.tool}] ${content.substring(0, 600)}`;
+              }).join('\n');
+
+              if (toolContextSummary) {
+                try {
+                  await supa
+                    .from('conversation_messages')
+                    .insert({
+                      conversation_id: conversation_id,
+                      role: 'assistant',
+                      content: `[TOOL_CONTEXT] The following tool results are available for reference:\n${toolContextSummary}`,
+                      metadata: {
+                        type: 'tool_context',
+                        tool_results: toolInteractions.map(({ full_result, ...rest }) => rest),
+                        hidden: true // UI should hide these messages
+                      }
+                    });
+                } catch (contextErr) {
+                  console.warn('[ai.chat] Failed to persist tool context:', contextErr?.message);
+                }
+              }
+            }
+
             // Extract entity context from tool interactions
             const entityContext = extractEntityContext(toolInteractions);
             
