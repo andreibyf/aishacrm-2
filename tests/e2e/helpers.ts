@@ -27,6 +27,7 @@ export async function createBizDevSource(request: APIRequestContext, data: {
       tenant_id: tenantId, 
       status: 'Active', 
       source: data.source_name,  // API requires 'source' field
+      is_test_data: true,  // Mark as test data for cleanup
       ...data 
     },
   });

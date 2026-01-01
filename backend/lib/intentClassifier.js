@@ -83,12 +83,18 @@ const INTENT_PATTERNS = {
     /\b(search|find)\s+.+\s+lead\b/i
   ],
   
+  // Status-based lead queries - ONLY use actual lead status values
+  // Valid statuses: new, contacted, qualified, converted, rejected
+  // NOTE: "warm/cold/hot" are NOT valid lead statuses - they may be custom entity names
+  LEAD_GET_BY_STATUS: [
+    /\bwhat\s+is\s+the\s+name\s+of\s+(my\s+)?(new|contacted|qualified|converted|rejected)\s*lead\b/i,
+    /\b(show|tell me|who is)\s+(my\s+)?(new|contacted|qualified|converted|rejected)\s+lead\b/i,
+    /\b(my\s+)?(new|contacted|qualified|converted|rejected)\s+lead(s)?\b/i
+  ],
+
   LEAD_GET: [
     /\b(show|get|display|tell me about)\s+(the\s+)?lead\s+(details|info(rmation)?)\b/i,
     /\b(what|who)\s+(is|are)\s+(the\s+)?lead\b/i,
-    // Common conversational phrasings
-    /\bwhat\s+is\s+the\s+name\s+of\s+(my\s+)?(warm|hot|cold)?\s*lead\b/i,
-    /\b(my\s+)?(warm|hot|cold)\s+lead\b/i,
     /\bwho\s+is\s+my\s+lead\b/i
   ],
   

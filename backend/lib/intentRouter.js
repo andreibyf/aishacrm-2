@@ -31,6 +31,7 @@ const INTENT_TO_TOOL_MAP = {
   LEAD_LIST: 'list_leads',
   LEAD_SEARCH: 'search_leads',
   LEAD_GET: 'get_lead_details',
+  LEAD_GET_BY_STATUS: 'search_leads_by_status',
   LEAD_DELETE: 'delete_lead',
 
   // ACTIVITIES

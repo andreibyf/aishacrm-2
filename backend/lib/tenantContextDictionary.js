@@ -345,25 +345,60 @@ export function generateContextDictionaryPrompt(dictionary) {
   
   // Custom terminology
   if (dictionary.terminology.customizationCount > 0) {
-    prompt += `**CUSTOM TERMINOLOGY (CRITICAL):**\n`;
+    prompt += `**CUSTOM ENTITY TERMINOLOGY (CRITICAL):**\n`;
     prompt += `This tenant has renamed entities. Map user terms correctly:\n`;
     
     for (const [entityKey, labels] of Object.entries(dictionary.terminology.entities)) {
       if (labels.isCustomized) {
         const defaultPlural = getDefaultLabel(entityKey, 'plural');
         prompt += `- "${labels.plural}" → ${defaultPlural} (use ${entityKey} tools)\n`;
+        prompt += `  └ "${labels.singular}" → single ${entityKey.replace(/_/g, ' ')}\n`;
       }
     }
     prompt += `\n`;
+
+    // Add clarification instructions for custom terminology
+    prompt += `**HANDLING AMBIGUOUS QUERIES WITH CUSTOM TERMINOLOGY:**\n`;
+    prompt += `When a user asks about a custom entity name without specifying which one, ASK for clarification:\n`;
+    prompt += `- If user says "my cold lead" or "a cold lead" → Ask: "Which Cold Lead? Please provide a name, company, or status (active, promoted, rejected, duplicate)."\n`;
+    prompt += `- If user says "what is my task" → Ask: "Which Task? Please provide the subject or a date."\n`;
+    prompt += `- Do NOT list all records when user asks about a single unspecified item.\n`;
+    prompt += `- Only list records when user explicitly asks to "list", "show all", or "display" the items.\n\n`;
   }
   
-  // Status values reference
+  // Check for customized status labels
+  const hasCustomStatusLabels = dictionary.statusCards.source === 'database';
+
+  // Status values reference - show both labels and IDs when customized
   prompt += `**STATUS VALUES:**\n`;
+  if (hasCustomStatusLabels) {
+    prompt += `(Some statuses have custom labels. Use the CANONICAL ID in tool calls, not the custom label.)\n`;
+  }
+
   for (const [entity, statuses] of Object.entries(dictionary.statusCards.entities)) {
-    const statusList = Array.isArray(statuses) 
-      ? statuses.map(s => typeof s === 'string' ? s : s.label).join(', ')
-      : statuses;
-    prompt += `- ${entity}: ${statusList}\n`;
+    if (!Array.isArray(statuses)) {
+      prompt += `- ${entity}: ${statuses}\n`;
+      continue;
+    }
+
+    // Check if this entity has any customized status labels
+    const hasCustomLabels = statuses.some(s => typeof s === 'object' && s.label !== s.id);
+
+    if (hasCustomLabels) {
+      // Show detailed mapping for customized statuses
+      const statusDetails = statuses.map(s => {
+        if (typeof s === 'string') return s;
+        if (s.label && s.label !== s.id) {
+          return `"${s.label}" → ${s.id}`;  // Show custom label → canonical id
+        }
+        return s.id || s.label;
+      }).join(', ');
+      prompt += `- ${entity}: ${statusDetails}\n`;
+    } else {
+      // Simple list for non-customized
+      const statusList = statuses.map(s => typeof s === 'string' ? s : (s.id || s.label)).join(', ');
+      prompt += `- ${entity}: ${statusList}\n`;
+    }
   }
   
   prompt += `\n**═══════════════════════════════════════════════**\n`;

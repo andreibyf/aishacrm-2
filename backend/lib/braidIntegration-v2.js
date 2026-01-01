@@ -591,6 +591,15 @@ You (response): "You have 50 leads in your CRM."
   "I can only provide information from your CRM. I don't have access to external systems or other tenants."
 - You are bound to the user's tenant context - never attempt to access or discuss data from other tenants
 
+**TEST DATA IDENTIFICATION (CRITICAL):**
+- Records have an \`is_test_data\` field that indicates if they are test data
+- ONLY use the \`is_test_data\` field to determine if a record is test data
+- Do NOT infer test data status from record names, values, or patterns
+- If \`is_test_data = false\` or is null, treat the record as REAL production data
+- Even if a name contains words like "test", "demo", "sample", "isolation" - if \`is_test_data = false\`, it is REAL data
+- Report the EXACT values from tool results - do not substitute, summarize, or "clean up" names
+- Never hallucinate or make up record names - use the exact data returned by tools
+
 **AMBIGUOUS TERM HANDLING (CRITICAL):**
 When users say vague terms like "client", "customer", "company", or "person", you MUST clarify:
 - "Client" or "Customer" could mean: Account, Lead, or Contact
@@ -604,6 +613,17 @@ Always ask for clarification: "When you say 'client', do you mean an Account, Le
 - **Contact**: An individual person associated with an Account"
 
 Do NOT assume - always clarify ambiguous references before taking action.
+
+**SINGLE-ITEM QUERIES ON CUSTOM TERMINOLOGY (CRITICAL):**
+When a user asks about "my [entity]" or "the [entity]" (singular) without specifying WHICH one:
+- "What is my cold lead?" → ASK: "Which Cold Lead are you referring to? Please provide a name, company, or status."
+- "Show me my task" → ASK: "Which Task? Please provide the subject, date, or type."
+- "What's the status of my deal?" → ASK: "Which deal are you referring to? Please provide a name or account."
+
+✅ CORRECT: Ask for clarification (name, status, date, or other identifying info)
+❌ WRONG: Call list_* tools and say "I couldn't find it" or offer to list all records
+
+Only list all records when user explicitly says "list", "show all", "display all", or similar.
 
 **TYPO TOLERANCE FOR ENTITY KEYWORDS (CRITICAL):**
 Users often make minor typos in entity keywords. Recognize common misspellings as their intended entity:
@@ -957,19 +977,20 @@ export function summarizeToolResult(result, toolName) {
       return true;
     });
 
-    const summaryItems = uniqueLeads.slice(0, 5).map(l => {
+    const summaryItems = uniqueLeads.slice(0, 10).map(l => {
       const fullName = [l.first_name, l.last_name].filter(Boolean).join(' ') || 'Unnamed';
-      return `• ID: ${l.id}, Name: "${fullName}", Company: "${l.company || 'N/A'}", Status: ${l.status || 'unknown'}, Email: ${l.email || 'N/A'}`;
+      const isTest = l.is_test_data === true ? ' [TEST DATA]' : '';
+      return `• ID: ${l.id}, EXACT Name: "${fullName}", Company: "${l.company || 'N/A'}", Status: ${l.status || 'unknown'}${isTest}`;
     });
 
-    let summary = `Found ${uniqueLeads.length} lead${uniqueLeads.length === 1 ? '' : 's'}:\n${summaryItems.join('\n')}`;
-    if (uniqueLeads.length > 5) {
-      summary += `\n... and ${uniqueLeads.length - 5} more`;
+    let summary = `Found ${uniqueLeads.length} Lead${uniqueLeads.length === 1 ? '' : 's'} (REPORT THESE EXACT NAMES - do not substitute):\n${summaryItems.join('\n')}`;
+    if (uniqueLeads.length > 10) {
+      summary += `\n... and ${uniqueLeads.length - 10} more`;
     }
     if (uniqueLeads.length < leads.length) {
       summary += `\n\n(Note: ${leads.length - uniqueLeads.length} duplicate${leads.length - uniqueLeads.length === 1 ? '' : 's'} removed from results)`;
     }
-    summary += '\n\n**CONTEXT RETENTION: Remember these lead IDs and names for follow-up actions (update_lead, qualify_lead, get_lead_details)**';
+    summary += '\n\n**CRITICAL: Use the EXACT names shown above. Do NOT make up different names. If is_test_data is false/null, treat as real data regardless of name.**';
     return summary;
   }
 
@@ -979,6 +1000,56 @@ export function summarizeToolResult(result, toolName) {
       const fullName = [data.first_name, data.last_name].filter(Boolean).join(' ') || 'Unnamed';
       return `Lead ID: ${data.id}, Name: "${fullName}", Company: "${data.company || 'N/A'}", Status: ${data.status || 'unknown'}, Email: ${data.email || 'N/A'}, Phone: ${data.phone || 'N/A'}`;
     }
+  }
+
+  // BizDev Sources (Cold Leads): EXPLICITLY report exact names - never hallucinate
+  if (toolName === 'list_bizdev_sources' || toolName === 'search_bizdev_sources') {
+    const sources = Array.isArray(data) ? data : (data.bizdevsources || data.data || []);
+    if (sources.length === 0) {
+      return `${toolName}: No Cold Leads found matching the criteria. This is a VALID result (no matches), NOT a network error.`;
+    }
+
+    const summaryItems = sources.slice(0, 10).map(s => {
+      const name = s.source_name || s.source || s.company_name || 'Unnamed';
+      const isTest = s.is_test_data === true ? ' [TEST DATA]' : '';
+      return `• ID: ${s.id}, EXACT Name: "${name}", Company: "${s.company_name || 'N/A'}", Status: ${s.status || 'unknown'}${isTest}`;
+    });
+
+    let summary = `Found ${sources.length} Cold Lead${sources.length === 1 ? '' : 's'} (REPORT THESE EXACT NAMES - do not substitute or change them):\n${summaryItems.join('\n')}`;
+    if (sources.length > 10) {
+      summary += `\n... and ${sources.length - 10} more`;
+    }
+    summary += '\n\n**CRITICAL: Use the EXACT names shown above. Do NOT make up different names. If is_test_data is false/null, treat as real data regardless of name.**';
+    return summary;
+  }
+
+  // Opportunities: EXPLICITLY report exact names - never hallucinate
+  if (toolName === 'list_opportunities_by_stage' || toolName === 'search_opportunities') {
+    const opps = Array.isArray(data) ? data : (data.opportunities || data.data || []);
+    if (opps.length === 0) {
+      return `${toolName}: No opportunities found matching the criteria. This is a VALID result (no matches), NOT a network error.`;
+    }
+
+    // Deduplicate by ID
+    const seenIds = new Set();
+    const uniqueOpps = opps.filter(o => {
+      if (seenIds.has(o.id)) return false;
+      seenIds.add(o.id);
+      return true;
+    });
+
+    const summaryItems = uniqueOpps.slice(0, 10).map(o => {
+      const isTest = o.is_test_data === true ? ' [TEST DATA]' : '';
+      const amount = o.amount ? `$${Number(o.amount).toLocaleString()}` : 'N/A';
+      return `• ID: ${o.id}, EXACT Name: "${o.name || 'Unnamed'}", Amount: ${amount}, Stage: ${o.stage || 'unknown'}${isTest}`;
+    });
+
+    let summary = `Found ${uniqueOpps.length} Opportunit${uniqueOpps.length === 1 ? 'y' : 'ies'} (REPORT THESE EXACT NAMES AND AMOUNTS - do not substitute):\n${summaryItems.join('\n')}`;
+    if (uniqueOpps.length > 10) {
+      summary += `\n... and ${uniqueOpps.length - 10} more`;
+    }
+    summary += '\n\n**CRITICAL: Use the EXACT names and amounts shown above. Do NOT make up different names or amounts. If is_test_data is false/null, treat as real data regardless of name.**';
+    return summary;
   }
 
   // Single activity detail
@@ -1003,18 +1074,19 @@ export function summarizeToolResult(result, toolName) {
       return true;
     });
 
-    const summaryItems = uniqueAccounts.slice(0, 5).map(a => {
-      return `• ID: ${a.id}, Name: "${a.name || 'Unnamed'}", Industry: "${a.industry || 'N/A'}", Revenue: $${(a.annual_revenue || 0).toLocaleString()}`;
+    const summaryItems = uniqueAccounts.slice(0, 10).map(a => {
+      const isTest = a.is_test_data === true ? ' [TEST DATA]' : '';
+      return `• ID: ${a.id}, EXACT Name: "${a.name || 'Unnamed'}", Industry: "${a.industry || 'N/A'}", Revenue: $${(a.annual_revenue || 0).toLocaleString()}${isTest}`;
     });
 
-    let summary = `Found ${uniqueAccounts.length} account${uniqueAccounts.length === 1 ? '' : 's'}:\n${summaryItems.join('\n')}`;
-    if (uniqueAccounts.length > 5) {
-      summary += `\n... and ${uniqueAccounts.length - 5} more`;
+    let summary = `Found ${uniqueAccounts.length} Account${uniqueAccounts.length === 1 ? '' : 's'} (REPORT THESE EXACT NAMES - do not substitute):\n${summaryItems.join('\n')}`;
+    if (uniqueAccounts.length > 10) {
+      summary += `\n... and ${uniqueAccounts.length - 10} more`;
     }
     if (uniqueAccounts.length < accounts.length) {
       summary += `\n\n(Note: ${accounts.length - uniqueAccounts.length} duplicate${accounts.length - uniqueAccounts.length === 1 ? '' : 's'} removed)`;
     }
-    summary += '\n\n**CONTEXT RETENTION: Remember these account IDs and names for follow-up actions**';
+    summary += '\n\n**CRITICAL: Use the EXACT names shown above. Do NOT make up different names. If is_test_data is false/null, treat as real data regardless of name.**';
     return summary;
   }
 
@@ -1040,19 +1112,20 @@ export function summarizeToolResult(result, toolName) {
       return true;
     });
 
-    const summaryItems = uniqueContacts.slice(0, 5).map(c => {
+    const summaryItems = uniqueContacts.slice(0, 10).map(c => {
       const fullName = [c.first_name, c.last_name].filter(Boolean).join(' ') || 'Unnamed';
-      return `• ID: ${c.id}, Name: "${fullName}", Title: "${c.job_title || 'N/A'}", Email: ${c.email || 'N/A'}`;
+      const isTest = c.is_test_data === true ? ' [TEST DATA]' : '';
+      return `• ID: ${c.id}, EXACT Name: "${fullName}", Title: "${c.job_title || 'N/A'}"${isTest}`;
     });
 
-    let summary = `Found ${uniqueContacts.length} contact${uniqueContacts.length === 1 ? '' : 's'}:\n${summaryItems.join('\n')}`;
-    if (uniqueContacts.length > 5) {
-      summary += `\n... and ${uniqueContacts.length - 5} more`;
+    let summary = `Found ${uniqueContacts.length} Contact${uniqueContacts.length === 1 ? '' : 's'} (REPORT THESE EXACT NAMES - do not substitute):\n${summaryItems.join('\n')}`;
+    if (uniqueContacts.length > 10) {
+      summary += `\n... and ${uniqueContacts.length - 10} more`;
     }
     if (uniqueContacts.length < contacts.length) {
       summary += `\n\n(Note: ${contacts.length - uniqueContacts.length} duplicate${contacts.length - uniqueContacts.length === 1 ? '' : 's'} removed)`;
     }
-    summary += '\n\n**CONTEXT RETENTION: Remember these contact IDs and names for follow-up actions**';
+    summary += '\n\n**CRITICAL: Use the EXACT names shown above. Do NOT make up different names. If is_test_data is false/null, treat as real data regardless of name.**';
     return summary;
   }
 

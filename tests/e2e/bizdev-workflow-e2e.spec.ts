@@ -44,6 +44,7 @@ async function createBizDevSourceViaAPI(request: APIRequestContext, data: {
       tenant_id: E2E_TENANT_ID,
       status: 'Active',
       source: data.source_name,  // API requires 'source' field
+      is_test_data: true,  // Mark as test data for cleanup
       ...data,
     },
   });

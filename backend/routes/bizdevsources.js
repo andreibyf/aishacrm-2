@@ -77,15 +77,17 @@ export default function createBizDevSourceRoutes(pgPool) {
         .eq('tenant_id', tenant_id)  // Always enforce tenant scoping
         .order('created_at', { ascending: false });
 
-      if (status) {
-        query = query.eq('status', status);
+      // Filter out "undefined" string from query params (braid sends these)
+      if (status && status !== 'undefined') {
+        // Case-insensitive status filter using ilike
+        query = query.ilike('status', status);
       }
 
-      if (source_type) {
+      if (source_type && source_type !== 'undefined') {
         query = query.eq('source_type', source_type);
       }
 
-      if (priority) {
+      if (priority && priority !== 'undefined') {
         query = query.eq('priority', priority);
       }
 
