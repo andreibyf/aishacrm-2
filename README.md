@@ -317,3 +317,4 @@ Proprietary. All rights reserved.
 - **Changelog**: [CHANGELOG.md](./CHANGELOG.md)
 - **Claude Instructions**: [CLAUDE.md](./CLAUDE.md)
 - **Docs Index**: [docs/README.md](./docs/README.md)
+# Trigger workflow
