@@ -156,10 +156,124 @@ function findTestForSource(sourceFile) {
  * Find corresponding source file for a test file
  */
 function findSourceForTest(testFile) {
+  const relativePath = path.relative(ROOT_DIR, testFile);
   const basename = path.basename(testFile);
   const nameWithoutExt = basename.replace(/\.(test|spec)\.(js|jsx|ts|tsx)$/, '');
   const dir = path.dirname(testFile);
   
+  // For backend route tests: backend/__tests__/routes/users.route.test.js -> backend/routes/users.js
+  if (relativePath.includes('backend/__tests__/routes/')) {
+    const routeName = basename.replace('.route.test.js', '.js');
+    const possibleSource = path.join(ROOT_DIR, 'backend', 'routes', routeName);
+    if (fs.existsSync(possibleSource)) {
+      return possibleSource;
+    }
+  }
+  
+  // For backend lib tests: backend/__tests__/lib/tenantResolver.test.js -> backend/lib/tenantResolver.js
+  if (relativePath.includes('backend/__tests__/lib/')) {
+    const libName = basename.replace('.test.js', '.js');
+    const possibleSource = path.join(ROOT_DIR, 'backend', 'lib', libName);
+    if (fs.existsSync(possibleSource)) {
+      return possibleSource;
+    }
+  }
+  
+  // For backend middleware tests
+  if (relativePath.includes('backend/__tests__/middleware/')) {
+    const middlewareName = basename.replace('.test.js', '.js');
+    const possibleSource = path.join(ROOT_DIR, 'backend', 'middleware', middlewareName);
+    if (fs.existsSync(possibleSource)) {
+      return possibleSource;
+    }
+  }
+  
+  // For backend AI tests - map to specific source files
+  if (relativePath.includes('backend/__tests__/ai/')) {
+    const testBaseName = basename.replace('.test.js', '');
+    
+    // aiTriggersWorker.test.js -> backend/lib/aiTriggersWorker.js
+    if (testBaseName === 'aiTriggersWorker') {
+      const source = path.join(ROOT_DIR, 'backend', 'lib', 'aiTriggersWorker.js');
+      if (fs.existsSync(source)) return source;
+    }
+    // tenantContextDictionary.test.js -> backend/lib/tenantContextDictionary.js
+    if (testBaseName === 'tenantContextDictionary') {
+      const source = path.join(ROOT_DIR, 'backend', 'lib', 'tenantContextDictionary.js');
+      if (fs.existsSync(source)) return source;
+    }
+    // suggestions.route.test.js -> backend/routes/suggestions.js
+    if (testBaseName === 'suggestions.route') {
+      const source = path.join(ROOT_DIR, 'backend', 'routes', 'suggestions.js');
+      if (fs.existsSync(source)) return source;
+    }
+    // braidScenarios.test.js, braidToolExecution.test.js -> backend/lib/braidIntegration-v2.js
+    if (testBaseName === 'braidScenarios' || testBaseName === 'braidToolExecution') {
+      const source = path.join(ROOT_DIR, 'backend', 'lib', 'braidIntegration-v2.js');
+      if (fs.existsSync(source)) return source;
+    }
+    
+    // These are integration tests
+    return 'integration-test';
+  }
+  
+  // For backend braid tests
+  if (relativePath.includes('backend/__tests__/braid/')) {
+    const source = path.join(ROOT_DIR, 'backend', 'lib', 'braidIntegration-v2.js');
+    if (fs.existsSync(source)) return source;
+  }
+  
+  // For backend auth tests
+  if (relativePath.includes('backend/__tests__/auth/')) {
+    const authRoute = path.join(ROOT_DIR, 'backend', 'routes', 'auth.js');
+    if (fs.existsSync(authRoute)) return authRoute;
+    const authMiddleware = path.join(ROOT_DIR, 'backend', 'middleware', 'authenticate.js');
+    if (fs.existsSync(authMiddleware)) return authMiddleware;
+  }
+  
+  // For backend integration tests
+  if (relativePath.includes('backend/__tests__/integration/')) {
+    const testBaseName = basename.replace('.test.js', '');
+    
+    // mcp.test.js -> backend/routes/mcp.js
+    if (testBaseName === 'mcp') {
+      const source = path.join(ROOT_DIR, 'backend', 'routes', 'mcp.js');
+      if (fs.existsSync(source)) return source;
+    }
+    
+    return 'integration-test';
+  }
+  
+  // For backend goalRouter.test.js -> backend/middleware/routerGuard.js
+  if (basename === 'goalRouter.test.js') {
+    const source = path.join(ROOT_DIR, 'backend', 'middleware', 'routerGuard.js');
+    if (fs.existsSync(source)) return source;
+  }
+  
+  // For backend system tests (test the whole system)
+  if (relativePath.includes('backend/__tests__/system/')) {
+    return 'system-test';
+  }
+  
+  // For backend validation tests
+  if (relativePath.includes('backend/__tests__/validation/')) {
+    return 'validation-test';
+  }
+  
+  // For backend phase3 tests (feature tests)
+  if (relativePath.includes('backend/__tests__/phase3/')) {
+    return 'feature-test';
+  }
+  
+  // For backend schema tests
+  if (relativePath.includes('backend/__tests__/schema/')) {
+    return 'schema-test';
+  }
+  
+  // If test is in __tests__ directory, look in parent
+  const searchDirs = dir.includes('__tests__') 
+    ? [dir, path.join(dir, '..')] 
+    : [dir];
   // Special cases for directories where sources are in different locations
   const specialCases = {
     'backend/__tests__/ai': 'backend/lib',
