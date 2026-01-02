@@ -9,6 +9,7 @@ import { createServer } from "http";
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './lib/swagger.js';
 import { initSupabaseAuth } from "./lib/supabaseAuth.js";
+import logger from "./lib/logger.js";
 
 // Import startup modules
 import { initDatabase } from "./startup/initDatabase.js";
@@ -44,29 +45,6 @@ const { resilientPerfDb } = initMiddleware(app, pgPool);
 
 // Initialize Supabase Auth
 const supabaseAuth = initSupabaseAuth();
-
-// ----------------------------------------------------------------------------
-// Canary logging middleware for BizDevSource promote diagnostics
-// Logs every POST to /api/bizdevsources/* BEFORE route handlers.
-// Helps distinguish client/network stall vs server handling issues.
-// ----------------------------------------------------------------------------
-app.use((req, _res, next) => {
-  try {
-    if (req.method === 'POST' && req.path.startsWith('/api/bizdevsources/')) {
-      console.log('[CANARY Promote POST] Incoming request', {
-        path: req.path,
-        method: req.method,
-        origin: req.headers.origin,
-        contentType: req.headers['content-type'],
-        hasBody: !!req.headers['content-length'],
-        productionGuardEnabled: true,
-      });
-    }
-  } catch (e) {
-    console.warn('[CANARY Promote POST] Logging error', e?.message);
-  }
-  return next();
-});
 
 // Root endpoint - provides API information
 app.get("/", (req, res) => {
@@ -252,7 +230,7 @@ import { authenticateRequest } from "./middleware/authenticate.js";
 
 // Apply v1 deprecation headers middleware (before routes)
 app.use(createDeprecationMiddleware());
-console.log("✓ v1 API deprecation headers middleware enabled");
+logger.info("v1 API deprecation headers middleware enabled");
 
 // Use the pgPool directly; per-request DB time is measured inside the DB adapter
 const measuredPgPool = pgPool;
@@ -297,23 +275,23 @@ app.use("/api/activities", createActivityRoutes(measuredPgPool));
 app.use("/api/opportunities", createOpportunityRoutes(measuredPgPool));
 // v2 opportunities endpoints (Phase 4.2 internal pilot).
 // Always mounted in local/dev backend; production gating is handled via CI/CD.
-console.log("✓ Mounting /api/v2/opportunities routes (dev/internal)");
+logger.debug("Mounting /api/v2/opportunities routes (dev/internal)");
 app.use("/api/v2/opportunities", createOpportunityV2Routes(measuredPgPool));
-console.log("✓ Mounting /api/v2/activities routes (dev/internal)");
+logger.debug("Mounting /api/v2/activities routes (dev/internal)");
 app.use("/api/v2/activities", createActivityV2Routes(measuredPgPool));
-console.log("✓ Mounting /api/v2/contacts routes (dev/internal)");
+logger.debug("Mounting /api/v2/contacts routes (dev/internal)");
 app.use("/api/v2/contacts", createContactV2Routes(measuredPgPool));
-console.log("✓ Mounting /api/v2/accounts routes (dev/internal)");
+logger.debug("Mounting /api/v2/accounts routes (dev/internal)");
 app.use("/api/v2/accounts", createAccountV2Routes(measuredPgPool));
-console.log("✓ Mounting /api/v2/leads routes (dev/internal)");
+logger.debug("Mounting /api/v2/leads routes (dev/internal)");
 app.use("/api/v2/leads", createLeadsV2Routes(measuredPgPool));
-console.log("✓ Mounting /api/v2/reports routes (dev/internal)");
+logger.debug("Mounting /api/v2/reports routes (dev/internal)");
 app.use("/api/v2/reports", createReportsV2Routes(measuredPgPool));
-console.log("✓ Mounting /api/v2/workflows routes (dev/internal)");
+logger.debug("Mounting /api/v2/workflows routes (dev/internal)");
 app.use("/api/v2/workflows", createWorkflowV2Routes(measuredPgPool));
-console.log("✓ Mounting /api/v2/documents routes (dev/internal)");
+logger.debug("Mounting /api/v2/documents routes (dev/internal)");
 app.use("/api/v2/documents", createDocumentV2Routes(measuredPgPool));
-console.log("✓ Mounting /api/workflow-templates routes");
+logger.debug("Mounting /api/workflow-templates routes");
 app.use("/api/workflow-templates", createWorkflowTemplateRoutes(measuredPgPool));
 app.use("/api/notifications", createNotificationRoutes(measuredPgPool));
 app.use("/api/system-logs", createSystemLogRoutes(measuredPgPool));
@@ -331,26 +309,26 @@ app.use("/api/synchealths", createSyncHealthRoutes(measuredPgPool));
 app.use("/api/aicampaigns", createAICampaignRoutes(measuredPgPool));
 app.use("/api/security", createSecurityRoutes(measuredPgPool));
 // Dashboard funnel counts (materialized view for fast dashboard loading)
-console.log("✓ Mounting /api/dashboard/funnel-counts routes");
+logger.debug("Mounting /api/dashboard/funnel-counts routes");
 app.use("/api/dashboard", createDashboardFunnelRoutes(measuredPgPool));
 // Braid SDK Audit Log routes
-console.log("✓ Mounting /api/braid/audit routes");
+logger.debug("Mounting /api/braid/audit routes");
 app.use("/api/braid/audit", braidAuditRoutes);
 // Braid SDK Tool Chaining routes
-console.log("✓ Mounting /api/braid/chain routes");
+logger.debug("Mounting /api/braid/chain routes");
 app.use("/api/braid/chain", braidChainRoutes);
 // Braid SDK Metrics routes
-console.log("✓ Mounting /api/braid/metrics routes");
+logger.debug("Mounting /api/braid/metrics routes");
 app.use("/api/braid/metrics", braidMetricsRoutes);
 // Braid SDK Tool Dependency Graph routes
-console.log("✓ Mounting /api/braid/graph routes");
+logger.debug("Mounting /api/braid/graph routes");
 app.use("/api/braid/graph", braidGraphRoutes);
 // Construction Projects module routes
-console.log("✓ Mounting /api/construction/projects routes");
+logger.debug("Mounting /api/construction/projects routes");
 app.use("/api/construction/projects", createConstructionProjectsRoutes(measuredPgPool));
-console.log("✓ Mounting /api/construction/assignments routes");
+logger.debug("Mounting /api/construction/assignments routes");
 app.use("/api/construction/assignments", createConstructionAssignmentsRoutes(measuredPgPool));
-console.log("✓ Mounting /api/workers routes");
+logger.debug("Mounting /api/workers routes");
 app.use("/api/workers", createWorkersRoutes(measuredPgPool));
 // Memory routes use Redis/Valkey; DB pool not required
 app.use("/api/memory", createMemoryRoutes());
@@ -379,7 +357,7 @@ app.use((req, res) => {
 
 // Error handler
 app.use((err, req, res, _next) => {
-  console.error("Error:", err);
+  logger.error({ err, path: req.path, method: req.method }, "Error in request handler");
 
   // Ensure CORS headers are present even in error responses
   // This prevents "CORS error" from masking the actual backend error (401, 403, 500, etc.)
@@ -431,13 +409,13 @@ async function logBackendEvent(level, message, metadata = {}) {
     ]);
   } catch (error) {
     // Don't fail startup/shutdown if logging fails
-    console.error("Failed to log backend event:", error.message);
+    logger.error({ err: error }, "Failed to log backend event");
   }
 }
 
 // Graceful shutdown
 process.on("SIGTERM", async () => {
-  console.log("SIGTERM received, shutting down gracefully...");
+  logger.info("SIGTERM received, shutting down gracefully");
 
   // Log shutdown event
   await logBackendEvent(
@@ -453,12 +431,12 @@ process.on("SIGTERM", async () => {
   // Close workflow queue
   if (workflowQueue) {
     await workflowQueue.close();
-    console.log("Workflow queue closed");
+    logger.info("Workflow queue closed");
   }
 
   if (pgPool) {
     pgPool.end(() => {
-      console.log("PostgreSQL pool closed");
+      logger.info("PostgreSQL pool closed");
       process.exit(0);
     });
   } else {
@@ -468,7 +446,7 @@ process.on("SIGTERM", async () => {
 
 // Handle unexpected crashes
 process.on("uncaughtException", async (err) => {
-  console.error("[uncaughtException]", err);
+  logger.error({ err }, "[uncaughtException]");
 
   // Log crash event
   await logBackendEvent("ERROR", "Backend server crashed (uncaughtException)", {
@@ -506,7 +484,7 @@ async function writeHeartbeat() {
     );
   } catch (e) {
     if (process.env.NODE_ENV !== "production") {
-      console.error("Failed to write heartbeat:", e.message);
+      logger.error({ err: e }, "Failed to write heartbeat");
     }
   }
 }
@@ -514,14 +492,14 @@ async function writeHeartbeat() {
 function startHeartbeat() {
   if (!pgPool) return;
   if (!HEARTBEAT_ENABLED) {
-    console.log("✓ Backend heartbeat disabled via HEARTBEAT_ENABLED=false");
+    logger.info("Backend heartbeat disabled via HEARTBEAT_ENABLED=false");
     return;
   }
   if (heartbeatTimer) clearInterval(heartbeatTimer);
   // Immediate heartbeat then at configured interval
   writeHeartbeat();
   heartbeatTimer = setInterval(writeHeartbeat, HEARTBEAT_INTERVAL_MS);
-  console.log(`✓ Heartbeat interval set to ${HEARTBEAT_INTERVAL_MS} ms`);
+  logger.info({ intervalMs: HEARTBEAT_INTERVAL_MS }, "Heartbeat interval configured");
 }
 
 async function logRecoveryIfGap() {
@@ -545,7 +523,7 @@ async function logRecoveryIfGap() {
     }
   } catch (e) {
     if (process.env.NODE_ENV !== "production") {
-      console.error("Failed to check last heartbeat:", e.message);
+      logger.error({ err: e }, "Failed to check last heartbeat");
     }
   }
 }
@@ -573,15 +551,15 @@ async function ensureStorageBucketExists() {
             public: true,
           });
           if (updErr) {
-            console.warn(`⚠️ Could not update bucket '${bucket}' to public:`, updErr.message);
+            logger.warn({ bucket, err: updErr }, "Could not update bucket to public");
           } else {
-            console.log(`✓ Updated Supabase storage bucket '${bucket}' to public: true`);
+            logger.info({ bucket }, "Updated Supabase storage bucket to public");
           }
         }
       } catch (e) {
-        console.warn(`⚠️ Failed to verify/update public setting for bucket '${bucket}':`, e.message);
+        logger.warn({ bucket, err: e }, "Failed to verify/update public setting for bucket");
       }
-      console.log(`✓ Supabase storage bucket '${bucket}' exists`);
+      logger.debug({ bucket }, "Supabase storage bucket exists");
       return;
     }
     // Fallback via listBuckets when getBucket not available
@@ -593,38 +571,42 @@ async function ensureStorageBucketExists() {
           public: true,
         });
         if (updErr) {
-          console.warn(`⚠️ Could not ensure bucket '${bucket}' is public:`, updErr.message);
+          logger.warn({ bucket, err: updErr }, "Could not ensure bucket is public");
         } else {
-          console.log(`✓ Ensured Supabase storage bucket '${bucket}' is public`);
+          logger.info({ bucket }, "Ensured Supabase storage bucket is public");
         }
       } catch (e) {
-        console.warn(`⚠️ Failed to ensure public setting for bucket '${bucket}':`, e.message);
+        logger.warn({ bucket, err: e }, "Failed to ensure public setting for bucket");
       }
-      console.log(`✓ Supabase storage bucket '${bucket}' exists`);
+      logger.debug({ bucket }, "Supabase storage bucket exists");
       return;
     }
     if (getErr && getErr.message) {
-      console.warn(
-        "Note: getBucket not available or returned error, attempted listBuckets fallback.",
-      );
+      logger.warn("getBucket not available or returned error, attempted listBuckets fallback");
     }
     // Create bucket (public=true for logos; adjust in Supabase UI if needed)
     const { error: createErr } = await supabase.storage.createBucket(bucket, {
       public: true,
     });
     if (createErr) throw createErr;
-    console.log(`✓ Created Supabase storage bucket '${bucket}' (public: true)`);
+    logger.info({ bucket }, "Created Supabase storage bucket (public: true)");
   } catch (e) {
-    console.error("Failed to ensure storage bucket:", e.message);
+    logger.error({ err: e }, "Failed to ensure storage bucket");
   }
 }
 
 // Start listening
 server.listen(PORT, async () => {
   const startTimestamp = new Date().toISOString();
-  console.log(`[startup] backend start | env=${process.env.NODE_ENV || 'unknown'} | port=${PORT} | started=${startTimestamp}`);
-  console.log(`
-  }   ║
+  logger.info({
+    env: process.env.NODE_ENV || 'unknown',
+    port: PORT,
+    startTimestamp
+  }, '[startup] backend start');
+  
+  const banner = `
+╔═══════════════════════════════════════════════════════════╗
+║                 AiSHA CRM Backend API                    ║
 ║                                                           ║
 ║   Health Check: http://localhost:${PORT}/health             ║
 ║   API Status: http://localhost:${PORT}/api/status           ║
@@ -632,37 +614,37 @@ server.listen(PORT, async () => {
 ║   Total Endpoints: 197 functions across 26 categories    ║
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
-  `);
+  `;
+  logger.info(banner);
 
-  console.log("✓ Server listening on port", PORT);
+  logger.info({ port: PORT }, "Server listening");
 
   // Kick off storage bucket provisioning (non-blocking)
   ensureStorageBucketExists().catch((err) =>
-    console.error("Bucket ensure failed:", err?.message)
+    logger.error({ err }, "Bucket ensure failed")
   );
 
-  console.log("!!! BACKEND VERSION CHECK: FIX APPLIED (v2) !!!");
+  logger.info("BACKEND VERSION CHECK: FIX APPLIED (v2)");
 
   // Log startup event (non-blocking - don't block server startup)
   logBackendEvent("INFO", "Backend server started successfully", {
     endpoints_count: 197,
     categories_count: 26,
     startup_time: new Date().toISOString(),
-  }).catch((err) => console.error("Failed to log startup event:", err.message));
+  }).catch((err) => logger.error({ err }, "Failed to log startup event"));
 
   // If there was a gap in heartbeats, log a recovery event, then start periodic heartbeats
   // Run in background - don't block server startup
-  console.log("✓ Initializing heartbeat system in 1 second...");
+  logger.info("Initializing heartbeat system in 1 second");
   setTimeout(async () => {
-    console.log("→ Starting heartbeat initialization...");
+    logger.debug("Starting heartbeat initialization");
     try {
       await logRecoveryIfGap();
-      console.log("✓ Recovery check complete");
+      logger.debug("Recovery check complete");
       startHeartbeat();
-      console.log("✓ Heartbeat system started");
-      console.log("✓ Heartbeat timer ID:", heartbeatTimer);
+      logger.info({ timerId: heartbeatTimer }, "Heartbeat system started");
     } catch (err) {
-      console.error("Failed to start heartbeat system:", err.message);
+      logger.error({ err }, "Failed to start heartbeat system");
     }
   }, 1000); // Delay 1 second to ensure server is fully started
 
@@ -671,7 +653,7 @@ server.listen(PORT, async () => {
     const workerInterval = parseInt(process.env.CAMPAIGN_WORKER_INTERVAL_MS || '30000', 10);
     startCampaignWorker(pgPool, workerInterval);
   } else {
-    console.log('[CampaignWorker] Disabled (set CAMPAIGN_WORKER_ENABLED=true to enable)');
+    logger.debug('[CampaignWorker] Disabled (set CAMPAIGN_WORKER_ENABLED=true to enable)');
   }
 
   // Start AI triggers worker if enabled (Phase 3 Autonomous Operations)
@@ -679,7 +661,7 @@ server.listen(PORT, async () => {
     const triggersInterval = parseInt(process.env.AI_TRIGGERS_WORKER_INTERVAL_MS || '60000', 10);
     startAiTriggersWorker(pgPool, triggersInterval);
   } else {
-    console.log('[AiTriggersWorker] Disabled (set AI_TRIGGERS_WORKER_ENABLED=true to enable)');
+    logger.debug('[AiTriggersWorker] Disabled (set AI_TRIGGERS_WORKER_ENABLED=true to enable)');
   }
 
   // Keep-alive interval to prevent process from exiting
@@ -690,16 +672,16 @@ server.listen(PORT, async () => {
 
 // Debug: Log if process is about to exit
 process.on("exit", (code) => {
-  console.log("⚠️  Process exiting with code:", code);
+  logger.warn({ code }, "Process exiting");
 });
 
 process.on("beforeExit", (code) => {
-  console.log("⚠️  Process about to exit (beforeExit) with code:", code);
+  logger.warn({ code }, "Process about to exit (beforeExit)");
 });
 
 // Handle server errors (port already in use, etc.)
 server.on("error", async (error) => {
-  console.error("Server error:", error);
+  logger.error({ err: error }, "Server error");
 
   // Log server error
   await logBackendEvent("ERROR", `Backend server error: ${error.message}`, {
@@ -709,14 +691,14 @@ server.on("error", async (error) => {
   });
 
   if (error.code === "EADDRINUSE") {
-    console.error(`Port ${PORT} is already in use`);
+    logger.error({ port: PORT }, "Port already in use");
     process.exit(1);
   }
 });
 
 // Handle unhandled rejections - log them to system_logs
 process.on("unhandledRejection", async (err) => {
-  console.error("[unhandledRejection]", err);
+  logger.error({ err }, "[unhandledRejection]");
 
   // Log unhandled rejection
   await logBackendEvent("ERROR", "Unhandled promise rejection detected", {
