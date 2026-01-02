@@ -13,7 +13,13 @@ let supabaseAdmin = null;
  */
 export function initSupabaseAuth() {
   try {
-    supabaseAdmin = getSupabaseAdmin();
+    supabaseAdmin = getSupabaseAdmin({ throwOnMissing: false });
+    if (!supabaseAdmin) {
+      console.warn(
+        "⚠ Supabase Auth not configured - set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY",
+      );
+      return null;
+    }
     console.log("✓ Supabase Auth initialized");
     return supabaseAdmin;
   } catch (error) {

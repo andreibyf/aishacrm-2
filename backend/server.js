@@ -558,7 +558,7 @@ import { getSupabaseAdmin, getBucketName } from "./lib/supabaseFactory.js";
 
 async function ensureStorageBucketExists() {
   try {
-    const supabase = getSupabaseAdmin();
+    const supabase = getSupabaseAdmin({ throwOnMissing: false });
     if (!supabase) return;
     const bucket = getBucketName();
     // Check bucket existence

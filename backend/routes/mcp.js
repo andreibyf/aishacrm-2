@@ -216,13 +216,16 @@ async function callLLMWithFailover({
 
 export default function createMCPRoutes(_pgPool) {
   const router = express.Router();
-  const supa = getSupabaseClient();
+  
+  // Lazy-load Supabase client to avoid initialization errors when credentials not configured
+  const getSupa = () => getSupabaseClient();
 
   // API key resolution now handled by centralized lib/aiEngine/keyResolver.js
 
   // GET /api/mcp/servers - List available MCP servers
   router.get("/servers", async (req, res) => {
     try {
+      const supa = getSupa();
       const servers = [];
 
       // GitHub MCP server presence is inferred via env token. This is a lightweight proxy/health integration.

@@ -28,11 +28,25 @@ export function initSupabaseDB(url, serviceRoleKey) {
 
 /**
  * Get Supabase client instance
+ * Returns a proxy that lazily initializes on first use
  */
 export function getSupabaseClient() {
   if (!supabaseClient) {
-    // Use centralized factory if not initialized via initSupabaseDB
-    supabaseClient = getSupabaseDB();
+    // Return a proxy that will lazily initialize when first accessed
+    // This allows routes to call getSupabaseClient() at module load time
+    // without requiring credentials to be set
+    return new Proxy({}, {
+      get(_target, prop) {
+        // Initialize on first property access
+        if (!supabaseClient) {
+          if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+            throw new Error('Supabase client not initialized. Call initSupabaseDB first or set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
+          }
+          supabaseClient = getSupabaseDB();
+        }
+        return supabaseClient[prop];
+      }
+    });
   }
   return supabaseClient;
 }

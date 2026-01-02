@@ -16,16 +16,21 @@ let dbClient = null;
 /**
  * Get Supabase Admin Client (service role key)
  * Use for: Auth operations, RLS bypass, admin tasks
- * @returns {import('@supabase/supabase-js').SupabaseClient}
+ * @param {Object} options - Configuration options
+ * @param {boolean} options.throwOnMissing - Whether to throw error if credentials missing (default: true)
+ * @returns {import('@supabase/supabase-js').SupabaseClient|null}
  */
-export function getSupabaseAdmin() {
+export function getSupabaseAdmin({ throwOnMissing = true } = {}) {
   if (adminClient) return adminClient;
   
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   
   if (!url || !key) {
-    throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+    if (throwOnMissing) {
+      throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+    }
+    return null;
   }
   
   adminClient = createClient(url, key, {

@@ -42,7 +42,7 @@ describe('supabaseFactory', () => {
       assert.strictEqual(client1, client2, 'Should return same instance');
     });
 
-    it('should throw error when SUPABASE_URL is missing', () => {
+    it('should throw error when SUPABASE_URL is missing (default behavior)', () => {
       _resetClients();
       delete process.env.SUPABASE_URL;
       
@@ -56,7 +56,18 @@ describe('supabaseFactory', () => {
       process.env.SUPABASE_URL = originalEnv.SUPABASE_URL;
     });
 
-    it('should throw error when SUPABASE_SERVICE_ROLE_KEY is missing', () => {
+    it('should return null when SUPABASE_URL is missing and throwOnMissing=false', () => {
+      _resetClients();
+      delete process.env.SUPABASE_URL;
+      
+      const client = getSupabaseAdmin({ throwOnMissing: false });
+      assert.strictEqual(client, null, 'Should return null when credentials missing');
+      
+      // Restore env
+      process.env.SUPABASE_URL = originalEnv.SUPABASE_URL;
+    });
+
+    it('should throw error when SUPABASE_SERVICE_ROLE_KEY is missing (default behavior)', () => {
       _resetClients();
       delete process.env.SUPABASE_SERVICE_ROLE_KEY;
       
