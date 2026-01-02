@@ -28,13 +28,27 @@ async function main() {
 
   let client;
   try {
-    client = new Client({ connectionString, ssl: { rejectUnauthorized: false } });
+    // Enhanced SSL configuration to handle Supabase certificates
+    const sslConfig = connectionString.includes('sslmode=require') || connectionString.includes('supabase')
+      ? { rejectUnauthorized: false }
+      : false;
+    
+    client = new Client({ 
+      connectionString, 
+      ssl: sslConfig
+    });
+    
     await client.connect();
     console.log(`✓ Connected. Applying ${path.basename(filePath)} ...`);
     await client.query(sql);
     console.log('✓ SQL applied successfully');
   } catch (err) {
     console.error('❌ Failed to apply SQL:', err.message || String(err));
+    console.error('\nTroubleshooting:');
+    console.error('1. Check DATABASE_URL is set correctly in Doppler or .env');
+    console.error('2. For Supabase, ensure DATABASE_URL uses Transaction pooler (not Session pooler)');
+    console.error('3. Try setting NODE_TLS_REJECT_UNAUTHORIZED=0 temporarily:');
+    console.error('   doppler run -- env NODE_TLS_REJECT_UNAUTHORIZED=0 node apply-single-sql.js ...');
     process.exit(1);
   } finally {
     try { await client?.end(); } catch { /* ignore cleanup errors */ }

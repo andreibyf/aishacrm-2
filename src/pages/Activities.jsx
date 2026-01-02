@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import TagFilter from "../components/shared/TagFilter";
 import { useEmployeeScope } from "../components/shared/EmployeeScopeContext";
 import RefreshButton from "../components/shared/RefreshButton";
+import { useLoadingToast } from "@/hooks/useLoadingToast";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -35,7 +36,7 @@ import { useConfirmDialog } from "../components/shared/ConfirmDialog";
 import StatusHelper from "../components/shared/StatusHelper";
 import { createPageUrl } from "@/utils";
 import { Link } from "react-router-dom";
-import { utcToLocal, getCurrentTimezoneOffset } from '../components/shared/timezoneUtils';
+import { getCurrentTimezoneOffset } from '../components/shared/timezoneUtils';
 import { useTimezone } from '../components/shared/TimezoneContext';
 import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
@@ -61,6 +62,7 @@ const typeColors = {
 
 export default function ActivitiesPage() {
   const { plural: activitiesLabel, singular: activityLabel } = useEntityLabel('activities');
+  const loadingToast = useLoadingToast();
   const [activities, setActivities] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [contacts, setContacts] = useState([]);
@@ -89,7 +91,6 @@ export default function ActivitiesPage() {
   const { selectedEmail } = useEmployeeScope();
 
   const { selectedTimezone } = useTimezone();
-  const offsetMinutes = getCurrentTimezoneOffset(selectedTimezone);
 
   const [totalStats, setTotalStats] = useState({
     total: 0,
@@ -237,6 +238,7 @@ export default function ActivitiesPage() {
   const loadActivities = useCallback(async (page = 1, size = 25) => {
     if (!user) return;
 
+    loadingToast.showLoading();
     setLoading(true);
     try {
       let currentFilter = { ...buildFilter(), include_stats: false }; // We load stats separately now
@@ -350,15 +352,17 @@ export default function ActivitiesPage() {
 
       setCurrentPage(page);
       initialLoadDone.current = true;
+      loadingToast.showSuccess(`${activitiesLabel} loaded! ✨`);
     } catch (error) {
       console.error("Failed to load activities:", error);
+      loadingToast.showError(`Failed to load ${activitiesLabel.toLowerCase()}`);
       toast.error("Failed to load activities");
       setActivities([]);
       setTotalItems(0);
     } finally {
       setLoading(false);
     }
-  }, [user, searchTerm, selectedTags, buildFilter, loadStats]);
+  }, [user, searchTerm, selectedTags, buildFilter, loadStats, loadingToast, activitiesLabel, selectedEmail]);
 
   useEffect(() => {
     if (user) {
@@ -854,7 +858,7 @@ export default function ActivitiesPage() {
       console.error('Error formatting date:', error, 'Activity:', activity);
       return activity.due_date;
     }
-  }, [offsetMinutes]);
+  }, []);
 
   if (!user) {
     return (

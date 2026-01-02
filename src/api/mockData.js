@@ -4,7 +4,7 @@ export const createMockUser = () => ({
   email: 'dev@localhost',
   name: 'Local Dev User',
   role: 'superadmin', // Full access for local testing
-  tenant_id: 'local-tenant-001',
+  tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69',
   permissions: {
     role: 'power-user',
     dashboard_scope: 'all',
@@ -56,7 +56,7 @@ export const createMockUser = () => ({
 
 // Mock tenant for local development
 export const createMockTenant = () => ({
-  id: 'local-tenant-001',
+  id: '6cb4c008-4847-426a-9a2e-918ad70e7b69',
   name: 'Local Development Tenant',
   logo_url: null,
   primary_color: '#06b6d4',

@@ -24,8 +24,11 @@ function resolveTenantId() {
  * @returns {Promise<Object>} Headers object without bearer tokens
  */
 async function getAuthHeaders() {
-  // Do NOT add bearer tokens. Backend uses cookie-based JWT auth.
-  // credentials: 'include' in fetch options sends cookies automatically.
+  // Supabase auth is optional - if user isn't logged in via Supabase,
+  // we rely on cookie-based JWT auth (aisha_access cookie) which is sent automatically
+  // via credentials: 'include' in fetch options
+  
+  // Return empty object - cookies are sent automatically with credentials: 'include'
   return {};
 }
 
@@ -34,7 +37,7 @@ async function getAuthHeaders() {
  * @param {Object} options - Conversation options
  * @param {string} options.agent_name - Agent name (default: 'crm_assistant')
  * @param {Object} options.metadata - Conversation metadata
- * @returns {Promise<Object>} Created conversation
+ * @returns {Promise<Object>}
  */
 export async function createConversation({ agent_name = 'crm_assistant', metadata = {} } = {}) {
   const tenantId = resolveTenantId();
@@ -293,6 +296,42 @@ export function subscribeToConversation(conversationId, callback) {
   };
 }
 
+/**
+ * Submit feedback (thumbs up/down) for an AI message
+ * @param {string} conversationId - Conversation ID
+ * @param {string} messageId - Message ID
+ * @param {'positive'|'negative'|null} rating - Feedback rating (null to clear)
+ * @returns {Promise<Object>} Updated feedback data
+ */
+export async function submitFeedback(conversationId, messageId, rating) {
+  const tenantId = resolveTenantId();
+  const authHeaders = await getAuthHeaders();
+  console.log(`[Conversations API] Submitting feedback for message ${messageId}: ${rating}`);
+  
+  const response = await fetch(
+    `${BACKEND_URL}/api/ai/conversations/${conversationId}/messages/${messageId}/feedback`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-tenant-id': tenantId,
+        ...authHeaders,
+      },
+      credentials: 'include',
+      body: JSON.stringify({ rating }),
+    }
+  );
+
+  if (!response.ok) {
+    console.error(`[Conversations API] Failed to submit feedback: ${response.status} ${response.statusText}`);
+    throw new Error(`Failed to submit feedback: ${response.statusText}`);
+  }
+
+  const result = await response.json();
+  console.log(`[Conversations API] Feedback submitted successfully`, result.data);
+  return result.data;
+}
+
 export default {
   createConversation,
   getConversation,
@@ -302,4 +341,5 @@ export default {
   addMessage,
   subscribeToConversation,
   getWhatsAppConnectURL,
+  submitFeedback,
 };

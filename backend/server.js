@@ -178,6 +178,7 @@ import createIntegrationRoutes from "./routes/integrations.js";
 import createTelephonyRoutes from "./routes/telephony.js";
 import createAiRoutes from "./routes/ai.js";
 import createMcpRoutes from "./routes/mcp.js";
+import devaiRoutes from "./routes/devai.js"; // Phase 6: Developer AI approvals
 import createAccountRoutes from "./routes/accounts.js";
 import createLeadRoutes from "./routes/leads.js";
 import createContactRoutes from "./routes/contacts.js";
@@ -240,11 +241,14 @@ import createSuggestionsRoutes from "./routes/suggestions.js";
 import createConstructionProjectsRoutes from "./routes/construction-projects.js";
 import createConstructionAssignmentsRoutes from "./routes/construction-assignments.js";
 import createWorkersRoutes from "./routes/workers.js";
+import createDashboardFunnelRoutes from "./routes/dashboard-funnel.js";
 import braidAuditRoutes from "./routes/braidAudit.js";
 import braidChainRoutes from "./routes/braidChain.js";
 import braidMetricsRoutes from "./routes/braidMetrics.js";
 import braidGraphRoutes from "./routes/braidGraph.js";
+import aiSettingsRoutes from "./routes/aiSettings.js";
 import { createDeprecationMiddleware } from "./middleware/deprecation.js";
+import { authenticateRequest } from "./middleware/authenticate.js";
 
 // Apply v1 deprecation headers middleware (before routes)
 app.use(createDeprecationMiddleware());
@@ -257,8 +261,10 @@ const measuredPgPool = pgPool;
 app.use("/api/database", createDatabaseRoutes(measuredPgPool));
 app.use("/api/integrations", createIntegrationRoutes(measuredPgPool));
 app.use("/api/telephony", createTelephonyRoutes(measuredPgPool));
-app.use("/api/ai", createAiRoutes(measuredPgPool));
+app.use("/api/ai", authenticateRequest, createAiRoutes(measuredPgPool));
+app.use("/api/ai-settings", authenticateRequest, aiSettingsRoutes); // AI configuration settings
 app.use("/api/mcp", createMcpRoutes(measuredPgPool));
+app.use("/api/devai", devaiRoutes); // Phase 6: Developer AI approvals (superadmin only)
 app.use("/api/accounts", createAccountRoutes(measuredPgPool));
 app.use("/api/leads", createLeadRoutes(measuredPgPool));
 app.use("/api/contacts", createContactRoutes(measuredPgPool));
@@ -324,6 +330,9 @@ app.use("/api/systembrandings", createSystemBrandingRoutes(measuredPgPool));
 app.use("/api/synchealths", createSyncHealthRoutes(measuredPgPool));
 app.use("/api/aicampaigns", createAICampaignRoutes(measuredPgPool));
 app.use("/api/security", createSecurityRoutes(measuredPgPool));
+// Dashboard funnel counts (materialized view for fast dashboard loading)
+console.log("✓ Mounting /api/dashboard/funnel-counts routes");
+app.use("/api/dashboard", createDashboardFunnelRoutes(measuredPgPool));
 // Braid SDK Audit Log routes
 console.log("✓ Mounting /api/braid/audit routes");
 app.use("/api/braid/audit", braidAuditRoutes);
@@ -371,6 +380,15 @@ app.use((req, res) => {
 // Error handler
 app.use((err, req, res, _next) => {
   console.error("Error:", err);
+
+  // Ensure CORS headers are present even in error responses
+  // This prevents "CORS error" from masking the actual backend error (401, 403, 500, etc.)
+  if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+
   res.status(err.status || 500).json({
     status: "error",
     message: err.message || "Internal server error",

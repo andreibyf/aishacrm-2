@@ -28,7 +28,7 @@ import { test, expect, Page } from '@playwright/test';
 
 const FRONTEND_URL = process.env.PLAYWRIGHT_FRONTEND_URL || process.env.VITE_AISHACRM_FRONTEND_URL || 'http://localhost:4000';
 const BACKEND_URL = process.env.PLAYWRIGHT_BACKEND_URL || process.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
-const E2E_TENANT_ID = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+const E2E_TENANT_ID = '6cb4c008-4847-426a-9a2e-918ad70e7b69';
 
 // Test data - unique per run
 const timestamp = Date.now();
@@ -245,7 +245,7 @@ test.describe('Complete User Workflow - Lead to Closed Deal', () => {
     
     // Get current authenticated user's real tenant UUID
     console.log('   🔍 Fetching current user context...');
-    let tenantId = 'a11dfb63-4b18-4eb8-872e-747af2e37c46'; // fallback
+    let tenantId = '6cb4c008-4847-426a-9a2e-918ad70e7b69'; // fallback
     try {
       const userResp = await request.get(`${BACKEND_URL}/api/users/me`);
       if (userResp.ok()) {
@@ -301,7 +301,7 @@ test.describe('Complete User Workflow - Lead to Closed Deal', () => {
     // Now test the API to see what leads the backend returns
     console.log(`   🔍 Testing backend leads query with tenant_id=${tenantId}...`);
     try {
-      const leadsResp = await request.get(`${BACKEND_URL}/api/leads?tenant_id=a11dfb63-4b18-4eb8-872e-747af2e37c46`);
+      const leadsResp = await request.get(`${BACKEND_URL}/api/leads?tenant_id=6cb4c008-4847-426a-9a2e-918ad70e7b69`);
       if (leadsResp.ok()) {
         const leadsData = await leadsResp.json();
         console.log(`   ✅ Backend returned ${leadsData?.data?.length || 0} leads with slug`);

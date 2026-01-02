@@ -23,7 +23,7 @@ async function checkLeadsAfterFix() {
         created_date,
         EXTRACT(EPOCH FROM (now() - created_date)) / 86400 as age_days
       FROM leads
-      WHERE tenant_id = 'local-tenant-001'
+      WHERE tenant_id = '6cb4c008-4847-426a-9a2e-918ad70e7b69'
       ORDER BY created_date DESC
       LIMIT 10
     `);

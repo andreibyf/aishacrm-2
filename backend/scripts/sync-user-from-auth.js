@@ -3,7 +3,7 @@
  * Sync a Supabase Auth user into the CRM app tables (public.users or public.employees).
  *
  * Usage:
- *   node backend/scripts/sync-user-from-auth.js --email test@aishacrm.com [--role superadmin|admin|employee|manager] [--tenant local-tenant-001]
+ *   node backend/scripts/sync-user-from-auth.js --email test@aishacrm.com [--role superadmin|admin|employee|manager] [--tenant 6cb4c008-4847-426a-9a2e-918ad70e7b69]
  *
  * Behavior:
  * - If --role/--tenant are provided and Supabase Admin is configured, updates the auth user's user_metadata first.

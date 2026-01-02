@@ -12,7 +12,7 @@ async function main() {
   });
   await c.connect();
 
-  const tenant = process.argv[2] || 'test-tenant-001';
+  const tenant = process.argv[2] || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
   const q1 = `SELECT * FROM v_opportunity_pipeline_by_stage WHERE tenant_id = $1 ORDER BY stage`;
   const q2 = `SELECT * FROM v_lead_counts_by_status WHERE tenant_id = $1 ORDER BY status`;
   const q3 = `SELECT id, subject, due_at FROM v_calendar_activities WHERE tenant_id = $1 ORDER BY COALESCE(due_at, created_at) LIMIT 5`;

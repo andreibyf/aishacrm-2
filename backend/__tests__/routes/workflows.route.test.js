@@ -154,4 +154,65 @@ describe('Workflow Routes', { skip: !SHOULD_RUN }, () => {
     const res = await fetch(`${BASE_URL}/api/workflow-templates?tenant_id=${TENANT_ID}`);
     assert.ok([200, 404].includes(res.status), `expected 200 or 404, got ${res.status}`);
   });
+
+  test('POST /api/workflows creates workflow with create_note node', async () => {
+    const result = await createWorkflow({
+      name: `Create Note Workflow ${Date.now()}`,
+      description: 'Test workflow with create_note node',
+      trigger_type: 'manual',
+      status: 'draft',
+      nodes: [
+        { id: 'trigger-1', type: 'manual_trigger', config: {}, position: { x: 400, y: 100 } },
+        { 
+          id: 'note-1', 
+          type: 'create_note', 
+          config: { 
+            content: 'Test note created by workflow automation',
+            related_to: 'lead'
+          }, 
+          position: { x: 400, y: 300 } 
+        }
+      ],
+      connections: [{ from: 'trigger-1', to: 'note-1' }]
+    });
+    assert.equal(result.status, 201, `expected 201, got ${result.status}: ${JSON.stringify(result.json)}`);
+    const id = result.json?.data?.id || result.json?.data?.workflow?.id;
+    assert.ok(id, 'workflow should have an id');
+    createdIds.push(id);
+  });
+
+  test('POST /api/workflows creates workflow with send_sms node', async () => {
+    const result = await createWorkflow({
+      name: `SMS Workflow ${Date.now()}`,
+      description: 'Test workflow with send_sms node for missed-call template',
+      trigger_type: 'webhook',
+      status: 'draft',
+      nodes: [
+        { id: 'trigger-1', type: 'webhook_trigger', config: {}, position: { x: 400, y: 100 } },
+        { 
+          id: 'find-1', 
+          type: 'find_contact', 
+          config: { lookup_field: 'phone' }, 
+          position: { x: 400, y: 200 } 
+        },
+        { 
+          id: 'sms-1', 
+          type: 'send_sms', 
+          config: { 
+            message: 'Sorry we missed your call. How can we help you today?',
+            to_field: '{{contact.phone}}'
+          }, 
+          position: { x: 400, y: 300 } 
+        }
+      ],
+      connections: [
+        { from: 'trigger-1', to: 'find-1' },
+        { from: 'find-1', to: 'sms-1' }
+      ]
+    });
+    assert.equal(result.status, 201, `expected 201, got ${result.status}: ${JSON.stringify(result.json)}`);
+    const id = result.json?.data?.id || result.json?.data?.workflow?.id;
+    assert.ok(id, 'workflow should have an id');
+    createdIds.push(id);
+  });
 });

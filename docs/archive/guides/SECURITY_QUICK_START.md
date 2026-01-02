@@ -55,7 +55,7 @@ node apply-rls-policies.js
 **Local Development**:
 ```bash
 # Edit backend/.env
-JWT_SECRET=cd33072ecf1243bd58a29c46ae3c7a6030b5942a153ca008ae9ba63e8bf66ab165264dd944beca52b779ee333fa23272ceff4e62a1594e4d562dcc8ce5c51c8e
+JWT_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 **Production (Railway)**:
@@ -80,7 +80,7 @@ JWT_SECRET=cd33072ecf1243bd58a29c46ae3c7a6030b5942a153ca008ae9ba63e8bf66ab165264
 **In `backend/.env.example`**:
 ```bash
 # OLD (remove this):
-DEFAULT_USER_PASSWORD=Welcome2024!
+DEFAULT_USER_PASSWORD=xxxxxxxxxxxx
 
 # NEW (add this):
 # DEPRECATED: Do not use a default password in production
@@ -91,7 +91,7 @@ DEFAULT_USER_PASSWORD=Welcome2024!
 **In your user creation code** (if using default password):
 ```javascript
 // BEFORE
-const password = process.env.DEFAULT_USER_PASSWORD || 'Welcome2024!';
+const password = process.env.DEFAULT_USER_PASSWORD || 'xxxxxxxxxxxx';
 
 // AFTER
 const crypto = require('crypto');
@@ -203,7 +203,7 @@ railway init
 
 # 3. Add environment variables in Railway Dashboard:
 #    - NODE_ENV=production
-#    - JWT_SECRET=cd33072ecf1243bd58a29c46ae3c7a6030b5942a153ca008ae9ba63e8bf66ab165264dd944beca52b779ee333fa23272ceff4e62a1594e4d562dcc8ce5c51c8e
+#    - JWT_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 #    - SUPABASE_URL=https://your-project.supabase.co
 #    - SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 #    - ALLOWED_ORIGINS=https://yourcrm.vercel.app

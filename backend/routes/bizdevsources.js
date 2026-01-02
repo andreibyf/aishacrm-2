@@ -60,28 +60,34 @@ export default function createBizDevSourceRoutes(pgPool) {
   // Get all bizdev sources (with optional filtering)
   router.get('/', cacheList('bizdevsources', 180), async (req, res) => {
     try {
-      let { tenant_id, status, source_type, priority } = req.query;
+      const { status, source_type, priority } = req.query;
 
-      // Accept UUID or slug; normalize to slug for legacy columns
+      // Enforce tenant isolation - support both middleware tenant and query param
+      const tenant_id = req.tenant?.id || req.query.tenant_id;
+      if (!tenant_id) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'tenant_id is required'
+        });
+      }
       
       let query = supabase
         .from('bizdev_sources')
         .select('*')
+        .eq('tenant_id', tenant_id)  // Always enforce tenant scoping
         .order('created_at', { ascending: false });
 
-      if (tenant_id) {
-        query = query.eq('tenant_id', tenant_id);
+      // Filter out "undefined" string from query params (braid sends these)
+      if (status && status !== 'undefined') {
+        // Case-insensitive status filter using ilike
+        query = query.ilike('status', status);
       }
 
-      if (status) {
-        query = query.eq('status', status);
-      }
-
-      if (source_type) {
+      if (source_type && source_type !== 'undefined') {
         query = query.eq('source_type', source_type);
       }
 
-      if (priority) {
+      if (priority && priority !== 'undefined') {
         query = query.eq('priority', priority);
       }
 
@@ -688,7 +694,7 @@ export default function createBizDevSourceRoutes(pgPool) {
           tenantBusinessModel = tenantResult.rows[0].business_model;
           console.log('[Promote] Tenant business_model:', tenantBusinessModel);
         }
-      } catch (e) {
+      } catch (_e) {
         console.warn('[Promote] Failed to fetch tenant business_model, using default:', tenantBusinessModel);
       }
 

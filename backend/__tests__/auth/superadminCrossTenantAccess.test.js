@@ -52,7 +52,7 @@ describe('Superadmin Cross-Tenant Access', { skip: !SHOULD_RUN }, () => {
   });
 
   test('POST /api/v2/opportunities without tenant_id is rejected', async () => {
-    const { res, body } = await jsonFetch('/api/v2/opportunities', {
+    const { res, body: _body } = await jsonFetch('/api/v2/opportunities', {
       method: 'POST',
       body: JSON.stringify({
         name: 'Test Opportunity',

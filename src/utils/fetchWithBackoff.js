@@ -74,25 +74,46 @@ async function fetchWithBackoff(input, init) {
   }
 
   // Seamless short-lived auth: if 401 from backend, attempt refresh once then retry
+  // If refresh fails multiple times, notify user and redirect to login
   try {
     const u = new URL(urlString, window.location.origin);
     const isBackendCall = u.pathname.startsWith('/api') || u.origin === new URL(BACKEND_URL, window.location.origin).origin;
     const isRefreshCall = u.pathname === '/api/auth/refresh';
+    const isLoginCall = u.pathname === '/api/auth/login';
     const alreadyRetried = hdrs.get('x-auth-retry') === '1';
-    if (resp && resp.status === 401 && isBackendCall && !isRefreshCall && !alreadyRetried) {
-      // Call refresh endpoint
-      const refreshUrl = '/api/auth/refresh';
+    
+    if (resp && resp.status === 401 && isBackendCall && !isRefreshCall && !isLoginCall && !alreadyRetried) {
+      if (import.meta.env.DEV) {
+        console.log('[fetchWithBackoff] 401 detected, attempting token refresh');
+      }
+      
+      // Call refresh endpoint - use absolute URL to ensure it hits the backend
+      const refreshUrl = `${BACKEND_URL}/api/auth/refresh`;
       const refreshResp = await originalFetch(refreshUrl, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' }
       });
+      
       if (refreshResp && refreshResp.ok) {
-        // Retry original once
+        // Refresh succeeded - retry original request
+        if (import.meta.env.DEV) {
+          console.log('[fetchWithBackoff] Token refreshed successfully, retrying request');
+        }
         const retryInit = { ...initWithCreds, headers: new Headers(hdrs) };
         retryInit.headers.set('x-auth-retry', '1');
         const retryResp = await originalFetch(input, retryInit);
         return retryResp;
+      } else {
+        // Refresh failed - session truly expired
+        if (import.meta.env.DEV) {
+          console.warn('[fetchWithBackoff] Token refresh failed, session expired');
+        }
+        
+        // Dispatch custom event to notify token refresh hook
+        window.dispatchEvent(new CustomEvent('auth-session-expired', {
+          detail: { reason: 'refresh_failed', status: refreshResp?.status }
+        }));
       }
     }
   } catch {

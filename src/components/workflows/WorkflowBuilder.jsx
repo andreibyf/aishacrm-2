@@ -7,9 +7,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Workflow } from '@/api/entities';
 import { useUser } from '@/components/shared/useUser.js';
 import { BACKEND_URL } from '@/api/entities';
-import { Webhook, Search, Save, Plus, X, Copy, Check, RefreshCw } from 'lucide-react';
+import { Webhook, Search, Save, Plus, X, Copy, Check, RefreshCw, Sparkles } from 'lucide-react';
 import WorkflowCanvas from './WorkflowCanvas';
 import NodeLibrary from './NodeLibrary';
+import WorkflowTemplatesBrowser from './WorkflowTemplatesBrowser';
 import { toast } from 'sonner';
 import { WorkflowExecution } from '@/api/entities';
 import { Switch } from '@/components/ui/switch';
@@ -36,6 +37,17 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
   const [executionOffset, setExecutionOffset] = useState(0);
   
   const [autoConnect, setAutoConnect] = useState(true);
+  const [showTemplates, setShowTemplates] = useState(false);
+
+  // Template handler
+  const handleSelectTemplate = (template) => {
+    setName(template.name);
+    setDescription(template.description);
+    setNodes(template.nodes || []);
+    setConnections(template.connections || []);
+    setShowTemplates(false);
+    toast.success(`Template "${template.name}" loaded successfully!`);
+  };
 
   // Update state when workflow prop changes (for editing)
   useEffect(() => {
@@ -109,8 +121,29 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
   };
 
   const handleConnect = (fromId, toId) => {
-    const filteredConnections = connections.filter(conn => conn.from !== fromId);
-    setConnections([...filteredConnections, { from: fromId, to: toId }]);
+    // Check if the source node is a condition node
+    const fromNode = nodes.find(n => n.id === fromId);
+    const isCondition = fromNode?.type === 'condition';
+    
+    if (isCondition) {
+      // For condition nodes, allow up to 2 outgoing connections (TRUE and FALSE)
+      const existingConnections = connections.filter(conn => conn.from === fromId);
+      
+      // If already has 2 connections, remove the oldest one
+      if (existingConnections.length >= 2) {
+        const filteredConnections = connections.filter(conn => 
+          conn.from !== fromId || conn.to !== existingConnections[0].to
+        );
+        setConnections([...filteredConnections, { from: fromId, to: toId }]);
+      } else {
+        // Just add the new connection
+        setConnections([...connections, { from: fromId, to: toId }]);
+      }
+    } else {
+      // For non-condition nodes, replace existing connection (only one allowed)
+      const filteredConnections = connections.filter(conn => conn.from !== fromId);
+      setConnections([...filteredConnections, { from: fromId, to: toId }]);
+    }
   };
 
   const handleSelectNode = (nodeId) => {
@@ -1753,6 +1786,693 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           </div>
         );
 
+      case 'wait':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-200">Wait Duration</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  min="1"
+                  value={node.config?.duration_value || 1}
+                  onChange={(e) => {
+                    updateNodeConfig(node.id, { ...node.config, duration_value: parseInt(e.target.value) || 1 });
+                  }}
+                  placeholder="1"
+                  className="bg-slate-800 border-slate-700 text-slate-200 flex-1"
+                />
+                <Select
+                  value={node.config?.duration_unit || 'minutes'}
+                  onValueChange={(value) => {
+                    updateNodeConfig(node.id, { ...node.config, duration_unit: value });
+                  }}
+                >
+                  <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200 w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-slate-700">
+                    <SelectItem value="seconds">Seconds</SelectItem>
+                    <SelectItem value="minutes">Minutes</SelectItem>
+                    <SelectItem value="hours">Hours</SelectItem>
+                    <SelectItem value="days">Days</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Workflow will pause execution for the specified duration
+              </p>
+            </div>
+            <div className="bg-amber-900/20 border border-amber-700 rounded-lg p-3">
+              <p className="text-sm text-amber-300 font-semibold mb-2">
+                ⚠️ Important Notes:
+              </p>
+              <ul className="text-xs text-amber-400 space-y-1 ml-4 list-disc">
+                <li>Use for follow-up delays (e.g., wait 3 days then send email)</li>
+                <li>Workflow execution continues after delay completes</li>
+                <li>Maximum recommended: 7 days</li>
+              </ul>
+            </div>
+          </div>
+        );
+
+      case 'send_sms':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-200">To (Phone Number)</Label>
+              {getAvailableFields().length > 0 ? (
+                <Select
+                  value={node.config?.to || ''}
+                  onValueChange={(value) => {
+                    updateNodeConfig(node.id, { ...node.config, to: `{{${value}}}` });
+                  }}
+                >
+                  <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                    <SelectValue placeholder="Select phone field" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-slate-700">
+                    {getAvailableFields().map(field => (
+                      <SelectItem key={field} value={field}>
+                        {'{{' + field + '}}'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  value={node.config?.to || ''}
+                  onChange={(e) => {
+                    updateNodeConfig(node.id, { ...node.config, to: e.target.value });
+                  }}
+                  placeholder="{{phone}} or +1234567890"
+                  className="bg-slate-800 border-slate-700 text-slate-200"
+                />
+              )}
+              <p className="text-xs text-slate-500 mt-1">
+                Use {'{{field_name}}'} to reference webhook data
+              </p>
+            </div>
+            <div>
+              <Label className="text-slate-200">Message</Label>
+              <textarea
+                value={node.config?.message || ''}
+                onChange={(e) => {
+                  updateNodeConfig(node.id, { ...node.config, message: e.target.value });
+                }}
+                maxLength={160}
+                placeholder="SMS message. Use {{field_name}} for dynamic content."
+                className="w-full min-h-[120px] rounded-md bg-slate-800 border border-slate-700 text-slate-200 p-2"
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                {(node.config?.message || '').length}/160 characters
+              </p>
+            </div>
+            <div className="bg-fuchsia-900/20 border border-fuchsia-700 rounded-lg p-3">
+              <p className="text-sm text-fuchsia-300 font-semibold mb-2">
+                📱 SMS Integration:
+              </p>
+              <ul className="text-xs text-fuchsia-400 space-y-1 ml-4 list-disc">
+                <li>Requires Twilio or SMS provider configuration</li>
+                <li>Phone numbers must include country code (+1 for US)</li>
+                <li>Keep messages under 160 characters to avoid splitting</li>
+              </ul>
+            </div>
+          </div>
+        );
+
+      case 'assign_record':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-200">Assignment Method</Label>
+              <Select
+                value={node.config?.method || 'specific_user'}
+                onValueChange={(value) => {
+                  updateNodeConfig(node.id, { ...node.config, method: value });
+                }}
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectItem value="specific_user">Specific User</SelectItem>
+                  <SelectItem value="round_robin">Round Robin</SelectItem>
+                  <SelectItem value="least_assigned">Least Assigned</SelectItem>
+                  <SelectItem value="record_owner">Record Owner</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {node.config?.method === 'specific_user' && (
+              <div>
+                <Label className="text-slate-200">User ID</Label>
+                <Input
+                  value={node.config?.user_id || ''}
+                  onChange={(e) => {
+                    updateNodeConfig(node.id, { ...node.config, user_id: e.target.value });
+                  }}
+                  placeholder="User UUID or {{webhook_field}}"
+                  className="bg-slate-800 border-slate-700 text-slate-200"
+                />
+              </div>
+            )}
+            {node.config?.method === 'round_robin' && (
+              <div>
+                <Label className="text-slate-200">Round Robin Group</Label>
+                <Input
+                  value={node.config?.group || 'sales_team'}
+                  onChange={(e) => {
+                    updateNodeConfig(node.id, { ...node.config, group: e.target.value });
+                  }}
+                  placeholder="Team name (e.g., sales_team, support)"
+                  className="bg-slate-800 border-slate-700 text-slate-200"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Distributes records evenly among users in the specified group
+                </p>
+              </div>
+            )}
+            <div className="bg-lime-900/20 border border-lime-700 rounded-lg p-3">
+              <p className="text-sm text-lime-300 font-semibold mb-2">
+                👥 Assignment Methods:
+              </p>
+              <ul className="text-xs text-lime-400 space-y-1 ml-4 list-disc">
+                <li>**Specific User**: Assign to a designated user ID</li>
+                <li>**Round Robin**: Rotate assignments evenly across team</li>
+                <li>**Least Assigned**: Assign to user with fewest active records</li>
+                <li>**Record Owner**: Keep current owner (useful in update flows)</li>
+              </ul>
+            </div>
+          </div>
+        );
+
+      case 'update_status':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-200">Record Type</Label>
+              <Select
+                value={node.config?.record_type || 'lead'}
+                onValueChange={(value) => {
+                  updateNodeConfig(node.id, { ...node.config, record_type: value });
+                }}
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectItem value="lead">Lead</SelectItem>
+                  <SelectItem value="contact">Contact</SelectItem>
+                  <SelectItem value="opportunity">Opportunity</SelectItem>
+                  <SelectItem value="account">Account</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-slate-200">New Status</Label>
+              <Input
+                value={node.config?.new_status || ''}
+                onChange={(e) => {
+                  updateNodeConfig(node.id, { ...node.config, new_status: e.target.value });
+                }}
+                placeholder="e.g., 'qualified', 'contacted', 'closed won'"
+                className="bg-slate-800 border-slate-700 text-slate-200"
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Use exact status values from your CRM
+              </p>
+            </div>
+            <div className="bg-sky-900/20 border border-sky-700 rounded-lg p-3">
+              <p className="text-sm text-sky-300 font-semibold mb-2">
+                📊 Common Status Updates:
+              </p>
+              <ul className="text-xs text-sky-400 space-y-1 ml-4 list-disc">
+                <li>**Leads**: new, contacted, qualified, disqualified, converted</li>
+                <li>**Opportunities**: prospecting, qualification, proposal, negotiation, closed won, closed lost</li>
+                <li>**Contacts**: active, inactive, churned</li>
+              </ul>
+            </div>
+          </div>
+        );
+
+      case 'create_note':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-200">Related Record Type</Label>
+              <Select
+                value={node.config?.related_record_type || 'lead'}
+                onValueChange={(value) => {
+                  updateNodeConfig(node.id, { ...node.config, related_record_type: value });
+                }}
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectItem value="lead">Lead</SelectItem>
+                  <SelectItem value="contact">Contact</SelectItem>
+                  <SelectItem value="account">Account</SelectItem>
+                  <SelectItem value="opportunity">Opportunity</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-slate-500 mt-1">
+                The note will be attached to the record found earlier in the workflow
+              </p>
+            </div>
+            <div>
+              <Label className="text-slate-200">Note Content</Label>
+              <textarea
+                value={node.config?.note_content || ''}
+                onChange={(e) => {
+                  updateNodeConfig(node.id, { ...node.config, note_content: e.target.value });
+                }}
+                placeholder="Enter note content. Use {{field_name}} for dynamic values."
+                className="w-full min-h-[120px] rounded-md bg-slate-800 border border-slate-700 text-slate-200 p-2"
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Use {'{{field_name}}'} to include webhook data or record fields
+              </p>
+            </div>
+            <div className="bg-amber-900/20 border border-amber-700 rounded-lg p-3">
+              <p className="text-sm text-amber-300 font-semibold mb-2">
+                📝 Note Tips:
+              </p>
+              <ul className="text-xs text-amber-400 space-y-1 ml-4 list-disc">
+                <li>Notes are attached to the record found in the workflow context</li>
+                <li>Use {'{{date}}'} to include the current date</li>
+                <li>Notes are visible in the record&apos;s activity timeline</li>
+              </ul>
+            </div>
+          </div>
+        );
+
+      case 'ai_summarize':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-200">Summary Type</Label>
+              <Select
+                value={node.config?.summary_type || 'status_update'}
+                onValueChange={(value) => {
+                  updateNodeConfig(node.id, { ...node.config, summary_type: value });
+                }}
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectItem value="status_update">Status Update</SelectItem>
+                  <SelectItem value="executive_summary">Executive Summary</SelectItem>
+                  <SelectItem value="action_items">Action Items</SelectItem>
+                  <SelectItem value="custom">Custom Prompt</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {node.config?.summary_type === 'custom' && (
+              <div>
+                <Label className="text-slate-200">Custom Prompt</Label>
+                <textarea
+                  value={node.config?.custom_prompt || ''}
+                  onChange={(e) => {
+                    updateNodeConfig(node.id, { ...node.config, custom_prompt: e.target.value });
+                  }}
+                  placeholder="Enter your custom summarization instructions..."
+                  className="w-full min-h-[80px] rounded-md bg-slate-800 border border-slate-700 text-slate-200 p-2"
+                />
+              </div>
+            )}
+            <div>
+              <Label className="text-slate-200">AI Provider</Label>
+              <Select
+                value={node.config?.provider || 'openai'}
+                onValueChange={(value) => {
+                  updateNodeConfig(node.id, { ...node.config, provider: value });
+                }}
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectItem value="openai">OpenAI (GPT-4o-mini)</SelectItem>
+                  <SelectItem value="anthropic">Anthropic (Claude)</SelectItem>
+                  <SelectItem value="groq">Groq (Llama)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="bg-violet-900/20 border border-violet-700 rounded-lg p-3">
+              <p className="text-sm text-violet-300 font-semibold mb-2">
+                ✨ AI Summarize
+              </p>
+              <p className="text-xs text-violet-400">
+                Uses AI to generate summaries from workflow context (leads, contacts, opportunities).
+                Result is stored in {'{{ai_summary}}'} for use in subsequent nodes.
+              </p>
+            </div>
+          </div>
+        );
+
+      case 'ai_generate_note':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-200">Note Type</Label>
+              <Select
+                value={node.config?.note_type || 'progress_update'}
+                onValueChange={(value) => {
+                  updateNodeConfig(node.id, { ...node.config, note_type: value });
+                }}
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectItem value="progress_update">Progress Update</SelectItem>
+                  <SelectItem value="call_summary">Call Summary</SelectItem>
+                  <SelectItem value="meeting_prep">Meeting Prep</SelectItem>
+                  <SelectItem value="custom">Custom Prompt</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-slate-200">Related Record Type</Label>
+              <Select
+                value={node.config?.related_record_type || 'auto'}
+                onValueChange={(value) => {
+                  updateNodeConfig(node.id, { ...node.config, related_record_type: value });
+                }}
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectItem value="auto">Auto-detect</SelectItem>
+                  <SelectItem value="lead">Lead</SelectItem>
+                  <SelectItem value="contact">Contact</SelectItem>
+                  <SelectItem value="account">Account</SelectItem>
+                  <SelectItem value="opportunity">Opportunity</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {node.config?.note_type === 'custom' && (
+              <div>
+                <Label className="text-slate-200">Custom Prompt</Label>
+                <textarea
+                  value={node.config?.custom_prompt || ''}
+                  onChange={(e) => {
+                    updateNodeConfig(node.id, { ...node.config, custom_prompt: e.target.value });
+                  }}
+                  placeholder="Enter your custom note generation instructions..."
+                  className="w-full min-h-[80px] rounded-md bg-slate-800 border border-slate-700 text-slate-200 p-2"
+                />
+              </div>
+            )}
+            <div className="bg-fuchsia-900/20 border border-fuchsia-700 rounded-lg p-3">
+              <p className="text-sm text-fuchsia-300 font-semibold mb-2">
+                📄 AI Note Generation
+              </p>
+              <p className="text-xs text-fuchsia-400">
+                Uses AI to generate intelligent notes based on workflow context.
+                Notes are automatically saved and attached to the related record.
+              </p>
+            </div>
+          </div>
+        );
+
+      case 'thoughtly_message':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-200">Message Type</Label>
+              <Select
+                value={node.config?.message_type || 'sms'}
+                onValueChange={(value) => {
+                  updateNodeConfig(node.id, { ...node.config, message_type: value });
+                }}
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectItem value="sms">SMS</SelectItem>
+                  <SelectItem value="email">Email</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-slate-200">{node.config?.message_type === 'email' ? 'Email Address' : 'Phone Number'}</Label>
+              <Input
+                value={node.config?.to || (node.config?.message_type === 'email' ? '{{email}}' : '{{phone}}')}
+                onChange={(e) => {
+                  updateNodeConfig(node.id, { ...node.config, to: e.target.value });
+                }}
+                className="bg-slate-800 border-slate-700 text-slate-200"
+                placeholder={node.config?.message_type === 'email' ? '{{email}}' : '{{phone}}'}
+              />
+            </div>
+            {node.config?.message_type === 'email' && (
+              <div>
+                <Label className="text-slate-200">Subject</Label>
+                <Input
+                  value={node.config?.subject || ''}
+                  onChange={(e) => {
+                    updateNodeConfig(node.id, { ...node.config, subject: e.target.value });
+                  }}
+                  className="bg-slate-800 border-slate-700 text-slate-200"
+                  placeholder="Email subject..."
+                />
+              </div>
+            )}
+            <div>
+              <Label className="text-slate-200">Message</Label>
+              <textarea
+                value={node.config?.message || ''}
+                onChange={(e) => {
+                  updateNodeConfig(node.id, { ...node.config, message: e.target.value });
+                }}
+                placeholder="Enter your message content..."
+                className="w-full min-h-[100px] rounded-md bg-slate-800 border border-slate-700 text-slate-200 p-2"
+              />
+            </div>
+            <div className="bg-sky-900/20 border border-sky-700 rounded-lg p-3">
+              <p className="text-sm text-sky-300 font-semibold mb-2">
+                💬 Thoughtly Integration
+              </p>
+              <p className="text-xs text-sky-400">
+                Send SMS or email messages through Thoughtly AI platform.
+                API credentials are configured in tenant integration settings.
+              </p>
+            </div>
+          </div>
+        );
+
+      case 'callfluent_message':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-200">Phone Number</Label>
+              <Input
+                value={node.config?.to || '{{phone}}'}
+                onChange={(e) => {
+                  updateNodeConfig(node.id, { ...node.config, to: e.target.value });
+                }}
+                className="bg-slate-800 border-slate-700 text-slate-200"
+                placeholder="{{phone}}"
+              />
+            </div>
+            <div>
+              <Label className="text-slate-200">SMS Message</Label>
+              <textarea
+                value={node.config?.message || ''}
+                onChange={(e) => {
+                  updateNodeConfig(node.id, { ...node.config, message: e.target.value });
+                }}
+                placeholder="Enter your SMS message (160 char limit)..."
+                className="w-full min-h-[80px] rounded-md bg-slate-800 border border-slate-700 text-slate-200 p-2"
+              />
+              <p className="text-xs text-slate-400 mt-1">
+                {(node.config?.message?.length || 0)}/160 characters
+              </p>
+            </div>
+            <div>
+              <Label className="text-slate-200">From Number (optional)</Label>
+              <Input
+                value={node.config?.from_number || ''}
+                onChange={(e) => {
+                  updateNodeConfig(node.id, { ...node.config, from_number: e.target.value });
+                }}
+                className="bg-slate-800 border-slate-700 text-slate-200"
+                placeholder="Uses tenant default if empty"
+              />
+            </div>
+            <div className="bg-lime-900/20 border border-lime-700 rounded-lg p-3">
+              <p className="text-sm text-lime-300 font-semibold mb-2">
+                📱 CallFluent SMS
+              </p>
+              <p className="text-xs text-lime-400">
+                Send SMS messages through CallFluent AI platform.
+                API credentials are configured in tenant integration settings.
+              </p>
+            </div>
+          </div>
+        );
+
+      case 'pabbly_webhook':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-200">Pabbly Webhook URL</Label>
+              <Input
+                value={node.config?.webhook_url || ''}
+                onChange={(e) => {
+                  updateNodeConfig(node.id, { ...node.config, webhook_url: e.target.value });
+                }}
+                className="bg-slate-800 border-slate-700 text-slate-200"
+                placeholder="https://connect.pabbly.com/workflow/sendwebhookdata/..."
+              />
+            </div>
+            <div>
+              <Label className="text-slate-200">Payload Type</Label>
+              <Select
+                value={node.config?.payload_type || 'full'}
+                onValueChange={(value) => {
+                  updateNodeConfig(node.id, { ...node.config, payload_type: value });
+                }}
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectItem value="full">Full Entity Data</SelectItem>
+                  <SelectItem value="custom">Custom Field Mapping</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {node.config?.payload_type === 'custom' && (
+              <div className="space-y-2">
+                <Label className="text-slate-200">Field Mappings</Label>
+                {(node.config?.field_mappings || []).map((mapping, idx) => (
+                  <div key={idx} className="flex gap-2">
+                    <Input
+                      value={mapping.pabbly_field || ''}
+                      onChange={(e) => {
+                        const mappings = [...(node.config.field_mappings || [])];
+                        mappings[idx] = { ...mappings[idx], pabbly_field: e.target.value };
+                        updateNodeConfig(node.id, { ...node.config, field_mappings: mappings });
+                      }}
+                      className="bg-slate-800 border-slate-700 text-slate-200 flex-1"
+                      placeholder="Pabbly field name"
+                    />
+                    <Input
+                      value={mapping.source_value || ''}
+                      onChange={(e) => {
+                        const mappings = [...(node.config.field_mappings || [])];
+                        mappings[idx] = { ...mappings[idx], source_value: e.target.value };
+                        updateNodeConfig(node.id, { ...node.config, field_mappings: mappings });
+                      }}
+                      className="bg-slate-800 border-slate-700 text-slate-200 flex-1"
+                      placeholder="Source: email, first_name, etc."
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const mappings = (node.config.field_mappings || []).filter((_, i) => i !== idx);
+                        updateNodeConfig(node.id, { ...node.config, field_mappings: mappings });
+                      }}
+                      className="text-red-400 hover:text-red-300"
+                    >
+                      ×
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const mappings = [...(node.config.field_mappings || []), { pabbly_field: '', source_value: '' }];
+                    updateNodeConfig(node.id, { ...node.config, field_mappings: mappings });
+                  }}
+                  className="w-full border-slate-600 text-slate-300"
+                >
+                  + Add Field Mapping
+                </Button>
+              </div>
+            )}
+            <div className="bg-pink-900/20 border border-pink-700 rounded-lg p-3">
+              <p className="text-sm text-pink-300 font-semibold mb-2">
+                🔗 Pabbly Connect
+              </p>
+              <p className="text-xs text-pink-400">
+                Send workflow data to Pabbly Connect for cross-platform automation.
+                Use &quot;Full Entity Data&quot; to send all context, or map specific fields.
+              </p>
+            </div>
+          </div>
+        );
+
+      case 'wait_for_webhook':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-200">Match Field</Label>
+              <Select
+                value={node.config?.match_field || 'call_id'}
+                onValueChange={(value) => {
+                  updateNodeConfig(node.id, { ...node.config, match_field: value });
+                }}
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectItem value="call_id">Call ID (from AI call)</SelectItem>
+                  <SelectItem value="message_id">Message ID</SelectItem>
+                  <SelectItem value="lead_id">Lead ID</SelectItem>
+                  <SelectItem value="contact_id">Contact ID</SelectItem>
+                  <SelectItem value="custom">Custom Key</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {node.config?.match_field === 'custom' && (
+              <div>
+                <Label className="text-slate-200">Custom Match Value</Label>
+                <Input
+                  value={node.config?.match_value || ''}
+                  onChange={(e) => {
+                    updateNodeConfig(node.id, { ...node.config, match_value: e.target.value });
+                  }}
+                  className="bg-slate-800 border-slate-700 text-slate-200"
+                  placeholder="Value to match incoming webhook"
+                />
+              </div>
+            )}
+            <div>
+              <Label className="text-slate-200">Timeout (minutes)</Label>
+              <Input
+                type="number"
+                value={node.config?.timeout_minutes || 60}
+                onChange={(e) => {
+                  updateNodeConfig(node.id, { ...node.config, timeout_minutes: parseInt(e.target.value) || 60 });
+                }}
+                className="bg-slate-800 border-slate-700 text-slate-200"
+                min={1}
+                max={10080}
+              />
+              <p className="text-xs text-slate-400 mt-1">Max: 7 days (10080 minutes)</p>
+            </div>
+            <div className="bg-slate-700/50 border border-slate-600 rounded-lg p-3">
+              <p className="text-sm text-slate-300 font-semibold mb-2">
+                ⏳ Wait for External Response
+              </p>
+              <p className="text-xs text-slate-400">
+                Pauses workflow execution until a matching webhook is received.
+                Useful for waiting on call results from Thoughtly/CallFluent.
+              </p>
+            </div>
+          </div>
+        );
+
       default:
         return (
           <div className="text-slate-400 text-sm">
@@ -1790,7 +2510,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
       } catch { /* noop */ }
       if (!tenantId && import.meta.env.DEV) {
         // Dev fallback to seeded tenant
-        tenantId = 'local-tenant-001';
+        tenantId = '6cb4c008-4847-426a-9a2e-918ad70e7b69';
       }
 
       if (!tenantId) {
@@ -1924,9 +2644,19 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
       </div>
 
       <div className="p-4 border-t border-slate-700 flex justify-between">
-        <Button variant="outline" onClick={onCancel} className="border-slate-600 text-slate-300">
-          Cancel
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setShowTemplates(!showTemplates)}
+            className="border-purple-600 text-purple-400 hover:bg-purple-600/10"
+          >
+            <Sparkles className="w-4 h-4 mr-2" />
+            Use Template
+          </Button>
+          <Button variant="outline" onClick={onCancel} className="border-slate-600 text-slate-300">
+            Cancel
+          </Button>
+        </div>
         <div className="flex gap-2 items-center">
           <div className="flex items-center gap-2 mr-4">
             <Switch 
@@ -1948,6 +2678,16 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           </Button>
         </div>
       </div>
+
+      {/* Template Browser */}
+      {showTemplates && (
+        <div className="absolute inset-0 z-50 bg-slate-900">
+          <WorkflowTemplatesBrowser
+            onSelectTemplate={handleSelectTemplate}
+            onClose={() => setShowTemplates(false)}
+          />
+        </div>
+      )}
     </div>
   );
 }

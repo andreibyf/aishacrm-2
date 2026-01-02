@@ -238,7 +238,7 @@ export const TenantProvider = ({ children }) => {
               savedValue: saved,
             },
           );
-          // Reset to null instead of defaulting to local-tenant-001
+          // Reset to null instead of defaulting to 6cb4c008-4847-426a-9a2e-918ad70e7b69
           setSelectedTenantIdState(null);
           localStorage.removeItem("selected_tenant_id");
           logTenantEvent(

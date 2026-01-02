@@ -36,7 +36,7 @@ const AI_AGENT_PAYLOAD_SCHEMA = {
     client_id: {
       type: "string",
       description: "Internal Client ID for tracking",
-      example: "68b0cba04f934c88fe26afab",
+      example: "6cb4c008-4847-426a-9a2e-918ad70e7b69",
     },
     call_objective: {
       type: "string",
@@ -81,7 +81,7 @@ const SAMPLE_AI_AGENT_PAYLOAD = {
   contact_name: "Andrew Day",
   company_name: "Day Construction LLC",
   tenant_name: "ABC Sales Company",
-  client_id: "68b0cba04f934c88fe26afab",
+  client_id: "6cb4c008-4847-426a-9a2e-918ad70e7b69",
   call_objective:
     "Follow up on our solar panel installation quote from last week. Confirm if they're ready to schedule the installation and answer any remaining questions about the warranty.",
   ai_prompt: `You are an AI assistant calling on behalf of ABC Sales Company. 
@@ -111,7 +111,7 @@ export default function WebhookExamples() {
         email: "jane.doe@example.com",
         phone: "555-123-4567",
         account_id: "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
-        tenant_id: "68b0cba04f934c88fe26afab",
+        tenant_id: "6cb4c008-4847-426a-9a2e-918ad70e7b69",
       },
     },
     // Add more examples here if needed

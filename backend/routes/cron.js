@@ -5,14 +5,24 @@
 
 import express from 'express';
 import { executeJob } from '../lib/cronExecutors.js';
+import { cacheList } from '../lib/cacheMiddleware.js';
 
 export default function createCronRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/cron/jobs - List cron jobs
-  router.get('/jobs', async (req, res) => {
+  router.get('/jobs', cacheList('cron_jobs', 240), async (req, res) => {
     try {
-      const { tenant_id, is_active } = req.query;
+      const { is_active } = req.query;
+
+      // Enforce tenant isolation
+      const tenant_id = req.tenant?.id || req.query.tenant_id;
+      if (!tenant_id) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'tenant_id is required'
+        });
+      }
       
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
@@ -20,11 +30,8 @@ export default function createCronRoutes(_pgPool) {
       let query = supabase
         .from('cron_job')
         .select('*')
+        .eq('tenant_id', tenant_id)
         .order('created_at', { ascending: false });
-
-      if (tenant_id) {
-        query = query.eq('tenant_id', tenant_id);
-      }
 
       if (is_active !== undefined) {
         query = query.eq('is_active', is_active === 'true');

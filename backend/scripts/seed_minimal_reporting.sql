@@ -1,7 +1,7 @@
 -- Seed a minimal dataset for reports/calendar validation
 DO $$
 DECLARE
-  v_tenant text := 'test-tenant-001';
+  v_tenant text := '6cb4c008-4847-426a-9a2e-918ad70e7b69';
   v_account uuid;
   v_contact uuid;
   v_lead uuid;

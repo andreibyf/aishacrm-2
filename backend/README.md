@@ -264,9 +264,27 @@ backend/
 │   ├── reports.js    # Dashboard & exports
 │   ├── validation.js # Duplicates & quality
 │   └── ... (23 more)
-├── package.json
+├── docs/
+│   ├── DEPENDENCIES.md # Dependency rationale & overview
+│   └── ...
+├── package.json       # 21 runtime dependencies
 └── .env
 ```
+
+### Dependencies
+
+This backend has **21 runtime dependencies** carefully selected for essential functionality:
+
+- **Database:** `pg` (PostgreSQL), `@supabase/supabase-js`
+- **Web Framework:** `express`, `helmet`, `cors`, `compression`
+- **Authentication:** `jsonwebtoken` (HS256), `jose` (ES256/JWKS)
+- **AI/LLMs:** `@anthropic-ai/sdk`, `openai`
+- **Background Jobs:** `bull`, `redis`
+- **PDF Generation:** `puppeteer` (reports & documentation)
+- **Email:** `nodemailer`
+- **API Documentation:** `swagger-jsdoc`, `swagger-ui-express`
+
+**See [docs/DEPENDENCIES.md](./docs/DEPENDENCIES.md) for detailed rationale and usage examples.**
 
 ## 🛠️ Development
 

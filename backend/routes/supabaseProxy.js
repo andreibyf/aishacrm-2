@@ -48,6 +48,8 @@ export default function createSupabaseProxyRoutes() {
   const allowedOrigins = [...new Set([
     ...(process.env.SUPABASE_PROXY_ALLOWED_ORIGINS?.split(',').map(s => s.trim()).filter(Boolean) || []),
     ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL.trim()] : []),
+    "https://app.aishacrm.com",
+    "https://api.aishacrm.com",
     // Development defaults (only when NODE_ENV !== 'production')
     ...(process.env.NODE_ENV === 'production' ? [] : [
       'http://localhost:5173','https://localhost:5173','http://localhost:4000','https://localhost:4000'

@@ -1,3 +1,5 @@
+import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
+
 /**
  * Tenant Validation Middleware
  * 
@@ -17,7 +19,7 @@
  * @param {Object} res - Express response object
  * @param {Function} next - Express next middleware function
  */
-export function validateTenantAccess(req, res, next) {
+export async function validateTenantAccess(req, res, next) {
   // This middleware assumes req.user is populated by authentication middleware
   const { user } = req;
   
@@ -46,6 +48,22 @@ export function validateTenantAccess(req, res, next) {
     req.params.tenant_id ||
     req.params.tenantId; // Support both snake_case and camelCase
 
+  // Resolve canonical tenant if an identifier was provided
+  if (requestedTenantId) {
+    try {
+      const resolved = await resolveCanonicalTenant(requestedTenantId);
+      if (resolved.found) {
+        req.tenant = {
+          id: resolved.uuid,
+          tenant_id: resolved.slug,
+          name: resolved.name
+        };
+      }
+    } catch (err) {
+      console.warn('[TenantValidation] Failed to resolve canonical tenant:', err.message);
+    }
+  }
+
   // Superadmins have special privileges:
   // - READ operations: can access ANY tenant's data (cross-tenant read access)
   // - WRITE operations: must specify a valid tenant_id (no global writes)
@@ -71,7 +89,7 @@ export function validateTenantAccess(req, res, next) {
   }
 
   // Admin/Manager/Employee must have a tenant_id assigned
-  if (!user.tenant_id) {
+  if (!user.tenant_id && !user.tenant_uuid) {
     return res.status(403).json({ 
       status: 'error', 
       message: 'User not assigned to any tenant. Contact administrator.' 
@@ -79,25 +97,35 @@ export function validateTenantAccess(req, res, next) {
   }
 
   // If a specific tenant is requested, validate it matches the user's tenant
-  if (requestedTenantId && requestedTenantId !== user.tenant_id) {
-    return res.status(403).json({ 
-      status: 'error', 
-      message: 'Access denied: You do not have permission to access this tenant\'s data.',
-      details: {
-        your_tenant: user.tenant_id,
-        requested_tenant: requestedTenantId
-      }
-    });
+  if (requestedTenantId) {
+    const isMatch = 
+      requestedTenantId === user.tenant_id || 
+      requestedTenantId === user.tenant_uuid ||
+      (req.tenant && (req.tenant.id === user.tenant_uuid || req.tenant.tenant_id === user.tenant_id));
+
+    if (!isMatch) {
+      return res.status(403).json({ 
+        status: 'error', 
+        message: 'Access denied: You do not have permission to access this tenant\'s data.',
+        details: {
+          your_tenant: user.tenant_id,
+          your_tenant_uuid: user.tenant_uuid,
+          requested_tenant: requestedTenantId
+        }
+      });
+    }
   }
 
   // If no tenant specified in request, inject user's tenant_id
   // This prevents users from accidentally querying across tenants
   if (!requestedTenantId) {
     // Inject tenant_id into request for downstream handlers
+    // Prefer UUID if available for database consistency
+    const bestTenantId = user.tenant_uuid || user.tenant_id;
     if (req.method === 'GET' || req.method === 'DELETE') {
-      req.query.tenant_id = user.tenant_id;
+      req.query.tenant_id = bestTenantId;
     } else if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
-      req.body.tenant_id = user.tenant_id;
+      req.body.tenant_id = bestTenantId;
     }
   }
 

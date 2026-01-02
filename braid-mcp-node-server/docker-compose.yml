@@ -20,6 +20,12 @@ services:
       # Docker-specific overrides (connect to other containers via aishanet)
       CRM_BACKEND_URL: http://aishacrm-backend:3001
       REDIS_URL: redis://aishacrm-redis-memory:6379
+      # Pass through credentials from shell environment
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
       interval: 30s
@@ -51,6 +57,12 @@ services:
       # Docker-specific overrides (connect to other containers via aishanet)
       CRM_BACKEND_URL: http://aishacrm-backend:3001
       REDIS_URL: redis://aishacrm-redis-memory:6379
+      # Pass through credentials from shell environment
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
       interval: 30s
@@ -82,6 +94,12 @@ services:
       # Docker-specific overrides (connect to other containers via aishanet)
       CRM_BACKEND_URL: http://aishacrm-backend:3001
       REDIS_URL: redis://aishacrm-redis-memory:6379
+      # Pass through credentials from shell environment
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
       interval: 30s

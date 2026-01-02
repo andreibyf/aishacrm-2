@@ -165,11 +165,11 @@ export default function createLeadsV2Routes() {
    */
   router.get('/', cacheList('leads', 180), async (req, res) => {
     try {
-      const { tenant_id, status, source, filter, assigned_to, is_test_data } = req.query;
+      const { tenant_id, status, source, filter, assigned_to, account_id, is_test_data, query: searchQuery } = req.query;
       const limit = parseInt(req.query.limit || '50', 10);
       const offset = parseInt(req.query.offset || '0', 10);
 
-      console.log('[V2 Leads GET] Called with:', { tenant_id, filter, status, assigned_to, is_test_data });
+      console.log('[V2 Leads GET] Called with:', { tenant_id, filter, status, assigned_to, account_id, is_test_data, searchQuery });
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -184,6 +184,39 @@ export default function createLeadsV2Routes() {
           .select(selectClause, { count: 'exact' })
           .eq('tenant_id', tenant_id);
 
+        // Text search across name and email fields
+        if (searchQuery && searchQuery.trim()) {
+          console.log('[V2 Leads] Applying text search:', searchQuery);
+          const searchTerm = searchQuery.trim();
+          const searchPattern = `%${searchTerm}%`;
+          
+          const orConditions = [
+            `first_name.ilike.${searchPattern}`,
+            `last_name.ilike.${searchPattern}`,
+            `email.ilike.${searchPattern}`,
+            `company.ilike.${searchPattern}`
+          ];
+          
+          // If search contains a space, also search concatenated first_name + last_name
+          // This handles full name searches like "John Doe" or "Iso Check"
+          if (searchTerm.includes(' ')) {
+            // PostgreSQL: concat(first_name, ' ', last_name) ILIKE '%search%'
+            // PostgREST doesn't support concat directly in filters, so we search for each part
+            const parts = searchTerm.split(/\s+/).filter(p => p.length > 0);
+            if (parts.length >= 2) {
+              // Add condition: first_name matches first part AND last_name matches second part
+              // Format: (first_name.ilike.%Iso%,last_name.ilike.%Check%)
+              const firstPart = `%${parts[0]}%`;
+              const lastPart = `%${parts[parts.length - 1]}%`;
+              orConditions.push(`first_name.ilike.${firstPart},last_name.ilike.${lastPart}`);
+              console.log('[V2 Leads] Added full name search condition for parts:', parts);
+            }
+          }
+          
+          query = query.or(orConditions.join(','));
+          console.log('[V2 Leads] Search OR conditions:', orConditions.join(','));
+        }
+
         // Handle filter parameter with $or support
         if (filter) {
           let parsedFilter = filter;
@@ -196,24 +229,47 @@ export default function createLeadsV2Routes() {
             }
           }
 
-          // Handle $or for assigned_to filtering
+          // Handle $or with $icontains for text search (from frontend filters)
           if (typeof parsedFilter === 'object' && parsedFilter.$or && Array.isArray(parsedFilter.$or)) {
-            // Normalize conditions to avoid empty strings or undefineds
-            const normalizedOr = parsedFilter.$or.filter(cond => cond && typeof cond === 'object');
+            // Check if this is a text search filter (contains $icontains operators)
+            const hasTextSearch = parsedFilter.$or.some(cond => 
+              cond && typeof cond === 'object' && 
+              Object.values(cond).some(val => val && typeof val === 'object' && '$icontains' in val)
+            );
 
-            // Detect unassigned explicitly and apply a safe null check
-            const hasUnassigned = normalizedOr.some(cond => cond.assigned_to === null);
-            const nonEmptyAssignedTo = normalizedOr
-              .map(cond => cond.assigned_to)
-              .filter(val => val !== undefined && val !== null && String(val).trim() !== '');
+            if (hasTextSearch) {
+              // Build PostgREST OR conditions for text search
+              const orConditions = [];
+              parsedFilter.$or.forEach(cond => {
+                Object.entries(cond).forEach(([field, value]) => {
+                  if (value && typeof value === 'object' && value.$icontains) {
+                    orConditions.push(`${field}.ilike.%${value.$icontains}%`);
+                  }
+                });
+              });
+              
+              if (orConditions.length > 0) {
+                console.log('[V2 Leads] Applying text search filter:', orConditions.join(','));
+                query = query.or(orConditions.join(','));
+              }
+            } else {
+              // Handle $or for assigned_to filtering
+              const normalizedOr = parsedFilter.$or.filter(cond => cond && typeof cond === 'object');
 
-            if (hasUnassigned && nonEmptyAssignedTo.length === 0) {
-              console.log('[V2 Leads] Applying unassigned-only filter');
-              query = query.is('assigned_to', null);
-            } else if (nonEmptyAssignedTo.length > 0) {
-              console.log('[V2 Leads] Applying assigned_to $or filter:', nonEmptyAssignedTo);
-              const orParts = nonEmptyAssignedTo.map(val => `assigned_to.eq.${val}`);
-              query = query.or(orParts.join(','));
+              // Detect unassigned explicitly and apply a safe null check
+              const hasUnassigned = normalizedOr.some(cond => cond.assigned_to === null);
+              const nonEmptyAssignedTo = normalizedOr
+                .map(cond => cond.assigned_to)
+                .filter(val => val !== undefined && val !== null && String(val).trim() !== '');
+
+              if (hasUnassigned && nonEmptyAssignedTo.length === 0) {
+                console.log('[V2 Leads] Applying unassigned-only filter');
+                query = query.is('assigned_to', null);
+              } else if (nonEmptyAssignedTo.length > 0) {
+                console.log('[V2 Leads] Applying assigned_to $or filter:', nonEmptyAssignedTo);
+                const orParts = nonEmptyAssignedTo.map(val => `assigned_to.eq.${val}`);
+                query = query.or(orParts.join(','));
+              }
             }
           }
 
@@ -248,6 +304,12 @@ export default function createLeadsV2Routes() {
           }
         }
         if (source) query = query.eq('source', source);
+        // Filter by account_id if provided
+        const safeAccountId = sanitizeUuidInput(account_id);
+        if (safeAccountId) {
+          console.log('[V2 Leads] Filtering by account_id:', safeAccountId);
+          query = query.eq('account_id', safeAccountId);
+        }
         // Sanitize potential UUID query params to avoid "invalid input syntax for type uuid" errors
         const safeAssignedTo = sanitizeUuidInput(assigned_to);
         if (!filter && safeAssignedTo !== undefined && safeAssignedTo !== null) {

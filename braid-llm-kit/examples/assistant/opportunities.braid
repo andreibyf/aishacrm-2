@@ -9,23 +9,25 @@ import { Result, Opportunity, CRMError } from "../../spec/types.braid"
 fn createOpportunity(
   tenant: String,
   name: String,
-  account_id: String,
+  description: String,
   amount: Number,
   stage: String,
-  close_date: String,
   probability: Number,
-  assigned_to: String
+  close_date: String,
+  account_id: String,
+  contact_id: String
 ) -> Result<Opportunity, CRMError> !net {
   let url = "/api/v2/opportunities";
   let body = {
     tenant_id: tenant,
     name: name,
-    account_id: account_id,
+    description: description,
     amount: amount,
     stage: stage,
-    close_date: close_date,
     probability: probability,
-    assigned_to: assigned_to,
+    close_date: close_date,
+    account_id: account_id,
+    contact_id: contact_id,
     metadata: {}
   };
   
@@ -70,12 +72,14 @@ fn updateOpportunity(
 fn listOpportunitiesByStage(
   tenant: String,
   stage: String,
+  account_id: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
   let url = "/api/v2/opportunities";
   let params = {
     tenant_id: tenant,
     stage: stage,
+    account_id: account_id,
     limit: limit
   };
   
@@ -127,14 +131,39 @@ fn searchOpportunities(
   };
 }
 
+// Search opportunities by stage - returns full opportunity details for opportunities in a specific stage
+// Use this when user asks about opportunities in a specific pipeline stage
+// Stage values: prospecting, qualification, proposal, negotiation, closed-won, closed-lost
+fn searchOpportunitiesByStage(
+  tenant: String,
+  stage: String,
+  limit: Number
+) -> Result<Array, CRMError> !net {
+  let url = "/api/v2/opportunities";
+  let params = {
+    tenant_id: tenant,
+    stage: stage,
+    limit: limit
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  // Returns full opportunity details including name, amount, stage, probability, etc.
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_opportunities_by_stage", stage: stage }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
 fn getOpportunityForecast(
   tenant: String,
-  assigned_to: String
+  period: String
 ) -> Result<Object, CRMError> !net {
   let url = "/api/reports/forecast";
   let params = {
     tenant_id: tenant,
-    assigned_to: assigned_to
+    period: period
   };
   
   let response = http.get(url, { params: params });
@@ -149,13 +178,14 @@ fn getOpportunityForecast(
 fn markOpportunityWon(
   tenant: String,
   opportunity_id: String,
-  close_date: String
+  close_details: Object
 ) -> Result<Opportunity, CRMError> !net {
   let url = "/api/v2/opportunities/" + opportunity_id;
+  // Extract close_date from close_details or use today
   let updates = {
     stage: "closed-won",
     probability: 100,
-    close_date: close_date
+    close_date: close_details.close_date
   };
   
   let response = http.put(url, { body: updates });

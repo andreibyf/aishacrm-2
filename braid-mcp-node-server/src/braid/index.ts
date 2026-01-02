@@ -39,6 +39,11 @@ export interface BraidAdapter {
 export interface BraidRegistry {
   registerAdapter(adapter: BraidAdapter): void;
   getAdapter(system: string): BraidAdapter | undefined;
+  /**
+   * Return a list of registered adapter system names. The list
+   * should be sorted alphabetically to provide stable ordering.
+   */
+  listAdapters(): string[];
 }
 
 // Minimal console-based logger for v0.

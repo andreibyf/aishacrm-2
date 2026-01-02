@@ -104,7 +104,7 @@ export default function TopAccounts({ tenantFilter, showTestData }) {
   };
 
   return (
-    <Card className="bg-slate-800 border-slate-700">
+    <Card className="bg-slate-800 border-slate-700 h-full flex flex-col">
       <CardHeader>
         <CardTitle className="text-slate-100 flex items-center gap-2">
           <Building2 className="w-5 h-5 text-blue-400" />

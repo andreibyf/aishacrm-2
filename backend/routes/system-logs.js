@@ -1,5 +1,6 @@
 import express from "express";
 import { sanitizeUuidInput } from "../lib/uuidValidator.js";
+import { cacheList, invalidateTenantCache } from '../lib/cacheMiddleware.js';
 
 export default function createSystemLogRoutes(_pgPool) {
   const router = express.Router();
@@ -225,7 +226,7 @@ export default function createSystemLogRoutes(_pgPool) {
    *             schema:
    *               $ref: '#/components/schemas/Success'
    */
-  router.get("/", async (req, res) => {
+  router.get("/", cacheList('system_logs', 120), async (req, res) => {
     try {
       const { tenant_id, level, limit = 100, offset = 0, hours } = req.query;
 
@@ -237,7 +238,16 @@ export default function createSystemLogRoutes(_pgPool) {
         .order('created_at', { ascending: false })
         .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
 
-      if (tenant_id) q = q.eq('tenant_id', tenant_id);
+      // Handle tenant_id filtering - 'system' alias maps to NULL (system-wide logs)
+      if (tenant_id) {
+        const sanitizedTenantId = sanitizeUuidInput(tenant_id);
+        if (sanitizedTenantId === null) {
+          // 'system' or invalid UUID → query for NULL tenant_id (system-wide logs)
+          q = q.is('tenant_id', null);
+        } else {
+          q = q.eq('tenant_id', sanitizedTenantId);
+        }
+      }
       if (level) q = q.eq('level', level);
       if (hours) {
         const since = new Date(Date.now() - parseInt(hours) * 60 * 60 * 1000).toISOString();
@@ -315,6 +325,14 @@ export default function createSystemLogRoutes(_pgPool) {
         });
       }
 
+      // Invalidate cache for the affected tenant
+      const tenantId = data.tenant_id || req.query.tenant_id || req.user?.tenant_id;
+      if (tenantId) {
+        await invalidateTenantCache(tenantId, 'system_logs');
+      }
+      // Also invalidate for 'system' (null tenant) logs
+      await invalidateTenantCache(null, 'system_logs');
+
       res.json({
         status: "success",
         message: "System log deleted",
@@ -370,7 +388,17 @@ export default function createSystemLogRoutes(_pgPool) {
       const supabase = getSupabaseClient();
 
       let del = supabase.from('system_logs').delete();
-      if (tenant_id) del = del.eq('tenant_id', tenant_id);
+      
+      // Handle tenant_id filtering - 'system' alias maps to NULL (system-wide logs)
+      if (tenant_id) {
+        const sanitizedTenantId = sanitizeUuidInput(tenant_id);
+        if (sanitizedTenantId === null) {
+          // 'system' or invalid UUID → query for NULL tenant_id (system-wide logs)
+          del = del.is('tenant_id', null);
+        } else {
+          del = del.eq('tenant_id', sanitizedTenantId);
+        }
+      }
       if (level) del = del.eq('level', level);
       if (hours) {
         const since = new Date(Date.now() - parseInt(hours) * 60 * 60 * 1000).toISOString();
@@ -386,6 +414,14 @@ export default function createSystemLogRoutes(_pgPool) {
 
       const deletedCount = (data || []).length;
       console.log(`[System Logs] Deleted ${deletedCount} system log(s) for tenant: ${tenant_id || 'all'}`);
+
+      // Invalidate cache after bulk delete
+      const sanitizedTenantId = tenant_id ? sanitizeUuidInput(tenant_id) : null;
+      if (sanitizedTenantId) {
+        await invalidateTenantCache(sanitizedTenantId, 'system_logs');
+      }
+      // Also invalidate for 'system' (null tenant) logs
+      await invalidateTenantCache(null, 'system_logs');
 
       res.json({
         status: "success",

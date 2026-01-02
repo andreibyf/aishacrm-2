@@ -9,6 +9,7 @@ const BACKEND_URL = process.env.PLAYWRIGHT_BACKEND_URL || process.env.VITE_AISHA
 // Require env vars for credentials; do not hardcode demo defaults
 const SUPERADMIN_EMAIL = process.env.SUPERADMIN_EMAIL || '';
 const SUPERADMIN_PASSWORD = process.env.SUPERADMIN_PASSWORD || '';
+const E2E_TENANT_ID = process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
 
 const authDir = path.join('playwright', '.auth');
 const authFile = path.join(authDir, 'superadmin.json');
@@ -59,8 +60,8 @@ setup('authenticate as superadmin', async ({ page, request }) => {
       origins: [{
         origin: BASE_URL,
         localStorage: [
-          { name: 'tenant_id', value: 'a11dfb63-4b18-4eb8-872e-747af2e37c46' },
-          { name: 'selected_tenant_id', value: 'a11dfb63-4b18-4eb8-872e-747af2e37c46' },
+          { name: 'tenant_id', value: E2E_TENANT_ID },
+          { name: 'selected_tenant_id', value: E2E_TENANT_ID },
           { name: 'mock_auth_mode', value: 'true' },
           { name: 'mock_superadmin', value: 'dev@localhost' }
         ]
@@ -92,11 +93,11 @@ setup('authenticate as superadmin', async ({ page, request }) => {
   });
   
   // Remove E2E mock mode - use real cookie auth instead
-  await page.addInitScript(() => {
-    localStorage.setItem('tenant_id', 'a11dfb63-4b18-4eb8-872e-747af2e37c46');
-    localStorage.setItem('selected_tenant_id', 'a11dfb63-4b18-4eb8-872e-747af2e37c46');
-    console.log('[Auth Setup] Tenant context initialized for real auth');
-  });
+  await page.addInitScript(({ tenant_id }) => {
+    localStorage.setItem('tenant_id', tenant_id);
+    localStorage.setItem('selected_tenant_id', tenant_id);
+    console.log(`[Auth Setup] Tenant context initialized for real auth: ${tenant_id}`);
+  }, { tenant_id: E2E_TENANT_ID });
   
   // If running against a remote backend, block until DB is healthy to avoid transient 401/500 noise
   try {
@@ -207,8 +208,8 @@ setup('authenticate as superadmin', async ({ page, request }) => {
         {
           origin: BASE_URL,
           localStorage: [
-            { name: 'tenant_id', value: 'a11dfb63-4b18-4eb8-872e-747af2e37c46' },
-            { name: 'selected_tenant_id', value: 'a11dfb63-4b18-4eb8-872e-747af2e37c46' },
+            { name: 'tenant_id', value: E2E_TENANT_ID },
+            { name: 'selected_tenant_id', value: E2E_TENANT_ID },
             { name: 'mock_auth_mode', value: 'true' },
             { name: 'mock_superadmin', value: SUPERADMIN_EMAIL || 'dev@localhost' }
           ]

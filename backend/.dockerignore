@@ -23,6 +23,7 @@ test-results
 scripts
 *.ps1
 *.sh
+!docker-entrypoint.sh
 
 # Database files
 *.db

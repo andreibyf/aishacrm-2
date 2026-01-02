@@ -286,18 +286,25 @@ export default function createAccountRoutes(_pgPool) {
   // GET /api/accounts - List accounts (with caching)
   router.get("/", cacheList('accounts', 180), async (req, res) => {
     try {
-      let { tenant_id, type, assigned_to } = req.query;
+      let { type, assigned_to } = req.query;
       const limit = parseInt(req.query.limit || '50', 10);
       const offset = parseInt(req.query.offset || '0', 10);
+
+      // Enforce tenant isolation
+      const tenant_id = req.tenant?.id || req.query.tenant_id;
+      if (!tenant_id) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'tenant_id is required'
+        });
+      }
 
       const filter = req.query.filter ? JSON.parse(req.query.filter) : {};
 
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
-      let q = supabase.from('accounts').select('*', { count: 'exact' });
-
-      if (tenant_id) q = q.eq('tenant_id', tenant_id);
+      let q = supabase.from('accounts').select('*', { count: 'exact' }).eq('tenant_id', tenant_id);
       if (type) q = q.eq('type', type);
       if (assigned_to) q = q.eq('assigned_to', assigned_to); // Direct param
 

@@ -139,6 +139,19 @@ app.get("/memory/status", async (_req: Request, res: Response) => {
   }
 });
 
+// List registered adapters and the current MCP role. Useful for admin introspection.
+app.get("/adapters", (_req: Request, res: Response) => {
+  try {
+    res.json({
+      status: "ok",
+      role: MCP_ROLE || "unknown",
+      adapters: registry.listAdapters(),
+    });
+  } catch (e: any) {
+    res.status(500).json({ status: "error", message: e?.message || String(e) });
+  }
+});
+
 // MCP-style endpoint for executing Braid envelopes
 app.post("/mcp/run", async (req: Request, res: Response) => {
   const body = req.body as Partial<BraidRequestEnvelope>;

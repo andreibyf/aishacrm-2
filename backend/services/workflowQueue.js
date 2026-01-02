@@ -16,15 +16,14 @@ export const workflowQueue = new Bull('workflow-execution', REDIS_URL, {
   }
 });
 
-// Job processor - will be imported and used by workflows.js
+// Job processor - imports from dedicated execution service
 workflowQueue.process(async (job) => {
   const { workflow_id, trigger_data } = job.data;
   
   console.log(`[WorkflowQueue] Processing job ${job.id} for workflow ${workflow_id}`);
   
-  // Import the execution function dynamically to avoid circular dependencies
-  const workflowsModule = await import('../routes/workflows.js');
-  const { executeWorkflowById } = workflowsModule;
+  // Import the execution function from dedicated service (avoids circular deps)
+  const { executeWorkflowById } = await import('./workflowExecutionService.js');
   
   const result = await executeWorkflowById(workflow_id, trigger_data);
   

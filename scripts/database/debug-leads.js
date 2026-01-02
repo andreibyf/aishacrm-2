@@ -16,7 +16,7 @@ async function checkLeads() {
   const { data: leads, error } = await supabase
     .from("leads")
     .select("*")
-    .eq("tenant_id", "local-tenant-001")
+    .eq("tenant_id", "6cb4c008-4847-426a-9a2e-918ad70e7b69")
     .limit(5);
 
   if (error) {
@@ -49,7 +49,7 @@ async function checkLeads() {
   const { data: activeLeads, error: filterError } = await supabase
     .from("leads")
     .select("*")
-    .eq("tenant_id", "local-tenant-001")
+    .eq("tenant_id", "6cb4c008-4847-426a-9a2e-918ad70e7b69")
     .not("status", "in", '("converted","lost")');
 
   if (filterError) {

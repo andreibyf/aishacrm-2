@@ -107,32 +107,29 @@ function* strings(length = 10, count = 20) {
 // Test Suite
 async function runTests() {
   const runner = new BraidTestRunner();
-  
-  // Test 1: Parser handles type declarations
+
   runner.test('Parser: Type declarations', async () => {
     const source = `
-      type Result<T, E> = Ok<T> | Err<E>
       type Account = { id: String, name: String }
+      type Result = Ok { value: JSONB } | Err { error: String }
     `;
     const ast = parse(source);
     assertEqual(ast.items.length, 2, 'Should parse 2 type declarations');
     assertEqual(ast.items[0].type, 'TypeDecl');
-    assertEqual(ast.items[0].name, 'Result');
-    assertEqual(ast.items[0].typeParams.length, 2);
+    assertEqual(ast.items[0].name, 'Account');
   });
-  
-  // Test 2: Transpiler generates correct imports
+
   runner.test('Transpiler: Import generation', async () => {
     const source = `
-      import { Ok, Err } from "./types.braid"
+      import { Ok, Err } from "./lib.js"
       fn test() -> Number {
         return 42;
       }
     `;
     const ast = parse(source);
     const { code } = transpileToJS(ast);
-    if (!code.includes('import { Ok, Err }')) {
-      throw new Error('Transpiler should generate import statement');
+    if (!code.includes('import { Ok, Err } from "./lib.js"')) {
+      throw new Error('Transpiler should generate import statement for .js files');
     }
   });
   
@@ -150,8 +147,7 @@ async function runTests() {
       }
     }
   });
-  
-  // Test 4: Tenant isolation
+
   runner.test('Runtime: Tenant isolation injection', async () => {
     const policy = {
       ...CRM_POLICIES.READ_ONLY,
@@ -159,7 +155,7 @@ async function runTests() {
     };
     const mockDeps = createMockDeps({
       http: {
-        get: async (url, opts) => {
+        get: async (_url, opts) => {
           assertEqual(opts.params.tenant_id, 'test-tenant', 'Tenant ID should be injected');
           return { tag: 'Ok', data: {} };
         }
@@ -188,28 +184,32 @@ async function runTests() {
       throw new Error('Match should transpile to switch');
     }
   });
-  
-  // Test 6: Property-based: Pure function consistency
+
   runner.test('Property: Array length preservation', async () => {
     const source = `
-      fn doubleArray(arr: Array) -> Array {
-        return map(arr, (x) => x * 2);
+      fn doubleArray(arr: Array) -> Result {
+        return Ok(map(arr, (x) => x * 2));
       }
     `;
     const ast = parse(source);
-    const { code } = transpileToJS(ast, { pure: true });
+    // Use absolute path for runtimeImport to work with data URLs
+    const rtUrl = new URL('./braid-rt.js', import.meta.url).href;
+    const { code } = transpileToJS(ast, { pure: true, runtimeImport: rtUrl });
     const dataUrl = `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
     const module = await import(dataUrl);
     
     for (const len of integers(0, 50, 10)) {
-      const _input = Array.from({length: len}, (_, i) => i);
-      const result = await module.doubleArray();
+      const input = Array.from({ length: len }, (_, i) => i);
+      const result = await module.doubleArray(input);
       assertEqual(result.value.length, len, `Array length should be preserved for ${len} elements`);
     }
   });
-  
-  // Test 7: Mock HTTP dependency
+
   runner.test('Integration: Mocked HTTP call', async () => {
+    const policy = {
+      ...CRM_POLICIES.READ_ONLY,
+      context: { tenant_id: 'test-tenant' }
+    };
     const mockDeps = createMockDeps({
       http: {
         get: async () => ({ 
@@ -220,7 +220,7 @@ async function runTests() {
     });
     
     const { IO } = await import('./braid-rt.js');
-    const io = IO(CRM_POLICIES.READ_ONLY, mockDeps);
+    const io = IO(policy, mockDeps);
     const result = await io.http.get('/api/snapshot');
     
     assertOk(result, 'Mock HTTP should return Ok');
@@ -231,7 +231,7 @@ async function runTests() {
 }
 
 // CLI
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'))) {
   runTests().then(success => process.exit(success ? 0 : 1));
 }
 

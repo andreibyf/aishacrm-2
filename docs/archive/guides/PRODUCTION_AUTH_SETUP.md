@@ -39,7 +39,7 @@ if (import.meta.env.PROD) {
 }
 ```
 
-**Effect:** Production builds will NO LONGER automatically redirect to `?tenant=local-tenant-001`
+**Effect:** Production builds will NO LONGER automatically redirect to `?tenant=6cb4c008-4847-426a-9a2e-918ad70e7b69`
 
 ---
 
@@ -58,10 +58,10 @@ Add to `/opt/aishacrm/.env`:
 ```bash
 # Admin User Setup (for create-admin.js script)
 ADMIN_EMAIL=admin@aishacrm.com
-ADMIN_PASSWORD=YourSecurePassword123!
+ADMIN_PASSWORD=xxxxxxxxxxxxxxxxxxxx
 
 # Supabase Service Role Key (from Supabase Dashboard > Settings > API)
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+SUPABASE_SERVICE_ROLE_KEY=eyJhbG...
 ```
 
 **Important Security Notes:**
@@ -82,8 +82,8 @@ cd /opt/aishacrm
 nano .env
 # Add:
 # ADMIN_EMAIL=admin@aishacrm.com
-# ADMIN_PASSWORD=YourSecurePassword123!
-# SUPABASE_SERVICE_ROLE_KEY=eyJ...
+# ADMIN_PASSWORD=xxxxxxxxxxxxxxxxxxxx
+# SUPABASE_SERVICE_ROLE_KEY=eyJhbG...
 
 # Restart backend to load new env vars
 docker-compose down backend
@@ -291,7 +291,7 @@ Once everything is configured:
 
 #### ✅ Login Test
 1. Navigate to `https://app.aishacrm.com`
-2. Should see login form (NO auto-redirect to ?tenant=local-tenant-001)
+2. Should see login form (NO auto-redirect to ?tenant=6cb4c008-4847-426a-9a2e-918ad70e7b69)
 3. Enter admin@aishacrm.com and password
 4. Should successfully sign in and load dashboard
 
@@ -444,7 +444,7 @@ https://app.aishacrm.com/reset-password
 # Via CLI or Management API (see step 3)
 ```
 
-### "Auto-redirect to ?tenant=local-tenant-001 still happening"
+### "Auto-redirect to ?tenant=6cb4c008-4847-426a-9a2e-918ad70e7b69 still happening"
 
 **Cause:** Frontend container has old build without production environment check
 

@@ -28,7 +28,7 @@ async function fixLeadDates() {
     const sampleResult = await pgPool.query(`
       SELECT first_name, last_name, created_date, status
       FROM leads
-      WHERE tenant_id = 'local-tenant-001'
+      WHERE tenant_id = '6cb4c008-4847-426a-9a2e-918ad70e7b69'
       ORDER BY created_date DESC
       LIMIT 5
     `);

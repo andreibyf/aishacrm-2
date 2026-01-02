@@ -3,6 +3,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Link } from "react-router-dom";
 import { GripVertical } from "lucide-react";
+import { useLoadingToast } from "@/hooks/useLoadingToast";
 
 /**
  * SortableNavItem - A draggable navigation item using @dnd-kit
@@ -21,6 +22,8 @@ export function SortableNavItem({
   onNavClick,
   isDragMode = false,
 }) {
+  const loadingToast = useLoadingToast();
+
   const {
     attributes,
     listeners,
@@ -38,6 +41,16 @@ export function SortableNavItem({
   };
 
   const Icon = item.icon;
+
+  // Handle navigation click - show loading toast for Dashboard
+  const handleClick = (e) => {
+    if (item.href === 'Dashboard') {
+      loadingToast.showLoading();
+    }
+    if (onNavClick) {
+      onNavClick(e);
+    }
+  };
 
   return (
     <li
@@ -67,7 +80,7 @@ export function SortableNavItem({
               ? "shadow-lg nav-active"
               : "text-slate-400 hover:bg-slate-800 hover:text-slate-300"
           }`}
-          onClick={onNavClick}
+          onClick={handleClick}
           style={
             isActive
               ? {

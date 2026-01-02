@@ -1,8 +1,18 @@
 # AiSHA Assistant User Guide
 
-_Last updated: December 20, 2025_
+_Last updated: January 2, 2025_
 
-AiSHA (AI Super Hi-performing Assistant) is the executive-assistant layer that runs inside the CRM sidebar. This guide explains how end users, product, and support teams should interact with the Phase 4-ready assistant experience, including layout, quick actions, guided forms, voice controls, and natural language commands.
+AiSHA (AI Super Hi-performing Assistant) is the executive-assistant layer that runs inside the CRM sidebar. This guide explains how end users, product, and support teams should interact with the Phase 4-ready assistant experience, including layout, quick actions, guided forms, voice controls, natural language commands, and **agent workflow delegation** (v3.7.0+).
+
+---
+
+## What's New
+
+### v3.7.0 - Agent Workflow Delegation
+- **Delegate to Agents:** Say "Have the sales manager follow up" to trigger specialized agent workflows
+- **AI-Powered Actions:** Workflows now generate personalized emails, summaries, and notes using OpenAI
+- **Progress Tracking:** Check workflow status with "What has the sales manager done?"
+- **4 New Tools:** `delegate_to_workflow`, `get_workflow_progress`, `list_active_workflows`, `get_workflow_notes`
 
 ---
 
@@ -13,7 +23,7 @@ AiSHA (AI Super Hi-performing Assistant) is the executive-assistant layer that r
 3. To close the assistant, press **Esc** or click the **×** button in the header.
 4. **Wake Word:** Say "Hey Aisha" (or "Hi Aisha", "Aisha") when Wake Word mode is enabled to activate hands-free voice interaction.
 
-> **Tip:** The assistant always runs in **read-only / propose-actions** mode. It never writes to production data without explicit confirmation via the existing Brain pipeline.
+> **Note:** AiSHA has full **CRM operations & automation** capabilities. It can create, read, update, and delete CRM records (accounts, leads, contacts, opportunities, activities, notes) as well as execute workflows, make AI-powered calls, conduct web research, generate reports, and navigate you through the CRM. All write operations are tracked in the audit log for compliance.
 
 ---
 
@@ -264,6 +274,83 @@ This keeps conversations natural while maintaining full ability to perform updat
 
 ---
 
+## 6.5 Agent Workflow Delegation (v3.7.0+)
+
+AiSHA can delegate complex, multi-step tasks to specialized **agent workflows** that execute autonomously. This is like having virtual team members who handle specific responsibilities.
+
+### Available Agent Workflows
+
+| Agent Workflow | Purpose | Example Tasks |
+|----------------|---------|---------------|
+| **Sales Manager Workflow** | Lead follow-ups, sales outreach, nurturing | "Follow up with this lead", "Send a sales email" |
+| **Customer Service Manager Workflow** | Support inquiries, response handling, escalation | "Handle this support request", "Send a resolution email" |
+
+### How It Works
+
+```mermaid
+graph LR
+    A[You: "Delegate to sales manager"] --> B[AiSHA]
+    B --> C[Triggers Sales Manager Workflow]
+    C --> D[Workflow Executes Autonomously]
+    D --> E[AI generates personalized email]
+    D --> F[Notes logged to record]
+    D --> G[Status updated]
+    D --> H[Activity created]
+    E --> I[You: "Check progress"]
+    I --> J[AiSHA shows workflow notes]
+```
+
+### Delegation Examples
+
+**Delegating a lead follow-up:**
+```
+You: "I just spoke with Jack from ABC Corp. Have the sales manager follow up with a personalized email."
+
+AiSHA: "I've delegated this to the Sales Manager Workflow. It will:
+- Analyze Jack's record and recent interactions
+- Generate a personalized follow-up email
+- Send the email and update the lead status
+- Create a follow-up task
+
+I'll track the progress. Would you like me to notify you when it's complete?"
+```
+
+**Checking workflow progress:**
+```
+You: "What has the sales manager done?"
+
+AiSHA: "The Sales Manager Workflow for Jack (ABC Corp) has completed:
+✓ Sent personalized email to jack@abccorp.com
+✓ Updated lead status to 'Contacted'  
+✓ Created follow-up task for next Monday
+✓ Added 3 notes documenting each action
+
+Would you like to see the email that was sent?"
+```
+
+### What Workflows Do Automatically
+
+When you delegate to an agent workflow, it:
+
+1. **Retrieves context** - Fetches the entity (lead/contact) and recent history
+2. **Generates AI summary** - Creates an intelligent summary of the situation
+3. **Logs start note** - Documents that the workflow has begun
+4. **Generates personalized content** - Uses OpenAI to create appropriate emails/messages
+5. **Executes actions** - Sends emails, updates records, creates activities
+6. **Logs completion note** - Documents all actions taken
+
+### Voice Commands for Delegation
+
+| Voice Command | What Happens |
+|---------------|--------------|
+| "Have sales follow up with this lead" | Triggers Sales Manager Workflow with current lead context |
+| "Delegate this to customer service" | Triggers Customer Service Workflow |
+| "Start the sales workflow for [name]" | Triggers workflow for specific contact |
+| "What's the status of the workflow?" | Shows current progress |
+| "Cancel the workflow" | Stops execution (if still running) |
+
+---
+
 ## 7. Testing & Preview Workflow
 
 | Scenario | Recommended Workflow |
@@ -291,9 +378,9 @@ This keeps conversations natural while maintaining full ability to perform updat
 
 ---
 
-## 9. Available AI Tools (48 Functions)
+## 9. Available AI Tools (52 Functions)
 
-AiSHA has access to 48 specialized tools for CRM operations:
+AiSHA has access to 52 specialized tools for CRM operations:
 
 ### Data Retrieval
 - \`fetch_tenant_snapshot\` - Get overview of all CRM data
@@ -311,6 +398,12 @@ AiSHA has access to 48 specialized tools for CRM operations:
 
 ### Workflows & Automation
 - \`listWorkflows\`, \`executeWorkflow\`, \`getWorkflowStatus\` - Manage automated workflows
+
+### **Agent Delegation (v3.7.0+)**
+- \`delegate_to_workflow\` - Trigger named agent workflows (Sales Manager, Customer Service)
+- \`get_workflow_progress\` - Check execution status of delegated workflows
+- \`list_active_workflows\` - See all running workflow instances
+- \`get_workflow_notes\` - Retrieve AI-generated notes from workflow execution
 
 ### Telephony & Communication
 - \`initiateCall\`, \`logCallOutcome\`, \`scheduleCallback\` - Call management
@@ -352,6 +445,15 @@ AiSHA has access to 48 specialized tools for CRM operations:
 | Create a lead | "Create a new lead for [company]" |
 | Get details | "Tell me about [name]" |
 | Dashboard | "Show me the dashboard" |
+
+### Agent Delegation Commands (v3.7.0+)
+| What You Want | What to Say |
+|---------------|-------------|
+| Delegate to sales | "Have the sales manager follow up with this lead" |
+| Delegate to support | "Ask customer service to handle this" |
+| Check progress | "What has the sales manager done?" |
+| List workflows | "Show me active workflows" |
+| View notes | "What notes did the workflow create?" |
 
 ---
 

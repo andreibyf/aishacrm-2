@@ -10,19 +10,21 @@ import { Result, Account, CRMError } from "../../spec/types.braid"
 fn createAccount(
   tenant: String,
   name: String,
-  industry: String,
   annual_revenue: Number,
+  industry: String,
   website: String,
-  assigned_to: String
+  email: String,
+  phone: String
 ) -> Result<Account, CRMError> !net {
   let url = "/api/v2/accounts";
   let body = {
     tenant_id: tenant,
     name: name,
-    industry: industry,
     annual_revenue: annual_revenue,
+    industry: industry,
     website: website,
-    assigned_to: assigned_to,
+    email: email,
+    phone: phone,
     metadata: {}
   };
   
@@ -108,6 +110,31 @@ fn searchAccounts(
   return match response {
     Ok{value} => Ok(value.data.accounts),
     Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_accounts", query: query }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+// Search accounts by status - returns full account details for accounts matching a specific status
+// Use this when user asks about accounts with a specific status (e.g. "active accounts", "inactive accounts")
+// Status values: active, inactive, prospect, churned
+fn searchAccountsByStatus(
+  tenant: String,
+  status: String,
+  limit: Number
+) -> Result<Array, CRMError> !net {
+  let url = "/api/v2/accounts";
+  let params = {
+    tenant_id: tenant,
+    status: status,
+    limit: limit
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  // Returns full account details including name, industry, revenue, etc.
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_accounts_by_status", status: status }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }

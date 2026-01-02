@@ -24,8 +24,10 @@ import EmployeePermissionsDialog from "../components/employees/EmployeePermissio
 import EmployeeInviteDialog from "../components/employees/EmployeeInviteDialog";
 import { toast } from "sonner";
 import { useState, useEffect, useCallback } from "react";
+import { useLoadingToast } from "@/hooks/useLoadingToast";
 
 export default function Employees() {
+  const loadingToast = useLoadingToast();
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -58,6 +60,7 @@ export default function Employees() {
   // Removed local User.me() fetch; currentUser provided by context
 
   const loadEmployees = useCallback(async () => {
+    loadingToast.showLoading();
     setLoading(true);
     try {
       if (!currentUser) {
@@ -112,13 +115,15 @@ export default function Employees() {
 
       const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
       setEmployees(paginated);
+      loadingToast.showSuccess("Employees loaded! ✨");
     } catch (error) {
       console.error("Error loading employees:", error);
+      loadingToast.showError("Failed to load employees");
       toast.error("Failed to load employees.");
     } finally {
       setLoading(false);
     }
-  }, [selectedTenantId, searchTerm, currentPage, pageSize, currentUser]);
+  }, [selectedTenantId, searchTerm, currentPage, pageSize, currentUser, loadingToast]);
 
   useEffect(() => {
     if (!userLoading && currentUser) {

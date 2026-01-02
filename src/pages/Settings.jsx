@@ -104,6 +104,8 @@ const QaConsole = lazy(() => import("../components/settings/QaConsole"));
 const TenantResolveCacheMonitor = lazy(() => import("../components/settings/TenantResolveCacheMonitor"));
 const LLMActivityMonitor = lazy(() => import("../components/settings/LLMActivityMonitor"));
 const BraidSDKMonitor = lazy(() => import("../components/settings/BraidSDKMonitor"));
+const AiSettings = lazy(() => import("../components/settings/AiSettings"));
+const McpAdmin = lazy(() => import("./McpAdmin"));
 
 export default function SettingsPage() { // Renamed from Settings to SettingsPage as per outline
   const [currentUser, setCurrentUser] = useState(null);
@@ -146,8 +148,17 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
   const isManager = currentUser?.role === 'manager';
   const isSuperadmin = currentUser?.role === 'superadmin';
 
+  // Debug logging for MCP Admin
+  console.log('[Settings] User role check:', {
+    role: currentUser?.role,
+    email: currentUser?.email,
+    isAdmin,
+    isManager,
+    isSuperadmin
+  });
+
   // Categories for grouping settings cards
-  const CATEGORIES = {
+  const CATEGORIES = useMemo(() => ({
     account: { label: 'Account', color: 'blue', icon: User },
     team: { label: 'Team', color: 'green', icon: Users },
     clients: { label: 'Clients', color: 'indigo', icon: Building2 },
@@ -157,7 +168,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
     monitoring: { label: 'Monitoring', color: 'emerald', icon: Activity },
     security: { label: 'Security', color: 'purple', icon: Shield },
     testing: { label: 'Testing', color: 'blue', icon: TestTube2 },
-  };
+  }), []);
 
   // Define all settings items with categories
   const settingsItems = useMemo(() => {
@@ -222,9 +233,10 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
         { id: 'performance', label: 'Performance', description: 'System performance metrics', icon: Activity, category: 'monitoring', roles: ['superadmin'] },
         { id: 'cache-monitor', label: 'Cache Monitor', description: 'Tenant cache statistics', icon: Database, category: 'monitoring', roles: ['superadmin'] },
         { id: 'llm-monitor', label: 'LLM Monitor', description: 'AI model usage and costs', icon: Brain, category: 'monitoring', roles: ['superadmin'] },
+        { id: 'ai-settings', label: 'AI Settings', description: 'Configure AI behavior and parameters', icon: Brain, category: 'monitoring', roles: ['superadmin'] },
         { id: 'braid-monitor', label: 'AI Tools Monitor', description: 'Tool metrics and dependency graph', icon: GitBranch, category: 'monitoring', roles: ['superadmin'] },
         { id: 'sync-health', label: 'Sync Health', description: 'Data synchronization status', icon: RefreshCw, category: 'monitoring', roles: ['superadmin'] },
-        { id: 'mcp-monitor', label: 'MCP Monitor', description: 'MCP server connections', icon: Server, category: 'monitoring', roles: ['superadmin'] },
+        { id: 'mcp-monitor', label: 'MCP Admin', description: 'MCP server health, memory, queue, and adapters', icon: Server, category: 'monitoring', roles: ['superadmin'] },
         { id: 'system-health', label: 'System Health', description: 'Overall system status', icon: Activity, category: 'monitoring', roles: ['superadmin'] },
         { id: 'system-logs', label: 'System Logs', description: 'Application logs and errors', icon: FileText, category: 'monitoring', roles: ['superadmin'] },
         { id: 'api-health', label: 'API Health', description: 'Backend endpoint status', icon: Activity, category: 'monitoring', roles: ['superadmin'] },
@@ -242,7 +254,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
   const availableCategories = useMemo(() => {
     const cats = new Set(settingsItems.map(item => item.category));
     return Object.entries(CATEGORIES).filter(([key]) => cats.has(key));
-  }, [settingsItems]);
+  }, [settingsItems, CATEGORIES]);
 
   // Filter items based on search and category
   const filteredItems = useMemo(() => {
@@ -681,14 +693,19 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                 </Card>
               )}
 
-              {activeTab === 'mcp-monitor' && isAdmin && ( // New tab content
+              {activeTab === 'mcp-monitor' && isSuperadmin && ( // MCP Admin - superadmin only
                 <Card>
                   <CardHeader>
-                    <CardTitle>MCP Server Status</CardTitle>
-                    <CardDescription>Monitor the Model Context Protocol server health</CardDescription>
+                    <CardTitle className="flex items-center gap-2">
+                      <Server className="w-5 h-5 text-blue-400" />
+                      MCP Server Administration
+                    </CardTitle>
+                    <CardDescription>Comprehensive MCP server health, memory, queue stats, and registered adapters</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <MCPServerMonitor />
+                    <SettingsLoader>
+                      <McpAdmin />
+                    </SettingsLoader>
                   </CardContent>
                 </Card>
               )}
@@ -706,6 +723,23 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                     </CardHeader>
                     <CardContent>
                       <LLMActivityMonitor />
+                    </CardContent>
+                  </Card>
+                )}
+
+                {activeTab === 'ai-settings' && isSuperadmin && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Brain className="w-5 h-5 text-blue-400" />
+                        AI Settings
+                      </CardTitle>
+                      <CardDescription>
+                        Configure AI behavior, context limits, temperature, and other parameters
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <AiSettings />
                     </CardContent>
                   </Card>
                 )}

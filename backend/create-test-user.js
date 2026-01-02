@@ -28,7 +28,7 @@ async function createTestUser() {
   console.log('5. Fill in your desired Email and Password');
   console.log('   User Metadata (JSON):');
       console.log('   {');
-      console.log('     "tenant_id": "local-tenant-001",');
+      console.log('     "tenant_id": "6cb4c008-4847-426a-9a2e-918ad70e7b69",');
       console.log('     "name": "Test User"');
       console.log('   }');
   console.log('\n6. Click "Create User"\n');

@@ -5,21 +5,29 @@
 
 import express from 'express';
 import { validateTenantScopedId } from '../lib/validation.js';
+import { cacheList } from '../lib/cacheMiddleware.js';
 
 export default function createAnnouncementRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/announcements - List announcements
-  router.get('/', async (req, res) => {
+  router.get('/', cacheList('announcements', 180), async (req, res) => {
     try {
-      const { tenant_id, is_active, limit = 50, offset = 0 } = req.query;
+      const { is_active, limit = 50, offset = 0 } = req.query;
+
+      // Enforce tenant isolation
+      const tenant_id = req.tenant?.id || req.query.tenant_id;
+      if (!tenant_id) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'tenant_id is required'
+        });
+      }
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
-      let query = supabase.from('announcement').select('*', { count: 'exact' });
-
-      if (tenant_id) query = query.eq('tenant_id', tenant_id);
+      let query = supabase.from('announcement').select('*', { count: 'exact' }).eq('tenant_id', tenant_id);
       if (is_active !== undefined) query = query.eq('is_active', is_active === 'true');
 
       query = query.order('created_at', { ascending: false }).range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);

@@ -53,7 +53,10 @@ export const ApiProvider = ({ children }) => {
         keysToDelete.push(key);
       }
     }
-    keysToDelete.forEach(key => cacheRef.current.delete(key));
+    keysToDelete.forEach(key => {
+      cacheRef.current.delete(key);
+      pendingRequestsRef.current.delete(key); // Also clear pending requests
+    });
   }, []);
 
   // Backward-compatible alias expected by some pages (e.g., Accounts.jsx)

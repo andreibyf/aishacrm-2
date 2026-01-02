@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Button } from "@/components/ui/button";
-import { Copy, Zap, CheckCircle2, AlertCircle, Loader2, ChevronRight, Clock } from 'lucide-react';
+import { Copy, Zap, CheckCircle2, AlertCircle, Loader2, ChevronRight, Clock, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { submitFeedback } from "@/api/conversations";
 
 const FunctionDisplay = ({ toolCall }) => {
     const [expanded, setExpanded] = useState(false);
@@ -94,11 +95,33 @@ const FunctionDisplay = ({ toolCall }) => {
     );
 };
 
-export default function MessageBubble({ message }) {
+export default function MessageBubble({ message, conversationId, onFeedbackChange }) {
     const isUser = message.role === 'user';
+    const [feedbackState, setFeedbackState] = useState(message.metadata?.feedback?.rating || null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleFeedback = async (rating) => {
+        if (isSubmitting || !message.id || !conversationId) return;
+        
+        // Toggle off if clicking the same rating
+        const newRating = feedbackState === rating ? null : rating;
+        
+        setIsSubmitting(true);
+        try {
+            await submitFeedback(conversationId, message.id, newRating);
+            setFeedbackState(newRating);
+            onFeedbackChange?.(message.id, newRating);
+            toast.success(newRating ? 'Thanks for your feedback!' : 'Feedback cleared');
+        } catch (error) {
+            console.error('Failed to submit feedback:', error);
+            toast.error('Failed to submit feedback');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
     
     return (
-        <div className={cn("flex gap-3", isUser ? "justify-end" : "justify-start")}>
+        <div className={cn("flex gap-3 group", isUser ? "justify-end" : "justify-start")}>
             {!isUser && (
                 <div className="h-7 w-7 rounded-lg bg-slate-100 flex items-center justify-center mt-0.5">
                     <div className="h-1.5 w-1.5 rounded-full bg-slate-400" />
@@ -169,6 +192,42 @@ export default function MessageBubble({ message }) {
                         {message.tool_calls.map((toolCall, idx) => (
                             <FunctionDisplay key={idx} toolCall={toolCall} />
                         ))}
+                    </div>
+                )}
+                
+                {/* Feedback buttons for assistant messages */}
+                {!isUser && message.id && (
+                    <div className="flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            className={cn(
+                                "h-6 w-6 rounded-full",
+                                feedbackState === 'positive' 
+                                    ? "bg-green-100 text-green-600 hover:bg-green-200" 
+                                    : "text-slate-400 hover:text-green-600 hover:bg-green-50"
+                            )}
+                            onClick={() => handleFeedback('positive')}
+                            disabled={isSubmitting}
+                            title="Good response"
+                        >
+                            <ThumbsUp className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            className={cn(
+                                "h-6 w-6 rounded-full",
+                                feedbackState === 'negative' 
+                                    ? "bg-red-100 text-red-600 hover:bg-red-200" 
+                                    : "text-slate-400 hover:text-red-600 hover:bg-red-50"
+                            )}
+                            onClick={() => handleFeedback('negative')}
+                            disabled={isSubmitting}
+                            title="Poor response"
+                        >
+                            <ThumbsDown className="h-3.5 w-3.5" />
+                        </Button>
                     </div>
                 )}
             </div>

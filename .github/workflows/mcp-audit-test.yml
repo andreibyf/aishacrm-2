@@ -43,9 +43,9 @@ jobs:
       - name: Start MCP server and run audit test
         working-directory: braid-mcp-node-server
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          TENANT_ID: ${{ secrets.TENANT_ID }}
+          TENANT_ID: ${{ vars.TENANT_ID }}
           MCP_URL: http://localhost:8000
           # Provide dummy values for env check warnings
           CRM_BACKEND_URL: http://localhost:3001

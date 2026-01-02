@@ -20,10 +20,11 @@ export default function SortableWidget({ id, children }) {
     transition,
     opacity: isDragging ? 0.5 : 1,
     zIndex: isDragging ? 1000 : "auto",
+    height: "600px", // CLS Optimization: Uniform widget height
   };
 
   return (
-    <div ref={setNodeRef} style={style} className="relative group">
+    <div ref={setNodeRef} style={style} className="relative group overflow-hidden">
       {/* Drag handle */}
       <button
         {...attributes}

@@ -1,10 +1,36 @@
 # Copilot Instructions for Aisha CRM
 
+## 🚨 DEPLOYMENT RULES (NON-NEGOTIABLE)
+
+**CRITICAL - NO EXCEPTIONS:**
+
+1. **NO GIT DEPLOYMENTS WITHOUT EXPRESS PERMISSION**
+   - ❌ NEVER push commits without explicit user approval
+   - ❌ NEVER create/push tags without explicit user approval
+   - ❌ NEVER run `git push` or `git tag` autonomously
+   - ✅ Stage changes with `git add` and show status ONLY
+   - ✅ Wait for user to explicitly say "push" or "deploy"
+
+2. **VERSION TAG VERIFICATION (MANDATORY)**
+   - BEFORE pushing ANY tag, ALWAYS run: `git tag --list | tail -5`
+   - Verify last version pushed (e.g., v3.3.5)
+   - Propose next version (bugfix: +0.0.1, feature: +0.1.0)
+   - Show user: "Last tag: v3.3.5 → Proposing: v3.3.6 (bugfix)"
+   - Wait for confirmation before creating tag
+
+3. **AI CODE MODIFICATIONS (SPECIAL RULES)**
+   - BEFORE working on Developer AI code → **Read `docs/AI_ARCHITECTURE_DEVELOPER_AI.md`**
+   - BEFORE working on AiSHA AI code → **Read `docs/AI_ARCHITECTURE_AISHA_AI.md`**
+   - Follow conversation flow patterns documented in architecture files
+   - Ensure follow-up suggestions are implemented per spec
+   - Test tool chains with Developer AI before deploying
+
 ## ⚠️ Before Making ANY Changes
 
 1. **Read `orchestra/PLAN.md`** - Only work on tasks marked "Active"
 2. **Default mode is BUGFIX-FIRST** - No new features unless explicitly authorized
 3. **Keep changes minimal and surgical** - See `orchestra/CONVENTIONS.md`
+4. **AI Code Changes** - Consult AI architecture docs FIRST (see above)
 
 ## Architecture Overview
 
@@ -154,13 +180,36 @@ JOIN tenant t ON a.tenant_id = t.id
 WHERE t.tenant_id = 'my-tenant-slug';  -- tenant.tenant_id is the TEXT slug
 
 -- WRONG: Never use deprecated tenant_id_text
-SELECT * FROM accounts WHERE tenant_id_text = 'local-tenant-001';  -- Deprecated!
+SELECT * FROM accounts WHERE tenant_id_text = '6cb4c008-4847-426a-9a2e-918ad70e7b69';  -- Deprecated!
 
 -- RLS Policy pattern (uses tenant_uuid from users table)
 CREATE POLICY example_policy ON my_table
   FOR SELECT TO authenticated
   USING (tenant_id IN (SELECT tenant_uuid FROM users WHERE id = auth.uid()));
 ```
+
+### Timestamp Column Naming Patterns (CRITICAL)
+
+**Three distinct patterns exist across the schema - routes must match exactly:**
+
+| Pattern | Tables | Column Names | Migration Source |
+|---------|--------|--------------|------------------|
+| **Standard (majority)** | accounts, leads, contacts, opportunities, notifications, system_logs, employees, modulesettings | `created_at`, `updated_at` | [001_init.sql](backend/migrations/001_init.sql) |
+| **AI conversations** | conversations, conversation_messages | `created_date`, `updated_date` | [014_conversations.sql](backend/migrations/014_conversations.sql) |
+| **API keys (hybrid)** | apikey | `created_at` AND `created_date` (both!) | [003_create_apikey.sql](backend/migrations/003_create_apikey.sql) |
+
+**Rules for route development:**
+- ✅ Use `.order('created_at')` for standard tables
+- ✅ Use `.order('created_date')` for conversations tables
+- ✅ INSERT `{ created_at: nowIso }` for standard tables
+- ✅ INSERT `{ created_date: nowIso, updated_date: nowIso }` for conversations
+- ✅ INSERT `{ created_at: nowIso, created_date: nowIso }` for apikey table (intentional duplication)
+- ❌ NEVER assume column names - verify against migration files first
+- ❌ Column name mismatches cause 500 errors in production
+
+**Example bugs prevented:**
+- `activities` table has NO `updated_date` column (only `created_at`)
+- `notifications` table uses `created_at` not `created_date`
 
 ## Essential Commands
 
@@ -214,6 +263,8 @@ npm run test
 
 | Purpose | Location |
 |---------|----------|
+| **AI Architecture - Developer AI** | `docs/AI_ARCHITECTURE_DEVELOPER_AI.md` ⚠️ **Required for AI code** |
+| **AI Architecture - AiSHA** | `docs/AI_ARCHITECTURE_AISHA_AI.md` ⚠️ **Required for AI code** |
 | API failover logic | `src/api/fallbackFunctions.js` |
 | Backend routes | `backend/routes/*.js` (60+ files) |
 | AI engine | `backend/lib/aiEngine/` |
@@ -221,7 +272,9 @@ npm run test
 | Tenant middleware | `backend/middleware/validateTenant.js` |
 | Docker config | `docker-compose.yml` |
 
-## AI Engine (Multi-Provider LLM)
+**⚠️ CRITICAL: Before modifying AI code, read:**
+- **Developer AI:** `docs/AI_ARCHITECTURE_DEVELOPER_AI.md`
+- **AiSHA AI:** `docs/AI_ARCHITECTURE_AISHA_AI.md`
 
 The `backend/lib/aiEngine/` provides unified AI infrastructure with automatic failover:
 
@@ -242,6 +295,22 @@ const result = await callLLMWithFailover({ messages, capability: 'chat_tools', t
 **Capabilities:** `chat_tools`, `chat_light`, `json_strict`, `brain_read_only`, `brain_plan_actions`, `realtime_voice`
 
 **Providers:** OpenAI (gpt-4o), Anthropic (claude-3-5-sonnet), Groq (llama-3.3-70b), Local LLMs
+
+**Per-tenant override:** Set `LLM_PROVIDER__TENANT_<id>=anthropic` in env to route specific tenants
+
+### AI Conversation Flow Requirements
+
+**AiSHA AI (Customer-Facing):**
+- **Session Entity Context:** MUST extract sessionEntities from req.body and inject into system prompt
+- **Follow-Up Suggestions:** MUST provide 2-4 contextual suggestions after every response
+- **Proactive Next Actions:** When user asks "what should I do next?", MUST call `suggest_next_actions` tool
+- **Tool Flow:** See `docs/AI_ARCHITECTURE_AISHA_AI.md` for detailed conversation patterns
+
+**Developer AI (Superadmin-Only):**
+- **Tool Approval:** Destructive operations MUST request explicit user approval
+- **Follow-Up Suggestions:** MUST provide 2-4 debugging/investigation suggestions after every response
+- **Security:** NEVER read .env, NEVER execute unauthorized commands
+- **Tool Flow:** See `docs/AI_ARCHITECTURE_DEVELOPER_AI.md` for detailed pattern
 
 **Per-tenant override:** Set `LLM_PROVIDER__TENANT_<id>=anthropic` in env to route specific tenants
 

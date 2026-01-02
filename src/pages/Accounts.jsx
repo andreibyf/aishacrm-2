@@ -37,6 +37,7 @@ import Pagination from "../components/shared/Pagination";
 import { toast } from "sonner";
 import TagFilter from "../components/shared/TagFilter";
 import { useEmployeeScope } from "../components/shared/EmployeeScopeContext";
+import { useLoadingToast } from "@/hooks/useLoadingToast";
 import RefreshButton from "../components/shared/RefreshButton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -52,9 +53,6 @@ import { formatIndustry } from "@/utils/industryUtils";
 import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
 import { useAiShaEvents } from "@/hooks/useAiShaEvents";
-
-// Helper to add delay between API calls
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function AccountsPage() {
   const { plural: accountsLabel, singular: accountLabel } = useEntityLabel('accounts');
@@ -97,6 +95,7 @@ export default function AccountsPage() {
 
   const { cachedRequest, clearCacheByKey } = useApiManager();
   const { selectedEmail } = useEmployeeScope();
+  const loadingToast = useLoadingToast();
 
   // Ref to track if initial load is done
   const initialLoadDone = useRef(false);
@@ -135,21 +134,20 @@ export default function AccountsPage() {
         // Only filter by null
         filterObj.$or = [{ assigned_to: null }];
       } else {
-        // Robust filtering: Match by ID or Email
-        let emailToUse = selectedEmail;
-        // Check if selectedEmail looks like a UUID (it often is from LazyEmployeeSelector)
+        // assigned_to is a UUID field, so only use UUID for filtering
+        // Check if selectedEmail looks like a UUID
         const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedEmail);
 
-        if (isUuid && employees && employees.length > 0) {
-          const emp = employees.find(e => e.id === selectedEmail);
-          if (emp && emp.email) {
-            emailToUse = emp.email;
-            // Match either ID OR Email
-            filterObj.$or = [
-              { assigned_to: selectedEmail },
-              { assigned_to: emailToUse }
-            ];
+        if (isUuid) {
+          // Use the UUID directly
+          filter.assigned_to = selectedEmail;
+        } else if (employees && employees.length > 0) {
+          // Find employee by email and use their ID (UUID)
+          const emp = employees.find(e => e.email === selectedEmail);
+          if (emp && emp.id) {
+            filter.assigned_to = emp.id;
           } else {
+            // If employee not found, filter by the email value (might fail, but let backend handle)
             filter.assigned_to = selectedEmail;
           }
         } else {
@@ -160,8 +158,17 @@ export default function AccountsPage() {
       user.employee_role === "employee" && user.role !== "admin" &&
       user.role !== "superadmin"
     ) {
-      // Regular employees only see their own data
-      filter.assigned_to = user.email;
+      // Regular employees: lookup user's UUID from employees list
+      if (employees && employees.length > 0) {
+        const currentEmp = employees.find(e => e.email === user.email);
+        if (currentEmp && currentEmp.id) {
+          filter.assigned_to = currentEmp.id;
+        } else {
+          filter.assigned_to = user.email; // Fallback
+        }
+      } else {
+        filter.assigned_to = user.email; // Fallback
+      }
     }
 
     // Test data filtering
@@ -307,11 +314,13 @@ export default function AccountsPage() {
         return;
       }
       
+      // Include limit parameter to fetch all accounts (not just default 50)
+      const filterWithLimit = { ...currentTenantFilter, limit: 10000 };
       const allAccounts = await cachedRequest(
         "Account",
         "filter",
-        { filter: currentTenantFilter },
-        () => Account.filter(currentTenantFilter),
+        { filter: filterWithLimit },
+        () => Account.filter(filterWithLimit),
       );
 
       const stats = {
@@ -333,6 +342,7 @@ export default function AccountsPage() {
   const loadAccounts = useCallback(async () => {
     if (!user) return;
 
+    loadingToast.showLoading();
     setLoading(true);
     try {
       const currentTenantFilter = getTenantFilter();
@@ -345,11 +355,13 @@ export default function AccountsPage() {
         return;
       }
 
+      // Include limit parameter to fetch all accounts for client-side filtering
+      const filterWithLimit = { ...currentTenantFilter, limit: 10000 };
       const allAccounts = await cachedRequest(
         "Account",
         "filter",
-        { filter: currentTenantFilter },
-        () => Account.filter(currentTenantFilter),
+        { filter: filterWithLimit },
+        () => Account.filter(filterWithLimit),
       );
 
       let filtered = allAccounts || [];
@@ -395,9 +407,10 @@ export default function AccountsPage() {
       const paginatedAccounts = filtered.slice(startIndex, endIndex);
 
       setAccounts(paginatedAccounts);
+      loadingToast.showSuccess(`${accountsLabel} loaded! ✨`);
     } catch (error) {
       console.error("[Accounts] Failed to load accounts:", error);
-      toast.error("Failed to load accounts");
+      loadingToast.showError(`Failed to load ${accountsLabel.toLowerCase()}`);
       setAccounts([]);
     } finally {
       setLoading(false);
@@ -414,6 +427,8 @@ export default function AccountsPage() {
     pageSize,
     cachedRequest,
     getTenantFilter,
+    accountsLabel,
+    loadingToast,
   ]);
 
   // Load accounts when dependencies change and data is ready
@@ -599,27 +614,59 @@ export default function AccountsPage() {
     }
 
     try {
-      // Optimistically update UI for instant feedback
-      setAccounts((prev) => prev.filter((a) => a.id !== id));
-      setTotalItems((t) => Math.max(0, (t || 0) - 1));
-      setSelectedAccounts((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-
       await Account.delete(id);
       clearCacheByKey("Account");
-      await Promise.all([
-        loadAccounts(),
-        loadTotalStats(),
-      ]);
+      
+      // Force reload with fresh data (bypass cache)
+      const currentTenantFilter = getTenantFilter();
+      const filterWithLimit = { ...currentTenantFilter, limit: 10000 };
+      const freshAccounts = await Account.filter(filterWithLimit);
+      
+      // Update state with fresh data
+      let filtered = freshAccounts || [];
+      
+      // Apply current filters
+      if (searchTerm) {
+        const search = searchTerm.toLowerCase();
+        filtered = filtered.filter((account) =>
+          account.name?.toLowerCase().includes(search) ||
+          account.website?.toLowerCase().includes(search) ||
+          account.email?.toLowerCase().includes(search) ||
+          account.phone?.includes(searchTerm)
+        );
+      }
+      
+      if (typeFilter !== "all") {
+        filtered = filtered.filter((account) => account.type === typeFilter);
+      }
+      
+      if (selectedTags.length > 0) {
+        filtered = filtered.filter((account) =>
+          Array.isArray(account.tags) &&
+          selectedTags.every((tag) => account.tags.includes(tag))
+        );
+      }
+      
+      filtered.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+      setTotalItems(filtered.length);
+      
+      const startIndex = (currentPage - 1) * pageSize;
+      const endIndex = startIndex + pageSize;
+      const paginatedAccounts = filtered.slice(startIndex, endIndex);
+      
+      setAccounts(paginatedAccounts);
+      await loadTotalStats();
+      
       toast.success("Account deleted successfully");
     } catch (error) {
       console.error("Failed to delete account:", error);
-      toast.error("Failed to delete account");
-      // Ensure UI consistency by reloading on failure
+      const errorMsg = error?.response?.status === 404 
+        ? "Account already deleted" 
+        : "Failed to delete account";
+      toast.error(errorMsg);
+      // Reload to sync UI state
       await loadAccounts();
+      await loadTotalStats();
     }
   };
 
@@ -707,24 +754,87 @@ export default function AccountsPage() {
       }
 
       try {
-        await Promise.all(
-          [...selectedAccounts].map((id) => Account.delete(id)),
+        const accountIds = [...selectedAccounts];
+        console.log('[Accounts] Starting bulk delete:', { count: accountIds.length, ids: accountIds });
+        
+        if (accountIds.length === 0) {
+          toast.error("No accounts selected for deletion");
+          return;
+        }
+        
+        const results = await Promise.allSettled(
+          accountIds.map((id) => Account.delete(id)),
         );
-        // Optimistically update UI for selected deletions
-        const idsToRemove = new Set(selectedAccounts);
-        setAccounts((prev) => prev.filter((a) => !idsToRemove.has(a.id)));
-        setTotalItems((t) => Math.max(0, (t || 0) - idsToRemove.size));
+        
+        const succeeded = results.filter(r => r.status === 'fulfilled').length;
+        const failed = results.filter(r => {
+          if (r.status === 'rejected') {
+            const is404 = r.reason?.response?.status === 404;
+            if (is404) return false; // Don't count 404s as failures
+            console.error('[Accounts] Delete failed:', r.reason);
+            return true;
+          }
+          return false;
+        }).length;
+        
+        console.log('[Accounts] Bulk delete results:', { succeeded, failed });
+        
+        // Clear selection BEFORE reloading to prevent race condition
         setSelectedAccounts(new Set());
+        
+        // Clear cache and force reload with fresh data
         clearCacheByKey("Account");
-        await Promise.all([
-          loadAccounts(),
-          loadTotalStats(),
-        ]);
-        toast.success(`${selectedAccounts.size} account(s) deleted`);
+        
+        // Force reload by calling Account.filter directly (bypass cache)
+        const currentTenantFilter = getTenantFilter();
+        const filterWithLimit = { ...currentTenantFilter, limit: 10000 };
+        const freshAccounts = await Account.filter(filterWithLimit);
+        
+        // Update state with fresh data
+        let filtered = freshAccounts || [];
+        
+        // Apply current filters
+        if (searchTerm) {
+          const search = searchTerm.toLowerCase();
+          filtered = filtered.filter((account) =>
+            account.name?.toLowerCase().includes(search) ||
+            account.website?.toLowerCase().includes(search) ||
+            account.email?.toLowerCase().includes(search) ||
+            account.phone?.includes(searchTerm)
+          );
+        }
+        
+        if (typeFilter !== "all") {
+          filtered = filtered.filter((account) => account.type === typeFilter);
+        }
+        
+        if (selectedTags.length > 0) {
+          filtered = filtered.filter((account) =>
+            Array.isArray(account.tags) &&
+            selectedTags.every((tag) => account.tags.includes(tag))
+          );
+        }
+        
+        filtered.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+        setTotalItems(filtered.length);
+        
+        const startIndex = (currentPage - 1) * pageSize;
+        const endIndex = startIndex + pageSize;
+        const paginatedAccounts = filtered.slice(startIndex, endIndex);
+        
+        setAccounts(paginatedAccounts);
+        await loadTotalStats();
+        
+        if (failed > 0) {
+          toast.error(`${succeeded} deleted, ${failed} failed`);
+        } else {
+          toast.success(`${succeeded} account(s) deleted`);
+        }
       } catch (error) {
         console.error("Failed to delete accounts:", error);
         toast.error("Failed to delete accounts");
-        await loadAccounts();
+        setSelectedAccounts(new Set());
+        await Promise.all([loadAccounts(), loadTotalStats()]);
       }
     }
   };
@@ -1380,25 +1490,25 @@ export default function AccountsPage() {
                             className="border-slate-600"
                           />
                         </th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                        <th className="px-4 py-3 text-left text-base font-medium text-slate-300">
                           Name
                         </th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                        <th className="px-4 py-3 text-left text-base font-medium text-slate-300">
                           Website
                         </th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                        <th className="px-4 py-3 text-left text-base font-medium text-slate-300">
                           Phone
                         </th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                        <th className="px-4 py-3 text-left text-base font-medium text-slate-300">
                           Industry
                         </th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                        <th className="px-4 py-3 text-left text-base font-medium text-slate-300">
                           Assigned To
                         </th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                        <th className="px-4 py-3 text-left text-base font-medium text-slate-300">
                           Type
                         </th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                        <th className="px-4 py-3 text-left text-base font-medium text-slate-300">
                           Actions
                         </th>
                       </tr>
@@ -1418,10 +1528,10 @@ export default function AccountsPage() {
                               className="border-slate-600"
                             />
                           </td>
-                          <td className="px-4 py-3 text-sm text-slate-300">
+                          <td className="px-4 py-3 text-base text-slate-300">
                             {account.name}
                           </td>
-                          <td className="px-4 py-3 text-sm text-slate-300">
+                          <td className="px-4 py-3 text-base text-slate-300">
                             {account.website
                               ? (
                                 <a
@@ -1435,17 +1545,17 @@ export default function AccountsPage() {
                               )
                               : <span className="text-slate-500">—</span>}
                           </td>
-                          <td className="px-4 py-3 text-sm text-slate-300">
+                          <td className="px-4 py-3 text-base text-slate-300">
                             {account.phone || (
                               <span className="text-slate-500">—</span>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-sm text-slate-300">
+                          <td className="px-4 py-3 text-base text-slate-300">
                             {formatIndustry(account.industry) || (
                               <span className="text-slate-500">—</span>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-sm text-slate-300">
+                          <td className="px-4 py-3 text-base text-slate-300">
                             {assignedToMap[account.assigned_to] ||
                               account.assigned_to || (
                               <span className="text-slate-500">Unassigned</span>

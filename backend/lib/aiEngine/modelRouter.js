@@ -10,6 +10,9 @@
  * - Provider-specific defaults (OpenAI vs Anthropic model names)
  */
 
+// DEBUG: Log LLM_PROVIDER at module load time
+console.log('[ModelRouter] Module loaded - LLM_PROVIDER=' + process.env.LLM_PROVIDER);
+
 /**
  * Convert tenant slug/id to env-safe key format.
  * e.g., "acme-inc" -> "ACME_INC", "a11dfb63-4b18-4eb8-872e-747af2e37c46" -> "A11DFB63_4B18_..."
@@ -30,23 +33,23 @@ function toEnvKey(tenantSlugOrId) {
  * @returns {string} model name
  */
 function getProviderDefaultModel(capability, provider) {
-  // Anthropic model defaults
+  // Anthropic model defaults (updated Jan 2026)
   if (provider === "anthropic") {
     switch (capability) {
       case "chat_light":
-        return process.env.ANTHROPIC_MODEL_CHAT_LIGHT || "claude-3-haiku-20240307";
+        return process.env.ANTHROPIC_MODEL_CHAT_LIGHT || "claude-3-5-haiku-20241022";
       case "chat_tools":
-        return process.env.ANTHROPIC_MODEL_CHAT_TOOLS || "claude-3-5-sonnet-20241022";
+        return process.env.ANTHROPIC_MODEL_CHAT_TOOLS || "claude-sonnet-4-20250514";
       case "json_strict":
-        return process.env.ANTHROPIC_MODEL_JSON_STRICT || "claude-3-haiku-20240307";
+        return process.env.ANTHROPIC_MODEL_JSON_STRICT || "claude-3-5-haiku-20241022";
       case "brain_read_only":
-        return process.env.ANTHROPIC_MODEL_BRAIN_READ_ONLY || "claude-3-5-sonnet-20241022";
+        return process.env.ANTHROPIC_MODEL_BRAIN_READ_ONLY || "claude-sonnet-4-20250514";
       case "brain_plan_actions":
-        return process.env.ANTHROPIC_MODEL_BRAIN_PLAN_ACTIONS || "claude-3-5-sonnet-20241022";
+        return process.env.ANTHROPIC_MODEL_BRAIN_PLAN_ACTIONS || "claude-sonnet-4-20250514";
       case "realtime_voice":
-        return "claude-3-5-sonnet-20241022"; // No realtime equivalent
+        return "claude-sonnet-4-20250514"; // No realtime equivalent
       default:
-        return "claude-3-5-sonnet-20241022";
+        return "claude-sonnet-4-20250514";
     }
   }
 

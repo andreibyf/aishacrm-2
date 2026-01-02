@@ -37,7 +37,7 @@ The workflow runs automatically on:
 3. **Runs tests:**
    - Executes all 27 API schema validation tests
    - Uses Playwright's `request` context for direct HTTP calls
-   - Tests against test tenant `local-tenant-001`
+   - Tests against test tenant `6cb4c008-4847-426a-9a2e-918ad70e7b69`
 
 4. **Reports results:**
    - Uploads test results and Playwright report as artifacts
@@ -250,7 +250,7 @@ npx playwright test tests/api-schema-validation.spec.js --reporter=list
 node -e "
 const { createClient } = require('@supabase/supabase-js');
 const client = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-client.from('employees').select('*').eq('tenant_id', 'local-tenant-001').then(console.log);
+client.from('employees').select('*').eq('tenant_id', '6cb4c008-4847-426a-9a2e-918ad70e7b69').then(console.log);
 "
 ```
 

@@ -33,12 +33,14 @@ function signRefresh(payload) {
 
 function cookieOpts(maxAgeMs) {
   const isProd = process.env.NODE_ENV === 'production';
+  const domain = process.env.COOKIE_DOMAIN;
   return {
     httpOnly: true,
     sameSite: 'lax',
     secure: isProd,
     maxAge: maxAgeMs,
     path: '/',
+    ...(domain && { domain }),
   };
 }
 
@@ -148,7 +150,7 @@ export default function createAuthRoutes(_pgPool) {
       let table = 'users';
       let { data: uRows, error: uError } = await supabase
         .from('users')
-        .select('id, tenant_id, email, first_name, last_name, role, metadata')
+        .select('id, tenant_id, tenant_uuid, email, first_name, last_name, role, metadata')
         .eq('email', normalizedEmail)
         .limit(1);
       
@@ -156,7 +158,7 @@ export default function createAuthRoutes(_pgPool) {
       
       if (uRows && uRows.length > 0) {
         user = uRows[0];
-        console.log('[Auth.login] Found user in users table:', { id: user.id, role: user.role, tenant_id: user.tenant_id });
+        console.log('[Auth.login] Found user in users table:', { id: user.id, role: user.role, tenant_id: user.tenant_id, tenant_uuid: user.tenant_uuid });
       } else {
         table = 'employees';
         const { data: eRows, error: eError } = await supabase
@@ -356,6 +358,7 @@ export default function createAuthRoutes(_pgPool) {
         email: user.email,
         role: user.role,
         tenant_id: user.tenant_id || null,
+        tenant_uuid: user.tenant_uuid || null,
         table,
       };
       const access = signAccess(payload);
@@ -448,7 +451,14 @@ export default function createAuthRoutes(_pgPool) {
             return res.status(403).json({ status: 'error', message: 'Account is disabled' });
           }
 
-          const payload = { sub: user.id, email: user.email, role: user.role, tenant_id: user.tenant_id || null, table };
+          const payload = { 
+            sub: user.id, 
+            email: user.email, 
+            role: user.role, 
+            tenant_id: user.tenant_id || null, 
+            tenant_uuid: user.tenant_uuid || null, 
+            table 
+          };
           const access = signAccess(payload);
           res.cookie('aisha_access', access, cookieOpts(15 * 60 * 1000));
           console.log('[Auth.refresh] Issued access cookie from Supabase Bearer token:', { email, mode: serviceKey ? 'service_role' : 'anon_fallback' });
@@ -492,9 +502,13 @@ export default function createAuthRoutes(_pgPool) {
 
       const tbl = table === 'employees' ? 'employees' : 'users';
       console.log('[Auth.refresh] Looking up user:', { sub, table: tbl });
+      const selectFields = tbl === 'users' 
+        ? 'id, email, role, tenant_id, tenant_uuid, status, metadata'
+        : 'id, email, role, tenant_id, status, metadata';
+      
       const { data: rows, error: lookupErr } = await supabase
         .from(tbl)
-        .select('id, email, role, tenant_id, status, metadata')
+        .select(selectFields)
         .eq('id', sub)
         .limit(1);
       if (lookupErr) {
@@ -512,7 +526,14 @@ export default function createAuthRoutes(_pgPool) {
         return res.status(403).json({ status: 'error', message: 'Account is disabled' });
       }
 
-      const payload = { sub: user.id, email: user.email, role: user.role, tenant_id: user.tenant_id || null, table: tbl };
+      const payload = { 
+        sub: user.id, 
+        email: user.email, 
+        role: user.role, 
+        tenant_id: user.tenant_id || null, 
+        tenant_uuid: user.tenant_uuid || null, 
+        table: tbl 
+      };
       const access = signAccess(payload);
       res.cookie('aisha_access', access, cookieOpts(15 * 60 * 1000));
       return res.json({ status: 'success', message: 'Refreshed' });

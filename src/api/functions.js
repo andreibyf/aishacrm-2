@@ -1,6 +1,45 @@
 import { isLocalDevMode } from './mockData';
 import { getBackendUrl } from '@/api/backendUrl';
 import { logDev } from '@/utils/devLogger';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+
+/**
+ * Get Supabase access token for Authorization header
+ * This allows cross-domain API requests to authenticate even when cookies are domain-locked
+ */
+async function getAuthorizationHeader() {
+  if (!isSupabaseConfigured()) return null;
+  
+  try {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    
+    // Handle auth session missing error gracefully (user not logged in)
+    if (error) {
+      if (error.name === 'AuthSessionMissingError' || error.message?.includes('Auth session missing')) {
+        // This is expected when user isn't logged in, don't log as warning
+        if (import.meta.env.DEV) {
+          console.log('[Auth] No session available (user not logged in)');
+        }
+        return null;
+      }
+      // Log other auth errors as warnings
+      if (import.meta.env.DEV) {
+        console.warn('[Auth] Failed to get Supabase session:', error.message);
+      }
+      return null;
+    }
+    
+    if (session?.access_token) {
+      return `Bearer ${session.access_token}`;
+    }
+  } catch (err) {
+    // Catch any unexpected errors
+    if (import.meta.env.DEV) {
+      console.warn('[Auth] Exception getting session:', err?.message || err);
+    }
+  }
+  return null;
+}
 
 // Optional direct MCP server URL (useful for connecting your own MCP instance)
 const MCP_SERVER_URL = import.meta.env.VITE_MCP_SERVER_URL || null;
@@ -67,14 +106,45 @@ const createFunctionProxy = (functionName) => {
           logDev(`[processChatCommand] tenantId=${tenantId || 'none'} (source: ${tenantSource || 'none'})`);
         }
 
-        const messages = Array.isArray(opts.messages)
-          ? opts.messages
-          : [{ role: 'user', content: String(opts.message || '').trim() }].filter(m => m.content);
+        // Optimize: only send last assistant and last user message to reduce token usage
+        // Support both "message" (single string) and "messages" (array) for backward compatibility
+        let allMessages = opts.messages || opts.history || [];
+        if (!Array.isArray(allMessages)) {
+          allMessages = [allMessages];
+        }
+        
+        // If no messages array but single "message" or "text" field is provided, convert it
+        if (allMessages.length === 0 && (opts.message || opts.text)) {
+          allMessages = [{ role: 'user', content: String(opts.message || opts.text).trim() }];
+        }
+        
+        console.log('[DEBUG processChatCommand] opts.message:', opts.message);
+        console.log('[DEBUG processChatCommand] opts.text:', opts.text);
+        console.log('[DEBUG processChatCommand] opts.messages:', opts.messages);
+        console.log('[DEBUG processChatCommand] opts.history:', opts.history);
+        console.log('[DEBUG processChatCommand] allMessages:', allMessages);
+
+        const all = allMessages;
+        const lastUser = [...all].reverse().find(m => m?.role === 'user');
+        const lastAssistant = [...all].reverse().find(m => m?.role === 'assistant');
+
+        const messages = [lastAssistant, lastUser].filter(Boolean);
+        
+        console.log('[DEBUG processChatCommand] messages to send:', messages);
+
+        // Safety: Ensure we always have at least one message
+        if (messages.length === 0 && all.length > 0) {
+          // Fallback to the very last message if optimization resulted in empty array
+          messages.push(all[all.length - 1]);
+        }
+        
         const body = {
           messages,
           model: opts.model,
           temperature: typeof opts.temperature === 'number' ? opts.temperature : undefined,
-          api_key: opts.api_key
+          api_key: opts.api_key,
+          conversation_id: opts.conversation_id || opts.conversationId, // Support both naming conventions
+          sessionEntities: opts.sessionEntities || opts.entityContext // Session context for follow-up questions
         };
 
         const headers = { 'Content-Type': 'application/json' };
@@ -82,6 +152,12 @@ const createFunctionProxy = (functionName) => {
           headers['x-tenant-id'] = tenantId;
         } else if (import.meta.env.DEV) {
           console.warn('[processChatCommand] Missing tenantId (superadmin global view or not selected). Header omitted.');
+        }
+
+        // Add Supabase access token for cross-domain authentication
+        const authHeader = await getAuthorizationHeader();
+        if (authHeader) {
+          headers['Authorization'] = authHeader;
         }
 
         const resp = await fetch(`${BACKEND_URL}/api/ai/chat`, {
@@ -142,6 +218,12 @@ const createFunctionProxy = (functionName) => {
           'x-user-role': userRole,
           'x-user-email': userEmail
         };
+
+        // Add Supabase access token for cross-domain authentication
+        const authHeader = await getAuthorizationHeader();
+        if (authHeader) {
+          headers['Authorization'] = authHeader;
+        }
 
         const resp = await fetch(`${BACKEND_URL}/api/ai/developer`, {
           method: 'POST',
@@ -923,7 +1005,7 @@ const OVERRIDE_FUNCTIONS = new Set(['validateAndImport']);
 const functionsProxy = new Proxy({}, {
   get: (target, prop) => {
     // If a direct MCP server URL is configured, allow direct JSON-RPC calls
-    // for MCP-related function names (mcpServer*, mcpHandler, mcpTool*) even in local-dev.
+    // for MCP-related function names (mcpServer*, mcpHandler, mcpTool*), even in local-dev.
     if (MCP_SERVER_URL && (String(prop).startsWith('mcpServer') || String(prop).startsWith('mcpHandler') || String(prop).startsWith('mcpTool') || String(prop).startsWith('mcpToolFinder'))) {
       return async (...args) => {
         try {

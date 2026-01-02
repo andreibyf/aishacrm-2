@@ -32,6 +32,8 @@ export function getNodeId() {
  * @param {Object} [entry.usage] - Token usage { prompt_tokens, completion_tokens }
  * @param {number} [entry.attempt] - Which attempt in failover chain (1, 2, etc.)
  * @param {number} [entry.totalAttempts] - Total attempts in failover chain
+ * @param {Array<string>} [entry.toolsCalled] - Array of tool names called during this request
+ * @param {string} [entry.intent] - Classified intent code from intentClassifier (e.g., LEAD_CREATE, AI_SUGGEST_NEXT_ACTIONS)
  */
 export function logLLMActivity(entry) {
   const containerId = getNodeId();
@@ -51,6 +53,8 @@ export function logLLMActivity(entry) {
     usage: entry.usage || null,
     attempt: entry.attempt || null,
     totalAttempts: entry.totalAttempts || null,
+    toolsCalled: entry.toolsCalled || null,
+    intent: entry.intent || null,
   };
 
   activityLog.unshift(logEntry); // Add to front (newest first)
@@ -79,6 +83,7 @@ export function logLLMActivity(entry) {
     attempt: logEntry.attempt,
     totalAttempts: logEntry.totalAttempts,
     usage: logEntry.usage,
+    toolsCalled: logEntry.toolsCalled,
     error: logEntry.error,
   }));
 }

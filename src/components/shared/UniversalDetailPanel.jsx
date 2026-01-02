@@ -416,7 +416,7 @@ export default function UniversalDetailPanel({
           <Mail className="w-4 h-4 text-slate-400" />
           <div>
             <Label className="text-xs text-slate-500">Email</Label>
-            <a href={`mailto:${entity.email}`} className="text-blue-400 hover:text-blue-300 text-sm block">
+            <a href={`mailto:${entity.email}`} className="text-blue-400 hover:text-blue-300 text-base block">
               {entity.email}
             </a>
           </div>
@@ -430,7 +430,7 @@ export default function UniversalDetailPanel({
           <Phone className="w-4 h-4 text-slate-400" />
           <div>
             <Label className="text-xs text-slate-500">Phone</Label>
-            <a href={`tel:${entity.phone}`} className="text-blue-400 hover:text-blue-300 text-sm block">
+            <a href={`tel:${entity.phone}`} className="text-blue-400 hover:text-blue-300 text-base block">
               {entity.phone}
             </a>
           </div>
@@ -444,7 +444,7 @@ export default function UniversalDetailPanel({
           <Phone className="w-4 h-4 text-slate-400" />
           <div>
             <Label className="text-xs text-slate-500">Mobile</Label>
-            <a href={`tel:${entity.mobile}`} className="text-blue-400 hover:text-blue-300 text-sm block">
+            <a href={`tel:${entity.mobile}`} className="text-blue-400 hover:text-blue-300 text-base block">
               {entity.mobile}
             </a>
           </div>
@@ -476,8 +476,8 @@ export default function UniversalDetailPanel({
 
         detailFields.push(
           <div key={`display-${label}`} className="grid grid-cols-2 gap-4 items-center">
-            <Label className="text-slate-400">{label}</Label>
-            <div className="text-sm text-slate-200 font-medium">
+            <Label className="text-slate-400">{ label}</Label>
+            <div className="text-base text-slate-200 font-medium">
               {value}
             </div>
           </div>
@@ -567,7 +567,7 @@ export default function UniversalDetailPanel({
         detailFields.push(
           <div key={`entity-${key}`} className="grid grid-cols-2 gap-4 items-center">
             <Label className="text-slate-400">{label}</Label>
-            <div className="text-sm text-slate-200 font-medium">
+            <div className="text-base text-slate-200 font-medium">
               {value}
             </div>
           </div>
@@ -667,7 +667,7 @@ export default function UniversalDetailPanel({
               <h3 className="text-sm font-semibold text-slate-400 uppercase mb-4">Address</h3>
               <div className="flex items-start gap-3">
                 <MapPin className="w-4 h-4 text-slate-400 mt-1" />
-                <div className="text-sm text-slate-300">
+                <div className="text-base text-slate-300">
                   {entity.address_1 && <div>{entity.address_1}</div>}
                   {entity.address_2 && <div>{entity.address_2}</div>}
                   {(entity.city || entity.state || entity.zip) && (
@@ -708,7 +708,7 @@ export default function UniversalDetailPanel({
                 </h3>
                 <span className="text-xs text-slate-500 italic">— What is this about?</span>
               </div>
-              <div className="text-sm text-slate-300 bg-slate-800 rounded-lg p-4 border border-slate-700 whitespace-pre-wrap">
+              <div className="text-base text-slate-300 bg-slate-800 rounded-lg p-4 border border-slate-700 whitespace-pre-wrap">
                 {entity.description}
               </div>
             </div>
@@ -757,7 +757,7 @@ export default function UniversalDetailPanel({
                           {/* Contact Name */}
                           <div className="flex items-center gap-2">
                             <User className="w-4 h-4 text-slate-400" />
-                            <span className="font-medium text-slate-200">
+                            <span className="font-medium text-slate-200 text-base">
                               {contact.first_name} {contact.last_name}
                             </span>
                             {contact.job_title && (
@@ -769,7 +769,7 @@ export default function UniversalDetailPanel({
 
                           {/* Contact Phone */}
                           {contact.phone && (
-                            <div className="flex items-center gap-2 text-sm">
+                            <div className="flex items-center gap-2 text-base">
                               <Phone className="w-4 h-4 text-slate-400" />
                               <a 
                                 href={`tel:${contact.phone}`}
@@ -783,7 +783,7 @@ export default function UniversalDetailPanel({
 
                           {/* Contact Email */}
                           {contact.email && (
-                            <div className="flex items-center gap-2 text-sm">
+                            <div className="flex items-center gap-2 text-base">
                               <Mail className="w-4 h-4 text-slate-400" />
                               <a 
                                 href={`mailto:${contact.email}`}
@@ -797,7 +797,7 @@ export default function UniversalDetailPanel({
 
                           {/* Contact Mobile (if different from phone) */}
                           {contact.mobile && contact.mobile !== contact.phone && (
-                            <div className="flex items-center gap-2 text-sm">
+                            <div className="flex items-center gap-2 text-base">
                               <Phone className="w-4 h-4 text-slate-400" />
                               <span className="text-slate-400 text-xs mr-1">Mobile:</span>
                               <a 
@@ -852,17 +852,17 @@ export default function UniversalDetailPanel({
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium text-slate-200 text-sm">{activity.subject}</span>
+                        <span className="font-medium text-slate-200 text-base">{activity.subject}</span>
                         <Badge className={getStatusColor(activity.status)}>
                           {activity.type.replace(/_/g, ' ')}
                         </Badge>
                       </div>
                       {activity.description && (
-                        <p className="text-xs text-slate-400 line-clamp-2">
+                        <p className="text-sm text-slate-400 line-clamp-2">
                           {activity.description}
                         </p>
                       )}
-                      <p className="text-xs text-slate-500 mt-1">
+                      <p className="text-sm text-slate-500 mt-1">
                         {activity.created_date ? format(new Date(activity.created_date), 'MMM d, yyyy') : 'N/A'}
                       </p>
                     </div>

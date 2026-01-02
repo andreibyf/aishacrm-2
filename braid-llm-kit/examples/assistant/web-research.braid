@@ -5,7 +5,7 @@ import { Result, CRMError } from "../../spec/types.braid"
 
 fn searchWeb(
   query: String,
-  max_results: Number
+  limit: Number
 ) -> Result<Array, CRMError> !net {
   // Note: In production, integrate with Google Custom Search API, Bing API, or similar
   // For now, this is a placeholder that would call an external search service
@@ -13,7 +13,7 @@ fn searchWeb(
   let url = "/api/utils/web-search";
   let params = {
     q: query,
-    max_results: max_results
+    limit: limit
   };
   
   let response = http.get(url, { params: params });
@@ -26,15 +26,15 @@ fn searchWeb(
 }
 
 fn fetchWebPage(
-  url_to_fetch: String
+  url: String
 ) -> Result<Object, CRMError> !net {
   // Fetch and parse a web page
-  let url = "/api/utils/fetch-page";
+  let api_url = "/api/utils/fetch-page";
   let body = {
-    url: url_to_fetch
+    url: url
   };
   
-  let response = http.post(url, { body: body });
+  let response = http.post(api_url, { body: body });
   
   return match response {
     Ok{value} => Ok(value.data),
@@ -44,14 +44,12 @@ fn fetchWebPage(
 }
 
 fn lookupCompanyInfo(
-  company_name: String,
-  domain: String
+  company_name: String
 ) -> Result<Object, CRMError> !net {
   // Enrich company data from external sources
   let url = "/api/utils/company-lookup";
   let body = {
-    company_name: company_name,
-    domain: domain
+    company_name: company_name
   };
   
   let response = http.post(url, { body: body });

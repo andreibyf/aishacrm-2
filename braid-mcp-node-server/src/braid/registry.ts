@@ -16,4 +16,12 @@ export class InMemoryBraidRegistry implements BraidRegistry {
   getAdapter(system: string): BraidAdapter | undefined {
     return this.adapters.get(system);
   }
+
+  /**
+   * Return the list of registered adapter system names. The returned
+   * array is sorted alphabetically to provide a stable order.
+   */
+  listAdapters(): string[] {
+    return Array.from(this.adapters.keys()).sort();
+  }
 }

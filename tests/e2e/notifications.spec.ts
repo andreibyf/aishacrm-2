@@ -17,7 +17,7 @@ test.describe('Notifications API', () => {
   test.beforeAll(async ({ request }) => { await waitForBackendHealth(request); });
 
   test('create → list → mark as read', async ({ request }) => {
-    const tenantId = process.env.E2E_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+    const tenantId = process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
     const userEmail = process.env.E2E_USER_EMAIL || 'e2e.test@aishacrm.com';
 
     // Create

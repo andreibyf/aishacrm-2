@@ -37,6 +37,7 @@ import { toast } from "sonner";
 import TagFilter from "../components/shared/TagFilter";
 import { useEmployeeScope } from "../components/shared/EmployeeScopeContext";
 import RefreshButton from "../components/shared/RefreshButton";
+import { useLoadingToast } from "@/hooks/useLoadingToast";
 import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -84,6 +85,7 @@ const stageToCardId = {
 
 export default function OpportunitiesPage() {
   const { plural: opportunitiesLabel, singular: opportunityLabel } = useEntityLabel('opportunities');
+  const loadingToast = useLoadingToast();
   const [opportunities, setOpportunities] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [contacts, setContacts] = useState([]);
@@ -327,6 +329,7 @@ export default function OpportunitiesPage() {
   const loadOpportunities = useCallback(async (page = 1, size = 25) => {
     if (!user) return;
 
+    loadingToast.showLoading();
     setLoading(true);
     try {
       let effectiveFilter = getTenantFilter();
@@ -371,31 +374,39 @@ export default function OpportunitiesPage() {
         effectiveFilter = { ...effectiveFilter, tags: { $all: selectedTags } };
       }
 
-      // Calculate offset for pagination
-      const skip = (page - 1) * size;
+      // KANBAN VIEW: Load ALL records (no pagination) to show full pipeline
+      // TABLE/GRID VIEW: Use pagination for performance
+      const effectiveSize = viewMode === "kanban" ? 10000 : size;
+      const skip = viewMode === "kanban" ? 0 : (page - 1) * size;
 
       logDev(
         "[Opportunities] Loading page:",
         page,
         "size:",
         size,
+        "effectiveSize:",
+        effectiveSize,
         "skip:",
         skip,
+        "viewMode:",
+        viewMode,
         "filter:",
         effectiveFilter,
         "cursor:",
         paginationCursors[page - 1],
       );
 
-      // Build API query with keyset cursor if available
+      // Build API query with keyset cursor if available (only for paginated views)
       const apiFilter = { ...effectiveFilter };
       
-      // Add cursor for keyset pagination if navigating forward
-      const cursor = paginationCursors[page - 1];
-      if (cursor && cursor.updated_at && cursor.id) {
-        apiFilter.cursor_updated_at = cursor.updated_at;
-        apiFilter.cursor_id = cursor.id;
-        logDev("[Opportunities] Using keyset cursor:", cursor);
+      // Add cursor for keyset pagination if navigating forward (skip for Kanban)
+      if (viewMode !== "kanban") {
+        const cursor = paginationCursors[page - 1];
+        if (cursor && cursor.updated_at && cursor.id) {
+          apiFilter.cursor_updated_at = cursor.updated_at;
+          apiFilter.cursor_id = cursor.id;
+          logDev("[Opportunities] Using keyset cursor:", cursor);
+        }
       }
 
       // Sort by updated_at DESC, id DESC to match composite index (tenant_id, stage, updated_at DESC)
@@ -403,12 +414,12 @@ export default function OpportunitiesPage() {
       const opportunitiesData = await Opportunity.filter(
         apiFilter,
         "-updated_at,-id",
-        size,
+        effectiveSize,
         skip,
       );
 
-      // Track last record for keyset pagination
-      if (opportunitiesData && opportunitiesData.length > 0) {
+      // Track last record for keyset pagination (only for paginated views)
+      if (viewMode !== "kanban" && opportunitiesData && opportunitiesData.length > 0) {
         const lastRecord = opportunitiesData[opportunitiesData.length - 1];
         setLastSeenRecord({
           updated_at: lastRecord.updated_at,
@@ -442,15 +453,17 @@ export default function OpportunitiesPage() {
       setTotalItems(totalCount);
       setCurrentPage(page);
       initialLoadDone.current = true;
+      loadingToast.showSuccess(`${opportunitiesLabel} loaded! ✨`);
     } catch (error) {
       console.error("Failed to load opportunities:", error);
+      loadingToast.showError(`Failed to load ${opportunitiesLabel.toLowerCase()}`);
       toast.error("Failed to load opportunities");
       setOpportunities([]);
       setTotalItems(0);
     } finally {
       setLoading(false);
     }
-  }, [user, searchTerm, stageFilter, selectedTags, getTenantFilter]); // Removed selectedTenantId, getFilter
+  }, [user, searchTerm, stageFilter, selectedTags, getTenantFilter, viewMode, loadingToast, opportunitiesLabel, paginationCursors]); // Added viewMode dependency
 
   // Load opportunities when dependencies change
   useEffect(() => {

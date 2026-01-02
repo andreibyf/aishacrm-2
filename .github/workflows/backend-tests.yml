@@ -95,7 +95,7 @@ jobs:
             echo "  To enable: Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY secrets"
           fi
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
       - name: Start backend server
@@ -124,9 +124,10 @@ jobs:
         env:
           PORT: 3001
           NODE_ENV: test
+          USE_SUPABASE_API: 'true'
           JWT_SECRET: test-jwt-secret-for-ci
           SESSION_SECRET: test-session-secret-for-ci
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           REDIS_CACHE_URL: redis://localhost:6379
           REDIS_MEMORY_URL: redis://localhost:6379
@@ -142,7 +143,7 @@ jobs:
           BACKEND_URL: http://localhost:3001
           CI: 'true'
           CI_BACKEND_TESTS: 'true'
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
       - name: Skip integration tests (no Supabase)

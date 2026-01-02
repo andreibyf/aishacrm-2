@@ -10,18 +10,24 @@ export default function WorkflowCanvas({ nodes, connections, onUpdateNode, onDel
   const canvasRef = useRef(null);
 
   const handleNodeClick = (nodeId) => {
-    if (connectingFrom) {
-      if (connectingFrom !== nodeId) {
-        onConnect(connectingFrom, nodeId);
-      }
-      setConnectingFrom(null);
-    } else {
+    if (!connectingFrom) {
       onSelectNode(nodeId);
     }
   };
 
-  const handleStartConnect = (nodeId) => {
-    setConnectingFrom(nodeId);
+  const handleConnectionPointClick = (nodeId, connectionPoint) => {
+    if (connectingFrom) {
+      if (connectingFrom.nodeId !== nodeId) {
+        onConnect(connectingFrom.nodeId, nodeId);
+      }
+      setConnectingFrom(null);
+    } else {
+      setConnectingFrom({ nodeId, point: connectionPoint });
+    }
+  };
+
+  const handleStartConnect = (nodeId, connectionPoint) => {
+    handleConnectionPointClick(nodeId, connectionPoint);
   };
 
   // Drag handlers
@@ -96,12 +102,30 @@ export default function WorkflowCanvas({ nodes, connections, onUpdateNode, onDel
           const container = element.closest('.workflow-canvas');
           if (container) {
             const containerRect = container.getBoundingClientRect();
+            const centerX = rect.left - containerRect.left + rect.width / 2 + container.scrollLeft;
+            const centerY = rect.top - containerRect.top + rect.height / 2 + container.scrollTop;
+            const top = rect.top - containerRect.top + container.scrollTop;
+            const bottom = top + rect.height;
+            const left = rect.left - containerRect.left + container.scrollLeft;
+            const right = left + rect.width;
+            
+            // No special handling needed - diamond now uses same rectangular container as regular nodes
+            
             positions[node.id] = {
-              x: rect.left - containerRect.left + rect.width / 2 + container.scrollLeft,
-              y: rect.top - containerRect.top + rect.height + container.scrollTop,
+              x: centerX,
+              y: centerY,
               width: rect.width,
               height: rect.height,
-              top: rect.top - containerRect.top + container.scrollTop,
+              top: top,
+              bottom: bottom,
+              left: left,
+              right: right,
+              points: {
+                top: { x: centerX, y: top },
+                bottom: { x: centerX, y: bottom },
+                left: { x: left, y: centerY },
+                right: { x: right, y: centerY }
+              }
             };
           }
         }
@@ -118,30 +142,45 @@ export default function WorkflowCanvas({ nodes, connections, onUpdateNode, onDel
   }, [nodes, connections]);
 
   // Generate SVG path for connection line
-  const generateConnectionPath = (fromId, toId, isCondition = false, branchType = null) => {
+  const generateConnectionPath = (fromId, toId) => {
     const from = nodePositions[fromId];
     const to = nodePositions[toId];
     
     if (!from || !to) return null;
 
-    const startX = from.x;
-    const startY = from.y;
-    const endX = to.x;
-    const endY = to.top;
-
-    // Calculate control points for curved line
-    const midY = (startY + endY) / 2;
+    // Determine best connection points based on relative positions
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
     
-    // Adjust for condition branches
-    let adjustedStartX = startX;
-    if (isCondition && branchType === 'true') {
-      adjustedStartX = startX - 40; // Left branch
-    } else if (isCondition && branchType === 'false') {
-      adjustedStartX = startX + 40; // Right branch
+    let startPoint, endPoint;
+    
+    // Choose start point based on direction to target
+    if (Math.abs(dx) > Math.abs(dy)) {
+      // Horizontal connection preferred
+      startPoint = dx > 0 ? from.points.right : from.points.left;
+      endPoint = dx > 0 ? to.points.left : to.points.right;
+    } else {
+      // Vertical connection preferred
+      startPoint = dy > 0 ? from.points.bottom : from.points.top;
+      endPoint = dy > 0 ? to.points.top : to.points.bottom;
     }
 
-    // Create smooth cubic bezier curve
-    const path = `M ${adjustedStartX} ${startY} C ${adjustedStartX} ${midY}, ${endX} ${midY}, ${endX} ${endY}`;
+    const startX = startPoint.x;
+    const startY = startPoint.y;
+    const endX = endPoint.x;
+    const endY = endPoint.y;
+
+    // Calculate control points for smooth curves
+    let path;
+    if (Math.abs(dx) > Math.abs(dy)) {
+      // Horizontal connection - use horizontal control points
+      const midX = (startX + endX) / 2;
+      path = `M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`;
+    } else {
+      // Vertical connection - use vertical control points
+      const midY = (startY + endY) / 2;
+      path = `M ${startX} ${startY} C ${startX} ${midY}, ${endX} ${midY}, ${endX} ${endY}`;
+    }
     
     return path;
   };
@@ -153,23 +192,20 @@ export default function WorkflowCanvas({ nodes, connections, onUpdateNode, onDel
     const svgConnections = [];
 
     connections.forEach((conn, index) => {
+      const path = generateConnectionPath(conn.from, conn.to);
+      if (!path) return;
+
+      // Check if this is from a condition node to style branches
       const fromNode = nodes.find(n => n.id === conn.from);
       const isCondition = fromNode?.type === 'condition';
       
-      // For condition nodes, determine branch type based on connection order
-      let branchType = null;
+      // For condition nodes, color based on connection order (first=true/green, second=false/red)
+      let color = '#a78bfa';
       if (isCondition) {
         const conditionConns = connections.filter(c => c.from === conn.from);
         const connIndex = conditionConns.findIndex(c => c.to === conn.to);
-        branchType = connIndex === 0 ? 'true' : 'false';
+        color = connIndex === 0 ? '#4ade80' : '#f87171'; // Green for TRUE, Red for FALSE
       }
-
-      const path = generateConnectionPath(conn.from, conn.to, isCondition, branchType);
-      if (!path) return;
-
-      const color = isCondition 
-        ? (branchType === 'true' ? '#4ade80' : '#f87171')
-        : '#a78bfa';
 
       svgConnections.push(
         <g key={`${conn.from}-${conn.to}-${index}`}>
@@ -281,7 +317,7 @@ export default function WorkflowCanvas({ nodes, connections, onUpdateNode, onDel
             🔗 Click on another node to connect
           </div>
         )}
-
+a connection point on another node
         {/* Nodes with absolute positioning */}
         {nodes.map((node) => {
           return (
@@ -300,11 +336,11 @@ export default function WorkflowCanvas({ nodes, connections, onUpdateNode, onDel
               <WorkflowNode
                 node={node}
                 isSelected={selectedNodeId === node.id}
-                isConnecting={connectingFrom === node.id}
+                isConnecting={connectingFrom?.nodeId === node.id}
                 onClick={() => handleNodeClick(node.id)}
                 onUpdate={(updates) => onUpdateNode(node.id, updates)}
                 onDelete={() => onDeleteNode(node.id)}
-                onStartConnect={() => handleStartConnect(node.id)}
+                onStartConnect={(point) => handleStartConnect(node.id, point)}
                 dragHandleProps={{
                   onMouseDown: (e) => handleDragStart(node.id, e)
                 }}
@@ -321,7 +357,7 @@ export default function WorkflowCanvas({ nodes, connections, onUpdateNode, onDel
                 👈 Add more nodes from the library on the left
               </p>
               <p className="text-slate-500 text-xs mt-2">
-                Then click the link button on nodes to connect them
+                Then click connection points (blue dots) to connect nodes
               </p>
               <p className="text-slate-500 text-xs mt-1">
                 💡 Drag the grip icon to reposition nodes

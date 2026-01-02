@@ -405,7 +405,7 @@ $body = @{
   first_name = 'Jane'
   last_name = 'Smith'
   role = 'employee'
-  tenant_id = 'local-tenant-001'
+  tenant_id = '6cb4c008-4847-426a-9a2e-918ad70e7b69'
   password = 'TempPassword2024!'
 } | ConvertTo-Json
 

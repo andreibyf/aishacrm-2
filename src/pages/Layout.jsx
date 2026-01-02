@@ -92,6 +92,7 @@ import GlobalDetailViewer from "../components/shared/GlobalDetailViewer";
 import { getTenantBrandingFast } from "@/api/entities";
 import { getDashboardBundleFast } from "@/api/dashboard";
 import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
+import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 import EmployeeScopeFilter from "../components/shared/EmployeeScopeFilter";
 import { EmployeeScopeProvider } from "../components/shared/EmployeeScopeContext";
 import FooterBrand from "../components/shared/FooterBrand";
@@ -99,7 +100,6 @@ import {
   initAgentSdkGuard,
   resetAgentSdkGuard,
 } from "@/components/ai/agentSdkGuard";
-import ClearChatButton from "../components/ai/ClearChatButton";
 import { clearChat } from "../components/ai/chatUtils";
 import AiSidebar from "@/components/ai/AiSidebar";
 import AiAssistantLauncher from "@/components/ai/AiAssistantLauncher.jsx";
@@ -148,11 +148,9 @@ const navItems = [
 const secondaryNavItems = [
   { href: "Documentation", icon: BookOpen, label: "Documentation" }, // Changed icon to BookOpen
   {
-    href: "Agent",
+    href: "DeveloperAI",
     icon: Bot,
-    label: "AI Agent",
-    isAvatar: true,
-    avatarUrl: "/assets/aisha-executive-portrait.jpg",
+    label: "Developer AI",
   },
   {
     href: "ClientRequirements",
@@ -200,7 +198,7 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
   if (superadminOnlyPages.has(pageName) && user.role !== 'superadmin') return false;
 
   const pagesAllowedWithoutCRM = new Set([
-    "Documentation","Agent","Settings","AuditLog","UnitTests","ClientRequirements",
+    "Documentation","DeveloperAI","Settings","AuditLog","UnitTests","ClientRequirements",
   ]);
   if (user.crm_access === false) return pagesAllowedWithoutCRM.has(pageName);
 
@@ -223,7 +221,7 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
     Integrations: 'Integrations',
     PaymentPortal: 'Payment Portal',
     AICampaigns: 'AI Campaigns',
-    Agent: 'AI Agent',
+    DeveloperAI: 'Developer AI',
     Utilities: 'Utilities',
     ClientOnboarding: 'Client Onboarding',
     Workflows: 'Workflows',
@@ -269,8 +267,9 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
   }
 
   if ((user.role === 'admin' || user.role === 'superadmin') && (
-      pageName === 'Documentation' || pageName === 'AuditLog' || pageName === 'Tenants' || pageName === 'Agent' ||
+      pageName === 'Documentation' || pageName === 'AuditLog' || pageName === 'Tenants' ||
     pageName === 'UnitTests' || pageName === 'ClientRequirements' || pageName === 'ConstructionProjects')) return true;
+  if (user.role === 'superadmin' && pageName === 'DeveloperAI') return true;
   if ((user.role === 'superadmin' || user.role === 'admin') && !selectedTenantId) return true;
 
   const defaultPermissions = getDefaultNavigationPermissions(user.role);
@@ -317,7 +316,7 @@ function getDefaultNavigationPermissions(role) {
       Integrations: true,
       PaymentPortal: true,
       AICampaigns: true,
-      Agent: true,
+      DeveloperAI: true,
       Tenants: true,
       Settings: true,
       Documentation: true,
@@ -350,7 +349,6 @@ function getDefaultNavigationPermissions(role) {
       Integrations: true,
       PaymentPortal: true,
       AICampaigns: true,
-      Agent: true,
       Tenants: true,
       Settings: true,
       Documentation: true,
@@ -383,7 +381,6 @@ function getDefaultNavigationPermissions(role) {
       Integrations: true,
       PaymentPortal: false,
       AICampaigns: true,
-      Agent: true,
       Tenants: false,
       Settings: true,
       Documentation: true,
@@ -407,7 +404,6 @@ function getDefaultNavigationPermissions(role) {
       Activities: true,
       Calendar: true,
       Documentation: true,
-      Agent: true,
       Settings: true, // All users need access to their profile settings
       ClientOnboarding: false,
       ClientRequirements: false,
@@ -419,11 +415,10 @@ function getDefaultNavigationPermissions(role) {
   // Merge the basePermissions with role-specific permissions, ensuring role-specific explicit 'true's override 'false'
   const rolePermissions = { ...(defaults[role] || defaults.employee) };
 
-  // Explicitly ensure 'Settings', 'Documentation', 'Agent' are accessible for all roles if CRM access is true
+  // Explicitly ensure 'Settings', 'Documentation' are accessible for all roles if CRM access is true
   // (CRM access check is done in hasPageAccess first)
   rolePermissions.Settings = true; // Always allow Settings for profile access
   rolePermissions.Documentation = rolePermissions.Documentation || true;
-  rolePermissions.Agent = rolePermissions.Agent || true;
   rolePermissions.ClientRequirements = rolePermissions.ClientRequirements ||
     false; // NEW: Explicitly manage ClientRequirements access
 
@@ -521,6 +516,19 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   // Ensure we know when auth cookies are available for backend calls
   const { authCookiesReady } = useAuthCookiesReady();
   const [userError, setUserError] = React.useState(null);
+  
+  // Proactive token refresh management (auto-refreshes before expiry)
+  // TEMPORARILY DISABLED - debugging initialization issue
+  // const handleSessionExpired = React.useCallback(() => {
+  //   // Clear all app state on session expiration
+  //   localStorage.clear();
+  //   navigate('/?session_expired=true');
+  // }, [navigate]);
+  
+  // const { isRefreshing } = useTokenRefresh({
+  //   enabled: !!user && authCookiesReady, // Only run when user is logged in
+  //   onSessionExpired: handleSessionExpired
+  // });
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
   const [selectedTenant, setSelectedTenant] = React.useState(null);
   const [moduleSettings, setModuleSettings] = React.useState([]);
@@ -2377,6 +2385,15 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
               <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
                 <p className="text-sm text-green-700 text-center">
                   ✓ Password updated successfully! Please sign in with your new password.
+                </p>
+              </div>
+            )}
+            
+            {/* Session expired message */}
+            {new URLSearchParams(window.location.search).get('session_expired') === 'true' && (
+              <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-md">
+                <p className="text-sm text-amber-700 text-center">
+                  ⚠️ Your session has expired. Please sign in again.
                 </p>
               </div>
             )}

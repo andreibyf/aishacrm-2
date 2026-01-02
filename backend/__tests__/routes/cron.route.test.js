@@ -23,13 +23,13 @@ async function createCronJob(payload) {
 }
 
 async function getCronJob(id) {
-  const res = await fetch(`${BASE_URL}/api/cron/jobs/${id}`);
+  const res = await fetch(`${BASE_URL}/api/cron/jobs/${id}?tenant_id=${TENANT_ID}`);
   const json = await res.json();
   return { status: res.status, json };
 }
 
 async function updateCronJob(id, payload) {
-  const res = await fetch(`${BASE_URL}/api/cron/jobs/${id}`, {
+  const res = await fetch(`${BASE_URL}/api/cron/jobs/${id}?tenant_id=${TENANT_ID}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -39,7 +39,7 @@ async function updateCronJob(id, payload) {
 }
 
 async function deleteCronJob(id) {
-  const res = await fetch(`${BASE_URL}/api/cron/jobs/${id}`, { method: 'DELETE' });
+  const res = await fetch(`${BASE_URL}/api/cron/jobs/${id}?tenant_id=${TENANT_ID}`, { method: 'DELETE' });
   return res.status;
 }
 
@@ -65,8 +65,8 @@ after(async () => {
   }
 });
 
-(SHOULD_RUN ? test : test.skip)('GET /api/cron/jobs returns 200', async () => {
-  const res = await fetch(`${BASE_URL}/api/cron/jobs`);
+(SHOULD_RUN ? test : test.skip)('GET /api/cron/jobs returns 200 with tenant_id', async () => {
+  const res = await fetch(`${BASE_URL}/api/cron/jobs?tenant_id=${TENANT_ID}`);
   assert.equal(res.status, 200, 'expected 200 from cron jobs list');
   const json = await res.json();
   assert.equal(json.status, 'success');
@@ -81,7 +81,7 @@ after(async () => {
 });
 
 (SHOULD_RUN ? test : test.skip)('GET /api/cron/jobs supports is_active filter', async () => {
-  const res = await fetch(`${BASE_URL}/api/cron/jobs?is_active=true`);
+  const res = await fetch(`${BASE_URL}/api/cron/jobs?tenant_id=${TENANT_ID}&is_active=true`);
   assert.equal(res.status, 200, 'expected 200 with is_active filter');
   const json = await res.json();
   assert.ok(Array.isArray(json.data?.jobs), 'expected jobs array');

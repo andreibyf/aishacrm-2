@@ -24,3 +24,8 @@ paths-ignore:
   - pages/**
   # Deno-style/browser function stubs that are not valid Node/Vite modules and trigger parser noise
   - src/functions/**
+  # REST Client test files (.http) are not JavaScript
+  - api-tests/**
+  - "**/*.http"
+  # Archive contains legacy/unused code
+  - archive/**

@@ -1112,7 +1112,7 @@ Fix `/api/ai/snapshot-internal` endpoint to properly resolve tenant context so B
 **Resolution Summary**:
 - Added tenant resolution to snapshot endpoint using canonical resolver with PGRST205 handling
 - Flattened accounts schema to align dev database with production (phone, email, assigned_to, address fields)
-- Updated 30+ test files from legacy slug "local-tenant-001" to UUID format "a11dfb63-4b18-4eb8-872e-747af2e37c46"
+- Updated 30+ test files from legacy slug "6cb4c008-4847-426a-9a2e-918ad70e7b69" to UUID format "a11dfb63-4b18-4eb8-872e-747af2e37c46"
 - Removed description field from accounts routes (unstructured data belongs in metadata JSONB)
 - Validated end-to-end: AI assistant successfully retrieves CRM data via Braid tools
 

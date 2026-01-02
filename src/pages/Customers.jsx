@@ -47,6 +47,7 @@ import {
 import StatusHelper from "../components/shared/StatusHelper";
 import { ComponentHelp } from "../components/shared/ComponentHelp";
 import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
+import { useLoadingToast } from "@/hooks/useLoadingToast";
 import { formatIndustry } from "@/utils/industryUtils";
 import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 
@@ -55,6 +56,7 @@ const _delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function CustomersPage() {
   const { plural: customersLabel, singular: customerLabel } = useEntityLabel('accounts');
+  const loadingToast = useLoadingToast();
   const [customers, setCustomers] = useState([]);
   const [, setContacts] = useState([]);
   const [users, setUsers] = useState([]);
@@ -330,6 +332,7 @@ export default function CustomersPage() {
   const loadAccounts = useCallback(async () => {
     if (!user) return;
 
+    loadingToast.showLoading();
     setLoading(true);
     try {
       const currentTenantFilter = getTenantFilter();
@@ -392,8 +395,10 @@ export default function CustomersPage() {
       const paginatedAccounts = filtered.slice(startIndex, endIndex);
 
       setCustomers(paginatedAccounts);
+      loadingToast.showSuccess(`${customersLabel} loaded! ✨`);
     } catch (error) {
       console.error("[Accounts] Failed to load accounts:", error);
+      loadingToast.showError(`Failed to load ${customersLabel.toLowerCase()}`);
       toast.error("Failed to load accounts");
       setCustomers([]);
     } finally {
@@ -411,6 +416,8 @@ export default function CustomersPage() {
     pageSize,
     cachedRequest,
     getTenantFilter,
+    loadingToast,
+    customersLabel,
   ]);
 
   // Load accounts when dependencies change and data is ready

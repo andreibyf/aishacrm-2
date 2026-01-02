@@ -7,6 +7,7 @@ import express from 'express';
 import { validateTenantScopedId } from '../lib/validation.js';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
+import { cacheList } from '../lib/cacheMiddleware.js';
 
 /**
  * @module routes/cashflow
@@ -22,18 +23,25 @@ export default function createCashFlowRoutes(_pgPool) {
   router.use(enforceEmployeeDataScope);
 
   // GET /api/cashflow - List cash flow records
-  router.get('/', async (req, res) => {
+  router.get('/', cacheList('cashflow', 180), async (req, res) => {
     try {
-      let { tenant_id, limit = 50, offset = 0, type } = req.query;
+      const { limit = 50, offset = 0, type } = req.query;
+
+      // Enforce tenant isolation
+      const tenant_id = req.tenant?.id || req.query.tenant_id;
+      if (!tenant_id) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'tenant_id is required'
+        });
+      }
 
       let query = supabase
         .from('cash_flow')
         .select('*', { count: 'exact' })
+        .eq('tenant_id', tenant_id)  // Always enforce tenant scoping
         .order('transaction_date', { ascending: false });
 
-      if (tenant_id) {
-        query = query.eq('tenant_id', tenant_id);
-      }
       if (type) {
         query = query.eq('type', type);
       }

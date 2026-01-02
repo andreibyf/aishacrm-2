@@ -1,11 +1,11 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { BizDevSource, Lead, Contact, Account } from '@/api/entities';
 import FunnelChart3D from './FunnelChart3D';
 import { useEntityLabel } from '@/components/shared/EntityLabelsContext';
 import { useUser } from '@/components/shared/useUser';
 import { useAuthCookiesReady } from '@/components/shared/useAuthCookiesReady';
 import { Loader2 } from 'lucide-react';
+import { getDashboardFunnelCounts } from '@/api/fallbackFunctions';
 
 /**
  * Sales Funnel Widget - Displays 3D cone funnel with real counts.
@@ -23,6 +23,7 @@ export default function SalesFunnelWidget({ tenantFilter = {}, showTestData = tr
     contacts: 0,
     accounts: 0,
   });
+  const loadingRef = useRef(false);
 
   const { loading: userLoading } = useUser();
   const { authCookiesReady } = useAuthCookiesReady();
@@ -41,45 +42,47 @@ export default function SalesFunnelWidget({ tenantFilter = {}, showTestData = tr
       return;
     }
 
-    const loadCounts = async () => {
-      // Guard: Don't fetch if no tenant_id is present
-      if (!tenantFilter?.tenant_id) {
-        setCounts({ sources: 0, leads: 0, contacts: 0, accounts: 0 });
-        setLoading(false);
-        return;
-      }
+    // Guard: Don't fetch if no tenant_id is present
+    if (!tenantFilter?.tenant_id) {
+      setCounts({ sources: 0, leads: 0, contacts: 0, accounts: 0 });
+      setLoading(false);
+      return;
+    }
 
+    // Prevent duplicate simultaneous requests
+    if (loadingRef.current) {
+      return;
+    }
+
+    const loadCounts = async () => {
+      loadingRef.current = true;
       setLoading(true);
       try {
-        // Build filter with test data handling
-        const filter = { ...tenantFilter };
-        if (!showTestData) {
-          filter.is_test_data = false;
-        }
-
-        // Fetch counts in parallel
-        const [sourcesData, leadsData, contactsData, accountsData] = await Promise.all([
-          BizDevSource.filter(filter, 'id', 10000).catch(() => []),
-          Lead.filter(filter, 'id', 10000).catch(() => []),
-          Contact.filter(filter, 'id', 10000).catch(() => []),
-          Account.filter(filter, 'id', 10000).catch(() => []),
-        ]);
-
-        setCounts({
-          sources: Array.isArray(sourcesData) ? sourcesData.length : 0,
-          leads: Array.isArray(leadsData) ? leadsData.length : 0,
-          contacts: Array.isArray(contactsData) ? contactsData.length : 0,
-          accounts: Array.isArray(accountsData) ? accountsData.length : 0,
+        // Use the new pre-computed dashboard funnel counts (90%+ faster)
+        const data = await getDashboardFunnelCounts({ 
+          tenant_id: tenantFilter.tenant_id,
+          include_test_data: showTestData 
         });
+
+        if (data?.funnel) {
+          const suffix = showTestData ? 'total' : 'real';
+          setCounts({
+            sources: data.funnel[`sources_${suffix}`] || 0,
+            leads: data.funnel[`leads_${suffix}`] || 0,
+            contacts: data.funnel[`contacts_${suffix}`] || 0,
+            accounts: data.funnel[`accounts_${suffix}`] || 0,
+          });
+        }
       } catch (error) {
         console.error('[SalesFunnelWidget] Failed to load counts:', error);
       } finally {
         setLoading(false);
+        loadingRef.current = false;
       }
     };
 
     loadCounts();
-  }, [tenantFilter, showTestData, userLoading, authCookiesReady]);
+  }, [tenantFilter?.tenant_id, showTestData, userLoading, authCookiesReady]);
 
   // Build funnel data using entity labels
   const funnelData = useMemo(() => [
@@ -92,7 +95,7 @@ export default function SalesFunnelWidget({ tenantFilter = {}, showTestData = tr
   const totalRecords = counts.sources + counts.leads + counts.contacts + counts.accounts;
 
   return (
-    <Card className="bg-slate-800 border-slate-700">
+    <Card className="bg-slate-800 border-slate-700 h-full flex flex-col">
       <CardHeader className="pb-2">
         <CardTitle className="text-lg font-semibold text-slate-100 flex items-center justify-between">
           <span>Sales Funnel</span>
@@ -113,13 +116,13 @@ export default function SalesFunnelWidget({ tenantFilter = {}, showTestData = tr
             No records to display
           </div>
         ) : (
-          <div className="flex justify-center">
+          <div className="flex justify-center items-center h-full">
             <FunnelChart3D 
               data={funnelData} 
-              width={480} 
-              height={340}
-              minRadius={30}
-              maxRadius={130}
+              width={550} 
+              height={450}
+              minRadius={50}
+              maxRadius={160}
             />
           </div>
         )}

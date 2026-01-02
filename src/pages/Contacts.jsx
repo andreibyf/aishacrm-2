@@ -38,6 +38,7 @@ import ContactToLeadDialog from "../components/contacts/ContactToLeadDialog";
 import TagFilter from "../components/shared/TagFilter";
 import { useEmployeeScope } from "../components/shared/EmployeeScopeContext";
 import RefreshButton from "../components/shared/RefreshButton";
+import { useLoadingToast } from "@/hooks/useLoadingToast";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -62,6 +63,7 @@ import { useAiShaEvents } from "@/hooks/useAiShaEvents";
 export default function ContactsPage() {
   const { plural: contactsLabel, singular: contactLabel } = useEntityLabel('contacts');
   const { getCardLabel, isCardVisible } = useStatusCardPreferences();
+  const loadingToast = useLoadingToast();
   const [contacts, setContacts] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [users, setUsers] = useState([]);
@@ -233,11 +235,13 @@ export default function ContactsPage() {
     try {
       const scopedFilter = getTenantFilter();
 
+      // Include limit parameter to fetch all contacts (not just default 50)
+      const filterWithLimit = { ...scopedFilter, limit: 10000 };
       const allContacts = await cachedRequest(
         "Contact",
         "filter",
-        { filter: scopedFilter },
-        () => Contact.filter(scopedFilter),
+        { filter: filterWithLimit },
+        () => Contact.filter(filterWithLimit),
       );
 
       const stats = {
@@ -280,6 +284,7 @@ export default function ContactsPage() {
       return;
     }
 
+    loadingToast.showLoading();
     setLoading(true);
     logger.info("Loading contacts with applied filters", "ContactsPage", {
       searchTerm,
@@ -303,10 +308,9 @@ export default function ContactsPage() {
             { last_name: { $icontains: searchTerm } },
             { email: { $icontains: searchTerm } },
             { phone: { $icontains: searchTerm } },
-            // Use actual column names present in contacts table
-            { title: { $icontains: searchTerm } },
+            { job_title: { $icontains: searchTerm } },
             { department: { $icontains: searchTerm } },
-            { description: { $icontains: searchTerm } },
+            { notes: { $icontains: searchTerm } },
           ],
         };
         scopedFilter.filter = JSON.stringify(searchFilterObj);
@@ -318,7 +322,7 @@ export default function ContactsPage() {
         if (scopedFilter.filter) {
           try {
             filterObj = JSON.parse(scopedFilter.filter);
-          } catch (e) { /* ignore */ }
+          } catch (_e) { /* ignore */ }
         }
 
         // Merge $or conditions
@@ -345,11 +349,13 @@ export default function ContactsPage() {
         );
       }
 
+      // Include limit parameter to fetch all contacts (not just default 50)
+      const filterWithLimit = { ...scopedFilter, limit: 10000 };
       const allContacts = await cachedRequest(
         "Contact",
         "filter",
-        { filter: scopedFilter },
-        () => Contact.filter(scopedFilter),
+        { filter: filterWithLimit },
+        () => Contact.filter(filterWithLimit),
       );
 
       let filtered = allContacts || [];
@@ -396,8 +402,10 @@ export default function ContactsPage() {
           selectedTags,
         },
       );
+      loadingToast.showSuccess(`${contactsLabel} loaded! ✨`);
     } catch (error) {
       console.error("[Contacts] Failed to load contacts:", error);
+      loadingToast.showError(`Failed to load ${contactsLabel.toLowerCase()}`);
       toast.error("Failed to load contacts");
       setContacts([]);
       logger.error("Failed to load contacts", "ContactsPage", {
@@ -430,6 +438,8 @@ export default function ContactsPage() {
     getTenantFilter,
     selectedEmail,
     logger,
+    loadingToast,
+    contactsLabel,
   ]);
 
   useEffect(() => {
@@ -520,17 +530,38 @@ export default function ContactsPage() {
     });
     try {
       await Contact.delete(id);
-      // Optimistically update UI
-      setContacts((prev) => prev.filter((c) => c.id !== id));
-      setTotalItems((prev) => (prev > 0 ? prev - 1 : 0));
-      toast.success("Contact deleted successfully");
-
-      // Small delay to let optimistic update settle
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
       clearCacheByKey("Contact");
-      loadContacts();
-      loadTotalStats();
+      
+      // Force reload with fresh data (bypass cache)
+      const scopedFilter = getTenantFilter();
+      const filterWithLimit = { ...scopedFilter, limit: 10000 };
+      const freshContacts = await Contact.filter(filterWithLimit);
+      
+      let filtered = freshContacts || [];
+      
+      // Apply client-side filters
+      if (statusFilter !== "all") {
+        filtered = filtered.filter((contact) => contact.status === statusFilter);
+      }
+      
+      if (selectedTags.length > 0) {
+        filtered = filtered.filter((contact) =>
+          Array.isArray(contact.tags) &&
+          selectedTags.every((tag) => contact.tags.includes(tag))
+        );
+      }
+      
+      filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      setTotalItems(filtered.length);
+      
+      const startIndex = (currentPage - 1) * pageSize;
+      const endIndex = startIndex + pageSize;
+      const paginatedContacts = filtered.slice(startIndex, endIndex);
+      
+      setContacts(paginatedContacts);
+      await loadTotalStats();
+      
+      toast.success("Contact deleted successfully");
       logger.info("Contact deleted successfully", "ContactsPage", {
         contactId: id,
         userId: user?.id || user?.email,
@@ -546,6 +577,7 @@ export default function ContactsPage() {
       });
       // Reload on error to ensure consistency
       loadContacts();
+      loadTotalStats();
     }
   };
 
@@ -572,19 +604,52 @@ export default function ContactsPage() {
       userId: user?.id || user?.email,
     });
 
-    let successCount = 0;
-    let failCount = 0;
     const contactIds = Array.from(selectedContacts);
-
-    for (const id of contactIds) {
-      try {
-        await Contact.delete(id);
-        successCount++;
-      } catch (error) {
-        console.error(`Error deleting contact ${id}:`, error);
-        failCount++;
+    const results = await Promise.allSettled(
+      contactIds.map((id) => Contact.delete(id))
+    );
+    
+    const successCount = results.filter(r => r.status === 'fulfilled').length;
+    const failCount = results.filter(r => {
+      if (r.status === 'rejected') {
+        const is404 = r.reason?.response?.status === 404;
+        if (is404) return false; // Don't count 404s as failures
+        return true;
       }
+      return false;
+    }).length;
+
+    setSelectedContacts(new Set());
+    clearCacheByKey("Contact");
+    
+    // Force reload with fresh data (bypass cache)
+    const scopedFilter = getTenantFilter();
+    const filterWithLimit = { ...scopedFilter, limit: 10000 };
+    const freshContacts = await Contact.filter(filterWithLimit);
+    
+    let filtered = freshContacts || [];
+    
+    // Apply client-side filters
+    if (statusFilter !== "all") {
+      filtered = filtered.filter((contact) => contact.status === statusFilter);
     }
+    
+    if (selectedTags.length > 0) {
+      filtered = filtered.filter((contact) =>
+        Array.isArray(contact.tags) &&
+        selectedTags.every((tag) => contact.tags.includes(tag))
+      );
+    }
+    
+    filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    setTotalItems(filtered.length);
+    
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    const paginatedContacts = filtered.slice(startIndex, endIndex);
+    
+    setContacts(paginatedContacts);
+    await loadTotalStats();
 
     if (successCount > 0) {
       toast.success(`Successfully deleted ${successCount} contact${successCount !== 1 ? 's' : ''}`);
@@ -603,21 +668,6 @@ export default function ContactsPage() {
         userId: user?.id || user?.email,
       });
     }
-
-    // Optimistically remove from UI immediately
-    const deletedIds = new Set(contactIds.slice(0, successCount));
-    setContacts((prev) => prev.filter((c) => !deletedIds.has(c.id)));
-    setTotalItems((t) => Math.max(0, (t || 0) - successCount));
-    setSelectedContacts(new Set());
-    
-    // Refresh in background to ensure sync
-    setTimeout(async () => {
-      clearCacheByKey("Contact");
-      await Promise.all([
-        loadContacts(),
-        loadTotalStats(),
-      ]);
-    }, 500);
   };
 
   const handleBulkStatusChange = async (newStatus) => {
@@ -1183,18 +1233,18 @@ export default function ContactsPage() {
                           />
                         </td>
                         <td className="px-4 py-3">
-                          <span className="text-slate-300 text-sm font-medium">
+                          <span className="text-slate-300 text-base font-medium">
                             {contact.first_name} {contact.last_name}
                           </span>
                         </td>
                         <td className="px-4 py-3">
                           {contact.email
                             ? (
-                              <span className="text-slate-300 text-sm">
+                              <span className="text-slate-300 text-base">
                                 {contact.email}
                               </span>
                             )
-                            : <span className="text-slate-500 text-sm">-</span>}
+                            : <span className="text-slate-500 text-base">-</span>}
                         </td>
                         <td className="px-4 py-3">
                           {contact.phone
@@ -1204,10 +1254,10 @@ export default function ContactsPage() {
                                 phone={contact.phone}
                                 contactName={`${contact.first_name} ${contact.last_name}`}
                                 enableCalling={true}
-                                className="text-slate-300 hover:text-blue-400 text-sm"
+                                className="text-slate-300 hover:text-blue-400 text-base"
                               />
                             )
-                            : <span className="text-slate-500 text-sm">-</span>}
+                            : <span className="text-slate-500 text-base">-</span>}
                         </td>
                         <td className="px-4 py-3">
                           {contact.account_id && account
@@ -1220,36 +1270,36 @@ export default function ContactsPage() {
                                     account.name,
                                   );
                                 }}
-                                className="text-blue-400 hover:text-blue-300 hover:underline text-sm"
+                                className="text-blue-400 hover:text-blue-300 hover:underline text-base"
                               >
                                 {account.name}
                               </button>
                             )
                             : contact.account_name
                             ? (
-                              <span className="text-slate-300 text-sm">
+                              <span className="text-slate-300 text-base">
                                 {contact.account_name}
                               </span>
                             )
-                            : <span className="text-slate-500 text-sm">-</span>}
+                            : <span className="text-slate-500 text-base">-</span>}
                         </td>
                         <td className="px-4 py-3">
                           {contact.job_title
                             ? (
-                              <span className="text-slate-300 text-sm">
+                              <span className="text-slate-300 text-base">
                                 {contact.job_title}
                               </span>
                             )
-                            : <span className="text-slate-500 text-sm">-</span>}
+                            : <span className="text-slate-500 text-base">-</span>}
                         </td>
                         <td className="px-4 py-3">
                           {assignedName
                             ? (
-                              <span className="text-slate-300 text-sm">
+                              <span className="text-slate-300 text-base">
                                 {assignedName}
                               </span>
                             )
-                            : <span className="text-slate-500 text-sm">-</span>}
+                            : <span className="text-slate-500 text-base">-</span>}
                         </td>
                         <td className="px-4 py-3">
                           <Badge

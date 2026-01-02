@@ -47,7 +47,7 @@ Successfully migrated from Base44 OAuth authentication to Supabase Email/Passwor
   - Email: `your-admin-email@example.com`
   - Role: `SuperAdmin` (normalized to `superadmin`)
   - Access Level: `superadmin`
-  - Tenant: `local-tenant-001`
+  - Tenant: `6cb4c008-4847-426a-9a2e-918ad70e7b69`
   - **15 Permissions**: CRM, Developer, Admin, SuperAdmin, Full System Access, Manage All Tenants, Manage All Users, View All Data, Export All Data, Delete Data, Manage Billing, Manage Integrations, Manage API Keys, View System Logs, Manage Security
 
 ### 5. God Mode Permissions System
@@ -216,7 +216,7 @@ If continuing Base44 migration:
 
 ### 1. Fix Tenant Display in Client Management
 - Issue: Tenants page shows "No tenants configured yet"
-- Tenant exists in database: `local-tenant-001` (Local Development Tenant)
+- Tenant exists in database: `6cb4c008-4847-426a-9a2e-918ad70e7b69` (Local Development Tenant)
 - Need to debug `Tenant.list()` call or update page data handling
 
 ### 2. Implement Navigation Permissions UI
@@ -249,14 +249,14 @@ If continuing Base44 migration:
 - **Email**: (configure in Supabase Auth)
 - **Password**: (configure in Supabase Auth)
 - **Role**: superadmin
-- **Tenant**: local-tenant-001
+- **Tenant**: 6cb4c008-4847-426a-9a2e-918ad70e7b69
 - **Access**: Full system access (god mode)
 
 ### Test User Account (if created)
 - **Email**: (your test email)
 - **Password**: (your test password)
 - **Role**: admin
-- **Tenant**: local-tenant-001
+- **Tenant**: 6cb4c008-4847-426a-9a2e-918ad70e7b69
 - **Access**: Admin access (no god mode)
 
 ---

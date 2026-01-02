@@ -114,14 +114,16 @@ fn convertLeadToAccount(
 fn listLeads(
   tenant: String,
   status: String,
+  account_id: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
   let url = "/api/v2/leads";
   
-  // Build params with optional status filter
+  // Build params with optional status and account_id filters
   let params = {
     tenant_id: tenant,
     status: status,
+    account_id: account_id,
     limit: limit
   };
   
@@ -160,7 +162,8 @@ fn searchLeads(
   let url = "/api/v2/leads";
   let params = {
     tenant_id: tenant,
-    limit: limit
+    limit: limit,
+    query: query
   };
   
   let response = http.get(url, { params: params });
@@ -170,6 +173,31 @@ fn searchLeads(
   return match response {
     Ok{value} => Ok(value.data.leads),
     Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_leads", query: query }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+// Search leads by status - returns full lead details for leads matching a specific status
+// Use this when user asks about leads with a specific status (e.g. "my warm leads", "new leads")
+// Status values: new, contacted, qualified, warm, hot, cold, lost, converted
+fn searchLeadsByStatus(
+  tenant: String,
+  status: String,
+  limit: Number
+) -> Result<Array, CRMError> !net {
+  let url = "/api/v2/leads";
+  let params = {
+    tenant_id: tenant,
+    status: status,
+    limit: limit
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  // Returns full lead details including name, company, email, phone, etc.
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_leads_by_status", status: status }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }

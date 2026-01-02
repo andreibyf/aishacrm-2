@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { processChatCommand } from '@/ai/engine/processChatCommand';
-import { processDeveloperCommand } from '@/api/functions';
+import { processChatCommand, processDeveloperCommand } from '@/api/functions';
 import { addHistoryEntry, getRecentHistory, getSuggestions } from '@/lib/suggestionEngine';
 import { useUser } from '@/components/shared/useUser';
+import * as conversations from '@/api/conversations';
 
 const ROUTE_CONTEXT_RULES = [
   { test: /^\/?$/, routeName: 'dashboard:home', entity: 'dashboard' },
@@ -101,11 +101,13 @@ export function AiSidebarProvider({ children }) {
   const [realtimeMode, setRealtimeMode] = useState(false);
   const [isDeveloperMode, setIsDeveloperMode] = useState(false); // Developer Mode for superadmins
   const [suggestions, setSuggestions] = useState([]);
+  const [conversationId, setConversationId] = useState(null); // Track database conversation for context persistence
   // Session entity context: maps entity names/references to their IDs for follow-up questions
   // Format: { "jack lemon": { id: "uuid", type: "lead", data: {...} }, ... }
   const [sessionEntityContext, setSessionEntityContext] = useState({});
   const messagesRef = useRef(messages);
   const userRef = useRef(user);
+  const conversationIdRef = useRef(conversationId);
   const suggestionContextRef = useRef(buildSuggestionContext());
   const suggestionIndexRef = useRef(new Map());
   const sessionContextRef = useRef({});
@@ -119,10 +121,48 @@ export function AiSidebarProvider({ children }) {
     messagesRef.current = messages;
   }, [messages]);
 
+  // Keep conversationIdRef in sync
+  useEffect(() => {
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
+
   // Keep sessionContextRef in sync
   useEffect(() => {
     sessionContextRef.current = sessionEntityContext;
   }, [sessionEntityContext]);
+
+  // Create initial conversation on mount (requires tenant context)
+  useEffect(() => {
+    let mounted = true;
+    if (!user) return; // Wait for user to be loaded
+    
+    // Require tenant_id - SuperAdmins should assign themselves to a tenant via User Management
+    if (!user.tenant_id) {
+      console.log('[AI Sidebar] Skipping conversation creation - no tenant_id (SuperAdmin can assign themselves to a tenant in User Management)');
+      return;
+    }
+
+    (async () => {
+      try {
+        const newConv = await conversations.createConversation({
+          agent_name: 'aisha_sidebar',
+          metadata: {
+            name: 'AiSHA Sidebar Session',
+            description: 'Persistent sidebar chat with context tracking',
+            interface: 'sidebar'
+          }
+        });
+        if (mounted) {
+          setConversationId(newConv.id);
+          console.log('[AI Sidebar] Initial conversation created:', newConv.id);
+        }
+      } catch (err) {
+        console.error('[AI Sidebar] Failed to create initial conversation:', err);
+      }
+    })();
+
+    return () => { mounted = false; };
+  }, [user]); // Create conversation once user is loaded with tenant context
 
   // Extract entities from AI response data and add to session context
   const extractAndStoreEntities = useCallback((data, entityType) => {
@@ -192,7 +232,37 @@ export function AiSidebarProvider({ children }) {
   // Build context summary for AI (names -> IDs)
   const buildSessionContextSummary = useCallback(() => {
     const ctx = sessionContextRef.current;
-    if (!ctx || Object.keys(ctx).length === 0) return null;
+    
+    // If no session context from previous AI responses, try to extract from current URL
+    // This handles the case where user navigates directly to an entity page and asks a question
+    if (!ctx || Object.keys(ctx).length === 0) {
+      try {
+        const pathname = window.location?.pathname || '';
+        // Match patterns like /leads/:id, /accounts/:id, /contacts/:id, /opportunities/:id
+        const entityPatterns = [
+          { regex: /^\/leads\/([a-f0-9-]{36})(?:\/|$)/i, type: 'lead' },
+          { regex: /^\/accounts\/([a-f0-9-]{36})(?:\/|$)/i, type: 'account' },
+          { regex: /^\/contacts\/([a-f0-9-]{36})(?:\/|$)/i, type: 'contact' },
+          { regex: /^\/opportunities\/([a-f0-9-]{36})(?:\/|$)/i, type: 'opportunity' }
+        ];
+        
+        for (const pattern of entityPatterns) {
+          const match = pathname.match(pattern.regex);
+          if (match && match[1]) {
+            console.log('[AI Sidebar] Extracted entity from URL:', { type: pattern.type, id: match[1] });
+            return [{
+              id: match[1],
+              type: pattern.type,
+              name: `Current ${pattern.type}`,
+              aliases: []
+            }];
+          }
+        }
+      } catch (e) {
+        console.warn('[AI Sidebar] Failed to extract entity from URL:', e);
+      }
+      return null;
+    }
 
     // Dedupe by ID and create a summary
     const byId = {};
@@ -229,11 +299,27 @@ export function AiSidebarProvider({ children }) {
   const closeSidebar = useCallback(() => setIsOpen(false), []);
   const toggleSidebar = useCallback(() => setIsOpen((prev) => !prev), []);
 
-  const resetThread = useCallback(() => {
+  const resetThread = useCallback(async () => {
     setMessages([{ ...welcomeMessage, id: createMessageId(), timestamp: Date.now() }]);
     setError(null);
     setSessionEntityContext({}); // Clear session context on reset
     refreshSuggestions();
+    
+    // Create new conversation for fresh context
+    try {
+      const newConv = await conversations.createConversation({
+        agent_name: 'aisha_sidebar',
+        metadata: {
+          name: 'AiSHA Sidebar Session',
+          description: 'Persistent sidebar chat with context tracking',
+          interface: 'sidebar'
+        }
+      });
+      setConversationId(newConv.id);
+      console.log('[AI Sidebar] Created new conversation:', newConv.id);
+    } catch (err) {
+      console.error('[AI Sidebar] Failed to create conversation:', err);
+    }
   }, [refreshSuggestions]);
 
   const clearError = useCallback(() => setError(null), []);
@@ -276,6 +362,7 @@ export function AiSidebarProvider({ children }) {
       if (isDeveloperMode && userRef.current?.role === 'superadmin') {
         const devResponse = await processDeveloperCommand({
           message: text,
+          messages: chatHistory, // ADD CONVERSATION HISTORY FOR CONTEXT
           userRole: userRef.current?.role,
           userEmail: userRef.current?.email
         });
@@ -300,23 +387,31 @@ export function AiSidebarProvider({ children }) {
           text,
           history: chatHistory,
           context,
-          sessionEntities: sessionContext
+          sessionEntities: sessionContext,
+          conversation_id: conversationIdRef.current // Pass conversation ID for backend context tracking
         });
       }
 
+      // Transform backend response format to frontend expected format
+      const backendData = result.data || {};
+      
+      // Use backend-generated message ID if available (enables feedback feature)
+      const savedMessageId = backendData.savedMessage?.id || null;
+      const savedUserMessageId = backendData.savedUserMessage?.id || null;
+      
       const assistantMessage = {
-        id: createMessageId(),
+        id: savedMessageId || createMessageId(), // Prefer backend ID for feedback
         role: 'assistant',
         content:
-          result.assistantMessage.content || 'I could not find any details yet, but I am ready to keep helping.',
+          backendData.response || result.assistantMessage?.content || 'I could not find any details yet, but I am ready to keep helping.',
         timestamp: Date.now(),
-        actions: result.assistantMessage.actions || [],
-        data: result.assistantMessage.data || null,
-        data_summary: result.assistantMessage.data_summary,
-        mode: result.assistantMessage.mode || 'read_only',
+        actions: result.assistantMessage?.actions || [],
+        data: result.assistantMessage?.data || null,
+        data_summary: result.assistantMessage?.data_summary,
+        mode: result.assistantMessage?.mode || 'read_only',
         metadata: {
-          route: result.route,
-          classification: result.classification,
+          route: backendData.route || result.route,
+          classification: backendData.classification || result.classification,
           localAction: result.localAction || null
         }
       };
@@ -325,7 +420,7 @@ export function AiSidebarProvider({ children }) {
         window.dispatchEvent(new CustomEvent('aisha:ai-local-action', { detail: result.localAction }));
       }
 
-      const parserSummary = result?.classification?.parserResult || result?.classification?.effectiveParser;
+      const parserSummary = backendData?.classification?.parserResult || backendData?.classification?.effectiveParser || result?.classification?.parserResult;
       if (parserSummary) {
         addHistoryEntry({
           intent: parserSummary.intent || 'ambiguous',
@@ -338,15 +433,108 @@ export function AiSidebarProvider({ children }) {
       }
 
       // Extract entities from response data for session context
-      if (result.assistantMessage?.data) {
-        const entityType = result.classification?.parserResult?.entity ||
-          result.classification?.effectiveParser?.entity ||
+      // Note: backendData = result.data (the actual API response body)
+      if (backendData.data) {
+        const entityType = backendData.classification?.parserResult?.entity ||
+          backendData.classification?.effectiveParser?.entity ||
           result.route;
-        extractAndStoreEntities(result.assistantMessage.data, entityType);
+        extractAndStoreEntities(backendData.data, entityType);
+      }
+
+      // ALSO extract from backend's entities field (parsed from tool results)
+      // CRITICAL: entities is in result.data, not result
+      if (backendData.entities && Array.isArray(backendData.entities)) {
+        const entityType = backendData.classification?.parserResult?.entity ||
+          backendData.classification?.effectiveParser?.entity ||
+          result.route;
+        extractAndStoreEntities(backendData.entities, entityType);
+        if (import.meta.env?.DEV) {
+          console.log('[AI Sidebar] Extracted', backendData.entities.length, 'entities from backend response');
+        }
+      }
+      
+      // ALSO extract entities from tool interactions (for search_leads, get_lead, etc.)
+      // CRITICAL: tool_interactions is in result.data, not result
+      if (backendData.tool_interactions && Array.isArray(backendData.tool_interactions)) {
+        for (const toolCall of backendData.tool_interactions) {
+          const toolName = toolCall.tool || toolCall.name || '';
+          const toolResult = toolCall.result;
+          
+          if (!toolResult || typeof toolResult !== 'object') continue;
+          
+          // Map tool names to entity types
+          const entityTypeMap = {
+            // Leads
+            'search_leads': 'lead',
+            'get_lead': 'lead',
+            'create_lead': 'lead',
+            'update_lead': 'lead',
+            
+            // Contacts
+            'search_contacts': 'contact',
+            'get_contact': 'contact',
+            'create_contact': 'contact',
+            'update_contact': 'contact',
+            
+            // Accounts
+            'search_accounts': 'account',
+            'get_account': 'account',
+            'create_account': 'account',
+            'update_account': 'account',
+            
+            // Opportunities
+            'search_opportunities': 'opportunity',
+            'get_opportunity': 'opportunity',
+            'create_opportunity': 'opportunity',
+            'update_opportunity': 'opportunity',
+            
+            // Activities ⭐ CRITICAL GAP - now tracked
+            'search_activities': 'activity',
+            'get_activity': 'activity',
+            'list_activities': 'activity',
+            'get_activity_details': 'activity',
+            'create_activity': 'activity',
+            'update_activity': 'activity',
+            'mark_activity_complete': 'activity',
+            'get_upcoming_activities': 'activity',
+            
+            // Notes ⭐ CRITICAL GAP - now tracked
+            'search_notes': 'note',
+            'get_note': 'note',
+            'get_note_details': 'note',
+            'create_note': 'note',
+            'update_note': 'note',
+            'get_notes_for_record': 'note',
+            
+            // BizDev Sources (v3.0.0 workflow)
+            'search_bizdev_sources': 'bizdev_source',
+            'get_bizdev_source': 'bizdev_source',
+            'get_bizdev_source_details': 'bizdev_source',
+            'create_bizdev_source': 'bizdev_source',
+            'update_bizdev_source': 'bizdev_source',
+            'list_bizdev_sources': 'bizdev_source'
+          };
+          
+          const entityType = entityTypeMap[toolName];
+          if (entityType && (toolResult.data || toolResult.records || toolResult.items || toolResult.id)) {
+            // Extract entities from tool result
+            const dataToExtract = toolResult.data || toolResult.records || toolResult.items || toolResult;
+            extractAndStoreEntities(dataToExtract, entityType);
+          }
+        }
       }
 
       setMessages((prev) => {
-        const next = [...prev, assistantMessage];
+        // Update user message with backend-generated ID if available (enables feedback)
+        let updated = prev;
+        if (savedUserMessageId) {
+          const lastUserIdx = prev.findLastIndex(m => m.role === 'user');
+          if (lastUserIdx >= 0) {
+            updated = [...prev];
+            updated[lastUserIdx] = { ...updated[lastUserIdx], id: savedUserMessageId };
+          }
+        }
+        const next = [...updated, assistantMessage];
         messagesRef.current = next;
         return next;
       });
@@ -412,7 +600,8 @@ export function AiSidebarProvider({ children }) {
       suggestions,
       applySuggestion,
       isDeveloperMode,
-      setIsDeveloperMode
+      setIsDeveloperMode,
+      conversationId
     }),
     [
       isOpen,
@@ -431,7 +620,8 @@ export function AiSidebarProvider({ children }) {
       suggestions,
       applySuggestion,
       isDeveloperMode,
-      setIsDeveloperMode
+      setIsDeveloperMode,
+      conversationId
     ]
   );
 

@@ -4,6 +4,251 @@ This file tracks known issues. PLAN.md selects which bugs are currently in scope
 
 ---
 
+## AI Conversation Context & Classification
+
+### BUG-AI-MONITOR-001 – LLM Activity Monitor missing "Tools Called" column
+
+**Status:** 🔄 PENDING TEST (code committed, needs deployment + testing)  
+**Priority:** Medium  
+**Area:** System Admin / LLM Monitoring  
+**Fix Committed:** December 28, 2025
+
+**Symptoms:**
+- LLM Activity Monitor table shows duration, tokens, model, capability
+- Missing which tools were actually called during each LLM interaction
+- Hard to debug tool chains or identify performance bottlenecks
+
+**Root Cause:**
+Activity logger `backend/lib/aiEngine/activityLogger.js` didn't track toolsCalled field.
+Backend wasn't extracting tool names from OpenAI responses.
+Frontend table didn't display tools even if backend logged them.
+
+**Solution:**
+1. Backend: Added `toolsCalled: Array<string>` field to activity log schema
+2. Backend: Extract tool names from `choice?.message?.tool_calls` array
+3. Frontend: Added "Tools Called" column to monitor table
+4. Frontend: Display tools as badges with monospace font for readability
+
+**Files Changed:**
+- `backend/lib/aiEngine/activityLogger.js` (added toolsCalled field)
+- `backend/routes/ai.js` (extract tool names from LLM response)
+- `src/components/settings/LLMActivityMonitor.jsx` (add column + cell rendering)
+
+**Testing Required:**
+1. ✅ Deploy to test environment
+2. ⏳ Verify "Tools Called" column appears in LLM Activity Monitor
+3. ⏳ Trigger AI chat with tools (e.g., "list my leads")
+4. ⏳ Verify tool names appear as badges in activity log
+
+**Impact:**
+- Better debugging of tool chains ✅
+- Performance analysis of specific tools ✅
+- Audit trail of what tools AI actually used ✅
+
+---
+
+### BUG-AI-TOOL-001 – suggest_next_actions returns "not found in registry"
+
+**Status:** 🔄 PENDING TEST (code committed, needs deployment + testing)  
+**Priority:** Critical  
+**Area:** AI Chat / Tool Execution  
+**Fix Committed:** December 28, 2025
+
+**Symptoms:**
+- User asks "What should be my next step?" in AI chat
+- AI attempts to call `suggest_next_actions` tool
+- Error: "Tool 'suggest_next_actions' not found in registry"
+- User sees "It seems there was an issue with generating next step suggestions"
+
+**Root Cause:**
+`suggest_next_actions` is a custom tool (not in Braid registry) and requires special handling.
+Regular chat endpoint `/conversations/:id/messages` has early-exit handler at line 408:
+```javascript
+if (toolName === 'suggest_next_actions') {
+  const { suggestNextActions } = await import('../lib/suggestNextActions.js');
+  return await suggestNextActions({ entity_type, entity_id, tenant_id, limit });
+}
+```
+
+However, `/realtime-tools/execute` endpoint was calling `executeBraidTool()` FIRST (line 2435), THEN checking for `suggest_next_actions` (line 2514).
+This caused Braid to throw "not found in registry" before the custom handler could intercept.
+
+**Solution:**
+Moved `suggest_next_actions` check BEFORE `executeBraidTool()` call in `/realtime-tools/execute` endpoint.
+Now follows same pattern as regular chat endpoint.
+Removed duplicate handler that appeared after tool execution.
+
+**Files Changed:**
+- `backend/routes/ai.js` (lines 2427-2450: moved suggest_next_actions handler before executeBraidTool)
+
+**Testing Required:**
+1. ✅ Deploy to test environment
+2. ⏳ Ask "What should be my next step?" in AI chat
+3. ⏳ Verify suggest_next_actions returns suggestions without error
+4. ⏳ Test with different entity types (lead, contact, account, opportunity)
+
+**Impact:**
+- Proactive next actions feature works ✅
+- AI can guide users through next best steps ✅
+- Better user experience with intelligent recommendations ✅
+
+---
+
+### BUG-AI-CONTEXT-001 – Session entity context not used for implicit references
+
+**Status:** 🔄 PENDING TEST (code committed bc93bd1, needs deployment + testing)  
+**Priority:** Critical  
+**Area:** AI Chat / Session Context Tracking  
+**Fix Committed:** December 27, 2025
+
+**Symptoms:**
+- User asks "what is the name of my warm lead?" → AiSHA responds "Jack Russel from JR Corporation" ✅
+- User immediately follows up with "What was the last note?" (implicit reference to Jack Russel)
+- AiSHA responds "Could you please specify which entity..." ❌
+- Context is lost between messages even though session tracking exists
+
+**Root Cause:**
+System prompt in `backend/routes/ai.js` only instructed AI to use SESSION ENTITY CONTEXT for "next steps"/"recommendations" questions, NOT for general follow-up queries like "What was the last note?"
+
+**Solution:**
+Expanded SESSION ENTITY CONTEXT directive to cover ALL implicit entity references:
+1. Implicit questions ("What was the last note?") → Use MOST RECENT entity from context
+2. Next steps/recommendations ("What should I do next?") → Call suggest_next_actions
+3. Tool parameters → Auto-extract entity_id from context
+4. Clarification rule → Only ask "Which entity?" if MULTIPLE entities of same type exist
+
+**Files Changed:**
+- `backend/routes/ai.js` (lines 2027-2053)
+
+**Testing Required:**
+1. ✅ Deploy v3.4.0+ to test environment
+2. ⏳ Test scenario: Ask "what is my warm lead?" → Get answer → Ask "What was the last note?" (should use context)
+3. ⏳ Verify AI doesn't ask "Which entity?" when context is clear
+4. ⏳ Test with multiple entities to ensure it uses most recent
+
+**Impact:**
+- Natural conversation flow ✅
+- No need to repeat entity names ✅
+- Proper context retention across messages ✅
+
+---
+
+### BUG-AI-CONTEXT-002 – Intent classification always shows "ambiguous"
+
+**Status:** 🔄 PENDING TEST (code committed 232b55f, needs deployment + testing)  
+**Priority:** High  
+**Area:** AI Chat / Response Classification  
+**Fix Committed:** December 27, 2025
+
+**Symptoms:**
+- Every AI message in the UI showed intent as "ambiguous" regardless of actual action
+- Conversation history couldn't track user intent patterns
+- Follow-up suggestions were less accurate due to missing intent context
+
+**Root Cause:**
+Backend `/api/ai/chat` endpoint was NOT returning a `classification` field in the response.
+Frontend `useAiSidebarState.jsx:385` tries to access `result.classification.parserResult.intent || 'ambiguous'`.
+Since classification was undefined, it always defaulted to `'ambiguous'`.
+
+**Solution:**
+Added intent and entity inference from tool interactions:
+
+Intent Mapping:
+- `create_*` → `'create'`
+- `update_*` → `'update'`
+- `delete_*` → `'delete'`
+- `search_*/get_*/list_*` → `'query'`
+- `suggest_next_actions` → `'recommend'`
+- (default) → `'query'`
+
+Entity Mapping:
+- `*lead*` → `'lead'`
+- `*contact*` → `'contact'`
+- `*account*` → `'account'`
+- `*opportunity*` → `'opportunity'`
+- `*activity*` → `'activity'`
+- `*note*` → `'note'`
+- `*bizdev*` → `'bizdev_source'`
+- (default) → `'general'`
+
+**Files Changed:**
+- `backend/routes/ai.js` (lines 2253-2286)
+
+**Testing Required:**
+1. ✅ Deploy v3.4.0+ to test environment
+2. ⏳ Verify intent shows "query", "create", "update", "recommend" instead of "ambiguous"
+3. ⏳ Check conversation history tracking shows correct entity types
+4. ⏳ Confirm follow-up suggestions improve with proper intent data
+
+**Impact:**
+- Proper intent tracking in conversation history ✅
+- Better follow-up suggestion generation ✅
+- Accurate analytics on user interaction patterns ✅
+
+---
+
+### BUG-AI-CONTEXT-003 – Session entity context not populated (localStorage empty)
+
+**Status:** 🔄 PENDING TEST (code committed a8a59d9, needs deployment + testing)  
+**Priority:** Critical  
+**Area:** AI Chat / Session Context Tracking / Entity Extraction  
+**Fix Committed:** December 27, 2025
+
+**Symptoms:**
+- Browser localStorage shows NO session entity context (empty)
+- Frontend `extractAndStoreEntities` function never receives entity data
+- Follow-up questions like "What was the last note?" fail because there's no context to reference
+- SESSION ENTITY CONTEXT directive (BUG-AI-CONTEXT-001 fix) cannot work without entity data
+
+**Root Cause:**
+Backend wasn't extracting entity data from tool results to send to frontend:
+1. Backend returns `metadata.tool_interactions` with `result_preview` JSON strings
+2. Frontend `extractAndStoreEntities` only looks at `result.assistantMessage.data` (which is empty)
+3. Tool results weren't being parsed to extract actual entity objects (leads, contacts, etc.)
+4. Frontend localStorage remained empty, defeating the entire session context system
+
+**Example from User:**
+```json
+{
+  "tool_interactions": [{
+    "tool": "list_leads",
+    "result_preview": "{\"tag\":\"Ok\",\"value\":{\"leads\":[{\"id\":\"a3af0a84-...\",\"first_name\":\"Jack\",\"last_name\":\"Russel\",\"company\":\"JR Corporation\"}]}}"
+  }]
+}
+```
+
+The `leads` array was in `result_preview` but not extracted for frontend use.
+
+**Solution:**
+
+**Backend (`backend/routes/ai.js`):**
+- Parse `tool_interactions[].result_preview` JSON strings
+- Extract entity arrays from wrapped responses (`data.leads`, `data.contacts`, etc.)
+- Extract single entities (`data.lead`, `data.contact`, etc.)
+- Return new `entities` array field in response for frontend consumption
+
+**Frontend (`src/components/ai/useAiSidebarState.jsx`):**
+- Extract entities from BOTH `result.assistantMessage.data` AND `result.entities`
+- Populate localStorage with entity references for session context
+
+**Files Changed:**
+- `backend/routes/ai.js` (lines 2253-2318) - Parse tool results, extract entities, return in response
+- `src/components/ai/useAiSidebarState.jsx` (lines 399-412) - Extract from result.entities
+
+**Testing Required:**
+1. ✅ Deploy v3.4.1+ to test environment
+2. ⏳ Ask "what is my warm lead?" (should trigger `list_leads` tool)
+3. ⏳ Check browser localStorage/DevTools for populated session entity context
+4. ⏳ Verify context shows: `{"jack russel": {id: "a3af0a84-...", type: "lead", name: "Jack Russel", ...}}`
+5. ⏳ Ask follow-up "What was the last note?" → Should use stored context (requires BUG-AI-CONTEXT-001 fix)
+
+**Impact:**
+- Session context actually populated with entity data ✅
+- localStorage debugging shows what AI has in context ✅
+- Enables BUG-AI-CONTEXT-001 fix to work properly ✅
+- Natural conversation flow without repeating entity names ✅
+
+---
 
 ## Backend / Frontend Field Mismatch
 
@@ -394,7 +639,7 @@ Resolution (December 1, 2025):
   - Created indexes for frequently queried columns
   - Removed description field from routes (unstructured data in metadata JSONB)
 - **Updated all test data to UUID format** (30+ files):
-  - Changed from legacy slug "local-tenant-001" to UUID "a11dfb63-4b18-4eb8-872e-747af2e37c46"
+  - Changed from legacy slug "6cb4c008-4847-426a-9a2e-918ad70e7b69" to UUID "a11dfb63-4b18-4eb8-872e-747af2e37c46"
   - Ensures consistent tenant isolation across E2E, unit, and integration tests
 
 Verification:

@@ -19,3 +19,10 @@ export {
   getLLMActivityStats,
   clearLLMActivity,
 } from "./activityLogger.js";
+export {
+  createAnthropicClientWrapper,
+  createAnthropicChatCompletion,
+  convertToolsToAnthropic,
+  convertMessagesToAnthropic,
+  convertResponseToOpenAI,
+} from "./anthropicAdapter.js";

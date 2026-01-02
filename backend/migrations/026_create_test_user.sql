@@ -1,7 +1,7 @@
 -- Migration 026: Create test user employee record with full access
 -- This creates an employee record for test@aishacrm.com with CRM and Developer access
 
--- Insert test employee for local-tenant-001
+-- Insert test employee for 6cb4c008-4847-426a-9a2e-918ad70e7b69
 INSERT INTO employees (
   id,
   tenant_id,
@@ -14,7 +14,7 @@ INSERT INTO employees (
   created_at
 ) VALUES (
   gen_random_uuid(),
-  'local-tenant-001',
+  '6cb4c008-4847-426a-9a2e-918ad70e7b69',
   'Test',
   'User',
   'test@aishacrm.com',
@@ -39,7 +39,7 @@ INSERT INTO modulesettings (
   settings,
   is_enabled
 ) VALUES (
-  'local-tenant-001',
+  '6cb4c008-4847-426a-9a2e-918ad70e7b69',
   'crm',
   jsonb_build_object(
     'features', jsonb_build_array('contacts', 'accounts', 'leads', 'opportunities', 'activities'),
@@ -59,7 +59,7 @@ INSERT INTO modulesettings (
   settings,
   is_enabled
 ) VALUES (
-  'local-tenant-001',
+  '6cb4c008-4847-426a-9a2e-918ad70e7b69',
   'developer',
   jsonb_build_object(
     'api_access', true,
@@ -85,4 +85,4 @@ SELECT
   metadata
 FROM employees 
 WHERE email = 'test@aishacrm.com' 
-  AND tenant_id = 'local-tenant-001';
+  AND tenant_id = '6cb4c008-4847-426a-9a2e-918ad70e7b69';

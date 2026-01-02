@@ -4,20 +4,60 @@
  * Dashboard-ready endpoints for tool performance, usage, and health metrics.
  * Combines real-time Redis counters with historical data from braid_audit_log.
  * 
+ * AUTHENTICATION: Superadmin-only (ADMIN_EMAILS) - monitors ALL tenants
+ * 
  * @module routes/braidMetrics
  */
 
 import express from 'express';
+import { requireAuthCookie } from '../middleware/authCookie.js';
 import { getRealtimeMetrics } from '../lib/braidIntegration-v2.js';
 import { getToolMetrics, getMetricsTimeSeries, getErrorAnalysis, getAuditStats } from '../../braid-llm-kit/tools/braid-rt.js';
+import { getSupabaseClient } from '../lib/supabase-db.js';
 
 const router = express.Router();
+
+// Superadmin authentication helper (from mcp.js pattern)
+function requireAdmin(req, res, next) {
+  if (!req.user || !req.user.email) {
+    return res.status(401).json({
+      error: "Unauthorized - authentication required"
+    });
+  }
+
+  const adminEmails = (process.env.ADMIN_EMAILS || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (adminEmails.length === 0) {
+    return res.status(403).json({
+      error: "Admin access not configured (ADMIN_EMAILS missing)"
+    });
+  }
+
+  const userEmail = String(req.user.email).toLowerCase();
+  if (!adminEmails.includes(userEmail)) {
+    return res.status(403).json({
+      error: "Forbidden - superadmin access required"
+    });
+  }
+
+  return next();
+}
+
+// Apply superadmin authentication to all routes
+router.use(requireAuthCookie);
+router.use(requireAdmin);
 
 /**
  * GET /api/braid/metrics/realtime
  * 
  * Returns real-time metrics from Redis counters (last minute and hour).
  * Fastest endpoint - no database queries.
+ * 
+ * Query params:
+ * - tenant_id: Optional - filter by specific tenant UUID (superadmin can monitor any tenant)
  * 
  * Response:
  * {
@@ -28,12 +68,31 @@ const router = express.Router();
  */
 router.get('/realtime', async (req, res) => {
   try {
-    const tenantId = req.tenant?.id;
-    if (!tenantId) {
-      return res.status(401).json({ error: 'Tenant context required' });
-    }
+    // Superadmin can optionally filter by tenant, or see all tenants aggregated
+    const tenantId = req.query.tenant_id || null; // null = aggregate all tenants
 
-    const metrics = await getRealtimeMetrics(tenantId);
+    // Get both minute and hour windows
+    const [minuteMetrics, hourMetrics] = await Promise.all([
+      getRealtimeMetrics(tenantId, 'minute'),
+      getRealtimeMetrics(tenantId, 'hour')
+    ]);
+    
+    const metrics = {
+      minute: {
+        total: minuteMetrics.calls,
+        success: minuteMetrics.calls - minuteMetrics.errors,
+        failed: minuteMetrics.errors,
+        cacheHits: minuteMetrics.cacheHits,
+        totalLatencyMs: 0 // Not tracked in current implementation
+      },
+      hour: {
+        total: hourMetrics.calls,
+        success: hourMetrics.calls - hourMetrics.errors,
+        failed: hourMetrics.errors,
+        cacheHits: hourMetrics.cacheHits,
+        totalLatencyMs: 0 // Not tracked in current implementation
+      }
+    };
     
     // Add derived metrics for easy dashboard consumption
     const derived = {
@@ -49,12 +108,8 @@ router.get('/realtime', async (req, res) => {
       hourCacheRate: metrics.hour.total > 0 
         ? metrics.hour.cacheHits / metrics.hour.total 
         : 0,
-      minuteAvgLatencyMs: metrics.minute.total > 0 
-        ? Math.round(metrics.minute.totalLatencyMs / metrics.minute.total) 
-        : 0,
-      hourAvgLatencyMs: metrics.hour.total > 0 
-        ? Math.round(metrics.hour.totalLatencyMs / metrics.hour.total) 
-        : 0
+      minuteAvgLatencyMs: 0, // Not tracked yet
+      hourAvgLatencyMs: 0 // Not tracked yet
     };
 
     res.json({
@@ -75,6 +130,7 @@ router.get('/realtime', async (req, res) => {
  * 
  * Query params:
  * - period: '1h' | '24h' | '7d' | '30d' (default: '24h')
+ * - tenant_id: Optional - filter by specific tenant UUID (superadmin can monitor any tenant)
  * 
  * Response:
  * {
@@ -87,10 +143,8 @@ router.get('/realtime', async (req, res) => {
  */
 router.get('/tools', async (req, res) => {
   try {
-    const tenantId = req.tenant?.id;
-    if (!tenantId) {
-      return res.status(401).json({ error: 'Tenant context required' });
-    }
+    // Superadmin can optionally filter by tenant, or see all tenants aggregated
+    const tenantId = req.query.tenant_id || null; // null = aggregate all tenants
 
     const period = req.query.period || '24h';
     const validPeriods = ['1h', '24h', '7d', '30d'];
@@ -98,24 +152,36 @@ router.get('/tools', async (req, res) => {
       return res.status(400).json({ error: `Invalid period. Use: ${validPeriods.join(', ')}` });
     }
 
-    const supabase = req.supabase;
-    const metrics = await getToolMetrics(supabase, tenantId, period);
+    // Map route periods to braid-rt periods
+    const periodMap = { '1h': 'hour', '24h': 'day', '7d': 'week', '30d': 'month' };
+    const braidPeriod = periodMap[period] || 'day';
+
+    const supabase = getSupabaseClient();
+    const result = await getToolMetrics(supabase, tenantId, braidPeriod);
+
+    // Handle error response from getToolMetrics
+    if (result.error) {
+      return res.status(500).json({ error: 'Failed to fetch tool metrics', details: result.error });
+    }
+
+    // Extract tools array from result
+    const tools = result.tools || [];
 
     // Generate summary
     const summary = {
-      totalTools: metrics.length,
-      healthyCount: metrics.filter(t => t.status === 'healthy').length,
-      degradedCount: metrics.filter(t => t.status === 'degraded').length,
-      warningCount: metrics.filter(t => t.status === 'warning').length,
-      criticalCount: metrics.filter(t => t.status === 'critical').length,
-      overallHealth: metrics.length > 0 
-        ? Math.round(metrics.reduce((sum, t) => sum + t.health, 0) / metrics.length) 
+      totalTools: tools.length,
+      healthyCount: tools.filter(t => t.healthStatus === 'healthy').length,
+      degradedCount: tools.filter(t => t.healthStatus === 'degraded').length,
+      warningCount: tools.filter(t => t.healthStatus === 'warning').length,
+      criticalCount: tools.filter(t => t.healthStatus === 'critical').length,
+      overallHealth: tools.length > 0 
+        ? Math.round(tools.reduce((sum, t) => sum + t.healthScore, 0) / tools.length) 
         : 100
     };
 
     res.json({
       period,
-      tools: metrics,
+      tools,
       summary,
       timestamp: new Date().toISOString()
     });
@@ -133,6 +199,7 @@ router.get('/tools', async (req, res) => {
  * Query params:
  * - granularity: 'minute' | 'hour' | 'day' (default: 'hour')
  * - points: number of data points (default: 24, max: 168)
+ * - tenant_id: Optional - filter by specific tenant UUID
  * 
  * Response:
  * {
@@ -145,10 +212,7 @@ router.get('/tools', async (req, res) => {
  */
 router.get('/timeseries', async (req, res) => {
   try {
-    const tenantId = req.tenant?.id;
-    if (!tenantId) {
-      return res.status(401).json({ error: 'Tenant context required' });
-    }
+    const tenantId = req.query.tenant_id || null;
 
     const granularity = req.query.granularity || 'hour';
     const validGranularities = ['minute', 'hour', 'day'];
@@ -158,7 +222,7 @@ router.get('/timeseries', async (req, res) => {
 
     const points = Math.min(parseInt(req.query.points) || 24, 168);
 
-    const supabase = req.supabase;
+    const supabase = getSupabaseClient();
     const data = await getMetricsTimeSeries(supabase, tenantId, granularity, points);
 
     res.json({
@@ -180,6 +244,7 @@ router.get('/timeseries', async (req, res) => {
  * 
  * Query params:
  * - period: '1h' | '24h' | '7d' | '30d' (default: '24h')
+ * - tenant_id: Optional - filter by specific tenant UUID
  * 
  * Response:
  * {
@@ -191,10 +256,7 @@ router.get('/timeseries', async (req, res) => {
  */
 router.get('/errors', async (req, res) => {
   try {
-    const tenantId = req.tenant?.id;
-    if (!tenantId) {
-      return res.status(401).json({ error: 'Tenant context required' });
-    }
+    const tenantId = req.query.tenant_id || null;
 
     const period = req.query.period || '24h';
     const validPeriods = ['1h', '24h', '7d', '30d'];
@@ -202,7 +264,7 @@ router.get('/errors', async (req, res) => {
       return res.status(400).json({ error: `Invalid period. Use: ${validPeriods.join(', ')}` });
     }
 
-    const supabase = req.supabase;
+    const supabase = getSupabaseClient();
     const analysis = await getErrorAnalysis(supabase, tenantId, period);
 
     res.json({
@@ -221,39 +283,42 @@ router.get('/errors', async (req, res) => {
  * 
  * Returns a combined summary for dashboard widgets.
  * Includes realtime stats, top tools, and health overview.
+ * 
+ * Query params:
+ * - tenant_id: Optional - filter by specific tenant UUID
  */
 router.get('/summary', async (req, res) => {
   try {
-    const tenantId = req.tenant?.id;
-    if (!tenantId) {
-      return res.status(401).json({ error: 'Tenant context required' });
-    }
+    const tenantId = req.query.tenant_id || null;
 
-    const supabase = req.supabase;
+    const supabase = getSupabaseClient();
 
     // Fetch in parallel
-    const [realtime, toolMetrics, auditStats] = await Promise.all([
+    const [realtime, toolMetricsResult, auditStats] = await Promise.all([
       getRealtimeMetrics(tenantId),
-      getToolMetrics(supabase, tenantId, '24h'),
-      getAuditStats(supabase, tenantId, '24h')
+      getToolMetrics(supabase, tenantId, 'day'),
+      getAuditStats(supabase, tenantId, 'day')
     ]);
+
+    // Extract tools array from result
+    const toolMetrics = toolMetricsResult?.tools || [];
 
     // Top 5 most-used tools
     const topTools = toolMetrics
-      .sort((a, b) => b.total - a.total)
+      .sort((a, b) => b.calls - a.calls)
       .slice(0, 5)
-      .map(t => ({ name: t.tool, total: t.total, successRate: t.successRate, health: t.health }));
+      .map(t => ({ name: t.name, total: t.calls, successRate: t.successRate, health: t.healthScore }));
 
     // Tools needing attention (health < 80)
     const problemTools = toolMetrics
-      .filter(t => t.health < 80)
-      .sort((a, b) => a.health - b.health)
+      .filter(t => t.healthScore < 80)
+      .sort((a, b) => a.healthScore - b.healthScore)
       .slice(0, 5)
-      .map(t => ({ name: t.tool, health: t.health, status: t.status, successRate: t.successRate }));
+      .map(t => ({ name: t.name, health: t.healthScore, status: t.healthStatus, successRate: t.successRate }));
 
     // Calculate overall health
     const overallHealth = toolMetrics.length > 0
-      ? Math.round(toolMetrics.reduce((sum, t) => sum + t.health, 0) / toolMetrics.length)
+      ? Math.round(toolMetrics.reduce((sum, t) => sum + t.healthScore, 0) / toolMetrics.length)
       : 100;
 
     // Determine overall status
@@ -274,7 +339,7 @@ router.get('/summary', async (req, res) => {
         score: overallHealth,
         status: overallStatus,
         toolCount: toolMetrics.length,
-        healthyCount: toolMetrics.filter(t => t.health >= 80).length
+        healthyCount: toolMetrics.filter(t => t.healthScore >= 80).length
       },
       timestamp: new Date().toISOString()
     });

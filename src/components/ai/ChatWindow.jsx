@@ -389,7 +389,7 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
               </div>
             )}
             {messages.map((msg, idx) => (
-              <MessageBubble key={idx} message={msg} />
+              <MessageBubble key={msg.id || idx} message={msg} conversationId={conversationId} />
             ))}
             {isLoading && (
               <div className="flex items-center gap-2 text-slate-400">

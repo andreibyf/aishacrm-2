@@ -550,13 +550,13 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
     { value: 'urgent', label: 'Urgent' },
   ];
 
-  const statusOptions = [
+  const statusOptions = useMemo(() => [
     { value: 'scheduled', label: 'Scheduled' },
     { value: 'in-progress', label: 'In Progress' },
     { value: 'overdue', label: 'Overdue' },
     { value: 'completed', label: 'Completed' },
     { value: 'cancelled', label: 'Cancelled' },
-  ];
+  ], []);
 
   const { isCardVisible, getCardLabel } = useStatusCardPreferences();
 
@@ -579,7 +579,7 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
         ...option,
         label: getCardLabel(statusCardMap[option.value]) || option.label
       }));
-  }, [isCardVisible, getCardLabel, formData.status]);
+  }, [isCardVisible, getCardLabel, formData.status, statusOptions]);
 
   return (
       <div className="p-1 bg-slate-800 max-h-[85vh] overflow-y-auto">

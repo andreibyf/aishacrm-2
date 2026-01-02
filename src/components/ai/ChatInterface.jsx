@@ -43,7 +43,7 @@ export default function ChatInterface({ user }) {
             }, 500); // Small delay so user sees the message first
             return true;
           }
-        } catch (_e) {
+        } catch {
           // Try regex fallback for truncated JSON
           const pathMatch = resultStr.match(/"path":\s*"([^"]+)"/);
           const pageMatch = resultStr.match(/"page":\s*"([^"]+)"/);

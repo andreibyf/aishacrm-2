@@ -6,7 +6,7 @@ After fixing the mock user injection bug, your production database may contain t
 ## What Gets Removed
 The script identifies records with:
 - **Mock user IDs**: `local-dev-user-001`
-- **Mock tenant IDs**: `local-tenant-001`
+- **Mock tenant IDs**: `6cb4c008-4847-426a-9a2e-918ad70e7b69`
 - **Test email patterns**:
   - `dev@localhost`
   - `*test@*`
@@ -52,7 +52,7 @@ Scanning activities...
   Found 23 test record(s):
     - dev@localhost
     - test-activity-001
-    - local-tenant-001
+    - 6cb4c008-4847-426a-9a2e-918ad70e7b69
     ... and 20 more
 
 Scanning contacts... ✓ Clean

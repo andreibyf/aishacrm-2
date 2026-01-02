@@ -185,7 +185,7 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
   // 2) URL param (?tenant=...)
   // 3) Persisted TenantContext selection (localStorage: selected_tenant_id)
   // 4) Local dev mock user (when isLocalDevMode())
-  // 5) Otherwise: null (do NOT fall back to "local-tenant-001" in production)
+  // 5) Otherwise: null (do NOT fall back to "6cb4c008-4847-426a-9a2e-918ad70e7b69" in production)
 
   const getSelectedTenantFromClient = () => {
     try {
@@ -290,8 +290,24 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     headers: {
       "Content-Type": "application/json",
     },
-    credentials: 'include', // Use cookies for auth, not bearer tokens
+    credentials: 'include', // Send cookies for auth
   };
+
+  // Add Supabase access token to Authorization header for cross-domain requests
+  // This allows api.aishacrm.com to authenticate requests even though cookies are domain-locked
+  if (isSupabaseConfigured()) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        options.headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+    } catch (err) {
+      // If session retrieval fails, continue without token (will use cookie auth as fallback)
+      if (import.meta.env.DEV) {
+        console.warn('[Auth] Failed to get Supabase session for Authorization header:', err.message);
+      }
+    }
+  }
 
   if (method === "GET") {
     if (id) {
@@ -1804,6 +1820,66 @@ export const User = {
    */
   logout: async () => {
     return User.signOut();
+  },
+
+  /**
+   * List user profiles with linked employee data
+   * @param {object} filters - Optional filters (tenant_id, role, etc.)
+   */
+  listProfiles: async (filters = {}) => {
+    try {
+      const params = new URLSearchParams();
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          params.append(key, value);
+        }
+      });
+
+      const url = `${BACKEND_URL}/api/users${params.toString() ? `?${params.toString()}` : ''}`;
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result.data?.users || result.data || result || [];
+    } catch (error) {
+      console.error('[User.listProfiles] Error:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Update user profile
+   * @param {string} id - User ID
+   * @param {object} data - Update data
+   */
+  updateProfile: async (id, data) => {
+    try {
+      const url = `${BACKEND_URL}/api/users/${id}`;
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(data)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Failed to update user: ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result.data || result;
+    } catch (error) {
+      console.error('[User.update] Error:', error);
+      throw error;
+    }
   },
 };
 

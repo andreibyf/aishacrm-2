@@ -45,9 +45,10 @@ export { transpileToJS } from '../tools/braid-transpile.js';
  * @param {string} tenantId - Tenant identifier
  * @param {string} userId - User identifier (for audit)
  * @param {string} authToken - Optional: Bearer token for internal API authentication
+ * @param {string} userEmail - Optional: User email for created_by fields
  * @returns {BraidDependencies}
  */
-export function createBackendDeps(baseUrl, tenantId, userId = null, authToken = null) {
+export function createBackendDeps(baseUrl, tenantId, userId = null, authToken = null, userEmail = null) {
   // Build auth headers - include Authorization if token provided
   const buildAuthHeaders = () => ({
     'Content-Type': 'application/json',
@@ -63,12 +64,14 @@ export function createBackendDeps(baseUrl, tenantId, userId = null, authToken = 
         params.set('tenant_id', tenantId);
         
         const fullUrl = `${baseUrl}${url}?${params}`;
+        console.log('[Braid HTTP GET]', fullUrl);
         const response = await fetch(fullUrl, {
           method: 'GET',
           headers: buildAuthHeaders()
         });
         
         if (!response.ok) {
+          console.error('[Braid HTTP GET] Error:', response.status, await response.clone().text().then(t => t.substring(0, 200)));
           return {
             tag: 'Err',
             error: {
@@ -80,12 +83,17 @@ export function createBackendDeps(baseUrl, tenantId, userId = null, authToken = 
         }
         
   const data = await response.json();
+  console.log('[Braid HTTP GET] Response data keys:', Object.keys(data), 'leads count:', data?.data?.leads?.length);
   return { tag: 'Ok', value: data };
       },
       
       async post(url, options = {}) {
         const body = options.body || {};
         body.tenant_id = tenantId;
+        // Inject created_by if userEmail is available and not already set
+        if (userEmail && !body.created_by) {
+          body.created_by = userEmail;
+        }
         
         const response = await fetch(`${baseUrl}${url}`, {
           method: 'POST',

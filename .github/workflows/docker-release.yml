@@ -32,6 +32,31 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v3
+
+      - name: Fetch secrets from Doppler
+        id: doppler
+        run: |
+          # Extract only actual secrets (sensitive data) from Doppler
+          # Non-sensitive variables come from GitHub vars
+          echo "ADMIN_EMAILS=$(doppler secrets get ADMIN_EMAILS --plain)" >> $GITHUB_OUTPUT
+          
+          # VPS deployment secrets for production deployment
+          echo "PROD_VPS_HOST=$(doppler secrets get PROD_VPS_HOST --plain)" >> $GITHUB_OUTPUT
+          echo "PROD_VPS_USER=$(doppler secrets get PROD_VPS_USER --plain)" >> $GITHUB_OUTPUT
+          echo "PROD_VPS_PORT=$(doppler secrets get PROD_VPS_PORT --plain)" >> $GITHUB_OUTPUT
+          echo "PROD_MCP_GITHUB_TOKEN=$(doppler secrets get PROD_MCP_GITHUB_TOKEN --plain)" >> $GITHUB_OUTPUT
+          
+          # SSH key with heredoc to preserve newlines
+          echo "PROD_VPS_SSH_KEY<<EOF" >> $GITHUB_OUTPUT
+          doppler secrets get PROD_VPS_SSH_KEY --plain >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+          DOPPLER_PROJECT: ${{ vars.DOPPLER_PROJECT }}
+          DOPPLER_CONFIG: ${{ vars.DOPPLER_CONFIG }}
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -72,9 +97,10 @@ jobs:
           build-args: |
             VITE_APP_BUILD_VERSION=${{ github.ref_name }}
             VITE_CURRENT_BRANCH=${{ github.ref_name }}
-            VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
-            VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
-            VITE_AISHACRM_BACKEND_URL=${{ secrets.VITE_AISHACRM_BACKEND_URL }}
+            VITE_SUPABASE_URL=${{ vars.VITE_SUPABASE_URL }}
+            VITE_SUPABASE_ANON_KEY=${{ vars.VITE_SUPABASE_ANON_KEY }}
+            VITE_AISHACRM_BACKEND_URL=${{ vars.VITE_AISHACRM_BACKEND_URL }}
+            ADMIN_EMAILS=${{ steps.doppler.outputs.ADMIN_EMAILS }}
             PUPPETEER_SKIP_DOWNLOAD=1
             USE_SYSTEM_CHROMIUM=false
 
@@ -95,13 +121,34 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v3
+
+      - name: Fetch SSH credentials from Doppler
+        id: doppler-deploy
+        run: |
+          # VPS deployment secrets for production deployment
+          echo "PROD_VPS_HOST=$(doppler secrets get PROD_VPS_HOST --plain)" >> $GITHUB_OUTPUT
+          echo "PROD_VPS_USER=$(doppler secrets get PROD_VPS_USER --plain)" >> $GITHUB_OUTPUT
+          echo "PROD_VPS_PORT=$(doppler secrets get PROD_VPS_PORT --plain)" >> $GITHUB_OUTPUT
+          echo "PROD_MCP_GITHUB_TOKEN=$(doppler secrets get PROD_MCP_GITHUB_TOKEN --plain)" >> $GITHUB_OUTPUT
+          
+          # SSH key with heredoc to preserve newlines
+          echo "PROD_VPS_SSH_KEY<<EOF" >> $GITHUB_OUTPUT
+          doppler secrets get PROD_VPS_SSH_KEY --plain >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+          DOPPLER_PROJECT: ${{ vars.DOPPLER_PROJECT }}
+          DOPPLER_CONFIG: ${{ vars.DOPPLER_CONFIG }}
+
       - name: Deploy Compose File to VPS
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ secrets.PROD_VPS_HOST }}
-          username: ${{ secrets.PROD_VPS_USER }}
-          key: ${{ secrets.PROD_VPS_SSH_KEY }}
-          port: ${{ secrets.PROD_VPS_PORT || 22 }}
+          host: ${{ steps.doppler-deploy.outputs.PROD_VPS_HOST }}
+          username: ${{ steps.doppler-deploy.outputs.PROD_VPS_USER }}
+          key: ${{ steps.doppler-deploy.outputs.PROD_VPS_SSH_KEY }}
+          port: ${{ steps.doppler-deploy.outputs.PROD_VPS_PORT || 22 }}
           source: "docker-compose.prod.yml,nginx-n8n.conf,nginx-proxy/nginx.conf,braid-mcp-node-server/docker-compose.prod.yml,braid-mcp-node-server/.env.example"
           target: "/opt/aishacrm/"
           strip_components: 0
@@ -110,13 +157,14 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         env:
           VERSION_TAG: ${{ github.ref_name }}
-          MCP_GITHUB_TOKEN: ${{ secrets.PROD_MCP_GITHUB_TOKEN }}
+          MCP_GITHUB_TOKEN: ${{ steps.doppler-deploy.outputs.PROD_MCP_GITHUB_TOKEN }}
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         with:
-          host: ${{ secrets.PROD_VPS_HOST }}
-          username: ${{ secrets.PROD_VPS_USER }}
-          key: ${{ secrets.PROD_VPS_SSH_KEY }}
-          port: ${{ secrets.PROD_VPS_PORT || 22 }}
-          envs: VERSION_TAG,MCP_GITHUB_TOKEN
+          host: ${{ steps.doppler-deploy.outputs.PROD_VPS_HOST }}
+          username: ${{ steps.doppler-deploy.outputs.PROD_VPS_USER }}
+          key: ${{ steps.doppler-deploy.outputs.PROD_VPS_SSH_KEY }}
+          port: ${{ steps.doppler-deploy.outputs.PROD_VPS_PORT || 22 }}
+          envs: VERSION_TAG,MCP_GITHUB_TOKEN,DOPPLER_TOKEN
           script: |
             set -e  # Exit on any error
             cd /opt/aishacrm
@@ -274,5 +322,5 @@ jobs:
           echo "### 🚀 Deployed to Production VPS" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Version**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Host**: ${{ secrets.PROD_VPS_HOST }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Host**: ${{ steps.doppler-deploy.outputs.PROD_VPS_HOST }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Time**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY

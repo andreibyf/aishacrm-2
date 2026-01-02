@@ -29,6 +29,7 @@ const PAGES = {
     PaymentPortal: lazy(() => import('./PaymentPortal')),
     DocumentManagement: lazy(() => import('./DocumentManagement')),
     Agent: lazy(() => import('./Agent')),
+    DeveloperAI: lazy(() => import('./DeveloperAI')),
     Calendar: lazy(() => import('./Calendar')),
     DuplicateContacts: lazy(() => import('./DuplicateContacts')),
     Utilities: lazy(() => import('./Utilities')),
@@ -45,6 +46,7 @@ const PAGES = {
     ConstructionProjects: lazy(() => import('./ConstructionProjects')),
     Workers: lazy(() => import('./Workers')),
     FunnelDemo: lazy(() => import('./FunnelDemo')),
+    McpAdmin: lazy(() => import('./McpAdmin')),
 };
 
 function _getCurrentPage(url) {
@@ -104,6 +106,7 @@ function PagesContent() {
                             <Route path="/PaymentPortal" element={<PAGES.PaymentPortal />} />
                             <Route path="/DocumentManagement" element={<PAGES.DocumentManagement />} />
                             <Route path="/Agent" element={<PAGES.Agent />} />
+                            <Route path="/DeveloperAI" element={<PAGES.DeveloperAI />} />
                             <Route path="/Calendar" element={<PAGES.Calendar />} />
                             <Route path="/DuplicateContacts" element={<PAGES.DuplicateContacts />} />
                             <Route path="/Utilities" element={<PAGES.Utilities />} />
@@ -120,6 +123,7 @@ function PagesContent() {
                             <Route path="/ConstructionProjects" element={<PAGES.ConstructionProjects />} />
                             <Route path="/Workers" element={<PAGES.Workers />} />
                             <Route path="/FunnelDemo" element={<PAGES.FunnelDemo />} />
+                            <Route path="/McpAdmin" element={<PAGES.McpAdmin />} />
                         </Routes>
                     </Layout>
                 } />

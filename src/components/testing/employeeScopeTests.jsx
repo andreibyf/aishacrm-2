@@ -72,7 +72,7 @@ export const employeeScopeTests = {
           email: 'employee@test.com'
         });
         
-        const filter = getFilter(employee, { tenant_id: 'test-tenant' });
+        const filter = getFilter(employee, { tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69' });
         
         assert.exists(filter.$or);
         assert.equal(filter.$or.length, 2);
@@ -84,10 +84,10 @@ export const employeeScopeTests = {
       name: 'Admin filter should NOT include $or clause',
       fn: async () => {
         const admin = createMockUser({ role: 'admin' });
-        const filter = getFilter(admin, { tenant_id: 'test-tenant' });
+        const filter = getFilter(admin, { tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69' });
         
         assert.notExists(filter.$or);
-        assert.equal(filter.tenant_id, 'test-tenant');
+        assert.equal(filter.tenant_id, '6cb4c008-4847-426a-9a2e-918ad70e7b69');
       }
     },
     {
@@ -97,7 +97,7 @@ export const employeeScopeTests = {
           role: 'user', 
           employee_role: 'manager' 
         });
-        const filter = getFilter(manager, { tenant_id: 'test-tenant' });
+        const filter = getFilter(manager, { tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69' });
         
         assert.notExists(filter.$or);
       }
@@ -105,9 +105,9 @@ export const employeeScopeTests = {
     {
       name: 'Empty user should return base filter only',
       fn: async () => {
-        const filter = getFilter(null, { tenant_id: 'test-tenant' });
+        const filter = getFilter(null, { tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69' });
         
-        assert.deepEqual(filter, { tenant_id: 'test-tenant' });
+        assert.deepEqual(filter, { tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69' });
       }
     }
   ]

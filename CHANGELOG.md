@@ -7,6 +7,209 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] - 2026-01-01
+
+### Added
+- **TokenBudgetManager** - centralized token budget enforcement (`backend/lib/aiBudgetConfig.js`)
+  - Hard ceiling of 4000 tokens (configurable via `AI_TOKEN_HARD_CEILING`)
+  - Component caps: system prompt (1200), tools (800), memory (250), tool results (700)
+  - Smart drop-order: memory → tools → messages → system prompt
+  - Core tools (`fetch_tenant_snapshot`, `suggest_next_actions`, etc.) never removed
+- **Memory Gating** - RAG memory only queried when user explicitly asks for history
+  - Trigger patterns: "last time", "remind me", "what did we discuss", etc.
+  - Gating precedence: `ALWAYS_OFF > MEMORY_ENABLED > ALWAYS_ON > patterns`
+  - Reduced defaults: topK=3 (was 8), maxChunkChars=300 (was 500)
+- `backend/README-ai-budget.md` - comprehensive budget documentation
+- Token budget and memory gating acceptance tests (47 tests)
+- AI token optimization with smart prompt condensing (70% token reduction: 8800 → 2300 tokens)
+- `enhanceSystemPromptSmart()` for condensed vs full context selection
+- `applyToolHardCap()` to limit tools to 3-20 (preserves forced tools)
+- `enforceToolSchemaCap()` for token-based tool schema limiting
+- `applyBudgetCaps()` with drop-order enforcement before model calls
+- `logBudgetSummary()` for one-line budget telemetry
+- `enhanceSystemPromptCondensed()` for follow-up messages (~400 tokens)
+- Phase 7 RAG memory helper (`getConversationSummaryFromMemory()` in aiMemory/index.js)
+- `searchLeadsByStatus`, `searchAccountsByStatus`, `searchOpportunitiesByStage`, `searchContactsByStatus` tools
+- `listAllContacts` tool for retrieving all contacts with full details
+
+### Changed
+- **AI token usage reduced from ~11k-12k to ~2k-3k tokens per interaction** (75% reduction)
+- Budget enforcement applied consistently in both `generateAssistantResponse` and `/api/ai/chat` flows
+- Updated `AI_ARCHITECTURE_AISHA_AI.md` with Token Budget Manager and Memory Gating sections
+
+### Fixed
+- CodeQL analysis - exclude .http files and api-tests from analysis (REST Client test files)
+- AI hallucination prevention - AI must use exact record names from tool results
+  - Added 'EXACT Name:' prefix in summarizers for all entities
+  - Added CRITICAL anti-hallucination instruction to each summarizer
+  - Added TEST DATA IDENTIFICATION rule to BRAID_SYSTEM_PROMPT
+- Braid metrics `getToolMetrics` return value handling (was treating object as array)
+- Braid metrics period mapping (1h/24h/7d/30d → hour/day/week/month)
+- BraidSDKMonitor.jsx missing credentials for cookie auth
+- Testing.js check-volume endpoint missing tenant_id param
+- Bizdevsources route: case-insensitive status filter, filter out 'undefined' string params
+
+### Changed
+- Intent classifier: only match valid lead statuses (new, contacted, qualified, converted, rejected)
+- E2E tests: mark created records with is_test_data=true
+- Enhanced tenantContextDictionary with custom entity/status terminology handling
+
+---
+
+## [3.6.19] - 2025-12-31
+
+### Added
+- AI thumbs up/down feedback for AI responses
+  - PATCH `/api/ai/conversations/:id/messages/:messageId/feedback` endpoint
+  - Stores feedback in conversation_messages.metadata.feedback JSONB
+  - UI thumbs buttons appear on hover for assistant messages
+- Cache invalidation to user CRUD operations (POST, PUT, DELETE routes)
+
+### Fixed
+- AI sidebar - skip conversation creation for users without tenant_id
+  - SuperAdmins can assign themselves to a tenant via User Management
+  - AI sidebar gracefully skips conversation creation instead of throwing auth error
+- Dashboard error display with status codes, duration, and error messages
+  - Status code badge with color coding (500+ red, 4xx yellow)
+  - Show request duration in milliseconds
+  - Display error_message from performance logs
+
+### Changed
+- Complete Phase 7 RAG implementation with memory retrieval and conversation summaries
+  - Memory chunks now correctly injected with UNTRUSTED boundary marker
+  - Conversation summaries provide rolling context for AI conversations
+  - Tenant isolation verified via mock tests and RLS policies
+  - All environment variables have sensible defaults (topK=8, minSimilarity=0.7)
+
+---
+
+## [3.6.18] - 2025-12-30
+
+### Added
+- Dashboard bundle optimization with pre-aggregated data (45% faster: 389ms → 214ms)
+  - `leadsBySource` pre-aggregation (eliminates LeadSourceChart API call)
+  - Increase bundle limits: 100 leads (was 5), 50 opps (was 5)
+  - `funnelAggregates` from materialized view dashboard_funnel_counts
+  - Extra fields: email, phone, source, is_test_data for richer widgets
+- Caching to dashboard-stats (90s TTL, 78% faster: 443ms → 98ms)
+- Caching to funnel-counts (120s TTL, 37% faster: 133ms → 84ms)
+
+### Fixed
+- Testing support for GH_TOKEN env var from Doppler (check both GITHUB_TOKEN and GH_TOKEN)
+- E2E test selectors for leads, opportunities, system logs (all 12 CRUD E2E tests pass)
+- System logs cache invalidation after delete operations
+- Testing endpoint tenant_id handling in cron/jobs full-scan endpoint
+- System logs tenant_id=system alias handling for UUID column (fixes 24% API error rate)
+
+### Changed
+- CLS Optimization: Enlarge Recent Activities chart + Graphics centering
+  - Recent Activities: h-72 → h-[26rem] (288px → 416px)
+  - Chart width: max-w-2xl → max-w-3xl
+  - Pie Chart: radius 80→120, container h-[28rem]
+  - Sales Funnel: 550x450 (was 480x340)
+  - All widgets: Uniform 600px height for zero layout shift
+
+---
+
+## [3.6.14] - 2025-12-30
+
+### Security (BREAKING CHANGE)
+- Enforce tenant isolation + add caching to 16 endpoints
+  - Enforce mandatory tenant_id validation on bizdevsources, cashflow, modulesettings, synchealths, notifications, announcements, audit-logs, notes, webhooks, cron, accounts
+  - Prevents multi-tenant data leakage vulnerability
+  - Returns 400 error when tenant_id is missing
+- Added Redis caching to all 11 security-fixed endpoints (60-300s TTL)
+- Added caching to activities, opportunities, employees, users, system-logs (120-180s TTL)
+- Performance gains: 11-77% faster response times on cached requests
+
+### Fixed
+- Superadmin access, JWT payload enhancement, and robust tenant validation
+- Production 401/403 errors by fixing token refresh and auth status codes
+- JWT secret fallback alignment in authenticate middleware
+- API test files protection with .gitignore updates
+- CORS issues for app.aishacrm.com with proper error response headers
+- Server.js authenticateRequest import to resolve backend crash
+- Authenticate middleware to /api/ai routes to enable Bearer token auth
+
+### Changed
+- Fixed cron.route.test.js to include tenant_id in all requests
+
+---
+
+## [3.5.0 - 3.5.9] - 2025-12-27 to 2025-12-30
+
+### Added
+- Token burn reduction by capping history + tool summaries
+  - MAX_INCOMING = 8 messages limit
+  - MAX_CHARS = 1500 per message content
+  - Tool summary cap at 1200 chars
+  - CostGuard logging to track optimization
+- Entity context extraction to conversation message metadata
+  - Extract lead_id, contact_id, account_id, opportunity_id, activity_id from tool interactions
+  - Comprehensive test suite for entity extraction and context persistence
+- Deterministic intent routing system (v3.5.0 - BREAKING CHANGE)
+  - Created intentClassifier.js with regex patterns for 100+ intent codes
+  - Created intentRouter.js mapping intent codes to Braid tools
+  - Confidence-based fallback: high → forced tool, medium → focused subset, low → all tools
+  - 60-70% reduction in tokens sent per request
+- Intent column to LLM Activity Monitor
+- Entity filter params to Braid list tools (listLeads, listActivities, listOpportunitiesByStage)
+- `suggestNextActions` to BRAID_PARAM_ORDER for proper arg binding
+- Status label resolver for tenant terminology normalization
+
+### Fixed
+- Lead search functionality and OpenAI API authentication
+  - Fixed broken text search in /api/v2/leads endpoint
+  - Updated OpenAI API key from deprecated sk-svcacct to sk-proj key
+- Pagination limits and immediate delete reflection
+  - Add limit: 10000 to Accounts and Contacts
+  - Fix bulk delete not reflecting immediately (cache issue)
+- Production API key error from malformed OpenAI API keys
+- Auth issues - handle AuthSessionMissingError gracefully
+- Dashboard data fetching optimization with visible widgets in cache key
+- Sales Pipeline chart vertical centering
+
+### Changed
+- Refine intent classifier patterns and add comprehensive test coverage (28 tests)
+- Frontend entity extraction - read from result.data not result
+- Entity extraction for bare array tool results (search_leads)
+- Extract entity context from URL for suggest_next_actions
+- Bind session focus to suggest_next_actions tool
+- Force suggest_next_actions tool call when user asks for next steps
+- Simplify suggest_next_actions tool description
+- Add tools display to LLM Monitor + fix suggest_next_actions routing
+- Register suggest_next_actions in Braid toolkit
+
+---
+
+## [3.5.13] - 2025-12-28
+
+### Fixed
+- **Lead Search Functionality:** Fixed broken text search in `/api/v2/leads` endpoint
+  - Changed from word-splitting logic to full-query pattern matching
+  - Search now correctly finds leads like "Iso Check" with query `%Iso Check%`
+  - Simplified OR conditions to search across `first_name`, `last_name`, `email`, `company` fields
+  - Fixed Supabase PostgREST query chaining issue that caused 0 results
+
+- **Braid SDK searchLeads Tool:** Fixed query parameter passing
+  - Updated `braid-llm-kit/examples/assistant/leads.braid` to include `query` in params object
+  - AI chat now successfully searches and finds leads by name
+
+- **OpenAI API Authentication:** Fixed invalid API key errors in chat endpoint
+  - Updated OpenAI API key from deprecated `sk-svcacct-*` to project key `sk-proj-*`
+  - Updated key in three locations: `backend/.env`, `docker-compose.yml`, `system_settings` database
+  - Chat endpoint now successfully authenticates and processes requests
+
+### Added
+- **Debug Logging:** Added HTTP GET debug logging to Braid SDK
+  - Logs full URL, response status, and data keys for troubleshooting
+  - Helps identify search result issues and API response structure
+
+### Changed
+- **Docker Compose:** Added explicit `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` environment variables to backend service
+
+---
+
 ## [3.1.6] - 2025-12-21
 
 ### Fixed

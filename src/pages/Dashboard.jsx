@@ -33,7 +33,6 @@ import RecentActivities from "../components/dashboard/RecentActivities";
 import LeadAgeReport from "../components/dashboard/LeadAgeReport";
 import SalesFunnelWidget from "../components/dashboard/SalesFunnelWidget";
 import ConversionRates from "../components/dashboard/ConversionRates";
-import { Loader2, RefreshCw } from "lucide-react";
 import { getDashboardBundleFast } from "@/api/dashboard";
 import { getCachedDashboardData, cacheDashboardData } from "@/api/dashboardCache";
 import WidgetPickerModal from "../components/dashboard/WidgetPickerModal";
@@ -41,6 +40,7 @@ import { toast } from "sonner";
 import { useUser } from "@/components/shared/useUser.js";
 import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
 import { useLogger } from "../components/shared/Logger";
+import { useLoadingToast } from "@/hooks/useLoadingToast";
 
 const ALL_WIDGETS = [
   {
@@ -88,6 +88,27 @@ const ALL_WIDGETS = [
   },
 ];
 
+/**
+ * CLS Optimization (v3.6.19): Widget-specific skeleton heights
+ * Prevents layout shift by reserving exact space needed for each widget
+ * Heights measured from actual rendered components
+ */
+/**
+ * CLS Optimization (v3.6.19): Uniform widget heights for consistent grid
+ * All widgets set to 600px - prevents ANY layout shift
+ * Taller widgets (Recent Activities) use overflow-y-auto
+ * Shorter widgets (Conversion Rates) use flex centering
+ */
+const WIDGET_CONFIGS = {
+  salesPipeline: { skeletonHeight: 600 },
+  salesFunnel: { skeletonHeight: 600 },
+  leadSourceChart: { skeletonHeight: 600 },
+  topAccounts: { skeletonHeight: 600 },
+  conversionRates: { skeletonHeight: 600 },
+  leadAgeReport: { skeletonHeight: 600 },
+  recentActivities: { skeletonHeight: 600 },
+};
+
 export default function DashboardPage() {
   // Use global user context (centralized User.me())
   const { user, reloadUser } = useUser();
@@ -120,6 +141,7 @@ export default function DashboardPage() {
   const { cachedRequest } = useApiManager();
   const { selectedEmail } = useEmployeeScope();
   const logger = useLogger();
+  const loadingToast = useLoadingToast();
 
   // DnD sensors for drag-and-drop
   const sensors = useSensors(
@@ -308,6 +330,9 @@ export default function DashboardPage() {
           return;
         }
 
+        // Loading toast already shown by nav click handler in Layout
+        // No delay needed since toast renders before this component mounts
+
         // OPTIMIZATION: Try browser cache first (unless forcing refresh)
         if (!forceRefresh) {
           const cached = getCachedDashboardData(tenantFilter.tenant_id || null, !!showTestData);
@@ -331,15 +356,22 @@ export default function DashboardPage() {
             setBundleLists(cached.data.lists);
             setLastUpdated(cached.cachedAt);
             setLoading(false);
+            
+            // Dismiss loading toast since we have cached data
+            loadingToast.showSuccess("Dashboard loaded! 📊");
 
             // Fetch fresh data in background (don't block UI)
             (async () => {
               try {
+                const visibleWidgetIds = Object.entries(widgetPreferences)
+                  .filter(([_, pref]) => pref.visible !== false)
+                  .map(([id]) => id);
+                
                 const bundleResp = await cachedRequest(
                   "Dashboard",
                   "bundle",
-                  { tenant_id: tenantFilter.tenant_id || null, include_test_data: !!showTestData },
-                  () => getDashboardBundleFast({ tenant_id: tenantFilter.tenant_id || null, include_test_data: !!showTestData })
+                  { tenant_id: tenantFilter.tenant_id || null, include_test_data: !!showTestData, widgets: visibleWidgetIds },
+                  () => getDashboardBundleFast({ tenant_id: tenantFilter.tenant_id || null, include_test_data: !!showTestData, widgets: visibleWidgetIds })
                 );
                 const bundle = bundleResp?.data || bundleResp;
                 if (bundle?.stats || bundle?.lists) {
@@ -374,11 +406,16 @@ export default function DashboardPage() {
         // Fast path: fetch compact dashboard bundle first (local backend with Redis cache)
         let bundle = null;
         try {
+          // Get visible widget IDs to optimize data fetching (skip data for hidden widgets)
+          const visibleWidgetIds = Object.entries(widgetPreferences)
+            .filter(([_, pref]) => pref.visible !== false)
+            .map(([id]) => id);
+          
           const bundleResp = await cachedRequest(
             "Dashboard",
             "bundle",
-            { tenant_id: tenantFilter.tenant_id || null, include_test_data: !!showTestData },
-            () => getDashboardBundleFast({ tenant_id: tenantFilter.tenant_id || null, include_test_data: !!showTestData })
+            { tenant_id: tenantFilter.tenant_id || null, include_test_data: !!showTestData, widgets: visibleWidgetIds },
+            () => getDashboardBundleFast({ tenant_id: tenantFilter.tenant_id || null, include_test_data: !!showTestData, widgets: visibleWidgetIds })
           );
           // Unwrap common shapes: either { data: {...} } or raw {...}
           bundle = bundleResp?.data || bundleResp;
@@ -534,10 +571,18 @@ export default function DashboardPage() {
           opportunitiesCount: opportunities?.length || 0,
           activitiesCount: activities?.length || 0,
         });
+        
+        // Dismiss loading toast and show success
+        if (!forceRefresh) {
+          loadingToast.showSuccess("Dashboard loaded! 📊");
+        } else {
+          loadingToast.dismiss();
+        }
       } catch (error) {
         // Retry logic for early auth race (cookies not yet processed)
         const isAuthRace = /Authentication required/i.test(error?.message || "") || /Authentication required/i.test(String(error));
         if (isAuthRace && attempt < 2) {
+          loadingToast.dismiss(); // Dismiss before retry
           setTimeout(() => loadStats(attempt + 1), 350);
           return; // Defer error handling until retries exhausted
         }
@@ -549,7 +594,7 @@ export default function DashboardPage() {
           selectedEmployeeId: selectedEmail,
         });
         console.error("Failed to load dashboard stats:", error);
-        toast.error("Failed to load dashboard data");
+        loadingToast.showError("Failed to load dashboard data");
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -565,6 +610,7 @@ export default function DashboardPage() {
     selectedEmail,
     cachedRequest,
     logger,
+    loadingToast,
   ]);
   // Removed getTenantFilter from dependencies - it's called inside the effect instead
 
@@ -573,8 +619,6 @@ export default function DashboardPage() {
     if (!user || !authCookiesReady) return;
     
     // Re-trigger loadStats with forceRefresh flag
-    const tempSetLoading = setLoading;
-    const tempSetRefreshing = setRefreshing;
     
     // Call loadStats with forceRefresh = true
     // This requires we wrap it in a way that the component's loadStats can be called
@@ -590,7 +634,7 @@ export default function DashboardPage() {
       }
     }
     
-    tempSetRefreshing(true);
+    setRefreshing(true);
     try {
       const bundleResp = await cachedRequest(
         "Dashboard",
@@ -622,7 +666,7 @@ export default function DashboardPage() {
       toast.error("Failed to refresh dashboard");
       console.error("[Dashboard] Refresh error:", e);
     } finally {
-      tempSetRefreshing(false);
+      setRefreshing(false);
     }
   }, [user, authCookiesReady, selectedTenantId, showTestData, cachedRequest]);
 
@@ -740,9 +784,11 @@ export default function DashboardPage() {
             <div className="h-24 bg-slate-800 rounded" />
             <div className="h-24 bg-slate-800 rounded" />
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="h-64 bg-slate-800 rounded" />
-            <div className="h-64 bg-slate-800 rounded" />
+          {/* CLS Optimization: Widget skeleton grid matching real layout */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-[600px] bg-slate-800 rounded-lg" />
+            ))}
           </div>
         </div>
       )}
@@ -794,10 +840,19 @@ export default function DashboardPage() {
                           ? bundleLists.recentOpportunities
                           : bundleLists.recentOpportunities.filter(o => o?.is_test_data !== true));
                       }
+                      /**
+                       * LeadSourceChart Optimization (v3.6.18+)
+                       * Pass both recentLeads (fallback) AND pre-aggregated stats.leadsBySource
+                       * Widget will prioritize stats.leadsBySource for instant rendering
+                       */
                       if (widget.id === "leadSourceChart" && Array.isArray(bundleLists?.recentLeads)) {
                         prefetchProps.leadsData = (showTestData
                           ? bundleLists.recentLeads
                           : bundleLists.recentLeads.filter(l => l?.is_test_data !== true));
+                        // Pass pre-aggregated source data (NEW in v3.6.18 - eliminates API call)
+                        if (stats?.leadsBySource) {
+                          prefetchProps.stats = stats;
+                        }
                       }
                       if (widget.id === "leadAgeReport" && Array.isArray(bundleLists?.recentLeads)) {
                         prefetchProps.leadsData = (showTestData
@@ -813,6 +868,7 @@ export default function DashboardPage() {
                             <LazyWidgetLoader
                               component={widget.component}
                               delay={0}
+                              skeletonHeight={WIDGET_CONFIGS[widget.id]?.skeletonHeight || 600}
                               user={user}
                               tenantFilter={stableTenantFilter}
                               showTestData={showTestData}

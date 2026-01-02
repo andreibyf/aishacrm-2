@@ -13,7 +13,6 @@ import {
   Trash2,
   Eye,
   CheckCircle2,
-  Users,
   Save,
   X,
   User,
@@ -60,7 +59,7 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
       } else {
         try {
           parsed = JSON.parse(source.lead_ids);
-        } catch (e) {
+        } catch {
           parsed = String(source.lead_ids)
             .split(',')
             .map(id => id.trim())

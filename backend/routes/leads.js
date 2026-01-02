@@ -1023,7 +1023,7 @@ export default function createLeadRoutes(_pgPool) {
         // Re-link Activities from lead -> contact
         await supabase
           .from('activities')
-          .update({ related_to: 'contact', related_id: contact.id, updated_date: nowIso })
+          .update({ related_to: 'contact', related_id: contact.id })
           .eq('tenant_id', tenant_id)
           .eq('related_to', 'lead')
           .eq('related_id', lead.id);

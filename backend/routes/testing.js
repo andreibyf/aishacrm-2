@@ -66,17 +66,17 @@ export default function createTestingRoutes(_pgPool) {
   // }
   router.post('/trigger-e2e', async (req, res) => {
     try {
-      const {
-        GITHUB_TOKEN = process.env.GH_TOKEN,
-        GITHUB_REPO_OWNER = process.env.REPO_OWNER || process.env.GITHUB_REPOSITORY_OWNER || 'andreibyf',
-        GITHUB_REPO_NAME = process.env.REPO_NAME || process.env.GITHUB_REPOSITORY_NAME || 'aishacrm-2',
-        GITHUB_WORKFLOW_FILE = process.env.WORKFLOW_FILE || process.env.GITHUB_WORKFLOW_FILE || 'e2e.yml',
-      } = process.env;
+      // Support both GITHUB_TOKEN and GH_TOKEN (Doppler uses GH_TOKEN)
+      const GITHUB_TOKEN = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+      const GITHUB_REPO_OWNER = process.env.GITHUB_REPO_OWNER || process.env.REPO_OWNER || process.env.GITHUB_REPOSITORY_OWNER || 'andreibyf';
+      const GITHUB_REPO_NAME = process.env.GITHUB_REPO_NAME || process.env.REPO_NAME || process.env.GITHUB_REPOSITORY_NAME || 'aishacrm-2';
+      const GITHUB_WORKFLOW_FILE = process.env.GITHUB_WORKFLOW_FILE || process.env.WORKFLOW_FILE || 'e2e.yml';
 
       if (!GITHUB_TOKEN) {
-        return res.status(400).json({
-          status: 'error',
-          message: 'GITHUB_TOKEN is not configured in backend environment',
+        return res.status(503).json({
+          status: 'unavailable',
+          message: 'GitHub integration not configured',
+          configured: false,
         });
       }
 
@@ -144,15 +144,14 @@ export default function createTestingRoutes(_pgPool) {
   // Query params: ref=main, per_page=5, created_after=ISO8601
   router.get('/workflow-status', async (req, res) => {
     try {
-      const {
-        GITHUB_TOKEN,
-        GITHUB_REPO_OWNER = process.env.GITHUB_REPOSITORY_OWNER || 'andreibyf',
-        GITHUB_REPO_NAME = process.env.GITHUB_REPOSITORY_NAME || 'aishacrm-2',
-        GITHUB_WORKFLOW_FILE = process.env.GITHUB_WORKFLOW_FILE || 'e2e.yml',
-      } = process.env;
+      // Support both GITHUB_TOKEN and GH_TOKEN (Doppler uses GH_TOKEN)
+      const GITHUB_TOKEN = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+      const GITHUB_REPO_OWNER = process.env.GITHUB_REPO_OWNER || process.env.GITHUB_REPOSITORY_OWNER || 'andreibyf';
+      const GITHUB_REPO_NAME = process.env.GITHUB_REPO_NAME || process.env.GITHUB_REPOSITORY_NAME || 'aishacrm-2';
+      const GITHUB_WORKFLOW_FILE = process.env.GITHUB_WORKFLOW_FILE || 'e2e.yml';
 
       if (!GITHUB_TOKEN) {
-        return res.status(400).json({ status: 'error', message: 'GITHUB_TOKEN is not configured in backend environment' });
+        return res.status(503).json({ status: 'unavailable', message: 'GitHub integration not configured', configured: false });
       }
 
       const ref = req.query.ref || 'main';
@@ -216,7 +215,7 @@ export default function createTestingRoutes(_pgPool) {
   // POST /api/testing/cleanup-test-data - Delete all records with is_test_data = true
   // Optional: also delete recent unflagged test data like example.com emails (contacts/leads)
   // Body: {
-  //   tenant_id?: 'local-tenant-001',             // Optional: clean only specific tenant
+  //   tenant_id?: '6cb4c008-4847-426a-9a2e-918ad70e7b69',             // Optional: clean only specific tenant
   //   confirm?: true,                              // Required: safety confirmation
   //   unflagged_cleanup?: {                        // Optional: additional cleanup for legacy/unflagged data
   //     enabled?: boolean,                         // If true, will run extra passes
@@ -446,7 +445,7 @@ export default function createTestingRoutes(_pgPool) {
         { method: 'GET', path: `/api/integrations?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/tenantintegrations?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/synchealths?tenant_id={TENANT_ID}` },
-        { method: 'GET', path: `/api/database/check-volume` },
+        { method: 'GET', path: `/api/database/check-volume?tenant_id={TENANT_ID}` },
         
         // Telephony
         { method: 'GET', path: `/api/telephony/status?tenant_id={TENANT_ID}` },
@@ -476,7 +475,7 @@ export default function createTestingRoutes(_pgPool) {
         { method: 'GET', path: '/api/testing/ping' },
         { method: 'GET', path: '/api/utils/health' },
         { method: 'GET', path: `/api/webhooks?tenant_id={TENANT_ID}` },
-        { method: 'GET', path: '/api/cron/jobs' },
+        { method: 'GET', path: `/api/cron/jobs?tenant_id={TENANT_ID}` },
         // NOTE: Validation endpoint disabled - error handling issues
         // { method: 'GET', path: `/api/validation/check-duplicate?tenant_id={TENANT_ID}&type=account&name=test` },
         

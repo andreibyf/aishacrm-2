@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Target, AlertTriangle, Loader2 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from "recharts";
@@ -12,11 +12,13 @@ import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 import { Link } from "react-router-dom"; // Added import
 import { createPageUrl } from "@/utils"; // Added import
 import { Button } from "@/components/ui/button"; // Added import for Button component
+import { getDashboardFunnelCounts } from '@/api/fallbackFunctions';
 
 function SalesPipeline(props) {
   const [pipelineData, setPipelineData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState(null);
+  const loadingRef = useRef(false);
   const { cachedRequest } = useApiManager();
   const { loading: userLoading } = useUser();
   const { authCookiesReady } = useAuthCookiesReady();
@@ -31,6 +33,11 @@ function SalesPipeline(props) {
         if (userLoading || !authCookiesReady) {
           return;
         }
+
+    // Prevent duplicate simultaneous requests
+    if (loadingRef.current) {
+      return;
+    }
 
     let mounted = true; // Flag to prevent state updates on unmounted component
 
@@ -96,6 +103,7 @@ function SalesPipeline(props) {
     };
 
     const load = async () => {
+      loadingRef.current = true;
       setLoading(true); // Start loading
       setErrorMessage(null); // Clear any previous errors
 
@@ -146,6 +154,52 @@ function SalesPipeline(props) {
         
         // Determine if we need to call filter or list based on effectiveFilter
         const hasFilter = Object.keys(effectiveFilter).length > 0;
+
+        // Use pre-computed pipeline counts (90%+ faster) if no special filtering
+        if (!hasFilter || (Object.keys(effectiveFilter).length === 1 && effectiveFilter.tenant_id)) {
+          try {
+            const dashboardData = await getDashboardFunnelCounts({ 
+              tenant_id: tenantFilter?.tenant_id,
+              include_test_data: showTestData 
+            });
+            if (mounted && dashboardData?.pipeline) {
+              // Map pre-computed pipeline data to chart format
+              const suffix = showTestData ? 'total' : 'real';
+              const stages = {
+                prospecting: { name: "Prospecting", value: dashboardData.pipeline.find(s => s.stage === 'prospecting')?.[`value_${suffix}`] || 0, count: dashboardData.pipeline.find(s => s.stage === 'prospecting')?.[`count_${suffix}`] || 0, key: 'prospecting' },
+                qualification: { name: "Qualification", value: dashboardData.pipeline.find(s => s.stage === 'qualification')?.[`value_${suffix}`] || 0, count: dashboardData.pipeline.find(s => s.stage === 'qualification')?.[`count_${suffix}`] || 0, key: 'qualification' },
+                proposal: { name: "Proposal", value: dashboardData.pipeline.find(s => s.stage === 'proposal')?.[`value_${suffix}`] || 0, count: dashboardData.pipeline.find(s => s.stage === 'proposal')?.[`count_${suffix}`] || 0, key: 'proposal' },
+                negotiation: { name: "Negotiation", value: dashboardData.pipeline.find(s => s.stage === 'negotiation')?.[`value_${suffix}`] || 0, count: dashboardData.pipeline.find(s => s.stage === 'negotiation')?.[`count_${suffix}`] || 0, key: 'negotiation' },
+                closed_won: { name: "Closed Won", value: dashboardData.pipeline.find(s => s.stage === 'closed_won')?.[`value_${suffix}`] || 0, count: dashboardData.pipeline.find(s => s.stage === 'closed_won')?.[`count_${suffix}`] || 0, key: 'closed_won' },
+                closed_lost: { name: "Closed Lost", value: dashboardData.pipeline.find(s => s.stage === 'closed_lost')?.[`value_${suffix}`] || 0, count: dashboardData.pipeline.find(s => s.stage === 'closed_lost')?.[`count_${suffix}`] || 0, key: 'closed_lost' },
+              };
+
+              // Filter to only visible stages based on preferences
+              const processedData = Object.entries(stages)
+                .filter(([key]) => visibleStageKeys.has(key))
+                .map(([, stage]) => ({
+                  stage: stage.name,
+                  value: stage.value,
+                  count: stage.count,
+                }));
+
+              // If all values are zero but there are counts, fall back to using counts
+              const allValuesZero = processedData.every((s) => s.value === 0);
+              if (allValuesZero && processedData.some((s) => s.count > 0)) {
+                setPipelineData(processedData.map((s) => ({ stage: s.stage, value: s.count, isCount: true })));
+              } else {
+                setPipelineData(processedData);
+              }
+              setLoading(false);
+              return; // Exit early - we got the data
+            }
+          } catch (error) {
+            console.warn('[SalesPipeline] Fast path failed, falling back to full fetch:', error);
+            // Fall through to slow path below
+          }
+        }
+
+        // Fallback: Use slow path for complex filters
         const methodName = hasFilter ? "filter" : "list";
         const methodParams = hasFilter ? { filter: effectiveFilter } : {};
         const dataFetcher = () => hasFilter ? Opportunity.filter(effectiveFilter) : Opportunity.list();
@@ -161,23 +215,28 @@ function SalesPipeline(props) {
         if (mounted) { // Only update state if component is still mounted
           setPipelineData(computeFromOpps(opps)); // Use the new helper function
           setLoading(false); // End loading
+          loadingRef.current = false;
         }
       } catch (error) {
         if (mounted) { // Only set error if component is still mounted
           console.warn("SalesPipeline: failed to load via cachedRequest:", error); // Use console.warn as in outline
           setErrorMessage("Failed to load pipeline data"); // Keep user-friendly error message
           setLoading(false); // End loading even on error
+          loadingRef.current = false;
         }
       }
     };
 
     load(); // Execute the async load function
-    return () => { mounted = false; }; // Cleanup function for unmounting
+    return () => { 
+      mounted = false;
+      loadingRef.current = false;
+    }; // Cleanup function for unmounting
      
-  }, [props?.tenantFilter, props?.showTestData, props?.prefetchedOpportunities, cachedRequest, userLoading, authCookiesReady, visibleOpportunityCards]); // Include all relevant props and cachedRequest in dependencies
+  }, [props?.tenantFilter?.tenant_id, props?.showTestData, props?.prefetchedOpportunities, cachedRequest, userLoading, authCookiesReady, visibleOpportunityCards]); // Include all relevant props and cachedRequest in dependencies
 
   return (
-    <Card className="bg-slate-800 border-slate-700 h-full">
+    <Card className="bg-slate-800 border-slate-700 h-full flex flex-col">
       <CardHeader className="border-b border-slate-700">
         <CardTitle className="text-slate-100 flex items-center gap-2">
           <Target className="w-5 h-5 text-blue-400" />
@@ -185,7 +244,7 @@ function SalesPipeline(props) {
         </CardTitle>
         <p className="text-slate-400 text-sm">Opportunities by stage</p>
       </CardHeader>
-      <CardContent className="p-6">
+      <CardContent className="p-6 flex-1 flex flex-col">
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
@@ -205,9 +264,10 @@ function SalesPipeline(props) {
           </div>
         ) : (
           <>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={pipelineData}>
+            <div className="flex-1 flex items-center justify-center">
+              <div className="h-80 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={pipelineData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
                   <XAxis 
                     dataKey="stage" 
@@ -215,6 +275,7 @@ function SalesPipeline(props) {
                     stroke="#475569"
                   />
                   <YAxis 
+                    tickCount={9}
                     tick={{ fontSize: 12, fill: '#94a3b8' }}
                     stroke="#475569"
                   />
@@ -245,9 +306,10 @@ function SalesPipeline(props) {
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
+              </div>
             </div>
             
-            <div className="text-center pt-4 border-t border-slate-700 mt-4">
+            <div className="text-center border-t border-slate-700">
               <Button variant="outline" size="sm" asChild className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
                 <Link to={createPageUrl("Opportunities")}>
                   View All {opportunitiesLabel}

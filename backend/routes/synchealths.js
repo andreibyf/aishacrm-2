@@ -5,6 +5,7 @@
 
 import express from "express";
 import { validateTenantAccess } from "../middleware/validateTenant.js";
+import { cacheList } from '../lib/cacheMiddleware.js';
 
 export default function createSyncHealthRoutes(_pgPool) {
     const router = express.Router();
@@ -13,21 +14,27 @@ export default function createSyncHealthRoutes(_pgPool) {
     router.use(validateTenantAccess);
 
     // GET /api/synchealths - List sync health records
-    router.get("/", async (req, res) => {
+    router.get("/", cacheList('synchealths', 180), async (req, res) => {
         try {
-            const { tenant_id, limit = 50, offset = 0 } = req.query;
+            const { limit = 50, offset = 0 } = req.query;
+
+            // Enforce tenant isolation
+            const tenant_id = req.tenant?.id || req.query.tenant_id;
+            if (!tenant_id) {
+                return res.status(400).json({
+                    status: 'error',
+                    message: 'tenant_id is required'
+                });
+            }
 
             const { getSupabaseClient } = await import('../lib/supabase-db.js');
             const supabase = getSupabaseClient();
             let query = supabase
                 .from('synchealth')
                 .select('*', { count: 'exact' })
+                .eq('tenant_id', tenant_id)  // Always enforce tenant scoping
                 .order('created_at', { ascending: false })
                 .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
-
-            if (tenant_id) {
-                query = query.eq('tenant_id', tenant_id);
-            }
 
             const { data, error, count } = await query;
             if (error) throw new Error(error.message);

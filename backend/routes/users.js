@@ -5,6 +5,7 @@
 
 import express from "express";
 import jwt from "jsonwebtoken";
+import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 import {
   confirmUserEmail,
   deleteAuthUser,
@@ -171,7 +172,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
   // GET /api/users - List users (combines global users + tenant employees)
   // Supports lookup by email without tenant filter
-  router.get("/", async (req, res) => {
+  router.get("/", cacheList('users', 180), async (req, res) => {
     try {
       // Normalize email param case-insensitively and support alternate casing
       const rawEmailKey = Object.keys(req.query).find(k => k.toLowerCase() === 'email');
@@ -999,7 +1000,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
   });
 
   // POST /api/users - Create new user (global admin or tenant employee)
-  router.post("/", mutateLimiter, async (req, res) => {
+  router.post("/", mutateLimiter, invalidateCache('users'), async (req, res) => {
     try {
       const {
         email,
@@ -1509,7 +1510,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
   });
 
   // PUT /api/users/:id - Update user (supports users and employees tables)
-  router.put("/:id", mutateLimiter, async (req, res) => {
+  router.put("/:id", mutateLimiter, invalidateCache('users'), async (req, res) => {
     try {
       const { id } = req.params;
       const {
@@ -1767,7 +1768,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
   });
 
   // DELETE /api/users/:id - Delete user (checks both users and employees tables)
-  router.delete("/:id", mutateLimiter, async (req, res) => {
+  router.delete("/:id", mutateLimiter, invalidateCache('users'), async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query;

@@ -9,6 +9,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { executeBraid, loadToolSchema, createBackendDeps, CRM_POLICIES, filterSensitiveFields, createAuditEntry, logToolExecution } from '../../braid-llm-kit/sdk/index.js';
 import cacheManager from './cacheManager.js';
+import { getSupabaseClient } from './supabase-db.js';
 
 // ============================================================================
 // REAL-TIME METRICS TRACKING (Redis-backed)
@@ -34,7 +35,12 @@ function trackRealtimeMetrics(tenantId, toolName, success, cacheHit, latencyMs) 
       const hourKey = `braid:metrics:${tenantId}:hour:${hour}`;
       const toolKey = `braid:metrics:${tenantId}:tool:${toolName}:${hour}`;
       
-      // Increment counters
+      // GLOBAL aggregate keys (for superadmin dashboard)
+      const globalMinuteKey = `braid:metrics:global:min:${minute}`;
+      const globalHourKey = `braid:metrics:global:hour:${hour}`;
+      const globalToolKey = `braid:metrics:global:tool:${toolName}:${hour}`;
+      
+      // Increment counters for BOTH per-tenant AND global
       await Promise.all([
         // Per-minute counters (5 min TTL)
         cacheManager.increment(`${minuteKey}:calls`, 300),
@@ -49,6 +55,16 @@ function trackRealtimeMetrics(tenantId, toolName, success, cacheHit, latencyMs) 
         // Per-tool per-hour counters (2 hour TTL)
         cacheManager.increment(`${toolKey}:calls`, 7200),
         success ? null : cacheManager.increment(`${toolKey}:errors`, 7200),
+        
+        // GLOBAL counters (5 min / 2 hour TTL)
+        cacheManager.increment(`${globalMinuteKey}:calls`, 300),
+        success ? null : cacheManager.increment(`${globalMinuteKey}:errors`, 300),
+        cacheHit ? cacheManager.increment(`${globalMinuteKey}:cache_hits`, 300) : null,
+        cacheManager.increment(`${globalHourKey}:calls`, 7200),
+        success ? null : cacheManager.increment(`${globalHourKey}:errors`, 7200),
+        cacheHit ? cacheManager.increment(`${globalHourKey}:cache_hits`, 7200) : null,
+        cacheManager.increment(`${globalToolKey}:calls`, 7200),
+        success ? null : cacheManager.increment(`${globalToolKey}:errors`, 7200),
         
         // Latency tracking (store as list, 2 hour TTL)
         latencyMs ? cacheManager.set(`${hourKey}:latency:${now}`, latencyMs, 7200) : null
@@ -69,10 +85,12 @@ function trackRealtimeMetrics(tenantId, toolName, success, cacheHit, latencyMs) 
 export async function getRealtimeMetrics(tenantId, window = 'minute') {
   try {
     const now = Math.floor(Date.now() / 1000);
+    // Use 'global' key when tenantId is null (superadmin aggregate view)
+    const effectiveTenantId = tenantId || 'global';
     
     if (window === 'minute') {
       const minute = Math.floor(now / 60) * 60;
-      const key = `braid:metrics:${tenantId}:min:${minute}`;
+      const key = `braid:metrics:${effectiveTenantId}:min:${minute}`;
       
       const [calls, errors, cacheHits] = await Promise.all([
         cacheManager.get(`${key}:calls`) || 0,
@@ -91,7 +109,7 @@ export async function getRealtimeMetrics(tenantId, window = 'minute') {
       };
     } else {
       const hour = Math.floor(now / 3600) * 3600;
-      const key = `braid:metrics:${tenantId}:hour:${hour}`;
+      const key = `braid:metrics:${effectiveTenantId}:hour:${hour}`;
       
       const [calls, errors, cacheHits] = await Promise.all([
         cacheManager.get(`${key}:calls`) || 0,
@@ -122,37 +140,61 @@ function logAuditEntry({
   toolName, config, basePolicy, tenantUuid, userId, userEmail, userRole,
   normalizedArgs, result, executionTimeMs, cacheHit, supabase
 }) {
+  // UUID regex for validation
+  const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  
   // Fire and forget - don't block the response
   setImmediate(async () => {
     try {
+      // Get supabase client if not provided
+      const db = supabase || getSupabaseClient();
+      if (!db) {
+        // Supabase not available - skip audit logging silently
+        return;
+      }
+      
       const entityType = extractEntityType(toolName);
       const entityId = normalizedArgs?.account_id || normalizedArgs?.lead_id || 
                        normalizedArgs?.contact_id || normalizedArgs?.activity_id ||
                        normalizedArgs?.opportunity_id || normalizedArgs?.document_id ||
                        normalizedArgs?.employee_id || normalizedArgs?.user_id || null;
       
+      // Validate userId is a proper UUID (may be passed as email by callers)
+      // Store email in userEmail field instead; userId must be null or valid UUID
+      let validUserId = null;
+      let finalUserEmail = userEmail || null;
+      
+      if (userId) {
+        if (UUID_PATTERN.test(userId)) {
+          validUserId = userId;
+        } else if (userId.includes('@')) {
+          // userId is actually an email - use it for userEmail if not already set
+          finalUserEmail = finalUserEmail || userId;
+        }
+      }
+      
       const entry = createAuditEntry({
-        toolName,
-        braidFunction: config?.function,
-        braidFile: config?.file,
+        toolName: toolName || 'unknown',
+        braidFunction: config?.function || null,
+        braidFile: config?.file || null,
         policy: config?.policy || 'UNKNOWN',
-        toolClass: basePolicy?.tool_class,
-        tenantId: tenantUuid,
-        userId,
-        userEmail,
-        userRole,
-        inputArgs: normalizedArgs,
-        resultTag: result?.tag,
+        toolClass: basePolicy?.tool_class || null,
+        tenantId: tenantUuid || null,
+        userId: validUserId,
+        userEmail: finalUserEmail,
+        userRole: userRole || null,
+        inputArgs: normalizedArgs || {},
+        resultTag: result?.tag || null,
         resultValue: result?.tag === 'Err' ? null : (result?.value ? { summary: 'Result logged' } : null), // Don't log full result for privacy
-        errorType: result?.error?.type,
-        errorMessage: result?.error?.message?.substring?.(0, 500),
-        executionTimeMs,
-        cacheHit,
-        entityType,
-        entityId
+        errorType: result?.error?.type || null,
+        errorMessage: result?.error?.message?.substring?.(0, 500) || null,
+        executionTimeMs: executionTimeMs || 0,
+        cacheHit: cacheHit || false,
+        entityType: entityType || null,
+        entityId: entityId || null
       });
       
-      await logToolExecution(supabase, entry);
+      await logToolExecution(db, entry);
     } catch (auditErr) {
       // Never let audit logging fail the main operation
       console.warn('[Braid Audit] Failed to log:', auditErr.message);
@@ -266,6 +308,7 @@ export const TOOL_REGISTRY = {
   get_account_details: { file: 'accounts.braid', function: 'getAccountDetails', policy: 'READ_ONLY' },
   list_accounts: { file: 'accounts.braid', function: 'listAccounts', policy: 'READ_ONLY' },
   search_accounts: { file: 'accounts.braid', function: 'searchAccounts', policy: 'READ_ONLY' },
+  search_accounts_by_status: { file: 'accounts.braid', function: 'searchAccountsByStatus', policy: 'READ_ONLY' },
   delete_account: { file: 'accounts.braid', function: 'deleteAccount', policy: 'DELETE_OPERATIONS' },
   
   // Lead Management
@@ -275,6 +318,7 @@ export const TOOL_REGISTRY = {
   convert_lead_to_account: { file: 'leads.braid', function: 'convertLeadToAccount', policy: 'WRITE_OPERATIONS' },
   list_leads: { file: 'leads.braid', function: 'listLeads', policy: 'READ_ONLY' },
   search_leads: { file: 'leads.braid', function: 'searchLeads', policy: 'READ_ONLY' },
+  search_leads_by_status: { file: 'leads.braid', function: 'searchLeadsByStatus', policy: 'READ_ONLY' },
   get_lead_details: { file: 'leads.braid', function: 'getLeadDetails', policy: 'READ_ONLY' },
   delete_lead: { file: 'leads.braid', function: 'deleteLead', policy: 'DELETE_OPERATIONS' },
   
@@ -302,6 +346,7 @@ export const TOOL_REGISTRY = {
   update_opportunity: { file: 'opportunities.braid', function: 'updateOpportunity', policy: 'WRITE_OPERATIONS' },
   list_opportunities_by_stage: { file: 'opportunities.braid', function: 'listOpportunitiesByStage', policy: 'READ_ONLY' },
   search_opportunities: { file: 'opportunities.braid', function: 'searchOpportunities', policy: 'READ_ONLY' },
+  search_opportunities_by_stage: { file: 'opportunities.braid', function: 'searchOpportunitiesByStage', policy: 'READ_ONLY' },
   get_opportunity_details: { file: 'opportunities.braid', function: 'getOpportunityDetails', policy: 'READ_ONLY' },
   get_opportunity_forecast: { file: 'opportunities.braid', function: 'getOpportunityForecast', policy: 'READ_ONLY' },
   mark_opportunity_won: { file: 'opportunities.braid', function: 'markOpportunityWon', policy: 'WRITE_OPERATIONS' },
@@ -311,8 +356,10 @@ export const TOOL_REGISTRY = {
   create_contact: { file: 'contacts.braid', function: 'createContact', policy: 'WRITE_OPERATIONS' },
   update_contact: { file: 'contacts.braid', function: 'updateContact', policy: 'WRITE_OPERATIONS' },
   list_contacts_for_account: { file: 'contacts.braid', function: 'listContactsForAccount', policy: 'READ_ONLY' },
+  list_all_contacts: { file: 'contacts.braid', function: 'listAllContacts', policy: 'READ_ONLY' },
   get_contact_details: { file: 'contacts.braid', function: 'getContactDetails', policy: 'READ_ONLY' },
   search_contacts: { file: 'contacts.braid', function: 'searchContacts', policy: 'READ_ONLY' },
+  search_contacts_by_status: { file: 'contacts.braid', function: 'searchContactsByStatus', policy: 'READ_ONLY' },
   delete_contact: { file: 'contacts.braid', function: 'deleteContact', policy: 'DELETE_OPERATIONS' },
   
   // Web Research
@@ -356,6 +403,7 @@ export const TOOL_REGISTRY = {
   reject_suggestion: { file: 'suggestions.braid', function: 'rejectSuggestion', policy: 'WRITE_OPERATIONS' },
   apply_suggestion: { file: 'suggestions.braid', function: 'applySuggestion', policy: 'WRITE_OPERATIONS' },
   trigger_suggestion_generation: { file: 'suggestions.braid', function: 'triggerSuggestionGeneration', policy: 'WRITE_OPERATIONS' },
+  suggest_next_actions: { file: 'suggest-next-actions.braid', function: 'suggestNextActions', policy: 'READ_ONLY' },
 
   // CRM Navigation (v3.0.0 - allows AI to navigate user to pages)
   navigate_to_page: { file: 'navigation.braid', function: 'navigateTo', policy: 'READ_ONLY' },
@@ -398,7 +446,13 @@ export const TOOL_REGISTRY = {
   get_activity_report: { file: 'reports.braid', function: 'getActivityReport', policy: 'READ_ONLY' },
   get_lead_conversion_report: { file: 'reports.braid', function: 'getLeadConversionReport', policy: 'READ_ONLY' },
   get_revenue_forecasts: { file: 'reports.braid', function: 'getRevenueForecasts', policy: 'READ_ONLY' },
-  clear_report_cache: { file: 'reports.braid', function: 'clearReportCache', policy: 'ADMIN_ONLY' }
+  clear_report_cache: { file: 'reports.braid', function: 'clearReportCache', policy: 'ADMIN_ONLY' },
+
+  // Workflow Delegation (Agent Orchestration)
+  delegate_to_workflow: { file: 'workflow-delegation.braid', function: 'triggerWorkflowByName', policy: 'WRITE_OPERATIONS' },
+  get_workflow_progress: { file: 'workflow-delegation.braid', function: 'getWorkflowProgress', policy: 'READ_ONLY' },
+  list_active_workflows: { file: 'workflow-delegation.braid', function: 'listActiveWorkflows', policy: 'READ_ONLY' },
+  get_workflow_notes: { file: 'workflow-delegation.braid', function: 'getWorkflowNotes', policy: 'READ_ONLY' }
 };
 
 /**
@@ -421,15 +475,15 @@ const TOOL_DESCRIPTIONS = {
   update_lead: 'Update an existing Lead record by its ID. Can modify name, email, company, status, source, phone, job_title, etc. Use for status changes (new→contacted→qualified).',
   qualify_lead: 'Mark a Lead as qualified. Updates status to "qualified" and prepares it for conversion. Use before convert_lead_to_account.',
   convert_lead_to_account: 'v3.0.0 WORKFLOW: Convert a Lead to Contact + Account + Opportunity. This is the key transition that creates the full customer record. Options: create_account (bool), account_name (string), selected_account_id (UUID for existing account), create_opportunity (bool), opportunity_name, opportunity_amount. Returns contact, account, opportunity.',
-  list_leads: 'List Leads in the CRM. FIRST ask user: "Would you like all leads, or filter by status (new, contacted, qualified, unqualified, converted)?" Pass status="all" for all leads. IMPORTANT: If more than 5 results, summarize the count and tell user to check the Leads page in the UI for the full list.',
+  list_leads: '⚠️ NOT FOR COUNTING! Use get_dashboard_bundle for counts. This tool lists individual Lead records. Use ONLY when user wants to SEE the leads, not count them. Pass status filter or "all".',
   search_leads: 'Search for Leads by name, email, or company. ALWAYS use this first when user asks about a lead by name or wants lead details. Use get_lead_details only when you have the lead ID.',
   get_lead_details: 'Get the full details of a specific Lead by its UUID. Only use when you already have the lead_id from a previous search or list.',
 
   // Activities
-  create_activity: 'Create a new Activity (task, meeting, call, email) in the CRM.',
+  create_activity: 'Create a new Activity (task, meeting, call, email) in the CRM. For related entities use entity_type (lead/contact/account/opportunity) and entity_id (the UUID).',
   update_activity: 'Update/reschedule an existing Activity by its ID. Use this for rescheduling - pass activity_id and updates object with new due_date (ISO format like "2025-12-20T13:00:00"). IMPORTANT: Use the activity ID from the previous list/search result - you do NOT need to query again.',
   mark_activity_complete: 'Mark an Activity as completed by its ID. Use the ID from previous list/search results.',
-  get_upcoming_activities: 'Get upcoming activities for a SPECIFIC user by their email. Requires assigned_to as the user\'s email address. Use list_activities instead for general calendar queries.',
+  get_upcoming_activities: 'Get upcoming activities for a user. The assigned_to parameter must be a user UUID (not email). Use search_users first to find the user UUID if needed. Use list_activities for general calendar queries.',
   schedule_meeting: 'Schedule a new meeting with attendees. Creates a meeting-type activity with date, time, duration, and attendee list.',
   list_activities: 'List all Activities in the CRM. Use this for calendar/schedule queries. Pass status="planned" for upcoming/pending, status="overdue" for overdue, status="completed" for past, or status="all" for everything. IMPORTANT: Results include activity IDs - remember these for follow-up actions like update or complete.',
   search_activities: 'Search for Activities by subject, body, or type. ALWAYS use this first when user asks about an activity by name or keyword. Results include IDs for follow-up actions.',
@@ -440,10 +494,10 @@ const TOOL_DESCRIPTIONS = {
 
 
   // Notes
-  create_note: 'Create a new Note attached to any CRM record (account, lead, contact, opportunity).',
+  create_note: 'Create a new Note attached to a CRM record. REQUIRED: content (the note text), entity_type (one of: "lead", "account", "contact", "opportunity"), entity_id (the UUID of the record).',
   update_note: 'Update an existing Note by its ID.',
   search_notes: 'Search notes by keyword across all records.',
-  get_notes_for_record: 'Get all notes attached to a specific record (account, lead, contact, or opportunity) by record ID.',
+  get_notes_for_record: 'Get all notes attached to a specific record. REQUIRED: entity_type (one of: "lead", "account", "contact", "opportunity"), entity_id (the UUID of the record).',
   get_note_details: 'Get the full details of a specific Note by its ID.',
 
   // Opportunities
@@ -538,14 +592,23 @@ const TOOL_DESCRIPTIONS = {
   invite_user: 'Send an invitation to a user to join the CRM. Requires admin privileges.',
 
   // Reports & Analytics
-  get_dashboard_bundle: 'Get the complete dashboard data bundle with all metrics, charts, and KPIs.',
+  get_dashboard_bundle: '🚨 REQUIRED for "how many" questions! Returns totalLeads, totalAccounts, totalContacts, totalOpportunities counts. When user asks "how many leads/accounts/contacts/opportunities", ALWAYS call this tool FIRST. Do NOT use list_leads/list_accounts to count - those are for viewing records, not counting.',
   get_health_summary: 'Get a health summary of the CRM data quality and system status.',
   get_sales_report: 'Generate a sales report for a date range. Group by day, week, month, or quarter.',
   get_pipeline_report: 'Get pipeline analysis with opportunity stages, values, and conversion rates.',
   get_activity_report: 'Generate an activity report for a date range. Optionally filter by employee.',
   get_lead_conversion_report: 'Get lead conversion metrics showing funnel stages and conversion rates.',
   get_revenue_forecasts: 'Get revenue forecasts based on pipeline opportunities. Specify months_ahead.',
-  clear_report_cache: 'Clear cached report data to force regeneration. Requires admin privileges.'
+  clear_report_cache: 'Clear cached report data to force regeneration. Requires admin privileges.',
+
+  // AI-Powered Next Actions (RAG-enabled)
+  suggest_next_actions: 'CRITICAL: Call this when user asks "what should I do next?", "what do you think?", "how should I proceed?", or similar open-ended questions. Analyzes entity state (notes, activities, stage) using RAG memory to suggest 2-3 specific next actions with reasoning. REQUIRED when users ask for guidance on next steps. Pass entity_type (lead/contact/account/opportunity) and entity_id.',
+
+  // Workflow Delegation (Agent Orchestration)
+  delegate_to_workflow: 'Delegate a task to a named workflow. Use this when user wants to hand off work to an automated agent workflow. Pass workflow_name (e.g., "Sales Manager Workflow", "Customer Service Workflow"), context object with relevant data, and related_entity_type/id. The workflow will handle the task autonomously and log progress via notes.',
+  get_workflow_progress: 'Check the status and progress of a workflow execution by its execution_id. Returns current status, started_at, execution_log, and current_node.',
+  list_active_workflows: 'List all currently running workflow executions. Use to see what automated processes are active.',
+  get_workflow_notes: 'Get notes/progress updates created by a workflow execution. Use to report on what an agent workflow has accomplished.'
 };
 
 /**
@@ -554,12 +617,47 @@ const TOOL_DESCRIPTIONS = {
 export const BRAID_SYSTEM_PROMPT = `
 You are AI-SHA - an AI Super Hi-performing Assistant designed to be an Executive Assistant for CRM operations.
 
+**� STOP! BEFORE ANSWERING "HOW MANY" QUESTIONS - READ THIS! 🛑**
+
+When users ask "how many", "count", "total number of" ANY entity (leads, accounts, contacts, opportunities):
+
+✅ CORRECT APPROACH:
+1. Call \`get_dashboard_bundle\` tool (NO parameters needed beyond tenant)
+2. Read the stats from the response: totalLeads, totalAccounts, totalContacts, totalOpportunities
+3. Report the EXACT number from the stats
+
+❌ WRONG APPROACH (DO NOT DO THIS):
+- Calling list_leads, list_accounts, list_contacts to count records
+- Fetching records and counting them manually
+- Saying "I found X leads" after listing them
+
+**IMPORTANT:** The dashboard bundle returns PRE-CALCULATED totals like totalLeads=50. Do NOT list individual records when asked for counts!
+
+**Example dialogue:**
+User: "How many leads do I have?"
+You (internally): Call get_dashboard_bundle → stats.totalLeads = 50
+You (response): "You have 50 leads in your CRM."
+
+**When to use list/search tools INSTEAD:**
+- "Show me my leads" → list_leads (they want to SEE records)
+- "Who is John Smith?" → search_leads (they want details)
+- "List my top 5 accounts" → list_accounts (they want a list)
+
 **CRITICAL BOUNDARIES:**
 - You ONLY have access to data within THIS CRM system for the user's assigned tenant
 - You CANNOT access, retrieve, or provide information about other CRMs, external systems, or other tenants
 - If asked about "another CRM", "different system", "other tenant", or data outside your scope, politely explain:
   "I can only provide information from your CRM. I don't have access to external systems or other tenants."
 - You are bound to the user's tenant context - never attempt to access or discuss data from other tenants
+
+**TEST DATA IDENTIFICATION (CRITICAL):**
+- Records have an \`is_test_data\` field that indicates if they are test data
+- ONLY use the \`is_test_data\` field to determine if a record is test data
+- Do NOT infer test data status from record names, values, or patterns
+- If \`is_test_data = false\` or is null, treat the record as REAL production data
+- Even if a name contains words like "test", "demo", "sample", "isolation" - if \`is_test_data = false\`, it is REAL data
+- Report the EXACT values from tool results - do not substitute, summarize, or "clean up" names
+- Never hallucinate or make up record names - use the exact data returned by tools
 
 **AMBIGUOUS TERM HANDLING (CRITICAL):**
 When users say vague terms like "client", "customer", "company", or "person", you MUST clarify:
@@ -574,6 +672,28 @@ Always ask for clarification: "When you say 'client', do you mean an Account, Le
 - **Contact**: An individual person associated with an Account"
 
 Do NOT assume - always clarify ambiguous references before taking action.
+
+**SINGLE-ITEM QUERIES ON CUSTOM TERMINOLOGY (CRITICAL):**
+When a user asks about "my [entity]" or "the [entity]" (singular) without specifying WHICH one:
+- "What is my cold lead?" → ASK: "Which Cold Lead are you referring to? Please provide a name, company, or status."
+- "Show me my task" → ASK: "Which Task? Please provide the subject, date, or type."
+- "What's the status of my deal?" → ASK: "Which deal are you referring to? Please provide a name or account."
+
+✅ CORRECT: Ask for clarification (name, status, date, or other identifying info)
+❌ WRONG: Call list_* tools and say "I couldn't find it" or offer to list all records
+
+Only list all records when user explicitly says "list", "show all", "display all", or similar.
+
+**TYPO TOLERANCE FOR ENTITY KEYWORDS (CRITICAL):**
+Users often make minor typos in entity keywords. Recognize common misspellings as their intended entity:
+- "Opportunities": opprtunities, oportunities, opportu nities, opportunity (all mean Opportunities)
+- "Accounts": acount, accouts, acounts (all mean Accounts)
+- "Contacts": contact, contacs, conacts (all mean Contacts)
+- "Activities": activites, activitie, activitys (all mean Activities)
+- "Leads": lead, leeds (all mean Leads)
+
+When you see a typo/variation that's close to a known entity keyword, interpret it as that entity.
+Do NOT ask for clarification on spelling - just use the closest matching entity type.
 
 **CONVERSATION END PHRASES:**
 When the user says any of these phrases, respond with a brief, friendly sign-off and indicate you're going back to standby:
@@ -601,6 +721,57 @@ Example response: "You're welcome! Let me know if you need anything else. Going 
 - You can also navigate to specific records by passing record_id parameter
 - ALWAYS use the tool for navigation requests - do NOT tell users you cannot navigate
 
+**CONVERSATION CONTINUITY & CONTEXT AWARENESS (CRITICAL):**
+You MUST maintain awareness of the conversation flow and recent discussion topics:
+- When user makes implicit references ("I think I only have 1", "what about that one", "the company"), refer to recent messages
+- Track what entities were just discussed (leads, accounts, contacts, opportunities)
+- If user says "I think I only have 1" after discussing warm leads, interpret as "I have only 1 warm lead"
+- If unclear, reference the recent context: "You mentioned wanting to see warm leads. Did you mean you have only 1 warm lead?"
+- NEVER respond with "I'm not sure what action you want to take" for vague statements - use conversation history
+- Look at the last 3-5 messages to understand implicit references
+
+**IMPLICIT REFERENCE HANDLING EXAMPLES:**
+User: "Show me warm leads"
+AiSHA: [calls list_leads with status="warm"]
+User: "I think I only have 1"
+→ CORRECT: Interpret as confirmation about lead count, respond naturally: "Yes, you have 1 warm lead: [name]. Would you like to see the details?"
+→ WRONG: "I'm not sure what action you want to take"
+
+User: "What's the name of my warm lead?"
+AiSHA: [calls list_leads, shows Jack Russel]
+User: "summarize the notes for me"
+→ CORRECT: Understand "the notes" refers to Jack Russel's notes (from session context), call search_notes with entity_id
+→ WRONG: Ask "Which entity's notes?"
+
+**PROACTIVE NEXT ACTIONS (CRITICAL - HIGHEST PRIORITY):**
+When users ask ANYTHING about recommendations or next steps, you MUST use suggest_next_actions tool:
+
+**Trigger Patterns (USE TOOL FOR ALL OF THESE):**
+- "What should I do next?"
+- "What do you think?"
+- "What are my next steps?"
+- "What do you recommend?"
+- "How should I proceed?"
+- "What's the next step?"
+- "What should be my next step?"
+- "What do you think my next steps should be?"
+- "What should be my next steps?" (any variation)
+
+**MANDATORY BEHAVIOR:**
+- NEVER EVER respond with "I'm not sure what action you want to take" when asked about next steps
+- ALWAYS call suggest_next_actions tool - it uses AI memory to analyze entity context
+- If user is discussing a specific entity (lead, account, contact, opportunity), use that entity's ID from session context
+- The tool analyzes: recent notes, activities, stage, last contact date, temperature, and context
+- Returns 2-3 specific, actionable next steps with reasoning
+- Prioritizes based on urgency, lead temperature, and best practices
+- If notes mention "awaiting callback", "left message", or "considering email", suggests appropriate follow-up timing and method
+
+**Example Flow:**
+User: "What should be my next steps?"
+→ YOU: Call suggest_next_actions(entity_type="lead", entity_id="<from session context>")
+→ RETURN: Tool's suggestions with reasoning
+→ NEVER say "I'm not sure" - the tool provides intelligent recommendations
+
 **Data Structure Guide (CRITICAL - Matches DB):**
 - Accounts: {id, name, annual_revenue, industry, website, email, phone, assigned_to, metadata}
 - Leads: {id, first_name, last_name, email, company, status, source, phone, job_title, assigned_to}
@@ -608,8 +779,16 @@ Example response: "You're welcome! Let me know if you need anything else. Going 
 - Opportunities: {id, name, description, amount, stage, probability, close_date, account_id, contact_id, assigned_to}
 - Activities: {id, type, subject, body, status, due_date, assigned_to}
 
-**CRITICAL - Listing vs Searching Data:**
-**CRITICAL - Listing vs Searching Data:**
+**CRITICAL - Getting Counts vs Listing Records:**
+**Priority 1: Use Dashboard Aggregations for Counts**
+- When user asks "how many [entity]" or "count of [entity]": Use get_dashboard_bundle tool FIRST
+- Dashboard bundle returns pre-aggregated counts: totalLeads, totalAccounts, totalContacts, totalOpportunities, openLeads, wonOpportunities, etc.
+- This is FASTER, MORE EFFICIENT, and ALWAYS ACCURATE (no duplicate counting issues)
+- Example: "How many leads do I have?" → Call get_dashboard_bundle, return totalLeads count
+- Example: "How many open opportunities?" → Call get_dashboard_bundle, return openOpportunities count
+
+**Priority 2: List/Search for Details (Not Counts)**
+- ONLY use list_leads/search_leads when user wants to SEE the actual records or details
 - When user asks "how many leads" or "list all leads": Use list_leads with status="all" to get ALL records
 - When user asks about a SPECIFIC lead by name (e.g., "Jennifer Martinez"): Use search_leads first
 - When user says "give me information on the lead": Use list_leads with status="all" FIRST to see what leads exist, then get details
@@ -817,6 +996,12 @@ export function summarizeToolResult(result, toolName) {
     return summary;
   }
   
+  // Dashboard bundle: Return pre-aggregated stats clearly for count questions
+  if (toolName === 'get_dashboard_bundle' && data.stats) {
+    const stats = data.stats;
+    return `Dashboard Stats: ${stats.totalLeads} leads (${stats.openLeads} open, ${stats.newLeadsLast30Days} new in 30 days), ${stats.totalAccounts} accounts, ${stats.totalContacts} contacts, ${stats.totalOpportunities} opportunities (${stats.openOpportunities} open, ${stats.wonOpportunities} won), Pipeline: $${(stats.pipelineValue || 0).toLocaleString()}, Won: $${(stats.wonValue || 0).toLocaleString()}, Activities (30 days): ${stats.activitiesLast30Days}`;
+  }
+  
   // Activity-specific: ALWAYS include IDs prominently for follow-up actions
   if (toolName === 'list_activities' || toolName === 'search_activities' || toolName === 'get_upcoming_activities') {
     const activities = Array.isArray(data) ? data : (data.activities || []);
@@ -843,16 +1028,30 @@ export function summarizeToolResult(result, toolName) {
       return `${toolName}: No leads found matching the criteria. This is a VALID result (no matches), NOT a network error. Consider asking the user to verify the search term or check a different entity type.`;
     }
 
-    const summaryItems = leads.slice(0, 5).map(l => {
-      const fullName = [l.first_name, l.last_name].filter(Boolean).join(' ') || 'Unnamed';
-      return `• ID: ${l.id}, Name: "${fullName}", Company: "${l.company || 'N/A'}", Status: ${l.status || 'unknown'}, Email: ${l.email || 'N/A'}`;
+    // Deduplicate by ID to avoid showing the same lead multiple times
+    const seenIds = new Set();
+    const uniqueLeads = leads.filter(l => {
+      if (seenIds.has(l.id)) return false;
+      seenIds.add(l.id);
+      return true;
     });
 
-    let summary = `Found ${leads.length} lead${leads.length === 1 ? '' : 's'}:\n${summaryItems.join('\n')}`;
-    if (leads.length > 5) {
-      summary += `\n... and ${leads.length - 5} more`;
+    const summaryItems = uniqueLeads.slice(0, 10).map(l => {
+      const fullName = [l.first_name, l.last_name].filter(Boolean).join(' ') || 'Unnamed';
+      const isTest = l.is_test_data === true ? ' [TEST DATA]' : '';
+      const phone = l.phone ? `, Phone: ${l.phone}` : '';
+      const email = l.email ? `, Email: ${l.email}` : '';
+      return `• ID: ${l.id}, EXACT Name: "${fullName}", Company: "${l.company || 'N/A'}", Status: ${l.status || 'unknown'}${phone}${email}${isTest}`;
+    });
+
+    let summary = `Found ${uniqueLeads.length} Lead${uniqueLeads.length === 1 ? '' : 's'} (REPORT THESE EXACT NAMES - do not substitute):\n${summaryItems.join('\n')}`;
+    if (uniqueLeads.length > 10) {
+      summary += `\n... and ${uniqueLeads.length - 10} more`;
     }
-    summary += '\n\n**CONTEXT RETENTION: Remember these lead IDs and names for follow-up actions (update_lead, qualify_lead, get_lead_details)**';
+    if (uniqueLeads.length < leads.length) {
+      summary += `\n\n(Note: ${leads.length - uniqueLeads.length} duplicate${leads.length - uniqueLeads.length === 1 ? '' : 's'} removed from results)`;
+    }
+    summary += '\n\n**CRITICAL: Use the EXACT names shown above. Do NOT make up different names. If is_test_data is false/null, treat as real data regardless of name.**';
     return summary;
   }
 
@@ -862,6 +1061,56 @@ export function summarizeToolResult(result, toolName) {
       const fullName = [data.first_name, data.last_name].filter(Boolean).join(' ') || 'Unnamed';
       return `Lead ID: ${data.id}, Name: "${fullName}", Company: "${data.company || 'N/A'}", Status: ${data.status || 'unknown'}, Email: ${data.email || 'N/A'}, Phone: ${data.phone || 'N/A'}`;
     }
+  }
+
+  // BizDev Sources (Cold Leads): EXPLICITLY report exact names - never hallucinate
+  if (toolName === 'list_bizdev_sources' || toolName === 'search_bizdev_sources') {
+    const sources = Array.isArray(data) ? data : (data.bizdevsources || data.data || []);
+    if (sources.length === 0) {
+      return `${toolName}: No Cold Leads found matching the criteria. This is a VALID result (no matches), NOT a network error.`;
+    }
+
+    const summaryItems = sources.slice(0, 10).map(s => {
+      const name = s.source_name || s.source || s.company_name || 'Unnamed';
+      const isTest = s.is_test_data === true ? ' [TEST DATA]' : '';
+      return `• ID: ${s.id}, EXACT Name: "${name}", Company: "${s.company_name || 'N/A'}", Status: ${s.status || 'unknown'}${isTest}`;
+    });
+
+    let summary = `Found ${sources.length} Cold Lead${sources.length === 1 ? '' : 's'} (REPORT THESE EXACT NAMES - do not substitute or change them):\n${summaryItems.join('\n')}`;
+    if (sources.length > 10) {
+      summary += `\n... and ${sources.length - 10} more`;
+    }
+    summary += '\n\n**CRITICAL: Use the EXACT names shown above. Do NOT make up different names. If is_test_data is false/null, treat as real data regardless of name.**';
+    return summary;
+  }
+
+  // Opportunities: EXPLICITLY report exact names - never hallucinate
+  if (toolName === 'list_opportunities_by_stage' || toolName === 'search_opportunities') {
+    const opps = Array.isArray(data) ? data : (data.opportunities || data.data || []);
+    if (opps.length === 0) {
+      return `${toolName}: No opportunities found matching the criteria. This is a VALID result (no matches), NOT a network error.`;
+    }
+
+    // Deduplicate by ID
+    const seenIds = new Set();
+    const uniqueOpps = opps.filter(o => {
+      if (seenIds.has(o.id)) return false;
+      seenIds.add(o.id);
+      return true;
+    });
+
+    const summaryItems = uniqueOpps.slice(0, 10).map(o => {
+      const isTest = o.is_test_data === true ? ' [TEST DATA]' : '';
+      const amount = o.amount ? `$${Number(o.amount).toLocaleString()}` : 'N/A';
+      return `• ID: ${o.id}, EXACT Name: "${o.name || 'Unnamed'}", Amount: ${amount}, Stage: ${o.stage || 'unknown'}${isTest}`;
+    });
+
+    let summary = `Found ${uniqueOpps.length} Opportunit${uniqueOpps.length === 1 ? 'y' : 'ies'} (REPORT THESE EXACT NAMES AND AMOUNTS - do not substitute):\n${summaryItems.join('\n')}`;
+    if (uniqueOpps.length > 10) {
+      summary += `\n... and ${uniqueOpps.length - 10} more`;
+    }
+    summary += '\n\n**CRITICAL: Use the EXACT names and amounts shown above. Do NOT make up different names or amounts. If is_test_data is false/null, treat as real data regardless of name.**';
+    return summary;
   }
 
   // Single activity detail
@@ -878,15 +1127,27 @@ export function summarizeToolResult(result, toolName) {
       return `${toolName}: No accounts found matching the criteria. This is a VALID result (no matches), NOT a network error.`;
     }
 
-    const summaryItems = accounts.slice(0, 5).map(a => {
-      return `• ID: ${a.id}, Name: "${a.name || 'Unnamed'}", Industry: "${a.industry || 'N/A'}", Revenue: $${(a.annual_revenue || 0).toLocaleString()}`;
+    // Deduplicate by ID
+    const seenIds = new Set();
+    const uniqueAccounts = accounts.filter(a => {
+      if (seenIds.has(a.id)) return false;
+      seenIds.add(a.id);
+      return true;
     });
 
-    let summary = `Found ${accounts.length} account${accounts.length === 1 ? '' : 's'}:\n${summaryItems.join('\n')}`;
-    if (accounts.length > 5) {
-      summary += `\n... and ${accounts.length - 5} more`;
+    const summaryItems = uniqueAccounts.slice(0, 10).map(a => {
+      const isTest = a.is_test_data === true ? ' [TEST DATA]' : '';
+      return `• ID: ${a.id}, EXACT Name: "${a.name || 'Unnamed'}", Industry: "${a.industry || 'N/A'}", Revenue: $${(a.annual_revenue || 0).toLocaleString()}${isTest}`;
+    });
+
+    let summary = `Found ${uniqueAccounts.length} Account${uniqueAccounts.length === 1 ? '' : 's'} (REPORT THESE EXACT NAMES - do not substitute):\n${summaryItems.join('\n')}`;
+    if (uniqueAccounts.length > 10) {
+      summary += `\n... and ${uniqueAccounts.length - 10} more`;
     }
-    summary += '\n\n**CONTEXT RETENTION: Remember these account IDs and names for follow-up actions**';
+    if (uniqueAccounts.length < accounts.length) {
+      summary += `\n\n(Note: ${accounts.length - uniqueAccounts.length} duplicate${accounts.length - uniqueAccounts.length === 1 ? '' : 's'} removed)`;
+    }
+    summary += '\n\n**CRITICAL: Use the EXACT names shown above. Do NOT make up different names. If is_test_data is false/null, treat as real data regardless of name.**';
     return summary;
   }
 
@@ -904,16 +1165,28 @@ export function summarizeToolResult(result, toolName) {
       return `${toolName}: No contacts found matching the criteria. This is a VALID result (no matches), NOT a network error.`;
     }
 
-    const summaryItems = contacts.slice(0, 5).map(c => {
-      const fullName = [c.first_name, c.last_name].filter(Boolean).join(' ') || 'Unnamed';
-      return `• ID: ${c.id}, Name: "${fullName}", Title: "${c.job_title || 'N/A'}", Email: ${c.email || 'N/A'}`;
+    // Deduplicate by ID
+    const seenIds = new Set();
+    const uniqueContacts = contacts.filter(c => {
+      if (seenIds.has(c.id)) return false;
+      seenIds.add(c.id);
+      return true;
     });
 
-    let summary = `Found ${contacts.length} contact${contacts.length === 1 ? '' : 's'}:\n${summaryItems.join('\n')}`;
-    if (contacts.length > 5) {
-      summary += `\n... and ${contacts.length - 5} more`;
+    const summaryItems = uniqueContacts.slice(0, 10).map(c => {
+      const fullName = [c.first_name, c.last_name].filter(Boolean).join(' ') || 'Unnamed';
+      const isTest = c.is_test_data === true ? ' [TEST DATA]' : '';
+      return `• ID: ${c.id}, EXACT Name: "${fullName}", Title: "${c.job_title || 'N/A'}"${isTest}`;
+    });
+
+    let summary = `Found ${uniqueContacts.length} Contact${uniqueContacts.length === 1 ? '' : 's'} (REPORT THESE EXACT NAMES - do not substitute):\n${summaryItems.join('\n')}`;
+    if (uniqueContacts.length > 10) {
+      summary += `\n... and ${uniqueContacts.length - 10} more`;
     }
-    summary += '\n\n**CONTEXT RETENTION: Remember these contact IDs and names for follow-up actions**';
+    if (uniqueContacts.length < contacts.length) {
+      summary += `\n\n(Note: ${contacts.length - uniqueContacts.length} duplicate${contacts.length - uniqueContacts.length === 1 ? '' : 's'} removed)`;
+    }
+    summary += '\n\n**CRITICAL: Use the EXACT names shown above. Do NOT make up different names. If is_test_data is false/null, treat as real data regardless of name.**';
     return summary;
   }
 
@@ -1054,9 +1327,12 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
   // Attach execution context so audit logs include tenant/user and tenant isolation has data
   const basePolicy = CRM_POLICIES[config.policy];
   
-  // Extract user info from access token for audit logging
+  // Extract user info from access token for audit logging and created_by fields
   const userRole = accessToken?.user_role || 'user';
   const userEmail = accessToken?.user_email || null;
+  const userName = accessToken?.user_name || null;
+  // Use userName for created_by (more readable), fallback to email
+  const createdBy = userName || userEmail || null;
   
   // === ROLE-BASED ACCESS CONTROL ===
   // Check if the tool requires specific roles and verify user has permission
@@ -1156,7 +1432,8 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
   // Inside Docker: CRM_BACKEND_URL=http://backend:3001
   // Outside Docker: BACKEND_URL=http://localhost:4001
   const backendUrl = process.env.CRM_BACKEND_URL || process.env.BACKEND_URL || 'http://localhost:4001';
-  const deps = createBackendDeps(backendUrl, tenantUuid, userId, internalToken);
+  // Pass createdBy (userName or email) for created_by field injection in POST requests
+  const deps = createBackendDeps(backendUrl, tenantUuid, userId, internalToken, createdBy);
 
   // Normalize arguments into a single object for Braid
   const normalizedArgs = normalizeToolArgs(toolName, args, tenantRecord);
@@ -1443,8 +1720,8 @@ export const TOOL_CHAINS = {
           activity_type: input.activity_type || 'call',
           due_date: input.followup_date || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
           assigned_to: input.assigned_to,
-          related_to_type: 'opportunity',
-          related_to_id: ctx.opportunity?.value?.id,
+          entity_type: 'opportunity',
+          entity_id: ctx.opportunity?.value?.id,
           body: input.followup_notes || 'Initial follow-up call'
         }),
         required: false,
@@ -2456,18 +2733,26 @@ export function listChains(userRole = 'user') {
 
 /**
  * Parameter order for each Braid function (matches .braid file signatures)
+ * CONVENTION: 
+ * - First param: 'tenant' (not tenant_id)
+ * - Entity IDs: '{entity}_id' (e.g., lead_id, account_id)
+ * - Related entities: 'entity_type', 'entity_id' (for notes, activities, documents)
+ * - Update objects: 'updates' (not content, changes, etc.)
+ * - Search strings: 'query'
+ * - Result limits: 'limit'
  */
 const BRAID_PARAM_ORDER = {
   // Snapshot
   fetchSnapshot: ['tenant', 'scope', 'limit'],
-  probe: ['tenant'],
+  probe: [],  // No params
 
   // Accounts
   createAccount: ['tenant', 'name', 'annual_revenue', 'industry', 'website', 'email', 'phone'],
   updateAccount: ['tenant', 'account_id', 'updates'],
   getAccountDetails: ['tenant', 'account_id'],
-  listAccounts: ['tenant', 'limit'],
+  listAccounts: ['tenant', 'limit', 'offset'],
   searchAccounts: ['tenant', 'query', 'limit'],
+  searchAccountsByStatus: ['tenant', 'status', 'limit'],
   deleteAccount: ['tenant', 'account_id'],
 
   // Leads
@@ -2475,48 +2760,101 @@ const BRAID_PARAM_ORDER = {
   updateLead: ['tenant', 'lead_id', 'updates'],
   qualifyLead: ['tenant', 'lead_id', 'notes'],
   convertLeadToAccount: ['tenant', 'lead_id', 'options'],
-  listLeads: ['tenant', 'status', 'limit'],
+  listLeads: ['tenant', 'status', 'account_id', 'limit'],
   searchLeads: ['tenant', 'query', 'limit'],
+  searchLeadsByStatus: ['tenant', 'status', 'limit'],
   getLeadDetails: ['tenant', 'lead_id'],
   deleteLead: ['tenant', 'lead_id'],
 
-  // Activities
-  createActivity: ['tenant', 'subject', 'activity_type', 'due_date', 'assigned_to', 'related_to_type', 'related_to_id', 'body'],
-  updateActivity: ['tenant', 'activity_id', 'updates'],
-  markActivityComplete: ['tenant', 'activity_id'],
-  getUpcomingActivities: ['tenant', 'assigned_to', 'days'],
-  listActivities: ['tenant', 'status', 'limit'],
-  searchActivities: ['tenant', 'query', 'limit'],
-  getActivityDetails: ['tenant', 'activity_id'],
-  scheduleMeeting: ['tenant', 'subject', 'attendees', 'date_time', 'duration_minutes', 'assigned_to'],
-  deleteActivity: ['tenant', 'activity_id'],
-
-
-  // Notes
-  createNote: ['tenant', 'content', 'related_to', 'related_id'],
-  updateNote: ['tenant', 'note_id', 'content'],
-  searchNotes: ['tenant', 'query', 'limit'],
-  getNotesForRecord: ['tenant', 'related_to', 'related_id'],
-  getNoteDetails: ['tenant', 'note_id'],
-  deleteNote: ['tenant', 'note_id'],
+  // Contacts
+  createContact: ['tenant', 'first_name', 'last_name', 'email', 'phone', 'job_title', 'account_id', 'assigned_to'],
+  updateContact: ['tenant', 'contact_id', 'updates'],
+  listContactsForAccount: ['tenant', 'account_id', 'limit'],
+  listAllContacts: ['tenant', 'limit'],
+  searchContacts: ['tenant', 'query', 'limit'],
+  searchContactsByStatus: ['tenant', 'status', 'limit'],
+  getContactDetails: ['tenant', 'contact_id'],
+  deleteContact: ['tenant', 'contact_id'],
 
   // Opportunities
   createOpportunity: ['tenant', 'name', 'description', 'amount', 'stage', 'probability', 'close_date', 'account_id', 'contact_id'],
   updateOpportunity: ['tenant', 'opportunity_id', 'updates'],
-  listOpportunitiesByStage: ['tenant', 'stage', 'limit'],
+  listOpportunitiesByStage: ['tenant', 'stage', 'account_id', 'limit'],
   searchOpportunities: ['tenant', 'query', 'limit'],
+  searchOpportunitiesByStage: ['tenant', 'stage', 'limit'],
   getOpportunityDetails: ['tenant', 'opportunity_id'],
   getOpportunityForecast: ['tenant', 'period'],
   markOpportunityWon: ['tenant', 'opportunity_id', 'close_details'],
   deleteOpportunity: ['tenant', 'opportunity_id'],
 
-  // Contacts
-  createContact: ['tenant', 'first_name', 'last_name', 'email', 'phone', 'job_title', 'account_id'],
-  updateContact: ['tenant', 'contact_id', 'updates'],
-  listContactsForAccount: ['tenant', 'account_id', 'limit'],
-  getContactDetails: ['tenant', 'contact_id'],
-  searchContacts: ['tenant', 'query', 'limit'],
-  deleteContact: ['tenant', 'contact_id'],
+  // Activities - AI uses entity_type/entity_id, Braid transforms to related_to/related_id for DB
+  createActivity: ['tenant', 'subject', 'activity_type', 'due_date', 'assigned_to', 'entity_type', 'entity_id', 'body'],
+  updateActivity: ['tenant', 'activity_id', 'updates'],
+  markActivityComplete: ['tenant', 'activity_id'],
+  getUpcomingActivities: ['tenant', 'assigned_to', 'days'],
+  listActivities: ['tenant', 'status', 'entity_type', 'entity_id', 'limit'],
+  searchActivities: ['tenant', 'query', 'limit'],
+  getActivityDetails: ['tenant', 'activity_id'],
+  scheduleMeeting: ['tenant', 'subject', 'attendees', 'date_time', 'duration_minutes', 'assigned_to'],
+  deleteActivity: ['tenant', 'activity_id'],
+
+  // Notes - AI uses entity_type/entity_id, Braid transforms to related_type/related_id for DB
+  createNote: ['tenant', 'content', 'entity_type', 'entity_id'],
+  updateNote: ['tenant', 'note_id', 'updates'],
+  searchNotes: ['tenant', 'query', 'limit'],
+  getNotesForRecord: ['tenant', 'entity_type', 'entity_id'],
+  getNoteDetails: ['tenant', 'note_id'],
+  deleteNote: ['tenant', 'note_id'],
+
+  // Documents - AI uses entity_type/entity_id
+  listDocuments: ['tenant', 'entity_type', 'entity_id', 'limit'],
+  getDocumentDetails: ['tenant', 'document_id'],
+  createDocument: ['tenant', 'name', 'description', 'entity_type', 'entity_id', 'file_url', 'file_type'],
+  updateDocument: ['tenant', 'document_id', 'updates'],
+  deleteDocument: ['tenant', 'document_id'],
+  analyzeDocument: ['tenant', 'document_id', 'analysis_type'],
+  searchDocuments: ['tenant', 'query', 'limit'],
+
+  // Employees
+  listEmployees: ['tenant', 'role', 'department', 'active_only'],
+  getEmployeeDetails: ['tenant', 'employee_id'],
+  createEmployee: ['tenant', 'first_name', 'last_name', 'email', 'role', 'department', 'phone'],
+  updateEmployee: ['tenant', 'employee_id', 'updates'],
+  deleteEmployee: ['tenant', 'employee_id'],
+  searchEmployees: ['tenant', 'query', 'limit'],
+  getEmployeeAssignments: ['tenant', 'employee_id'],
+
+  // Users (ADMIN_ONLY policy for most)
+  listUsers: ['tenant', 'role', 'active_only'],
+  getUserDetails: ['tenant', 'user_id'],
+  getCurrentUserProfile: ['tenant'],
+  getUserProfiles: ['tenant'],
+  createUser: ['tenant', 'email', 'first_name', 'last_name', 'role', 'password'],
+  updateUser: ['tenant', 'user_id', 'updates'],
+  deleteUser: ['tenant', 'user_id'],
+  searchUsers: ['tenant', 'query', 'limit'],
+  inviteUser: ['tenant', 'user_id', 'invitation_message'],
+
+  // Reports & Analytics
+  getDashboardBundle: ['tenant', 'time_range', 'include_forecasts'],
+  getHealthSummary: ['tenant'],
+  getSalesReport: ['tenant', 'start_date', 'end_date', 'group_by'],
+  getPipelineReport: ['tenant', 'include_history'],
+  getActivityReport: ['tenant', 'start_date', 'end_date', 'employee_id'],
+  getLeadConversionReport: ['tenant', 'start_date', 'end_date'],
+  getRevenueForecasts: ['tenant', 'months_ahead'],
+  clearReportCache: ['tenant', 'report_type'],
+
+  // Telephony & AI Calling
+  initiateCall: ['tenant', 'provider', 'phone_number', 'contact_name', 'company', 'purpose', 'talking_points'],
+  callContact: ['tenant', 'contact_id', 'provider', 'purpose', 'talking_points'],
+  checkCallingProvider: ['tenant', 'provider'],
+  getCallingAgents: ['tenant', 'provider'],
+
+  // Workflow Templates
+  listWorkflowTemplates: ['tenant', 'category'],
+  getWorkflowTemplate: ['tenant', 'template_id'],
+  instantiateWorkflowTemplate: ['tenant', 'template_id', 'workflow_name', 'parameters'],
 
   // Web Research
   searchWeb: ['query', 'limit'],
@@ -2548,6 +2886,9 @@ const BRAID_PARAM_ORDER = {
   rejectSuggestion: ['tenant', 'suggestion_id', 'rejection_reason'],
   applySuggestion: ['tenant', 'suggestion_id'],
   triggerSuggestionGeneration: ['tenant', 'trigger_id'],
+  
+  // AI Next Actions (RAG-enabled suggestions)
+  suggestNextActions: ['tenant', 'entity_type', 'entity_id', 'limit'],
 
   // CRM Navigation (v3.0.0)
   navigateTo: ['tenant', 'page', 'record_id'],
@@ -2637,7 +2978,7 @@ function normalizeToolArgs(toolName, rawArgs, tenantRecord) {
     if (typeof args.updates === 'string') {
       try {
         args.updates = JSON.parse(args.updates);
-      } catch (e) {
+      } catch (_e) {
         console.warn('[Braid] Failed to parse updates string:', args.updates);
       }
     }
