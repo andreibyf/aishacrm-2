@@ -1,9 +1,18 @@
 # AiSHA AI Architecture
 
-**Version:** 1.2  
-**Last Updated:** January 1, 2026  
+**Version:** 1.3  
+**Last Updated:** January 2, 2025  
 **Status:** Production  
 **Purpose:** Customer-facing AI Executive Assistant for Aisha CRM
+
+---
+
+## What's New in v1.3
+
+- **Agent Workflow Orchestration:** AiSHA can now delegate multi-step tasks to named agent workflows (Sales Manager, Customer Service Manager)
+- **AI-Powered Workflow Nodes:** New `ai_summarize`, `ai_generate_note`, and `ai_generate_email` nodes with real OpenAI integration
+- **Workflow Delegation Tools:** 4 new Braid tools for triggering and monitoring agent workflows
+- **Progress Tracking:** Workflows log AI-generated notes at each step for full visibility
 
 ---
 
@@ -485,6 +494,14 @@ Tool Chain:
 | `schedule_meeting` | Calendar integration | `{ attendees, date, duration }` |
 | `convert_lead` | Lead → Account/Contact | `{ lead_id }` |
 
+### **Workflow Delegation (Agent Orchestration)** (v3.7.0+)
+| Tool | Purpose | Example |
+|------|---------|---------|
+| `delegate_to_workflow` | Delegate task to named agent workflow | `{ workflow_name: "Sales Manager Workflow", context: {...}, related_entity_type: "lead", related_entity_id: "uuid" }` |
+| `get_workflow_progress` | Check execution status | `{ execution_id: "uuid" }` |
+| `list_active_workflows` | See running workflows | `{ limit: 10 }` |
+| `get_workflow_notes` | Get progress notes from workflow | `{ execution_id: "uuid" }` |
+
 ---
 
 ## Conversation Patterns
@@ -565,6 +582,224 @@ Follow-Up Suggestions:
 - "John Smith from XYZ"
 - "Show all Johns"
 - "Never mind"
+```
+
+### **Pattern 5: Agent Workflow Delegation** (v3.7.0+)
+```
+User: "Have the sales manager follow up with this lead"
+↓
+AiSHA:
+1. Detects WORKFLOW_DELEGATE intent
+2. Reads SESSION ENTITY CONTEXT → Jack Russel (lead, ID: abc-123)
+3. Calls delegate_to_workflow({
+     workflow_name: "Sales Manager Workflow",
+     context: { priority: "normal", source: "user_request" },
+     related_entity_type: "lead",
+     related_entity_id: "abc-123"
+   })
+4. Workflow executes autonomously:
+   - find_lead → ai_summarize → ai_generate_note
+   - ai_generate_email → send_email → update_lead
+   - create_activity → ai_generate_note (completion)
+5. Response: "I've delegated the follow-up to the Sales Manager Workflow. 
+   It will send a personalized email and schedule a follow-up task."
+
+Follow-Up Suggestions:
+- "Check the workflow progress"
+- "What has the sales manager done?"
+- "Show me the lead's notes"
+- "Cancel the workflow"
+```
+
+---
+
+## Agent Workflow Orchestration (v3.7.0+)
+
+**Purpose:** Enable AiSHA to delegate complex, multi-step tasks to specialized agent workflows that execute autonomously.
+
+### 1. **Architecture Overview**
+
+```mermaid
+graph TD
+    A[User: "Delegate to sales manager"] --> B[AiSHA Detects Intent]
+    B --> C{Intent Classification}
+    C -->|WORKFLOW_DELEGATE| D[delegate_to_workflow Tool]
+    D --> E[Find Workflow by Name]
+    E --> F[Trigger Workflow Execution]
+    F --> G[Workflow Engine]
+    
+    subgraph "Workflow Execution"
+        G --> H[find_lead/contact]
+        H --> I[ai_summarize]
+        I --> J[ai_generate_note]
+        J --> K[ai_generate_email]
+        K --> L[send_email]
+        L --> M[update_lead]
+        M --> N[create_activity]
+        N --> O[ai_generate_note - completion]
+    end
+    
+    O --> P[Notes Logged to Record]
+    P --> Q[AiSHA Reports Status]
+    
+    style D fill:#violet
+    style G fill:#blue
+    style I fill:#purple
+    style J fill:#purple
+    style K fill:#purple
+```
+
+### 2. **Named Agent Workflows**
+
+Two pre-built agent workflows are available for delegation:
+
+| Workflow | Purpose | Triggered By |
+|----------|---------|--------------|
+| **Sales Manager Workflow** | Lead follow-ups, personalized outreach, sales nurturing | "delegate to sales manager", "have sales follow up" |
+| **Customer Service Manager Workflow** | Support inquiries, response generation, escalation | "delegate to customer service", "have support handle" |
+
+### 3. **AI-Powered Workflow Nodes**
+
+The workflow engine includes specialized AI nodes that call OpenAI:
+
+| Node Type | Purpose | Configuration |
+|-----------|---------|---------------|
+| `ai_summarize` | Generate context summaries | `summary_type`: status_update, executive_summary, action_items, custom |
+| `ai_generate_note` | Create AI-generated notes | `note_type`: progress_update, call_summary, meeting_prep, custom |
+| `ai_generate_email` | Generate personalized emails | `tone`: professional, friendly, formal, casual, urgent |
+
+**Node Implementation:**
+```javascript
+// ai_summarize generates summaries stored in {{ai_summary}}
+case 'ai_summarize': {
+  const result = await generateChatCompletion({
+    provider: 'openai',
+    model: 'gpt-4o-mini',
+    messages: [
+      { role: 'system', content: `Generate ${summaryType} for CRM context` },
+      { role: 'user', content: contextData }
+    ]
+  });
+  context.variables.ai_summary = result.content;
+}
+
+// ai_generate_note creates notes and persists to database
+case 'ai_generate_note': {
+  const noteContent = await generateChatCompletion({...});
+  await pgPool.query(`INSERT INTO notes (...) VALUES (...)`);
+  context.variables.ai_note = savedNote;
+}
+```
+
+### 4. **Delegation Flow**
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant AiSHA
+    participant BraidTool as delegate_to_workflow
+    participant WorkflowEngine
+    participant OpenAI
+    participant Database
+    
+    User->>AiSHA: "Have sales manager follow up with Jack"
+    AiSHA->>AiSHA: Detect WORKFLOW_DELEGATE intent
+    AiSHA->>AiSHA: Get entity from session context
+    AiSHA->>BraidTool: delegate_to_workflow({workflow_name, context, entity})
+    BraidTool->>Database: Find workflow by name
+    BraidTool->>WorkflowEngine: Trigger execution
+    
+    loop Node Execution
+        WorkflowEngine->>Database: find_lead
+        WorkflowEngine->>OpenAI: ai_summarize
+        WorkflowEngine->>Database: ai_generate_note (save)
+        WorkflowEngine->>OpenAI: ai_generate_email
+        WorkflowEngine->>Database: send_email (queue)
+        WorkflowEngine->>Database: update_lead
+        WorkflowEngine->>Database: create_activity
+        WorkflowEngine->>Database: ai_generate_note (completion)
+    end
+    
+    BraidTool-->>AiSHA: Execution started, ID: xyz-789
+    AiSHA-->>User: "Delegated to Sales Manager Workflow. I'll track progress."
+```
+
+### 5. **Intent Patterns for Delegation**
+
+| Pattern | Intent Code | Tool Called |
+|---------|-------------|-------------|
+| "delegate to sales manager" | `WORKFLOW_DELEGATE` | `delegate_to_workflow` |
+| "have customer service handle" | `WORKFLOW_DELEGATE` | `delegate_to_workflow` |
+| "start the sales workflow" | `WORKFLOW_DELEGATE` | `delegate_to_workflow` |
+| "what has the sales manager done" | `WORKFLOW_STATUS` | `get_workflow_progress` |
+| "check workflow progress" | `WORKFLOW_STATUS` | `get_workflow_progress` |
+
+### 6. **Progress Tracking**
+
+Workflows log progress via AI-generated notes:
+
+```sql
+-- Notes created by workflow execution
+SELECT content, metadata->'ai_generated' as ai_generated
+FROM notes 
+WHERE metadata->>'workflow_execution_id' = 'xyz-789'
+ORDER BY created_at;
+
+-- Results:
+-- "Sales Manager Workflow starting. Lead Jack Russel status: warm, last contact: 3 days ago."
+-- "Email sent to jack@example.com with personalized follow-up. Subject: Following up on our conversation"
+-- "Sales Manager Workflow completed. Actions: email sent, lead status updated to 'contacted', follow-up task created."
+```
+
+### 7. **Workflow Templates**
+
+**Location:** `src/data/workflowTemplates.js`
+
+**Sales Manager Workflow:**
+```javascript
+{
+  id: 'sales-manager-workflow',
+  name: 'Sales Manager Workflow',
+  category: 'Agent Workflows',
+  nodes: [
+    { type: 'webhook_trigger', ... },
+    { type: 'find_lead', config: { search_field: 'id', search_value: '{{entity_id}}' } },
+    { type: 'ai_summarize', config: { summary_type: 'status_update' } },
+    { type: 'ai_generate_note', config: { note_type: 'progress_update' } },
+    { type: 'condition', config: { field: 'found_lead.status', operator: 'equals', value: 'new' } },
+    { type: 'ai_generate_email', config: { tone: 'professional', prompt: 'Write introductory email...' } },
+    { type: 'send_email', config: { to: '{{found_lead.email}}', subject: '{{ai_email.subject}}' } },
+    { type: 'update_lead', config: { field_mappings: [{ lead_field: 'status', webhook_field: 'contacted' }] } },
+    { type: 'create_activity', config: { type: 'task', subject: 'Follow up with {{found_lead.first_name}}' } },
+    { type: 'ai_generate_note', config: { note_type: 'progress_update', custom_prompt: 'Summarize completion...' } }
+  ]
+}
+```
+
+### 8. **Braid Tool Implementation**
+
+**Location:** `braid-llm-kit/examples/assistant/workflow-delegation.braid`
+
+```braid
+// Trigger a named workflow by name with context
+fn triggerWorkflowByName(
+  tenant: String,
+  workflow_name: String,
+  context: Object,
+  related_entity_type: String,
+  related_entity_id: String
+) -> Result<Object, CRMError> !net {
+  // 1. Find workflow by name
+  let searchResponse = http.get("/api/workflows", { params: { name: workflow_name } });
+  
+  // 2. Trigger execution with context
+  let executeResponse = http.post("/api/workflows/execute", { 
+    params: { workflow_id: workflow.id },
+    body: { trigger_source: "ai_delegation", entity_type, entity_id, context }
+  });
+  
+  return Ok({ workflow_id, execution_id, status: "started" });
+}
 ```
 
 ---

@@ -1,4 +1,4 @@
-import { Search, Edit, Mail, Plus, GitBranch, UserPlus, Globe, Building2, Briefcase, Activity, Brain, Sparkles, Phone, Clock, MessageSquare, UserCheck, CheckCircle } from 'lucide-react'
+import { Search, Edit, Mail, Plus, GitBranch, UserPlus, Globe, Building2, Briefcase, Activity, Brain, Sparkles, Phone, Clock, MessageSquare, UserCheck, CheckCircle, Send } from 'lucide-react'
 
 const nodeTypes = [
   {
@@ -161,6 +161,35 @@ const nodeTypes = [
     icon: Sparkles,
     description: 'Suggest next best action and priority',
     color: 'cyan'
+  },
+  // External Integration nodes
+  {
+    type: 'thoughtly_message',
+    label: 'Thoughtly Message',
+    icon: MessageSquare,
+    description: 'Send SMS or email via Thoughtly AI',
+    color: 'sky'
+  },
+  {
+    type: 'callfluent_message',
+    label: 'CallFluent SMS',
+    icon: MessageSquare,
+    description: 'Send SMS via CallFluent AI',
+    color: 'lime'
+  },
+  {
+    type: 'pabbly_webhook',
+    label: 'Pabbly Webhook',
+    icon: Send,
+    description: 'Send data to Pabbly Connect',
+    color: 'pink'
+  },
+  {
+    type: 'wait_for_webhook',
+    label: 'Wait for Webhook',
+    icon: Clock,
+    description: 'Wait for external callback (call results, etc.)',
+    color: 'slate'
   }
 ];
 

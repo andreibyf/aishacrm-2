@@ -446,7 +446,13 @@ export const TOOL_REGISTRY = {
   get_activity_report: { file: 'reports.braid', function: 'getActivityReport', policy: 'READ_ONLY' },
   get_lead_conversion_report: { file: 'reports.braid', function: 'getLeadConversionReport', policy: 'READ_ONLY' },
   get_revenue_forecasts: { file: 'reports.braid', function: 'getRevenueForecasts', policy: 'READ_ONLY' },
-  clear_report_cache: { file: 'reports.braid', function: 'clearReportCache', policy: 'ADMIN_ONLY' }
+  clear_report_cache: { file: 'reports.braid', function: 'clearReportCache', policy: 'ADMIN_ONLY' },
+
+  // Workflow Delegation (Agent Orchestration)
+  delegate_to_workflow: { file: 'workflow-delegation.braid', function: 'triggerWorkflowByName', policy: 'WRITE_OPERATIONS' },
+  get_workflow_progress: { file: 'workflow-delegation.braid', function: 'getWorkflowProgress', policy: 'READ_ONLY' },
+  list_active_workflows: { file: 'workflow-delegation.braid', function: 'listActiveWorkflows', policy: 'READ_ONLY' },
+  get_workflow_notes: { file: 'workflow-delegation.braid', function: 'getWorkflowNotes', policy: 'READ_ONLY' }
 };
 
 /**
@@ -596,7 +602,13 @@ const TOOL_DESCRIPTIONS = {
   clear_report_cache: 'Clear cached report data to force regeneration. Requires admin privileges.',
 
   // AI-Powered Next Actions (RAG-enabled)
-  suggest_next_actions: 'CRITICAL: Call this when user asks "what should I do next?", "what do you think?", "how should I proceed?", or similar open-ended questions. Analyzes entity state (notes, activities, stage) using RAG memory to suggest 2-3 specific next actions with reasoning. REQUIRED when users ask for guidance on next steps. Pass entity_type (lead/contact/account/opportunity) and entity_id.'
+  suggest_next_actions: 'CRITICAL: Call this when user asks "what should I do next?", "what do you think?", "how should I proceed?", or similar open-ended questions. Analyzes entity state (notes, activities, stage) using RAG memory to suggest 2-3 specific next actions with reasoning. REQUIRED when users ask for guidance on next steps. Pass entity_type (lead/contact/account/opportunity) and entity_id.',
+
+  // Workflow Delegation (Agent Orchestration)
+  delegate_to_workflow: 'Delegate a task to a named workflow. Use this when user wants to hand off work to an automated agent workflow. Pass workflow_name (e.g., "Sales Manager Workflow", "Customer Service Workflow"), context object with relevant data, and related_entity_type/id. The workflow will handle the task autonomously and log progress via notes.',
+  get_workflow_progress: 'Check the status and progress of a workflow execution by its execution_id. Returns current status, started_at, execution_log, and current_node.',
+  list_active_workflows: 'List all currently running workflow executions. Use to see what automated processes are active.',
+  get_workflow_notes: 'Get notes/progress updates created by a workflow execution. Use to report on what an agent workflow has accomplished.'
 };
 
 /**

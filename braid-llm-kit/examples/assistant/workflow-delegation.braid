@@ -1,0 +1,133 @@
+// Executive Assistant Tools - Workflow Delegation
+// Allows AiSHA to delegate tasks to named agent workflows (Sales Manager, Customer Service)
+
+import { Result, CRMError } from "../../spec/types.braid"
+
+// Trigger a named workflow by name with context
+// This allows AiSHA to delegate to "Sales Manager Workflow" or "Customer Service Workflow"
+fn triggerWorkflowByName(
+  tenant: String,
+  workflow_name: String,
+  context: Object,
+  related_entity_type: String,
+  related_entity_id: String
+) -> Result<Object, CRMError> !net {
+  // First, find the workflow by name
+  let searchUrl = "/api/workflows";
+  let searchParams = {
+    tenant_id: tenant,
+    name: workflow_name,
+    is_active: true
+  };
+  
+  let searchResponse = http.get(searchUrl, { params: searchParams });
+  
+  let workflow = match searchResponse {
+    Ok{value} => {
+      let workflows = value.data;
+      if (workflows.length == 0) {
+        return Err({ tag: "NotFound", message: "Workflow not found: " + workflow_name });
+      }
+      workflows[0]
+    },
+    Err{error} => return Err({ tag: "NetworkError", url: searchUrl, code: error.status }),
+    _ => return Err({ tag: "NetworkError", url: searchUrl, code: 500 })
+  };
+  
+  // Now trigger the workflow with the provided context
+  let executeUrl = "/api/workflows/execute";
+  let executeParams = {
+    workflow_id: workflow.id
+  };
+  
+  // Build trigger payload with context
+  let payload = {
+    trigger_source: "ai_delegation",
+    delegated_by: "AiSHA",
+    entity_type: related_entity_type,
+    entity_id: related_entity_id,
+    context: context
+  };
+  
+  let executeResponse = http.post(executeUrl, { 
+    params: executeParams,
+    body: payload 
+  });
+  
+  return match executeResponse {
+    Ok{value} => Ok({
+      workflow_id: workflow.id,
+      workflow_name: workflow.name,
+      execution_id: value.data.execution_id,
+      status: "started",
+      message: "Workflow delegation successful. " + workflow.name + " is now handling this task."
+    }),
+    Err{error} => Err({ tag: "NetworkError", url: executeUrl, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: executeUrl, code: 500 })
+  };
+}
+
+// Get status and progress of a workflow execution
+fn getWorkflowProgress(
+  tenant: String,
+  execution_id: String
+) -> Result<Object, CRMError> !net {
+  let url = "/api/workflow-executions/" + execution_id;
+  let params = { tenant_id: tenant };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok({
+      execution_id: execution_id,
+      status: value.data.status,
+      started_at: value.data.started_at,
+      completed_at: value.data.completed_at,
+      execution_log: value.data.execution_log,
+      current_node: value.data.current_node
+    }),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+// List active workflow executions for a tenant (to check what's running)
+fn listActiveWorkflows(
+  tenant: String,
+  limit: Int
+) -> Result<Array, CRMError> !net {
+  let url = "/api/workflow-executions";
+  let params = {
+    tenant_id: tenant,
+    status: "running",
+    limit: limit
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+// Get notes/progress created by a workflow (to report status back)
+fn getWorkflowNotes(
+  tenant: String,
+  execution_id: String
+) -> Result<Array, CRMError> !net {
+  let url = "/api/notes";
+  let params = {
+    tenant_id: tenant,
+    workflow_execution_id: execution_id
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}

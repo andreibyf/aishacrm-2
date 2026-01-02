@@ -265,6 +265,20 @@ const INTENT_PATTERNS = {
     /\bwhat\s+is\s+(the|my)\s+best\s+(next\s+)?(move|action|step)\b/i
   ],
 
+  // WORKFLOW DELEGATION (Agent Orchestration)
+  WORKFLOW_DELEGATE: [
+    /\b(delegate|hand\s+off|pass\s+to|assign\s+to)\s+(the\s+)?(sales\s+manager|customer\s+service|support\s+team)\b/i,
+    /\b(let|have)\s+(the\s+)?(sales\s+manager|customer\s+service|support)\s+(handle|take\s+care\s+of|manage)\b/i,
+    /\b(start|trigger|run)\s+(the\s+)?(sales\s+manager|customer\s+service)\s+workflow\b/i,
+    /\b(put\s+this\s+on)\s+(the\s+)?(sales|support|customer\s+service)\s+(queue|workflow)\b/i
+  ],
+
+  WORKFLOW_STATUS: [
+    /\b(what|how)\s+(is|are)\s+(the\s+)?(sales\s+manager|customer\s+service|agent\s+workflows?)\s+(doing|progressing|status)\b/i,
+    /\b(check|get)\s+(the\s+)?workflow\s+(status|progress)\b/i,
+    /\b(what\s+has)\s+(the\s+)?(sales\s+manager|customer\s+service)\s+(done|accomplished)\b/i
+  ],
+
   // NAVIGATION
   NAVIGATE_TO_PAGE: [
     /\b(go to|take me to|show me|open|navigate to)\s+(the\s+)?(\w+)\s+(page|view|screen)\b/i,

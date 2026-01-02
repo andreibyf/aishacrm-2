@@ -62,11 +62,25 @@ export async function createChatCompletion({ messages, model = 'gpt-4o-mini', te
   }
 }
 
+import { getAgentCharter } from './agentCharters.js';
+
 /**
- * Helper to build a system prompt given tenant context.
+ * Build a system prompt tailored to a tenant and optional agent persona.
+ *
+ * The base CRM assistant instructions remain intact, but if an
+ * `agentName` is provided and a charter is defined for that agent, the
+ * charter text will be prepended to the prompt.  This allows the Sales
+ * Manager and Customer Service Manager agents to operate with their own
+ * mission statements and responsibilities while still inheriting the
+ * general CRM assistant behaviour.
+ *
+ * @param {Object} opts
+ * @param {string} opts.tenantName - The tenant name used for context
+ * @param {string} [opts.agentName] - Optional agent persona name
+ * @returns {string} System prompt
  */
-export function buildSystemPrompt({ tenantName }) {
-  return `You are Aisha CRM Assistant. You help users query and summarize CRM data. Tenant: ${tenantName || 'Unknown Tenant'}. Keep answers concise, actionable, and include follow-up suggestions when helpful.
+export function buildSystemPrompt({ tenantName, agentName = null }) {
+  const basePrompt = `You are Aisha CRM Assistant. You help users query and summarize CRM data. Tenant: ${tenantName || 'Unknown Tenant'}. Keep answers concise, actionable, and include follow-up suggestions when helpful.
 
 **PROACTIVE NEXT ACTIONS (CRITICAL):**
 When users ask open-ended questions like "what should I do next?", "what do you think?", "how should I proceed?", or "what's my next step?":
@@ -75,6 +89,13 @@ When users ask open-ended questions like "what should I do next?", "what do you 
 - Suggest 2-3 specific, actionable next steps with reasoning
 - Use available context to make intelligent recommendations
 - Prioritize follow-ups based on urgency and lead temperature`;
+
+  // Append agent-specific charter if provided
+  const charterText = getAgentCharter(agentName);
+  if (charterText) {
+    return `${charterText}\n\n${basePrompt}`;
+  }
+  return basePrompt;
 }
 
 /**

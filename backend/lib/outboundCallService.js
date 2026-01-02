@@ -53,13 +53,45 @@ export async function initiateOutboundCall(options) {
 
   // Step 1: Get provider credentials from tenant_integrations
   const credentials = await getProviderCredentials(tenant_id, provider);
+  
+  // Dev mode: if no credentials and NODE_ENV is development, use mock
+  const isDev = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
   if (!credentials) {
+    if (isDev) {
+      console.log(`[OutboundCall] No ${provider} integration - using DEV MOCK mode`);
+      return {
+        success: true,
+        provider,
+        status: 'initiated',
+        call_id: `${provider}_dev_mock_${Date.now()}`,
+        phone_number,
+        contact_name,
+        purpose,
+        message: `Call initiated (DEV MOCK - no ${provider} integration configured)`,
+        mock: true
+      };
+    }
     throw new Error(`No ${provider} integration configured for tenant`);
   }
 
   // Use provided agent_id or fall back to tenant default
   const effectiveAgentId = agent_id || credentials.agent_id;
   if (!effectiveAgentId) {
+    // Dev mode: use mock agent if none configured
+    if (isDev) {
+      console.log(`[OutboundCall] No agent_id configured - using DEV MOCK mode`);
+      return {
+        success: true,
+        provider,
+        status: 'initiated',
+        call_id: `${provider}_dev_mock_${Date.now()}`,
+        phone_number,
+        contact_name,
+        purpose,
+        message: `Call initiated (DEV MOCK - no agent_id configured)`,
+        mock: true
+      };
+    }
     throw new Error(`No agent_id configured for ${provider}`);
   }
 

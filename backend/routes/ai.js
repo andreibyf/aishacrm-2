@@ -639,8 +639,11 @@ export default function createAIRoutes(pgPool) {
         .order('created_date', { ascending: true });
 
       const tenantName = conversationMetadata?.tenant_name || tenantRecord?.name || tenantSlug || 'CRM Tenant';
-      const userContext = userName ? `\n\n**CURRENT USER:**\n- Name: ${userName}\n- Email: ${userEmail}\n- When creating activities or assigning tasks, use this user's name ("${userName}") unless explicitly asked to assign to someone else.` : '';
-      const baseSystemPrompt = `${buildSystemPrompt({ tenantName })}
+      const agentNameForPrompt = conversation?.agent_name || null;
+      const userContext = userName
+        ? `\n\n**CURRENT USER:**\n- Name: ${userName}\n- Email: ${userEmail}\n- When creating activities or assigning tasks, use this user's name ("${userName}") unless explicitly asked to assign to someone else.`
+        : '';
+      const baseSystemPrompt = `${buildSystemPrompt({ tenantName, agentName: agentNameForPrompt })}
 
 ${BRAID_SYSTEM_PROMPT}${userContext}
 

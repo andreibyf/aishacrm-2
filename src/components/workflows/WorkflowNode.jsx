@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Webhook, Search, Edit, Trash2, UserPlus, GitBranch, Globe, Mail, GripVertical } from 'lucide-react';
+import { Webhook, Search, Edit, Trash2, UserPlus, GitBranch, Globe, Mail, GripVertical, StickyNote, Sparkles, FileText, Phone, MessageSquare, Send, Clock } from 'lucide-react';
 
 const nodeIcons = {
   webhook_trigger: Webhook,
@@ -12,6 +12,15 @@ const nodeIcons = {
   find_contact: Search,
   update_contact: Edit,
   send_email: Mail,
+  create_note: StickyNote,
+  ai_summarize: Sparkles,
+  ai_generate_note: FileText,
+  ai_generate_email: Mail,
+  initiate_call: Phone,
+  thoughtly_message: MessageSquare,
+  callfluent_message: MessageSquare,
+  pabbly_webhook: Send,
+  wait_for_webhook: Clock,
 };
 
 const nodeColors = {
@@ -24,6 +33,15 @@ const nodeColors = {
   find_contact: 'bg-cyan-600',
   update_contact: 'bg-teal-600',
   send_email: 'bg-indigo-600',
+  create_note: 'bg-amber-600',
+  ai_summarize: 'bg-violet-600',
+  ai_generate_note: 'bg-fuchsia-600',
+  ai_generate_email: 'bg-rose-600',
+  initiate_call: 'bg-green-700',
+  thoughtly_message: 'bg-sky-600',
+  callfluent_message: 'bg-lime-600',
+  pabbly_webhook: 'bg-pink-600',
+  wait_for_webhook: 'bg-slate-600',
 };
 
 export default function WorkflowNode({ node, isSelected, isConnecting, onClick, _onUpdate, onDelete, onStartConnect, dragHandleProps }) {
@@ -42,6 +60,14 @@ export default function WorkflowNode({ node, isSelected, isConnecting, onClick, 
       case 'update_contact': return 'Update Contact';
       case 'send_email': return 'Send Email';
       case 'initiate_call': return 'AI Call';
+      case 'create_note': return 'Create Note';
+      case 'ai_summarize': return 'AI Summarize';
+      case 'ai_generate_note': return 'AI Generate Note';
+      case 'ai_generate_email': return 'AI Generate Email';
+      case 'thoughtly_message': return 'Thoughtly Message';
+      case 'callfluent_message': return 'CallFluent SMS';
+      case 'pabbly_webhook': return 'Pabbly Webhook';
+      case 'wait_for_webhook': return 'Wait for Webhook';
       default: return node.type;
     }
   };
@@ -73,6 +99,21 @@ export default function WorkflowNode({ node, isSelected, isConnecting, onClick, 
           return `${node.config.provider} AI call`;
         }
         return 'Initiate AI outbound call';
+      case 'create_note': return 'Add note to record';
+      case 'ai_summarize': 
+        return node.config?.summary_type ? `Generate ${node.config.summary_type.replace('_', ' ')}` : 'Generate AI summary';
+      case 'ai_generate_note':
+        return node.config?.note_type ? `Create ${node.config.note_type.replace('_', ' ')} note` : 'Generate AI note';
+      case 'ai_generate_email':
+        return node.config?.tone ? `${node.config.tone} tone email` : 'Generate AI email';
+      case 'thoughtly_message':
+        return node.config?.message_type === 'email' ? 'Send email via Thoughtly' : 'Send SMS via Thoughtly';
+      case 'callfluent_message':
+        return 'Send SMS via CallFluent';
+      case 'pabbly_webhook':
+        return node.config?.webhook_url ? `Send to Pabbly` : 'Send data to Pabbly Connect';
+      case 'wait_for_webhook':
+        return node.config?.match_field ? `Wait for ${node.config.match_field}` : 'Wait for external webhook';
       default: return '';
     }
   };

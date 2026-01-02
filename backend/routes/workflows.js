@@ -6,6 +6,10 @@
 import express from 'express';
 import workflowQueue from '../services/workflowQueue.js';
 import { initiateOutboundCall } from '../lib/outboundCallService.js';
+import { executeWorkflowById as executeWorkflowByIdService } from '../services/workflowExecutionService.js';
+
+// Re-export the service function for backwards compatibility
+export { executeWorkflowByIdService as executeWorkflowById };
 
 // Helper: lift workflow fields from metadata and align shape with frontend expectations
 function normalizeWorkflow(row) {
@@ -1487,8 +1491,8 @@ export default function createWorkflowRoutes(pgPool) {
     try {
       const { id } = req.params;
       const payload = req.body?.payload ?? req.body ?? {};
-      // Directly execute without issuing an internal HTTP request (prevents SSRF)
-      const result = await executeWorkflowById(id, payload);
+      // Use the service function (Supabase-based) instead of local pgPool function
+      const result = await executeWorkflowByIdService(id, payload);
       return res.status(result.httpStatus).json({ status: result.status, data: result.data });
     } catch (error) {
       return res.status(500).json({ status: 'error', message: error.message });

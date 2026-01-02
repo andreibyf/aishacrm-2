@@ -100,6 +100,10 @@ const INTENT_TO_TOOL_MAP = {
   // NEXT ACTIONS
   AI_SUGGEST_NEXT_ACTIONS: 'suggest_next_actions',
 
+  // WORKFLOW DELEGATION (Agent Orchestration)
+  WORKFLOW_DELEGATE: 'delegate_to_workflow',
+  WORKFLOW_STATUS: 'get_workflow_progress',
+
   // NAVIGATION
   NAVIGATE_TO_PAGE: 'navigate_to_page',
   NAVIGATE_GET_CURRENT: 'get_current_page',
