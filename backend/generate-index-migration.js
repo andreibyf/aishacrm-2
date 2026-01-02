@@ -2,10 +2,27 @@
 /**
  * Generate Index Migration Script
  * 
- * Reads dev_functions_export.sql and generates migration to replace
- * all tenant_id_text/tenant_id_legacy indexes with tenant_id (UUID) indexes
+ * Purpose: One-time migration tool for tenant UUID cleanup (Phase 2)
+ * Context: Reads current schema and generates SQL to replace deprecated
+ *          tenant_id_text/tenant_id_legacy indexes with tenant_id (UUID)
  * 
- * Output: backend/migrations/110_replace_legacy_indexes.sql
+ * Input:  backend/migrations/dev_functions_export.sql (current schema)
+ * Output: backend/migrations/110_replace_legacy_indexes.sql (migration)
+ * 
+ * When to use:
+ * - Phase 2 of TENANT_ID_CLEANUP_PLAN.md
+ * - After all tenant_id (UUID) columns are backfilled
+ * - Before RLS policy migration (Phase 3)
+ * 
+ * How it works:
+ * 1. Scans dev_functions_export.sql for CREATE INDEX statements
+ * 2. Identifies indexes using tenant_id_text or tenant_id_legacy
+ * 3. Generates DROP + CREATE CONCURRENTLY statements with tenant_id (UUID)
+ * 4. Preserves WHERE clauses and composite index structures
+ * 
+ * Impact: ~100+ indexes across 40+ tables
+ * Status: Tool ready, migration not yet applied
+ * See: backend/migrations/MIGRATION_SCRIPTS_README.md for full context
  */
 
 import fs from 'fs';
@@ -24,7 +41,7 @@ console.log('🔍 Parsing dev_functions_export.sql for legacy indexes...\n');
 const content = fs.readFileSync(INPUT_FILE, 'utf8');
 
 // Extract all CREATE INDEX statements with tenant_id_text or tenant_id_legacy
-const indexRegex = /CREATE\s+INDEX\s+"([^"]+)"\s+ON\s+"public"\."([^"]+)"\s+USING\s+(\w+)\s+\(([^)]+)\)(?:\s+WHERE\s+(.+?))?;/gi;
+const indexRegex = /CREATE\s+INDEX\s+"([^"]+)"\s+ON\s+"public"\."([^"]+)"\s+USING\s+"?(\w+)"?\s+\(([^)]+)\)(?:\s+WHERE\s+(.+?))?;/gi;
 
 const legacyIndexes = [];
 let match;
@@ -54,6 +71,9 @@ let migrationSQL = `-- Migration 110: Replace Legacy Tenant ID Indexes
 -- Context: Phase 2 of legacy tenant ID cleanup plan
 -- Impact: ~${legacyIndexes.length} indexes will be recreated
 -- 
+-- IMPORTANT: DO NOT run this script inside a transaction block.
+-- CREATE INDEX CONCURRENTLY requires being run outside of BEGIN/COMMIT.
+-- 
 -- This migration:
 -- 1. Drops old indexes using tenant_id_text or tenant_id_legacy
 -- 2. Creates new indexes using tenant_id (UUID)
@@ -61,8 +81,6 @@ let migrationSQL = `-- Migration 110: Replace Legacy Tenant ID Indexes
 -- 
 -- Deployment: Apply during low-traffic window (recommended: 2am-5am UTC)
 -- Rollback: See TENANT_ID_CLEANUP_PLAN.md Phase 2 rollback section
-
-BEGIN;
 
 -- Prevent other migrations from running concurrently
 SET lock_timeout = '10s';
@@ -106,12 +124,12 @@ for (const [tableName, indexes] of Object.entries(indexesByTable).sort()) {
     migrationSQL += `DROP INDEX IF EXISTS "${idx.name}";\n\n`;
     
     // Create new index (CONCURRENTLY requires it to be outside transaction)
-    migrationSQL += `-- Create UUID-based index: ${newIndexName}\n`;
-    migrationSQL += `-- Note: This will be created CONCURRENTLY in post-transaction step\n`;
-    migrationSQL += `-- CREATE INDEX CONCURRENTLY "${newIndexName}" ON "public"."${idx.table}" USING ${idx.type} (${newColumns})`;
+    migrationSQL += `-- Create UUID-based index: \${newIndexName}\n`;
+    migrationSQL += `-- Note: This will be created CONCURRENTLY below\n`;
+    migrationSQL += `-- CREATE INDEX CONCURRENTLY "\${newIndexName}" ON "public"."\${idx.table}" USING \${idx.type} (\${newColumns})`;
     
     if (newWhere) {
-      migrationSQL += ` WHERE ${newWhere}`;
+      migrationSQL += ` WHERE \${newWhere}`;
     }
     
     migrationSQL += `;\n\n`;
@@ -119,15 +137,13 @@ for (const [tableName, indexes] of Object.entries(indexesByTable).sort()) {
 }
 
 migrationSQL += `
-COMMIT;
-
 -- ====================================
--- POST-TRANSACTION INDEX CREATION
+-- INDEX CREATION
 -- ====================================
--- The following indexes must be created OUTSIDE the transaction
--- using CREATE INDEX CONCURRENTLY to avoid table locks.
+-- The following indexes are created using CREATE INDEX CONCURRENTLY 
+-- to avoid table locks. They MUST be run outside a transaction block.
 -- 
--- Run these statements one at a time, monitoring for completion:
+-- Run these statements, monitoring for completion:
 
 `;
 

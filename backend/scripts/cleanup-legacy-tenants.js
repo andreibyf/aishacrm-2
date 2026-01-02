@@ -1,3 +1,22 @@
+/**
+ * Cleanup Legacy Tenant Test Data
+ * 
+ * Purpose: Remove test records created with old text-based tenant IDs
+ * Context: Post-UUID migration cleanup script
+ * 
+ * This script:
+ * - Identifies test records using deprecated text-based tenant IDs
+ * - Safely deletes them (they reference non-existent tenants)
+ * - Ensures all remaining data uses UUID-based tenant_id
+ * 
+ * Safe to run: YES - only removes orphaned test data
+ * Frequency: One-time cleanup, or after E2E test failures
+ * 
+ * Note: This script uses tenant_id (UUID) column exclusively.
+ * Legacy LEGACY_TENANT_IDS array contains TEXT values that should NOT
+ * exist in the tenant_id column (which is UUID type).
+ */
+
 import pg from 'pg';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
@@ -16,10 +35,11 @@ const pool = new Pool({
   ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false },
 });
 
-// Standard UUID for all test data
+// Standard UUID for all test data (canonical test tenant)
 const STANDARD_TENANT_UUID = '6cb4c008-4847-426a-9a2e-918ad70e7b69';
 
-// Legacy tenant IDs to remove
+// Legacy TEXT-based tenant IDs that should no longer exist
+// These were used before UUID migration and should be cleaned up
 const LEGACY_TENANT_IDS = [
   'local-tenant-001',
   'test-tenant-001',

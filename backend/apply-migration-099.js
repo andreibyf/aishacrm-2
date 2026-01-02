@@ -1,6 +1,18 @@
 /**
- * Apply migration 099 - Make tenant_id_legacy/tenant_id_text nullable
+ * Apply Migration 099 - Make tenant_id_legacy Nullable
+ * 
+ * STATUS: ✅ HISTORICAL - Already applied to production
+ * Purpose: Make tenant_id_legacy nullable on bizdev_sources and system_logs
+ * Context: Part of Phase 1 tenant UUID migration
+ * 
+ * This script:
+ * - Makes tenant_id_legacy nullable on specific tables
+ * - Enabled application code to use tenant_id (UUID) exclusively
+ * - Historical reference only - do not re-run
+ * 
  * Run with: doppler run -c prd -- node apply-migration-099.js
+ * See: backend/migrations/099_tenant_id_legacy_nullable.sql for SQL version
+ * See: backend/migrations/TENANT_ID_CLEANUP_PLAN.md for full migration plan
  */
 
 import pg from 'pg';

@@ -2,10 +2,26 @@
 /**
  * Generate RLS Policy Migration Script
  * 
- * Reads dev_functions_export.sql and generates migration to replace
- * all tenant_id_text/tenant_id_legacy RLS policies with tenant_id (UUID) policies
+ * Purpose: One-time migration tool for tenant UUID cleanup (Phase 3)
+ * Context: Reads current schema and generates SQL to replace deprecated
+ *          tenant_id_text/tenant_id_legacy RLS policies with tenant_id (UUID)
  * 
- * Output: backend/migrations/111_replace_legacy_rls_policies.sql
+ * Input:  backend/migrations/dev_functions_export.sql (current schema)
+ * Output: backend/migrations/111_replace_legacy_rls_policies.sql (migration)
+ * 
+ * When to use:
+ * - Phase 3 of TENANT_ID_CLEANUP_PLAN.md
+ * - After Phase 2 (index migration) is complete
+ * - Before dropping legacy columns
+ * 
+ * How it works:
+ * 1. Scans dev_functions_export.sql for CREATE POLICY statements
+ * 2. Identifies policies using tenant_id_text or tenant_id_legacy
+ * 3. Generates DROP + CREATE statements with tenant_id (UUID)
+ * 4. Preserves superadmin bypass logic
+ * 
+ * Status: Tool ready, migration not yet applied
+ * See: backend/migrations/MIGRATION_SCRIPTS_README.md for full context
  */
 
 import fs from 'fs';
@@ -24,22 +40,27 @@ console.log('🔍 Parsing dev_functions_export.sql for legacy RLS policies...\n'
 const content = fs.readFileSync(INPUT_FILE, 'utf8');
 
 // Extract all CREATE POLICY statements with tenant_id_text or tenant_id_legacy
-const policyRegex = /CREATE\s+POLICY\s+"([^"]+)"\s+ON\s+"public"\."([^"]+)"(?:\s+(?:FOR\s+(\w+))?\s+(?:TO\s+(\w+))?)?\s+USING\s+\((.+?)\);/gis;
+const policyRegex = /CREATE\s+POLICY\s+"([^"]+)"\s+ON\s+"public"\."([^"]+)"(.*?)\s+USING\s+\((.+?)\)(?:\s+WITH\s+CHECK\s+\((.+?)\))?;/gis;
 
 const legacyPolicies = [];
 let match;
 
 while ((match = policyRegex.exec(content)) !== null) {
-  const [fullMatch, policyName, tableName, forClause, toClause, usingClause] = match;
+  const [fullMatch, policyName, tableName, middlePart, usingClause, withCheckClause] = match;
   
   // Check if this policy uses tenant_id_text or tenant_id_legacy
   if (usingClause.includes('tenant_id_text') || usingClause.includes('tenant_id_legacy')) {
+    // Extract FOR and TO from middlePart
+    const forMatch = middlePart.match(/FOR\s+(\w+)/i);
+    const toMatch = middlePart.match(/TO\s+((?:(?:"[^"]+")|(?:\w+))(?:\s*,\s*(?:(?:"[^"]+")|(?:\w+)))*)/i);
+
     legacyPolicies.push({
       name: policyName,
       table: tableName,
-      for: forClause || null,
-      to: toClause || null,
+      for: forMatch ? forMatch[1] : null,
+      to: toMatch ? toMatch[1] : null,
       using: usingClause.trim(),
+      withCheck: withCheckClause ? withCheckClause.trim() : null,
       original: fullMatch
     });
   }
