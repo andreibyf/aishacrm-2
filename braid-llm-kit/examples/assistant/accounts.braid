@@ -10,19 +10,21 @@ import { Result, Account, CRMError } from "../../spec/types.braid"
 fn createAccount(
   tenant: String,
   name: String,
-  industry: String,
   annual_revenue: Number,
+  industry: String,
   website: String,
-  assigned_to: String
+  email: String,
+  phone: String
 ) -> Result<Account, CRMError> !net {
   let url = "/api/v2/accounts";
   let body = {
     tenant_id: tenant,
     name: name,
-    industry: industry,
     annual_revenue: annual_revenue,
+    industry: industry,
     website: website,
-    assigned_to: assigned_to,
+    email: email,
+    phone: phone,
     metadata: {}
   };
   

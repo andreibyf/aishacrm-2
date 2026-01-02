@@ -56,12 +56,14 @@ fn updateContact(
 
 fn listContactsForAccount(
   tenant: String,
-  account_id: String
+  account_id: String,
+  limit: Number
 ) -> Result<Array, CRMError> !net {
   let url = "/api/v2/contacts";
   let params = {
     tenant_id: tenant,
-    account_id: account_id
+    account_id: account_id,
+    limit: limit
   };
   
   let response = http.get(url, { params: params });

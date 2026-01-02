@@ -4,6 +4,8 @@
  * so the AI can recognize renamed entities (e.g., "Clients" instead of "Accounts")
  */
 
+import { CORE_TOOLS } from './aiBudgetConfig.js';
+
 // Default entity labels
 const DEFAULT_LABELS = {
   leads: { plural: 'Leads', singular: 'Lead' },
@@ -421,13 +423,9 @@ export async function enhanceSystemPromptSmart(basePrompt, pool, tenantIdOrSlug,
 }
 
 /**
- * CORE TOOLS: Always available when relevant (should not be removed by hard cap)
- */
-const CORE_TOOLS = ['fetch_tenant_snapshot', 'suggest_next_actions'];
-
-/**
  * Tool cap configuration
  * Only applied when intent is detected - prevents over-capping general queries
+ * NOTE: CORE_TOOLS imported from aiBudgetConfig.js for consistency
  */
 const TOOL_CAP_MIN = 3;
 const TOOL_CAP_MAX = 20; // Raised from 12 to allow more tools when intent is unclear

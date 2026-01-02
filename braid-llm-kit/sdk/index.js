@@ -45,9 +45,10 @@ export { transpileToJS } from '../tools/braid-transpile.js';
  * @param {string} tenantId - Tenant identifier
  * @param {string} userId - User identifier (for audit)
  * @param {string} authToken - Optional: Bearer token for internal API authentication
+ * @param {string} userEmail - Optional: User email for created_by fields
  * @returns {BraidDependencies}
  */
-export function createBackendDeps(baseUrl, tenantId, userId = null, authToken = null) {
+export function createBackendDeps(baseUrl, tenantId, userId = null, authToken = null, userEmail = null) {
   // Build auth headers - include Authorization if token provided
   const buildAuthHeaders = () => ({
     'Content-Type': 'application/json',
@@ -89,6 +90,10 @@ export function createBackendDeps(baseUrl, tenantId, userId = null, authToken = 
       async post(url, options = {}) {
         const body = options.body || {};
         body.tenant_id = tenantId;
+        // Inject created_by if userEmail is available and not already set
+        if (userEmail && !body.created_by) {
+          body.created_by = userEmail;
+        }
         
         const response = await fetch(`${baseUrl}${url}`, {
           method: 'POST',

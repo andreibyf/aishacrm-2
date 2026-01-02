@@ -38,13 +38,22 @@ import {
   logBudgetSummary,
   estimateTokens,
 } from '../lib/tokenBudget.js';
+// AI Settings (configurable via Settings UI)
+import { loadAiSettings, getAiSetting } from '../lib/aiSettingsLoader.js';
+// Anthropic adapter for Claude tool calling
+import { createAnthropicClientWrapper } from '../lib/aiEngine/anthropicAdapter.js';
 
 /**
- * Create provider-specific OpenAI-compatible client for tool calling.
- * Note: Anthropic is not supported for tool calling in this path (different API format).
- * Supported: openai, groq, local (all OpenAI-compatible)
+ * Create provider-specific client for tool calling.
+ * Supports: openai, groq, local (OpenAI-compatible), anthropic (via adapter)
  */
 function createProviderClient(provider, apiKey) {
+  // Anthropic uses a wrapper that converts to OpenAI-compatible interface
+  if (provider === 'anthropic') {
+    return createAnthropicClientWrapper(apiKey);
+  }
+
+  // OpenAI-compatible providers
   let baseUrl;
   switch (provider) {
     case 'groq':
@@ -67,7 +76,10 @@ export default function createAIRoutes(pgPool) {
   const DEFAULT_CHAT_MODEL = pickModel({ capability: 'chat_tools' });
   const DEFAULT_STT_MODEL = process.env.OPENAI_STT_MODEL || 'whisper-1';
   const MAX_STT_AUDIO_BYTES = parseInt(process.env.MAX_STT_AUDIO_BYTES || '6000000', 10);
-  const MAX_TOOL_ITERATIONS = 3;
+  // Default fallbacks - actual values come from ai_settings table via loadAiSettings()
+  // Increased from 3 to 5 - complex tasks (e.g., "create meeting for X with Y") need 4+ iterations
+  const DEFAULT_TOOL_ITERATIONS = 5;
+  const DEFAULT_TEMPERATURE = 0.4;
   // Lazy-load Supabase client to avoid initialization errors during startup
   const getSupa = () => getSupabaseClient();
 
@@ -498,7 +510,7 @@ export default function createAIRoutes(pgPool) {
     }
   };
 
-  const executeToolCall = async ({ toolName, args, tenantRecord, userEmail = null, accessToken = null }) => {
+  const executeToolCall = async ({ toolName, args, tenantRecord, userEmail = null, userName = null, accessToken = null }) => {
     // Handle suggest_next_actions directly (not a Braid tool)
     if (toolName === 'suggest_next_actions') {
       const { suggestNextActions } = await import('../lib/suggestNextActions.js');
@@ -510,9 +522,16 @@ export default function createAIRoutes(pgPool) {
       });
     }
     
+    // Build dynamic access token with user info for Braid execution
+    const dynamicAccessToken = {
+      ...accessToken,
+      user_email: userEmail,
+      user_name: userName,
+    };
+    
     // Route execution through Braid SDK tool registry
     // SECURITY: accessToken must be provided after tenant authorization passes
-    return await executeBraidTool(toolName, args || {}, tenantRecord, userEmail, accessToken);
+    return await executeBraidTool(toolName, args || {}, tenantRecord, userEmail, dynamicAccessToken);
   };
 
   const generateAssistantResponse = async ({
@@ -528,6 +547,16 @@ export default function createAIRoutes(pgPool) {
       const supa = getSupabaseClient();
       const tenantSlug = tenantRecord?.tenant_id || tenantIdentifier || null;
       const conversationMetadata = parseMetadata(conversation?.metadata);
+
+      // Load AI settings from database (cached, with fallback defaults)
+      const tenantUuid = tenantRecord?.id || null;
+      const aiSettings = await loadAiSettings('aisha', tenantUuid);
+      console.log('[AI][Settings] Loaded settings for aisha:', {
+        temperature: aiSettings.temperature,
+        max_iterations: aiSettings.max_iterations,
+        enable_memory: aiSettings.enable_memory,
+        tenantUuid: tenantUuid ? tenantUuid.substring(0, 8) + '...' : 'global',
+      });
 
       // Per-tenant model/provider selection
       const modelConfig = selectLLMConfigForTenant({
@@ -578,10 +607,8 @@ export default function createAIRoutes(pgPool) {
         return;
       }
 
-      // Create provider-aware client (Anthropic not supported for tool calling)
-      const client = modelConfig.provider === 'anthropic'
-        ? createProviderClient('openai', await resolveLLMApiKey({ tenantSlugOrId: tenantSlug, provider: 'openai' }))
-        : createProviderClient(modelConfig.provider, apiKey);
+      // Create provider-aware client (now supports anthropic via adapter)
+      const client = createProviderClient(modelConfig.provider, apiKey);
 
       console.log(`[AI][generateAssistantResponse] Using provider=${modelConfig.provider}, model=${modelConfig.model}`);
 
@@ -731,58 +758,18 @@ Use this summary for context about prior discussion topics, goals, and decisions
 
       // Use model from modelConfig already resolved above
       const model = modelConfig.model;
-      const rawTemperature = requestDescriptor.temperatureOverride ?? conversationMetadata?.temperature ?? 0.2;
-      const temperature = Math.min(Math.max(Number(rawTemperature) || 0.2, 0), 2);
+      // Temperature: request override > conversation metadata > ai_settings > default
+      const settingsTemp = aiSettings.temperature ?? DEFAULT_TEMPERATURE;
+      const rawTemperature = requestDescriptor.temperatureOverride ?? conversationMetadata?.temperature ?? settingsTemp;
+      const temperature = Math.min(Math.max(Number(rawTemperature) || settingsTemp, 0), 2);
+      console.log('[AI][Temperature] Using:', { temperature, settingsTemp, rawTemperature, hasOverride: !!requestDescriptor.temperatureOverride });
 
       // Generate tools and update descriptions with custom entity labels
       const baseTools = await generateToolSchemas();
       const entityLabels = await fetchEntityLabels(pgPool, tenantIdentifier);
       const tools = updateToolSchemasWithLabels(baseTools, entityLabels);
       
-      // Add suggest_next_actions tool (not in Braid registry)
-      tools.push({
-        type: 'function',
-        function: {
-          name: 'suggest_next_actions',
-          description: `**MANDATORY TOOL - USE IMMEDIATELY FOR NEXT STEPS QUESTIONS**
-
-Trigger patterns (call this tool for ALL of these):
-- "What should I do next?"
-- "What do you think?"
-- "What are my next steps?"
-- "What do you recommend?"
-- "How should I proceed?"
-- "What's the next step?"
-
-**CRITICAL: Extract entity_id from SESSION ENTITY CONTEXT in system prompt above**
-Example: If system prompt shows "Jack Russel (lead, ID: abc-123)", use entity_id="abc-123"
-
-DO NOT ask user for entity_id. DO NOT respond with "I'm not sure".
-This tool analyzes entity state (notes, activities, stage, temperature) and provides intelligent next actions.`,
-          parameters: {
-            type: 'object',
-            properties: {
-              entity_type: { 
-                type: 'string', 
-                enum: ['lead', 'contact', 'account', 'opportunity'],
-                description: 'Type of entity to analyze' 
-              },
-              entity_id: { 
-                type: 'string', 
-                description: 'UUID of the entity (extract from SESSION ENTITY CONTEXT in system prompt)' 
-              },
-              limit: { 
-                type: 'integer', 
-                description: 'Max number of suggestions (1-5)',
-                minimum: 1,
-                maximum: 5,
-                default: 3
-              }
-            },
-            required: ['entity_type', 'entity_id']
-          }
-        }
-      });
+      // NOTE: suggest_next_actions is now provided by Braid registry, no need to add manually
       
       if (!tools || tools.length === 0) {
         console.warn('[AI] No Braid tools loaded; falling back to minimal snapshot tool definition');
@@ -937,7 +924,9 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       // Log budget summary
       logBudgetSummary(budgetResult.report, budgetResult.actionsTaken);
 
-      for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
+      // Max iterations from ai_settings (or fallback default)
+      const maxIterations = aiSettings.max_iterations ?? DEFAULT_TOOL_ITERATIONS;
+      for (let iteration = 0; iteration < maxIterations; iteration += 1) {
         const startTime = Date.now();
         const response = await client.chat.completions.create({
           model,
@@ -1002,6 +991,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
                 args: parsedArgs,
                 tenantRecord,
                 userEmail,
+                userName,
                 accessToken: TOOL_ACCESS_TOKEN, // SECURITY: Unlocks tool execution after authorization
               });
             } catch (toolError) {
@@ -1077,6 +1067,41 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
         }
 
         break;
+      }
+
+      // If we exhausted iterations without a final response, give the AI one last chance
+      // to summarize what it learned (no tools, must respond with text)
+      if (!assistantResponded && executedTools.length > 0) {
+        try {
+          console.log('[AI] Max iterations reached, requesting final summary without tools');
+          const summaryResponse = await client.chat.completions.create({
+            model,
+            messages: [
+              ...finalMessages,
+              {
+                role: 'user',
+                content: 'Based on the tool results above, please provide your response to the user. Do not call any more tools - summarize what you found and take the appropriate action or explain what happened.'
+              }
+            ],
+            temperature,
+            // No tools - force text response
+          });
+          const summaryChoice = summaryResponse.choices?.[0];
+          const summaryText = (summaryChoice?.message?.content || '').trim();
+          if (summaryText) {
+            const entityContext = extractEntityContext(executedTools);
+            await insertAssistantMessage(conversationId, summaryText, {
+              model: summaryResponse.model || model,
+              usage: summaryResponse.usage || null,
+              tool_interactions: executedTools,
+              reason: 'max_iterations_summary',
+              ...entityContext,
+            });
+            assistantResponded = true;
+          }
+        } catch (summaryErr) {
+          console.error('[AI] Final summary failed:', summaryErr?.message);
+        }
       }
 
       if (!assistantResponded) {
@@ -2215,10 +2240,17 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
 
   // POST /api/ai/chat - AI chat completion
   router.post('/chat', async (req, res) => {
+    console.log('=== CHAT REQUEST START === LLM_PROVIDER=' + process.env.LLM_PROVIDER);
     try {
       console.log('[DEBUG /api/ai/chat] req.body:', JSON.stringify(req.body, null, 2));
 
       const { messages = [], model = DEFAULT_CHAT_MODEL, temperature = 0.7, sessionEntities = null, conversation_id: conversationId } = req.body || {};
+
+      // Extract user identity for created_by fields
+      const userFirstName = req.headers['x-user-first-name'] || req.user?.first_name || '';
+      const userLastName = req.headers['x-user-last-name'] || req.user?.last_name || '';
+      const userName = [userFirstName, userLastName].filter(Boolean).join(' ').trim() || null;
+      const userEmail = req.body?.user_email || req.headers['x-user-email'] || req.user?.email || null;
 
       console.log('[DEBUG /api/ai/chat] Extracted messages:', messages);
       console.log('[DEBUG /api/ai/chat] messages.length:', messages?.length, 'isArray:', Array.isArray(messages));
@@ -2272,6 +2304,14 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
         console.warn('[AI Security] Chat blocked - unauthorized tenant access');
         return res.status(authCheck.status || 403).json({ status: 'error', message: authCheck.error });
       }
+
+      // Load AI settings from database (cached, with fallback defaults)
+      const aiSettings = await loadAiSettings('aisha', tenantRecord?.id);
+      console.log('[AI Chat][Settings] Loaded:', {
+        temperature: aiSettings.temperature,
+        max_iterations: aiSettings.max_iterations,
+        tenantId: tenantRecord?.id?.substring(0, 8) + '...',
+      });
 
       // Load conversation history from database if conversation_id provided
       // CRITICAL: This enables context awareness for follow-up questions
@@ -2461,10 +2501,18 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
 
       // Per-tenant model/provider selection
       const tenantSlugForModel = tenantRecord?.tenant_id || tenantIdentifier;
+      // Only pass overrideModel if explicitly provided in request body (not default)
+      const hasExplicitModel = req.body?.model && req.body.model !== DEFAULT_CHAT_MODEL;
       const tenantModelConfig = selectLLMConfigForTenant({
         capability: 'chat_tools',
         tenantSlugOrId: tenantSlugForModel,
-        overrideModel: model, // model from request body
+        overrideModel: hasExplicitModel ? model : null, // Let provider-specific defaults apply
+      });
+      console.log('[AI Chat] Model config resolved:', {
+        provider: tenantModelConfig.provider,
+        model: tenantModelConfig.model,
+        tenantSlugForModel,
+        LLM_PROVIDER_ENV: process.env.LLM_PROVIDER,
       });
 
       // Resolve API key for the selected provider
@@ -2489,16 +2537,14 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
         resolvedKeyPrefix: apiKey ? apiKey.substring(0, 7) : 'none'
       });
 
-      // Create provider-aware client (Anthropic falls back to OpenAI for tool calling)
-      const effectiveProvider = tenantModelConfig.provider === 'anthropic' ? 'openai' : tenantModelConfig.provider;
-      const effectiveApiKey = tenantModelConfig.provider === 'anthropic'
-        ? await resolveLLMApiKey({ tenantSlugOrId: tenantSlugForModel, provider: 'openai' })
-        : apiKey;
+      // Create provider-aware client (now supports anthropic via adapter)
+      const effectiveProvider = tenantModelConfig.provider;
+      const effectiveApiKey = apiKey;
 
       const client = createProviderClient(effectiveProvider, effectiveApiKey || process.env.OPENAI_API_KEY);
       
-      // BUGFIX: Validate API key before creating client to prevent cryptic OpenAI errors
-      const keyToUse = effectiveApiKey || process.env.OPENAI_API_KEY;
+      // BUGFIX: Validate API key before creating client to prevent cryptic errors
+      const keyToUse = effectiveApiKey || (effectiveProvider === 'anthropic' ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY);
       if (!keyToUse || keyToUse.trim().length === 0) {
         console.error('[AI Chat] ERROR: No API key available for provider:', effectiveProvider);
         return res.status(501).json({ 
@@ -2507,7 +2553,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
         });
       }
       
-      // Additional validation for OpenAI keys
+      // Additional validation for API keys based on provider
       if (effectiveProvider === 'openai') {
         const trimmedKey = keyToUse.trim();
         if (!trimmedKey.startsWith('sk-')) {
@@ -2528,6 +2574,18 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
           return res.status(501).json({ 
             status: 'error', 
             message: 'Invalid OpenAI API key configuration (unusual length). Please contact your administrator.' 
+          });
+        }
+      } else if (effectiveProvider === 'anthropic') {
+        const trimmedKey = keyToUse.trim();
+        if (!trimmedKey.startsWith('sk-ant-')) {
+          console.error('[AI Chat] ERROR: Invalid Anthropic API key format (must start with sk-ant-):', {
+            keyPrefix: trimmedKey.substring(0, 10),
+            keyLength: trimmedKey.length
+          });
+          return res.status(501).json({ 
+            status: 'error', 
+            message: 'Invalid Anthropic API key configuration. Please contact your administrator.' 
           });
         }
       }
@@ -2639,34 +2697,7 @@ ${conversationSummary}`;
       const entityLabels = await fetchEntityLabels(pgPool, tenantIdentifier);
       const tools = updateToolSchemasWithLabels(baseTools, entityLabels);
       
-      // Add suggest_next_actions tool (not in Braid registry)
-      tools.push({
-        type: 'function',
-        function: {
-          name: 'suggest_next_actions',
-          description: 'Analyze entity and suggest next actions. Use when user asks "What should I do next?", "What do you recommend?", "How should I proceed?". Extract entity_id from SESSION ENTITY CONTEXT.',
-          parameters: {
-            type: 'object',
-            properties: {
-              entity_type: { 
-                type: 'string', 
-                enum: ['lead', 'contact', 'account', 'opportunity'],
-                description: 'Entity type' 
-              },
-              entity_id: { 
-                type: 'string', 
-                description: 'UUID from SESSION ENTITY CONTEXT' 
-              },
-              limit: { 
-                type: 'integer', 
-                description: 'Max suggestions',
-                default: 3
-              }
-            },
-            required: ['entity_type', 'entity_id']
-          }
-        }
-      });
+      // NOTE: suggest_next_actions is now provided by Braid registry, no need to add manually
       
       if (!tools || tools.length === 0) {
         tools.push({
@@ -2824,12 +2855,21 @@ ${conversationSummary}`;
       // Log budget summary
       logBudgetSummary(budgetResult.report, budgetResult.actionsTaken);
 
-      for (let i = 0; i < MAX_TOOL_ITERATIONS; i += 1) {
+      // Temperature: request body > ai_settings > default
+      // Note: 'temperature' var is from req.body (defaults to 0.7 if not provided)
+      const finalTemperature = temperature !== 0.7 
+        ? temperature  // Explicit request override
+        : (aiSettings.temperature ?? DEFAULT_TEMPERATURE);  // Settings or default
+      console.log('[AI Chat][Temperature] Using:', { finalTemperature, bodyTemp: temperature, settingsTemp: aiSettings.temperature, maxIterations: aiSettings.max_iterations });
+
+      // Max iterations from ai_settings (or fallback default)
+      const maxIterations = aiSettings.max_iterations ?? DEFAULT_TOOL_ITERATIONS;
+      for (let i = 0; i < maxIterations; i += 1) {
         const startTime = Date.now();
         const completion = await client.chat.completions.create({
           model: finalModel,
           messages: finalLoopMessages,
-          temperature,
+          temperature: finalTemperature,
           tools: focusedTools, // Use focused tool subset when intent is clear
           tool_choice: i === 0 ? toolChoice : 'auto' // Only force on first iteration
         });
@@ -2919,7 +2959,9 @@ ${conversationSummary}`;
           try {
             // SECURITY: Pass the access token to unlock tool execution
             // The token is only available after tenant authorization passed above
-            toolResult = await executeBraidTool(toolName, args, tenantRecord, req.user?.email, TOOL_ACCESS_TOKEN);
+            // Include user identity for created_by fields
+            const dynamicAccessToken = { ...TOOL_ACCESS_TOKEN, user_email: userEmail, user_name: userName };
+            toolResult = await executeBraidTool(toolName, args, tenantRecord, userEmail, dynamicAccessToken);
           } catch (err) {
             toolResult = { error: err.message || String(err) };
           }
@@ -2946,6 +2988,33 @@ ${conversationSummary}`;
             tool_call_id: call.id,
             content: safeSummary
           });
+        }
+      }
+
+      // If we exhausted iterations without a final response, give the AI one last chance
+      // to summarize what it learned (no tools, must respond with text)
+      if (!finalContent) {
+        try {
+          console.log('[AI Chat] Max iterations reached, requesting final summary without tools');
+          const summaryCompletion = await client.chat.completions.create({
+            model: finalModel,
+            messages: [
+              ...finalLoopMessages,
+              {
+                role: 'user',
+                content: 'Based on the tool results above, please provide your response to the user. Do not call any more tools - summarize what you found and take the appropriate action or explain what happened.'
+              }
+            ],
+            temperature: finalTemperature,
+            // No tools - force text response
+          });
+          const summaryMsg = summaryCompletion.choices?.[0]?.message;
+          if (summaryMsg?.content) {
+            finalContent = summaryMsg.content;
+            finalUsage = summaryCompletion.usage || finalUsage;
+          }
+        } catch (summaryErr) {
+          console.error('[AI Chat] Final summary failed:', summaryErr?.message);
         }
       }
 

@@ -110,7 +110,11 @@ export const CORE_TOOLS = [
   'search_leads',
   'search_contacts', 
   'search_accounts',
+  'search_activities',
+  'list_activities',
+  'create_lead',
   'create_activity',
+  'update_activity',
   'suggest_next_actions',
 ];
 

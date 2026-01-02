@@ -12,19 +12,20 @@ fn createActivity(
   activity_type: String,
   due_date: String,
   assigned_to: String,
-  related_to_type: String,
-  related_to_id: String,
+  entity_type: String,
+  entity_id: String,
   body: String
 ) -> Result<Activity, CRMError> !net {
   let url = "/api/v2/activities";
+  // Transform entity_type/entity_id to DB column names: related_to/related_id
   let payload = {
     tenant_id: tenant,
     subject: subject,
     activity_type: activity_type,
     due_date: due_date,
     assigned_to: assigned_to,
-    related_to_type: related_to_type,
-    related_to_id: related_to_id,
+    related_to: entity_type,
+    related_id: entity_id,
     body: body,
     status: "planned",
     metadata: {}
@@ -140,17 +141,18 @@ fn deleteActivity(
 fn listActivities(
   tenant: String,
   status: String,
-  related_to_type: String,
-  related_to_id: String,
+  entity_type: String,
+  entity_id: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
   let url = "/api/v2/activities";
-  // related_to_type: lead, contact, account, opportunity
+  // entity_type: lead, contact, account, opportunity
+  // API query params use related_to_type/related_to_id
   let params = {
     tenant_id: tenant,
     status: status,
-    related_to_type: related_to_type,
-    related_to_id: related_to_id,
+    related_to_type: entity_type,
+    related_to_id: entity_id,
     limit: limit
   };
   

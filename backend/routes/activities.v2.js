@@ -4,6 +4,65 @@ import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildActivityAiContext } from '../lib/aiContextEnricher.js';
 import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 
+/**
+ * Look up the name and email for a related entity (lead, contact, account, opportunity)
+ * @param {object} supabase - Supabase client
+ * @param {string} relatedTo - Entity type ('lead', 'contact', 'account', 'opportunity')
+ * @param {string} relatedId - Entity UUID
+ * @returns {Promise<{name: string|null, email: string|null}>}
+ */
+async function lookupRelatedEntity(supabase, relatedTo, relatedId) {
+  if (!relatedTo || !relatedId) return { name: null, email: null };
+  
+  // B2B CRM: Different entities have different columns
+  const entityConfig = {
+    lead: { table: 'leads', select: 'company, first_name, last_name, email' },
+    contact: { table: 'contacts', select: 'company, first_name, last_name, email' },
+    account: { table: 'accounts', select: 'name, email, phone' },
+    opportunity: { table: 'opportunities', select: 'name' }
+  };
+  
+  const config = entityConfig[relatedTo];
+  if (!config) return { name: null, email: null };
+  
+  try {
+    const { data, error } = await supabase
+      .from(config.table)
+      .select(config.select)
+      .eq('id', relatedId)
+      .single();
+    
+    if (error || !data) {
+      console.warn('[Activities] lookupRelatedEntity failed:', { relatedTo, relatedId, error: error?.message });
+      return { name: null, email: null };
+    }
+    
+    // Build name based on entity type (B2B: show company + contact for leads)
+    let name = null;
+    if (relatedTo === 'lead') {
+      // B2B Leads: "Company Name (Contact Name)" format
+      const personName = `${data.first_name || ''} ${data.last_name || ''}`.trim();
+      if (data.company && personName) {
+        name = `${data.company} (${personName})`;
+      } else {
+        name = data.company || personName || null;
+      }
+    } else if (relatedTo === 'contact') {
+      // Contacts: full name, fall back to company
+      const fullName = `${data.first_name || ''} ${data.last_name || ''}`.trim();
+      name = fullName || data.company || null;
+    } else {
+      // Accounts, Opportunities: just name field
+      name = data.name || null;
+    }
+    
+    return { name, email: data.email || null };
+  } catch (err) {
+    console.warn('[Activities] Failed to lookup related entity:', err.message);
+    return { name: null, email: null };
+  }
+}
+
 export default function createActivityV2Routes(_pgPool) {
   const router = express.Router();
 
@@ -45,6 +104,44 @@ export default function createActivityV2Routes(_pgPool) {
     };
   };
 
+  /**
+   * Resolve assigned_to to a valid UUID.
+   * Accepts either a UUID directly, or an email address to look up.
+   * Returns null if not resolvable.
+   */
+  async function resolveAssignedTo(assignedTo, tenantId, supabase) {
+    if (!assignedTo) return null;
+    
+    // If it's already a valid UUID, return it directly
+    if (UUID_REGEX.test(assignedTo)) return assignedTo;
+    
+    // If it looks like an email, try to look up the user/employee
+    if (assignedTo.includes('@')) {
+      // Try employees table first (for CRM-specific employee records)
+      const { data: employee } = await supabase
+        .from('employees')
+        .select('id')
+        .eq('tenant_id', tenantId)
+        .eq('email', assignedTo)
+        .limit(1)
+        .maybeSingle();
+      
+      if (employee?.id) return employee.id;
+      
+      // Fallback: try users table
+      const { data: user } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', assignedTo)
+        .limit(1)
+        .maybeSingle();
+      
+      if (user?.id) return user.id;
+    }
+    
+    return null; // Not resolvable
+  }
+
   router.get('/', cacheList('activities', 180), async (req, res) => {
     try {
       const { tenant_id, filter } = req.query;
@@ -74,7 +171,16 @@ export default function createActivityV2Routes(_pgPool) {
       // Support filtering by related entity type (lead, contact, account, opportunity) and ID
       if (related_to_type) q = q.eq('related_to', related_to_type);
       if (related_to_id) q = q.eq('related_id', related_to_id);
-      if (assigned_to) q = q.eq('assigned_to', assigned_to);
+      
+      // Resolve assigned_to (supports both UUID and email)
+      if (assigned_to) {
+        const resolvedAssignee = await resolveAssignedTo(assigned_to, tenant_id, supabase);
+        if (resolvedAssignee) {
+          q = q.eq('assigned_to', resolvedAssignee);
+        } else {
+          console.warn(`[Activities V2] Could not resolve assigned_to: ${assigned_to}`);
+        }
+      }
 
       // Handle is_test_data filter
       if (is_test_data !== undefined) {
@@ -129,10 +235,15 @@ export default function createActivityV2Routes(_pgPool) {
           }
         }
         if (parsed && typeof parsed === 'object') {
-          // Handle assigned_to filter from filter object
-          if (parsed.assigned_to !== undefined) {
+          // Handle assigned_to filter from filter object (supports UUID or email)
+          if (parsed.assigned_to !== undefined && parsed.assigned_to !== null && parsed.assigned_to !== '') {
             console.log('[Activities V2] Applying assigned_to filter:', parsed.assigned_to);
-            q = q.eq('assigned_to', parsed.assigned_to);
+            const resolvedFilterAssignee = await resolveAssignedTo(parsed.assigned_to, tenant_id, supabase);
+            if (resolvedFilterAssignee) {
+              q = q.eq('assigned_to', resolvedFilterAssignee);
+            } else {
+              console.warn(`[Activities V2] Could not resolve filter assigned_to: ${parsed.assigned_to}`);
+            }
           }
 
           // Handle $or for unassigned
@@ -228,7 +339,7 @@ export default function createActivityV2Routes(_pgPool) {
 
   router.post('/', invalidateCache('activities'), async (req, res) => {
     try {
-      const { tenant_id, metadata, description, body, duration_minutes, duration, tags, ...payload } = req.body || {};
+      const { tenant_id, metadata, description, body, duration_minutes, duration, tags, activity_type, assigned_to, ...payload } = req.body || {};
       // Accept either duration_minutes or duration (legacy) - prefer duration_minutes
       const durationValue = duration_minutes ?? duration ?? undefined;
       if (!tenant_id) {
@@ -238,9 +349,25 @@ export default function createActivityV2Routes(_pgPool) {
       const supabase = getSupabaseClient();
 
       const bodyText = description ?? body ?? null;
+      // Map activity_type to type (Braid SDK uses activity_type, DB column is 'type')
+      const activityType = activity_type ?? payload.type ?? null;
+      
+      // Sanitize assigned_to: must be valid UUID or null (AI may pass strings like "Unassigned")
+      const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const validAssignedTo = assigned_to && UUID_REGEX.test(assigned_to) ? assigned_to : null;
+      
+      // Lookup related entity name/email if related_to and related_id are provided
+      const relatedTo = payload.related_to;
+      const relatedId = payload.related_id;
+      const { name: relatedName, email: relatedEmail } = await lookupRelatedEntity(supabase, relatedTo, relatedId);
+      
       const insertPayload = {
         tenant_id,
         ...payload,
+        assigned_to: validAssignedTo,
+        ...(relatedName ? { related_name: relatedName } : {}),
+        ...(relatedEmail ? { related_email: relatedEmail } : {}),
+        ...(activityType ? { type: activityType } : {}),
         ...(durationValue !== undefined ? { duration_minutes: durationValue } : {}),
         ...(Array.isArray(tags) ? { tags } : {}),
         body: bodyText,

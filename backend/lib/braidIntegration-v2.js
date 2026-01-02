@@ -9,6 +9,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { executeBraid, loadToolSchema, createBackendDeps, CRM_POLICIES, filterSensitiveFields, createAuditEntry, logToolExecution } from '../../braid-llm-kit/sdk/index.js';
 import cacheManager from './cacheManager.js';
+import { getSupabaseClient } from './supabase-db.js';
 
 // ============================================================================
 // REAL-TIME METRICS TRACKING (Redis-backed)
@@ -122,14 +123,38 @@ function logAuditEntry({
   toolName, config, basePolicy, tenantUuid, userId, userEmail, userRole,
   normalizedArgs, result, executionTimeMs, cacheHit, supabase
 }) {
+  // UUID regex for validation
+  const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  
   // Fire and forget - don't block the response
   setImmediate(async () => {
     try {
+      // Get supabase client if not provided
+      const db = supabase || getSupabaseClient();
+      if (!db) {
+        // Supabase not available - skip audit logging silently
+        return;
+      }
+      
       const entityType = extractEntityType(toolName);
       const entityId = normalizedArgs?.account_id || normalizedArgs?.lead_id || 
                        normalizedArgs?.contact_id || normalizedArgs?.activity_id ||
                        normalizedArgs?.opportunity_id || normalizedArgs?.document_id ||
                        normalizedArgs?.employee_id || normalizedArgs?.user_id || null;
+      
+      // Validate userId is a proper UUID (may be passed as email by callers)
+      // Store email in userEmail field instead; userId must be null or valid UUID
+      let validUserId = null;
+      let finalUserEmail = userEmail || null;
+      
+      if (userId) {
+        if (UUID_PATTERN.test(userId)) {
+          validUserId = userId;
+        } else if (userId.includes('@')) {
+          // userId is actually an email - use it for userEmail if not already set
+          finalUserEmail = finalUserEmail || userId;
+        }
+      }
       
       const entry = createAuditEntry({
         toolName: toolName || 'unknown',
@@ -138,8 +163,8 @@ function logAuditEntry({
         policy: config?.policy || 'UNKNOWN',
         toolClass: basePolicy?.tool_class || null,
         tenantId: tenantUuid || null,
-        userId: userId || null,
-        userEmail: userEmail || null,
+        userId: validUserId,
+        userEmail: finalUserEmail,
         userRole: userRole || null,
         inputArgs: normalizedArgs || {},
         resultTag: result?.tag || null,
@@ -152,7 +177,7 @@ function logAuditEntry({
         entityId: entityId || null
       });
       
-      await logToolExecution(supabase, entry);
+      await logToolExecution(db, entry);
     } catch (auditErr) {
       // Never let audit logging fail the main operation
       console.warn('[Braid Audit] Failed to log:', auditErr.message);
@@ -266,6 +291,7 @@ export const TOOL_REGISTRY = {
   get_account_details: { file: 'accounts.braid', function: 'getAccountDetails', policy: 'READ_ONLY' },
   list_accounts: { file: 'accounts.braid', function: 'listAccounts', policy: 'READ_ONLY' },
   search_accounts: { file: 'accounts.braid', function: 'searchAccounts', policy: 'READ_ONLY' },
+  search_accounts_by_status: { file: 'accounts.braid', function: 'searchAccountsByStatus', policy: 'READ_ONLY' },
   delete_account: { file: 'accounts.braid', function: 'deleteAccount', policy: 'DELETE_OPERATIONS' },
   
   // Lead Management
@@ -275,6 +301,7 @@ export const TOOL_REGISTRY = {
   convert_lead_to_account: { file: 'leads.braid', function: 'convertLeadToAccount', policy: 'WRITE_OPERATIONS' },
   list_leads: { file: 'leads.braid', function: 'listLeads', policy: 'READ_ONLY' },
   search_leads: { file: 'leads.braid', function: 'searchLeads', policy: 'READ_ONLY' },
+  search_leads_by_status: { file: 'leads.braid', function: 'searchLeadsByStatus', policy: 'READ_ONLY' },
   get_lead_details: { file: 'leads.braid', function: 'getLeadDetails', policy: 'READ_ONLY' },
   delete_lead: { file: 'leads.braid', function: 'deleteLead', policy: 'DELETE_OPERATIONS' },
   
@@ -302,6 +329,7 @@ export const TOOL_REGISTRY = {
   update_opportunity: { file: 'opportunities.braid', function: 'updateOpportunity', policy: 'WRITE_OPERATIONS' },
   list_opportunities_by_stage: { file: 'opportunities.braid', function: 'listOpportunitiesByStage', policy: 'READ_ONLY' },
   search_opportunities: { file: 'opportunities.braid', function: 'searchOpportunities', policy: 'READ_ONLY' },
+  search_opportunities_by_stage: { file: 'opportunities.braid', function: 'searchOpportunitiesByStage', policy: 'READ_ONLY' },
   get_opportunity_details: { file: 'opportunities.braid', function: 'getOpportunityDetails', policy: 'READ_ONLY' },
   get_opportunity_forecast: { file: 'opportunities.braid', function: 'getOpportunityForecast', policy: 'READ_ONLY' },
   mark_opportunity_won: { file: 'opportunities.braid', function: 'markOpportunityWon', policy: 'WRITE_OPERATIONS' },
@@ -311,8 +339,10 @@ export const TOOL_REGISTRY = {
   create_contact: { file: 'contacts.braid', function: 'createContact', policy: 'WRITE_OPERATIONS' },
   update_contact: { file: 'contacts.braid', function: 'updateContact', policy: 'WRITE_OPERATIONS' },
   list_contacts_for_account: { file: 'contacts.braid', function: 'listContactsForAccount', policy: 'READ_ONLY' },
+  list_all_contacts: { file: 'contacts.braid', function: 'listAllContacts', policy: 'READ_ONLY' },
   get_contact_details: { file: 'contacts.braid', function: 'getContactDetails', policy: 'READ_ONLY' },
   search_contacts: { file: 'contacts.braid', function: 'searchContacts', policy: 'READ_ONLY' },
+  search_contacts_by_status: { file: 'contacts.braid', function: 'searchContactsByStatus', policy: 'READ_ONLY' },
   delete_contact: { file: 'contacts.braid', function: 'deleteContact', policy: 'DELETE_OPERATIONS' },
   
   // Web Research
@@ -427,10 +457,10 @@ const TOOL_DESCRIPTIONS = {
   get_lead_details: 'Get the full details of a specific Lead by its UUID. Only use when you already have the lead_id from a previous search or list.',
 
   // Activities
-  create_activity: 'Create a new Activity (task, meeting, call, email) in the CRM.',
+  create_activity: 'Create a new Activity (task, meeting, call, email) in the CRM. For related entities use entity_type (lead/contact/account/opportunity) and entity_id (the UUID).',
   update_activity: 'Update/reschedule an existing Activity by its ID. Use this for rescheduling - pass activity_id and updates object with new due_date (ISO format like "2025-12-20T13:00:00"). IMPORTANT: Use the activity ID from the previous list/search result - you do NOT need to query again.',
   mark_activity_complete: 'Mark an Activity as completed by its ID. Use the ID from previous list/search results.',
-  get_upcoming_activities: 'Get upcoming activities for a SPECIFIC user by their email. Requires assigned_to as the user\'s email address. Use list_activities instead for general calendar queries.',
+  get_upcoming_activities: 'Get upcoming activities for a user. The assigned_to parameter must be a user UUID (not email). Use search_users first to find the user UUID if needed. Use list_activities for general calendar queries.',
   schedule_meeting: 'Schedule a new meeting with attendees. Creates a meeting-type activity with date, time, duration, and attendee list.',
   list_activities: 'List all Activities in the CRM. Use this for calendar/schedule queries. Pass status="planned" for upcoming/pending, status="overdue" for overdue, status="completed" for past, or status="all" for everything. IMPORTANT: Results include activity IDs - remember these for follow-up actions like update or complete.',
   search_activities: 'Search for Activities by subject, body, or type. ALWAYS use this first when user asks about an activity by name or keyword. Results include IDs for follow-up actions.',
@@ -441,10 +471,10 @@ const TOOL_DESCRIPTIONS = {
 
 
   // Notes
-  create_note: 'Create a new Note attached to any CRM record (account, lead, contact, opportunity).',
+  create_note: 'Create a new Note attached to a CRM record. REQUIRED: content (the note text), entity_type (one of: "lead", "account", "contact", "opportunity"), entity_id (the UUID of the record).',
   update_note: 'Update an existing Note by its ID.',
   search_notes: 'Search notes by keyword across all records.',
-  get_notes_for_record: 'Get all notes attached to a specific record (account, lead, contact, or opportunity) by record ID.',
+  get_notes_for_record: 'Get all notes attached to a specific record. REQUIRED: entity_type (one of: "lead", "account", "contact", "opportunity"), entity_id (the UUID of the record).',
   get_note_details: 'Get the full details of a specific Note by its ID.',
 
   // Opportunities
@@ -980,7 +1010,9 @@ export function summarizeToolResult(result, toolName) {
     const summaryItems = uniqueLeads.slice(0, 10).map(l => {
       const fullName = [l.first_name, l.last_name].filter(Boolean).join(' ') || 'Unnamed';
       const isTest = l.is_test_data === true ? ' [TEST DATA]' : '';
-      return `• ID: ${l.id}, EXACT Name: "${fullName}", Company: "${l.company || 'N/A'}", Status: ${l.status || 'unknown'}${isTest}`;
+      const phone = l.phone ? `, Phone: ${l.phone}` : '';
+      const email = l.email ? `, Email: ${l.email}` : '';
+      return `• ID: ${l.id}, EXACT Name: "${fullName}", Company: "${l.company || 'N/A'}", Status: ${l.status || 'unknown'}${phone}${email}${isTest}`;
     });
 
     let summary = `Found ${uniqueLeads.length} Lead${uniqueLeads.length === 1 ? '' : 's'} (REPORT THESE EXACT NAMES - do not substitute):\n${summaryItems.join('\n')}`;
@@ -1266,9 +1298,12 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
   // Attach execution context so audit logs include tenant/user and tenant isolation has data
   const basePolicy = CRM_POLICIES[config.policy];
   
-  // Extract user info from access token for audit logging
+  // Extract user info from access token for audit logging and created_by fields
   const userRole = accessToken?.user_role || 'user';
   const userEmail = accessToken?.user_email || null;
+  const userName = accessToken?.user_name || null;
+  // Use userName for created_by (more readable), fallback to email
+  const createdBy = userName || userEmail || null;
   
   // === ROLE-BASED ACCESS CONTROL ===
   // Check if the tool requires specific roles and verify user has permission
@@ -1368,7 +1403,8 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
   // Inside Docker: CRM_BACKEND_URL=http://backend:3001
   // Outside Docker: BACKEND_URL=http://localhost:4001
   const backendUrl = process.env.CRM_BACKEND_URL || process.env.BACKEND_URL || 'http://localhost:4001';
-  const deps = createBackendDeps(backendUrl, tenantUuid, userId, internalToken);
+  // Pass createdBy (userName or email) for created_by field injection in POST requests
+  const deps = createBackendDeps(backendUrl, tenantUuid, userId, internalToken, createdBy);
 
   // Normalize arguments into a single object for Braid
   const normalizedArgs = normalizeToolArgs(toolName, args, tenantRecord);
@@ -1655,8 +1691,8 @@ export const TOOL_CHAINS = {
           activity_type: input.activity_type || 'call',
           due_date: input.followup_date || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
           assigned_to: input.assigned_to,
-          related_to_type: 'opportunity',
-          related_to_id: ctx.opportunity?.value?.id,
+          entity_type: 'opportunity',
+          entity_id: ctx.opportunity?.value?.id,
           body: input.followup_notes || 'Initial follow-up call'
         }),
         required: false,
@@ -2668,18 +2704,26 @@ export function listChains(userRole = 'user') {
 
 /**
  * Parameter order for each Braid function (matches .braid file signatures)
+ * CONVENTION: 
+ * - First param: 'tenant' (not tenant_id)
+ * - Entity IDs: '{entity}_id' (e.g., lead_id, account_id)
+ * - Related entities: 'entity_type', 'entity_id' (for notes, activities, documents)
+ * - Update objects: 'updates' (not content, changes, etc.)
+ * - Search strings: 'query'
+ * - Result limits: 'limit'
  */
 const BRAID_PARAM_ORDER = {
   // Snapshot
   fetchSnapshot: ['tenant', 'scope', 'limit'],
-  probe: ['tenant'],
+  probe: [],  // No params
 
   // Accounts
   createAccount: ['tenant', 'name', 'annual_revenue', 'industry', 'website', 'email', 'phone'],
   updateAccount: ['tenant', 'account_id', 'updates'],
   getAccountDetails: ['tenant', 'account_id'],
-  listAccounts: ['tenant', 'limit'],
+  listAccounts: ['tenant', 'limit', 'offset'],
   searchAccounts: ['tenant', 'query', 'limit'],
+  searchAccountsByStatus: ['tenant', 'status', 'limit'],
   deleteAccount: ['tenant', 'account_id'],
 
   // Leads
@@ -2689,46 +2733,99 @@ const BRAID_PARAM_ORDER = {
   convertLeadToAccount: ['tenant', 'lead_id', 'options'],
   listLeads: ['tenant', 'status', 'account_id', 'limit'],
   searchLeads: ['tenant', 'query', 'limit'],
+  searchLeadsByStatus: ['tenant', 'status', 'limit'],
   getLeadDetails: ['tenant', 'lead_id'],
   deleteLead: ['tenant', 'lead_id'],
 
-  // Activities
-  createActivity: ['tenant', 'subject', 'activity_type', 'due_date', 'assigned_to', 'related_to_type', 'related_to_id', 'body'],
-  updateActivity: ['tenant', 'activity_id', 'updates'],
-  markActivityComplete: ['tenant', 'activity_id'],
-  getUpcomingActivities: ['tenant', 'assigned_to', 'days'],
-  listActivities: ['tenant', 'status', 'related_to_type', 'related_to_id', 'limit'],
-  searchActivities: ['tenant', 'query', 'limit'],
-  getActivityDetails: ['tenant', 'activity_id'],
-  scheduleMeeting: ['tenant', 'subject', 'attendees', 'date_time', 'duration_minutes', 'assigned_to'],
-  deleteActivity: ['tenant', 'activity_id'],
-
-
-  // Notes
-  createNote: ['tenant', 'content', 'related_to', 'related_id'],
-  updateNote: ['tenant', 'note_id', 'content'],
-  searchNotes: ['tenant', 'query', 'limit'],
-  getNotesForRecord: ['tenant', 'related_to', 'related_id'],
-  getNoteDetails: ['tenant', 'note_id'],
-  deleteNote: ['tenant', 'note_id'],
+  // Contacts
+  createContact: ['tenant', 'first_name', 'last_name', 'email', 'phone', 'job_title', 'account_id', 'assigned_to'],
+  updateContact: ['tenant', 'contact_id', 'updates'],
+  listContactsForAccount: ['tenant', 'account_id', 'limit'],
+  listAllContacts: ['tenant', 'limit'],
+  searchContacts: ['tenant', 'query', 'limit'],
+  searchContactsByStatus: ['tenant', 'status', 'limit'],
+  getContactDetails: ['tenant', 'contact_id'],
+  deleteContact: ['tenant', 'contact_id'],
 
   // Opportunities
   createOpportunity: ['tenant', 'name', 'description', 'amount', 'stage', 'probability', 'close_date', 'account_id', 'contact_id'],
   updateOpportunity: ['tenant', 'opportunity_id', 'updates'],
   listOpportunitiesByStage: ['tenant', 'stage', 'account_id', 'limit'],
   searchOpportunities: ['tenant', 'query', 'limit'],
+  searchOpportunitiesByStage: ['tenant', 'stage', 'limit'],
   getOpportunityDetails: ['tenant', 'opportunity_id'],
   getOpportunityForecast: ['tenant', 'period'],
   markOpportunityWon: ['tenant', 'opportunity_id', 'close_details'],
   deleteOpportunity: ['tenant', 'opportunity_id'],
 
-  // Contacts
-  createContact: ['tenant', 'first_name', 'last_name', 'email', 'phone', 'job_title', 'account_id'],
-  updateContact: ['tenant', 'contact_id', 'updates'],
-  listContactsForAccount: ['tenant', 'account_id', 'limit'],
-  getContactDetails: ['tenant', 'contact_id'],
-  searchContacts: ['tenant', 'query', 'limit'],
-  deleteContact: ['tenant', 'contact_id'],
+  // Activities - AI uses entity_type/entity_id, Braid transforms to related_to/related_id for DB
+  createActivity: ['tenant', 'subject', 'activity_type', 'due_date', 'assigned_to', 'entity_type', 'entity_id', 'body'],
+  updateActivity: ['tenant', 'activity_id', 'updates'],
+  markActivityComplete: ['tenant', 'activity_id'],
+  getUpcomingActivities: ['tenant', 'assigned_to', 'days'],
+  listActivities: ['tenant', 'status', 'entity_type', 'entity_id', 'limit'],
+  searchActivities: ['tenant', 'query', 'limit'],
+  getActivityDetails: ['tenant', 'activity_id'],
+  scheduleMeeting: ['tenant', 'subject', 'attendees', 'date_time', 'duration_minutes', 'assigned_to'],
+  deleteActivity: ['tenant', 'activity_id'],
+
+  // Notes - AI uses entity_type/entity_id, Braid transforms to related_type/related_id for DB
+  createNote: ['tenant', 'content', 'entity_type', 'entity_id'],
+  updateNote: ['tenant', 'note_id', 'updates'],
+  searchNotes: ['tenant', 'query', 'limit'],
+  getNotesForRecord: ['tenant', 'entity_type', 'entity_id'],
+  getNoteDetails: ['tenant', 'note_id'],
+  deleteNote: ['tenant', 'note_id'],
+
+  // Documents - AI uses entity_type/entity_id
+  listDocuments: ['tenant', 'entity_type', 'entity_id', 'limit'],
+  getDocumentDetails: ['tenant', 'document_id'],
+  createDocument: ['tenant', 'name', 'description', 'entity_type', 'entity_id', 'file_url', 'file_type'],
+  updateDocument: ['tenant', 'document_id', 'updates'],
+  deleteDocument: ['tenant', 'document_id'],
+  analyzeDocument: ['tenant', 'document_id', 'analysis_type'],
+  searchDocuments: ['tenant', 'query', 'limit'],
+
+  // Employees
+  listEmployees: ['tenant', 'role', 'department', 'active_only'],
+  getEmployeeDetails: ['tenant', 'employee_id'],
+  createEmployee: ['tenant', 'first_name', 'last_name', 'email', 'role', 'department', 'phone'],
+  updateEmployee: ['tenant', 'employee_id', 'updates'],
+  deleteEmployee: ['tenant', 'employee_id'],
+  searchEmployees: ['tenant', 'query', 'limit'],
+  getEmployeeAssignments: ['tenant', 'employee_id'],
+
+  // Users (ADMIN_ONLY policy for most)
+  listUsers: ['tenant', 'role', 'active_only'],
+  getUserDetails: ['tenant', 'user_id'],
+  getCurrentUserProfile: ['tenant'],
+  getUserProfiles: ['tenant'],
+  createUser: ['tenant', 'email', 'first_name', 'last_name', 'role', 'password'],
+  updateUser: ['tenant', 'user_id', 'updates'],
+  deleteUser: ['tenant', 'user_id'],
+  searchUsers: ['tenant', 'query', 'limit'],
+  inviteUser: ['tenant', 'user_id', 'invitation_message'],
+
+  // Reports & Analytics
+  getDashboardBundle: ['tenant', 'time_range', 'include_forecasts'],
+  getHealthSummary: ['tenant'],
+  getSalesReport: ['tenant', 'start_date', 'end_date', 'group_by'],
+  getPipelineReport: ['tenant', 'include_history'],
+  getActivityReport: ['tenant', 'start_date', 'end_date', 'employee_id'],
+  getLeadConversionReport: ['tenant', 'start_date', 'end_date'],
+  getRevenueForecasts: ['tenant', 'months_ahead'],
+  clearReportCache: ['tenant', 'report_type'],
+
+  // Telephony & AI Calling
+  initiateCall: ['tenant', 'provider', 'phone_number', 'contact_name', 'company', 'purpose', 'talking_points'],
+  callContact: ['tenant', 'contact_id', 'provider', 'purpose', 'talking_points'],
+  checkCallingProvider: ['tenant', 'provider'],
+  getCallingAgents: ['tenant', 'provider'],
+
+  // Workflow Templates
+  listWorkflowTemplates: ['tenant', 'category'],
+  getWorkflowTemplate: ['tenant', 'template_id'],
+  instantiateWorkflowTemplate: ['tenant', 'template_id', 'workflow_name', 'parameters'],
 
   // Web Research
   searchWeb: ['query', 'limit'],
