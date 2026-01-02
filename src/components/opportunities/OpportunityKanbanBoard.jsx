@@ -1,5 +1,19 @@
 import React, { useState, useMemo } from 'react';
-import { DragDropContext, Droppable } from '@hello-pangea/dnd';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { restrictToVerticalAxis, restrictToWindowEdges } from '@dnd-kit/modifiers';
 import OpportunityKanbanCard from './OpportunityKanbanCard';
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -27,6 +41,19 @@ export default function OpportunityKanbanBoard({ opportunities, accounts, contac
   const [localOpportunities, setLocalOpportunities] = useState(opportunities);
   // Track ids with an in-flight stage update to prevent premature reversion from parent prop sync
   const [pendingStageIds, setPendingStageIds] = useState(new Set());
+  const [activeId, setActiveId] = useState(null);
+  
+  // Configure sensors for drag and drop
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5, // 5px of movement before drag starts
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
   
   // Get visibility preferences from status cards
   const { isCardVisible, getCardLabel } = useStatusCardPreferences();
@@ -91,87 +118,101 @@ export default function OpportunityKanbanBoard({ opportunities, accounts, contac
     return user?.full_name || userEmail;
   };
 
-  const onDragEnd = async (result) => {
-    const { destination, source, draggableId } = result;
-    if (!destination) return;
+  const handleDragStart = (event) => {
+    setActiveId(event.active.id);
+  };
 
-    console.log('[Kanban] Drag ended:', { draggableId, from: source.droppableId, to: destination.droppableId });
+  const handleDragEnd = async (event) => {
+    const { active, over } = event;
+    
+    setActiveId(null);
+    
+    if (!over) return;
 
-    // If moving within same column and position changed, reorder locally (no persistence server-side)
-    if (destination.droppableId === source.droppableId && destination.index !== source.index) {
-      setLocalOpportunities(prev => {
-        const stageId = source.droppableId;
-        const stageItems = prev.filter(o => o.stage === stageId);
-        const otherItems = prev.filter(o => o.stage !== stageId);
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    
+    // Find the opportunity being dragged
+    const draggedOpp = localOpportunities.find(opp => String(opp.id) === activeId);
+    if (!draggedOpp) return;
 
-        // Remove dragged item from stage list
-        const fromIndex = source.index;
-        const [moved] = stageItems.splice(fromIndex, 1);
-        // Insert at new index
-        stageItems.splice(destination.index, 0, moved);
-
-        // Rebuild list preserving order inside the stage
-        return [
-          ...otherItems,
-          ...stageItems
-        ];
-      });
-      return; // Done - no backend call for ordering yet
-    }
-
-    // If dropped back to original spot, do nothing
-    if (destination.droppableId === source.droppableId && destination.index === source.index) return;
-
-    // Moving to a different stage
-    if (destination.droppableId !== source.droppableId) {
-      const newStage = destination.droppableId;
-      const idStr = String(draggableId);
-
-      console.log('[Kanban] Stage change:', { id: idStr, oldStage: source.droppableId, newStage });
-
-      // Mark id as pending so parent prop sync won't overwrite optimistic state
-      setPendingStageIds(prev => {
-        const next = new Set(prev).add(idStr);
-        console.log('[Kanban] Pending IDs after add:', Array.from(next));
-        return next;
-      });
-
-      // OPTIMISTIC UPDATE
-      setLocalOpportunities(prev => {
-        const updated = prev.map(opp => (
-          String(opp.id) === idStr
-            ? { ...opp, stage: newStage }
-            : opp
-        ));
-        console.log('[Kanban] Optimistic update applied for', idStr);
-        return updated;
-      });
-
-      try {
-        console.log('[Kanban] Calling onStageChange...');
-        const result = await onStageChange(draggableId, newStage);
-        console.log('[Kanban] onStageChange result:', result);
-        
-        // Refresh (optional) - keep small delay to let backend commit fully
-        if (onDataRefresh) {
-          console.log('[Kanban] Calling onDataRefresh...');
-          await onDataRefresh();
-          console.log('[Kanban] onDataRefresh complete');
-        }
-      } catch (error) {
-        console.error('[Kanban] Error updating stage:', error);
-        toast.error('Failed to move opportunity');
-        setLocalOpportunities(opportunities); // revert
-      } finally {
-        // Remove id from pending so future prop syncs include updated record
-        setPendingStageIds(prev => {
-          const next = new Set(prev);
-          next.delete(idStr);
-          console.log('[Kanban] Pending IDs after remove:', Array.from(next));
-          return next;
-        });
+    const sourceStage = draggedOpp.stage;
+    
+    // Determine the destination stage
+    let destinationStage;
+    
+    // Check if we dropped over a stage container
+    const stageMatch = overId.match(/^stage-(.+)$/);
+    if (stageMatch) {
+      destinationStage = stageMatch[1];
+    } else {
+      // We dropped over another card, find its stage
+      const overOpp = localOpportunities.find(opp => String(opp.id) === overId);
+      if (overOpp) {
+        destinationStage = overOpp.stage;
+      } else {
+        return; // Invalid drop target
       }
     }
+
+    console.log('[Kanban] Drag ended:', { activeId, sourceStage, destinationStage });
+
+    // If dropped in same stage, no backend update needed (position reordering is local only)
+    if (destinationStage === sourceStage) {
+      // In @dnd-kit, we'd handle sorting here, but since we're not persisting order
+      // we'll just return
+      return;
+    }
+
+    // Moving to a different stage
+    console.log('[Kanban] Stage change:', { id: activeId, oldStage: sourceStage, newStage: destinationStage });
+
+    // Mark id as pending so parent prop sync won't overwrite optimistic state
+    setPendingStageIds(prev => {
+      const next = new Set(prev).add(activeId);
+      console.log('[Kanban] Pending IDs after add:', Array.from(next));
+      return next;
+    });
+
+    // OPTIMISTIC UPDATE
+    setLocalOpportunities(prev => {
+      const updated = prev.map(opp => (
+        String(opp.id) === activeId
+          ? { ...opp, stage: destinationStage }
+          : opp
+      ));
+      console.log('[Kanban] Optimistic update applied for', activeId);
+      return updated;
+    });
+
+    try {
+      console.log('[Kanban] Calling onStageChange...');
+      const result = await onStageChange(activeId, destinationStage);
+      console.log('[Kanban] onStageChange result:', result);
+      
+      // Refresh (optional) - keep small delay to let backend commit fully
+      if (onDataRefresh) {
+        console.log('[Kanban] Calling onDataRefresh...');
+        await onDataRefresh();
+        console.log('[Kanban] onDataRefresh complete');
+      }
+    } catch (error) {
+      console.error('[Kanban] Error updating stage:', error);
+      toast.error('Failed to move opportunity');
+      setLocalOpportunities(opportunities); // revert
+    } finally {
+      // Remove id from pending so future prop syncs include updated record
+      setPendingStageIds(prev => {
+        const next = new Set(prev);
+        next.delete(activeId);
+        console.log('[Kanban] Pending IDs after remove:', Array.from(next));
+        return next;
+      });
+    }
+  };
+
+  const handleDragCancel = () => {
+    setActiveId(null);
   };
 
   const handleSave = async () => {
@@ -220,7 +261,14 @@ export default function OpportunityKanbanBoard({ opportunities, accounts, contac
         </div>
       </div>
       
-      <DragDropContext onDragEnd={onDragEnd}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
+        modifiers={[restrictToWindowEdges]}
+      >
         <div className={`grid gap-6 p-4 ${
           visibleStages.length === 2 ? 'grid-cols-1 md:grid-cols-2' :
           visibleStages.length === 3 ? 'grid-cols-1 md:grid-cols-3' :
@@ -230,6 +278,8 @@ export default function OpportunityKanbanBoard({ opportunities, accounts, contac
         }`}>
           {visibleStages.map(stage => {
             const stageOpportunities = localOpportunities.filter(opp => opp.stage === stage.id);
+            const opportunityIds = stageOpportunities.map(opp => String(opp.id));
+            
             return (
               <div key={stage.id} className="flex flex-col h-full">
                 <Card className={`kanban-stage-card bg-slate-800 border border-t-4 border-l-slate-700 border-r-slate-700 border-b-slate-700 ${stage.color} shadow-md mb-4 rounded-lg`}>
@@ -239,36 +289,32 @@ export default function OpportunityKanbanBoard({ opportunities, accounts, contac
                     </CardTitle>
                   </CardHeader>
                 </Card>
-                <Droppable droppableId={stage.id}>
-                  {(provided, snapshot) => (
-                    <div
-                      {...provided.droppableProps}
-                      ref={provided.innerRef}
-                      className={`kanban-droppable p-2 rounded-lg transition-colors flex-1 min-h-[400px] ${
-                        snapshot.isDraggingOver ? 'drag-over bg-slate-700/50' : 'bg-slate-800/30'
-                      }`}
-                    >
-                      {stageOpportunities.map((opp, index) => (
-                        <OpportunityKanbanCard
-                          key={opp.id}
-                          opportunity={opp}
-                          accountName={getDisplayInfo(opp)}
-                          assignedUserName={getUserName(opp.assigned_to)}
-                          index={index}
-                          onEdit={handleEditOpportunity}
-                          onDelete={onDelete}
-                          onView={onView}
-                        />
-                      ))}
-                      {provided.placeholder}
-                    </div>
-                  )}
-                </Droppable>
+                <SortableContext
+                  id={`stage-${stage.id}`}
+                  items={opportunityIds}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div
+                    className="kanban-droppable p-2 rounded-lg transition-colors flex-1 min-h-[400px] bg-slate-800/30"
+                  >
+                    {stageOpportunities.map((opp) => (
+                      <OpportunityKanbanCard
+                        key={opp.id}
+                        opportunity={opp}
+                        accountName={getDisplayInfo(opp)}
+                        assignedUserName={getUserName(opp.assigned_to)}
+                        onEdit={handleEditOpportunity}
+                        onDelete={onDelete}
+                        onView={onView}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
               </div>
             );
           })}
         </div>
-      </DragDropContext>
+      </DndContext>
     </div>
   );
 }

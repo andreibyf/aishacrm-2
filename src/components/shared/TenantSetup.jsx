@@ -45,7 +45,22 @@ import {
   Upload,
 } from "lucide-react";
 import { useUser } from '@/components/shared/useUser.js';
-import { DragDropContext, Draggable, Droppable } from "@hello-pangea/dnd";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { Tenant } from "@/api/entities";
 import { createTenantWithR2Bucket } from "@/api/functions";
 import { deleteTenantWithData } from "@/api/functions";
@@ -106,6 +121,134 @@ const industries = [
   { value: "textiles_and_apparel", label: "Textiles & Apparel" },
   { value: "other", label: "Other" },
 ];
+
+// Sortable Table Row component for drag and drop
+function SortableTenantRow({ tenant, onEdit, onDelete, industries }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: tenant.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <TableRow
+      ref={setNodeRef}
+      style={style}
+      className={`${isDragging ? "shadow-lg" : ""} border-slate-700`}
+    >
+      <TableCell {...attributes} {...listeners}>
+        <GripVertical className="w-4 h-4 text-slate-500 cursor-grab active:cursor-grabbing" />
+      </TableCell>
+      <TableCell>
+        {tenant.logo_url
+          ? (
+            <img
+              src={tenant.logo_url}
+              alt={tenant.name}
+              className="w-8 h-8 rounded object-contain"
+            />
+          )
+          : (
+            <div className="w-8 h-8 bg-slate-600 rounded flex items-center justify-center">
+              <span className="text-xs font-medium text-slate-300">
+                {tenant.name?.charAt(0)
+                  ?.toUpperCase() || "?"}
+              </span>
+            </div>
+          )}
+      </TableCell>
+      <TableCell className="font-medium text-slate-200">
+        {tenant.name}
+      </TableCell>
+      <TableCell className="text-slate-300">
+        {tenant.domain || "—"}
+      </TableCell>
+      <TableCell>
+        {tenant.call_agent_url
+          ? (
+            <Badge
+              variant="secondary"
+              className="bg-slate-600 text-slate-300"
+            >
+              Legacy Configured
+            </Badge>
+          )
+          : tenant.ai_calling_providers
+              ?.callfluent?.is_active ||
+              tenant.ai_calling_providers
+                ?.thoughtly?.is_active
+          ? (
+            <Badge
+              variant="default"
+              className="bg-blue-600 text-white"
+            >
+              AI Providers Active
+            </Badge>
+          )
+          : (
+            <Badge
+              variant="outline"
+              className="border-slate-600 text-slate-400"
+            >
+              Not Set
+            </Badge>
+          )}
+      </TableCell>
+      <TableCell>
+        <Badge
+          variant="outline"
+          className="capitalize border-slate-600 text-slate-400"
+        >
+          {industries.find((i) =>
+            i.value === tenant.industry
+          )?.label || "Not set"}
+        </Badge>
+      </TableCell>
+      <TableCell className="text-right">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-slate-400 hover:text-slate-200 hover:bg-slate-700"
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            className="bg-slate-800 border-slate-700"
+          >
+            <DropdownMenuItem
+              onClick={() => onEdit(tenant)}
+              className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
+            >
+              <Pencil className="w-4 h-4 mr-2" />
+              Edit
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="bg-slate-600" />
+            <DropdownMenuItem
+              onClick={() => onDelete(tenant.id)}
+              className="text-red-400 focus:text-red-300 hover:bg-slate-700 focus:bg-slate-700"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </TableCell>
+    </TableRow>
+  );
+}
 
 const TenantFormModal = ({ tenant, onSave, onCancel }) => {
   const [formData, setFormData] = useState({
@@ -906,15 +1049,18 @@ export default function TenantSetup() {
     }
   };
 
-  const onDragEnd = async (result) => {
-    if (!result.destination) return;
+  const handleDragEnd = async (event) => {
+    const { active, over } = event;
 
-    const items = Array.from(tenants);
-    const [reorderedItem] = items.splice(result.source.index, 1);
-    items.splice(result.destination.index, 0, reorderedItem);
+    if (!over || active.id === over.id) return;
 
-    // Update display_order for all affected items in local state
-    const updates = items.map((item, index) => ({
+    const oldIndex = tenants.findIndex((t) => t.id === active.id);
+    const newIndex = tenants.findIndex((t) => t.id === over.id);
+
+    const reordered = arrayMove(tenants, oldIndex, newIndex);
+
+    // Update display_order for all affected items
+    const updates = reordered.map((item, index) => ({
       ...item,
       display_order: index,
     }));
@@ -935,6 +1081,18 @@ export default function TenantSetup() {
       loadTenants(); // Revert on failure by reloading original data
     }
   };
+
+  // Configure sensors for drag and drop
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5, // 5px of movement before drag starts
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   if (loading) {
     return (
@@ -1015,166 +1173,56 @@ export default function TenantSetup() {
               </div>
             )
             : (
-              <DragDropContext onDragEnd={onDragEnd}>
-                <Droppable droppableId="tenants">
-                  {(provided) => (
-                    <div {...provided.droppableProps} ref={provided.innerRef}>
-                      <div className="overflow-x-auto">
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="border-slate-700">
-                              <TableHead className="w-12 text-slate-300">
-                              </TableHead>
-                              <TableHead className="text-slate-300">
-                                Logo
-                              </TableHead>
-                              <TableHead className="text-slate-300">
-                                Name
-                              </TableHead>
-                              <TableHead className="text-slate-300">
-                                Domain
-                              </TableHead>
-                              <TableHead className="text-slate-300">
-                                Agent URL
-                              </TableHead>
-                              <TableHead className="text-slate-300">
-                                Industry
-                              </TableHead>
-                              <TableHead className="text-right text-slate-300">
-                                Actions
-                              </TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {tenants.map((tenant, index) => (
-                              <Draggable
-                                key={tenant.id}
-                                draggableId={tenant.id}
-                                index={index}
-                              >
-                                {(provided, snapshot) => (
-                                  <TableRow
-                                    ref={provided.innerRef}
-                                    {...provided.draggableProps}
-                                    className={`${
-                                      snapshot.isDragging ? "shadow-lg" : ""
-                                    } border-slate-700`}
-                                  >
-                                    <TableCell {...provided.dragHandleProps}>
-                                      <GripVertical className="w-4 h-4 text-slate-500 cursor-grab" />
-                                    </TableCell>
-                                    <TableCell>
-                                      {tenant.logo_url
-                                        ? (
-                                          <img
-                                            src={tenant.logo_url}
-                                            alt={tenant.name}
-                                            className="w-8 h-8 rounded object-contain"
-                                          />
-                                        )
-                                        : (
-                                          <div className="w-8 h-8 bg-slate-600 rounded flex items-center justify-center">
-                                            <span className="text-xs font-medium text-slate-300">
-                                              {tenant.name?.charAt(0)
-                                                ?.toUpperCase() || "?"}
-                                            </span>
-                                          </div>
-                                        )}
-                                    </TableCell>
-                                    <TableCell className="font-medium text-slate-200">
-                                      {tenant.name}
-                                    </TableCell>
-                                    <TableCell className="text-slate-300">
-                                      {tenant.domain || "—"}
-                                    </TableCell>
-                                    <TableCell>
-                                      {tenant.call_agent_url
-                                        ? (
-                                          <Badge
-                                            variant="secondary"
-                                            className="bg-slate-600 text-slate-300"
-                                          >
-                                            Legacy Configured
-                                          </Badge>
-                                        )
-                                        : tenant.ai_calling_providers
-                                            ?.callfluent?.is_active ||
-                                            tenant.ai_calling_providers
-                                              ?.thoughtly?.is_active
-                                        ? (
-                                          <Badge
-                                            variant="default"
-                                            className="bg-blue-600 text-white"
-                                          >
-                                            AI Providers Active
-                                          </Badge>
-                                        )
-                                        : (
-                                          <Badge
-                                            variant="outline"
-                                            className="border-slate-600 text-slate-400"
-                                          >
-                                            Not Set
-                                          </Badge>
-                                        )}
-                                    </TableCell>
-                                    <TableCell>
-                                      <Badge
-                                        variant="outline"
-                                        className="capitalize border-slate-600 text-slate-400"
-                                      >
-                                        {industries.find((i) =>
-                                          i.value === tenant.industry
-                                        )?.label || "Not set"}
-                                      </Badge>
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                      <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                          <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="text-slate-400 hover:text-slate-200 hover:bg-slate-700"
-                                          >
-                                            <MoreHorizontal className="w-4 h-4" />
-                                          </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent
-                                          align="end"
-                                          className="bg-slate-800 border-slate-700"
-                                        >
-                                          <DropdownMenuItem
-                                            onClick={() =>
-                                              setEditingTenant(tenant)}
-                                            className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
-                                          >
-                                            <Pencil className="w-4 h-4 mr-2" />
-                                            Edit
-                                          </DropdownMenuItem>
-                                          <DropdownMenuSeparator className="bg-slate-600" />
-                                          <DropdownMenuItem
-                                            onClick={() =>
-                                              handleDeleteTenant(tenant.id)}
-                                            className="text-red-400 focus:text-red-300 hover:bg-slate-700 focus:bg-slate-700"
-                                          >
-                                            <Trash2 className="w-4 h-4 mr-2" />
-                                            Delete
-                                          </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                      </DropdownMenu>
-                                    </TableCell>
-                                  </TableRow>
-                                )}
-                              </Draggable>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                      {provided.placeholder}
-                    </div>
-                  )}
-                </Droppable>
-              </DragDropContext>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-slate-700">
+                        <TableHead className="w-12 text-slate-300">
+                        </TableHead>
+                        <TableHead className="text-slate-300">
+                          Logo
+                        </TableHead>
+                        <TableHead className="text-slate-300">
+                          Name
+                        </TableHead>
+                        <TableHead className="text-slate-300">
+                          Domain
+                        </TableHead>
+                        <TableHead className="text-slate-300">
+                          Agent URL
+                        </TableHead>
+                        <TableHead className="text-slate-300">
+                          Industry
+                        </TableHead>
+                        <TableHead className="text-right text-slate-300">
+                          Actions
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <SortableContext
+                        items={tenants.map(t => t.id)}
+                        strategy={verticalListSortingStrategy}
+                      >
+                        {tenants.map((tenant) => (
+                          <SortableTenantRow
+                            key={tenant.id}
+                            tenant={tenant}
+                            onEdit={setEditingTenant}
+                            onDelete={handleDeleteTenant}
+                            industries={industries}
+                          />
+                        ))}
+                      </SortableContext>
+                    </TableBody>
+                  </Table>
+                </div>
+              </DndContext>
             )}
         </CardContent>
       </Card>
