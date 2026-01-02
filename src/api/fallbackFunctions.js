@@ -1,180 +1,145 @@
 /**
- * Fallback Functions - Resilient API Layer
+ * Fallback Functions - Resilient API Layer with Circuit Breaker
  * 
  * This module provides automatic fallback from Base44 cloud functions
- * to local implementations when Base44 is unavailable.
+ * to local implementations when Base44 is unavailable, using a
+ * circuit breaker pattern for better resilience and observability.
+ * 
+ * Features:
+ * - Circuit breaker pattern prevents cascading failures
+ * - Automatic failover to local implementations
+ * - Comprehensive metrics and state tracking
+ * - Exponential backoff for retries
+ * - Event-based logging for observability
  * 
  * Usage:
- *   import { mcpServer } from '@/api/fallbackFunctions';
- *   // Will try Base44 first, then fall back to local
+ *   import { getDashboardStats } from '@/api/fallbackFunctions';
+ *   const stats = await getDashboardStats({ tenant_id: 'abc' });
  */
 
-import { checkBackendStatus as base44HealthCheck } from '@/api/functions';
+import { createCircuitBreakerWithFallback, getCircuitBreakerHealth } from '@/lib/circuitBreaker';
 import * as cloudFunctions from '@/api/functions';
 import * as localFunctions from '@/functions';
 
-// Cache health check for 30 seconds to avoid hammering the API
-let lastHealthCheck = null;
-let lastHealthStatus = false;
-let healthCheckPromise = null;
+/**
+ * Circuit breaker configuration for Base44 cloud functions
+ */
+const CIRCUIT_BREAKER_OPTIONS = {
+  timeout: 5000,                    // 5 second timeout
+  errorThresholdPercentage: 50,     // Open circuit at 50% error rate
+  resetTimeout: 30000,              // Try to close circuit after 30s
+  rollingCountTimeout: 10000,       // 10 second rolling window
+  rollingCountBuckets: 10,          // 10 buckets in window
+  volumeThreshold: 3,               // Minimum 3 requests before opening
+  maxRetries: 2,                    // Retry up to 2 times
+  retryDelay: 1000,                 // Start with 1s delay
+};
 
 /**
- * Check if Base44 is healthy (with caching)
+ * Create a resilient function with circuit breaker and fallback
+ * 
+ * @param {Function} cloudFn - Cloud function (Base44)
+ * @param {Function} localFn - Local fallback function
+ * @param {string} fnName - Function name for logging and metrics
+ * @returns {Function} Wrapped function with circuit breaker
  */
-async function isBase44Healthy() {
-  const now = Date.now();
-  
-  // Return cached result if less than 30 seconds old
-  if (lastHealthCheck && (now - lastHealthCheck) < 30000) {
-    return lastHealthStatus;
+function createResilientFunction(cloudFn, localFn, fnName) {
+  // If no cloud function, just return local
+  if (!cloudFn) {
+    return localFn || (() => {
+      throw new Error(`${fnName} is not available`);
+    });
   }
-  
-  // If a check is already in progress, wait for it
-  if (healthCheckPromise) {
-    return healthCheckPromise;
-  }
-  
-  healthCheckPromise = (async () => {
-    try {
-      const result = await Promise.race([
-        base44HealthCheck(),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Health check timeout')), 5000)
-        )
-      ]);
-      
-      lastHealthStatus = result?.success === true || result?.status === 'ok';
-      lastHealthCheck = now;
-      
-      if (import.meta.env.DEV) {
-        console.log('Base44 health check:', lastHealthStatus ? '✅ Healthy' : '❌ Down');
-      }
-      
-      return lastHealthStatus;
-    } catch (error) {
-      if (import.meta.env.DEV) {
-        console.warn('Base44 health check failed:', error.message);
-      }
-      lastHealthStatus = false;
-      lastHealthCheck = now;
-      return false;
-    } finally {
-      healthCheckPromise = null;
-    }
-  })();
-  
-  return healthCheckPromise;
+
+  // Create circuit breaker with fallback
+  return createCircuitBreakerWithFallback(
+    cloudFn,
+    localFn,
+    `base44_${fnName}`,
+    CIRCUIT_BREAKER_OPTIONS
+  );
 }
 
 /**
- * Create a fallback wrapper for a function
- */
-function createFallbackFunction(cloudFn, localFn, fnName) {
-  return async function(...args) {
-    // Try cloud first if healthy
-    const isHealthy = await isBase44Healthy();
-    
-    if (isHealthy && cloudFn) {
-      try {
-        const result = await cloudFn(...args);
-        return result;
-      } catch (error) {
-        if (import.meta.env.DEV) {
-          console.warn(`Base44 ${fnName} failed, trying local fallback:`, error.message);
-        }
-        
-        // Mark as unhealthy to use local for next calls
-        lastHealthStatus = false;
-        lastHealthCheck = Date.now();
-      }
-    }
-    
-    // Use local fallback
-    if (localFn) {
-      if (import.meta.env.DEV) {
-        console.log(`Using local fallback for ${fnName}`);
-      }
-      return localFn(...args);
-    }
-    
-    throw new Error(`${fnName} is unavailable: Base44 is down and no local fallback exists`);
-  };
-}
-
-/**
- * Export fallback versions of critical functions
- * These will automatically use local implementations when Base44 is down
+ * Export resilient versions of critical functions
+ * These use circuit breaker pattern and automatically fallback when Base44 is down
  */
 
 // System functions
-export const checkBackendStatus = createFallbackFunction(
+export const checkBackendStatus = createResilientFunction(
   cloudFunctions.checkBackendStatus,
   localFunctions.checkBackendStatus,
   'checkBackendStatus'
 );
 
-export const runFullSystemDiagnostics = createFallbackFunction(
+export const runFullSystemDiagnostics = createResilientFunction(
   cloudFunctions.runFullSystemDiagnostics,
   localFunctions.runFullSystemDiagnostics,
   'runFullSystemDiagnostics'
 );
 
 // Reports
-export const getDashboardStats = createFallbackFunction(
+export const getDashboardStats = createResilientFunction(
   cloudFunctions.getDashboardStats,
   localFunctions.getDashboardStats,
   'getDashboardStats'
 );
 
-export const getDashboardBundle = createFallbackFunction(
+export const getDashboardBundle = createResilientFunction(
   cloudFunctions.getDashboardBundle,
   localFunctions.getDashboardBundle,
   'getDashboardBundle'
 );
 
 // Validation
-export const findDuplicates = createFallbackFunction(
+export const findDuplicates = createResilientFunction(
   cloudFunctions.findDuplicates,
   localFunctions.findDuplicates,
   'findDuplicates'
 );
 
-export const analyzeDataQuality = createFallbackFunction(
+export const analyzeDataQuality = createResilientFunction(
   cloudFunctions.analyzeDataQuality,
   localFunctions.analyzeDataQuality,
   'analyzeDataQuality'
 );
 
-// Database
-export const syncDatabase = createFallbackFunction(
-  cloudFunctions.syncDatabase,
-  localFunctions.syncDatabase,
-  'syncDatabase'
-);
-
+// Note: syncDatabase removed - not exported by localFunctions
 // Add more critical functions as needed
-// export const yourFunction = createFallbackFunction(
+// export const yourFunction = createResilientFunction(
 //   cloudFunctions.yourFunction,
 //   localFunctions.yourFunction,
 //   'yourFunction'
 // );
 
 /**
- * Manual health check trigger (useful for UI)
+ * Get circuit breaker health status
+ * Replaces the manual health check with circuit breaker metrics
+ */
+export function getCircuitBreakerStatus() {
+  return getCircuitBreakerHealth();
+}
+
+/**
+ * Manual health check trigger (kept for backward compatibility)
+ * Now returns circuit breaker status instead of simple health check
  */
 export async function checkHealth() {
-  lastHealthCheck = null; // Force fresh check
-  return isBase44Healthy();
+  return getCircuitBreakerHealth();
 }
 
 /**
  * Get current health status without triggering a check
+ * Now returns circuit breaker status for all Base44 functions
  */
 export function getCurrentHealthStatus() {
+  const cbHealth = getCircuitBreakerHealth();
+  
   return {
-    isHealthy: lastHealthStatus,
-    lastChecked: lastHealthCheck ? new Date(lastHealthCheck).toISOString() : null,
-    cacheAge: lastHealthCheck ? Date.now() - lastHealthCheck : null
+    isHealthy: cbHealth.summary.healthy === cbHealth.summary.total,
+    circuitBreakers: cbHealth.circuitBreakers,
+    summary: cbHealth.summary,
+    timestamp: cbHealth.timestamp,
   };
 }
 
@@ -205,6 +170,6 @@ export async function getDashboardFunnelCounts({ tenant_id, include_test_data = 
 export default {
   checkHealth,
   getCurrentHealthStatus,
+  getCircuitBreakerStatus,
   getDashboardFunnelCounts,
-  isBase44Healthy
 };
