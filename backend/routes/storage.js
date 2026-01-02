@@ -5,27 +5,10 @@
 
 import express from "express";
 import multer from "multer";
-import { createClient } from "@supabase/supabase-js";
+import { getSupabaseAdmin, getBucketName } from "../lib/supabaseFactory.js";
 
 // Multer memory storage to forward buffer to Supabase
 const upload = multer({ storage: multer.memoryStorage() });
-
-// Initialize Supabase service client (backend-only)
-function getSupabaseAdmin() {
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error("Supabase URL or Service Role Key not configured");
-  }
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false },
-  });
-}
-
-// Resolve target bucket name with a sensible default
-function getBucketName() {
-  return process.env.SUPABASE_STORAGE_BUCKET || "tenant-assets";
-}
 
 // Build a tenant-aware storage key
 function buildObjectKey({ tenantId, originalName }) {

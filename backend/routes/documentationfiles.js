@@ -6,23 +6,7 @@
 
 import express from 'express';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
-import { createClient } from '@supabase/supabase-js';
-
-// Initialize Supabase service client
-function getSupabaseAdmin() {
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error('Supabase URL or Service Role Key not configured');
-  }
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false },
-  });
-}
-
-function getBucketName() {
-  return process.env.SUPABASE_STORAGE_BUCKET || 'tenant-assets';
-}
+import { getSupabaseAdmin, getBucketName } from '../lib/supabaseFactory.js';
 
 export default function createDocumentationFileRoutes(_pgPool) {
   const router = express.Router();

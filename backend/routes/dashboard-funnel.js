@@ -1,15 +1,13 @@
 import express from 'express';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseAdmin } from '../lib/supabaseFactory.js';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
 import { cacheList } from '../lib/cacheMiddleware.js';
 
 export default function createDashboardFunnelRoutes(_pgPool) {
   const router = express.Router();
 
-  const supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  );
+  // Lazy-load Supabase client to avoid initialization errors when credentials not configured
+  const getSupabase = () => getSupabaseAdmin({ throwOnMissing: false }) || getSupabaseAdmin();
 
 /**
  * GET /api/dashboard/funnel-counts
@@ -231,6 +229,7 @@ router.get('/funnel-counts', cacheList('funnel_counts', 120), validateTenantAcce
  */
 router.post('/funnel-counts/refresh', validateTenantAccess, async (req, res) => {
   try {
+    const supabase = getSupabase();
     // Call the refresh function
     const { error } = await supabase.rpc('refresh_dashboard_funnel_counts');
 

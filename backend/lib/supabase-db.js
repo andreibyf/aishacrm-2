@@ -4,7 +4,7 @@
  * This avoids direct pooler connection issues while maintaining compatibility
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseDB } from './supabaseFactory.js';
 import { addDbTime } from './requestContext.js';
 
 let supabaseClient = null;
@@ -12,71 +12,41 @@ let postgresClient = null;
 
 /**
  * Initialize Supabase client with direct Postgres connection fallback
+ * @deprecated Use getSupabaseDB() from supabaseFactory.js instead
  */
 export function initSupabaseDB(url, serviceRoleKey) {
   if (!url || !serviceRoleKey) {
     throw new Error('Supabase URL and Service Role Key are required');
   }
-  // Wrap fetch to time all Supabase HTTP calls and accumulate into per-request DB time
-  const baseFetch = globalThis.fetch?.bind(globalThis);
-  const timedFetch = async (input, init) => {
-    const t0 = Number(process.hrtime.bigint()) / 1e6;
-    try {
-      return await (baseFetch ? baseFetch(input, init) : fetch(input, init));
-    } finally {
-      const t1 = Number(process.hrtime.bigint()) / 1e6;
-      addDbTime(Math.max(0, t1 - t0));
-    }
-  };
-
-  supabaseClient = createClient(url, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    },
-    db: {
-      schema: 'public'
-    },
-    global: {
-      fetch: timedFetch
-    }
-  });
   
-  // DISABLED: Direct postgres connection still has pooler issues
-  // Use Supabase API for all queries instead
-  console.log('✓ Supabase API client initialized (using API for all queries)');
+  // Use centralized factory
+  supabaseClient = getSupabaseDB();
   
-  /*
-  // Also initialize direct postgres connection for raw SQL support
-  // Use connection string from environment
-  if (process.env.SUPABASE_DB_HOST) {
-    const connectionString = `postgresql://${process.env.SUPABASE_DB_USER}:${process.env.SUPABASE_DB_PASSWORD}@${process.env.SUPABASE_DB_HOST}:${process.env.SUPABASE_DB_PORT || 5432}/${process.env.SUPABASE_DB_NAME || 'postgres'}`;
-    
-    try {
-      postgresClient = postgres(connectionString, {
-        ssl: 'require',
-        max: 10,
-        idle_timeout: 20,
-        connect_timeout: 10,
-      });
-      console.log('✓ Direct Postgres connection initialized for raw SQL');
-    } catch (error) {
-      console.warn('⚠ Could not initialize direct Postgres connection:', error.message);
-      console.warn('→ Will use Supabase API for all queries');
-    }
-  }
-  */
-  
-  console.log('✓ Supabase DB client initialized');
+  console.log('✓ Supabase DB client initialized (using centralized factory)');
   return supabaseClient;
 }
 
 /**
  * Get Supabase client instance
+ * Returns a proxy that lazily initializes on first use
  */
 export function getSupabaseClient() {
   if (!supabaseClient) {
-    throw new Error('Supabase client not initialized. Call initSupabaseDB first.');
+    // Return a proxy that will lazily initialize when first accessed
+    // This allows routes to call getSupabaseClient() at module load time
+    // without requiring credentials to be set
+    return new Proxy({}, {
+      get(_target, prop) {
+        // Initialize on first property access
+        if (!supabaseClient) {
+          if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+            throw new Error('Supabase client not initialized. Call initSupabaseDB first or set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
+          }
+          supabaseClient = getSupabaseDB();
+        }
+        return supabaseClient[prop];
+      }
+    });
   }
   return supabaseClient;
 }

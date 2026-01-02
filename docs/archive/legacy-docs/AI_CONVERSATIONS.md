@@ -49,7 +49,12 @@ Matches lowercase substrings:
 Extend by editing `classifyTopicFromText()` in `backend/routes/ai.js`.
 
 ## Supabase Client Refactor
-All conversation-related operations now use:
+All conversation-related operations now use the centralized factory:
+```javascript
+import { getSupabaseDB } from '../lib/supabaseFactory.js';
+const supa = getSupabaseDB();
+```
+Or for backward compatibility:
 ```javascript
 import { getSupabaseClient } from '../lib/supabase-db.js';
 const supa = getSupabaseClient();
