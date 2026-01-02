@@ -3,7 +3,7 @@
  * Handles user authentication operations with Supabase Auth
  */
 
-import { createClient } from "@supabase/supabase-js";
+import { getSupabaseAdmin } from "./supabaseFactory.js";
 
 let supabaseAdmin = null;
 
@@ -12,25 +12,16 @@ let supabaseAdmin = null;
  * Uses service role key for admin operations (user creation, password reset, etc.)
  */
 export function initSupabaseAuth() {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !supabaseServiceKey) {
+  try {
+    supabaseAdmin = getSupabaseAdmin();
+    console.log("✓ Supabase Auth initialized");
+    return supabaseAdmin;
+  } catch (error) {
     console.warn(
       "⚠ Supabase Auth not configured - set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY",
     );
     return null;
   }
-
-  supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
-
-  console.log("✓ Supabase Auth initialized");
-  return supabaseAdmin;
 }
 
 /**

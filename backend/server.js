@@ -554,18 +554,8 @@ async function logRecoveryIfGap() {
 const server = createServer(app);
 
 // Supabase admin helpers for storage bucket provisioning
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-function getSupabaseAdmin() {
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return null;
-  return createSupabaseClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false },
-  });
-}
-function getBucketName() {
-  return process.env.SUPABASE_STORAGE_BUCKET || "tenant-assets";
-}
+import { getSupabaseAdmin, getBucketName } from "./lib/supabaseFactory.js";
+
 async function ensureStorageBucketExists() {
   try {
     const supabase = getSupabaseAdmin();

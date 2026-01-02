@@ -4,8 +4,8 @@
  */
 
 import express from "express";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createAuditLog, getUserEmailFromRequest, getClientIP } from "../lib/auditLogger.js";
+import { getSupabaseAdmin, getBucketName } from "../lib/supabaseFactory.js";
 
 /**
  * Default modules that should be initialized for every new tenant.
@@ -34,18 +34,6 @@ const DEFAULT_MODULES = [
   "Realtime Voice",
   "Workflows",
 ];
-
-function getSupabaseAdmin() {
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return null;
-  return createSupabaseClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false },
-  });
-}
-function getBucketName() {
-  return process.env.SUPABASE_STORAGE_BUCKET || "tenant-assets";
-}
 
 /**
  * Generate a unique tenant_id slug from a company name
