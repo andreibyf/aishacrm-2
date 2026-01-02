@@ -35,7 +35,12 @@ function trackRealtimeMetrics(tenantId, toolName, success, cacheHit, latencyMs) 
       const hourKey = `braid:metrics:${tenantId}:hour:${hour}`;
       const toolKey = `braid:metrics:${tenantId}:tool:${toolName}:${hour}`;
       
-      // Increment counters
+      // GLOBAL aggregate keys (for superadmin dashboard)
+      const globalMinuteKey = `braid:metrics:global:min:${minute}`;
+      const globalHourKey = `braid:metrics:global:hour:${hour}`;
+      const globalToolKey = `braid:metrics:global:tool:${toolName}:${hour}`;
+      
+      // Increment counters for BOTH per-tenant AND global
       await Promise.all([
         // Per-minute counters (5 min TTL)
         cacheManager.increment(`${minuteKey}:calls`, 300),
@@ -50,6 +55,16 @@ function trackRealtimeMetrics(tenantId, toolName, success, cacheHit, latencyMs) 
         // Per-tool per-hour counters (2 hour TTL)
         cacheManager.increment(`${toolKey}:calls`, 7200),
         success ? null : cacheManager.increment(`${toolKey}:errors`, 7200),
+        
+        // GLOBAL counters (5 min / 2 hour TTL)
+        cacheManager.increment(`${globalMinuteKey}:calls`, 300),
+        success ? null : cacheManager.increment(`${globalMinuteKey}:errors`, 300),
+        cacheHit ? cacheManager.increment(`${globalMinuteKey}:cache_hits`, 300) : null,
+        cacheManager.increment(`${globalHourKey}:calls`, 7200),
+        success ? null : cacheManager.increment(`${globalHourKey}:errors`, 7200),
+        cacheHit ? cacheManager.increment(`${globalHourKey}:cache_hits`, 7200) : null,
+        cacheManager.increment(`${globalToolKey}:calls`, 7200),
+        success ? null : cacheManager.increment(`${globalToolKey}:errors`, 7200),
         
         // Latency tracking (store as list, 2 hour TTL)
         latencyMs ? cacheManager.set(`${hourKey}:latency:${now}`, latencyMs, 7200) : null
@@ -70,10 +85,12 @@ function trackRealtimeMetrics(tenantId, toolName, success, cacheHit, latencyMs) 
 export async function getRealtimeMetrics(tenantId, window = 'minute') {
   try {
     const now = Math.floor(Date.now() / 1000);
+    // Use 'global' key when tenantId is null (superadmin aggregate view)
+    const effectiveTenantId = tenantId || 'global';
     
     if (window === 'minute') {
       const minute = Math.floor(now / 60) * 60;
-      const key = `braid:metrics:${tenantId}:min:${minute}`;
+      const key = `braid:metrics:${effectiveTenantId}:min:${minute}`;
       
       const [calls, errors, cacheHits] = await Promise.all([
         cacheManager.get(`${key}:calls`) || 0,
@@ -92,7 +109,7 @@ export async function getRealtimeMetrics(tenantId, window = 'minute') {
       };
     } else {
       const hour = Math.floor(now / 3600) * 3600;
-      const key = `braid:metrics:${tenantId}:hour:${hour}`;
+      const key = `braid:metrics:${effectiveTenantId}:hour:${hour}`;
       
       const [calls, errors, cacheHits] = await Promise.all([
         cacheManager.get(`${key}:calls`) || 0,
