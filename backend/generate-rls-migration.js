@@ -40,22 +40,27 @@ console.log('🔍 Parsing dev_functions_export.sql for legacy RLS policies...\n'
 const content = fs.readFileSync(INPUT_FILE, 'utf8');
 
 // Extract all CREATE POLICY statements with tenant_id_text or tenant_id_legacy
-const policyRegex = /CREATE\s+POLICY\s+"([^"]+)"\s+ON\s+"public"\."([^"]+)"(?:\s+(?:FOR\s+(\w+))?\s+(?:TO\s+(\w+))?)?\s+USING\s+\((.+?)\);/gis;
+const policyRegex = /CREATE\s+POLICY\s+"([^"]+)"\s+ON\s+"public"\."([^"]+)"(.*?)\s+USING\s+\((.+?)\)(?:\s+WITH\s+CHECK\s+\((.+?)\))?;/gis;
 
 const legacyPolicies = [];
 let match;
 
 while ((match = policyRegex.exec(content)) !== null) {
-  const [fullMatch, policyName, tableName, forClause, toClause, usingClause] = match;
+  const [fullMatch, policyName, tableName, middlePart, usingClause, withCheckClause] = match;
   
   // Check if this policy uses tenant_id_text or tenant_id_legacy
   if (usingClause.includes('tenant_id_text') || usingClause.includes('tenant_id_legacy')) {
+    // Extract FOR and TO from middlePart
+    const forMatch = middlePart.match(/FOR\s+(\w+)/i);
+    const toMatch = middlePart.match(/TO\s+((?:(?:"[^"]+")|(?:\w+))(?:\s*,\s*(?:(?:"[^"]+")|(?:\w+)))*)/i);
+
     legacyPolicies.push({
       name: policyName,
       table: tableName,
-      for: forClause || null,
-      to: toClause || null,
+      for: forMatch ? forMatch[1] : null,
+      to: toMatch ? toMatch[1] : null,
       using: usingClause.trim(),
+      withCheck: withCheckClause ? withCheckClause.trim() : null,
       original: fullMatch
     });
   }

@@ -16,13 +16,19 @@ These scripts generate SQL migration files by analyzing the current schema:
   - Generates `110_replace_legacy_indexes.sql`
   - Scans for indexes using deprecated `tenant_id_text`/`tenant_id_legacy`
   - Creates replacement SQL using `tenant_id` (UUID)
-  - **Status:** Tool for Phase 2 migration (not yet applied)
+  - **Status:** Tool for Phase 2 migration (READY)
 
 - **`backend/generate-rls-migration.js`**
   - Generates `111_replace_legacy_rls_policies.sql`
   - Scans for RLS policies using deprecated columns
   - Creates replacement policies using `tenant_id` (UUID)
-  - **Status:** Tool for Phase 3 migration (not yet applied)
+  - **Status:** Tool for Phase 3 migration (READY)
+
+- **`backend/generate-cleanup-migration.js`**
+  - Generates `112_drop_legacy_tenant_columns.sql`
+  - Scans for tables with deprecated columns
+  - Creates final DROP COLUMN migration
+  - **Status:** Tool for Phase 4 migration (READY)
 
 ### Helper Scripts (Backend Root)
 

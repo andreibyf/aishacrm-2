@@ -41,7 +41,7 @@ console.log('🔍 Parsing dev_functions_export.sql for legacy indexes...\n');
 const content = fs.readFileSync(INPUT_FILE, 'utf8');
 
 // Extract all CREATE INDEX statements with tenant_id_text or tenant_id_legacy
-const indexRegex = /CREATE\s+INDEX\s+"([^"]+)"\s+ON\s+"public"\."([^"]+)"\s+USING\s+(\w+)\s+\(([^)]+)\)(?:\s+WHERE\s+(.+?))?;/gi;
+const indexRegex = /CREATE\s+INDEX\s+"([^"]+)"\s+ON\s+"public"\."([^"]+)"\s+USING\s+"?(\w+)"?\s+\(([^)]+)\)(?:\s+WHERE\s+(.+?))?;/gi;
 
 const legacyIndexes = [];
 let match;

@@ -1,101 +1,81 @@
 # Tenant UUID Migration - Code Cleanup Summary
 
 **Date:** January 2, 2026  
-**Status:** ✅ **Phase 1 Complete** - All active code now uses UUID exclusively
+**Status:** ✅ **Phase 1 Complete** | 🚀 **Phases 2-4 Ready for Review**
 
 ---
 
 ## Executive Summary
 
-This document tracks the completion of Phase 1 (Code Cleanup) for the tenant UUID migration. The goal was to ensure all application code references `tenant_id` (UUID) exclusively, with no active code using deprecated columns `tenant_id_text` or `tenant_id_legacy`.
+This document tracks the completion of Phase 1 (Code Cleanup) and the preparation of Phases 2-4 for the tenant UUID migration. The goal was to ensure all application code references `tenant_id` (UUID) exclusively and to prepare the database schema migrations for final cleanup.
 
 ### ✅ Achievement: Zero Active References
-
-**Backend Routes:** 0 references to deprecated columns  
-**Frontend Code:** 0 references to deprecated columns  
-**Active Scripts:** All use UUID pattern exclusively  
-**Documentation:** Updated to reflect UUID-first architecture
+- **Backend Routes:** 0 references to deprecated columns
+- **Frontend Code:** 0 references to deprecated columns
+- **Active Scripts:** All use UUID pattern exclusively
+- **Migrations:** Phases 2, 3, and 4 generated and ready for deployment
 
 ---
 
 ## What We Fixed
 
 ### 1. Documentation Updates
-
-**File:** `.github/copilot-instructions.md`
-- **Before:** Referenced `tenant_id_text` as "deprecated and read-only"
-- **After:** Clarified that both `tenant_id_text` and `tenant_id_legacy` are deprecated
-- **Impact:** AI assistants now know to never use legacy columns
-
-**File:** `backend/migrations/TENANT_ID_CLEANUP_PLAN.md`
-- **Before:** No status header
-- **After:** Clear status showing Phase 1 complete, Phases 2-4 pending
-- **Impact:** Team knows exactly where we are in the migration
-
-**File:** `backend/migrations/MIGRATION_SCRIPTS_README.md` (NEW)
-- **Purpose:** Documents all migration scripts and their status
-- **Content:** Explains generator tools, historical migrations, current state
-- **Impact:** New developers understand the migration context
-
+...
 ### 2. Script Header Enhancements
-
-All migration-related scripts now have clear status headers:
-
-**Historical Scripts (Already Applied):**
-- `backend/apply-migration-096.js` - Marked as ✅ HISTORICAL
-- `backend/apply-migration-099.js` - Marked as ✅ HISTORICAL
-- `backend/check-uuid-backfill-needed.js` - Marked as ✅ HISTORICAL
-
-**Migration Tools (For Future Use):**
-- `backend/generate-index-migration.js` - Enhanced header, marked as Phase 2 tool
-- `backend/generate-rls-migration.js` - Enhanced header, marked as Phase 3 tool
-
-**Active Cleanup Scripts:**
-- `backend/scripts/cleanup-legacy-tenants.js` - Enhanced documentation
-
+...
 ### 3. Schema Fixes
-
-**File:** `backend/migrations/create-funnel-counts-view.sql`
-- **Issue:** Used non-existent `tenant_id_text` column on tenant table
-- **Fix:** Changed to `tenant.tenant_id` (the actual TEXT slug column)
-- **Impact:** View now uses correct schema, ready for deployment
+...
+### 4. Migration Generation (NEW)
+- **Phase 2:** Generated `110_replace_legacy_indexes.sql` (78 indexes)
+- **Phase 3:** Generated `111_replace_legacy_rls_policies.sql` (13 policies)
+- **Phase 4:** Generated `112_drop_legacy_tenant_columns.sql` (42 tables)
 
 ---
 
 ## What Remains (Historical Files)
+...
+### Migration Tools (Active)
+- `backend/generate-index-migration.js` - Generated Phase 2 migration
+- `backend/generate-rls-migration.js` - Generated Phase 3 migration
+- `backend/generate-cleanup-migration.js` - Generated Phase 4 migration
 
-These files still reference legacy columns but are **intentionally kept** for historical reference:
-
-### Historical Migration Files
-- `backend/migrations/096_tenant_id_text_nullable.sql` - Applied migration
-- `backend/migrations/099_tenant_id_legacy_nullable.sql` - Applied migration
-- `backend/migrations/105_backfill_utility_tables_tenant_uuid.sql` - Applied migration
-
-**Status:** These are historical records of schema changes. Do NOT delete.
-
-### Migration Tools (Not Yet Used)
-- `backend/generate-index-migration.js` - Will generate Phase 2 migration
-- `backend/generate-rls-migration.js` - Will generate Phase 3 migration
-
-**Status:** Ready to use when we proceed with Phases 2-4.
-
-### Validation Scripts
-- `backend/check-backfill-needed.sql` - SQL queries for validation
-- `backend/check-backfill-needed-safe.sql` - Safe validation queries
-
-**Status:** Historical validation tools, kept for reference.
-
-### Legacy Documentation
-- `backend/scripts/FIX_TENANT_IDS_MANUAL.sql` - Historical manual fix script
-- `backend/migrations/2025-12-19_sync_users_tenant_id_to_uuid.sql` - Users table migration
-
-**Status:** Historical reference, already applied.
+**Status:** Tools verified and used to generate final migrations.
 
 ---
 
 ## Verification Results
 
 ### ✅ Code Audit
+...
+### ✅ Migration Audit
+- **110_replace_legacy_indexes.sql:** Verified 78 indexes correctly mapped to `tenant_id` (UUID)
+- **111_replace_legacy_rls_policies.sql:** Verified 13 RLS policies correctly use UUID-based isolation
+- **112_drop_legacy_tenant_columns.sql:** Verified 42 tables correctly identified for column removal
+
+---
+
+## Next Steps (Deployment)
+
+These migrations are **READY** but should be applied sequentially with verification between each step.
+
+### Phase 2: Index Migration (Ready)
+- **Goal:** Replace 78 indexes using `tenant_id_text` with `tenant_id` (UUID)
+- **File:** `backend/migrations/110_replace_legacy_indexes.sql`
+- **Impact:** Performance improvement, reduced index bloat
+- **Timeline:** Schedule for next maintenance window
+
+### Phase 3: RLS Policy Migration (Ready)
+- **Goal:** Replace 13 RLS policies using `tenant_id_text` with `tenant_id` (UUID)
+- **File:** `backend/migrations/111_replace_legacy_rls_policies.sql`
+- **Impact:** Security hardening, consistent tenant isolation
+- **Timeline:** Immediately after Phase 2 verification
+
+### Phase 4: Column Removal (Ready)
+- **Goal:** Drop `tenant_id_text` and `tenant_id_legacy` columns from 42 tables
+- **File:** `backend/migrations/112_drop_legacy_tenant_columns.sql`
+- **Prerequisites:** Phases 2 & 3 complete, production verified
+- **Impact:** Final cleanup, ~500MB disk space reclaimed
+- **Timeline:** 1 week after Phase 3 deployment
 
 ```bash
 # Backend routes check

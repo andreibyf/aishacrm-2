@@ -6,9 +6,9 @@
 
 **Current Status:**
 - ✅ Phase 1: COMPLETE - All application code uses `tenant_id` (UUID)
-- ⏳ Phase 2: PENDING - Index migration (110_replace_legacy_indexes.sql)
-- ⏳ Phase 3: PENDING - RLS policy migration (111_replace_legacy_rls_policies.sql)
-- ⏳ Phase 4: PENDING - Column cleanup (112_drop_legacy_tenant_columns.sql)
+- ✅ Phase 2: READY - Index migration generated (110_replace_legacy_indexes.sql)
+- ✅ Phase 3: READY - RLS policy migration generated (111_replace_legacy_rls_policies.sql)
+- ✅ Phase 4: READY - Column cleanup generated (112_drop_legacy_tenant_columns.sql)
 
 **Purpose of this document:**
 - Planning roadmap for completing the tenant UUID migration
