@@ -9,7 +9,9 @@ export function createPageUrl(pageName: string) {
                 // eslint-disable-next-line no-console
                 console.warn('[createPageUrl] called with invalid pageName:', pageName);
             }
-        } catch {}
+        } catch (_error) {
+            // Ignore import.meta errors in non-Vite environments
+        }
         return '#';
     }
     return '/' + pageName.toLowerCase().replace(/ /g, '-');

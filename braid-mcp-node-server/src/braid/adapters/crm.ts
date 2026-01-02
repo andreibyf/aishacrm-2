@@ -275,6 +275,7 @@ async function callBackend(
 
         // Extract table name from path (/api/{table}/...)
         let tableName: string | null = null;
+        // eslint-disable-next-line no-useless-escape
         const m = path.match(/^\/api\/([^\/\?]+)/);
         if (m && m[1]) tableName = m[1];
 
