@@ -264,10 +264,55 @@ function findSourceFile(testFile, sourceFiles) {
     }
   }
   
-  // For backend AI tests: backend/__tests__/ai/suggestions.route.test.js -> backend/routes/ai.js (suggestions endpoint is in ai.js)
+  // For backend lib tests: backend/__tests__/lib/tenantResolver.test.js -> backend/lib/tenantResolver.js
+  if (testFile.includes('backend/__tests__/lib/')) {
+    const libName = path.basename(testFile).replace('.test.js', '.js');
+    const possibleSource = `backend/lib/${libName}`;
+    if (sourceFiles.includes(possibleSource)) {
+      return possibleSource;
+    }
+  }
+  
+  // For backend middleware tests: backend/__tests__/middleware/auth.test.js -> backend/middleware/auth.js
+  if (testFile.includes('backend/__tests__/middleware/')) {
+    const middlewareName = path.basename(testFile).replace('.test.js', '.js');
+    const possibleSource = `backend/middleware/${middlewareName}`;
+    if (sourceFiles.includes(possibleSource)) {
+      return possibleSource;
+    }
+  }
+  
+  // For backend AI tests - map to specific source files
   if (testFile.includes('backend/__tests__/ai/')) {
-    // These are integration tests, not direct mappings - consider them valid
+    const testBaseName = path.basename(testFile, '.test.js');
+    
+    // aiTriggersWorker.test.js -> backend/lib/aiTriggersWorker.js
+    if (testBaseName === 'aiTriggersWorker' && sourceFiles.includes('backend/lib/aiTriggersWorker.js')) {
+      return 'backend/lib/aiTriggersWorker.js';
+    }
+    // tenantContextDictionary.test.js -> backend/lib/tenantContextDictionary.js
+    if (testBaseName === 'tenantContextDictionary' && sourceFiles.includes('backend/lib/tenantContextDictionary.js')) {
+      return 'backend/lib/tenantContextDictionary.js';
+    }
+    // suggestions.route.test.js -> backend/routes/suggestions.js
+    if (testBaseName === 'suggestions.route' && sourceFiles.includes('backend/routes/suggestions.js')) {
+      return 'backend/routes/suggestions.js';
+    }
+    // braidScenarios.test.js, braidToolExecution.test.js -> backend/lib/braidIntegration-v2.js
+    if ((testBaseName === 'braidScenarios' || testBaseName === 'braidToolExecution') && 
+        sourceFiles.includes('backend/lib/braidIntegration-v2.js')) {
+      return 'backend/lib/braidIntegration-v2.js';
+    }
+    
+    // Fall back to integration test for other AI tests
     return 'integration-test';
+  }
+  
+  // For backend braid tests: backend/__tests__/braid/braid-syntax-validation.test.js -> backend/lib/braidIntegration-v2.js
+  if (testFile.includes('backend/__tests__/braid/')) {
+    if (sourceFiles.includes('backend/lib/braidIntegration-v2.js')) {
+      return 'backend/lib/braidIntegration-v2.js';
+    }
   }
   
   // For backend system tests
@@ -278,21 +323,39 @@ function findSourceFile(testFile, sourceFiles) {
   
   // For backend auth tests
   if (testFile.includes('backend/__tests__/auth/')) {
-    // Auth tests test auth routes
+    // Auth tests test auth routes and middleware
     if (sourceFiles.some(f => f.includes('backend/routes/auth.js'))) {
       return 'backend/routes/auth.js';
     }
+    // Also check for auth middleware
+    if (sourceFiles.some(f => f.includes('backend/middleware/authenticate.js'))) {
+      return 'backend/middleware/authenticate.js';
+    }
+  }
+  
+  // For backend integration tests - map to specific source files
+  if (testFile.includes('backend/__tests__/integration/')) {
+    const testBaseName = path.basename(testFile, '.test.js');
+    
+    // mcp.test.js -> backend/routes/mcp.js
+    if (testBaseName === 'mcp' && sourceFiles.includes('backend/routes/mcp.js')) {
+      return 'backend/routes/mcp.js';
+    }
+    
+    // Fall back to integration test for others
+    return 'integration-test';
+  }
+  
+  // For backend goalRouter.test.js -> backend/middleware/routerGuard.js
+  if (testFile === 'backend/__tests__/goalRouter.test.js' && 
+      sourceFiles.includes('backend/middleware/routerGuard.js')) {
+    return 'backend/middleware/routerGuard.js';
   }
   
   // For backend validation tests
   if (testFile.includes('backend/__tests__/validation/')) {
     // Validation tests test validation modules
     return 'validation-test';
-  }
-  
-  // For backend integration tests
-  if (testFile.includes('backend/__tests__/integration/')) {
-    return 'integration-test';
   }
   
   // For backend phase3 tests (feature tests)
