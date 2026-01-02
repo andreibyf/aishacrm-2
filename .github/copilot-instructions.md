@@ -55,17 +55,21 @@ fallbackFunctions.js   (60+ route files)
 **Schema overview:**
 - `tenant` table: `id` (UUID PK), `tenant_id` (TEXT unique slug for legacy/human-readable)
 - Domain tables (`accounts`, `contacts`, `leads`, etc.): `tenant_id` (UUID FK → `tenant(id)`)
-- `users` table: `tenant_uuid` (UUID FK → `tenant(id)`), legacy `tenant_id` (TEXT) still present
+- `users` table: `tenant_uuid` (UUID FK → `tenant(id)`)
 
 **Rules for new code:**
 1. **Always use `tenant_id` (UUID)** for queries, inserts, joins, RLS
-2. **Never use `tenant_id_text`** - it's deprecated and read-only
+2. **NEVER use deprecated columns:** `tenant_id_text` and `tenant_id_legacy` are deprecated and may be removed
 3. **RLS policies** must use `tenant_uuid` from users table: `SELECT tenant_uuid FROM users WHERE id = auth.uid()`
 4. **FKs reference `tenant(id)`** not `tenants` (table is singular)
 5. **Index `tenant_id`** on any new table for RLS performance
 
-**Migration rules:**
-- Do NOT drop columns until confirmed cutover
+**Migration status:**
+- ✅ All application code uses `tenant_id` (UUID)
+- ✅ Legacy columns made nullable (migrations 096, 099)
+- ⏳ Pending: Index/RLS migration and final column cleanup (see `TENANT_ID_CLEANUP_PLAN.md`)
+
+**Database modification rules:**
 - Add/keep indexes on `tenant_id` used by RLS and joins
 - Create policies using `tenant_id` (UUID) and auth context
 - Avoid DROP/ALTER of extensions; only `CREATE EXTENSION IF NOT EXISTS` in schema `extensions`

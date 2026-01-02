@@ -2,10 +2,27 @@
 /**
  * Generate Index Migration Script
  * 
- * Reads dev_functions_export.sql and generates migration to replace
- * all tenant_id_text/tenant_id_legacy indexes with tenant_id (UUID) indexes
+ * Purpose: One-time migration tool for tenant UUID cleanup (Phase 2)
+ * Context: Reads current schema and generates SQL to replace deprecated
+ *          tenant_id_text/tenant_id_legacy indexes with tenant_id (UUID)
  * 
- * Output: backend/migrations/110_replace_legacy_indexes.sql
+ * Input:  backend/migrations/dev_functions_export.sql (current schema)
+ * Output: backend/migrations/110_replace_legacy_indexes.sql (migration)
+ * 
+ * When to use:
+ * - Phase 2 of TENANT_ID_CLEANUP_PLAN.md
+ * - After all tenant_id (UUID) columns are backfilled
+ * - Before RLS policy migration (Phase 3)
+ * 
+ * How it works:
+ * 1. Scans dev_functions_export.sql for CREATE INDEX statements
+ * 2. Identifies indexes using tenant_id_text or tenant_id_legacy
+ * 3. Generates DROP + CREATE CONCURRENTLY statements with tenant_id (UUID)
+ * 4. Preserves WHERE clauses and composite index structures
+ * 
+ * Impact: ~100+ indexes across 40+ tables
+ * Status: Tool ready, migration not yet applied
+ * See: backend/migrations/MIGRATION_SCRIPTS_README.md for full context
  */
 
 import fs from 'fs';

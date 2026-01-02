@@ -2,10 +2,26 @@
 /**
  * Generate RLS Policy Migration Script
  * 
- * Reads dev_functions_export.sql and generates migration to replace
- * all tenant_id_text/tenant_id_legacy RLS policies with tenant_id (UUID) policies
+ * Purpose: One-time migration tool for tenant UUID cleanup (Phase 3)
+ * Context: Reads current schema and generates SQL to replace deprecated
+ *          tenant_id_text/tenant_id_legacy RLS policies with tenant_id (UUID)
  * 
- * Output: backend/migrations/111_replace_legacy_rls_policies.sql
+ * Input:  backend/migrations/dev_functions_export.sql (current schema)
+ * Output: backend/migrations/111_replace_legacy_rls_policies.sql (migration)
+ * 
+ * When to use:
+ * - Phase 3 of TENANT_ID_CLEANUP_PLAN.md
+ * - After Phase 2 (index migration) is complete
+ * - Before dropping legacy columns
+ * 
+ * How it works:
+ * 1. Scans dev_functions_export.sql for CREATE POLICY statements
+ * 2. Identifies policies using tenant_id_text or tenant_id_legacy
+ * 3. Generates DROP + CREATE statements with tenant_id (UUID)
+ * 4. Preserves superadmin bypass logic
+ * 
+ * Status: Tool ready, migration not yet applied
+ * See: backend/migrations/MIGRATION_SCRIPTS_README.md for full context
  */
 
 import fs from 'fs';

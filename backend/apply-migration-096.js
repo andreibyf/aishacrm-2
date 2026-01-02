@@ -1,6 +1,19 @@
 /**
- * Apply migration 096 using Supabase client query method
- * Works around the exec_sql RPC function not being available
+ * Apply Migration 096 - Make tenant_id_text Nullable
+ * 
+ * STATUS: ✅ HISTORICAL - Already applied to production
+ * Purpose: Allowed INSERT operations to work without tenant_id_text
+ * Context: Part of Phase 1 tenant UUID migration
+ * 
+ * This script:
+ * - Makes tenant_id_text nullable on core tables
+ * - Enabled application code to use tenant_id (UUID) exclusively
+ * - Historical reference only - do not re-run
+ * 
+ * See: backend/migrations/096_tenant_id_text_nullable.sql for SQL version
+ * See: backend/migrations/TENANT_ID_CLEANUP_PLAN.md for full migration plan
+ * 
+ * Note: Works around the exec_sql RPC function not being available
  */
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';

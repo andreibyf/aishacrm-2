@@ -1,5 +1,29 @@
 # Legacy Tenant ID Cleanup Plan
 
+## ⚠️ DOCUMENT STATUS: PLANNING ONLY - MIGRATIONS NOT YET APPLIED
+
+**Last Updated:** January 2026
+
+**Current Status:**
+- ✅ Phase 1: COMPLETE - All application code uses `tenant_id` (UUID)
+- ⏳ Phase 2: PENDING - Index migration (110_replace_legacy_indexes.sql)
+- ⏳ Phase 3: PENDING - RLS policy migration (111_replace_legacy_rls_policies.sql)
+- ⏳ Phase 4: PENDING - Column cleanup (112_drop_legacy_tenant_columns.sql)
+
+**Purpose of this document:**
+- Planning roadmap for completing the tenant UUID migration
+- Reference for understanding legacy column deprecation
+- Deployment guide when migrations are ready to apply
+
+**Active code status:**
+- ✅ No backend routes reference `tenant_id_text` or `tenant_id_legacy`
+- ✅ No frontend code references legacy columns
+- ✅ All new migrations use `tenant_id` (UUID) pattern
+- ⚠️ Database schema still contains deprecated columns (nullable)
+- ⚠️ Some indexes and RLS policies still use deprecated columns
+
+---
+
 ## ⚠️ CRITICAL: Multi-Environment Deployment
 
 **This migration MUST be applied to BOTH databases:**
