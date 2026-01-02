@@ -4,6 +4,8 @@ import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 import prettier from 'eslint-config-prettier';
+import tseslint from '@typescript-eslint/eslint-plugin';
+import tsparser from '@typescript-eslint/parser';
 
 export default [
   {
@@ -17,6 +19,7 @@ export default [
       'backend/node_modules/**',
       'src/functions/**',
       'src/functions.archived/**',
+      'supabase/functions/**',
       'node_modules/**',
       '.DS_Store',
       '*.local',
@@ -220,6 +223,93 @@ export default [
     },
     rules: {
       'no-undef': 'off',
+    },
+  },
+  // TypeScript files configuration - enforce type safety
+  {
+    files: ['**/*.{ts,tsx}'],
+    ignores: ['tests/**/*.spec.ts', 'tests/**/*.test.ts'],
+    languageOptions: {
+      parser: tsparser,
+      ecmaVersion: 2020,
+      globals: globals.browser,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        ecmaFeatures: { jsx: true },
+        sourceType: 'module',
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tseslint,
+      react,
+      'react-hooks': reactHooks,
+      'react-refresh': reactRefresh,
+    },
+    rules: {
+      ...js.configs.recommended.rules,
+      ...react.configs.recommended.rules,
+      ...react.configs['jsx-runtime'].rules,
+      ...reactHooks.configs.recommended.rules,
+      'react/jsx-no-target-blank': 'off',
+      'react/prop-types': 'off',
+      'no-unused-vars': 'off', // Disable base rule for TS
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      // Type safety rules - prevent any usage (warn for gradual migration)
+      '@typescript-eslint/no-explicit-any': 'warn',
+    },
+  },
+  // TypeScript test files - allow Node.js globals
+  {
+    files: ['tests/**/*.ts', 'tests/**/*.spec.ts', 'src/**/*.test.ts'],
+    languageOptions: {
+      parser: tsparser,
+      ecmaVersion: 2022,
+      globals: {
+        ...globals.node,
+        ...globals.browser,
+      },
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tseslint,
+    },
+    rules: {
+      ...js.configs.recommended.rules,
+      'react/jsx-no-target-blank': 'off',
+      'react/prop-types': 'off',
+      'react-refresh/only-export-components': 'off',
+      'no-undef': 'off',
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-explicit-any': 'warn',
+    },
+  },
+  // TypeScript backend/Node files - allow Node.js globals
+  {
+    files: ['braid-mcp-node-server/**/*.ts', 'backend/**/*.ts', 'orchestra/**/*.ts'],
+    languageOptions: {
+      parser: tsparser,
+      ecmaVersion: 2022,
+      globals: {
+        ...globals.node,
+      },
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tseslint,
+    },
+    rules: {
+      ...js.configs.recommended.rules,
+      'no-undef': 'off',
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-explicit-any': 'warn',
     },
   },
   // Disable ESLint rules that conflict with Prettier formatting
