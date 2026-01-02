@@ -24,7 +24,7 @@ This document explains the purpose and rationale for key backend dependencies in
 - **Examples**: All route files in `backend/routes/`
 
 ### ~~`postgres`~~ (REMOVED)
-- **Status**: ❌ Removed in v1.0.52
+- **Status**: ❌ Removed (not used in codebase)
 - **Reason**: Duplicate functionality with `pg` package. Not used anywhere in the codebase.
 
 ## Authentication & Security
