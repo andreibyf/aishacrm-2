@@ -1,5 +1,5 @@
 import { BraidAdapter, BraidAdapterContext } from "../index";
-import { BraidAction, BraidActionResult } from "../types";
+import { BraidAction, BraidActionResult, BraidFilter } from "../types";
 import { saveSession, appendEvent, getEvents, cachePreferences, getPreferences, deletePreferences, saveNavigation, getNavigation } from "../../lib/memory";
 
 function getStr(obj: Record<string, unknown> | undefined, key: string): string | undefined {
@@ -12,30 +12,30 @@ function getStr(obj: Record<string, unknown> | undefined, key: string): string |
 function extractIds(action: BraidAction) {
   const p = (action.payload || {}) as Record<string, unknown>;
   const m = (action.metadata || {}) as Record<string, unknown>;
-  const f = (action.filters || []) as any[];
+  const f = (action.filters || []) as BraidFilter[];
 
-  const tenantId = getStr(p, 'tenant_id') || getStr(p, 'tenantId') || getStr(m as any, 'tenant_id') || getStr(m as any, 'tenantId');
-  const userId = getStr(p, 'user_id') || getStr(p, 'userId') || getStr(m as any, 'user_id') || getStr(m as any, 'userId');
-  const sessionId = getStr(p, 'session_id') || getStr(p, 'sessionId') || getStr(m as any, 'session_id') || getStr(m as any, 'sessionId') || action.targetId;
+  const tenantId = getStr(p, 'tenant_id') || getStr(p, 'tenantId') || getStr(m, 'tenant_id') || getStr(m, 'tenantId');
+  const userId = getStr(p, 'user_id') || getStr(p, 'userId') || getStr(m, 'user_id') || getStr(m, 'userId');
+  const sessionId = getStr(p, 'session_id') || getStr(p, 'sessionId') || getStr(m, 'session_id') || getStr(m, 'sessionId') || action.targetId;
 
   // Allow filters to carry ids for search
   if (!tenantId && Array.isArray(f)) {
     const t = f.find(x => x.field === 'tenant_id' || x.field === 'tenantId');
-    if (t && typeof t.value === 'string') (m as any).tenant_id = t.value;
+    if (t && typeof t.value === 'string') m.tenant_id = t.value;
   }
   if (!userId && Array.isArray(f)) {
     const u = f.find(x => x.field === 'user_id' || x.field === 'userId');
-    if (u && typeof u.value === 'string') (m as any).user_id = u.value;
+    if (u && typeof u.value === 'string') m.user_id = u.value;
   }
   if (!sessionId && Array.isArray(f)) {
     const s = f.find(x => x.field === 'session_id' || x.field === 'sessionId');
-    if (s && typeof s.value === 'string') (m as any).session_id = s.value;
+    if (s && typeof s.value === 'string') m.session_id = s.value;
   }
 
   return {
-    tenantId: tenantId || (m as any).tenant_id || (m as any).tenantId,
-    userId: userId || (m as any).user_id || (m as any).userId,
-    sessionId: sessionId || (m as any).session_id || (m as any).sessionId,
+    tenantId: tenantId || m.tenant_id || m.tenantId,
+    userId: userId || m.user_id || m.userId,
+    sessionId: sessionId || m.session_id || m.sessionId,
   } as { tenantId?: string; userId?: string; sessionId?: string };
 }
 

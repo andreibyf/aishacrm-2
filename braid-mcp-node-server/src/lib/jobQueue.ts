@@ -6,6 +6,7 @@
  */
 import { Queue, Worker, Job, QueueEvents, ConnectionOptions } from "bullmq";
 import { BraidRequestEnvelope, BraidResponseEnvelope } from "../braid/types";
+import { getErrorMessage } from "./errorUtils";
 
 const QUEUE_NAME = "mcp-jobs";
 const JOB_TIMEOUT = 30000; // 30 seconds
@@ -138,8 +139,8 @@ export async function initWorker(
           nodeId,
           durationMs,
         };
-      } catch (error: any) {
-        console.error(`[MCP Worker ${nodeId}] Job ${job.id} failed:`, error?.message);
+      } catch (error: unknown) {
+        console.error(`[MCP Worker ${nodeId}] Job ${job.id} failed:`, getErrorMessage(error));
         throw error;
       }
     },

@@ -11,6 +11,7 @@ import { MemoryAdapter } from "./braid/adapters/memory";
 import { BraidRequestEnvelope, BraidResponseEnvelope } from "./braid/types";
 import { initMemory, isMemoryAvailable, getStatus as getMemoryStatus } from "./lib/memory";
 import { initQueue, initWorker, queueJob, getQueueStats, shutdownQueue } from "./lib/jobQueue";
+import { getErrorMessage } from "./lib/errorUtils";
 
 const app = express();
 
@@ -75,8 +76,8 @@ async function initializeRole(): Promise<void> {
   try {
     await initMemory(process.env.REDIS_URL);
     console.log(`[MCP] Memory layer ${isMemoryAvailable() ? 'available' : 'unavailable'}`);
-  } catch (e: any) {
-    console.warn('[MCP] Memory init failed:', e?.message || String(e));
+  } catch (e: unknown) {
+    console.warn('[MCP] Memory init failed:', getErrorMessage(e));
   }
 
   if (MCP_ROLE === "server") {
@@ -107,8 +108,8 @@ app.get("/health", async (_req: Request, res: Response) => {
     try {
       const queueStats = await getQueueStats();
       return res.json({ ...baseHealth, queue: queueStats });
-    } catch (e: any) {
-      return res.json({ ...baseHealth, queue: { error: e?.message } });
+    } catch (e: unknown) {
+      return res.json({ ...baseHealth, queue: { error: getErrorMessage(e) } });
     }
   }
 
@@ -124,8 +125,8 @@ app.get("/queue/stats", async (_req: Request, res: Response) => {
   try {
     const stats = await getQueueStats();
     res.json({ status: "success", data: stats });
-  } catch (e: any) {
-    res.status(500).json({ status: "error", message: e?.message || String(e) });
+  } catch (e: unknown) {
+    res.status(500).json({ status: "error", message: getErrorMessage(e) });
   }
 });
 
@@ -134,8 +135,8 @@ app.get("/memory/status", async (_req: Request, res: Response) => {
   try {
     const st = await getMemoryStatus();
     res.json({ status: 'success', data: st });
-  } catch (e: any) {
-    res.status(500).json({ status: 'error', message: e?.message || String(e) });
+  } catch (e: unknown) {
+    res.status(500).json({ status: 'error', message: getErrorMessage(e) });
   }
 });
 
@@ -147,8 +148,8 @@ app.get("/adapters", (_req: Request, res: Response) => {
       role: MCP_ROLE || "unknown",
       adapters: registry.listAdapters(),
     });
-  } catch (e: any) {
-    res.status(500).json({ status: "error", message: e?.message || String(e) });
+  } catch (e: unknown) {
+    res.status(500).json({ status: "error", message: getErrorMessage(e) });
   }
 });
 
@@ -212,11 +213,11 @@ app.post("/mcp/run", async (req: Request, res: Response) => {
     }
 
     res.json(response);
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Error in /mcp/run", err);
     res.status(500).json({
       error: "MCP_EXECUTION_ERROR",
-      message: err?.message ?? String(err),
+      message: getErrorMessage(err),
     });
   }
 });

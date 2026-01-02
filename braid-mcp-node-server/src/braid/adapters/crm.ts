@@ -7,6 +7,7 @@ import {
 } from "../types";
 import { getSupabaseClient } from "../../lib/supabase";
 import { appendEvent as memAppendEvent } from "../../lib/memory";
+import { getErrorMessage } from "../../lib/errorUtils";
 import jwt from "jsonwebtoken";
 
 // Node 18+ provides a global fetch; declare for TypeScript.
@@ -116,7 +117,7 @@ function logToMemory(action: BraidAction, ctx: BraidAdapterContext, event: Recor
         ...event,
       });
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
     ctx.debug('Memory trace (CRM) failed', { error: e?.message ?? String(e) });
   }
 }
@@ -308,7 +309,7 @@ async function callBackend(
           try {
             await supa.from('audit_log').insert([auditRow]);
             ctx.debug('Audit log inserted for CRM action', { actionId: action.id, entity: entityType });
-          } catch (e: any) {
+          } catch (e: unknown) {
             ctx.warn('Failed to insert audit_log entry', { error: e?.message ?? String(e) });
           }
         })();
@@ -325,16 +326,16 @@ async function callBackend(
     };
     logToMemory(action, ctx, { ok: true, size: Array.isArray(data) ? data.length : (data ? 1 : 0) });
     return okResult;
-  } catch (err: any) {
+  } catch (err: unknown) {
     ctx.error("CRM backend call threw error", {
-      error: err?.message ?? String(err),
+      error: getErrorMessage(err) ?? String(err),
     });
     const thrown: BraidActionResult = {
       actionId: action.id,
       status: "error",
       resource: action.resource,
       errorCode: "NETWORK_ERROR",
-      errorMessage: err?.message ?? String(err),
+      errorMessage: getErrorMessage(err) ?? String(err),
     };
     logToMemory(action, ctx, { ok: false, error: thrown.errorMessage, code: 'NETWORK_ERROR' });
     return thrown;
@@ -485,9 +486,9 @@ async function handleSearch(
         resource: action.resource,
         data: filtered,
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
       ctx.warn("Direct Supabase access failed, falling back to backend API", {
-        error: err?.message,
+        error: getErrorMessage(err),
       });
       // Fall through to backend API call
     }

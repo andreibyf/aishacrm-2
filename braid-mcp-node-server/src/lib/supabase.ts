@@ -1,5 +1,17 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
+interface BraidCredentials {
+  api_key?: string;
+  apiKey?: string;
+}
+
+interface SystemSettings {
+  system_openai_settings?: {
+    enabled: boolean;
+    openai_api_key?: string;
+  };
+}
+
 let supabaseClient: SupabaseClient | null = null;
 
 export function getSupabaseClient(): SupabaseClient {
@@ -52,8 +64,8 @@ export async function resolveOpenAIKey(params: {
       if (error) throw error;
 
       if (ti?.length) {
-        const creds = ti[0].api_credentials || {};
-        const k = (creds as any).api_key || (creds as any).apiKey || null;
+        const creds = ti[0].api_credentials as BraidCredentials || {};
+        const k = creds.api_key || creds.apiKey || null;
         if (k) return k;
       }
     } catch (e) {
@@ -76,8 +88,8 @@ export async function resolveOpenAIKey(params: {
       const settings = data[0].settings;
       const systemOpenAI =
         typeof settings === 'object'
-          ? (settings as any).system_openai_settings
-          : JSON.parse((settings as string) || '{}').system_openai_settings;
+          ? (settings as SystemSettings).system_openai_settings
+          : (JSON.parse((settings as string) || '{}') as SystemSettings).system_openai_settings;
 
       if (systemOpenAI?.enabled && systemOpenAI?.openai_api_key) {
         return systemOpenAI.openai_api_key;
