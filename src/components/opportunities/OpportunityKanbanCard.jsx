@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Edit, Trash2, Eye, GripVertical } from "lucide-react";
 import { format } from "date-fns";
 
-export default function OpportunityKanbanCard({ opportunity, accountName, assignedUserName, index, onEdit, onDelete, onView }) {
+export default function OpportunityKanbanCard({ opportunity, accountName, assignedUserName, onEdit, onDelete, onView }) {
   const draggableId = String(opportunity.id);
   
   const {

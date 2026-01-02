@@ -6,14 +6,13 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
-  DragOverlay,
 } from '@dnd-kit/core';
 import {
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { restrictToVerticalAxis, restrictToWindowEdges } from '@dnd-kit/modifiers';
+import { restrictToWindowEdges } from '@dnd-kit/modifiers';
 import OpportunityKanbanCard from './OpportunityKanbanCard';
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -41,7 +40,6 @@ export default function OpportunityKanbanBoard({ opportunities, accounts, contac
   const [localOpportunities, setLocalOpportunities] = useState(opportunities);
   // Track ids with an in-flight stage update to prevent premature reversion from parent prop sync
   const [pendingStageIds, setPendingStageIds] = useState(new Set());
-  const [activeId, setActiveId] = useState(null);
   
   // Configure sensors for drag and drop
   const sensors = useSensors(
@@ -118,14 +116,12 @@ export default function OpportunityKanbanBoard({ opportunities, accounts, contac
     return user?.full_name || userEmail;
   };
 
-  const handleDragStart = (event) => {
-    setActiveId(event.active.id);
+  const handleDragStart = (_event) => {
+    // Optional: Add visual feedback for drag start if needed
   };
 
   const handleDragEnd = async (event) => {
     const { active, over } = event;
-    
-    setActiveId(null);
     
     if (!over) return;
 
@@ -212,7 +208,7 @@ export default function OpportunityKanbanBoard({ opportunities, accounts, contac
   };
 
   const handleDragCancel = () => {
-    setActiveId(null);
+    // Optional: Handle drag cancel if needed
   };
 
   const handleSave = async () => {
