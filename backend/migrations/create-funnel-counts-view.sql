@@ -3,6 +3,9 @@
 -- Purpose: Pre-compute entity counts for dashboard funnel AND pipeline
 -- Performance: Eliminates 5 separate API calls (90%+ faster)
 -- Supports: Period filtering (year/quarter/month/week) via date columns
+-- 
+-- Note: Uses tenant.tenant_id (TEXT slug) for legacy API compatibility
+--       Core joins use tenant_id (UUID) for performance
 -- =====================================================
 
 -- Drop existing view if exists
@@ -13,7 +16,7 @@ CREATE MATERIALIZED VIEW dashboard_funnel_counts AS
 WITH tenant_counts AS (
   SELECT 
     t.id as tenant_id,
-    t.tenant_id_text as tenant_slug,
+    t.tenant_id as tenant_slug,  -- tenant.tenant_id is the TEXT slug column
     -- BizDev Sources counts
     COUNT(DISTINCT CASE WHEN bs.is_test_data = true THEN bs.id END) as sources_test,
     COUNT(DISTINCT CASE WHEN bs.is_test_data = false OR bs.is_test_data IS NULL THEN bs.id END) as sources_real,
@@ -41,7 +44,7 @@ WITH tenant_counts AS (
   LEFT JOIN leads l ON l.tenant_id = t.id
   LEFT JOIN contacts c ON c.tenant_id = t.id
   LEFT JOIN accounts a ON a.tenant_id = t.id
-  GROUP BY t.id, t.tenant_id_text
+  GROUP BY t.id, t.tenant_id  -- tenant.tenant_id is TEXT slug, t.id is UUID
 ),
 pipeline_counts AS (
   SELECT

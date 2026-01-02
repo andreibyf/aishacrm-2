@@ -1,9 +1,19 @@
 #!/usr/bin/env node
 /**
- * Check if utility tables need tenant_id UUID backfill
- * Verifies production data state before migration 105
+ * Check if Utility Tables Need Tenant UUID Backfill
+ * 
+ * STATUS: ✅ HISTORICAL - Migration 105 already applied
+ * Purpose: Pre-migration 105 validation script
+ * Context: Verified which rows needed tenant_id (UUID) backfill
+ * 
+ * This script:
+ * - Checks notifications, system_logs, modulesettings tables
+ * - Counts rows with NULL tenant_id but non-NULL tenant_id_text
+ * - Historical reference for understanding migration 105 scope
  * 
  * Run with Doppler: doppler run -- node backend/check-uuid-backfill-needed.js
+ * See: backend/migrations/105_backfill_utility_tables_tenant_uuid.sql
+ * See: backend/migrations/MIGRATION_SCRIPTS_README.md for full context
  */
 
 import { initSupabaseDB, getSupabaseClient } from './lib/supabase-db.js';
