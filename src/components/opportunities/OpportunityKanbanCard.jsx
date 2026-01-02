@@ -1,28 +1,40 @@
-import { Draggable } from '@hello-pangea/dnd';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Edit, Trash2, Eye, GripVertical } from "lucide-react";
 import { format } from "date-fns";
 
-export default function OpportunityKanbanCard({ opportunity, accountName, assignedUserName, index, onEdit, onDelete, onView }) {
+export default function OpportunityKanbanCard({ opportunity, accountName, assignedUserName, onEdit, onDelete, onView }) {
   const draggableId = String(opportunity.id);
   
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: draggableId });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+  
   return (
-    <Draggable draggableId={draggableId} index={index}>
-      {(provided, snapshot) => (
-        <div
-          ref={provided.innerRef}
-          {...provided.draggableProps}
-          {...provided.dragHandleProps}
-          className={`mb-3 ${snapshot.isDragging ? 'opacity-70 rotate-2' : ''}`}
-        >
-          <Card className={`bg-slate-700 border-slate-600 transition-all cursor-grab active:cursor-grabbing ${snapshot.isDragging ? 'shadow-2xl border-blue-500' : 'hover:border-blue-500'}`}>
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`mb-3 ${isDragging ? 'opacity-70 rotate-2' : ''}`}
+    >
+      <Card className={`bg-slate-700 border-slate-600 transition-all cursor-grab active:cursor-grabbing ${isDragging ? 'shadow-2xl border-blue-500' : 'hover:border-blue-500'}`}>
             <CardHeader className="p-3 pb-2">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-start gap-2 flex-1 min-w-0">
-                  <div className="mt-1 flex-shrink-0">
-                    <GripVertical className="w-4 h-4 text-slate-400" />
+                  <div className="mt-1 flex-shrink-0" {...attributes} {...listeners}>
+                    <GripVertical className="w-4 h-4 text-slate-400 cursor-grab active:cursor-grabbing" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <CardTitle className="text-sm font-semibold text-slate-100 truncate">
@@ -102,7 +114,5 @@ export default function OpportunityKanbanCard({ opportunity, accountName, assign
             </CardContent>
           </Card>
         </div>
-      )}
-    </Draggable>
   );
 }
