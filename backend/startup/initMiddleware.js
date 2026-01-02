@@ -10,6 +10,7 @@ import { productionSafetyGuard } from "../middleware/productionSafetyGuard.js";
 import { intrusionDetection } from "../middleware/intrusionDetection.js";
 import { authenticateRequest } from "../middleware/authenticate.js";
 import { pool as perfLogPool } from '../lib/supabase-db.js';
+import logger from '../lib/logger.js';
 
 export function initMiddleware(app, pgPool) {
   // Middleware
@@ -36,10 +37,10 @@ export function initMiddleware(app, pgPool) {
     ? parseInt(process.env.RATE_LIMIT_TEST_MAX || '120', 10)
     : RAW_RATE_LIMIT_MAX;
   if (IS_TEST_MODE) {
-    console.log(`[RateLimiter] Test mode active → effective RATE_LIMIT_MAX=${RATE_LIMIT_MAX} (raw=${RAW_RATE_LIMIT_MAX})`);
+    logger.debug({ effectiveMax: RATE_LIMIT_MAX, rawMax: RAW_RATE_LIMIT_MAX }, '[RateLimiter] Test mode active');
   }
   if (FORCE_DEFAULT) {
-    console.log(`[RateLimiter] FORCE_DEFAULT enabled → effective RATE_LIMIT_MAX=${RATE_LIMIT_MAX} (raw=${RAW_RATE_LIMIT_MAX})`);
+    logger.debug({ effectiveMax: RATE_LIMIT_MAX, rawMax: RAW_RATE_LIMIT_MAX }, '[RateLimiter] FORCE_DEFAULT enabled');
   }
   const rateBucket = new Map(); // key -> { count, ts }
   const rateSkip = new Set(['/health', '/api/status', '/api-docs', '/api-docs.json']);
@@ -102,12 +103,11 @@ export function initMiddleware(app, pgPool) {
 
   // Fail loudly if no origins configured in production
   if (process.env.NODE_ENV === 'production' && allowedOrigins.length === 0) {
-    console.error('❌ CRITICAL: ALLOWED_ORIGINS not set in production environment');
-    console.error('   Set ALLOWED_ORIGINS in .env with your frontend URL(s)');
+    logger.error('CRITICAL: ALLOWED_ORIGINS not set in production environment. Set ALLOWED_ORIGINS in .env with your frontend URL(s)');
     process.exit(1);
   }
 
-  console.log(`[CORS] Allowed origins: ${allowedOrigins.join(", ")}`);
+  logger.info({ origins: allowedOrigins.join(", ") }, '[CORS] Allowed origins configured');
 
   app.use(cors({
     origin: (origin, callback) => {
@@ -125,10 +125,10 @@ export function initMiddleware(app, pgPool) {
           return callback(null, true);
         }
 
-        console.warn(`[CORS] Origin rejected: ${origin}`);
+        logger.warn({ origin }, '[CORS] Origin rejected');
         return callback(null, false); // Return false instead of Error to avoid triggering error handler
       } catch (e) {
-        console.error(`[CORS] Error in origin callback: ${e.message}`);
+        logger.error({ err: e }, '[CORS] Error in origin callback');
         return callback(null, false);
       }
     },
@@ -156,7 +156,7 @@ export function initMiddleware(app, pgPool) {
             return await pgPool.query(...args);
           } catch (e2) {
             // Log fallback error and re-throw original
-            console.error('[ResilientPerfDb] Fallback query failed:', e2?.message || e2);
+            logger.error({ err: e2 }, '[ResilientPerfDb] Fallback query failed');
             throw e;
           }
         }
@@ -167,11 +167,9 @@ export function initMiddleware(app, pgPool) {
 
   if (perfLogPool || pgPool) {
     app.use(performanceLogger(resilientPerfDb));
-    console.log(
-      `✓ Performance logging middleware enabled (${perfLogPool ? "PostgreSQL direct" : "Supabase API"})`
-    );
+    logger.info({ source: perfLogPool ? 'PostgreSQL direct' : 'Supabase API' }, 'Performance logging middleware enabled');
   } else {
-    console.warn("⚠ Performance logging disabled - no database connection available");
+    logger.warn('Performance logging disabled - no database connection available');
   }
 
   // Block mutating requests in production Supabase unless explicitly allowed
@@ -193,7 +191,7 @@ export function initMiddleware(app, pgPool) {
     ],
     pgPool, // Pass database connection for security event logging
   }));
-  console.log("✓ Production safety guard enabled");
+  logger.info('Production safety guard enabled');
 
   // Attach Supabase client to request for IDR middleware
   app.use((req, _res, next) => {
@@ -204,9 +202,9 @@ export function initMiddleware(app, pgPool) {
   // Enable Intrusion Detection and Response (IDR) system
   if (process.env.IDR_ENABLED !== 'false') {
     app.use(intrusionDetection);
-    console.log("✓ Intrusion Detection & Response (IDR) middleware enabled");
+    logger.info('Intrusion Detection & Response (IDR) middleware enabled');
   } else {
-    console.warn("⚠ IDR middleware disabled via IDR_ENABLED=false");
+    logger.warn('IDR middleware disabled via IDR_ENABLED=false');
   }
 
   // Attach authentication context (cookie or Supabase bearer) for downstream route auth checks
@@ -220,17 +218,17 @@ export function initMiddleware(app, pgPool) {
   app.use((req, _res, next) => {
     try {
       if (req.method === 'POST' && req.path.startsWith('/api/bizdevsources/')) {
-        console.log('[CANARY Promote POST] Incoming request', {
+        logger.debug({
           path: req.path,
           method: req.method,
           origin: req.headers.origin,
           contentType: req.headers['content-type'],
           hasBody: !!req.headers['content-length'],
           productionGuardEnabled: true,
-        });
+        }, '[CANARY Promote POST] Incoming request');
       }
     } catch (e) {
-      console.warn('[CANARY Promote POST] Logging error', e?.message);
+      logger.warn({ err: e }, '[CANARY Promote POST] Logging error');
     }
     return next();
   });
