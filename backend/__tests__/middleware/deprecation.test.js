@@ -208,7 +208,7 @@ describe('Deprecation Middleware - After Sunset Simulation', () => {
     
     const res = {
       set: mock.fn(),
-      status: mock.fn((statusCode) => ({
+      status: mock.fn((_statusCode) => ({
         json: mock.fn((body) => {
           jsonResponse = body;
           return body;

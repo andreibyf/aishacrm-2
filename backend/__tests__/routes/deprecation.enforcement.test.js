@@ -1,4 +1,4 @@
-import { test, describe, before, after, mock } from 'node:test';
+import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
