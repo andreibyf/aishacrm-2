@@ -137,8 +137,13 @@ services:
     build:
       context: .
       args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-https://efzqxjpfewkrgpdootte.supabase.co}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-sb_publishable_6AFc_XdEzOF0SAE6ivUL2A_fpdZZdBq}
+        VITE_AISHACRM_BACKEND_URL: ${VITE_AISHACRM_BACKEND_URL:-http://localhost:4001}
         VITE_CURRENT_BRANCH: ${VITE_CURRENT_BRANCH:-main}
         APP_BUILD_VERSION: ${APP_BUILD_VERSION:-dev-local}
+        VITE_SYSTEM_TENANT_ID: ${VITE_SYSTEM_TENANT_ID:-a11dfb63-4b18-4eb8-872e-747af2e37c46}
+        VITE_USER_HEARTBEAT_INTERVAL_MS: ${VITE_USER_HEARTBEAT_INTERVAL_MS:-90000}
       dockerfile: Dockerfile
     container_name: aishacrm-frontend
     restart: unless-stopped
