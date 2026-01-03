@@ -44,6 +44,13 @@ Warning: 299 - "API v1 is deprecated. Migrate to v2 by 2027-08-01"
 backend/middleware/deprecation.js
 ```
 
+### Enforcement Logic
+The middleware automatically enforces the sunset policy:
+- **Before August 1, 2027**: Returns successful responses with deprecation headers
+- **After August 1, 2027**: Returns 410 Gone with migration instructions
+
+No manual intervention required - the enforcement activates automatically based on the system date.
+
 ### Affected Endpoints
 
 The following v1 endpoint patterns trigger deprecation headers:
@@ -86,10 +93,13 @@ Endpoints without v2 alternatives do NOT receive deprecation headers:
 - Documentation emphasizes v2
 
 ### Phase 3: Sunset (August 2027)
-- v1 endpoints return `410 Gone`
+- v1 endpoints return `410 Gone` ✅ **IMPLEMENTED**
 - Response body includes migration instructions
 - v1 traffic redirected to v2 documentation
 - Final warning emails sent
+
+### Implementation Status
+**✅ Code Complete**: The 410 enforcement is implemented in `backend/middleware/deprecation.js` and will activate automatically when the current date passes August 1, 2027.
 
 ### Post-Sunset Response
 ```http
@@ -166,6 +176,24 @@ Deprecation middleware logs to console:
 
 ### Q: What if I need more time?
 **A:** Contact support for enterprise migration assistance. Extended support may be available.
+
+---
+
+## Testing
+
+### Unit Tests
+Comprehensive tests are located in:
+- `backend/__tests__/middleware/deprecation.test.js` - Unit tests for middleware logic
+- `backend/__tests__/routes/deprecation.enforcement.test.js` - Integration tests
+
+Run tests with:
+```bash
+cd backend
+node --test __tests__/middleware/deprecation.test.js
+```
+
+### Simulating Post-Sunset Behavior
+To test the 410 enforcement before the sunset date, the tests use mocked dates. See the "After Sunset Simulation" test suite for examples of how the middleware behaves after August 2027.
 
 ---
 
