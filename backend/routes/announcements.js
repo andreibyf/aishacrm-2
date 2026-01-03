@@ -6,6 +6,7 @@
 import express from 'express';
 import { validateTenantScopedId } from '../lib/validation.js';
 import { cacheList } from '../lib/cacheMiddleware.js';
+import logger from '../lib/logger.js';
 
 export default function createAnnouncementRoutes(_pgPool) {
   const router = express.Router();
@@ -40,7 +41,7 @@ export default function createAnnouncementRoutes(_pgPool) {
         data: { announcements: data || [], total: count || 0 },
       });
     } catch (error) {
-      console.error('Error fetching announcements:', error);
+      logger.error('Error fetching announcements:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -94,7 +95,7 @@ export default function createAnnouncementRoutes(_pgPool) {
       if (error) throw new Error(error.message);
       res.status(201).json({ status: 'success', message: 'Created', data: { announcement: data } });
     } catch (error) {
-      console.error('Error creating announcement:', error);
+      logger.error('Error creating announcement:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

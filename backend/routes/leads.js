@@ -6,6 +6,7 @@
 import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
+import logger from '../lib/logger.js';
 import {
   extractPersonDataFromLead,
   buildContactProvenanceMetadata,
@@ -350,7 +351,7 @@ export default function createLeadRoutes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error('Error searching leads:', error);
+      logger.error('Error searching leads:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -389,7 +390,7 @@ export default function createLeadRoutes(_pgPool) {
         if (typeof filter === 'string' && filter.startsWith('{')) {
           try {
             parsedFilter = JSON.parse(filter);
-            console.log('[Leads] Parsed filter:', JSON.stringify(parsedFilter, null, 2));
+            logger.debug('[Leads] Parsed filter:', JSON.stringify(parsedFilter, null, 2));
           } catch {
             // treat as literal
           }
@@ -397,13 +398,13 @@ export default function createLeadRoutes(_pgPool) {
 
         // Handle assigned_to filter (supports UUID, null, or email)
         if (typeof parsedFilter === 'object' && parsedFilter.assigned_to !== undefined) {
-          console.log('[Leads] Applying assigned_to filter:', parsedFilter.assigned_to);
+          logger.debug('[Leads] Applying assigned_to filter:', parsedFilter.assigned_to);
           q = q.eq('assigned_to', parsedFilter.assigned_to);
         }
 
         // Handle is_test_data filter from parsed filter object
         if (typeof parsedFilter === 'object' && parsedFilter.is_test_data !== undefined) {
-          console.log('[Leads] Applying is_test_data filter:', parsedFilter.is_test_data);
+          logger.debug('[Leads] Applying is_test_data filter:', parsedFilter.is_test_data);
           q = q.eq('is_test_data', parsedFilter.is_test_data);
         }
         
@@ -415,7 +416,7 @@ export default function createLeadRoutes(_pgPool) {
           );
           
           if (isUnassignedFilter) {
-            console.log('[Leads] Applying unassigned filter');
+            logger.debug('[Leads] Applying unassigned filter');
             // For unassigned, check for null or empty string
             q = q.or('assigned_to.is.null,assigned_to.eq.');
           } else {
@@ -470,7 +471,7 @@ export default function createLeadRoutes(_pgPool) {
         data: { leads, total: count || 0, status, limit, offset },
       });
     } catch (error) {
-      console.error('Error listing leads:', error);
+      logger.error('Error listing leads:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -586,14 +587,14 @@ export default function createLeadRoutes(_pgPool) {
 
       const lead = expandMetadata(data);
 
-      console.log('[Leads POST] Successfully created lead:', lead.id);
+      logger.debug('[Leads POST] Successfully created lead:', lead.id);
       res.status(201).json({
         status: 'success',
         message: 'Lead created',
         data: { lead },
       });
     } catch (error) {
-      console.error('Error creating lead:', error);
+      logger.error('Error creating lead:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -687,7 +688,7 @@ export default function createLeadRoutes(_pgPool) {
         data: { lead },
       });
     } catch (error) {
-      console.error('Error fetching lead:', error);
+      logger.error('Error fetching lead:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -816,7 +817,7 @@ export default function createLeadRoutes(_pgPool) {
         data: { lead: updatedLead },
       });
     } catch (error) {
-      console.error('Error updating lead:', error);
+      logger.error('Error updating lead:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -843,7 +844,7 @@ export default function createLeadRoutes(_pgPool) {
         data: { id: data.id },
       });
     } catch (error) {
-      console.error('Error deleting lead:', error);
+      logger.error('Error deleting lead:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -987,7 +988,7 @@ export default function createLeadRoutes(_pgPool) {
         if (contErr) throw new Error(contErr.message);
         contact = cont;
         
-        console.log('[Leads Convert v3.0.0] Contact created:', {
+        logger.debug('[Leads Convert v3.0.0] Contact created:', {
           contact_id: contact.id,
           account_id: accountId || lead.account_id,
           lead_type: contactType,
@@ -1042,9 +1043,9 @@ export default function createLeadRoutes(_pgPool) {
             .eq('tenant_id', tenant_id)
             .ilike('description', `%[Lead:${lead.id}]%`);
 
-          console.log('[Leads] Converted: attempted to relink opportunities by description');
+          logger.debug('[Leads] Converted: attempted to relink opportunities by description');
         } catch (oppLinkErr) {
-          console.warn('[Leads] Failed to relink opportunities from lead', oppLinkErr);
+          logger.warn('[Leads] Failed to relink opportunities from lead', oppLinkErr);
         }
 
         // Record transition snapshot
@@ -1071,22 +1072,22 @@ export default function createLeadRoutes(_pgPool) {
 
       } catch (innerErr) {
         // Compensate created records when running without DB transactions (best-effort)
-        console.error('[Leads] conversion inner error, attempting cleanup:', innerErr.message || innerErr);
+        logger.error('[Leads] conversion inner error, attempting cleanup:', innerErr.message || innerErr);
         try {
           if (opportunity && opportunity.id) await supabase.from('opportunities').delete().eq('id', opportunity.id).eq('tenant_id', tenant_id);
-        } catch (e) { console.warn('Cleanup opportunity failed', e.message || e); }
+        } catch (e) { logger.warn('Cleanup opportunity failed', e.message || e); }
         try {
           if (contact && contact.id) await supabase.from('contacts').delete().eq('id', contact.id).eq('tenant_id', tenant_id);
-        } catch (e) { console.warn('Cleanup contact failed', e.message || e); }
+        } catch (e) { logger.warn('Cleanup contact failed', e.message || e); }
         try {
           if (newAccount && newAccount.id) await supabase.from('accounts').delete().eq('id', newAccount.id).eq('tenant_id', tenant_id);
-        } catch (e) { console.warn('Cleanup account failed', e.message || e); }
+        } catch (e) { logger.warn('Cleanup account failed', e.message || e); }
 
-        console.error('[Leads] convert error:', innerErr);
+        logger.error('[Leads] convert error:', innerErr);
         return res.status(500).json({ status: 'error', message: innerErr.message || String(innerErr) });
       }
     } catch (error) {
-      console.error('[Leads] convert error:', error);
+      logger.error('[Leads] convert error:', error);
       return res.status(500).json({ status: 'error', message: error.message });
     }
   });

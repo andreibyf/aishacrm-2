@@ -241,7 +241,6 @@ export async function processChatCommand({
   try {
     parserResult = parseIntent(text);
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.warn('intentParser failed, falling back to legacy classifier', error);
   }
 

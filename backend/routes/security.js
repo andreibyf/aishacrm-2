@@ -11,6 +11,7 @@
  */
 
 import express from "express";
+import logger from '../lib/logger.js';
 import {
   getSecurityStatus,
   manuallyBlockIP,
@@ -61,7 +62,7 @@ async function enrichIPThreatData(ipList) {
         }
       }
     } catch (error) {
-      console.warn(`[ThreatIntel] GreyNoise lookup failed for ${ipData.ip}:`, error.message);
+      logger.warn(`[ThreatIntel] GreyNoise lookup failed for ${ipData.ip}:`, error.message);
     }
 
     // AbuseIPDB (requires API key)
@@ -97,7 +98,7 @@ async function enrichIPThreatData(ipList) {
           }
         }
       } catch (error) {
-        console.warn(`[ThreatIntel] AbuseIPDB lookup failed for ${ipData.ip}:`, error.message);
+        logger.warn(`[ThreatIntel] AbuseIPDB lookup failed for ${ipData.ip}:`, error.message);
       }
     }
 
@@ -169,7 +170,7 @@ export default function createSecurityRoutes(_pgPool) {
       }
 
       if (secret !== EMERGENCY_SECRET) {
-        console.warn(`[Security] Emergency unblock failed: Invalid secret from ${req.ip}`);
+        logger.warn(`[Security] Emergency unblock failed: Invalid secret from ${req.ip}`);
         return res.status(403).json({
           status: 'error',
           message: 'Invalid emergency secret'
@@ -179,7 +180,7 @@ export default function createSecurityRoutes(_pgPool) {
       // Unblock the IP
       await unblockIP(ip);
 
-      console.log(`[Security] Emergency unblock: ${ip} by ${req.ip}`);
+      logger.debug(`[Security] Emergency unblock: ${ip} by ${req.ip}`);
       res.json({
         status: 'success',
         message: `IP ${ip} has been unblocked`,
@@ -187,7 +188,7 @@ export default function createSecurityRoutes(_pgPool) {
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      console.error('[Security] Emergency unblock error:', error);
+      logger.error('[Security] Emergency unblock error:', error);
       res.status(500).json({
         status: 'error',
         message: error.message
@@ -290,7 +291,7 @@ export default function createSecurityRoutes(_pgPool) {
         }
       });
     } catch (error) {
-      console.error('Error fetching security alerts:', error);
+      logger.error('Error fetching security alerts:', error);
       res.status(500).json({
         status: 'error',
         message: 'Failed to fetch security alerts',
@@ -374,7 +375,7 @@ export default function createSecurityRoutes(_pgPool) {
         }
       });
     } catch (error) {
-      console.error('Error calculating security statistics:', error);
+      logger.error('Error calculating security statistics:', error);
       res.status(500).json({
         status: 'error',
         message: 'Failed to calculate statistics',
@@ -391,7 +392,7 @@ export default function createSecurityRoutes(_pgPool) {
     try {
       const status = await getSecurityStatus();
 
-      console.log('[Security] Status response:', JSON.stringify(status, null, 2));
+      logger.debug('[Security] Status response:', JSON.stringify(status, null, 2));
 
       res.json({
         status: 'success',
@@ -403,7 +404,7 @@ export default function createSecurityRoutes(_pgPool) {
         }
       });
     } catch (error) {
-      console.error('Error getting security status:', error);
+      logger.error('Error getting security status:', error);
       res.status(500).json({
         status: 'error',
         message: 'Failed to get security status',
@@ -453,7 +454,7 @@ export default function createSecurityRoutes(_pgPool) {
         data: { ip, duration_ms, expires_at: new Date(Date.now() + duration_ms) }
       });
     } catch (error) {
-      console.error('Error blocking IP:', error);
+      logger.error('Error blocking IP:', error);
       res.status(500).json({
         status: 'error',
         message: 'Failed to block IP',
@@ -502,7 +503,7 @@ export default function createSecurityRoutes(_pgPool) {
         data: { ip }
       });
     } catch (error) {
-      console.error('Error unblocking IP:', error);
+      logger.error('Error unblocking IP:', error);
       res.status(500).json({
         status: 'error',
         message: 'Failed to unblock IP',
@@ -639,7 +640,7 @@ export default function createSecurityRoutes(_pgPool) {
         }
       });
     } catch (error) {
-      console.error('Error generating threat intelligence:', error);
+      logger.error('Error generating threat intelligence:', error);
       res.status(500).json({
         status: 'error',
         message: 'Failed to generate threat intelligence',
@@ -675,7 +676,7 @@ export default function createSecurityRoutes(_pgPool) {
         message: 'IDR tracking data cleared'
       });
     } catch (error) {
-      console.error('Error clearing tracking data:', error);
+      logger.error('Error clearing tracking data:', error);
       res.status(500).json({
         status: 'error',
         message: 'Failed to clear tracking data',

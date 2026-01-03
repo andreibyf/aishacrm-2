@@ -1,4 +1,5 @@
 import express from 'express';
+import logger from '../lib/logger.js';
 
 export default function createWorkflowExecutionRoutes(pgPool) {
   const router = express.Router();
@@ -39,7 +40,7 @@ export default function createWorkflowExecutionRoutes(pgPool) {
         }
       });
     } catch (error) {
-      console.error('Error listing workflow executions:', error);
+      logger.error('Error listing workflow executions:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

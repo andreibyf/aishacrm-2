@@ -11,6 +11,7 @@ import { requireAuthCookie } from "../middleware/authCookie.js";
 import { resolveLLMApiKey, generateChatCompletion, selectLLMConfigForTenant } from "../lib/aiEngine/index.js";
 import { logLLMActivity } from "../lib/aiEngine/activityLogger.js";
 import { executeMcpToolViaBraid, getExecutionStrategy } from "../lib/braidMcpBridge.js";
+import logger from '../lib/logger.js';
 
 // Admin helper: restrict access to users with emails defined in ADMIN_EMAILS env variable.
 // Requires req.user to be set by requireAuthCookie middleware
@@ -32,7 +33,7 @@ function requireAdmin(req, res, next) {
     .filter(Boolean);
 
   // Debug logging
-  console.log('[MCP Admin] Auth check:', {
+  logger.debug('[MCP Admin] Auth check:', {
     userEmail,
     isInAdminList: allow.includes(userEmail.toLowerCase()),
     adminEmailsCount: allow.length
@@ -513,7 +514,7 @@ export default function createMCPRoutes(_pgPool) {
           const tenantRecord = { id: tenant_id, tenant_id };
           const userId = req.user?.id || req.headers['x-user-id'] || null;
           
-          console.log('[MCP→Braid] Routing through Braid bridge', {
+          logger.debug('[MCP→Braid] Routing through Braid bridge', {
             tool: tool_name,
             strategy: executionStrategy,
             tenantId: tenant_id?.substring(0, 8),
@@ -1449,7 +1450,7 @@ export default function createMCPRoutes(_pgPool) {
           searchResults = searchJson?.query?.search || [];
         }
       } catch (wikiErr) {
-        console.warn('[market-insights] Wikipedia search failed:', wikiErr?.message);
+        logger.warn('[market-insights] Wikipedia search failed:', wikiErr?.message);
         // Continue with empty results - LLM will generate baseline content
       }
 
@@ -1736,7 +1737,7 @@ export default function createMCPRoutes(_pgPool) {
     } catch (err) {
       // Collect all errors for debugging
       const aggregateErrors = err.errors ? err.errors.map(e => ({ message: e.message, stack: e.stack?.split('\n')[0] })) : [];
-      console.log('[MCP Health Proxy] All attempts failed:', JSON.stringify(aggregateErrors, null, 2));
+      logger.debug('[MCP Health Proxy] All attempts failed:', JSON.stringify(aggregateErrors, null, 2));
       return res.json({
         status: 'success',
         data: {

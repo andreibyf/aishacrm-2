@@ -10,6 +10,7 @@
  */
 
 import { emitTenantWebhooks } from './webhookEmitter.js';
+import logger from './logger.js';
 
 let workerInterval = null;
 let pgPool = null;
@@ -19,7 +20,7 @@ let pgPool = null;
  */
 export function startCampaignWorker(pool, intervalMs = 30000) {
   if (!pool) {
-    console.warn('[CampaignWorker] No database pool provided - worker disabled');
+    logger.warn('[CampaignWorker] No database pool provided - worker disabled');
     return;
   }
 
@@ -27,25 +28,25 @@ export function startCampaignWorker(pool, intervalMs = 30000) {
   const enabled = process.env.CAMPAIGN_WORKER_ENABLED === 'true';
   
   if (!enabled) {
-    console.log('[CampaignWorker] Disabled (CAMPAIGN_WORKER_ENABLED not true)');
+    logger.info('[CampaignWorker] Disabled (CAMPAIGN_WORKER_ENABLED not true)');
     return;
   }
 
-  console.log(`[CampaignWorker] Starting with ${intervalMs}ms interval`);
+  logger.info({ intervalMs }, '[CampaignWorker] Starting');
   
   // Run immediately on start
   processPendingCampaigns().catch(err => 
-    console.error('[CampaignWorker] Initial run error:', err.message)
+    logger.error({ err }, '[CampaignWorker] Initial run error')
   );
 
   // Then run on interval
   workerInterval = setInterval(() => {
     processPendingCampaigns().catch(err => 
-      console.error('[CampaignWorker] Error:', err.message)
+      logger.error({ err }, '[CampaignWorker] Error')
     );
   }, intervalMs);
 
-  console.log('[CampaignWorker] Started');
+  logger.info('[CampaignWorker] Started');
 }
 
 /**
@@ -55,7 +56,7 @@ export function stopCampaignWorker() {
   if (workerInterval) {
     clearInterval(workerInterval);
     workerInterval = null;
-    console.log('[CampaignWorker] Stopped');
+    logger.info('[CampaignWorker] Stopped');
   }
 }
 
@@ -83,14 +84,14 @@ async function processPendingCampaigns() {
       return;
     }
 
-    console.log(`[CampaignWorker] Found ${result.rows.length} pending campaign(s)`);
+    logger.debug({ count: result.rows.length }, '[CampaignWorker] Found pending campaigns');
 
     // Process each campaign
     for (const campaign of result.rows) {
       await processCampaign(campaign);
     }
   } catch (err) {
-    console.error('[CampaignWorker] processPendingCampaigns error:', err.message);
+    logger.error({ err }, '[CampaignWorker] processPendingCampaigns error');
   }
 }
 
@@ -116,7 +117,7 @@ async function processCampaign(campaign) {
       return;
     }
 
-    console.log(`[CampaignWorker] Processing campaign ${id} (${name})`);
+    logger.info({ campaignId: id, name }, '[CampaignWorker] Processing campaign');
 
     // Mark as running and stamp start time
     await client.query(`
@@ -134,7 +135,7 @@ async function processCampaign(campaign) {
       id,
       status: 'running',
       progress: { total: 0, processed: 0, success: 0, failed: 0 }
-    }).catch(err => console.error('[CampaignWorker] Webhook emission failed:', err.message));
+    }).catch(err => logger.error({ err }, '[CampaignWorker] Webhook emission failed'));
 
     // Execute the campaign based on type
     const result = await executeCampaign(campaign, client);
@@ -161,12 +162,12 @@ async function processCampaign(campaign) {
       status: finalStatus,
       progress: result.progress,
       details: result.details
-    }).catch(err => console.error('[CampaignWorker] Final webhook emission failed:', err.message));
+    }).catch(err => logger.error({ err }, '[CampaignWorker] Final webhook emission failed'));
 
-    console.log(`[CampaignWorker] Campaign ${id} finished: ${finalStatus}`);
+    logger.info({ campaignId: id, finalStatus }, '[CampaignWorker] Campaign finished');
 
   } catch (err) {
-    console.error(`[CampaignWorker] Error processing campaign ${id}:`, err.message);
+    logger.error({ err, campaignId: id }, '[CampaignWorker] Error processing campaign');
     
     // Mark as failed
     if (client) {
@@ -181,7 +182,7 @@ async function processCampaign(campaign) {
           WHERE id = $2 AND tenant_id = $3
         `, [err.message, id, tenant_id]);
       } catch (updateErr) {
-        console.error('[CampaignWorker] Failed to update error status:', updateErr.message);
+        logger.error({ err: updateErr }, '[CampaignWorker] Failed to update error status');
       }
     }
   } finally {
@@ -190,7 +191,7 @@ async function processCampaign(campaign) {
       try {
         await client.query('SELECT pg_advisory_unlock($1)', [lockId]);
       } catch (unlockErr) {
-        console.error('[CampaignWorker] Failed to release lock:', unlockErr.message);
+        logger.error({ err: unlockErr }, '[CampaignWorker] Failed to release lock');
       }
       client.release();
     }
@@ -285,7 +286,7 @@ async function executeEmailCampaign(campaign, contacts, progress, client) {
 
       progress.success++;
     } catch (err) {
-      console.error(`[CampaignWorker] Failed to send email to ${contact.email}:`, err.message);
+      logger.error({ err, email: contact.email }, '[CampaignWorker] Failed to send email');
       progress.failed++;
     }
     
@@ -335,7 +336,7 @@ async function executeCallCampaign(campaign, contacts, progress, client) {
 
       progress.success++;
     } catch (err) {
-      console.error(`[CampaignWorker] Failed to trigger call to ${contact.phone}:`, err.message);
+      logger.error({ err, phone: contact.phone }, '[CampaignWorker] Failed to trigger call');
       progress.failed++;
     }
     
@@ -357,7 +358,7 @@ async function executeCallCampaign(campaign, contacts, progress, client) {
  */
 async function sendEmail(integrationType, credentials, toEmail, _subject, _body) {
   // Stub implementation - to be expanded with actual providers
-  console.log(`[CampaignWorker] Sending email via ${integrationType} to ${toEmail}`);
+  logger.debug({ integrationType, toEmail }, '[CampaignWorker] Sending email via integration');
   
   switch (integrationType) {
     case 'gmail':
@@ -385,7 +386,7 @@ async function sendEmail(integrationType, credentials, toEmail, _subject, _body)
  * Trigger AI call via integration
  */
 async function triggerAICall(integrationType, credentials, phone, metadata) {
-  console.log(`[CampaignWorker] Triggering AI call via ${integrationType} to ${phone}`);
+  logger.debug({ integrationType, phone }, '[CampaignWorker] Triggering AI call via integration');
   
   // Step 1: Prepare call context with contact details and talking points
   const { contact_id, campaign_id, tenant_id } = metadata;
@@ -401,7 +402,7 @@ async function triggerAICall(integrationType, credentials, phone, metadata) {
       campaign_id
     });
   } catch (error) {
-    console.error('[CampaignWorker] Failed to prepare call context:', error);
+    logger.error({ err: error }, '[CampaignWorker] Failed to prepare call context');
     throw new Error('Failed to prepare call context');
   }
   
@@ -446,12 +447,7 @@ async function triggerCallFluentCall(credentials, callContext, _campaign_id) {
   //   })
   // });
   
-  console.log('[CampaignWorker] CallFluent call triggered (stub):', {
-    to: callContext.contact.phone,
-    name: callContext.contact.name,
-    purpose: callContext.call_context.purpose,
-    talking_points: callContext.call_context.talking_points
-  });
+  logger.debug({ to: callContext.contact.phone, name: callContext.contact.name, purpose: callContext.call_context.purpose }, '[CampaignWorker] CallFluent call triggered (stub)');
   
   return { success: true, provider: 'callfluent', status: 'initiated' };
 }
@@ -487,12 +483,7 @@ async function triggerThoughtlyCall(credentials, callContext, _campaign_id) {
   //   })
   // });
   
-  console.log('[CampaignWorker] Thoughtly call triggered (stub):', {
-    to: callContext.contact.phone,
-    name: callContext.contact.name,
-    purpose: callContext.call_context.purpose,
-    talking_points: callContext.call_context.talking_points
-  });
+  logger.debug({ to: callContext.contact.phone, name: callContext.contact.name, purpose: callContext.call_context.purpose }, '[CampaignWorker] Thoughtly call triggered (stub)');
   
   return { success: true, provider: 'thoughtly', status: 'initiated' };
 }

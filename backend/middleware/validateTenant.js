@@ -1,4 +1,5 @@
 import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
+import logger from '../lib/logger.js';
 
 /**
  * Tenant Validation Middleware
@@ -60,7 +61,7 @@ export async function validateTenantAccess(req, res, next) {
         };
       }
     } catch (err) {
-      console.warn('[TenantValidation] Failed to resolve canonical tenant:', err.message);
+      logger.warn('[TenantValidation] Failed to resolve canonical tenant:', err.message);
     }
   }
 

@@ -12,6 +12,7 @@
 import express from 'express';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
+import logger from '../lib/logger.js';
 
 const ENABLE_AI_ENRICHMENT = process.env.AI_ENRICHMENT_ENABLED !== 'false';
 const SLOW_THRESHOLD_MS = parseInt(process.env.AI_CONTEXT_SLOW_THRESHOLD_MS || '500', 10);
@@ -21,7 +22,7 @@ const SLOW_THRESHOLD_MS = parseInt(process.env.AI_CONTEXT_SLOW_THRESHOLD_MS || '
  */
 function warnIfSlow(operation, processingTime) {
   if (processingTime > SLOW_THRESHOLD_MS) {
-    console.warn(`[workflows.v2] SLOW: ${operation} took ${processingTime}ms (threshold: ${SLOW_THRESHOLD_MS}ms)`);
+    logger.warn(`[workflows.v2] SLOW: ${operation} took ${processingTime}ms (threshold: ${SLOW_THRESHOLD_MS}ms)`);
   }
 }
 
@@ -446,7 +447,7 @@ async function buildWorkflowAiContext(workflow, _options = {}) {
       processingTime,
     };
   } catch (error) {
-    console.error('[workflows.v2] AI context error:', error.message);
+    logger.error('[workflows.v2] AI context error:', error.message);
     return createStubAiContext(startTime, error.message);
   }
 }
@@ -553,7 +554,7 @@ export default function createWorkflowV2Routes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error('[workflows.v2] GET / error:', error);
+      logger.error('[workflows.v2] GET / error:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -613,7 +614,7 @@ export default function createWorkflowV2Routes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error('[workflows.v2] GET /:id error:', error);
+      logger.error('[workflows.v2] GET /:id error:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -760,7 +761,7 @@ export default function createWorkflowV2Routes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error('[workflows.v2] GET /:id/analyze error:', error);
+      logger.error('[workflows.v2] GET /:id/analyze error:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -902,7 +903,7 @@ export default function createWorkflowV2Routes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error('[workflows.v2] GET /health-summary error:', error);
+      logger.error('[workflows.v2] GET /health-summary error:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

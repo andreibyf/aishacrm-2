@@ -1,6 +1,7 @@
 import express from "express";
 import { sanitizeUuidInput } from "../lib/uuidValidator.js";
 import { cacheList, invalidateTenantCache } from '../lib/cacheMiddleware.js';
+import logger from '../lib/logger.js';
 
 export default function createSystemLogRoutes(_pgPool) {
   const router = express.Router();
@@ -109,7 +110,7 @@ export default function createSystemLogRoutes(_pgPool) {
         data: systemLog,
       });
     } catch (error) {
-      console.error("Error creating system log:", error);
+      logger.error("Error creating system log:", error);
       res.status(500).json({
         status: "error",
         message: error.message,
@@ -183,7 +184,7 @@ export default function createSystemLogRoutes(_pgPool) {
         data: { inserted_count: data?.length || 0 },
       });
     } catch (err) {
-      console.error('[System Logs Bulk] Error inserting logs:', err);
+      logger.error('[System Logs Bulk] Error inserting logs:', err);
       res.status(500).json({ status: 'error', message: err.message });
     }
   });
@@ -269,7 +270,7 @@ export default function createSystemLogRoutes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error("Error fetching system logs:", error);
+      logger.error("Error fetching system logs:", error);
       res.status(500).json({
         status: "error",
         message: error.message,
@@ -339,7 +340,7 @@ export default function createSystemLogRoutes(_pgPool) {
         data,
       });
     } catch (error) {
-      console.error("Error deleting system log:", error);
+      logger.error("Error deleting system log:", error);
       res.status(500).json({
         status: "error",
         message: error.message,
@@ -413,7 +414,7 @@ export default function createSystemLogRoutes(_pgPool) {
       if (error) throw new Error(error.message);
 
       const deletedCount = (data || []).length;
-      console.log(`[System Logs] Deleted ${deletedCount} system log(s) for tenant: ${tenant_id || 'all'}`);
+      logger.debug(`[System Logs] Deleted ${deletedCount} system log(s) for tenant: ${tenant_id || 'all'}`);
 
       // Invalidate cache after bulk delete
       const sanitizedTenantId = tenant_id ? sanitizeUuidInput(tenant_id) : null;
@@ -431,7 +432,7 @@ export default function createSystemLogRoutes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error("Error clearing system logs:", error);
+      logger.error("Error clearing system logs:", error);
       res.status(500).json({
         status: "error",
         message: error.message,

@@ -7,6 +7,7 @@ import express from 'express';
 import { handleInboundCall, handleOutboundCall } from '../lib/callFlowHandler.js';
 import { normalizeWebhook } from '../lib/webhookAdapters.js';
 import { initiateOutboundCall, checkProviderStatus, getProviderAgents } from '../lib/outboundCallService.js';
+import logger from '../lib/logger.js';
 
 export default function createTelephonyRoutes(pgPool) {
   const router = express.Router();
@@ -112,7 +113,7 @@ export default function createTelephonyRoutes(pgPool) {
       const result = await initiateOutboundCall(req.body);
       res.json(result);
     } catch (error) {
-      console.error('[Telephony] Initiate call error:', error);
+      logger.error('[Telephony] Initiate call error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to initiate call',
@@ -157,7 +158,7 @@ export default function createTelephonyRoutes(pgPool) {
       const status = await checkProviderStatus(tenant_id, provider);
       res.json(status);
     } catch (error) {
-      console.error('[Telephony] Provider status error:', error);
+      logger.error('[Telephony] Provider status error:', error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -198,7 +199,7 @@ export default function createTelephonyRoutes(pgPool) {
       const agents = await getProviderAgents(tenant_id, provider);
       res.json(agents);
     } catch (error) {
-      console.error('[Telephony] Get agents error:', error);
+      logger.error('[Telephony] Get agents error:', error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -248,7 +249,7 @@ export default function createTelephonyRoutes(pgPool) {
       const result = await handleInboundCall(pgPool, normalizedPayload);
       res.json(result);
     } catch (error) {
-      console.error('[Telephony] Provider inbound webhook error:', error);
+      logger.error('[Telephony] Provider inbound webhook error:', error);
       res.status(500).json({ 
         status: 'error',
         error: 'Failed to process inbound call',
@@ -299,7 +300,7 @@ export default function createTelephonyRoutes(pgPool) {
       const result = await handleOutboundCall(pgPool, normalizedPayload);
       res.json(result);
     } catch (error) {
-      console.error('[Telephony] Provider outbound webhook error:', error);
+      logger.error('[Telephony] Provider outbound webhook error:', error);
       res.status(500).json({ 
         status: 'error',
         error: 'Failed to process outbound call',
@@ -399,7 +400,7 @@ export default function createTelephonyRoutes(pgPool) {
       
       res.json(callContext);
     } catch (error) {
-      console.error('[Telephony] Prepare call error:', error);
+      logger.error('[Telephony] Prepare call error:', error);
       res.status(500).json({ 
         status: 'error',
         error: 'Failed to prepare call context',
@@ -487,7 +488,7 @@ export default function createTelephonyRoutes(pgPool) {
       const result = await handleInboundCall(pgPool, req.body);
       res.json(result);
     } catch (error) {
-      console.error('[Telephony] Inbound webhook error:', error);
+      logger.error('[Telephony] Inbound webhook error:', error);
       res.status(500).json({ 
         status: 'error',
         error: 'Failed to process inbound call',
@@ -562,7 +563,7 @@ export default function createTelephonyRoutes(pgPool) {
       const result = await handleOutboundCall(pgPool, req.body);
       res.json(result);
     } catch (error) {
-      console.error('[Telephony] Outbound webhook error:', error);
+      logger.error('[Telephony] Outbound webhook error:', error);
       res.status(500).json({ 
         status: 'error',
         error: 'Failed to process outbound call',
@@ -632,7 +633,7 @@ export default function createTelephonyRoutes(pgPool) {
       const result = await handleOutboundCall(pgPool, payload);
       res.json(result);
     } catch (error) {
-      console.error('[Telephony] Manual log error:', error);
+      logger.error('[Telephony] Manual log error:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

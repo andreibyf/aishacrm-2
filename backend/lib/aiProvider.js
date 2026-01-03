@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import logger from './logger.js';
 
 /**
  * aiProvider.js
@@ -10,7 +11,7 @@ import OpenAI from 'openai';
 
 const defaultApiKey = process.env.OPENAI_API_KEY || null;
 if (!defaultApiKey) {
-  console.warn('[aiProvider] No DEFAULT OPENAI_API_KEY set; will require tenant-level key.');
+  logger.warn('[aiProvider] No DEFAULT OPENAI_API_KEY set; will require tenant-level key.');
 }
 
 function getClient(apiKey) {
@@ -19,7 +20,7 @@ function getClient(apiKey) {
   try {
     return new OpenAI({ apiKey: key });
   } catch (err) {
-    console.error('[aiProvider] Failed to init OpenAI client:', err);
+    logger.error({ err }, '[aiProvider] Failed to init OpenAI client');
     return null;
   }
 }
@@ -57,7 +58,7 @@ export async function createChatCompletion({ messages, model = 'gpt-4o-mini', te
       model
     };
   } catch (err) {
-    console.error('[aiProvider] OpenAI chat error:', err);
+    logger.error({ err }, '[aiProvider] OpenAI chat error');
     return { status: 'error', error: err.message || String(err) };
   }
 }

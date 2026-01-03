@@ -19,6 +19,7 @@
 import { emitTenantWebhooks } from './webhookEmitter.js';
 import { runTask as runAiBrainTask } from './aiBrain.js';
 import { getSupabaseClient } from './supabase-db.js';
+import logger from './logger.js';
 
 let workerInterval = null;
 let supabase = null;
@@ -50,32 +51,32 @@ export function startAiTriggersWorker(_pool, intervalMs = DEFAULT_INTERVAL_MS) {
   const enabled = process.env.AI_TRIGGERS_WORKER_ENABLED === 'true';
   
   if (!enabled) {
-    console.log('[AiTriggersWorker] Disabled (AI_TRIGGERS_WORKER_ENABLED not true)');
+    logger.info('[AiTriggersWorker] Disabled (AI_TRIGGERS_WORKER_ENABLED not true)');
     return;
   }
 
   try {
     supabase = getSupabaseClient();
   } catch (err) {
-    console.warn('[AiTriggersWorker] Supabase client not initialized - worker disabled:', err.message);
+    logger.warn({ err }, '[AiTriggersWorker] Supabase client not initialized - worker disabled');
     return;
   }
 
-  console.log(`[AiTriggersWorker] Starting with ${intervalMs}ms interval`);
+  logger.info({ intervalMs }, '[AiTriggersWorker] Starting');
   
   // Run immediately on start
   processAllTriggers().catch(err => 
-    console.error('[AiTriggersWorker] Initial run error:', err.message)
+    logger.error({ err }, '[AiTriggersWorker] Initial run error')
   );
 
   // Then run on interval
   workerInterval = setInterval(() => {
     processAllTriggers().catch(err => 
-      console.error('[AiTriggersWorker] Error:', err.message)
+      logger.error({ err }, '[AiTriggersWorker] Error')
     );
   }, intervalMs);
 
-  console.log('[AiTriggersWorker] Started');
+  logger.info('[AiTriggersWorker] Started');
 }
 
 /**
@@ -85,7 +86,7 @@ export function stopAiTriggersWorker() {
   if (workerInterval) {
     clearInterval(workerInterval);
     workerInterval = null;
-    console.log('[AiTriggersWorker] Stopped');
+    logger.info('[AiTriggersWorker] Stopped');
   }
 }
 
@@ -96,7 +97,7 @@ async function processAllTriggers() {
   if (!supabase) return;
 
   try {
-    console.log('[AiTriggersWorker] Processing triggers...');
+    logger.debug('[AiTriggersWorker] Processing triggers...');
     const startTime = Date.now();
 
     // Get all active tenants using Supabase JS client
@@ -106,7 +107,7 @@ async function processAllTriggers() {
       .eq('status', 'active');
 
     if (tenantsError) {
-      console.error('[AiTriggersWorker] Error fetching tenants:', tenantsError.message);
+      logger.error({ err: tenantsError }, '[AiTriggersWorker] Error fetching tenants');
       return;
     }
 
@@ -117,7 +118,7 @@ async function processAllTriggers() {
         const tenantTriggers = await processTriggersForTenant(tenant);
         totalTriggers += tenantTriggers;
       } catch (tenantErr) {
-        console.error(`[AiTriggersWorker] Error processing tenant ${tenant.tenant_id}:`, tenantErr.message);
+        logger.error({ err: tenantErr, tenantSlug: tenant.tenant_id }, '[AiTriggersWorker] Error processing tenant');
       }
     }
 
@@ -125,10 +126,10 @@ async function processAllTriggers() {
     await expireOldSuggestions();
 
     const duration = Date.now() - startTime;
-    console.log(`[AiTriggersWorker] Processed ${totalTriggers} triggers in ${duration}ms`);
+    logger.debug({ totalTriggers, durationMs: duration }, '[AiTriggersWorker] Processed triggers');
 
   } catch (err) {
-    console.error('[AiTriggersWorker] processAllTriggers error:', err.message);
+    logger.error({ err }, '[AiTriggersWorker] processAllTriggers error');
   }
 }
 
@@ -212,11 +213,11 @@ async function processTriggersForTenant(tenant) {
     }
 
     if (triggerCount > 0) {
-      console.log(`[AiTriggersWorker] Tenant ${tenantSlug}: ${triggerCount} triggers detected`);
+      logger.debug({ tenantSlug, triggerCount }, '[AiTriggersWorker] Triggers detected for tenant');
     }
 
   } catch (err) {
-    console.error(`[AiTriggersWorker] Error processing tenant ${tenantSlug}:`, err.message);
+    logger.error({ err, tenantSlug }, '[AiTriggersWorker] Error processing tenant');
   }
 
   return triggerCount;
@@ -244,7 +245,7 @@ async function detectStagnantLeads(tenantUuid) {
       .limit(50);
 
     if (error) {
-      console.error('[AiTriggersWorker] detectStagnantLeads error:', error.message);
+      logger.error({ err: error }, '[AiTriggersWorker] detectStagnantLeads error');
       return [];
     }
 
@@ -271,7 +272,7 @@ async function detectStagnantLeads(tenantUuid) {
         last_activity_at: null
       }));
   } catch (err) {
-    console.error('[AiTriggersWorker] detectStagnantLeads error:', err.message);
+    logger.error({ err }, '[AiTriggersWorker] detectStagnantLeads error');
     return [];
   }
 }
@@ -298,7 +299,7 @@ async function detectDealDecay(tenantUuid) {
       .limit(50);
 
     if (error) {
-      console.error('[AiTriggersWorker] detectDealDecay error:', error.message);
+      logger.error({ err: error }, '[AiTriggersWorker] detectDealDecay error');
       return [];
     }
 
@@ -324,7 +325,7 @@ async function detectDealDecay(tenantUuid) {
         days_inactive: Math.floor((Date.now() - new Date(deal.updated_at || deal.created_at).getTime()) / (1000 * 60 * 60 * 24))
       }));
   } catch (err) {
-    console.error('[AiTriggersWorker] detectDealDecay error:', err.message);
+    logger.error({ err }, '[AiTriggersWorker] detectDealDecay error');
     return [];
   }
 }
@@ -350,7 +351,7 @@ async function detectOverdueActivities(tenantUuid) {
       .limit(100);
 
     if (error) {
-      console.error('[AiTriggersWorker] detectOverdueActivities error:', error.message);
+      logger.error({ err: error }, '[AiTriggersWorker] detectOverdueActivities error');
       return [];
     }
 
@@ -386,7 +387,7 @@ async function detectOverdueActivities(tenantUuid) {
       }))
       .slice(0, 50);
   } catch (err) {
-    console.error('[AiTriggersWorker] detectOverdueActivities error:', err.message);
+    logger.error({ err }, '[AiTriggersWorker] detectOverdueActivities error');
     return [];
   }
 }
@@ -417,7 +418,7 @@ async function detectHotOpportunities(tenantUuid) {
       .limit(20);
 
     if (error) {
-      console.error('[AiTriggersWorker] detectHotOpportunities error:', error.message);
+      logger.error({ err: error }, '[AiTriggersWorker] detectHotOpportunities error');
       return [];
     }
 
@@ -443,7 +444,7 @@ async function detectHotOpportunities(tenantUuid) {
         days_to_close: Math.floor((new Date(opp.close_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
       }));
   } catch (err) {
-    console.error('[AiTriggersWorker] detectHotOpportunities error:', err.message);
+    logger.error({ err }, '[AiTriggersWorker] detectHotOpportunities error');
     return [];
   }
 }
@@ -472,12 +473,12 @@ async function createSuggestionIfNew(tenantUuid, triggerData) {
       .limit(1);
     
     if (checkError) {
-      console.error(`[AiTriggersWorker] Error checking existing suggestion:`, checkError.message);
+      logger.error({ err: checkError }, '[AiTriggersWorker] Error checking existing suggestion');
     }
     
     if (existing && existing.length > 0) {
       const existingStatus = existing[0].status;
-      console.log(`[AiTriggersWorker] Skipping ${triggerId}:${recordId} - existing ${existingStatus} suggestion`);
+      logger.debug({ triggerId, recordId, existingStatus }, '[AiTriggersWorker] Skipping - existing suggestion');
       return null;
     }
 
@@ -485,7 +486,7 @@ async function createSuggestionIfNew(tenantUuid, triggerData) {
     const suggestion = await generateAiSuggestion(tenantUuid, triggerId, recordType, recordId, context);
     
     if (!suggestion) {
-      console.log(`[AiTriggersWorker] No suggestion generated for ${triggerId}:${recordId}`);
+      logger.debug({ triggerId, recordId }, '[AiTriggersWorker] No suggestion generated');
       return null;
     }
 
@@ -515,15 +516,15 @@ async function createSuggestionIfNew(tenantUuid, triggerData) {
     if (error) {
       // Check if it's a duplicate (constraint violation)
       if (error.code === '23505') {
-        console.log(`[AiTriggersWorker] Suggestion already exists for ${triggerId}:${recordId}`);
+        logger.debug({ triggerId, recordId }, '[AiTriggersWorker] Suggestion already exists');
         return null;
       }
-      console.error(`[AiTriggersWorker] Error inserting suggestion:`, error.message);
+      logger.error({ err: error, triggerId, recordId }, '[AiTriggersWorker] Error inserting suggestion');
       return null;
     }
 
     if (data) {
-      console.log(`[AiTriggersWorker] Created suggestion ${data.id} for ${triggerId}:${recordId}`);
+      logger.info({ suggestionId: data.id, triggerId, recordId }, '[AiTriggersWorker] Created suggestion');
       
       // Emit webhook for new suggestion
       await emitTenantWebhooks(tenantUuid, 'ai.suggestion.generated', {
@@ -532,14 +533,14 @@ async function createSuggestionIfNew(tenantUuid, triggerData) {
         record_type: recordType,
         record_id: recordId,
         priority,
-      }).catch(err => console.error('[AiTriggersWorker] Webhook emission failed:', err.message));
+      }).catch(err => logger.error({ err }, '[AiTriggersWorker] Webhook emission failed'));
 
       return data.id;
     }
 
     return null;
   } catch (err) {
-    console.error(`[AiTriggersWorker] Error creating suggestion:`, err.message);
+    logger.error({ err, triggerId, recordId }, '[AiTriggersWorker] Error creating suggestion');
     return null;
   }
 }
@@ -559,7 +560,7 @@ async function generateAiSuggestion(tenantUuid, triggerId, recordType, recordId,
         return brainSuggestion;
       }
     } catch (brainError) {
-      console.warn(`[AiTriggersWorker] AI Brain suggestion failed, falling back to templates:`, brainError.message);
+      logger.warn({ err: brainError }, '[AiTriggersWorker] AI Brain suggestion failed, falling back to templates');
     }
   }
 
@@ -610,7 +611,7 @@ async function generateAiBrainSuggestion(tenantUuid, triggerId, recordType, reco
     // If AI Brain didn't propose actions, return null to fall back to templates
     return null;
   } catch (error) {
-    console.error(`[AiTriggersWorker] AI Brain error for ${triggerId}:`, error.message);
+    logger.error({ err: error, triggerId }, '[AiTriggersWorker] AI Brain error');
     throw error;
   }
 }
@@ -721,15 +722,15 @@ async function expireOldSuggestions() {
       .select('id');
 
     if (error) {
-      console.error('[AiTriggersWorker] Error expiring suggestions:', error.message);
+      logger.error({ err: error }, '[AiTriggersWorker] Error expiring suggestions');
       return;
     }
 
     if (data && data.length > 0) {
-      console.log(`[AiTriggersWorker] Expired ${data.length} old suggestions`);
+      logger.debug({ count: data.length }, '[AiTriggersWorker] Expired old suggestions');
     }
   } catch (err) {
-    console.error('[AiTriggersWorker] Error expiring suggestions:', err.message);
+    logger.error({ err }, '[AiTriggersWorker] Error expiring suggestions');
   }
 }
 
@@ -792,7 +793,7 @@ export async function getPendingSuggestions(_pool, tenantUuid, limit = 50) {
     .limit(limit);
 
   if (error) {
-    console.error('[AiTriggersWorker] getPendingSuggestions error:', error.message);
+    logger.error({ err: error, tenantUuid }, '[AiTriggersWorker] getPendingSuggestions error');
     return [];
   }
 

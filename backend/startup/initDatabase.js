@@ -1,4 +1,5 @@
 import { initSupabaseDB, pool as supabasePool } from '../lib/supabase-db.js';
+import logger from '../lib/logger.js';
 
 export async function initDatabase(app) {
   // Database connection using Supabase PostgREST API (avoids IPv6 issues)
@@ -29,13 +30,13 @@ export async function initDatabase(app) {
     initSupabaseDB(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     pgPool = supabasePool;
     dbConnectionType = "Supabase API";
-    console.log("✓ Supabase PostgREST API initialized (HTTP-based, bypassing PostgreSQL IPv6)");
+    logger.info({ dbConnectionType }, "Supabase PostgREST API initialized (HTTP-based, bypassing PostgreSQL IPv6)");
 
     // update diagnostics
     app.locals.dbConnectionType = dbConnectionType;
     app.locals.dbConfigPath = 'supabase_api';
   } else {
-    console.warn("⚠ No database configured - set USE_SUPABASE_API=true (or USE_SUPABASE_PROD=true for legacy) with SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
+    logger.warn("No database configured - set USE_SUPABASE_API=true (or USE_SUPABASE_PROD=true for legacy) with SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
   }
 
   return { pgPool, dbConnectionType, ipv4FirstApplied };

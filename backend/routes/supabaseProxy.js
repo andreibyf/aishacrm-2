@@ -11,6 +11,7 @@
  * Adds explicit CORS headers with the requesting Origin to satisfy credentialed requests.
  */
 import express from 'express';
+import logger from '../lib/logger.js';
 
 // Lightweight in-memory rate limiter (dependency-free)
 const ipBuckets = new Map(); // key -> { count, ts }
@@ -40,7 +41,7 @@ export default function createSupabaseProxyRoutes() {
 
   const SUPABASE_URL = process.env.SUPABASE_URL;
   if (!SUPABASE_URL) {
-    console.warn('[SupabaseProxy] SUPABASE_URL not set – routes will return 503');
+    logger.warn('[SupabaseProxy] SUPABASE_URL not set – routes will return 503');
   }
 
   // Build explicit allowlist: SUPABASE_PROXY_ALLOWED_ORIGINS (comma separated)
@@ -139,7 +140,7 @@ export default function createSupabaseProxyRoutes() {
       try { data = text ? JSON.parse(text) : null; } catch { data = null; }
       return res.json({ status: 'success', data });
     } catch (e) {
-      console.error('[SupabaseProxy] /auth/user error:', e?.message || e);
+      logger.error('[SupabaseProxy] /auth/user error:', e?.message || e);
       return res.status(500).json({ status: 'error', message: 'Internal proxy error' });
     }
   });

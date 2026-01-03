@@ -5,6 +5,7 @@
 
 import express from 'express';
 import { queryAuditLogs, getAuditStats } from '../../braid-llm-kit/sdk/index.js';
+import logger from '../lib/logger.js';
 
 const router = express.Router();
 
@@ -62,7 +63,7 @@ router.get('/', async (req, res) => {
       filters: { tool_name, policy, result_tag, start_date, end_date }
     });
   } catch (err) {
-    console.error('[Braid Audit API] Query error:', err);
+    logger.error('[Braid Audit API] Query error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -97,7 +98,7 @@ router.get('/stats', async (req, res) => {
     
     res.json(stats);
   } catch (err) {
-    console.error('[Braid Audit API] Stats error:', err);
+    logger.error('[Braid Audit API] Stats error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -140,7 +141,7 @@ router.get('/tools', async (req, res) => {
     
     res.json({ tools, count: tools.length });
   } catch (err) {
-    console.error('[Braid Audit API] Tools error:', err);
+    logger.error('[Braid Audit API] Tools error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -177,7 +178,7 @@ router.get('/user/:userId', async (req, res) => {
     
     res.json({ data, count: data.length });
   } catch (err) {
-    console.error('[Braid Audit API] User logs error:', err);
+    logger.error('[Braid Audit API] User logs error:', err);
     res.status(500).json({ error: err.message });
   }
 });

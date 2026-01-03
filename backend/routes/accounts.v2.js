@@ -14,6 +14,7 @@ import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildAccountAiContext } from '../lib/aiContextEnricher.js';
 import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 import { sanitizeUuidInput } from '../lib/uuidValidator.js';
+import logger from '../lib/logger.js';
 
 export default function createAccountV2Routes(_pgPool) {
   const router = express.Router();
@@ -189,7 +190,7 @@ export default function createAccountV2Routes(_pgPool) {
       const { data, error, count } = await query;
 
       if (error) {
-        console.error('[accounts.v2] List error:', error);
+        logger.error('[accounts.v2] List error:', error);
         return res.status(500).json({ status: 'error', message: error.message });
       }
 
@@ -208,7 +209,7 @@ export default function createAccountV2Routes(_pgPool) {
         data: { accounts, total: count ?? accounts.length, limit, offset },
       });
     } catch (err) {
-      console.error('[accounts.v2] List exception:', err);
+      logger.error('[accounts.v2] List exception:', err);
       return res.status(500).json({ status: 'error', message: err.message });
     }
   });
@@ -342,7 +343,7 @@ export default function createAccountV2Routes(_pgPool) {
         .single();
 
       if (error) {
-        console.error('[accounts.v2] Create error:', error);
+        logger.error('[accounts.v2] Create error:', error);
         return res.status(500).json({ status: 'error', message: error.message });
       }
 
@@ -353,11 +354,11 @@ export default function createAccountV2Routes(_pgPool) {
       buildAccountAiContext(created, { tenantId: tenant_id })
         .then(aiContext => {
           if (aiContext) {
-            console.log('[accounts.v2] AI context built in background');
+            logger.debug('[accounts.v2] AI context built in background');
           }
         })
         .catch(err => {
-          console.warn('[accounts.v2] Background AI context building failed:', err.message);
+          logger.warn('[accounts.v2] Background AI context building failed:', err.message);
         });
 
       // Return immediately with created account - AI context will be available on fetch
@@ -366,7 +367,7 @@ export default function createAccountV2Routes(_pgPool) {
         data: { account: created },
       });
     } catch (err) {
-      console.error('[accounts.v2] Create exception:', err);
+      logger.error('[accounts.v2] Create exception:', err);
       return res.status(500).json({ status: 'error', message: err.message });
     }
   });
@@ -424,7 +425,7 @@ export default function createAccountV2Routes(_pgPool) {
         data: { account, aiContext },
       });
     } catch (err) {
-      console.error('[accounts.v2] Get exception:', err);
+      logger.error('[accounts.v2] Get exception:', err);
       return res.status(500).json({ status: 'error', message: err.message });
     }
   });
@@ -559,7 +560,7 @@ export default function createAccountV2Routes(_pgPool) {
         .single();
 
       if (error) {
-        console.error('[accounts.v2] Update error:', error);
+        logger.error('[accounts.v2] Update error:', error);
         return res.status(500).json({ status: 'error', message: error.message });
       }
 
@@ -568,7 +569,7 @@ export default function createAccountV2Routes(_pgPool) {
         data: { account: expandMetadata(data) },
       });
     } catch (err) {
-      console.error('[accounts.v2] Update exception:', err);
+      logger.error('[accounts.v2] Update exception:', err);
       return res.status(500).json({ status: 'error', message: err.message });
     }
   });
@@ -614,13 +615,13 @@ export default function createAccountV2Routes(_pgPool) {
         .eq('tenant_id', tenant_id);
 
       if (error) {
-        console.error('[accounts.v2] Delete error:', error);
+        logger.error('[accounts.v2] Delete error:', error);
         return res.status(500).json({ status: 'error', message: error.message });
       }
 
       return res.json({ status: 'success', message: 'Account deleted successfully' });
     } catch (err) {
-      console.error('[accounts.v2] Delete exception:', err);
+      logger.error('[accounts.v2] Delete exception:', err);
       return res.status(500).json({ status: 'error', message: err.message });
     }
   });

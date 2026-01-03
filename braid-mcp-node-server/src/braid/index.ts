@@ -5,6 +5,7 @@ import {
   BraidResponseEnvelope,
   BraidActor,
 } from "./types";
+import logger from '../lib/logger';
 
 export { 
   BraidAction,
@@ -46,13 +47,12 @@ export interface BraidRegistry {
   listAdapters(): string[];
 }
 
-// Minimal console-based logger for v0.
-// Replace with your own logging system if desired.
+// Minimal logger for Braid adapters using Pino
 export function createConsoleLogger(): BraidAdapterContext["log"] {
   return {
-    debug: (msg, meta) => console.debug(msg, meta ?? {}),
-    info: (msg, meta) => console.info(msg, meta ?? {}),
-    warn: (msg, meta) => console.warn(msg, meta ?? {}),
-    error: (msg, meta) => console.error(msg, meta ?? {}),
+    debug: (msg, meta) => logger.debug(meta ?? {}, msg),
+    info: (msg, meta) => logger.info(meta ?? {}, msg),
+    warn: (msg, meta) => logger.warn(meta ?? {}, msg),
+    error: (msg, meta) => logger.error(meta ?? {}, msg),
   };
 }

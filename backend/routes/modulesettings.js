@@ -2,6 +2,7 @@ import express from 'express';
 import { requireAdminRole } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { cacheList } from '../lib/cacheMiddleware.js';
+import logger from '../lib/logger.js';
 
 export default function createModuleSettingsRoutes(_pool) {
   const router = express.Router();
@@ -66,7 +67,7 @@ export default function createModuleSettingsRoutes(_pool) {
 
       res.json({ status: 'success', data: { modulesettings: data || [] } });
     } catch (error) {
-      console.error('Error fetching module settings:', error);
+      logger.error('Error fetching module settings:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -136,7 +137,7 @@ router.get('/:id', async (req, res) => {
     
     res.json({ status: 'success', data });
   } catch (error) {
-    console.error('Error fetching module setting:', error);
+    logger.error('Error fetching module setting:', error);
     res.status(500).json({ status: 'error', message: error.message });
   }
 });
@@ -188,7 +189,7 @@ router.post('/', async (req, res) => {
     
     res.status(201).json({ status: 'success', data: result.rows[0] });
   } catch (error) {
-    console.error('Error creating module setting:', error);
+    logger.error('Error creating module setting:', error);
     res.status(500).json({ status: 'error', message: error.message });
   }
 });
@@ -293,13 +294,13 @@ router.put('/:id', async (req, res) => {
 
     // Safety check: verify returned row matches tenant
     if (result.rows[0].tenant_id !== tenant_id) {
-      console.error('[ModuleSettings PUT] Mismatched tenant_id', { expected: tenant_id, got: result.rows[0].tenant_id });
+      logger.error('[ModuleSettings PUT] Mismatched tenant_id', { expected: tenant_id, got: result.rows[0].tenant_id });
       return res.status(404).json({ status: 'error', message: 'Module setting not found' });
     }
 
     res.json({ status: 'success', data: result.rows[0] });
   } catch (error) {
-    console.error('Error updating module setting:', error);
+    logger.error('Error updating module setting:', error);
     res.status(500).json({ status: 'error', message: error.message });
   }
 });
@@ -354,13 +355,13 @@ router.put('/:id', async (req, res) => {
 
       // Safety check: verify deleted row matched tenant
       if (result.rows[0].tenant_id !== tenant_id) {
-        console.error('[ModuleSettings DELETE] Mismatched tenant_id', { expected: tenant_id, got: result.rows[0].tenant_id });
+        logger.error('[ModuleSettings DELETE] Mismatched tenant_id', { expected: tenant_id, got: result.rows[0].tenant_id });
         return res.status(404).json({ status: 'error', message: 'Module setting not found' });
       }
 
       res.json({ status: 'success', data: result.rows[0] });
     } catch (error) {
-      console.error('Error deleting module setting:', error);
+      logger.error('Error deleting module setting:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

@@ -14,6 +14,7 @@ import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildContactAiContext } from '../lib/aiContextEnricher.js';
 import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 import { sanitizeUuidInput } from '../lib/uuidValidator.js';
+import logger from '../lib/logger.js';
 
 export default function createContactV2Routes(_pgPool) {
   const router = express.Router();
@@ -199,7 +200,7 @@ export default function createContactV2Routes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error('Error in v2 contacts list:', error);
+      logger.error('Error in v2 contacts list:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -264,7 +265,7 @@ export default function createContactV2Routes(_pgPool) {
         data: { contact: created, aiContext },
       });
     } catch (error) {
-      console.error('Error in v2 contact create:', error);
+      logger.error('Error in v2 contact create:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -317,7 +318,7 @@ export default function createContactV2Routes(_pgPool) {
       
       res.json({ status: 'success', data: { contact, aiContext } });
     } catch (error) {
-      console.error('Error in v2 contact get:', error);
+      logger.error('Error in v2 contact get:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -407,7 +408,7 @@ export default function createContactV2Routes(_pgPool) {
       const updated = expandMetadata(data);
       res.json({ status: 'success', data: { contact: updated } });
     } catch (error) {
-      console.error('Error in v2 contact update:', error);
+      logger.error('Error in v2 contact update:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -458,7 +459,7 @@ export default function createContactV2Routes(_pgPool) {
 
       res.json({ status: 'success', message: 'Contact deleted successfully' });
     } catch (error) {
-      console.error('Error in v2 contact delete:', error);
+      logger.error('Error in v2 contact delete:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

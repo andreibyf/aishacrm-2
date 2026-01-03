@@ -1,5 +1,6 @@
 import { createClient, RedisClientType } from 'redis';
 import { getErrorMessage } from './errorUtils';
+import logger from '../lib/logger';
 
 let client: RedisClientType | null = null;
 let connected = false;
@@ -11,23 +12,23 @@ const DEFAULT_PREFS_TTL = 3600; // 1 hour
 export async function initMemory(redisUrl = process.env.REDIS_URL): Promise<RedisClientType | null> {
   if (client) return client;
   if (!redisUrl) {
-    console.warn('[MCP Memory] REDIS_URL not set; memory disabled');
+    logger.warn('[MCP Memory] REDIS_URL not set; memory disabled');
     return null;
   }
   try {
     client = createClient({ url: redisUrl });
     client.on('error', (err: unknown) => {
-      console.error('[MCP Memory] Redis error:', getErrorMessage(err));
+      logger.error('[MCP Memory] Redis error:', getErrorMessage(err));
       connected = false;
     });
     client.on('connect', () => {
       connected = true;
-      console.log('[MCP Memory] Connected to Redis');
+      logger.debug('[MCP Memory] Connected to Redis');
     });
     await client.connect();
     return client;
   } catch (e: unknown) {
-    console.error('[MCP Memory] Failed to connect:', getErrorMessage(e));
+    logger.error('[MCP Memory] Failed to connect:', getErrorMessage(e));
     client = null;
     return null;
   }
@@ -57,7 +58,7 @@ export async function saveSession(tenantId: string, userId: string, sessionId: s
     await client.setEx(sessionKey(tenantId, userId, sessionId), ttlSeconds, JSON.stringify(payload));
     return true;
   } catch (e: unknown) {
-    console.error('[MCP Memory] saveSession error:', getErrorMessage(e));
+    logger.error('[MCP Memory] saveSession error:', getErrorMessage(e));
     return false;
   }
 }
@@ -71,7 +72,7 @@ export async function appendEvent(tenantId: string, userId: string, sessionId: s
     await client.expire(key, DEFAULT_EVENT_TTL);
     return true;
   } catch (e: unknown) {
-    console.error('[MCP Memory] appendEvent error:', getErrorMessage(e));
+    logger.error('[MCP Memory] appendEvent error:', getErrorMessage(e));
     return false;
   }
 }
@@ -83,7 +84,7 @@ export async function getEvents(tenantId: string, userId: string, sessionId: str
     const raw = await client.lRange(key, -limit, -1);
     return raw.map((s: string) => JSON.parse(s));
   } catch (e: unknown) {
-    console.error('[MCP Memory] getEvents error:', getErrorMessage(e));
+    logger.error('[MCP Memory] getEvents error:', getErrorMessage(e));
     return [];
   }
 }
@@ -106,7 +107,7 @@ export async function cachePreferences(tenantId: string, userId: string, prefs: 
     await client.setEx(prefsKey(tenantId, userId), ttlSeconds, JSON.stringify(prefs));
     return true;
   } catch (e: unknown) {
-    console.error('[MCP Memory] cachePreferences error:', getErrorMessage(e));
+    logger.error('[MCP Memory] cachePreferences error:', getErrorMessage(e));
     return false;
   }
 }
@@ -117,7 +118,7 @@ export async function getPreferences(tenantId: string, userId: string): Promise<
     const s = await client.get(prefsKey(tenantId, userId));
     return s ? JSON.parse(s) : null;
   } catch (e: unknown) {
-    console.error('[MCP Memory] getPreferences error:', getErrorMessage(e));
+    logger.error('[MCP Memory] getPreferences error:', getErrorMessage(e));
     return null;
   }
 }
@@ -128,7 +129,7 @@ export async function deletePreferences(tenantId: string, userId: string): Promi
     await client.del(prefsKey(tenantId, userId));
     return true;
   } catch (e: unknown) {
-    console.error('[MCP Memory] deletePreferences error:', getErrorMessage(e));
+    logger.error('[MCP Memory] deletePreferences error:', getErrorMessage(e));
     return false;
   }
 }
@@ -140,7 +141,7 @@ export async function saveNavigation(tenantId: string, userId: string, nav: any,
     await client.setEx(navKey(tenantId, userId), ttlSeconds, JSON.stringify(nav));
     return true;
   } catch (e: unknown) {
-    console.error('[MCP Memory] saveNavigation error:', getErrorMessage(e));
+    logger.error('[MCP Memory] saveNavigation error:', getErrorMessage(e));
     return false;
   }
 }
@@ -151,7 +152,7 @@ export async function getNavigation(tenantId: string, userId: string): Promise<a
     const s = await client.get(navKey(tenantId, userId));
     return s ? JSON.parse(s) : null;
   } catch (e: unknown) {
-    console.error('[MCP Memory] getNavigation error:', getErrorMessage(e));
+    logger.error('[MCP Memory] getNavigation error:', getErrorMessage(e));
     return null;
   }
 }

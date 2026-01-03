@@ -10,6 +10,7 @@ import {
 } from "../middleware/validateTenant.js";
 import { tenantScopedId } from "../middleware/tenantScopedId.js";
 import { cacheList, invalidateCache } from "../lib/cacheMiddleware.js";
+import logger from '../lib/logger.js';
 
 export default function createConstructionAssignmentsRoutes(_pgPool) {
   const router = express.Router();
@@ -87,7 +88,7 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
       const { data, error, count } = await q;
 
       if (error) {
-        console.error("[construction-assignments] GET error:", error);
+        logger.error("[construction-assignments] GET error:", error);
         return res.status(500).json({ status: "error", message: error.message });
       }
 
@@ -99,7 +100,7 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
         },
       });
     } catch (err) {
-      console.error("[construction-assignments] GET exception:", err);
+      logger.error("[construction-assignments] GET exception:", err);
       res.status(500).json({ status: "error", message: err.message });
     }
   });
@@ -133,13 +134,13 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
         if (error.code === "PGRST116") {
           return res.status(404).json({ status: "error", message: "Assignment not found" });
         }
-        console.error("[construction-assignments] GET/:id error:", error);
+        logger.error("[construction-assignments] GET/:id error:", error);
         return res.status(500).json({ status: "error", message: error.message });
       }
 
       res.json({ status: "success", data });
     } catch (err) {
-      console.error("[construction-assignments] GET/:id exception:", err);
+      logger.error("[construction-assignments] GET/:id exception:", err);
       res.status(500).json({ status: "error", message: err.message });
     }
   });
@@ -216,7 +217,7 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
             message: "This worker is already assigned to this project in the same role",
           });
         }
-        console.error("[construction-assignments] POST error:", error);
+        logger.error("[construction-assignments] POST error:", error);
         return res.status(500).json({ status: "error", message: error.message });
       }
 
@@ -225,7 +226,7 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
         const { invalidateCacheByKey } = await import("../lib/cacheMiddleware.js");
         invalidateCacheByKey("construction_projects");
       } catch (cacheErr) {
-        console.warn("[construction-assignments] Could not invalidate projects cache:", cacheErr.message);
+        logger.warn("[construction-assignments] Could not invalidate projects cache:", cacheErr.message);
       }
 
       res.status(201).json({
@@ -234,7 +235,7 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
         data,
       });
     } catch (err) {
-      console.error("[construction-assignments] POST exception:", err);
+      logger.error("[construction-assignments] POST exception:", err);
       res.status(500).json({ status: "error", message: err.message });
     }
   });
@@ -300,7 +301,7 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
             message: "This worker is already assigned to this project in the same role",
           });
         }
-        console.error("[construction-assignments] PUT error:", error);
+        logger.error("[construction-assignments] PUT error:", error);
         return res.status(500).json({ status: "error", message: error.message });
       }
 
@@ -310,7 +311,7 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
         data,
       });
     } catch (err) {
-      console.error("[construction-assignments] PUT exception:", err);
+      logger.error("[construction-assignments] PUT exception:", err);
       res.status(500).json({ status: "error", message: err.message });
     }
   });
@@ -336,7 +337,7 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
         .maybeSingle();
 
       if (error) {
-        console.error("[construction-assignments] DELETE error:", error);
+        logger.error("[construction-assignments] DELETE error:", error);
         return res.status(500).json({ status: "error", message: error.message });
       }
 
@@ -349,7 +350,7 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
         const { invalidateCacheByKey } = await import("../lib/cacheMiddleware.js");
         invalidateCacheByKey("construction_projects");
       } catch (cacheErr) {
-        console.warn("[construction-assignments] Could not invalidate projects cache:", cacheErr.message);
+        logger.warn("[construction-assignments] Could not invalidate projects cache:", cacheErr.message);
       }
 
       res.json({
@@ -358,7 +359,7 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
         data: { id: data.id },
       });
     } catch (err) {
-      console.error("[construction-assignments] DELETE exception:", err);
+      logger.error("[construction-assignments] DELETE exception:", err);
       res.status(500).json({ status: "error", message: err.message });
     }
   });
@@ -389,7 +390,7 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
         .order("role", { ascending: true });
 
       if (error) {
-        console.error("[construction-assignments] GET by-project error:", error);
+        logger.error("[construction-assignments] GET by-project error:", error);
         return res.status(500).json({ status: "error", message: error.message });
       }
 
@@ -401,7 +402,7 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
         },
       });
     } catch (err) {
-      console.error("[construction-assignments] GET by-project exception:", err);
+      logger.error("[construction-assignments] GET by-project exception:", err);
       res.status(500).json({ status: "error", message: err.message });
     }
   });
@@ -434,7 +435,7 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
         .order("start_date", { ascending: false });
 
       if (error) {
-        console.error("[construction-assignments] GET by-worker error:", error);
+        logger.error("[construction-assignments] GET by-worker error:", error);
         return res.status(500).json({ status: "error", message: error.message });
       }
 
@@ -446,7 +447,7 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
         },
       });
     } catch (err) {
-      console.error("[construction-assignments] GET by-worker exception:", err);
+      logger.error("[construction-assignments] GET by-worker exception:", err);
       res.status(500).json({ status: "error", message: err.message });
     }
   });

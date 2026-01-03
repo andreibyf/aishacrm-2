@@ -5,6 +5,7 @@
 
 import express from 'express';
 import { executeChain, listChains, validateChain, TOOL_CHAINS, TOOL_ACCESS_TOKEN } from '../lib/braidIntegration-v2.js';
+import logger from '../lib/logger.js';
 
 const router = express.Router();
 
@@ -23,7 +24,7 @@ router.get('/', async (req, res) => {
       count: chains.length
     });
   } catch (error) {
-    console.error('[Braid Chain API] List error:', error.message);
+    logger.error('[Braid Chain API] List error:', error.message);
     res.status(500).json({
       success: false,
       error: 'Failed to list chains',
@@ -72,7 +73,7 @@ router.get('/:chainName', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('[Braid Chain API] Get chain error:', error.message);
+    logger.error('[Braid Chain API] Get chain error:', error.message);
     res.status(500).json({
       success: false,
       error: 'Failed to get chain details',
@@ -100,7 +101,7 @@ router.post('/:chainName/validate', async (req, res) => {
       stepCount: validation.steps?.length || 0
     });
   } catch (error) {
-    console.error('[Braid Chain API] Validate error:', error.message);
+    logger.error('[Braid Chain API] Validate error:', error.message);
     res.status(500).json({
       success: false,
       error: 'Validation failed',
@@ -136,7 +137,7 @@ router.post('/:chainName/execute', async (req, res) => {
       tenant_id: req.tenant.id
     };
 
-    console.log(`[Braid Chain API] Executing '${chainName}'`, {
+    logger.debug(`[Braid Chain API] Executing '${chainName}'`, {
       tenantId: req.tenant.id,
       userId: req.user.id,
       dryRun: options.dryRun || false
@@ -168,7 +169,7 @@ router.post('/:chainName/execute', async (req, res) => {
       ...result
     });
   } catch (error) {
-    console.error('[Braid Chain API] Execute error:', error.message, error.stack);
+    logger.error('[Braid Chain API] Execute error:', error.message, error.stack);
     res.status(500).json({
       success: false,
       error: 'ChainExecutionError',
@@ -217,7 +218,7 @@ router.post('/:chainName/dry-run', async (req, res) => {
       ...result
     });
   } catch (error) {
-    console.error('[Braid Chain API] Dry-run error:', error.message);
+    logger.error('[Braid Chain API] Dry-run error:', error.message);
     res.status(500).json({
       success: false,
       error: 'DryRunError',

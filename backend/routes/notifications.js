@@ -1,5 +1,6 @@
 import express from 'express';
 import { cacheList } from '../lib/cacheMiddleware.js';
+import logger from '../lib/logger.js';
 
 export default function createNotificationRoutes(_pgPool) {
   const router = express.Router();
@@ -103,7 +104,7 @@ export default function createNotificationRoutes(_pgPool) {
         }
       });
     } catch (error) {
-      console.error('Error fetching notifications:', error);
+      logger.error('Error fetching notifications:', error);
       res.status(500).json({
         status: 'error',
         message: error.message
@@ -189,7 +190,7 @@ export default function createNotificationRoutes(_pgPool) {
         data: notification
       });
     } catch (error) {
-      console.error('Error creating notification:', error);
+      logger.error('Error creating notification:', error);
       res.status(500).json({
         status: 'error',
         message: error.message
@@ -283,7 +284,7 @@ export default function createNotificationRoutes(_pgPool) {
         data: updatedNotification
       });
     } catch (error) {
-      console.error('Error updating notification:', error);
+      logger.error('Error updating notification:', error);
       res.status(500).json({
         status: 'error',
         message: error.message

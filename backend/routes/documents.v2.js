@@ -12,6 +12,7 @@ import express from 'express';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
+import logger from '../lib/logger.js';
 
 export default function createDocumentV2Routes(_pgPool) {
   const router = express.Router();
@@ -122,7 +123,7 @@ export default function createDocumentV2Routes(_pgPool) {
         processingTime,
       };
     } catch (error) {
-      console.error('[documents.v2] AI context error:', error.message);
+      logger.error('[documents.v2] AI context error:', error.message);
       return {
         confidence: 0,
         suggestions: [],
@@ -328,7 +329,7 @@ export default function createDocumentV2Routes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error('Error in v2 documents list:', error);
+      logger.error('Error in v2 documents list:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -373,7 +374,7 @@ export default function createDocumentV2Routes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error('Error in v2 document get:', error);
+      logger.error('Error in v2 document get:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -436,7 +437,7 @@ export default function createDocumentV2Routes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error('Error in v2 document create:', error);
+      logger.error('Error in v2 document create:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -492,7 +493,7 @@ export default function createDocumentV2Routes(_pgPool) {
         data: { document: data },
       });
     } catch (error) {
-      console.error('Error in v2 document update:', error);
+      logger.error('Error in v2 document update:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -533,7 +534,7 @@ export default function createDocumentV2Routes(_pgPool) {
         message: 'Document deleted successfully',
       });
     } catch (error) {
-      console.error('Error in v2 document delete:', error);
+      logger.error('Error in v2 document delete:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -587,7 +588,7 @@ export default function createDocumentV2Routes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error('Error in v2 document analyze:', error);
+      logger.error('Error in v2 document analyze:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

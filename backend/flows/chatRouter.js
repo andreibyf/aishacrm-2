@@ -8,6 +8,7 @@
 import { routerGuard } from '../middleware/routerGuard.js';
 import { initializeNewGoalFlow } from './initializeNewGoalFlow.js';
 import { continueGoalFlow } from './continueGoalFlow.js';
+import logger from '../lib/logger.js';
 
 /**
  * @typedef {Object} ChatRouterResult
@@ -84,7 +85,7 @@ export async function routeChat({ conversationId, tenantId, userText }) {
       }
     }
   } catch (error) {
-    console.error('[ChatRouter] Error routing message:', error.message);
+    logger.error('[ChatRouter] Error routing message:', error.message);
     
     // On error, fall through to normal chat
     return {

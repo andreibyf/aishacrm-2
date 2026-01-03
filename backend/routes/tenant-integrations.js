@@ -1,5 +1,6 @@
 import express from 'express';
 import { validateTenantScopedId } from '../lib/validation.js';
+import logger from '../lib/logger.js';
 
 export default function createTenantIntegrationRoutes(pool) {
   const router = express.Router();
@@ -32,7 +33,7 @@ export default function createTenantIntegrationRoutes(pool) {
       const result = await pool.query(query, params);
       res.json({ status: 'success', data: { tenantintegrations: result.rows } });
     } catch (error) {
-      console.error('Error fetching tenant integrations:', error);
+      logger.error('Error fetching tenant integrations:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -61,7 +62,7 @@ export default function createTenantIntegrationRoutes(pool) {
 
       res.json({ status: 'success', data: result.rows[0] });
     } catch (error) {
-      console.error('Error fetching tenant integration:', error);
+      logger.error('Error fetching tenant integration:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -88,7 +89,7 @@ export default function createTenantIntegrationRoutes(pool) {
       
       res.status(201).json({ status: 'success', data: result.rows[0] });
     } catch (error) {
-      console.error('Error creating tenant integration:', error);
+      logger.error('Error creating tenant integration:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -147,7 +148,7 @@ export default function createTenantIntegrationRoutes(pool) {
       
       res.json({ status: 'success', data: result.rows[0] });
     } catch (error) {
-      console.error('Error updating tenant integration:', error);
+      logger.error('Error updating tenant integration:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -171,7 +172,7 @@ export default function createTenantIntegrationRoutes(pool) {
       
       res.json({ status: 'success', data: result.rows[0] });
     } catch (error) {
-      console.error('Error deleting tenant integration:', error);
+      logger.error('Error deleting tenant integration:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

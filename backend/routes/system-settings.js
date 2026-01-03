@@ -4,6 +4,7 @@
  */
 
 import express from 'express';
+import logger from '../lib/logger.js';
 
 export default function createSystemSettingsRoutes(_pgPool) {
   const router = express.Router();
@@ -22,7 +23,7 @@ export default function createSystemSettingsRoutes(_pgPool) {
 
       // Ignore table-not-found errors (Postgres: 42P01, Supabase PostgREST: PGRST204/PGRST205)
       if (error && error.code !== '42P01' && error.code !== 'PGRST204' && error.code !== 'PGRST205') {
-        console.error('[System Settings] Supabase query error:', error);
+        logger.error('[System Settings] Supabase query error:', error);
         throw new Error(error.message);
       }
 
@@ -39,8 +40,8 @@ export default function createSystemSettingsRoutes(_pgPool) {
         }
       });
     } catch (error) {
-      console.error('[System Settings] Route error:', error.message);
-      console.error('[System Settings] Stack:', error.stack);
+      logger.error('[System Settings] Route error:', error.message);
+      logger.error('[System Settings] Stack:', error.stack);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

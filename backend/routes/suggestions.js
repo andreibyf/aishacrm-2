@@ -14,6 +14,7 @@ import express from 'express';
 import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
 import { triggerForTenant } from '../lib/aiTriggersWorker.js';
 import { executeBraidTool } from '../lib/braidIntegration-v2.js';
+import logger from '../lib/logger.js';
 
 export default function createSuggestionsRoutes(pgPool) {
   const router = express.Router();
@@ -128,7 +129,7 @@ export default function createSuggestionsRoutes(pgPool) {
         }
       });
     } catch (error) {
-      console.error('[Suggestions] Error listing suggestions:', error);
+      logger.error('[Suggestions] Error listing suggestions:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -202,7 +203,7 @@ export default function createSuggestionsRoutes(pgPool) {
         data: { stats }
       });
     } catch (error) {
-      console.error('[Suggestions] Error getting stats:', error);
+      logger.error('[Suggestions] Error getting stats:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -227,7 +228,7 @@ export default function createSuggestionsRoutes(pgPool) {
         return res.status(404).json({ status: 'error', message: 'Tenant not found' });
       }
 
-      console.log(`[Suggestions] Manual trigger requested for tenant ${resolved.slug}`);
+      logger.debug(`[Suggestions] Manual trigger requested for tenant ${resolved.slug}`);
 
       const result = await triggerForTenant(pgPool, resolved.uuid);
 
@@ -237,7 +238,7 @@ export default function createSuggestionsRoutes(pgPool) {
         message: `Trigger completed. ${result.triggers_detected} new triggers detected.`,
       });
     } catch (error) {
-      console.error('[Suggestions] Error triggering suggestions:', error);
+      logger.error('[Suggestions] Error triggering suggestions:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -321,7 +322,7 @@ export default function createSuggestionsRoutes(pgPool) {
         },
       });
     } catch (error) {
-      console.error('[Suggestions] Error getting metrics:', error);
+      logger.error('[Suggestions] Error getting metrics:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -352,7 +353,7 @@ export default function createSuggestionsRoutes(pgPool) {
         [resolved.uuid, bucket_size]
       );
 
-      console.log(`[Suggestions] Aggregated metrics for tenant ${resolved.slug}: ${result.rows[0].rows_updated} rows`);
+      logger.debug(`[Suggestions] Aggregated metrics for tenant ${resolved.slug}: ${result.rows[0].rows_updated} rows`);
 
       res.json({
         status: 'success',
@@ -360,7 +361,7 @@ export default function createSuggestionsRoutes(pgPool) {
         message: 'Metrics aggregated',
       });
     } catch (error) {
-      console.error('[Suggestions] Error aggregating metrics:', error);
+      logger.error('[Suggestions] Error aggregating metrics:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -420,7 +421,7 @@ export default function createSuggestionsRoutes(pgPool) {
         }
       });
     } catch (error) {
-      console.error('[Suggestions] Error getting suggestion:', error);
+      logger.error('[Suggestions] Error getting suggestion:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -509,7 +510,7 @@ export default function createSuggestionsRoutes(pgPool) {
         });
       }
 
-      console.log(`[Suggestions] Approved suggestion ${id} by user ${userId}`);
+      logger.debug(`[Suggestions] Approved suggestion ${id} by user ${userId}`);
 
       res.json({
         status: 'success',
@@ -517,7 +518,7 @@ export default function createSuggestionsRoutes(pgPool) {
         message: 'Suggestion approved. Use /apply to execute.',
       });
     } catch (error) {
-      console.error('[Suggestions] Error approving suggestion:', error);
+      logger.error('[Suggestions] Error approving suggestion:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -616,7 +617,7 @@ export default function createSuggestionsRoutes(pgPool) {
         });
       }
 
-      console.log(`[Suggestions] Rejected suggestion ${id} by user ${userId}`);
+      logger.debug(`[Suggestions] Rejected suggestion ${id} by user ${userId}`);
 
       res.json({
         status: 'success',
@@ -624,7 +625,7 @@ export default function createSuggestionsRoutes(pgPool) {
         message: 'Suggestion rejected.',
       })
     } catch (error) {
-      console.error('[Suggestions] Error rejecting suggestion:', error);
+      logger.error('[Suggestions] Error rejecting suggestion:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -698,7 +699,7 @@ export default function createSuggestionsRoutes(pgPool) {
       }
 
       // Safe Apply Engine - Execute the action via Braid
-      console.log(`[Suggestions] Applying suggestion ${id}: ${action.tool_name}`, {
+      logger.debug(`[Suggestions] Applying suggestion ${id}: ${action.tool_name}`, {
         user: userEmail,
         tenant: resolved.uuid,
         args: action.tool_args,
@@ -761,7 +762,7 @@ export default function createSuggestionsRoutes(pgPool) {
       ]);
 
       if (applySuccess) {
-        console.log(`[Suggestions] Successfully applied suggestion ${id}`);
+        logger.debug(`[Suggestions] Successfully applied suggestion ${id}`);
         res.json({
           status: 'success',
           data: updateResult.rows[0],
@@ -769,7 +770,7 @@ export default function createSuggestionsRoutes(pgPool) {
           message: 'Suggestion applied successfully.',
         });
       } else {
-        console.error(`[Suggestions] Failed to apply suggestion ${id}:`, applyResult);
+        logger.error(`[Suggestions] Failed to apply suggestion ${id}:`, applyResult);
         res.status(500).json({
           status: 'error',
           message: 'Failed to apply suggestion',
@@ -778,7 +779,7 @@ export default function createSuggestionsRoutes(pgPool) {
         });
       }
     } catch (error) {
-      console.error('[Suggestions] Error applying suggestion:', error);
+      logger.error('[Suggestions] Error applying suggestion:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -876,7 +877,7 @@ export default function createSuggestionsRoutes(pgPool) {
         userId,
       ]);
 
-      console.log(`[Suggestions] Feedback recorded for ${id}: rating=${rating}, outcome=${outcome_positive}`);
+      logger.debug(`[Suggestions] Feedback recorded for ${id}: rating=${rating}, outcome=${outcome_positive}`);
 
       res.json({
         status: 'success',
@@ -884,7 +885,7 @@ export default function createSuggestionsRoutes(pgPool) {
         message: 'Feedback recorded',
       });
     } catch (error) {
-      console.error('[Suggestions] Error recording feedback:', error);
+      logger.error('[Suggestions] Error recording feedback:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

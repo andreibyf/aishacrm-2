@@ -21,6 +21,7 @@
 
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { initMemoryClient, getMemoryClient } from '../lib/memoryClient.js';
+import logger from '../lib/logger.js';
 
 // In-memory tracking for rate limiting and pattern detection
 const suspiciousActivityTracker = new Map();
@@ -48,17 +49,17 @@ async function initRedisClient() {
         const ip = key.replace('idr:blocked:', '');
         blockedIPs.add(ip);
       }
-      console.log(`[IDR] Loaded ${keys.length} blocked IPs from Redis`);
+      logger.debug(`[IDR] Loaded ${keys.length} blocked IPs from Redis`);
     }
   } catch (error) {
-    console.warn('[IDR] Redis client unavailable, using in-memory only:', error.message);
+    logger.warn('[IDR] Redis client unavailable, using in-memory only:', error.message);
   }
 
   return redisClient;
 }
 
 // Initialize Redis on module load (non-blocking, runs in background)
-initRedisClient().catch(e => console.warn('[IDR] Redis init deferred:', e.message));
+initRedisClient().catch(e => logger.warn('[IDR] Redis init deferred:', e.message));
 
 // IP Whitelist - Trusted IPs that bypass ALL IDR checks
 // Add your admin/trusted IPs here to prevent lockouts
@@ -137,7 +138,7 @@ function ipMatchesCIDR(ip, cidr) {
       return ipv4MatchesCIDR(ip, range, prefix);
     }
   } catch (e) {
-    console.warn(`[IDR] Invalid CIDR notation: ${cidr}`, e.message);
+    logger.warn(`[IDR] Invalid CIDR notation: ${cidr}`, e.message);
     return false;
   }
 }
@@ -250,13 +251,13 @@ async function logSecurityEvent(
     }
 
     // Also log to console for immediate visibility
-    console.error(`[IDR ${severity.toUpperCase()}] ${message}`, {
+    logger.error(`[IDR ${severity.toUpperCase()}] ${message}`, {
       user_id,
       ip_address,
       violation_type,
     });
   } catch (error) {
-    console.error('Failed to log security event:', error);
+    logger.error('Failed to log security event:', error);
   }
 }
 
@@ -276,7 +277,7 @@ async function isIPBlocked(ip) {
         return true;
       }
     } catch (error) {
-      console.warn('[IDR] Redis check failed, falling back to in-memory:', error.message);
+      logger.warn('[IDR] Redis check failed, falling back to in-memory:', error.message);
     }
   }
 
@@ -303,9 +304,9 @@ async function blockIP(ip, durationMs = IDR_CONFIG.BLOCK_DURATION_MS) {
         'PX', // millisecond precision
         durationMs
       );
-      console.log(`[IDR] IP blocked in Redis: ${ip} (expires in ${durationMs}ms)`);
+      logger.debug(`[IDR] IP blocked in Redis: ${ip} (expires in ${durationMs}ms)`);
     } catch (error) {
-      console.error('[IDR] Failed to persist IP block to Redis:', error.message);
+      logger.error('[IDR] Failed to persist IP block to Redis:', error.message);
     }
   }
 
@@ -313,7 +314,7 @@ async function blockIP(ip, durationMs = IDR_CONFIG.BLOCK_DURATION_MS) {
   setTimeout(async () => {
     blockedIPs.delete(ip);
     // Redis will auto-expire via TTL, but clean up in-memory
-    console.log(`[IDR] IP unblocked: ${ip}`);
+    logger.debug(`[IDR] IP unblocked: ${ip}`);
   }, durationMs);
 }
 
@@ -411,7 +412,7 @@ export async function intrusionDetection(req, res, next) {
   const IDR_DEBUG = process.env.IDR_DEBUG === 'true';
   if (IDR_DEBUG) {
     const remote = req.connection?.remoteAddress || '';
-    console.log('[IDR][DEBUG] IP resolution', {
+    logger.debug('[IDR][DEBUG] IP resolution', {
       cfConnectingIp: cfIp || null,
       xForwardedFor: xff || null,
       expressIp: req.ip || null,
@@ -601,7 +602,7 @@ export async function intrusionDetection(req, res, next) {
     const limit = parseInt(req.query.limit) || 0;
     if (limit > IDR_CONFIG.SUSPICIOUS_PATTERNS.BULK_DATA_EXTRACTION) {
       // Log as warning, not security alert (intent-based, not result-based)
-      console.warn(`[IDR] High limit requested: ${limit} (threshold: ${IDR_CONFIG.SUSPICIOUS_PATTERNS.BULK_DATA_EXTRACTION})`);
+      logger.warn(`[IDR] High limit requested: ${limit} (threshold: ${IDR_CONFIG.SUSPICIOUS_PATTERNS.BULK_DATA_EXTRACTION})`);
 
       await logSecurityEvent(supabase, {
         tenant_id: user?.tenant_id,
@@ -625,7 +626,7 @@ export async function intrusionDetection(req, res, next) {
       // Escalate to temporary IP block ONLY for extreme values
       if (limit >= IDR_CONFIG.BULK_BLOCK_THRESHOLD) {
         // Block for 1 hour for severe extraction attempts
-        blockIP(ip, 60 * 60 * 1000).catch(e => console.error('[IDR] Failed to block IP:', e));
+        blockIP(ip, 60 * 60 * 1000).catch(e => logger.error('[IDR] Failed to block IP:', e));
 
         return res.status(400).json({
           status: 'error',
@@ -669,7 +670,7 @@ export async function intrusionDetection(req, res, next) {
           });
 
           // Block IP (fire-and-forget, don't await in sync function)
-          blockIP(ip, 5 * 60 * 1000).catch(e => console.error('[IDR] Failed to block IP:', e)); // 5 minute block
+          blockIP(ip, 5 * 60 * 1000).catch(e => logger.error('[IDR] Failed to block IP:', e)); // 5 minute block
         }
 
         trackActivity(activityKey, 'FAILED_REQUEST', {
@@ -683,7 +684,7 @@ export async function intrusionDetection(req, res, next) {
 
     next();
   } catch (error) {
-    console.error('[IDR] Error in intrusion detection middleware:', error);
+    logger.error('[IDR] Error in intrusion detection middleware:', error);
     // Don't block request if IDR fails
     next();
   }
@@ -727,7 +728,7 @@ export async function getSecurityStatus() {
         redis_available: true
       };
     } catch (error) {
-      console.warn('[IDR] Failed to get Redis status:', error.message);
+      logger.warn('[IDR] Failed to get Redis status:', error.message);
     }
   }
 
@@ -745,7 +746,7 @@ export async function getSecurityStatus() {
  */
 export async function manuallyBlockIP(ip, durationMs = IDR_CONFIG.BLOCK_DURATION_MS) {
   await blockIP(ip, durationMs);
-  console.log(`[IDR] IP manually blocked: ${ip} for ${durationMs}ms`);
+  logger.debug(`[IDR] IP manually blocked: ${ip} for ${durationMs}ms`);
 }
 
 /**
@@ -758,13 +759,13 @@ export async function unblockIP(ip) {
   if (redisClient) {
     try {
       await redisClient.del(`idr:blocked:${ip}`);
-      console.log(`[IDR] IP manually unblocked from Redis: ${ip}`);
+      logger.debug(`[IDR] IP manually unblocked from Redis: ${ip}`);
     } catch (error) {
-      console.error('[IDR] Failed to unblock IP in Redis:', error.message);
+      logger.error('[IDR] Failed to unblock IP in Redis:', error.message);
     }
   }
 
-  console.log(`[IDR] IP manually unblocked: ${ip}`);
+  logger.debug(`[IDR] IP manually unblocked: ${ip}`);
 }
 
 /**
@@ -774,7 +775,7 @@ export function clearTrackingData() {
   suspiciousActivityTracker.clear();
   blockedIPs.clear();
   alertedUsers.clear();
-  console.log('[IDR] All tracking data cleared');
+  logger.debug('[IDR] All tracking data cleared');
 }
 
 export default {

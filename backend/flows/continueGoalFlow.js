@@ -8,6 +8,7 @@
 import { setActiveGoal, clearActiveGoal } from '../state/goalStore.js';
 import { findLeadByName } from '../services/leadLookup.js';
 import { extractDateTime } from './initializeNewGoalFlow.js';
+import logger from '../lib/logger.js';
 
 /**
  * Classify user response type
@@ -69,7 +70,7 @@ async function executeGoal(goal) {
         
         // Here we would integrate with the actual calendar/activity creation
         // For now, log and return success
-        console.log('[ContinueGoalFlow] Executing schedule_call:', {
+        logger.debug('[ContinueGoalFlow] Executing schedule_call:', {
           leadId: lead.id,
           leadName: lead.name,
           scheduledTime: dateTime.timestamp,
@@ -85,7 +86,7 @@ async function executeGoal(goal) {
       case 'send_email': {
         const lead = extractedData.lead;
         
-        console.log('[ContinueGoalFlow] Executing send_email:', {
+        logger.debug('[ContinueGoalFlow] Executing send_email:', {
           leadId: lead?.id,
           content: extractedData.emailContent || extractedData.rawText?.slice(0, 100),
           tenantId,
@@ -101,7 +102,7 @@ async function executeGoal(goal) {
         const lead = extractedData.lead;
         const dateTime = extractedData.dateTime;
         
-        console.log('[ContinueGoalFlow] Executing book_meeting:', {
+        logger.debug('[ContinueGoalFlow] Executing book_meeting:', {
           leadId: lead?.id,
           scheduledTime: dateTime?.timestamp,
           tenantId,
@@ -114,7 +115,7 @@ async function executeGoal(goal) {
       }
       
       case 'create_reminder': {
-        console.log('[ContinueGoalFlow] Executing create_reminder:', {
+        logger.debug('[ContinueGoalFlow] Executing create_reminder:', {
           tenantId,
           content: extractedData.rawText,
         });
@@ -132,7 +133,7 @@ async function executeGoal(goal) {
         };
     }
   } catch (error) {
-    console.error('[ContinueGoalFlow] Execution error:', error.message);
+    logger.error('[ContinueGoalFlow] Execution error:', error.message);
     return {
       success: false,
       message: 'An error occurred while executing the task. Please try again.',
@@ -320,7 +321,7 @@ export async function continueGoalFlow({ conversationId, tenantId, userText, act
       }
     }
   } catch (error) {
-    console.error('[ContinueGoalFlow] Error:', error.message);
+    logger.error('[ContinueGoalFlow] Error:', error.message);
     return {
       success: false,
       message: 'I encountered an error processing your response. Please try again.',

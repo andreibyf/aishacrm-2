@@ -6,6 +6,7 @@
 import dotenv from 'dotenv';
 import nodemailer from 'nodemailer';
 import { pool as pgPool } from '../lib/supabase-db.js';
+import logger from '../lib/logger.js';
 
 // Load environment (.env.local first, then .env)
 dotenv.config({ path: '.env.local' });
@@ -13,14 +14,14 @@ dotenv.config();
 
 // Database connection via Supabase pool wrapper (replaces direct pg.Pool)
 if (!pgPool) {
-  console.error('[EmailWorker] No database configured (ensure Supabase client is initialized)');
+  logger.error('[EmailWorker] No database configured (ensure Supabase client is initialized)');
 }
 
 // SMTP transporter
 let transporter = null;
 function ensureTransporter() {
   if (!process.env.SMTP_HOST) {
-    console.warn('[EmailWorker] SMTP_HOST is not configured; skipping email send');
+    logger.warn('[EmailWorker] SMTP_HOST is not configured; skipping email send');
     transporter = null;
     return null;
   }
@@ -83,7 +84,7 @@ async function postStatusWebhook(payload) {
       body: JSON.stringify(payload),
     });
   } catch (e) {
-    console.warn('[EmailWorker] Status webhook failed:', e?.message);
+    logger.warn('[EmailWorker] Status webhook failed:', e?.message);
   }
 }
 
@@ -95,7 +96,7 @@ async function createNotification({ tenant_id, title, message, type = 'info', us
       [tenant_id, user_email, title, message, type, false]
     );
   } catch (e) {
-    console.warn('[EmailWorker] Failed to create notification:', e?.message);
+    logger.warn('[EmailWorker] Failed to create notification:', e?.message);
   }
 }
 
@@ -117,7 +118,7 @@ async function processActivity(activity) {
   if (!toValue) {
     const failedMeta = { ...meta, delivery: { error: 'Missing recipient', failed_at: new Date().toISOString() } };
     await markActivity(activity.id, 'failed', failedMeta);
-    console.warn('[EmailWorker] Skipping email activity due to missing recipient', activity.id);
+    logger.warn('[EmailWorker] Skipping email activity due to missing recipient', activity.id);
     return;
   }
 
@@ -147,7 +148,7 @@ async function processActivity(activity) {
       }
     };
     await markActivity(activity.id, 'sent', sentMeta);
-    console.log('[EmailWorker] Sent email activity', activity.id, info?.messageId);
+    logger.debug('[EmailWorker] Sent email activity', activity.id, info?.messageId);
     await postStatusWebhook({ event: 'email.sent', activity_id: activity.id, tenant_id: activity.tenant_id, to: toList, subject, messageId: info?.messageId });
   } catch (err) {
     const prevAttempts = (meta.delivery && meta.delivery.attempts) ? parseInt(meta.delivery.attempts) : 0;
@@ -164,12 +165,12 @@ async function processActivity(activity) {
       delivery.next_attempt_at = computeNextAttempt(attempts);
       const queuedMeta = { ...meta, delivery };
       await markActivity(activity.id, 'queued', queuedMeta);
-      console.warn('[EmailWorker] Email send failed, will retry', { activity_id: activity.id, attempts, next_attempt_at: delivery.next_attempt_at });
+      logger.warn('[EmailWorker] Email send failed, will retry', { activity_id: activity.id, attempts, next_attempt_at: delivery.next_attempt_at });
       await postStatusWebhook({ event: 'email.retry_scheduled', activity_id: activity.id, tenant_id: activity.tenant_id, attempts, next_attempt_at: delivery.next_attempt_at, error: err.message });
     } else {
       const failedMeta = { ...meta, delivery: { ...delivery, failed_at: new Date().toISOString() } };
       await markActivity(activity.id, 'failed', failedMeta);
-      console.error('[EmailWorker] Failed to send email activity (max attempts reached)', activity.id, err.message);
+      logger.error('[EmailWorker] Failed to send email activity (max attempts reached)', activity.id, err.message);
       await postStatusWebhook({ event: 'email.failed', activity_id: activity.id, tenant_id: activity.tenant_id, attempts, error: err.message });
       await createNotification({
         tenant_id: activity.tenant_id,
@@ -189,23 +190,23 @@ async function loop() {
       await processActivity(row);
     }
   } catch (err) {
-    console.error('[EmailWorker] Loop error:', err.message);
+    logger.error('[EmailWorker] Loop error:', err.message);
   } finally {
     setTimeout(loop, POLL_INTERVAL_MS);
   }
 }
 
-console.log('[EmailWorker] Starting email worker...');
+logger.debug('[EmailWorker] Starting email worker...');
 loop();
 
 process.on('SIGTERM', async () => {
-  console.log('[EmailWorker] SIGTERM received, shutting down...');
+  logger.debug('[EmailWorker] SIGTERM received, shutting down...');
   try {
     if (pgPool) {
       await pgPool.end();
     }
   } catch (e) {
-    console.warn('[EmailWorker] Error during pool shutdown:', e?.message);
+    logger.warn('[EmailWorker] Error during pool shutdown:', e?.message);
   }
   process.exit(0);
 });

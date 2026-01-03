@@ -8,6 +8,7 @@
 import express from 'express';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { clearAiSettingsCache } from '../lib/aiSettingsLoader.js';
+import logger from '../lib/logger.js';
 
 const router = express.Router();
 
@@ -34,7 +35,7 @@ router.get('/', async (req, res) => {
     const { data, error } = await query;
     
     if (error) {
-      console.error('[ai-settings] List error:', error);
+      logger.error('[ai-settings] List error:', error);
       return res.status(500).json({ error: error.message });
     }
     
@@ -53,7 +54,7 @@ router.get('/', async (req, res) => {
       agent_roles: [...new Set((data || []).map(s => s.agent_role))],
     });
   } catch (err) {
-    console.error('[ai-settings] List error:', err);
+    logger.error('[ai-settings] List error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -154,7 +155,7 @@ router.put('/:id', async (req, res) => {
       .single();
     
     if (error) {
-      console.error('[ai-settings] Update error:', error);
+      logger.error('[ai-settings] Update error:', error);
       return res.status(500).json({ error: error.message });
     }
     
@@ -167,7 +168,7 @@ router.put('/:id', async (req, res) => {
       message: `Updated ${existing.display_name || existing.setting_key}`,
     });
   } catch (err) {
-    console.error('[ai-settings] Update error:', err);
+    logger.error('[ai-settings] Update error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -194,7 +195,7 @@ router.post('/reset', async (req, res) => {
     const { error: deleteError } = await deleteQuery;
     
     if (deleteError) {
-      console.error('[ai-settings] Reset delete error:', deleteError);
+      logger.error('[ai-settings] Reset delete error:', deleteError);
       return res.status(500).json({ error: deleteError.message });
     }
     
@@ -207,7 +208,7 @@ router.post('/reset', async (req, res) => {
       message: 'Settings reset. Please run migration 106_ai_settings.sql to re-seed defaults.',
     });
   } catch (err) {
-    console.error('[ai-settings] Reset error:', err);
+    logger.error('[ai-settings] Reset error:', err);
     res.status(500).json({ error: err.message });
   }
 });

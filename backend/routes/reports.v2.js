@@ -11,6 +11,7 @@
 
 import { Router } from 'express';
 import { getSupabaseClient } from '../lib/supabase-db.js';
+import logger from '../lib/logger.js';
 
 const ENABLE_AI_ENRICHMENT = process.env.AI_ENRICHMENT_ENABLED !== 'false';
 const SLOW_THRESHOLD_MS = parseInt(process.env.AI_CONTEXT_SLOW_THRESHOLD_MS || '500', 10);
@@ -24,7 +25,7 @@ const v2BundleCache = new Map();
  */
 function warnIfSlow(operation, processingTime) {
   if (processingTime > SLOW_THRESHOLD_MS) {
-    console.warn(`[reports.v2] SLOW: ${operation} took ${processingTime}ms (threshold: ${SLOW_THRESHOLD_MS}ms)`);
+    logger.warn(`[reports.v2] SLOW: ${operation} took ${processingTime}ms (threshold: ${SLOW_THRESHOLD_MS}ms)`);
   }
 }
 
@@ -374,7 +375,7 @@ async function buildDashboardAiContext(stats, tenant_id) {
       processingTime,
     };
   } catch (error) {
-    console.error('[reports.v2] AI context error:', error.message);
+    logger.error('[reports.v2] AI context error:', error.message);
     return createStubAiContext(startTime, error.message);
   }
 }
@@ -396,7 +397,7 @@ async function safeCount(_, table, tenant_id, filterFn, opts = {}) {
     if (error) throw error;
     return count ?? 0;
   } catch (err) {
-    console.error(`[reports.v2] safeCount error for ${table}:`, err.message);
+    logger.error(`[reports.v2] safeCount error for ${table}:`, err.message);
     return 0;
   }
 }
@@ -620,7 +621,7 @@ export default function createReportsV2Router(_pgPool) {
       
       // Debug: log if we have opportunities but no pipeline value
       if (allOpportunities.length > 0 && pipelineValue === 0) {
-        console.warn('[reports.v2] WARNING: Opportunities found but pipelineValue=0', {
+        logger.warn('[reports.v2] WARNING: Opportunities found but pipelineValue=0', {
           tenantId: tenant_id,
           opportunitiesCount: allOpportunities.length,
           sample: allOpportunities.slice(0, 2),
@@ -669,7 +670,7 @@ export default function createReportsV2Router(_pgPool) {
       
       res.json({ status: 'success', data: bundle, cached: false });
     } catch (error) {
-      console.error('[reports.v2] dashboard-bundle error:', error);
+      logger.error('[reports.v2] dashboard-bundle error:', error);
       res.status(500).json({
         status: 'error',
         message: error.message,
@@ -818,7 +819,7 @@ export default function createReportsV2Router(_pgPool) {
       
       res.json(response);
     } catch (error) {
-      console.error('[reports.v2] health-summary error:', error);
+      logger.error('[reports.v2] health-summary error:', error);
       res.status(500).json({
         status: 'error',
         message: error.message,
@@ -868,7 +869,7 @@ export default function createReportsV2Router(_pgPool) {
         data: { cleared: true, remaining: v2BundleCache.size },
       });
     } catch (error) {
-      console.error('[reports.v2] clear-cache error:', error);
+      logger.error('[reports.v2] clear-cache error:', error);
       res.status(500).json({
         status: 'error',
         message: error.message,

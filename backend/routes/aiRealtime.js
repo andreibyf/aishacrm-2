@@ -2,6 +2,7 @@ import express from 'express';
 import { BRAID_SYSTEM_PROMPT, generateToolSchemas } from '../lib/braidIntegration-v2.js';
 import { resolveLLMApiKey } from '../lib/aiEngine/index.js';
 import { fetchEntityLabels, generateEntityLabelPrompt, updateToolSchemasWithLabels } from '../lib/entityLabelInjector.js';
+import logger from '../lib/logger.js';
 
 const REALTIME_URL = 'https://api.openai.com/v1/realtime/client_secrets';
 const DEFAULT_REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview-2024-12-17';
@@ -105,7 +106,7 @@ const logRealtimeSystemEvent = async (pgPool, { level = 'INFO', tenantId, messag
     );
   } catch (error) {
     if (process.env.NODE_ENV !== 'production') {
-      console.error('[AI][Realtime] Failed to log system event', error?.message);
+      logger.error('[AI][Realtime] Failed to log system event', error?.message);
     }
   }
 };
@@ -136,7 +137,7 @@ export default function createAiRealtimeRoutes(pgPool) {
       }
       return true;
     } catch (error) {
-      console.error('[AI][Realtime] Module lookup failed', {
+      logger.error('[AI][Realtime] Module lookup failed', {
         message: error?.message,
         tenantId: normalizedTenantId || 'unknown',
       });
@@ -170,13 +171,13 @@ export default function createAiRealtimeRoutes(pgPool) {
         tenantSlugOrId: tenantId,
       });
       if (!apiKey) {
-        console.error('[AI][Realtime] No API key available for minting realtime token');
+        logger.error('[AI][Realtime] No API key available for minting realtime token');
         return res.status(500).json({ status: 'error', message: 'Realtime voice is not configured' });
       }
 
       const moduleEnabled = await isRealtimeModuleEnabled(tenantId);
       if (!moduleEnabled) {
-        console.warn('[AI][Realtime] Token request blocked by module settings', {
+        logger.warn('[AI][Realtime] Token request blocked by module settings', {
           tenantId: tenantId || 'unknown',
           userId: req.user?.id || 'anonymous',
         });
@@ -214,9 +215,9 @@ export default function createAiRealtimeRoutes(pgPool) {
       // Generate and filter tools for Realtime Voice
       try {
         const allTools = await generateToolSchemas();
-        console.log(`[AI][Realtime] generateToolSchemas returned ${allTools?.length || 0} tools`);
+        logger.debug(`[AI][Realtime] generateToolSchemas returned ${allTools?.length || 0} tools`);
         const safeTools = filterRealtimeTools(allTools || []);
-        console.log(`[AI][Realtime] After filtering: ${safeTools.length} safe tools`);
+        logger.debug(`[AI][Realtime] After filtering: ${safeTools.length} safe tools`);
         if (safeTools.length > 0) {
           // Update tool descriptions with entity labels
           const labeledTools = updateToolSchemasWithLabels(safeTools, entityLabels);
@@ -228,15 +229,15 @@ export default function createAiRealtimeRoutes(pgPool) {
             parameters: tool.function?.parameters || tool.parameters || { type: 'object', properties: {} }
           }));
           sessionPayload.session.tool_choice = 'auto';
-          console.log(`[AI][Realtime] Added ${labeledTools.length} tools with entity labels to session payload`);
-          console.log(`[AI][Realtime] Tool names:`, labeledTools.slice(0, 5).map(t => t.function?.name || t.name));
+          logger.debug(`[AI][Realtime] Added ${labeledTools.length} tools with entity labels to session payload`);
+          logger.debug(`[AI][Realtime] Tool names:`, labeledTools.slice(0, 5).map(t => t.function?.name || t.name));
         }
       } catch (toolError) {
-        console.warn('[AI][Realtime] Failed to generate tool schemas, proceeding without tools:', toolError?.message);
-        console.error('[AI][Realtime] Tool error stack:', toolError?.stack);
+        logger.warn('[AI][Realtime] Failed to generate tool schemas, proceeding without tools:', toolError?.message);
+        logger.error('[AI][Realtime] Tool error stack:', toolError?.stack);
       }
 
-      console.log('[AI][Realtime] Session payload (truncated):', JSON.stringify(sessionPayload).substring(0, 1000));
+      logger.debug('[AI][Realtime] Session payload (truncated):', JSON.stringify(sessionPayload).substring(0, 1000));
 
       const response = await fetch(REALTIME_URL, {
         method: 'POST',
@@ -249,7 +250,7 @@ export default function createAiRealtimeRoutes(pgPool) {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('[AI][Realtime] Failed to mint token', {
+        logger.error('[AI][Realtime] Failed to mint token', {
           status: response.status,
           body: errorText,
           tenantId: tenantId || 'unknown',
@@ -272,11 +273,11 @@ export default function createAiRealtimeRoutes(pgPool) {
       }
 
       const payload = await response.json();
-      console.log('[AI][Realtime] OpenAI response payload keys:', Object.keys(payload));
-      console.log('[AI][Realtime] OpenAI response:', JSON.stringify(payload).substring(0, 500));
+      logger.debug('[AI][Realtime] OpenAI response payload keys:', Object.keys(payload));
+      logger.debug('[AI][Realtime] OpenAI response:', JSON.stringify(payload).substring(0, 500));
       
       const secret = extractClientSecret(payload);
-      console.log('[AI][Realtime] Extracted secret:', { 
+      logger.debug('[AI][Realtime] Extracted secret:', { 
         hasValue: !!secret.value, 
         valueLength: secret.value?.length,
         valuePreview: secret.value?.substring(0, 30),
@@ -284,7 +285,7 @@ export default function createAiRealtimeRoutes(pgPool) {
       });
 
       if (!secret.value) {
-        console.error('[AI][Realtime] Token response missing value', payload);
+        logger.error('[AI][Realtime] Token response missing value', payload);
         await logRealtimeSystemEvent(pgPool, {
           tenantId,
           level: 'ERROR',
@@ -297,7 +298,7 @@ export default function createAiRealtimeRoutes(pgPool) {
         return res.status(502).json({ status: 'error', message: 'Realtime service returned invalid token' });
       }
 
-      console.info('[AI][Realtime] Token minted', {
+      logger.info('[AI][Realtime] Token minted', {
         tenantId: tenantId || 'unknown',
         userId: req.user?.id || 'anonymous',
         durationMs: Date.now() - startedAt,
@@ -319,7 +320,7 @@ export default function createAiRealtimeRoutes(pgPool) {
         expires_at: secret.expires_at,
       });
     } catch (error) {
-      console.error('[AI][Realtime] Error minting token', {
+      logger.error('[AI][Realtime] Error minting token', {
         message: error?.message,
       });
       await logRealtimeSystemEvent(pgPool, {

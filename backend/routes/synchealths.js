@@ -6,6 +6,7 @@
 import express from "express";
 import { validateTenantAccess } from "../middleware/validateTenant.js";
 import { cacheList } from '../lib/cacheMiddleware.js';
+import logger from '../lib/logger.js';
 
 export default function createSyncHealthRoutes(_pgPool) {
     const router = express.Router();
@@ -44,7 +45,7 @@ export default function createSyncHealthRoutes(_pgPool) {
                 data: { synchealths: data || [], total: count || 0 }
             });
         } catch (error) {
-            console.error("Error fetching sync health records:", error);
+            logger.error("Error fetching sync health records:", error);
             res.status(500).json({ status: 'error', message: error.message });
         }
     });
@@ -66,7 +67,7 @@ export default function createSyncHealthRoutes(_pgPool) {
             }
             res.json({ status: 'success', data });
         } catch (error) {
-            console.error("Error fetching sync health record:", error);
+            logger.error("Error fetching sync health record:", error);
             res.status(500).json({ status: 'error', message: error.message });
         }
     });
@@ -100,7 +101,7 @@ export default function createSyncHealthRoutes(_pgPool) {
             if (error) throw new Error(error.message);
             res.status(201).json({ status: 'success', data });
         } catch (error) {
-            console.error("Error creating sync health record:", error);
+            logger.error("Error creating sync health record:", error);
             res.status(500).json({ status: 'error', message: error.message });
         }
     });
@@ -134,7 +135,7 @@ export default function createSyncHealthRoutes(_pgPool) {
             }
             res.json({ status: 'success', data });
         } catch (error) {
-            console.error("Error updating sync health record:", error);
+            logger.error("Error updating sync health record:", error);
             res.status(500).json({ status: 'error', message: error.message });
         }
     });
@@ -157,7 +158,7 @@ export default function createSyncHealthRoutes(_pgPool) {
             }
             res.json({ status: 'success', message: "SyncHealth record deleted", id, data });
         } catch (error) {
-            console.error("Error deleting sync health record:", error);
+            logger.error("Error deleting sync health record:", error);
             res.status(500).json({ status: 'error', message: error.message });
         }
     });

@@ -7,6 +7,7 @@ import express from 'express';
 import fetch from 'node-fetch';
 import crypto from 'crypto';
 import fs from 'fs';
+import logger from '../lib/logger.js';
 
 const router = express.Router();
 
@@ -24,7 +25,7 @@ async function getRedisClient() {
     redisClient = getCacheClient();
     return redisClient;
   } catch (error) {
-    console.warn('[GitHub Issues] Redis unavailable, idempotency disabled:', error.message);
+    logger.warn('[GitHub Issues] Redis unavailable, idempotency disabled:', error.message);
     return null;
   }
 }
@@ -37,7 +38,7 @@ const GITHUB_REPO_NAME = process.env.REPO_NAME || process.env.GITHUB_REPO_NAME |
 const GITHUB_API_BASE = 'https://api.github.com';
 
 // Log config on startup (without exposing token)
-console.log('[GitHub Issues] Configuration:', {
+logger.debug('[GitHub Issues] Configuration:', {
   hasToken: !!GITHUB_TOKEN,
   tokenLength: GITHUB_TOKEN.length,
   owner: GITHUB_REPO_OWNER,
@@ -108,7 +109,7 @@ async function checkIdempotency(idempotencyKey) {
     }
     return { suppressed: false };
   } catch (error) {
-    console.warn('[GitHub Issues] Idempotency check failed:', error.message);
+    logger.warn('[GitHub Issues] Idempotency check failed:', error.message);
     return { suppressed: false }; // Fail open
   }
 }
@@ -128,7 +129,7 @@ async function recordIssueCreation(idempotencyKey, issueData) {
     });
     await redis.set(idempotencyKey, data, 'PX', IDEMPOTENCY_TTL);
   } catch (error) {
-    console.error('[GitHub Issues] Failed to record issue creation:', error.message);
+    logger.error('[GitHub Issues] Failed to record issue creation:', error.message);
   }
 }
 
@@ -154,7 +155,7 @@ async function retryWithBackoff(fn, maxRetries = MAX_RETRIES) {
         const jitter = Math.random() * delay * 0.3; // 30% jitter
         const totalDelay = delay + jitter;
         
-        console.log(`[GitHub Issues] Retry ${attempt + 1}/${maxRetries} after ${Math.round(totalDelay)}ms (error: ${error.message})`);
+        logger.debug(`[GitHub Issues] Retry ${attempt + 1}/${maxRetries} after ${Math.round(totalDelay)}ms (error: ${error.message})`);
         await new Promise(resolve => setTimeout(resolve, totalDelay));
       }
     }
@@ -215,11 +216,11 @@ router.post('/create-health-issue', async (req, res) => {
     try {
       idempotencyCheck = await checkIdempotency(idempotencyKey);
     } catch (idempErr) {
-      console.warn('[GitHub Issues] Idempotency check failed (non-blocking):', idempErr.message);
+      logger.warn('[GitHub Issues] Idempotency check failed (non-blocking):', idempErr.message);
       idempotencyCheck = { suppressed: false };
     }
     if (idempotencyCheck.suppressed) {
-      console.log('[GitHub Issues] Suppressed duplicate issue:', {
+      logger.debug('[GitHub Issues] Suppressed duplicate issue:', {
         idempotencyKey,
         existingIssue: idempotencyCheck.existingIssue,
         createdAt: idempotencyCheck.createdAt
@@ -266,7 +267,7 @@ router.post('/create-health-issue', async (req, res) => {
       ...(assignee && { assignees: [assignee] })
     };
 
-    console.log('[GitHub Issues] Creating issue:', {
+    logger.debug('[GitHub Issues] Creating issue:', {
       title: issuePayload.title,
       labels,
       assignee,
@@ -302,7 +303,7 @@ router.post('/create-health-issue', async (req, res) => {
 
           return await response.json();
         } catch (fetchErr) {
-          console.error('[GitHub Issues] Fetch/parse error during GitHub API call:', {
+          logger.error('[GitHub Issues] Fetch/parse error during GitHub API call:', {
             message: fetchErr.message,
             status: fetchErr.status,
             details: fetchErr.details,
@@ -313,7 +314,7 @@ router.post('/create-health-issue', async (req, res) => {
         }
       });
     } catch (retryErr) {
-      console.error('[GitHub Issues] GitHub API call failed after all retries:', {
+      logger.error('[GitHub Issues] GitHub API call failed after all retries:', {
         message: retryErr.message,
         status: retryErr.status,
         details: retryErr.details,
@@ -323,13 +324,13 @@ router.post('/create-health-issue', async (req, res) => {
       throw retryErr;
     }
 
-    console.log('[GitHub Issues] Issue created:', issue.html_url);
+    logger.debug('[GitHub Issues] Issue created:', issue.html_url);
 
     // Record issue creation for idempotency (non-blocking, catch errors)
     try {
       await recordIssueCreation(idempotencyKey, issue);
     } catch (recordErr) {
-      console.warn('[GitHub Issues] Failed to record issue to Redis (non-blocking):', {
+      logger.warn('[GitHub Issues] Failed to record issue to Redis (non-blocking):', {
         message: recordErr.message,
         stack: recordErr.stack,
         issueNumber: issue.number,
@@ -356,7 +357,7 @@ router.post('/create-health-issue', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('[GitHub Issues] CRITICAL - Error creating issue:', {
+    logger.error('[GitHub Issues] CRITICAL - Error creating issue:', {
       message: error.message,
       status: error.status,
       details: error.details,
@@ -446,7 +447,7 @@ ${additionalContext ? `\n**Additional Context:**\n${additionalContext}` : ''}
     });
 
   } catch (error) {
-    console.error('[GitHub Issues] Error assigning Copilot:', error);
+    logger.error('[GitHub Issues] Error assigning Copilot:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to assign Copilot',
@@ -557,10 +558,10 @@ async function triggerCopilotReview(issueNumber) {
   try {
     // This would trigger a GitHub Actions workflow that assigns Copilot
     // For now, just log the intent
-    console.log(`[GitHub Issues] Would trigger Copilot review for issue #${issueNumber}`);
+    logger.debug(`[GitHub Issues] Would trigger Copilot review for issue #${issueNumber}`);
     // Future: Implement workflow_dispatch API call
   } catch (error) {
-    console.error('[GitHub Issues] Error triggering Copilot review:', error);
+    logger.error('[GitHub Issues] Error triggering Copilot review:', error);
   }
 }
 

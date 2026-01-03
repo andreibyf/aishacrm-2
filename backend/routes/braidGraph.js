@@ -8,6 +8,7 @@
  */
 
 import express from 'express';
+import logger from '../lib/logger.js';
 import {
   TOOL_CATEGORIES,
   TOOL_GRAPH,
@@ -66,7 +67,7 @@ router.get('/', (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('[Braid Graph] Error:', error);
+    logger.error('[Braid Graph] Error:', error);
     res.status(500).json({ error: 'Failed to fetch tool graph', details: error.message });
   }
 });
@@ -108,7 +109,7 @@ router.get('/categories', (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('[Braid Graph] Categories error:', error);
+    logger.error('[Braid Graph] Categories error:', error);
     res.status(500).json({ error: 'Failed to fetch categories', details: error.message });
   }
 });
@@ -153,7 +154,7 @@ router.get('/tool/:toolName', (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('[Braid Graph] Tool info error:', error);
+    logger.error('[Braid Graph] Tool info error:', error);
     res.status(500).json({ error: 'Failed to fetch tool info', details: error.message });
   }
 });
@@ -187,7 +188,7 @@ router.get('/tool/:toolName/impact', (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('[Braid Graph] Impact analysis error:', error);
+    logger.error('[Braid Graph] Impact analysis error:', error);
     res.status(500).json({ error: 'Failed to analyze tool impact', details: error.message });
   }
 });
@@ -214,7 +215,7 @@ router.get('/dependencies/:toolName', (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('[Braid Graph] Dependencies error:', error);
+    logger.error('[Braid Graph] Dependencies error:', error);
     res.status(500).json({ error: 'Failed to fetch dependencies', details: error.message });
   }
 });
@@ -241,7 +242,7 @@ router.get('/dependents/:toolName', (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('[Braid Graph] Dependents error:', error);
+    logger.error('[Braid Graph] Dependents error:', error);
     res.status(500).json({ error: 'Failed to fetch dependents', details: error.message });
   }
 });
@@ -297,7 +298,7 @@ router.get('/validate', (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('[Braid Graph] Validate error:', error);
+    logger.error('[Braid Graph] Validate error:', error);
     res.status(500).json({ error: 'Failed to validate graph', details: error.message });
   }
 });
@@ -364,7 +365,7 @@ router.get('/path/:from/:to', (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('[Braid Graph] Path error:', error);
+    logger.error('[Braid Graph] Path error:', error);
     res.status(500).json({ error: 'Failed to find path', details: error.message });
   }
 });
@@ -405,7 +406,7 @@ router.get('/effects/:effect', (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('[Braid Graph] Effects error:', error);
+    logger.error('[Braid Graph] Effects error:', error);
     res.status(500).json({ error: 'Failed to fetch tools by effect', details: error.message });
   }
 });

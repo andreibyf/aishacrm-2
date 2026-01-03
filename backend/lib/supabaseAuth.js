@@ -4,6 +4,7 @@
  */
 
 import { getSupabaseAdmin } from "./supabaseFactory.js";
+import logger from './logger.js';
 
 let supabaseAdmin = null;
 
@@ -15,17 +16,13 @@ export function initSupabaseAuth() {
   try {
     supabaseAdmin = getSupabaseAdmin({ throwOnMissing: false });
     if (!supabaseAdmin) {
-      console.warn(
-        "⚠ Supabase Auth not configured - set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY",
-      );
+      logger.warn('⚠ Supabase Auth not configured - set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
       return null;
     }
-    console.log("✓ Supabase Auth initialized");
+    logger.info('✓ Supabase Auth initialized');
     return supabaseAdmin;
   } catch (error) {
-    console.warn(
-      "⚠ Supabase Auth not configured - set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY",
-    );
+    logger.warn('⚠ Supabase Auth not configured - set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
     return null;
   }
 }
@@ -56,14 +53,14 @@ export async function createAuthUser(email, password, metadata = {}) {
     });
 
     if (error) {
-      console.error("[Supabase Auth] Error creating user:", error);
+      logger.error({ err: error, email }, '[Supabase Auth] Error creating user');
       return { user: null, error };
     }
 
-    console.log(`✓ Created auth user: ${email}`);
+    logger.info({ email }, '✓ Created auth user');
     return { user: data.user, error: null };
   } catch (error) {
-    console.error("[Supabase Auth] Exception creating user:", error);
+    logger.error({ err: error, email }, '[Supabase Auth] Exception creating user');
     return { user: null, error };
   }
 }
@@ -88,14 +85,14 @@ export async function updateAuthUserPassword(userId, newPassword) {
     );
 
     if (error) {
-      console.error("[Supabase Auth] Error updating password:", error);
+      logger.error({ err: error, userId }, '[Supabase Auth] Error updating password');
       return { user: null, error };
     }
 
-    console.log(`✓ Updated password for user: ${userId}`);
+    logger.info({ userId }, '✓ Updated password for user');
     return { user: data.user, error: null };
   } catch (error) {
-    console.error("[Supabase Auth] Exception updating password:", error);
+    logger.error({ err: error, userId }, '[Supabase Auth] Exception updating password');
     return { user: null, error };
   }
 }
@@ -122,7 +119,7 @@ export async function sendPasswordResetEmail(email, redirectTo) {
       resetRedirectUrl = `${process.env.FRONTEND_URL}/auth/reset`;
     } else if (process.env.NODE_ENV === 'development') {
       resetRedirectUrl = 'http://localhost:4000/auth/reset';
-      console.warn('⚠️  FRONTEND_URL not set, using dev default: http://localhost:4000/auth/reset');
+      logger.warn('⚠️  FRONTEND_URL not set, using dev default: http://localhost:4000/auth/reset');
     } else {
       throw new Error('FRONTEND_URL environment variable is required for password reset in production');
     }
@@ -135,14 +132,14 @@ export async function sendPasswordResetEmail(email, redirectTo) {
     );
 
     if (error) {
-      console.error("[Supabase Auth] Error sending reset email:", error);
+      logger.error({ err: error, email }, '[Supabase Auth] Error sending reset email');
       return { data: null, error };
     }
 
-    console.log(`✓ Sent password reset email to: ${email}`);
+    logger.info({ email }, '✓ Sent password reset email');
     return { data, error: null };
   } catch (error) {
-    console.error("[Supabase Auth] Exception sending reset email:", error);
+    logger.error({ err: error, email }, '[Supabase Auth] Exception sending reset email');
     return { data: null, error };
   }
 }
@@ -165,7 +162,7 @@ export async function inviteUserByEmail(email, metadata = {}) {
       inviteRedirectTo = `${process.env.FRONTEND_URL}/accept-invite`;
     } else if (process.env.NODE_ENV === 'development') {
       inviteRedirectTo = 'http://localhost:4000/accept-invite';
-      console.warn('⚠️  FRONTEND_URL not set, using dev default: http://localhost:4000');
+      logger.warn('⚠️  FRONTEND_URL not set, using dev default: http://localhost:4000');
     } else {
       throw new Error('FRONTEND_URL environment variable is required for user invitations in production');
     }
@@ -182,19 +179,16 @@ export async function inviteUserByEmail(email, metadata = {}) {
     );
 
     if (error) {
-      console.error("[Supabase Auth] Error inviting user:", error);
+      logger.error({ err: error, email }, '[Supabase Auth] Error inviting user');
       return { user: null, error };
     }
 
-    console.log(`✓ User created and invitation queued for: ${email}`);
-    console.log(`  → Auth User ID: ${data.user?.id}`);
-    console.log(`  → Email will be sent via configured SMTP`);
-    console.log(
-      `  → Check Supabase Dashboard → Auth → Logs to verify delivery`,
-    );
+    logger.info({ email, authUserId: data.user?.id }, '✓ User created and invitation queued');
+    logger.info('  → Email will be sent via configured SMTP');
+    logger.info('  → Check Supabase Dashboard → Auth → Logs to verify delivery');
     return { user: data.user, error: null };
   } catch (error) {
-    console.error("[Supabase Auth] Exception inviting user:", error);
+    logger.error({ err: error, email }, '[Supabase Auth] Exception inviting user');
     return { user: null, error };
   }
 }
@@ -213,14 +207,14 @@ export async function deleteAuthUser(userId) {
     const { data, error } = await supabaseAdmin.auth.admin.deleteUser(userId);
 
     if (error) {
-      console.error("[Supabase Auth] Error deleting user:", error);
+      logger.error({ err: error, userId }, '[Supabase Auth] Error deleting user');
       return { data: null, error };
     }
 
-    console.log(`✓ Deleted auth user: ${userId}`);
+    logger.info({ userId }, '✓ Deleted auth user');
     return { data, error: null };
   } catch (error) {
-    console.error("[Supabase Auth] Exception deleting user:", error);
+    logger.error({ err: error, userId }, '[Supabase Auth] Exception deleting user');
     return { data: null, error };
   }
 }
@@ -239,14 +233,14 @@ export async function getAuthUserByEmail(email) {
     const { data, error } = await supabaseAdmin.auth.admin.listUsers();
 
     if (error) {
-      console.error("[Supabase Auth] Error listing users:", error);
+      logger.error({ err: error, email }, '[Supabase Auth] Error listing users');
       return { user: null, error };
     }
 
     const user = data.users.find((u) => u.email === email);
     return { user: user || null, error: null };
   } catch (error) {
-    console.error("[Supabase Auth] Exception getting user:", error);
+    logger.error({ err: error, email }, '[Supabase Auth] Exception getting user');
     return { user: null, error };
   }
 }
@@ -271,14 +265,14 @@ export async function updateAuthUserMetadata(userId, metadata) {
     );
 
     if (error) {
-      console.error("[Supabase Auth] Error updating metadata:", error);
+      logger.error({ err: error, userId }, '[Supabase Auth] Error updating metadata');
       return { user: null, error };
     }
 
-    console.log(`✓ Updated metadata for user: ${userId}`);
+    logger.info({ userId }, '✓ Updated metadata for user');
     return { user: data.user, error: null };
   } catch (error) {
-    console.error("[Supabase Auth] Exception updating metadata:", error);
+    logger.error({ err: error, userId }, '[Supabase Auth] Exception updating metadata');
     return { user: null, error };
   }
 }
@@ -302,14 +296,14 @@ export async function confirmUserEmail(userId) {
     );
 
     if (error) {
-      console.error("[Supabase Auth] Error confirming email:", error);
+      logger.error({ err: error, userId }, '[Supabase Auth] Error confirming email');
       return { user: null, error };
     }
 
-    console.log(`✓ Email confirmed for user: ${userId}`);
+    logger.info({ userId }, '✓ Email confirmed for user');
     return { user: data.user, error: null };
   } catch (error) {
-    console.error("[Supabase Auth] Exception confirming email:", error);
+    logger.error({ err: error, userId }, '[Supabase Auth] Exception confirming email');
     return { user: null, error };
   }
 }
@@ -335,7 +329,7 @@ export async function generateRecoveryLink(email, redirectTo) {
       resetRedirectUrl = `${process.env.FRONTEND_URL}/auth/reset`;
     } else if (process.env.NODE_ENV === 'development') {
       resetRedirectUrl = 'http://localhost:4000/auth/reset';
-      console.warn('⚠️  FRONTEND_URL not set; using dev default recovery redirect http://localhost:4000/auth/reset');
+      logger.warn('⚠️  FRONTEND_URL not set; using dev default recovery redirect http://localhost:4000/auth/reset');
     } else {
       throw new Error("FRONTEND_URL environment variable is required for recovery link generation in production");
     }
@@ -346,7 +340,7 @@ export async function generateRecoveryLink(email, redirectTo) {
       options: { redirectTo: resetRedirectUrl }
     });
     if (error) {
-      console.error("[Supabase Auth] generateLink error:", error);
+      logger.error({ err: error, email }, '[Supabase Auth] generateLink error');
       return { link: null, error };
     }
     const link = data?.properties?.action_link || null;
@@ -355,7 +349,7 @@ export async function generateRecoveryLink(email, redirectTo) {
     }
     return { link, error: null };
   } catch (e) {
-    console.error("[Supabase Auth] Exception generating recovery link:", e);
+    logger.error({ err: e, email }, '[Supabase Auth] Exception generating recovery link');
     return { link: null, error: { message: e.message } };
   }
 }

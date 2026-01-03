@@ -6,6 +6,7 @@
 import express from 'express';
 import { validateTenantScopedId } from '../lib/validation.js';
 import { cacheList } from '../lib/cacheMiddleware.js';
+import logger from '../lib/logger.js';
 
 export default function createNoteRoutes(_pgPool) {
   const router = express.Router();
@@ -82,7 +83,7 @@ export default function createNoteRoutes(_pgPool) {
 
       res.json({ status: 'success', data: { notes: data || [], total: count || 0 } });
     } catch (error) {
-      console.error('Error fetching notes:', error);
+      logger.error('Error fetching notes:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -227,13 +228,13 @@ export default function createNoteRoutes(_pgPool) {
             });
           })
           .catch(err => {
-            console.error('[NOTE_MEMORY_INGESTION] Failed:', err.message);
+            logger.error('[NOTE_MEMORY_INGESTION] Failed:', err.message);
           });
       }
       
       res.status(201).json({ status: 'success', message: 'Created', data: { note: data } });
     } catch (error) {
-      console.error('Error creating note:', error);
+      logger.error('Error creating note:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -337,7 +338,7 @@ export default function createNoteRoutes(_pgPool) {
             });
           })
           .catch(err => {
-            console.error('[NOTE_MEMORY_INGESTION] Failed:', err.message);
+            logger.error('[NOTE_MEMORY_INGESTION] Failed:', err.message);
           });
       }
       

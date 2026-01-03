@@ -6,6 +6,7 @@
 import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
+import logger from '../lib/logger.js';
 
 export default function createContactRoutes(_pgPool) {
   const router = express.Router();
@@ -290,7 +291,7 @@ export default function createContactRoutes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error('Error listing contacts:', error);
+      logger.error('Error listing contacts:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -363,7 +364,7 @@ export default function createContactRoutes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error('Error searching contacts:', error);
+      logger.error('Error searching contacts:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -470,7 +471,7 @@ export default function createContactRoutes(_pgPool) {
         data: { contact },
       });
     } catch (error) {
-      console.error('Error creating contact:', error);
+      logger.error('Error creating contact:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -564,7 +565,7 @@ export default function createContactRoutes(_pgPool) {
         data: contact,
       });
     } catch (error) {
-      console.error('Error fetching contact:', error);
+      logger.error('Error fetching contact:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -679,7 +680,7 @@ export default function createContactRoutes(_pgPool) {
         data: updatedContact,
       });
     } catch (error) {
-      console.error('Error updating contact:', error);
+      logger.error('Error updating contact:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -706,7 +707,7 @@ export default function createContactRoutes(_pgPool) {
         data: { id: data.id },
       });
     } catch (error) {
-      console.error('Error deleting contact:', error);
+      logger.error('Error deleting contact:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
