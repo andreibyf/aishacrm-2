@@ -36,7 +36,7 @@ import { useConfirmDialog } from "../components/shared/ConfirmDialog";
 import StatusHelper from "../components/shared/StatusHelper";
 import { createPageUrl } from "@/utils";
 import { Link } from "react-router-dom";
-import { getCurrentTimezoneOffset } from '../components/shared/timezoneUtils';
+import { getCurrentTimezoneOffset, formatActivityDateTime } from '../components/shared/timezoneUtils';
 import { useTimezone } from '../components/shared/TimezoneContext';
 import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
@@ -91,6 +91,7 @@ export default function ActivitiesPage() {
   const { selectedEmail } = useEmployeeScope();
 
   const { selectedTimezone } = useTimezone();
+  const offsetMinutes = getCurrentTimezoneOffset(selectedTimezone);
 
   const [totalStats, setTotalStats] = useState({
     total: 0,
@@ -835,30 +836,10 @@ export default function ActivitiesPage() {
   }), []);
 
   const formatDisplayDate = useCallback((activity) => {
-    if (!activity.due_date) return '—';
-    
-    try {
-      if (activity.due_time) {
-        const datePart = activity.due_date.split('T')[0];
-        // Normalize time to HH:mm format
-        const parts = activity.due_time.split(':');
-        const hours = parseInt(parts[0], 10);
-        const minutes = parseInt(parts[1] || '0', 10);
-
-        // due_time is stored as LOCAL time, not UTC - just display it directly
-        const [year, month, day] = datePart.split('-').map(Number);
-        const localDate = new Date(year, month - 1, day, hours, minutes);
-        return format(localDate, 'MMM d, yyyy h:mm a');
-      } else {
-        const parts = activity.due_date.split('-').map(Number);
-        const localCalendarDate = new Date(parts[0], parts[1] - 1, parts[2]);
-        return format(localCalendarDate, 'MMM d, yyyy');
-      }
-    } catch (error) {
-      console.error('Error formatting date:', error, 'Activity:', activity);
-      return activity.due_date;
-    }
-  }, []);
+    if (!activity?.due_date) return '—';
+    const result = formatActivityDateTime(activity, offsetMinutes);
+    return result === 'Not set' ? '—' : result;
+  }, [offsetMinutes]);
 
   if (!user) {
     return (

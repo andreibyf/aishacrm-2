@@ -231,7 +231,12 @@ export default function EntityLabelsManager({ isTenantAdmin = false }) {
         )}
 
         {/* Labels Table */}
-        {loading ? (
+        {tenantsLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            <span className="ml-2 text-muted-foreground">Loading tenants...</span>
+          </div>
+        ) : loading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             <span className="ml-2 text-muted-foreground">Loading labels...</span>

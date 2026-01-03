@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 
-vi.mock('@/ai/engine/processChatCommand', () => ({
+vi.mock('@/api/functions', () => ({
   processChatCommand: vi.fn().mockResolvedValue({
     route: 'ai_chat',
     assistantMessage: { content: 'acknowledged' },
@@ -15,7 +15,8 @@ vi.mock('@/ai/engine/processChatCommand', () => ({
       matchedKeywords: [],
       parserResult: null
     }
-  })
+  }),
+  processDeveloperCommand: vi.fn()
 }));
 
 vi.mock('@/lib/suggestionEngine', () => ({
@@ -25,7 +26,7 @@ vi.mock('@/lib/suggestionEngine', () => ({
 }));
 
 import { AiSidebarProvider, useAiSidebarState } from '../useAiSidebarState.jsx';
-import { processChatCommand } from '@/ai/engine/processChatCommand';
+import { processChatCommand } from '@/api/functions';
 import { addHistoryEntry, getSuggestions } from '@/lib/suggestionEngine';
 
 beforeEach(() => {
