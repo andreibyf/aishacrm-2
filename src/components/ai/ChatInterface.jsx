@@ -60,6 +60,33 @@ export default function ChatInterface({ user }) {
     return false;
   };
 
+  // Helper to dispatch UI actions as custom events for AiShaActionHandler
+  const handleUIActions = (uiActions) => {
+    if (!Array.isArray(uiActions) || uiActions.length === 0) return;
+
+    for (const action of uiActions) {
+      try {
+        // Dispatch custom event that AiShaActionHandler will catch
+        const event = new CustomEvent('aisha:ai-local-action', {
+          detail: action,
+          bubbles: true,
+          cancelable: true
+        });
+        window.dispatchEvent(event);
+        
+        // Log for debugging
+        console.log('[ChatInterface] Dispatched UI action:', action);
+        
+        // Show user feedback for navigation actions
+        if (action.action === 'navigate' && action.message) {
+          toast.success(action.message);
+        }
+      } catch (err) {
+        console.error('[ChatInterface] Failed to dispatch UI action:', err, action);
+      }
+    }
+  };
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -108,7 +135,12 @@ export default function ChatInterface({ user }) {
             data_summary: data.data_summary
           }]);
 
-          // Check for navigation commands in tool interactions
+          // PRIORITY 1: Check for new ui_actions array (backend extracts actions from tool results)
+          if (data.ui_actions) {
+            handleUIActions(data.ui_actions);
+          }
+
+          // FALLBACK: Check for navigation commands in tool interactions (legacy pattern)
           if (data.tool_interactions) {
             handleNavigationFromToolResult(data.tool_interactions);
           }

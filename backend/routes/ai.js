@@ -3151,6 +3151,65 @@ ${conversationSummary}`;
       // Remove internal-only fields from tool interactions before returning to client
       const safeToolInteractions = toolInteractions.map(({ full_result, ...rest }) => rest);
 
+      // CRITICAL: Extract UI actions from tool results for frontend event dispatch
+      // This enables navigation, form opening, and other UI side effects
+      const uiActions = [];
+      for (const interaction of toolInteractions) {
+        try {
+          const resultObj = interaction.full_result;
+          const result = typeof resultObj === 'string' ? JSON.parse(resultObj) : resultObj;
+          
+          // Braid tools return Result<T, E> with {tag: "Ok", value: {...}} or {tag: "Err", error: "..."}
+          if (result?.tag === 'Ok' && result?.value) {
+            const value = result.value;
+            
+            // Check for navigation action: {action: "navigate", path, page, record_id, message}
+            if (value.action === 'navigate' && value.page) {
+              uiActions.push({
+                action: 'navigate',
+                path: value.path || `/${value.page}`,
+                page: value.page,
+                record_id: value.record_id || null,
+                message: value.message || `Navigating to ${value.page}`
+              });
+              logger.debug('[AI Chat] Extracted navigation action:', { page: value.page, path: value.path });
+            }
+            // Check for edit action: {action: "edit_record", entity_type, entity_id}
+            else if (value.action === 'edit_record' && value.entity_type && value.entity_id) {
+              uiActions.push({
+                action: 'edit_record',
+                entity_type: value.entity_type,
+                entity_id: value.entity_id,
+                message: value.message || `Opening ${value.entity_type} editor`
+              });
+              logger.debug('[AI Chat] Extracted edit action:', { entity_type: value.entity_type, entity_id: value.entity_id });
+            }
+            // Check for form action: {action: "open_form", form_type, prefill}
+            else if (value.action === 'open_form' && value.form_type) {
+              uiActions.push({
+                action: 'open_form',
+                form_type: value.form_type,
+                prefill: value.prefill || null,
+                message: value.message || `Opening ${value.form_type} form`
+              });
+              logger.debug('[AI Chat] Extracted form action:', { form_type: value.form_type });
+            }
+            // Check for refresh action: {action: "refresh_view", view_type}
+            else if (value.action === 'refresh_view' && value.view_type) {
+              uiActions.push({
+                action: 'refresh_view',
+                view_type: value.view_type,
+                message: value.message || `Refreshing ${value.view_type} view`
+              });
+              logger.debug('[AI Chat] Extracted refresh action:', { view_type: value.view_type });
+            }
+          }
+        } catch (parseErr) {
+          // Silently skip malformed tool results
+          logger.debug('[AI Chat] Failed to parse tool result for UI actions:', parseErr?.message);
+        }
+      }
+
       return res.json({
         status: 'success',
         response: finalContent,
@@ -3168,6 +3227,8 @@ ${conversationSummary}`;
         },
         // Include extracted entities for frontend session context tracking
         entities: extractedEntities.length > 0 ? extractedEntities : undefined,
+        // UI actions for frontend to dispatch as custom events
+        ui_actions: uiActions.length > 0 ? uiActions : undefined,
         data: {
           response: finalContent,
           usage: finalUsage,

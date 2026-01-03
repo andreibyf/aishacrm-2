@@ -340,6 +340,24 @@ export default function AIAssistantWidget({ user }) {
         
         logDev('🤖 Adding AI response to chat:', assistantMessage.content.substring(0, Math.min(assistantMessage.content.length, 100)) + '...');
         setMessages(prev => [...prev, assistantMessage]);
+
+        // Handle UI actions from backend (navigation, edit, etc.)
+        if (response.data.ui_actions && Array.isArray(response.data.ui_actions)) {
+          for (const action of response.data.ui_actions) {
+            try {
+              // Dispatch custom event for AiShaActionHandler
+              const event = new CustomEvent('aisha:ai-local-action', {
+                detail: action,
+                bubbles: true,
+                cancelable: true
+              });
+              window.dispatchEvent(event);
+              logDev('[AIAssistantWidget] Dispatched UI action:', action);
+            } catch (err) {
+              console.error('[AIAssistantWidget] Failed to dispatch UI action:', err, action);
+            }
+          }
+        }
         
         // Only speak if voice is still enabled
         if (voiceEnabled) {
