@@ -236,6 +236,7 @@ export default function BizDevSourcesPage() {
         status: "Archived",
         archived_at: new Date().toISOString(),
       });
+      clearCacheByKey('BizDevSource');
       toast.success("BizDev source archived");
       handleRefresh();
       if (selectedSource?.id === source.id) {
@@ -394,6 +395,7 @@ export default function BizDevSourcesPage() {
     // Refresh in background to sync with backend
     setTimeout(() => {
       clearCache();
+      clearCacheByKey('BizDevSource');
       loadSources();
     }, 500);
 
@@ -409,6 +411,7 @@ export default function BizDevSourcesPage() {
 
     try {
       await BizDevSource.delete(source.id);
+      clearCacheByKey('BizDevSource');
       toast.success('BizDev source deleted successfully');
       handleRefresh();
     } catch (error) {

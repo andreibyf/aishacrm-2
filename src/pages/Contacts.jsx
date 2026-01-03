@@ -532,34 +532,11 @@ export default function ContactsPage() {
       await Contact.delete(id);
       clearCacheByKey("Contact");
       
-      // Force reload with fresh data (bypass cache)
-      const scopedFilter = getTenantFilter();
-      const filterWithLimit = { ...scopedFilter, limit: 10000 };
-      const freshContacts = await Contact.filter(filterWithLimit);
-      
-      let filtered = freshContacts || [];
-      
-      // Apply client-side filters
-      if (statusFilter !== "all") {
-        filtered = filtered.filter((contact) => contact.status === statusFilter);
-      }
-      
-      if (selectedTags.length > 0) {
-        filtered = filtered.filter((contact) =>
-          Array.isArray(contact.tags) &&
-          selectedTags.every((tag) => contact.tags.includes(tag))
-        );
-      }
-      
-      filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-      setTotalItems(filtered.length);
-      
-      const startIndex = (currentPage - 1) * pageSize;
-      const endIndex = startIndex + pageSize;
-      const paginatedContacts = filtered.slice(startIndex, endIndex);
-      
-      setContacts(paginatedContacts);
-      await loadTotalStats();
+      // Reload data properly
+      await Promise.all([
+        loadContacts(),
+        loadTotalStats()
+      ]);
       
       toast.success("Contact deleted successfully");
       logger.info("Contact deleted successfully", "ContactsPage", {
@@ -622,34 +599,11 @@ export default function ContactsPage() {
     setSelectedContacts(new Set());
     clearCacheByKey("Contact");
     
-    // Force reload with fresh data (bypass cache)
-    const scopedFilter = getTenantFilter();
-    const filterWithLimit = { ...scopedFilter, limit: 10000 };
-    const freshContacts = await Contact.filter(filterWithLimit);
-    
-    let filtered = freshContacts || [];
-    
-    // Apply client-side filters
-    if (statusFilter !== "all") {
-      filtered = filtered.filter((contact) => contact.status === statusFilter);
-    }
-    
-    if (selectedTags.length > 0) {
-      filtered = filtered.filter((contact) =>
-        Array.isArray(contact.tags) &&
-        selectedTags.every((tag) => contact.tags.includes(tag))
-      );
-    }
-    
-    filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    setTotalItems(filtered.length);
-    
-    const startIndex = (currentPage - 1) * pageSize;
-    const endIndex = startIndex + pageSize;
-    const paginatedContacts = filtered.slice(startIndex, endIndex);
-    
-    setContacts(paginatedContacts);
-    await loadTotalStats();
+    // Reload data properly
+    await Promise.all([
+      loadContacts(),
+      loadTotalStats()
+    ]);
 
     if (successCount > 0) {
       toast.success(`Successfully deleted ${successCount} contact${successCount !== 1 ? 's' : ''}`);

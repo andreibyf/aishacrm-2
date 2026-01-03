@@ -181,7 +181,7 @@ export default function LeadsPage() {
   const [pageSize, setPageSize] = useState(25);
   const [totalItems, setTotalItems] = useState(0);
 
-  const { cachedRequest, clearCache } = useApiManager();
+  const { cachedRequest, clearCache, clearCacheByKey } = useApiManager();
   const { selectedEmail } = useEmployeeScope();
 
   // Ref to track if initial load is done
@@ -537,7 +537,7 @@ export default function LeadsPage() {
   // Clear cache when employee filter changes to force fresh data
   useEffect(() => {
     if (selectedEmail !== null) {
-      clearCache("Lead");
+      clearCache("Lead"); clearCacheByKey("Lead");
     }
   }, [selectedEmail, clearCache]);
 
@@ -617,7 +617,7 @@ export default function LeadsPage() {
       setCurrentPage(1);
 
       // Clear cache and reload BEFORE closing the dialog
-      clearCache("Lead");
+      clearCache("Lead"); clearCacheByKey("Lead");
 
       // Reload leads and stats
       await Promise.all([
@@ -655,7 +655,8 @@ export default function LeadsPage() {
         throw new Error('Cannot delete: tenant_id is not available');
       }
       await Lead.delete(id, { tenant_id: tenantId });
-      clearCache("Lead");
+      clearCache("Lead"); clearCacheByKey("Lead");
+      clearCacheByKey("Lead");
       
       // Force reload with fresh data (bypass cache)
       let currentFilter = getTenantFilter();
@@ -765,7 +766,7 @@ export default function LeadsPage() {
 
         setSelectedLeads(new Set());
         setSelectAllMode(false);
-        clearCache("Lead");
+        clearCache("Lead"); clearCacheByKey("Lead");
         await Promise.all([
           loadLeads(1, pageSize),
           loadTotalStats(),
@@ -810,7 +811,7 @@ export default function LeadsPage() {
         ).length;
         
         setSelectedLeads(new Set());
-        clearCache("Lead");
+        clearCache("Lead"); clearCacheByKey("Lead");
         
         // Force reload with fresh data (bypass cache)
         let currentFilter = getTenantFilter();
@@ -854,7 +855,8 @@ export default function LeadsPage() {
         console.error("Failed to delete leads:", error);
         toast.error("Failed to delete leads");
         setSelectedLeads(new Set());
-        clearCache("Lead");
+        clearCache("Lead"); clearCacheByKey("Lead");
+        clearCacheByKey("Lead");
         await loadLeads(currentPage, pageSize);
         await loadTotalStats();
       }
@@ -928,7 +930,7 @@ export default function LeadsPage() {
 
         setSelectedLeads(new Set());
         setSelectAllMode(false);
-        clearCache("Lead");
+        clearCache("Lead"); clearCacheByKey("Lead");
         await Promise.all([
           loadLeads(currentPage, pageSize),
           loadTotalStats(),
@@ -951,7 +953,7 @@ export default function LeadsPage() {
 
         await Promise.all(promises);
         setSelectedLeads(new Set());
-        clearCache("Lead");
+        clearCache("Lead"); clearCacheByKey("Lead");
         await Promise.all([
           loadLeads(currentPage, pageSize),
           loadTotalStats(),
@@ -1033,7 +1035,7 @@ export default function LeadsPage() {
 
         setSelectedLeads(new Set());
         setSelectAllMode(false);
-        clearCache("Lead");
+        clearCache("Lead"); clearCacheByKey("Lead");
         await Promise.all([
           loadLeads(currentPage, pageSize),
           loadTotalStats(),
@@ -1056,7 +1058,7 @@ export default function LeadsPage() {
 
         await Promise.all(promises);
         setSelectedLeads(new Set());
-        clearCache("Lead");
+        clearCache("Lead"); clearCacheByKey("Lead");
         await Promise.all([
           loadLeads(currentPage, pageSize),
           loadTotalStats(),
@@ -1127,7 +1129,7 @@ export default function LeadsPage() {
     setConvertingLead(null);
     
     // Clear cache and refresh in background - don't block UI
-    clearCache("Lead");
+    clearCache("Lead"); clearCacheByKey("Lead");
     clearCache("Contact");
     clearCache("Account");
     clearCache("Opportunity");
@@ -1137,7 +1139,7 @@ export default function LeadsPage() {
   };
 
   const handleRefresh = async () => {
-    clearCache("Lead");
+    clearCache("Lead"); clearCacheByKey("Lead");
     clearCache("Employee");
     clearCache("User");
     clearCache("Account");
@@ -1251,7 +1253,7 @@ export default function LeadsPage() {
             onOpenChange={setIsImportOpen}
             schema={Lead.schema ? Lead.schema() : null}
             onSuccess={async () => {
-              clearCache("Lead");
+              clearCache("Lead"); clearCacheByKey("Lead");
               await Promise.all([
                 loadLeads(1, pageSize),
                 loadTotalStats(),
@@ -1315,7 +1317,7 @@ export default function LeadsPage() {
                     onClick={() => {
                       setShowTestData(!showTestData);
                       setCurrentPage(1); // Reset page on filter change
-                      clearCache("Lead"); // Clear cache as filter changes leads data
+                      clearCache("Lead"); clearCacheByKey("Lead"); // Clear cache as filter changes leads data
                     }}
                     className={showTestData
                       ? "bg-amber-600 hover:bg-amber-700 text-white"
