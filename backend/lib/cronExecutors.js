@@ -3,6 +3,7 @@
  * Registry of actual job functions that can be executed by the cron runner
  */
 
+import logger from './logger.js';
 /**
  * Mark users offline when last_seen is older than threshold
  */
@@ -45,7 +46,7 @@ export async function markUsersOffline(pgPool, jobMetadata = {}) {
       }
     };
   } catch (error) {
-    console.error('Error in markUsersOffline:', error);
+    logger.error({ err: error }, 'Error in markUsersOffline');
     return {
       success: false,
       error: error.message
@@ -77,7 +78,7 @@ export async function cleanOldActivities(pgPool, jobMetadata = {}) {
       }
     };
   } catch (error) {
-    console.error('Error in cleanOldActivities:', error);
+    logger.error({ err: error }, 'Error in cleanOldActivities');
     return {
       success: false,
       error: error.message
@@ -151,7 +152,7 @@ export async function markActivitiesOverdue(pgPool, jobMetadata = {}) {
       error: 'No database connection available (pgPool or supabase)'
     };
   } catch (error) {
-    console.error('Error in markActivitiesOverdue:', error);
+    logger.error({ err: error }, 'Error in markActivitiesOverdue');
     return {
       success: false,
       error: error.message
@@ -190,7 +191,7 @@ export async function warmDashboardBundleCache(_pgPool, jobMetadata = {}) {
       };
     }
 
-    console.log(`[warmDashboardBundleCache] Found ${tenants.length} active tenants`);
+    logger.info({ tenantCount: tenants.length }, '[warmDashboardBundleCache] Found active tenants');
 
     let warmedCount = 0;
     let errorCount = 0;
@@ -205,7 +206,7 @@ export async function warmDashboardBundleCache(_pgPool, jobMetadata = {}) {
           // Check if already cached
           const cached = await cacheManager.get(cacheKey);
           if (cached) {
-            console.log(`[warmDashboardBundleCache] Cache already warm: ${cacheKey}`);
+            logger.debug({ cacheKey }, '[warmDashboardBundleCache] Cache already warm');
             continue;
           }
 
@@ -372,10 +373,10 @@ export async function warmDashboardBundleCache(_pgPool, jobMetadata = {}) {
           // Store in redis cache
           await cacheManager.set(cacheKey, bundle, 300); // 5-minute TTL
           warmedCount++;
-          console.log(`[warmDashboardBundleCache] Warmed: ${cacheKey}`);
+          logger.debug({ cacheKey }, '[warmDashboardBundleCache] Warmed cache');
         } catch (err) {
           errorCount++;
-          console.error(`[warmDashboardBundleCache] Error warming cache for tenant ${tenant.id}:`, err.message);
+          logger.error({ err, tenantId: tenant.id }, '[warmDashboardBundleCache] Error warming cache for tenant');
         }
       }
     }
@@ -392,7 +393,7 @@ export async function warmDashboardBundleCache(_pgPool, jobMetadata = {}) {
       }
     };
   } catch (error) {
-    console.error('Error in warmDashboardBundleCache:', error);
+    logger.error({ err: error }, 'Error in warmDashboardBundleCache');
     return {
       success: false,
       error: error.message
@@ -446,7 +447,7 @@ export async function executeJob(functionName, pgPool, jobMetadata) {
   try {
     return await executor(pgPool, jobMetadata);
   } catch (error) {
-    console.error(`Error executing job ${functionName}:`, error);
+    logger.error({ err: error, functionName }, `Error executing job ${functionName}`);
     return {
       success: false,
       error: error.message

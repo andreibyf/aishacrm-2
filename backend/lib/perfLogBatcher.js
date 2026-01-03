@@ -4,6 +4,7 @@
  */
 import { getSupabaseClient } from './supabase-db.js';
 import { sanitizeUuidInput } from './uuidValidator.js';
+import logger from './logger.js';
 
 let queue = [];
 let flushing = false;
@@ -38,7 +39,7 @@ function sanitizeRecord(rec) {
 export function initializePerformanceLogBatcher(pgPool) {
   if (initialized) return; // idempotent
   pgFallback = pgPool || null;
-  setInterval(() => flush().catch(e => console.error('[PerfLogBatcher] Interval flush error:', e.message)), FLUSH_INTERVAL_MS).unref();
+  setInterval(() => flush().catch(e => logger.error({ err: e }, '[PerfLogBatcher] Interval flush error')), FLUSH_INTERVAL_MS).unref();
   // Flush on shutdown
   for (const sig of ['SIGINT','SIGTERM','beforeExit']) {
     process.on(sig, async () => {
@@ -46,7 +47,7 @@ export function initializePerformanceLogBatcher(pgPool) {
     });
   }
   initialized = true;
-  console.log(`✓ Performance log batcher initialized (interval=${FLUSH_INTERVAL_MS}ms, max=${BATCH_MAX})`);
+  logger.info({ intervalMs: FLUSH_INTERVAL_MS, batchMax: BATCH_MAX }, '✓ Performance log batcher initialized');
 }
 
 export function enqueuePerformanceLog(record) {
@@ -58,7 +59,7 @@ export function enqueuePerformanceLog(record) {
   record.tenant_id = safeTenantId(record.tenant_id);
   queue.push(record);
   if (queue.length >= BATCH_MAX) {
-    flush().catch(e => console.error('[PerfLogBatcher] Flush error:', e.message));
+    flush().catch(e => logger.error({ err: e }, '[PerfLogBatcher] Flush error'));
   }
 }
 
@@ -77,10 +78,10 @@ async function directInsert(rec) {
           [s.tenant_id, s.method, s.endpoint, s.status_code, s.duration_ms, s.response_time_ms, s.db_query_time_ms, s.user_email, s.ip_address, s.user_agent, s.error_message, s.error_stack]
         );
       } catch (fallbackErr) {
-        console.error('[PerfLogBatcher] Direct fallback insert failed:', fallbackErr.message);
+        logger.error({ err: fallbackErr }, '[PerfLogBatcher] Direct fallback insert failed');
       }
     } else {
-      console.error('[PerfLogBatcher] Direct insert failed:', e.message);
+      logger.error({ err: e }, '[PerfLogBatcher] Direct insert failed');
     }
   }
 }
@@ -97,11 +98,11 @@ export async function flush() {
     const { error } = await supabase.from('performance_logs').insert(sanitizedBatch);
     if (error) throw error;
     if (process.env.NODE_ENV !== 'production') {
-      console.log(`[PerfLogBatcher] Flushed ${batch.length} performance logs`);
+      logger.debug({ count: batch.length }, '[PerfLogBatcher] Flushed performance logs');
     }
     lastFlushAt = new Date();
   } catch (e) {
-    console.error('[PerfLogBatcher] Batch insert failed:', e.message);
+    logger.error({ err: e }, '[PerfLogBatcher] Batch insert failed');
     // Fallback: attempt sequential pg inserts if available
     if (pgFallback) {
       for (const rec of batch) {
@@ -113,7 +114,7 @@ export async function flush() {
             [s.tenant_id, s.method, s.endpoint, s.status_code, s.duration_ms, s.response_time_ms, s.db_query_time_ms, s.user_email, s.ip_address, s.user_agent, s.error_message, s.error_stack]
           );
         } catch (fallbackErr) {
-          console.error('[PerfLogBatcher] Fallback pgPool insert failed:', fallbackErr.message);
+          logger.error({ err: fallbackErr }, '[PerfLogBatcher] Fallback pgPool insert failed');
         }
       }
     }

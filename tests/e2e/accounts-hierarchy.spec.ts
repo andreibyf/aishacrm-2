@@ -11,8 +11,8 @@ async function waitForElement(page, locatorFn, timeoutMs = 30000) {
     try {
       const loc = locatorFn();
       if (await loc.isVisible({ timeout: 1000 })) return loc;
-    } catch (_error) {
-      // Ignore errors during polling
+    } catch {
+      // Ignore visibility check errors and retry
     }
     await page.waitForTimeout(500);
   }

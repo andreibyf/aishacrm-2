@@ -4,6 +4,7 @@ import { selectLLMConfigForTenant, resolveLLMApiKey } from './aiEngine/index.js'
 import { logLLMActivity } from './aiEngine/activityLogger.js';
 import { BRAID_SYSTEM_PROMPT, executeBraidTool, generateToolSchemas, summarizeToolResult, } from './braidIntegration-v2.js';
 import { resolveCanonicalTenant, isUuid as isUuidHelper } from './tenantCanonicalResolver.js';
+import logger from './logger.js';
 const READ_ONLY_NAME_REGEX = /^(search_|list_|get_|fetch_|lookup_|debug_)/i;
 function assertUuid(value, label) {
     if (!value || !isUuid(value)) {
@@ -34,7 +35,7 @@ function buildSystemPrompt(params, tenant) {
         `Context:\n${contextSummary}`;
 }
 function logBrainRun(entry) {
-    console.log('[AI Brain]', JSON.stringify(entry));
+    logger.debug({ ...entry }, '[AI Brain]');
 }
 function classifyReadOnly(toolName, policy) {
     if (policy && policy.toUpperCase() === 'READ_ONLY') {
@@ -92,7 +93,7 @@ function parseToolArgs(rawArgs, toolName) {
         return JSON.parse(rawArgs);
     }
     catch (error) {
-        console.warn(`[AI Brain] Failed to parse arguments for ${toolName}:`, error);
+        logger.warn({ err: error, toolName }, '[AI Brain] Failed to parse arguments');
         return {};
     }
 }
@@ -156,7 +157,7 @@ export async function runTask(params) {
 
         const openai = new OpenAI({ apiKey, baseURL: baseUrl });
 
-        console.log(`[AI Brain] Using provider=${llmConfig.provider}, model=${llmConfig.model}, capability=${capability}`);
+        logger.info({ provider: llmConfig.provider, model: llmConfig.model, capability }, '[AI Brain] Using LLM configuration');
 
         const completionPayload = {
             model: llmConfig.model,
@@ -201,7 +202,7 @@ export async function runTask(params) {
             if (!toolName)
                 continue;
             if (toolName.startsWith('delete_')) {
-                console.warn('[AI Brain] Ignoring delete tool call in Phase 1:', toolName);
+                logger.warn({ toolName }, '[AI Brain] Ignoring delete tool call in Phase 1');
                 continue;
             }
             const args = parseToolArgs(call.function?.arguments, toolName);
@@ -210,7 +211,7 @@ export async function runTask(params) {
             if (params.mode === 'propose_actions' && !isReadTool) {
                 const actionType = classifyActionType(toolName);
                 if (!actionType) {
-                    console.warn('[AI Brain] Unable to classify proposed action for tool:', toolName);
+                    logger.warn({ toolName }, '[AI Brain] Unable to classify proposed action for tool');
                     continue;
                 }
                 proposedActions.push({
@@ -223,7 +224,7 @@ export async function runTask(params) {
                 continue;
             }
             if (!isReadTool && params.mode === 'read_only') {
-                console.warn('[AI Brain] Blocking non-read tool execution in read_only mode:', toolName);
+                logger.warn({ toolName }, '[AI Brain] Blocking non-read tool execution in read_only mode');
                 continue;
             }
             const tenantRecord = {
@@ -312,6 +313,6 @@ void (async () => {
         cachedRegistry = await getToolRegistrySnapshot();
     }
     catch (error) {
-        console.warn('[AI Brain] Failed to preload tool registry:', error);
+        logger.warn({ err: error }, '[AI Brain] Failed to preload tool registry');
     }
 })();

@@ -13,6 +13,7 @@
  */
 
 import { createClient } from 'redis';
+import logger from './logger.js';
 
 let redisClient = null;
 let isConnected = false;
@@ -28,7 +29,7 @@ export async function initMemoryClient(redisUrl = process.env.REDIS_MEMORY_URL |
   if (redisClient) return redisClient;
   
   if (!redisUrl) {
-    console.warn('[MemoryClient] REDIS_MEMORY_URL not set, memory features disabled');
+    logger.warn('[MemoryClient] REDIS_MEMORY_URL not set, memory features disabled');
     return null;
   }
 
@@ -36,26 +37,26 @@ export async function initMemoryClient(redisUrl = process.env.REDIS_MEMORY_URL |
     redisClient = createClient({ url: redisUrl });
     
     redisClient.on('error', (err) => {
-      console.error('[MemoryClient] Redis connection error:', err.message);
+      logger.error({ err }, '[MemoryClient] Redis connection error');
       isConnected = false;
     });
 
     redisClient.on('connect', () => {
-      console.log('[MemoryClient] Connected to Redis');
+      logger.info('[MemoryClient] Connected to Redis');
       isConnected = true;
     });
 
     redisClient.on('reconnecting', () => {
-      console.log('[MemoryClient] Reconnecting to Redis...');
+      logger.info('[MemoryClient] Reconnecting to Redis...');
     });
 
     await redisClient.connect();
     // Set isConnected immediately after successful connect (event may fire later)
     isConnected = true;
-    console.log('✓ Memory client initialized');
+    logger.info('✓ Memory client initialized');
     return redisClient;
   } catch (error) {
-    console.error('[MemoryClient] Failed to initialize:', error.message);
+    logger.error({ err: error }, '[MemoryClient] Failed to initialize');
     redisClient = null;
     isConnected = false;
     return null;
@@ -102,7 +103,7 @@ export async function saveAgentSession(tenantId, userId, sessionId, data, ttlSec
     await redisClient.setEx(key, ttlSeconds, JSON.stringify(payload));
     return true;
   } catch (error) {
-    console.error('[MemoryClient] Failed to save session:', error.message);
+    logger.error({ err: error, key }, '[MemoryClient] Failed to save session');
     return false;
   }
 }
@@ -118,7 +119,7 @@ export async function getAgentSession(tenantId, userId, sessionId) {
     const data = await redisClient.get(key);
     return data ? JSON.parse(data) : null;
   } catch (error) {
-    console.error('[MemoryClient] Failed to get session:', error.message);
+    logger.error({ err: error, key }, '[MemoryClient] Failed to get session');
     return null;
   }
 }
@@ -134,7 +135,7 @@ export async function deleteAgentSession(tenantId, userId, sessionId) {
     await redisClient.del(key);
     return true;
   } catch (error) {
-    console.error('[MemoryClient] Failed to delete session:', error.message);
+    logger.error({ err: error, key }, '[MemoryClient] Failed to delete session');
     return false;
   }
 }
@@ -161,7 +162,7 @@ export async function listUserSessions(tenantId, userId) {
     
     return sessions;
   } catch (error) {
-    console.error('[MemoryClient] Failed to list sessions:', error.message);
+    logger.error({ err: error, tenantId, userId }, '[MemoryClient] Failed to list sessions');
     return [];
   }
 }
@@ -190,7 +191,7 @@ export async function appendEvent(tenantId, userId, sessionId, event) {
     await redisClient.expire(key, DEFAULT_EVENT_TTL);
     return true;
   } catch (error) {
-    console.error('[MemoryClient] Failed to append event:', error.message);
+    logger.error({ err: error, key }, '[MemoryClient] Failed to append event');
     return false;
   }
 }
@@ -206,7 +207,7 @@ export async function getSessionEvents(tenantId, userId, sessionId, limit = 100)
     const events = await redisClient.lRange(key, -limit, -1);
     return events.map(e => JSON.parse(e));
   } catch (error) {
-    console.error('[MemoryClient] Failed to get session events:', error.message);
+    logger.error({ err: error, key }, '[MemoryClient] Failed to get session events');
     return [];
   }
 }
@@ -234,7 +235,7 @@ export async function getRecentEvents(tenantId, userId, limit = 50) {
     
     return allEvents.slice(0, limit);
   } catch (error) {
-    console.error('[MemoryClient] Failed to get recent events:', error.message);
+    logger.error({ err: error, tenantId, userId }, '[MemoryClient] Failed to get recent events');
     return [];
   }
 }
@@ -254,7 +255,7 @@ export async function cacheUserPreferences(tenantId, userId, preferences, ttlSec
     await redisClient.setEx(key, ttlSeconds, JSON.stringify(preferences));
     return true;
   } catch (error) {
-    console.error('[MemoryClient] Failed to cache preferences:', error.message);
+    logger.error({ err: error, key }, '[MemoryClient] Failed to cache preferences');
     return false;
   }
 }
@@ -270,7 +271,7 @@ export async function getCachedPreferences(tenantId, userId) {
     const data = await redisClient.get(key);
     return data ? JSON.parse(data) : null;
   } catch (error) {
-    console.error('[MemoryClient] Failed to get cached preferences:', error.message);
+    logger.error({ err: error, key }, '[MemoryClient] Failed to get cached preferences');
     return null;
   }
 }
@@ -286,7 +287,7 @@ export async function invalidatePreferencesCache(tenantId, userId) {
     await redisClient.del(key);
     return true;
   } catch (error) {
-    console.error('[MemoryClient] Failed to invalidate cache:', error.message);
+    logger.error({ err: error, key }, '[MemoryClient] Failed to invalidate cache');
     return false;
   }
 }
@@ -306,7 +307,7 @@ export async function saveNavigationState(tenantId, userId, navState, ttlSeconds
     await redisClient.setEx(key, ttlSeconds, JSON.stringify(navState));
     return true;
   } catch (error) {
-    console.error('[MemoryClient] Failed to save navigation state:', error.message);
+    logger.error({ err: error, key }, '[MemoryClient] Failed to save navigation state');
     return false;
   }
 }
@@ -322,7 +323,7 @@ export async function getNavigationState(tenantId, userId) {
     const data = await redisClient.get(key);
     return data ? JSON.parse(data) : null;
   } catch (error) {
-    console.error('[MemoryClient] Failed to get navigation state:', error.message);
+    logger.error({ err: error, key }, '[MemoryClient] Failed to get navigation state');
     return null;
   }
 }
@@ -350,7 +351,7 @@ export async function getMemoryStats() {
       stats
     };
   } catch (error) {
-    console.error('[MemoryClient] Failed to get stats:', error.message);
+    logger.error({ err: error }, '[MemoryClient] Failed to get stats');
     return { available: true, connected: isConnected, error: error.message };
   }
 }
@@ -363,10 +364,10 @@ export async function flushAllMemory() {
   
   try {
     await redisClient.flushAll();
-    console.log('[MemoryClient] Flushed all memory data');
+    logger.info('[MemoryClient] Flushed all memory data');
     return true;
   } catch (error) {
-    console.error('[MemoryClient] Failed to flush memory:', error.message);
+    logger.error({ err: error }, '[MemoryClient] Failed to flush memory');
     return false;
   }
 }
@@ -378,9 +379,9 @@ export async function disconnectMemoryClient() {
   if (redisClient) {
     try {
       await redisClient.quit();
-      console.log('[MemoryClient] Disconnected');
+      logger.info('[MemoryClient] Disconnected');
     } catch (error) {
-      console.error('[MemoryClient] Error during disconnect:', error.message);
+      logger.error({ err: error }, '[MemoryClient] Error during disconnect');
     }
     redisClient = null;
     isConnected = false;
