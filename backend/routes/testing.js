@@ -432,7 +432,6 @@ export default function createTestingRoutes(_pgPool) {
         { method: 'GET', path: `/api/workflow-templates?tenant_id={TENANT_ID}` },
         
         // Business Development
-        { method: 'GET', path: `/api/bizdev?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/bizdevsources?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/cashflow?tenant_id={TENANT_ID}` },
         

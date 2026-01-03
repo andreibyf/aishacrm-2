@@ -7,7 +7,8 @@
 -- 
 -- Affected tables: leads, accounts, contacts, opportunities, activities, note
 -- 
--- Note: DO NOT DROP the column - migration guide says "Do NOT drop columns until confirmed cutover"
+-- Status: Column cleanup complete. See migrations 110-112 for final legacy column removal.
+-- Note: Migrations 110-112 contain the DROP COLUMN statements for production deployment.
 
 -- Make tenant_id_text nullable on leads table
 ALTER TABLE leads ALTER COLUMN tenant_id_text DROP NOT NULL;

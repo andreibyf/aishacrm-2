@@ -96,10 +96,10 @@ Successfully migrated all environment variable management from manual `.env` fil
 ### Service Tokens (stored in `.env.docker`, gitignored)
 ```bash
 # Dev token (read-write, 30-day)
-DOPPLER_TOKEN=dp.st.dev.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+DOPPLER_TOKEN=<REDACTED_DEV_TOKEN>
 
 # Production token (read-write)
-DOPPLER_TOKEN_PRD=dp.st.prd_prd.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+DOPPLER_TOKEN_PRD=<REDACTED_PROD_TOKEN>
 ```
 
 ### Production VPS Token Location
