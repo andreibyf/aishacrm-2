@@ -5,6 +5,7 @@
 
 import { createClient } from 'redis';
 import crypto from 'crypto';
+import logger from './logger.js';
 
 class CacheManager {
   constructor() {
@@ -33,7 +34,7 @@ class CacheManager {
           connectTimeout: 5000,
           reconnectStrategy: (retries) => {
             if (retries > 10) {
-              console.error('[CacheManager] Max reconnection attempts reached');
+              logger.error('[CacheManager] Max reconnection attempts reached');
               return new Error('Max reconnection attempts');
             }
             return Math.min(retries * 100, 3000);
@@ -42,23 +43,23 @@ class CacheManager {
       });
 
       this.client.on('error', (err) => {
-        console.error('[CacheManager] Redis error:', err);
+        logger.error({ err }, '[CacheManager] Redis error');
         this.connected = false;
       });
 
       this.client.on('connect', () => {
-        console.log('[CacheManager] Redis cache connected');
+        logger.info('[CacheManager] Redis cache connected');
         this.connected = true;
       });
 
       this.client.on('disconnect', () => {
-        console.log('[CacheManager] Redis cache disconnected');
+        logger.info('[CacheManager] Redis cache disconnected');
         this.connected = false;
       });
 
       await this.client.connect();
     } catch (error) {
-      console.error('[CacheManager] Failed to connect:', error);
+      logger.error({ err: error }, '[CacheManager] Failed to connect');
       this.connected = false;
     }
   }
@@ -96,7 +97,7 @@ class CacheManager {
 
       return parsed.data;
     } catch (error) {
-      console.error('[CacheManager] Get error:', error);
+      logger.error({ err: error }, '[CacheManager] Get error');
       return null;
     }
   }
@@ -118,7 +119,7 @@ class CacheManager {
       await this.client.setEx(key, ttlSeconds, JSON.stringify(cacheData));
       return true;
     } catch (error) {
-      console.error('[CacheManager] Set error:', error);
+      logger.error({ err: error }, '[CacheManager] Set error');
       return false;
     }
   }
@@ -133,7 +134,7 @@ class CacheManager {
       await this.client.del(key);
       return true;
     } catch (error) {
-      console.error('[CacheManager] Delete error:', error);
+      logger.error({ err: error }, '[CacheManager] Delete error');
       return false;
     }
   }
@@ -155,12 +156,12 @@ class CacheManager {
 
       if (keys.length > 0) {
         await this.client.del(keys);
-        console.log(`[CacheManager] Invalidated ${keys.length} keys for tenant ${tenantId} module ${module}`);
+        logger.debug({ tenantId, module, count: keys.length }, '[CacheManager] Invalidated keys for tenant module');
       }
 
       return true;
     } catch (error) {
-      console.error('[CacheManager] Invalidate error:', error);
+      logger.error({ err: error, tenantId, module }, '[CacheManager] Invalidate error');
       return false;
     }
   }
@@ -181,12 +182,12 @@ class CacheManager {
 
       if (keys.length > 0) {
         await this.client.del(keys);
-        console.log(`[CacheManager] Invalidated ${keys.length} keys for tenant ${tenantId}`);
+        logger.debug({ tenantId, count: keys.length }, '[CacheManager] Invalidated keys for tenant');
       }
 
       return true;
     } catch (error) {
-      console.error('[CacheManager] Invalidate all error:', error);
+      logger.error({ err: error, tenantId }, '[CacheManager] Invalidate all error');
       return false;
     }
   }
@@ -200,12 +201,12 @@ class CacheManager {
     // Try cache first
     const cached = await this.get(key);
     if (cached !== null) {
-      console.log(`[CacheManager] Cache hit: ${key}`);
+      logger.debug({ key }, '[CacheManager] Cache hit');
       return { data: cached, cached: true };
     }
 
     // Cache miss - fetch from database
-    console.log(`[CacheManager] Cache miss: ${key}`);
+    logger.debug({ key }, '[CacheManager] Cache miss');
     const data = await fetchFn();
     
     // Cache the result
@@ -230,7 +231,7 @@ class CacheManager {
         memory
       };
     } catch (error) {
-      console.error('[CacheManager] Stats error:', error);
+      logger.error({ err: error }, '[CacheManager] Stats error');
       return null;
     }
   }
@@ -254,7 +255,7 @@ class CacheManager {
       
       return newValue;
     } catch (error) {
-      console.error('[CacheManager] Increment error:', error);
+      logger.error({ err: error, key }, '[CacheManager] Increment error');
       return null;
     }
   }
@@ -267,10 +268,10 @@ class CacheManager {
 
     try {
       await this.client.flushAll();
-      console.log('[CacheManager] All cache flushed');
+      logger.info('[CacheManager] All cache flushed');
       return true;
     } catch (error) {
-      console.error('[CacheManager] FlushAll error:', error);
+      logger.error({ err: error }, '[CacheManager] FlushAll error');
       return false;
     }
   }

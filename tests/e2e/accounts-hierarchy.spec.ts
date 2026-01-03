@@ -11,7 +11,9 @@ async function waitForElement(page, locatorFn, timeoutMs = 30000) {
     try {
       const loc = locatorFn();
       if (await loc.isVisible({ timeout: 1000 })) return loc;
-    } catch {}
+    } catch {
+      // Ignore visibility check errors and retry
+    }
     await page.waitForTimeout(500);
   }
   throw new Error('Element not found within timeout');

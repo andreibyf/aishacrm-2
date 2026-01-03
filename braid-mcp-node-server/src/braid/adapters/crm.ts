@@ -275,7 +275,7 @@ async function callBackend(
 
         // Extract table name from path (/api/{table}/...)
         let tableName: string | null = null;
-        const m = path.match(/^\/api\/([^\/\?]+)/);
+        const m = path.match(/^\/api\/([^/?]+)/);
         if (m && m[1]) tableName = m[1];
 
         const recordId = action.targetId ?? ((data && (data as any).id) || null);

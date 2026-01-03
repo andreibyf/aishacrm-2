@@ -1,3 +1,4 @@
+/* eslint-disable no-undef */
 // Add the new intent label for scheduling
 export type IntentLabel =
   | 'list_records'

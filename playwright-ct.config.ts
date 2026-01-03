@@ -19,12 +19,15 @@ export default defineConfig({
   timeout: 30000,
   
   // Fail the build on CI if you accidentally left test.only in the source code
+  // eslint-disable-next-line no-undef
   forbidOnly: !!process.env.CI,
   
   // Retry on CI only
+  // eslint-disable-next-line no-undef
   retries: process.env.CI ? 2 : 0,
   
   // Limit workers on CI
+  // eslint-disable-next-line no-undef
   workers: process.env.CI ? 1 : undefined,
   
   // Reporter to use

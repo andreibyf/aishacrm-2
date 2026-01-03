@@ -1,5 +1,6 @@
 // transitions.js - helper to record entity move/conversion events
 
+import logger from './logger.js';
 async function resolveTenantIdForTransitions(supabase, tenantSlugOrId) {
   // Some environments use TEXT slug for tenant_id, but entity_transitions.tenant_id may be UUID
   // Try to resolve the tenant UUID by slug; fall back to provided value if not found
@@ -46,7 +47,7 @@ export async function logEntityTransition(supabase, {
     }]);
   
   if (error) {
-    console.warn('[Transitions] Failed to log entity transition:', error.message);
+    logger.warn({ err: error, fromTable: from_table, toTable: to_table }, '[Transitions] Failed to log entity transition');
     // Don't throw - logging transition failures shouldn't break the main operation
   }
 }

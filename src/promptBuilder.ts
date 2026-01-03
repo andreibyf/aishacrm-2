@@ -1,3 +1,4 @@
+/* eslint-disable no-undef */
 // Update mode selector to include scheduling intent
 const mode =
   classification.intent === 'summaries' ||
