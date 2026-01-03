@@ -14,6 +14,7 @@ import { requireAuthCookie } from '../middleware/authCookie.js';
 import { getRealtimeMetrics } from '../lib/braidIntegration-v2.js';
 import { getToolMetrics, getMetricsTimeSeries, getErrorAnalysis, getAuditStats } from '../../braid-llm-kit/tools/braid-rt.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
+import logger from '../lib/logger.js';
 
 const router = express.Router();
 
@@ -118,7 +119,7 @@ router.get('/realtime', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('[Braid Metrics] Realtime error:', error);
+    logger.error('[Braid Metrics] Realtime error:', error);
     res.status(500).json({ error: 'Failed to fetch realtime metrics', details: error.message });
   }
 });
@@ -186,7 +187,7 @@ router.get('/tools', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('[Braid Metrics] Tools error:', error);
+    logger.error('[Braid Metrics] Tools error:', error);
     res.status(500).json({ error: 'Failed to fetch tool metrics', details: error.message });
   }
 });
@@ -232,7 +233,7 @@ router.get('/timeseries', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('[Braid Metrics] Timeseries error:', error);
+    logger.error('[Braid Metrics] Timeseries error:', error);
     res.status(500).json({ error: 'Failed to fetch timeseries metrics', details: error.message });
   }
 });
@@ -273,7 +274,7 @@ router.get('/errors', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('[Braid Metrics] Errors analysis error:', error);
+    logger.error('[Braid Metrics] Errors analysis error:', error);
     res.status(500).json({ error: 'Failed to fetch error analysis', details: error.message });
   }
 });
@@ -344,7 +345,7 @@ router.get('/summary', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('[Braid Metrics] Summary error:', error);
+    logger.error('[Braid Metrics] Summary error:', error);
     res.status(500).json({ error: 'Failed to fetch summary metrics', details: error.message });
   }
 });

@@ -8,6 +8,7 @@
 import { randomUUID } from 'node:crypto';
 import { setActiveGoal } from '../state/goalStore.js';
 import { findLeadByName } from '../services/leadLookup.js';
+import logger from '../lib/logger.js';
 
 /**
  * Extract lead name from user text
@@ -207,7 +208,7 @@ export async function initializeNewGoalFlow({ conversationId, tenantId, userText
       needsMoreInfo: missingInfo.length > 0,
     };
   } catch (error) {
-    console.error('[InitializeGoalFlow] Error:', error.message);
+    logger.error('[InitializeGoalFlow] Error:', error.message);
     return {
       success: false,
       message: 'I encountered an error setting up that task. Please try again.',

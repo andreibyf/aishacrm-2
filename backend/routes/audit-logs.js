@@ -1,6 +1,7 @@
 import express from 'express';
 import { validateTenantScopedId } from '../lib/validation.js';
 import { cacheList } from '../lib/cacheMiddleware.js';
+import logger from '../lib/logger.js';
 
 export default function createAuditLogRoutes(_pgPool) {
   const router = express.Router();
@@ -34,7 +35,7 @@ export default function createAuditLogRoutes(_pgPool) {
         data
       });
     } catch (error) {
-      console.error('Error creating audit log:', error);
+      logger.error('Error creating audit log:', error);
       res.status(500).json({
         status: 'error',
         message: error.message
@@ -86,7 +87,7 @@ export default function createAuditLogRoutes(_pgPool) {
         }
       });
     } catch (error) {
-      console.error('Error fetching audit logs:', error);
+      logger.error('Error fetching audit logs:', error);
       res.status(500).json({
         status: 'error',
         message: error.message
@@ -124,7 +125,7 @@ export default function createAuditLogRoutes(_pgPool) {
         data
       });
     } catch (error) {
-      console.error('Error fetching audit log:', error);
+      logger.error('Error fetching audit log:', error);
       res.status(500).json({
         status: 'error',
         message: error.message
@@ -164,7 +165,7 @@ export default function createAuditLogRoutes(_pgPool) {
         data
       });
     } catch (error) {
-      console.error('Error deleting audit log:', error);
+      logger.error('Error deleting audit log:', error);
       res.status(500).json({
         status: 'error',
         message: error.message
@@ -202,7 +203,7 @@ export default function createAuditLogRoutes(_pgPool) {
         }
       });
     } catch (error) {
-      console.error('Error clearing audit logs:', error);
+      logger.error('Error clearing audit logs:', error);
       res.status(500).json({
         status: 'error',
         message: error.message

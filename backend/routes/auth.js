@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { getAuthUserByEmail, sendPasswordResetEmail } from '../lib/supabaseAuth.js';
+import logger from '../lib/logger.js';
 
 function getAnonSupabase() {
   const url = process.env.SUPABASE_URL;
@@ -17,7 +18,7 @@ function signAccess(payload) {
   // Use HS256 explicitly - must match verification in authenticate.js
   const secret = process.env.JWT_SECRET;
   if (!secret) {
-    console.warn('[Auth] JWT_SECRET not set, using insecure fallback');
+    logger.warn('[Auth] JWT_SECRET not set, using insecure fallback');
   }
   return jwt.sign(payload, secret || 'change-me-access', { algorithm: 'HS256', expiresIn: '15m' });
 }
@@ -26,7 +27,7 @@ function signRefresh(payload) {
   // Use HS256 explicitly for refresh tokens
   const secret = process.env.JWT_SECRET;
   if (!secret) {
-    console.warn('[Auth] JWT_SECRET not set for refresh, using insecure fallback');
+    logger.warn('[Auth] JWT_SECRET not set for refresh, using insecure fallback');
   }
   return jwt.sign(payload, secret || 'change-me-refresh', { algorithm: 'HS256', expiresIn: '7d' });
 }
@@ -125,20 +126,20 @@ export default function createAuthRoutes(_pgPool) {
       
       if (anonClient && !isDev && !isE2E) {
         // Production: require Supabase Auth password verification
-        console.log('[Auth.login] Production mode: verifying credentials with Supabase Auth');
+        logger.debug('[Auth.login] Production mode: verifying credentials with Supabase Auth');
         const { data: _authData, error: authError } = await anonClient.auth.signInWithPassword({ email, password });
         if (authError) {
-          console.log('[Auth.login] Supabase Auth failed:', { email, error: authError.message });
+          logger.debug('[Auth.login] Supabase Auth failed:', { email, error: authError.message });
           return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
         }
-        console.log('[Auth.login] Supabase Auth successful for:', email);
+        logger.debug('[Auth.login] Supabase Auth successful for:', email);
       } else {
         // Dev/E2E: skip Supabase Auth password check, rely on DB user existence
         // This allows login even when Supabase Auth user doesn't exist or password differs
         if (!anonClient) {
-          console.log('[Auth.login] Warning: No anon client available (SUPABASE_ANON_KEY not set)');
+          logger.debug('[Auth.login] Warning: No anon client available (SUPABASE_ANON_KEY not set)');
         }
-        console.log('[Auth.login] Dev/E2E mode: skipping Supabase Auth password verification');
+        logger.debug('[Auth.login] Dev/E2E mode: skipping Supabase Auth password verification');
       }
 
       // 2) Fetch user details from CRM DB using Supabase client
@@ -154,11 +155,11 @@ export default function createAuthRoutes(_pgPool) {
         .eq('email', normalizedEmail)
         .limit(1);
       
-      console.log('[Auth.login] Users query:', { email: normalizedEmail, rowCount: uRows?.length, error: uError?.message });
+      logger.debug('[Auth.login] Users query:', { email: normalizedEmail, rowCount: uRows?.length, error: uError?.message });
       
       if (uRows && uRows.length > 0) {
         user = uRows[0];
-        console.log('[Auth.login] Found user in users table:', { id: user.id, role: user.role, tenant_id: user.tenant_id, tenant_uuid: user.tenant_uuid });
+        logger.debug('[Auth.login] Found user in users table:', { id: user.id, role: user.role, tenant_id: user.tenant_id, tenant_uuid: user.tenant_uuid });
       } else {
         table = 'employees';
         const { data: eRows, error: eError } = await supabase
@@ -166,25 +167,25 @@ export default function createAuthRoutes(_pgPool) {
           .select('id, tenant_id, email, first_name, last_name, role, status, metadata')
           .eq('email', normalizedEmail)
           .limit(1);
-        console.log('[Auth.login] Employees query:', { email: normalizedEmail, rowCount: eRows?.length, error: eError?.message });
+        logger.debug('[Auth.login] Employees query:', { email: normalizedEmail, rowCount: eRows?.length, error: eError?.message });
         if (eRows && eRows.length > 0) {
           user = eRows[0];
-          console.log('[Auth.login] Found user in employees table:', { id: user.id, role: user.role, tenant_id: user.tenant_id });
+          logger.debug('[Auth.login] Found user in employees table:', { id: user.id, role: user.role, tenant_id: user.tenant_id });
         }
       }
 
       // AUTO-SYNC: If user not found in CRM but authenticated via Supabase Auth, create CRM record
       if (!user) {
-        console.log('[Auth.login] No user found in CRM database for email:', normalizedEmail);
+        logger.debug('[Auth.login] No user found in CRM database for email:', normalizedEmail);
 
         // Only auto-sync if Supabase Auth verification succeeded (production mode or explicitly verified)
         if (anonClient && !isDev && !isE2E) {
-          console.log('[Auth.login] Attempting auto-sync from Supabase Auth...');
+          logger.debug('[Auth.login] Attempting auto-sync from Supabase Auth...');
           try {
             // Fetch user metadata from Supabase Auth
             const { user: authUser, error: authErr } = await getAuthUserByEmail(normalizedEmail);
             if (authErr || !authUser) {
-              console.log('[Auth.login] Auto-sync failed: user not found in Supabase Auth');
+              logger.debug('[Auth.login] Auto-sync failed: user not found in Supabase Auth');
               return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
             }
 
@@ -217,7 +218,7 @@ export default function createAuthRoutes(_pgPool) {
               if (error) throw error;
               user = data;
               table = 'users';
-              console.log('[Auth.login] Auto-synced superadmin to users table:', user.id);
+              logger.debug('[Auth.login] Auto-synced superadmin to users table:', user.id);
             } else if (role === 'admin' && normalizedTenantId) {
               const { data, error } = await supabase
                 .from('users')
@@ -236,11 +237,11 @@ export default function createAuthRoutes(_pgPool) {
               if (error) throw error;
               user = data;
               table = 'users';
-              console.log('[Auth.login] Auto-synced admin to users table:', user.id);
+              logger.debug('[Auth.login] Auto-synced admin to users table:', user.id);
             } else {
               // Default to employee
               if (!normalizedTenantId) {
-                console.log('[Auth.login] Auto-sync failed: tenant_id required for non-admin users');
+                logger.debug('[Auth.login] Auto-sync failed: tenant_id required for non-admin users');
                 return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
               }
               const { data, error } = await supabase
@@ -261,21 +262,21 @@ export default function createAuthRoutes(_pgPool) {
               if (error) throw error;
               user = data;
               table = 'employees';
-              console.log('[Auth.login] Auto-synced employee to employees table:', user.id);
+              logger.debug('[Auth.login] Auto-synced employee to employees table:', user.id);
             }
           } catch (syncErr) {
-            console.error('[Auth.login] Auto-sync error:', syncErr);
+            logger.error('[Auth.login] Auto-sync error:', syncErr);
             return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
           }
         } else {
           // Dev/E2E mode or no Supabase Auth verification - reject login
-          console.log('[Auth.login] User not found in CRM database and auto-sync not available');
+          logger.debug('[Auth.login] User not found in CRM database and auto-sync not available');
           return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
         }
       }
 
       if (!user) {
-        console.log('[Auth.login] Login failed after auto-sync attempt');
+        logger.debug('[Auth.login] Login failed after auto-sync attempt');
         return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
       }
 
@@ -284,7 +285,7 @@ export default function createAuthRoutes(_pgPool) {
       const accountStatus = String(meta.account_status || user.status || '').toLowerCase();
       const isActiveFlag = meta.is_active !== false;
       if (accountStatus === 'inactive' || isActiveFlag === false || (user.status || '').toLowerCase() === 'inactive') {
-        console.log('[Auth.login] Account disabled:', { email: normalizedEmail, status: accountStatus, is_active: isActiveFlag });
+        logger.debug('[Auth.login] Account disabled:', { email: normalizedEmail, status: accountStatus, is_active: isActiveFlag });
         return res.status(403).json({ status: 'error', message: 'Account is disabled' });
       }
 
@@ -345,7 +346,7 @@ export default function createAuthRoutes(_pgPool) {
         permissionSet.has('crm_access');
 
       if (!hasCrmAccess) {
-        console.log('[Auth.login] CRM access denied:', {
+        logger.debug('[Auth.login] CRM access denied:', {
           email: normalizedEmail,
           role: roleLower,
           permissions: Array.from(permissionSet).sort(),
@@ -367,7 +368,7 @@ export default function createAuthRoutes(_pgPool) {
       res.cookie('aisha_access', access, cookieOpts(15 * 60 * 1000));
       res.cookie('aisha_refresh', refresh, cookieOpts(7 * 24 * 60 * 60 * 1000));
 
-      console.log('[Auth.login] Login successful:', { email: normalizedEmail, role: user.role, table });
+      logger.debug('[Auth.login] Login successful:', { email: normalizedEmail, role: user.role, table });
       return res.json({ 
         status: 'success', 
         message: 'Login successful',
@@ -383,7 +384,7 @@ export default function createAuthRoutes(_pgPool) {
         }
       });
     } catch (err) {
-      console.error('[Auth.login] error', err);
+      logger.error('[Auth.login] error', err);
       return res.status(500).json({ status: 'error', message: 'Internal error' });
     }
   });
@@ -396,7 +397,7 @@ export default function createAuthRoutes(_pgPool) {
       const authHeader = req.headers?.authorization || '';
       const hasBearer = authHeader.startsWith('Bearer ');
       if (process.env.NODE_ENV !== 'production' || process.env.AUTH_DEBUG === 'true') {
-        console.log('[Auth.refresh] Request context:', { hasRefreshCookie, hasBearer });
+        logger.debug('[Auth.refresh] Request context:', { hasRefreshCookie, hasBearer });
       }
 
       // Accept either refresh cookie (for cookie-based sessions) OR Supabase Bearer token
@@ -406,7 +407,7 @@ export default function createAuthRoutes(_pgPool) {
       // If Supabase Bearer token provided, validate it with service role OR anon client fallback
       if (!token && bearer) {
         if (process.env.NODE_ENV !== 'production' || process.env.AUTH_DEBUG === 'true') {
-          console.log('[Auth.refresh] Using Supabase Bearer token for refresh');
+          logger.debug('[Auth.refresh] Using Supabase Bearer token for refresh');
         }
         try {
           const url = process.env.SUPABASE_URL;
@@ -419,7 +420,7 @@ export default function createAuthRoutes(_pgPool) {
           const { data: getUserData, error: getUserErr } = await client.auth.getUser(bearer);
           const authUser = getUserData?.user;
           if (getUserErr || !authUser) {
-            console.log('[Auth.refresh] Invalid Supabase token:', getUserErr?.message);
+            logger.debug('[Auth.refresh] Invalid Supabase token:', getUserErr?.message);
             return res.status(401).json({ status: 'error', message: 'Unauthorized' });
           }
 
@@ -439,7 +440,7 @@ export default function createAuthRoutes(_pgPool) {
           }
 
           if (!user) {
-            console.log('[Auth.refresh] No CRM user found for Supabase token');
+            logger.debug('[Auth.refresh] No CRM user found for Supabase token');
             return res.status(401).json({ status: 'error', message: 'Unauthorized' });
           }
 
@@ -461,30 +462,30 @@ export default function createAuthRoutes(_pgPool) {
           };
           const access = signAccess(payload);
           res.cookie('aisha_access', access, cookieOpts(15 * 60 * 1000));
-          console.log('[Auth.refresh] Issued access cookie from Supabase Bearer token:', { email, mode: serviceKey ? 'service_role' : 'anon_fallback' });
+          logger.debug('[Auth.refresh] Issued access cookie from Supabase Bearer token:', { email, mode: serviceKey ? 'service_role' : 'anon_fallback' });
           return res.json({ status: 'success', message: 'Refreshed' });
         } catch (bearerErr) {
-          console.error('[Auth.refresh] Bearer token processing error:', bearerErr);
+          logger.error('[Auth.refresh] Bearer token processing error:', bearerErr);
           return res.status(401).json({ status: 'error', message: 'Unauthorized' });
         }
       }
 
       if (!token) {
-        console.log('[Auth.refresh] No refresh token found in cookies');
+        logger.debug('[Auth.refresh] No refresh token found in cookies');
         return res.status(401).json({ status: 'error', message: 'Unauthorized' });
       }
       const secret = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || 'change-me-refresh';
       let decoded;
       try {
         decoded = jwt.verify(token, secret);
-        console.log('[Auth.refresh] JWT decoded successfully:', { 
+        logger.debug('[Auth.refresh] JWT decoded successfully:', { 
           sub: decoded?.sub, 
           table: decoded?.table,
           exp: decoded?.exp,
           iat: decoded?.iat
         });
       } catch (jwtErr) {
-        console.log('[Auth.refresh] JWT verify failed:', { 
+        logger.debug('[Auth.refresh] JWT verify failed:', { 
           error: jwtErr?.message || 'Unknown JWT error',
           tokenPreview: token ? token.substring(0, 20) + '...' : 'no-token',
           secretPreview: secret ? secret.substring(0, 8) + '...' : 'no-secret'
@@ -496,12 +497,12 @@ export default function createAuthRoutes(_pgPool) {
       const supabase = getSupabaseClient();
       const { sub, table } = decoded || {};
       if (!sub) {
-        console.log('[Auth.refresh] No sub in decoded token');
+        logger.debug('[Auth.refresh] No sub in decoded token');
         return res.status(401).json({ status: 'error', message: 'Unauthorized' });
       }
 
       const tbl = table === 'employees' ? 'employees' : 'users';
-      console.log('[Auth.refresh] Looking up user:', { sub, table: tbl });
+      logger.debug('[Auth.refresh] Looking up user:', { sub, table: tbl });
       const selectFields = tbl === 'users' 
         ? 'id, email, role, tenant_id, tenant_uuid, status, metadata'
         : 'id, email, role, tenant_id, status, metadata';
@@ -512,11 +513,11 @@ export default function createAuthRoutes(_pgPool) {
         .eq('id', sub)
         .limit(1);
       if (lookupErr) {
-        console.log('[Auth.refresh] User lookup error:', lookupErr.message);
+        logger.debug('[Auth.refresh] User lookup error:', lookupErr.message);
       }
       const user = rows && rows[0];
       if (!user) {
-        console.log('[Auth.refresh] User not found:', { sub, table: tbl, rowCount: rows?.length });
+        logger.debug('[Auth.refresh] User not found:', { sub, table: tbl, rowCount: rows?.length });
         return res.status(401).json({ status: 'error', message: 'Unauthorized' });
       }
       const meta = user.metadata || {};
@@ -538,7 +539,7 @@ export default function createAuthRoutes(_pgPool) {
       res.cookie('aisha_access', access, cookieOpts(15 * 60 * 1000));
       return res.json({ status: 'success', message: 'Refreshed' });
     } catch (e) {
-      console.error('[Auth.refresh] error', e);
+      logger.error('[Auth.refresh] error', e);
       return res.status(500).json({ status: 'error', message: 'Internal error' });
     }
   });
@@ -595,7 +596,7 @@ export default function createAuthRoutes(_pgPool) {
       }
       return res.json({ status: 'success', message: 'Reset email sent' });
     } catch (e) {
-      console.error('[Auth.password.reset.request] error', e);
+      logger.error('[Auth.password.reset.request] error', e);
       return res.status(500).json({ status: 'error', message: 'Internal error' });
     }
   });
@@ -628,7 +629,7 @@ export default function createAuthRoutes(_pgPool) {
       }
       return res.json({ status: 'success', message: 'Password updated' });
     } catch (e) {
-      console.error('[Auth.password.reset.confirm] error', e);
+      logger.error('[Auth.password.reset.confirm] error', e);
       return res.status(500).json({ status: 'error', message: 'Internal error' });
     }
   });

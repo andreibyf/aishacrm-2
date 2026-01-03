@@ -9,6 +9,7 @@ import { getSupabaseClient } from "../../lib/supabase";
 import { appendEvent as memAppendEvent } from "../../lib/memory";
 import { getErrorMessage } from "../../lib/errorUtils";
 import jwt from "jsonwebtoken";
+import logger from '../../lib/logger';
 
 // Node 18+ provides a global fetch; declare for TypeScript.
 declare const fetch: any;
@@ -24,7 +25,7 @@ let cachedServiceToken: { token: string; expiresAt: number } | null = null;
 function getInternalServiceToken(tenantId?: string): string | null {
   const jwtSecret = process.env.JWT_SECRET;
   if (!jwtSecret) {
-    console.warn('[CRM Adapter] JWT_SECRET not set - backend calls will fail in production');
+    logger.warn('[CRM Adapter] JWT_SECRET not set - backend calls will fail in production');
     return null;
   }
 
@@ -275,7 +276,6 @@ async function callBackend(
 
         // Extract table name from path (/api/{table}/...)
         let tableName: string | null = null;
-        // eslint-disable-next-line no-useless-escape
         const m = path.match(/^\/api\/([^/?]+)/);
         if (m && m[1]) tableName = m[1];
 

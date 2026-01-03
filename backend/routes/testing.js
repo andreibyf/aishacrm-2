@@ -4,6 +4,7 @@
  */
 
 import express from 'express';
+import logger from '../lib/logger.js';
 
 export default function createTestingRoutes(_pgPool) {
   const router = express.Router();
@@ -274,7 +275,7 @@ export default function createTestingRoutes(_pgPool) {
           
           totalDeleted += count;
         } catch (error) {
-          console.error(`Error cleaning ${table}:`, error);
+          logger.error(`Error cleaning ${table}:`, error);
           results[table] = {
             deleted: 0,
             success: false,
@@ -309,12 +310,12 @@ export default function createTestingRoutes(_pgPool) {
               results[`${table}_unflagged`] = { deleted: count, success: true, window_days: windowDays };
               totalDeleted += count;
             } catch (unflaggedErr) {
-              console.error(`Unflagged cleanup error for ${table}:`, unflaggedErr);
+              logger.error(`Unflagged cleanup error for ${table}:`, unflaggedErr);
               results[`${table}_unflagged`] = { deleted: 0, success: false, error: unflaggedErr.message };
             }
           }
         } catch (unflaggedBlockErr) {
-          console.error('Unflagged cleanup block error:', unflaggedBlockErr);
+          logger.error('Unflagged cleanup block error:', unflaggedBlockErr);
           results['unflagged_cleanup'] = { success: false, error: unflaggedBlockErr.message };
         }
       }
@@ -329,7 +330,7 @@ export default function createTestingRoutes(_pgPool) {
         }
       });
     } catch (error) {
-      console.error('Cleanup test data error:', error);
+      logger.error('Cleanup test data error:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -516,7 +517,7 @@ export default function createTestingRoutes(_pgPool) {
             // Check if timeout or network error
             statusCode = 0;
             if (err.name === 'AbortError' || err.name === 'TimeoutError') {
-              console.warn(`[Full Scan] Timeout on ${ep.method} ${fullPath}`);
+              logger.warn(`[Full Scan] Timeout on ${ep.method} ${fullPath}`);
             }
           }
           const end = performance.now ? performance.now() : Date.now();
@@ -592,7 +593,7 @@ export default function createTestingRoutes(_pgPool) {
         }
       });
     } catch (error) {
-      console.error('Full scan error:', error);
+      logger.error('Full scan error:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

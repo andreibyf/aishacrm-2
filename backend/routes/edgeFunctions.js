@@ -1,4 +1,5 @@
 import express from 'express';
+import logger from '../lib/logger.js';
 
 // Derive Supabase functions base from SUPABASE_URL
 // Support both subdomain style (functions.supabase.co) and path style (/functions/v1)
@@ -39,7 +40,7 @@ async function forwardGet(req, res, upstreamPath) {
     return res.status(503).json({ status: 'error', message: 'SUPABASE_URL not configured for functions proxy' });
   }
   try {
-    console.log('[EdgeFunctionsProxy] Forwarding GET to', target);
+    logger.debug('[EdgeFunctionsProxy] Forwarding GET to', target);
     const upstream = await fetch(target, {
       method: 'GET',
       headers: {
@@ -50,7 +51,7 @@ async function forwardGet(req, res, upstreamPath) {
     const text = await upstream.text();
     const contentType = upstream.headers.get('content-type') || '';
     if (!upstream.ok) {
-      console.error('[EdgeFunctionsProxy] Upstream error', {
+      logger.error('[EdgeFunctionsProxy] Upstream error', {
         status: upstream.status,
         url: target,
         contentType,
@@ -67,7 +68,7 @@ async function forwardGet(req, res, upstreamPath) {
     }
     return res.send(text);
   } catch (e) {
-    console.error('[EdgeFunctionsProxy] forward exception', e?.message || e);
+    logger.error('[EdgeFunctionsProxy] forward exception', e?.message || e);
     return res.status(500).json({ status: 'error', message: 'Edge function proxy failure' });
   }
 }
@@ -78,7 +79,7 @@ async function forwardPost(req, res, upstreamPath) {
     return res.status(503).json({ status: 'error', message: 'SUPABASE_URL not configured for functions proxy' });
   }
   try {
-    console.log('[EdgeFunctionsProxy] Forwarding POST to', target);
+    logger.debug('[EdgeFunctionsProxy] Forwarding POST to', target);
     const upstream = await fetch(target, {
       method: 'POST',
       headers: {
@@ -90,7 +91,7 @@ async function forwardPost(req, res, upstreamPath) {
     const text = await upstream.text();
     const contentType = upstream.headers.get('content-type') || '';
     if (!upstream.ok) {
-      console.error('[EdgeFunctionsProxy] Upstream error', {
+      logger.error('[EdgeFunctionsProxy] Upstream error', {
         status: upstream.status,
         url: target,
         contentType,
@@ -107,7 +108,7 @@ async function forwardPost(req, res, upstreamPath) {
     }
     return res.send(text);
   } catch (e) {
-    console.error('[EdgeFunctionsProxy] forward exception', e?.message || e);
+    logger.error('[EdgeFunctionsProxy] forward exception', e?.message || e);
     return res.status(500).json({ status: 'error', message: 'Edge function proxy failure' });
   }
 }

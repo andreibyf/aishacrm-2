@@ -5,6 +5,7 @@
  */
 
 import express from 'express';
+import logger from '../lib/logger.js';
 
 // Helper to normalize strings for duplicate detection
 function normalizeString(str) {
@@ -294,7 +295,7 @@ export default function createValidationRoutes(_pgPool) {
 
       res.json({ status: 'success', data: { report }, tenant_id });
     } catch (error) {
-      console.error('analyze-data-quality error:', error);
+      logger.error('analyze-data-quality error:', error);
       res.status(500).json({
         status: 'error',
         message: error.message,
@@ -431,7 +432,7 @@ export default function createValidationRoutes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error('checkDuplicateBeforeCreate error:', error);
+      logger.error('checkDuplicateBeforeCreate error:', error);
       res.status(500).json({
         status: 'error',
         message: error.message,
@@ -464,7 +465,7 @@ export default function createValidationRoutes(_pgPool) {
         });
       }
 
-      console.log(`📥 Import request: ${records.length} ${entityType} records`);
+      logger.debug(`📥 Import request: ${records.length} ${entityType} records`);
 
       const results = {
         successCount: 0,
@@ -501,7 +502,7 @@ export default function createValidationRoutes(_pgPool) {
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
       if (entityType === 'Contact' && accountLinkColumn) {
-        console.log(`🔗 Processing account links via column: ${accountLinkColumn}`);
+        logger.debug(`🔗 Processing account links via column: ${accountLinkColumn}`);
         const { data: accountsData, error: accountsErr } = await supabase
           .from('accounts')
           .select('*')
@@ -521,7 +522,7 @@ export default function createValidationRoutes(_pgPool) {
           }
         });
 
-        console.log(`📚 Built account lookup with ${Object.keys(accountLookupMap).length} entries`);
+        logger.debug(`📚 Built account lookup with ${Object.keys(accountLookupMap).length} entries`);
       }
 
       // Process each record
@@ -614,7 +615,7 @@ export default function createValidationRoutes(_pgPool) {
           if (insertErr) throw new Error(insertErr.message);
           results.successCount++;
         } catch (error) {
-          console.error(`Row ${rowNumber} failed:`, error);
+          logger.error(`Row ${rowNumber} failed:`, error);
           results.errors.push({
             row_number: rowNumber,
             error: error.message || 'Unknown error',
@@ -623,14 +624,14 @@ export default function createValidationRoutes(_pgPool) {
         }
       }
 
-      console.log(`✅ Import complete: ${results.successCount} success, ${results.failCount} failed`);
+      logger.debug(`✅ Import complete: ${results.successCount} success, ${results.failCount} failed`);
 
       res.json({
         status: 'success',
         data: results,
       });
     } catch (error) {
-      console.error('❌ validateAndImport error:', error);
+      logger.error('❌ validateAndImport error:', error);
       res.status(500).json({
         status: 'error',
         message: `An unexpected server error occurred: ${error.message}`,

@@ -14,6 +14,7 @@ import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { createReadStream } from 'fs';
+import logger from '../lib/logger.js';
 
 const execAsync = promisify(exec);
 const router = express.Router();
@@ -58,10 +59,10 @@ async function logAuditEvent(actor, action, approvalId = null, details = {}) {
       });
     
     if (error) {
-      console.error('[DevAI Audit] Failed to log event:', error);
+      logger.error('[DevAI Audit] Failed to log event:', error);
     }
   } catch (err) {
-    console.error('[DevAI Audit] Exception logging event:', err);
+    logger.error('[DevAI Audit] Exception logging event:', err);
   }
 }
 
@@ -89,7 +90,7 @@ router.get('/approvals', async (req, res) => {
     const { data, error } = await query;
     
     if (error) {
-      console.error('[DevAI] Error fetching approvals:', error);
+      logger.error('[DevAI] Error fetching approvals:', error);
       return res.status(500).json({ error: 'Failed to fetch approvals' });
     }
     
@@ -102,7 +103,7 @@ router.get('/approvals', async (req, res) => {
     
     return res.json({ approvals: redactedData });
   } catch (err) {
-    console.error('[DevAI] Exception in GET /approvals:', err);
+    logger.error('[DevAI] Exception in GET /approvals:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -134,7 +135,7 @@ router.get('/approvals/:id', async (req, res) => {
     
     return res.json({ approval: redacted });
   } catch (err) {
-    console.error('[DevAI] Exception in GET /approvals/:id:', err);
+    logger.error('[DevAI] Exception in GET /approvals/:id:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -181,7 +182,7 @@ router.post('/approvals/:id/approve', async (req, res) => {
       .eq('id', id);
     
     if (approveError) {
-      console.error('[DevAI] Error approving:', approveError);
+      logger.error('[DevAI] Error approving:', approveError);
       return res.status(500).json({ error: 'Failed to approve' });
     }
     
@@ -218,7 +219,7 @@ router.post('/approvals/:id/approve', async (req, res) => {
       });
       
     } catch (execError) {
-      console.error('[DevAI] Execution error:', execError);
+      logger.error('[DevAI] Execution error:', execError);
       
       // Mark as failed
       await supabase
@@ -242,7 +243,7 @@ router.post('/approvals/:id/approve', async (req, res) => {
     }
     
   } catch (err) {
-    console.error('[DevAI] Exception in approve:', err);
+    logger.error('[DevAI] Exception in approve:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -288,7 +289,7 @@ router.post('/approvals/:id/reject', async (req, res) => {
       .eq('id', id);
     
     if (rejectError) {
-      console.error('[DevAI] Error rejecting:', rejectError);
+      logger.error('[DevAI] Error rejecting:', rejectError);
       return res.status(500).json({ error: 'Failed to reject' });
     }
     
@@ -301,7 +302,7 @@ router.post('/approvals/:id/reject', async (req, res) => {
     return res.json({ success: true, message: 'Approval rejected' });
     
   } catch (err) {
-    console.error('[DevAI] Exception in reject:', err);
+    logger.error('[DevAI] Exception in reject:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -354,12 +355,12 @@ router.get('/approvals/:id/export', async (req, res) => {
       try {
         await fs.unlink(exportPath);
       } catch (err) {
-        console.error('[DevAI] Failed to cleanup export file:', err);
+        logger.error('[DevAI] Failed to cleanup export file:', err);
       }
     });
     
   } catch (_err) {
-    console.error('[DevAI] Exception in export:', _err);
+    logger.error('[DevAI] Exception in export:', _err);
     return res.status(500).json({ error: 'Failed to create export' });
   }
 });
@@ -538,7 +539,7 @@ async function createExportBundle(approval) {
         const targetPath = path.join(filesDir, path.basename(file));
         await fs.writeFile(targetPath, content);
       } catch (err) {
-        console.warn(`[DevAI Export] Could not export file ${file}:`, err.message);
+        logger.warn(`[DevAI Export] Could not export file ${file}:`, err.message);
         manifest.excluded_files.push(file);
       }
     }

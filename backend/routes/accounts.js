@@ -10,6 +10,7 @@ import {
 } from "../middleware/validateTenant.js";
 import { tenantScopedId, buildGetByIdSQL as _buildGetByIdSQL } from "../middleware/tenantScopedId.js";
 import { cacheList, invalidateCache } from "../lib/cacheMiddleware.js";
+import logger from '../lib/logger.js';
 
 export default function createAccountRoutes(_pgPool) {
   const router = express.Router();
@@ -278,7 +279,7 @@ export default function createAccountRoutes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error('Error searching accounts:', error);
+      logger.error('Error searching accounts:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -365,7 +366,7 @@ export default function createAccountRoutes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error("Error listing accounts:", error);
+      logger.error("Error listing accounts:", error);
       res.status(500).json({ status: "error", message: error.message });
     }
   });
@@ -429,7 +430,7 @@ export default function createAccountRoutes(_pgPool) {
         data: normalizeAccount(data),
       });
     } catch (error) {
-      console.error("Error creating account:", error);
+      logger.error("Error creating account:", error);
       res.status(500).json({ status: "error", message: error.message });
     }
   });
@@ -511,7 +512,7 @@ export default function createAccountRoutes(_pgPool) {
       const account = normalizeAccount(data);
       res.json({ status: "success", data: account });
     } catch (error) {
-      console.error("Error fetching account:", error);
+      logger.error("Error fetching account:", error);
       res.status(500).json({ status: "error", message: error.message });
     }
   });
@@ -535,7 +536,7 @@ export default function createAccountRoutes(_pgPool) {
       if (error) throw new Error(error.message);
       return res.json({ status: 'success', data: { people: data || [] } });
     } catch (error) {
-      console.error('[Accounts] related-people error:', error);
+      logger.error('[Accounts] related-people error:', error);
       return res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -608,7 +609,7 @@ export default function createAccountRoutes(_pgPool) {
         data: updatedAccount,
       });
     } catch (error) {
-      console.error("Error updating account:", error);
+      logger.error("Error updating account:", error);
       res.status(500).json({ status: "error", message: error.message });
     }
   });
@@ -638,7 +639,7 @@ export default function createAccountRoutes(_pgPool) {
         data: { id: data.id },
       });
     } catch (error) {
-      console.error("Error deleting account:", error);
+      logger.error("Error deleting account:", error);
       res.status(500).json({ status: "error", message: error.message });
     }
   });

@@ -6,7 +6,6 @@ export function createPageUrl(pageName: string) {
     if (!pageName || typeof pageName !== 'string') {
         try {
             if (import.meta.env?.DEV) {
-                // eslint-disable-next-line no-console
                 console.warn('[createPageUrl] called with invalid pageName:', pageName);
             }
         } catch {

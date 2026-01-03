@@ -5,6 +5,7 @@
 
 import express from 'express';
 import { getPerformanceLogBatchStatus, flush as flushPerfLogs } from '../lib/perfLogBatcher.js';
+import logger from '../lib/logger.js';
 
 export default function createMetricsRoutes(pgPool) {
   const router = express.Router();
@@ -163,12 +164,12 @@ export default function createMetricsRoutes(pgPool) {
           finalAggNo304 = dbAggNo304;
         }
       } catch (aggErr) {
-        console.warn('[Metrics] DB aggregate failed, using fallback:', aggErr.message);
+        logger.warn('[Metrics] DB aggregate failed, using fallback:', aggErr.message);
       }
 
       const errorRate = finalAgg.total_calls > 0 ? Number(((finalAgg.error_count / finalAgg.total_calls) * 100).toFixed(2)) : 0;
       const errorRateNo304 = finalAggNo304.total_calls > 0 ? Number(((finalAggNo304.error_count / finalAggNo304.total_calls) * 100).toFixed(2)) : 0;
-      console.log('[Metrics] performance', {
+      logger.debug('[Metrics] performance', {
         tenant_id: tenant_id || 'ALL',
         hours,
         logCount: logs.length,
@@ -210,7 +211,7 @@ export default function createMetricsRoutes(pgPool) {
         }
       });
     } catch (error) {
-      console.error('[Metrics] Fatal error in /performance route:', error);
+      logger.error('[Metrics] Fatal error in /performance route:', error);
       return res.status(500).json({
         status: 'error',
         message: error.message,
@@ -263,7 +264,7 @@ export default function createMetricsRoutes(pgPool) {
       const status = getPerformanceLogBatchStatus();
       return res.json({ status: 'success', message: 'Flush triggered', data: status });
     } catch (error) {
-      console.error('[Metrics] Flush endpoint error:', error);
+      logger.error('[Metrics] Flush endpoint error:', error);
       return res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -280,10 +281,10 @@ export default function createMetricsRoutes(pgPool) {
       }
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
       const result = await pgPool.query(`DELETE FROM performance_logs ${whereClause} RETURNING id`, params);
-      console.log(`[Metrics] Deleted ${result.rows.length} performance log(s) for tenant: ${tenant_id || 'ALL'}`);
+      logger.debug(`[Metrics] Deleted ${result.rows.length} performance log(s) for tenant: ${tenant_id || 'ALL'}`);
       return res.json({ status: 'success', message: `Deleted ${result.rows.length} performance log(s)`, data: { deleted_count: result.rows.length } });
     } catch (error) {
-      console.error('[Metrics] Error deleting performance logs:', error);
+      logger.error('[Metrics] Error deleting performance logs:', error);
       return res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -334,7 +335,7 @@ export default function createMetricsRoutes(pgPool) {
         );
         apiKeysCount = parseInt(apiKeysResult.rows[0]?.count || 0);
       } catch {
-        console.log('[Metrics] API keys table not found, skipping');
+        logger.debug('[Metrics] API keys table not found, skipping');
       }
 
       const authFailures = authFailuresResult.rows[0] || {};
@@ -370,7 +371,7 @@ export default function createMetricsRoutes(pgPool) {
         }
       });
     } catch (error) {
-      console.error('[Metrics] Error fetching security metrics:', error);
+      logger.error('[Metrics] Error fetching security metrics:', error);
       return res.status(500).json({ status: 'error', message: error.message });
     }
   });

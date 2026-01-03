@@ -1,11 +1,16 @@
 /**
  * Backend Logger Utility
  * 
- * Provides environment-aware logging for backend services.
- * Supports different log levels and structured logging.
+ * DEPRECATED: This is a legacy logger wrapper.
+ * New code should use the Pino logger directly from '../lib/logger.js'
+ * 
+ * This file maintains backward compatibility for existing code.
  * 
  * @module backend/utils/logger
+ * @deprecated Use '../lib/logger.js' instead
  */
+
+import logger from '../lib/logger.js';
 
 /**
  * Log levels enum
@@ -55,25 +60,6 @@ function shouldLog(level) {
 }
 
 /**
- * Format log message with timestamp and level
- * 
- * @param {string} level - Log level
- * @param {string} message - Log message
- * @param {Object} [meta] - Additional metadata
- * @returns {string} Formatted log message
- */
-function formatMessage(level, message, meta = null) {
-  const timestamp = new Date().toISOString();
-  let formatted = `[${timestamp}] [${level}] ${message}`;
-  
-  if (meta && Object.keys(meta).length > 0) {
-    formatted += ` ${JSON.stringify(meta)}`;
-  }
-  
-  return formatted;
-}
-
-/**
  * Log an error message
  * 
  * @param {string} message - Error message
@@ -81,8 +67,11 @@ function formatMessage(level, message, meta = null) {
  */
 export function error(message, error = null) {
   if (shouldLog(LogLevel.ERROR)) {
-    const meta = error instanceof Error ? { stack: error.stack, message: error.message } : error;
-    console.error(formatMessage(LogLevel.ERROR, message, meta));
+    if (error instanceof Error) {
+      logger.error({ err: error }, message);
+    } else {
+      logger.error(error || {}, message);
+    }
   }
 }
 
@@ -94,7 +83,7 @@ export function error(message, error = null) {
  */
 export function warn(message, meta = null) {
   if (shouldLog(LogLevel.WARN)) {
-    console.warn(formatMessage(LogLevel.WARN, message, meta));
+    logger.warn(meta || {}, message);
   }
 }
 
@@ -106,7 +95,7 @@ export function warn(message, meta = null) {
  */
 export function info(message, meta = null) {
   if (shouldLog(LogLevel.INFO)) {
-    console.log(formatMessage(LogLevel.INFO, message, meta));
+    logger.info(meta || {}, message);
   }
 }
 
@@ -118,7 +107,7 @@ export function info(message, meta = null) {
  */
 export function debug(message, meta = null) {
   if (shouldLog(LogLevel.DEBUG)) {
-    console.log(formatMessage(LogLevel.DEBUG, message, meta));
+    logger.debug(meta || {}, message);
   }
 }
 
@@ -129,13 +118,19 @@ export function debug(message, meta = null) {
  * @returns {Object} Scoped logger instance
  */
 export function createLogger(moduleName) {
-  const prefix = `[${moduleName}]`;
+  const childLogger = logger.child({ module: moduleName });
   
   return {
-    error: (message, err = null) => error(`${prefix} ${message}`, err),
-    warn: (message, meta = null) => warn(`${prefix} ${message}`, meta),
-    info: (message, meta = null) => info(`${prefix} ${message}`, meta),
-    debug: (message, meta = null) => debug(`${prefix} ${message}`, meta),
+    error: (message, err = null) => {
+      if (err instanceof Error) {
+        childLogger.error({ err }, message);
+      } else {
+        childLogger.error(err || {}, message);
+      }
+    },
+    warn: (message, meta = null) => childLogger.warn(meta || {}, message),
+    info: (message, meta = null) => childLogger.info(meta || {}, message),
+    debug: (message, meta = null) => childLogger.debug(meta || {}, message),
   };
 }
 
@@ -148,7 +143,7 @@ export function createLogger(moduleName) {
  * @param {number} duration - Request duration in ms
  */
 export function logRequest(req, statusCode, duration) {
-  const level = statusCode >= 500 ? LogLevel.ERROR : statusCode >= 400 ? LogLevel.WARN : LogLevel.INFO;
+  const level = statusCode >= 500 ? 'error' : statusCode >= 400 ? 'warn' : 'info';
   const message = `${req.method} ${req.path} ${statusCode} ${duration}ms`;
   const meta = {
     method: req.method,
@@ -158,11 +153,5 @@ export function logRequest(req, statusCode, duration) {
     ip: req.ip,
   };
   
-  if (level === LogLevel.ERROR) {
-    error(message, meta);
-  } else if (level === LogLevel.WARN) {
-    warn(message, meta);
-  } else {
-    info(message, meta);
-  }
+  logger[level](meta, message);
 }

@@ -606,8 +606,8 @@ export const sanitizeMessageText = (text: unknown): string => {
 
   // Strip control chars except \n and \t, preserve printable ASCII and common punctuation
   // This keeps Latin text readable while removing binary garbage
-  // eslint-disable-next-line no-control-regex
   return str
+    // eslint-disable-next-line no-control-regex
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Remove control chars except \t \n \r
     .trim();
 };

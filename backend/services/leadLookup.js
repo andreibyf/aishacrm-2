@@ -5,6 +5,7 @@
  */
 
 import { getSupabaseClient } from '../lib/supabase-db.js';
+import logger from '../lib/logger.js';
 
 /**
  * @typedef {Object} Lead
@@ -48,7 +49,7 @@ export async function findLeadByName(tenantId, name) {
     .limit(5);
   
   if (partialError) {
-    console.error('[LeadLookup] Error searching leads:', partialError.message);
+    logger.error('[LeadLookup] Error searching leads:', partialError.message);
     return null;
   }
   
@@ -86,7 +87,7 @@ export async function searchLeadsByName(tenantId, name, limit = 10) {
     .limit(limit);
   
   if (error) {
-    console.error('[LeadLookup] Error searching leads:', error.message);
+    logger.error('[LeadLookup] Error searching leads:', error.message);
     return [];
   }
   

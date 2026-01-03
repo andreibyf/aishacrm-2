@@ -1,6 +1,7 @@
 import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { emitTenantWebhooks } from '../lib/webhookEmitter.js';
+import logger from '../lib/logger.js';
 
 // Real routes for AI Campaigns backed by ai_campaign table (singular)
 export default function createAICampaignRoutes(pgPool) {
@@ -46,7 +47,7 @@ export default function createAICampaignRoutes(pgPool) {
         data: { campaigns: result.rows, total: parseInt(countResult.rows[0].count, 10), limit: parseInt(limit), offset: parseInt(offset) }
       });
     } catch (err) {
-      console.error('[AI Campaigns] List error:', err.message);
+      logger.error('[AI Campaigns] List error:', err.message);
       res.status(500).json({ status: 'error', message: err.message });
     }
   });
@@ -61,7 +62,7 @@ export default function createAICampaignRoutes(pgPool) {
       if (result.rows.length === 0) return res.status(404).json({ status: 'error', message: 'AI Campaign not found' });
       res.json({ status: 'success', data: result.rows[0] });
     } catch (err) {
-      console.error('[AI Campaigns] Get error:', err.message);
+      logger.error('[AI Campaigns] Get error:', err.message);
       res.status(500).json({ status: 'error', message: err.message });
     }
   });
@@ -84,7 +85,7 @@ export default function createAICampaignRoutes(pgPool) {
       emitTenantWebhooks(pgPool, tenant_id, 'aicampaign.created', { id: created.id, name: created.name, status: created.status }).catch(() => undefined);
       res.status(201).json({ status: 'success', data: created });
     } catch (err) {
-      console.error('[AI Campaigns] Create error:', err.message);
+      logger.error('[AI Campaigns] Create error:', err.message);
       res.status(500).json({ status: 'error', message: err.message });
     }
   });
@@ -113,7 +114,7 @@ export default function createAICampaignRoutes(pgPool) {
       if (result.rows.length === 0) return res.status(404).json({ status: 'error', message: 'AI Campaign not found' });
       res.json({ status: 'success', data: result.rows[0] });
     } catch (err) {
-      console.error('[AI Campaigns] Update error:', err.message);
+      logger.error('[AI Campaigns] Update error:', err.message);
       res.status(500).json({ status: 'error', message: err.message });
     }
   });
@@ -128,7 +129,7 @@ export default function createAICampaignRoutes(pgPool) {
       if (result.rowCount === 0) return res.status(404).json({ status: 'error', message: 'AI Campaign not found' });
       res.json({ status: 'success', data: { id } });
     } catch (err) {
-      console.error('[AI Campaigns] Delete error:', err.message);
+      logger.error('[AI Campaigns] Delete error:', err.message);
       res.status(500).json({ status: 'error', message: err.message });
     }
   });
@@ -203,7 +204,7 @@ export default function createAICampaignRoutes(pgPool) {
       // TODO: enqueue background job here (worker/cron) if available
       res.json({ status: 'success', data: updated });
     } catch (err) {
-      console.error('[AI Campaigns] Start error:', err.message);
+      logger.error('[AI Campaigns] Start error:', err.message);
       res.status(500).json({ status: 'error', message: err.message });
     }
   });
@@ -230,7 +231,7 @@ export default function createAICampaignRoutes(pgPool) {
       emitTenantWebhooks(pgPool, tenant_id, 'aicampaign.pause', { id: updated.id, status: updated.status }).catch(() => undefined);
       res.json({ status: 'success', data: updated });
     } catch (err) {
-      console.error('[AI Campaigns] Pause error:', err.message);
+      logger.error('[AI Campaigns] Pause error:', err.message);
       res.status(500).json({ status: 'error', message: err.message });
     }
   });
@@ -257,7 +258,7 @@ export default function createAICampaignRoutes(pgPool) {
       emitTenantWebhooks(pgPool, tenant_id, 'aicampaign.resume', { id: updated.id, status: updated.status }).catch(() => undefined);
       res.json({ status: 'success', data: updated });
     } catch (err) {
-      console.error('[AI Campaigns] Resume error:', err.message);
+      logger.error('[AI Campaigns] Resume error:', err.message);
       res.status(500).json({ status: 'error', message: err.message });
     }
   });

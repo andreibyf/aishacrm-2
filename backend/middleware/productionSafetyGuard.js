@@ -9,6 +9,7 @@
  * 
  * Usage:
  *   import { productionSafetyGuard } from '../middleware/productionSafetyGuard.js';
+import logger from '../lib/logger.js';
  *   
  *   // Apply globally in server.js (before routes):
  *   app.use(productionSafetyGuard());
@@ -56,7 +57,7 @@ async function logSecurityEvent(pgPool, details) {
     await pgPool.query(query, values);
   } catch (error) {
     // Don't fail the request if logging fails
-    console.error('Failed to log security event:', error.message);
+    logger.error('Failed to log security event:', error.message);
   }
 }
 
@@ -133,7 +134,7 @@ export function productionSafetyGuard(opts = {}) {
     // Check 1: Global environment bypass
     if (process.env.ALLOW_PRODUCTION_WRITES === 'true') {
       const message = `⚠️  Production write allowed via ALLOW_PRODUCTION_WRITES: ${method} ${path}`;
-      console.warn(message);
+      logger.warn(message);
       
       // Log to system_logs table
       logSecurityEvent(pgPool, {
@@ -156,7 +157,7 @@ export function productionSafetyGuard(opts = {}) {
       
       if (expectedToken && writeToken === expectedToken) {
         const message = `⚠️  Production write allowed via header token: ${method} ${path}`;
-        console.warn(message);
+        logger.warn(message);
         
         // Log to system_logs table
         logSecurityEvent(pgPool, {
@@ -176,7 +177,7 @@ export function productionSafetyGuard(opts = {}) {
     // Check 3: E2E test mode (requires both flags)
     if (process.env.E2E_TEST_MODE === 'true' && process.env.ALLOW_E2E_MUTATIONS === 'true') {
       const message = `⚠️  Production write allowed via E2E_TEST_MODE + ALLOW_E2E_MUTATIONS: ${method} ${path}`;
-      console.warn(message);
+      logger.warn(message);
       
       // Log to system_logs table
       logSecurityEvent(pgPool, {
@@ -194,7 +195,7 @@ export function productionSafetyGuard(opts = {}) {
 
     // BLOCKED: No bypass mechanism provided
     const blockMessage = `🚫 Blocked production write: ${method} ${path}`;
-    console.error(blockMessage);
+    logger.error(blockMessage);
     
     // Log blocked attempt to system_logs table
     logSecurityEvent(pgPool, {

@@ -6,6 +6,7 @@
 import express from "express";
 import multer from "multer";
 import { getSupabaseAdmin, getBucketName } from "../lib/supabaseFactory.js";
+import logger from '../lib/logger.js';
 
 // Multer memory storage to forward buffer to Supabase
 const upload = multer({ storage: multer.memoryStorage() });
@@ -75,7 +76,7 @@ export default function createStorageRoutes(_pgPool) {
         req.body?.tenant_id?.toString() ||
         null;
 
-      console.log("[storage.upload] Upload request:", {
+      logger.debug("[storage.upload] Upload request:", {
         originalName: req.file.originalname,
         size: req.file.size,
         mimetype: req.file.mimetype,
@@ -90,7 +91,7 @@ export default function createStorageRoutes(_pgPool) {
         originalName: req.file.originalname,
       });
 
-      console.log("[storage.upload] Uploading to:", {
+      logger.debug("[storage.upload] Uploading to:", {
         bucket,
         objectKey,
         tenantId,
@@ -105,11 +106,11 @@ export default function createStorageRoutes(_pgPool) {
         });
 
       if (uploadError) {
-        console.error("[storage.upload] Supabase upload error:", uploadError);
+        logger.error("[storage.upload] Supabase upload error:", uploadError);
         throw uploadError;
       }
 
-      console.log("[storage.upload] Upload successful:", objectKey);
+      logger.debug("[storage.upload] Upload successful:", objectKey);
 
       // Prefer public URL (bucket should be public). If not accessible, fall back to a signed URL.
       const { data: publicUrlData } = supabase.storage.from(bucket)
@@ -150,7 +151,7 @@ export default function createStorageRoutes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error("[storage.upload] Error:", error);
+      logger.error("[storage.upload] Error:", error);
       return res.status(500).json({
         status: "error",
         message: error.message || "Upload failed",
@@ -233,7 +234,7 @@ export default function createStorageRoutes(_pgPool) {
           .createSignedUrl(objectKey, expiresIn);
         
         if (signErr) {
-          console.error("[storage.signed-url] Error creating signed URL:", signErr);
+          logger.error("[storage.signed-url] Error creating signed URL:", signErr);
           throw signErr;
         }
         
@@ -255,7 +256,7 @@ export default function createStorageRoutes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error("[storage.signed-url] Error:", error);
+      logger.error("[storage.signed-url] Error:", error);
       return res.status(500).json({
         status: "error",
         message: error.message || "Failed to generate signed URL",
@@ -376,7 +377,7 @@ export default function createStorageRoutes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error("[storage.bucket] Error:", error);
+      logger.error("[storage.bucket] Error:", error);
       return res.status(500).json({ status: "error", message: error.message });
     }
   });

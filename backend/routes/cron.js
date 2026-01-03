@@ -6,6 +6,7 @@
 import express from 'express';
 import { executeJob } from '../lib/cronExecutors.js';
 import { cacheList } from '../lib/cacheMiddleware.js';
+import logger from '../lib/logger.js';
 
 export default function createCronRoutes(_pgPool) {
   const router = express.Router();
@@ -48,7 +49,7 @@ export default function createCronRoutes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error('Error listing cron jobs:', error);
+      logger.error('Error listing cron jobs:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -80,7 +81,7 @@ export default function createCronRoutes(_pgPool) {
         data: { job: data }
       });
     } catch (error) {
-      console.error('Error getting cron job:', error);
+      logger.error('Error getting cron job:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -135,7 +136,7 @@ export default function createCronRoutes(_pgPool) {
         data: { job: data },
       });
     } catch (error) {
-      console.error('Error creating cron job:', error);
+      logger.error('Error creating cron job:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -189,7 +190,7 @@ export default function createCronRoutes(_pgPool) {
         data: { job: data }
       });
     } catch (error) {
-      console.error('Error updating cron job:', error);
+      logger.error('Error updating cron job:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -223,7 +224,7 @@ export default function createCronRoutes(_pgPool) {
         data: { job: data }
       });
     } catch (error) {
-      console.error('Error deleting cron job:', error);
+      logger.error('Error deleting cron job:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -290,7 +291,7 @@ export default function createCronRoutes(_pgPool) {
           }
           
         } catch (error) {
-          console.error(`Error executing cron job ${job.name}:`, error);
+          logger.error(`Error executing cron job ${job.name}:`, error);
           
           failed.push({
             id: job.id,
@@ -330,7 +331,7 @@ export default function createCronRoutes(_pgPool) {
         }
       });
     } catch (error) {
-      console.error('Error running cron jobs:', error);
+      logger.error('Error running cron jobs:', error);
       res.status(500).json({ 
         status: 'error', 
         message: error.message,
@@ -397,7 +398,7 @@ export default function createCronRoutes(_pgPool) {
         }
       });
     } catch (error) {
-      console.error('Error running cron job:', error);
+      logger.error('Error running cron job:', error);
       res.status(500).json({
         status: 'error',
         message: error.message,
@@ -449,6 +450,6 @@ function calculateNextRun(schedule, fromDate) {
   }
   
   // Default to 5 minutes for unrecognized patterns
-  console.warn(`Unknown schedule pattern: ${schedule}, defaulting to 5 minutes`);
+  logger.warn(`Unknown schedule pattern: ${schedule}, defaulting to 5 minutes`);
   return new Date(from.getTime() + 5 * 60 * 1000);
 }

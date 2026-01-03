@@ -1,6 +1,7 @@
 import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { cacheList } from '../lib/cacheMiddleware.js';
+import logger from '../lib/logger.js';
 
 export default function createOpportunityRoutes(_pgPool) {
   const router = express.Router();
@@ -319,7 +320,7 @@ export default function createOpportunityRoutes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error('Error searching opportunities:', error);
+      logger.error('Error searching opportunities:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -422,7 +423,7 @@ export default function createOpportunityRoutes(_pgPool) {
         }
       });
     } catch (error) {
-      console.error('Error fetching opportunities:', error);
+      logger.error('Error fetching opportunities:', error);
       res.status(500).json({
         status: 'error',
         message: error.message
@@ -528,7 +529,7 @@ export default function createOpportunityRoutes(_pgPool) {
         data: opportunity
       });
     } catch (error) {
-      console.error('Error fetching opportunity:', error);
+      logger.error('Error fetching opportunity:', error);
       res.status(500).json({
         status: 'error',
         message: error.message
@@ -615,7 +616,7 @@ export default function createOpportunityRoutes(_pgPool) {
         data: opportunity
       });
     } catch (error) {
-      console.error('Error creating opportunity:', error);
+      logger.error('Error creating opportunity:', error);
       res.status(500).json({
         status: 'error',
         message: error.message
@@ -714,7 +715,7 @@ export default function createOpportunityRoutes(_pgPool) {
       if (error) throw new Error(error.message);
 
       if (normalizedStage !== null && data.stage !== normalizedStage) {
-        console.warn('[Opportunities PUT] ⚠️  Stage mismatch', {
+        logger.warn('[Opportunities PUT] ⚠️  Stage mismatch', {
           expected: normalizedStage,
           persisted: data.stage,
           id: data.id
@@ -728,7 +729,7 @@ export default function createOpportunityRoutes(_pgPool) {
         data: updatedOpportunity
       });
     } catch (error) {
-      console.error('Error updating opportunity:', error);
+      logger.error('Error updating opportunity:', error);
       res.status(500).json({
         status: 'error',
         message: error.message
@@ -761,7 +762,7 @@ export default function createOpportunityRoutes(_pgPool) {
         message: 'Opportunity deleted successfully'
       });
     } catch (error) {
-      console.error('Error deleting opportunity:', error);
+      logger.error('Error deleting opportunity:', error);
       res.status(500).json({
         status: 'error',
         message: error.message

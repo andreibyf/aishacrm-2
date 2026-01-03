@@ -4,6 +4,7 @@
  */
 
 import express from 'express';
+import logger from '../lib/logger.js';
 
 export default function createSystemBrandingRoutes(_pgPool) {
   const router = express.Router();
@@ -32,7 +33,7 @@ export default function createSystemBrandingRoutes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error('Error listing systembranding:', error);
+      logger.error('Error listing systembranding:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -63,7 +64,7 @@ export default function createSystemBrandingRoutes(_pgPool) {
         data,
       });
     } catch (error) {
-      console.error('Error getting systembranding:', error);
+      logger.error('Error getting systembranding:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -94,7 +95,7 @@ export default function createSystemBrandingRoutes(_pgPool) {
         data,
       });
     } catch (error) {
-      console.error('Error creating systembranding:', error);
+      logger.error('Error creating systembranding:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -147,7 +148,7 @@ export default function createSystemBrandingRoutes(_pgPool) {
         data,
       });
     } catch (error) {
-      console.error('Error updating systembranding:', error);
+      logger.error('Error updating systembranding:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -180,7 +181,7 @@ export default function createSystemBrandingRoutes(_pgPool) {
         data,
       });
     } catch (error) {
-      console.error('Error deleting systembranding:', error);
+      logger.error('Error deleting systembranding:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

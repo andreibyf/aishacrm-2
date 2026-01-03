@@ -9,6 +9,7 @@ import { logEntityTransition } from '../lib/transitions.js';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
+import logger from '../lib/logger.js';
 import {
   getOrCreatePlaceholderB2CAccount,
   createPersonFromBizDev,
@@ -106,7 +107,7 @@ export default function createBizDevSourceRoutes(pgPool) {
         data: { bizdevsources: mappedData }
       });
     } catch (error) {
-      console.error('Error fetching bizdev sources:', error);
+      logger.error('Error fetching bizdev sources:', error);
       res.status(500).json({
         status: 'error',
         message: error.message
@@ -178,7 +179,7 @@ export default function createBizDevSourceRoutes(pgPool) {
         data: { ...data, source_name: data.source || data.source_name }
       });
     } catch (error) {
-      console.error('Error fetching bizdev source:', error);
+      logger.error('Error fetching bizdev source:', error);
       res.status(500).json({
         status: 'error',
         message: error.message
@@ -347,7 +348,7 @@ export default function createBizDevSourceRoutes(pgPool) {
         data: { ...data, source_name: data.source }
       });
     } catch (error) {
-      console.error('Error creating bizdev source:', error);
+      logger.error('Error creating bizdev source:', error);
       res.status(500).json({
         status: 'error',
         message: error.message
@@ -525,7 +526,7 @@ export default function createBizDevSourceRoutes(pgPool) {
         data: { ...data, source_name: data.source || data.source_name }
       });
     } catch (error) {
-      console.error('Error updating bizdev source:', error);
+      logger.error('Error updating bizdev source:', error);
       res.status(500).json({
         status: 'error',
         message: error.message
@@ -592,7 +593,7 @@ export default function createBizDevSourceRoutes(pgPool) {
         data: { ...deletedData, source_name: deletedData.source || deletedData.source_name }
       });
     } catch (error) {
-      console.error('Error deleting bizdev source:', error);
+      logger.error('Error deleting bizdev source:', error);
       res.status(500).json({
         status: 'error',
         message: error.message
@@ -651,7 +652,7 @@ export default function createBizDevSourceRoutes(pgPool) {
       const { tenant_id: incomingTenantId, performed_by, delete_source = false, client_type = 'B2B' } = req.body;
       const tenant_id = incomingTenantId;
 
-      console.log('[Promote BizDev → Lead v3.0.0] Request:', { id, tenant_id, client_type });
+      logger.debug('[Promote BizDev → Lead v3.0.0] Request:', { id, tenant_id, client_type });
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -677,7 +678,7 @@ export default function createBizDevSourceRoutes(pgPool) {
       }
 
       const bizdevSource = sourceResult.rows[0];
-      console.log('[Promote] BizDev Source fetched:', {
+      logger.debug('[Promote] BizDev Source fetched:', {
         company_name: bizdevSource.company_name,
         contact_person: bizdevSource.contact_person
       });
@@ -692,10 +693,10 @@ export default function createBizDevSourceRoutes(pgPool) {
         );
         if (tenantResult.rows.length > 0 && tenantResult.rows[0].business_model) {
           tenantBusinessModel = tenantResult.rows[0].business_model;
-          console.log('[Promote] Tenant business_model:', tenantBusinessModel);
+          logger.debug('[Promote] Tenant business_model:', tenantBusinessModel);
         }
       } catch (_e) {
-        console.warn('[Promote] Failed to fetch tenant business_model, using default:', tenantBusinessModel);
+        logger.warn('[Promote] Failed to fetch tenant business_model, using default:', tenantBusinessModel);
       }
 
       const hasCompanyData = !!(bizdevSource.company_name || bizdevSource.dba_name);
@@ -706,24 +707,24 @@ export default function createBizDevSourceRoutes(pgPool) {
 
       if (leadType === 'b2c') {
         // B2C: Create person_profile, link to placeholder B2C account
-        console.log('[Promote] Creating B2C Lead flow');
+        logger.debug('[Promote] Creating B2C Lead flow');
         
         // Get or create placeholder B2C account
         const b2cAccountResult = await getOrCreatePlaceholderB2CAccount(client, tenant_id);
         accountId = b2cAccountResult.id;
-        console.log('[Promote] Using placeholder B2C account:', accountId);
+        logger.debug('[Promote] Using placeholder B2C account:', accountId);
 
         // Create person_profile from contact data
         const personResult = await createPersonFromBizDev(client, tenant_id, bizdevSource);
         personId = personResult.id;
-        console.log('[Promote] Created person_profile:', personId);
+        logger.debug('[Promote] Created person_profile:', personId);
       } else {
         // B2B: Create or find B2B company account
-        console.log('[Promote] Creating B2B Lead flow');
+        logger.debug('[Promote] Creating B2B Lead flow');
         
         const accountResult = await findOrCreateB2BAccountFromBizDev(client, tenant_id, bizdevSource);
         accountId = accountResult.id;
-        console.log('[Promote] Using/created B2B account:', accountId);
+        logger.debug('[Promote] Using/created B2B account:', accountId);
       }
 
       // ========== STEP 3: Build Lead metadata with provenance ==========
@@ -757,7 +758,7 @@ export default function createBizDevSourceRoutes(pgPool) {
 
       const leadResult = await client.query(leadInsertSql, leadParams);
       const newLead = leadResult.rows[0];
-      console.log('[Promote] Lead created:', { lead_id: newLead.id, lead_type: leadType });
+      logger.debug('[Promote] Lead created:', { lead_id: newLead.id, lead_type: leadType });
 
       // ========== STEP 5: Update BizDev Source status and link (provenance stored in lead metadata) ==========
       const updateBizDevSql = `UPDATE bizdev_sources SET
@@ -776,7 +777,7 @@ export default function createBizDevSourceRoutes(pgPool) {
       };
 
       await client.query(updateBizDevSql, ['Promoted', JSON.stringify(updatedBizdevMetadata), id, tenant_id]);
-      console.log('[Promote] BizDev Source marked as Promoted');
+      logger.debug('[Promote] BizDev Source marked as Promoted');
 
       // ========== STEP 6: Relink activities ==========
       try {
@@ -786,7 +787,7 @@ export default function createBizDevSourceRoutes(pgPool) {
           ['lead', newLead.id, tenant_id, id]
         );
       } catch (e) {
-        console.warn('[Promote] Activity relink failed (non-fatal):', e?.message);
+        logger.warn('[Promote] Activity relink failed (non-fatal):', e?.message);
       }
 
       // ========== STEP 7: Optionally delete BizDev Source ==========
@@ -803,10 +804,10 @@ export default function createBizDevSourceRoutes(pgPool) {
             snapshot: bizdevSource
           });
         } catch (e) {
-          console.warn('[Promote] Transition log failed (non-fatal):', e?.message);
+          logger.warn('[Promote] Transition log failed (non-fatal):', e?.message);
         }
         await client.query('DELETE FROM bizdev_sources WHERE id = $1 AND tenant_id = $2', [id, tenant_id]);
-        console.log('[Promote] BizDev Source deleted');
+        logger.debug('[Promote] BizDev Source deleted');
       }
 
       if (supportsTx) await client.query('COMMIT');
@@ -834,7 +835,7 @@ export default function createBizDevSourceRoutes(pgPool) {
       if (supportsTx && client) {
         try { await client.query('ROLLBACK'); } catch { /* noop */ }
       }
-      console.error('[Promote] Error:', error);
+      logger.error('[Promote] Error:', error);
       return res.status(500).json({ status: 'error', message: error.message });
     } finally {
       if (supportsTx && client && typeof client.release === 'function') {
@@ -954,7 +955,7 @@ export default function createBizDevSourceRoutes(pgPool) {
         data: archiveData
       });
     } catch (error) {
-      console.error('Error archiving bizdev sources:', error);
+      logger.error('Error archiving bizdev sources:', error);
       res.status(500).json({
         status: 'error',
         message: error.message

@@ -8,6 +8,7 @@ import { validateTenantScopedId } from '../lib/validation.js';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { cacheList } from '../lib/cacheMiddleware.js';
+import logger from '../lib/logger.js';
 
 /**
  * @module routes/cashflow
@@ -53,7 +54,7 @@ export default function createCashFlowRoutes(_pgPool) {
 
       res.json({ status: 'success', data: { cashflow: data || [], total: count || 0 } });
     } catch (error) {
-      console.error('Error fetching cash flow:', error);
+      logger.error('Error fetching cash flow:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -113,7 +114,7 @@ export default function createCashFlowRoutes(_pgPool) {
 
       res.status(201).json({ status: 'success', message: 'Created', data: { cashflow: data } });
     } catch (error) {
-      console.error('Error creating cash flow:', error);
+      logger.error('Error creating cash flow:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

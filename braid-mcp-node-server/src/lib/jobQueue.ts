@@ -7,6 +7,7 @@
 import { Queue, Worker, Job, QueueEvents, ConnectionOptions } from "bullmq";
 import { BraidRequestEnvelope, BraidResponseEnvelope } from "../braid/types";
 import { getErrorMessage } from "./errorUtils";
+import logger from '../lib/logger';
 
 const QUEUE_NAME = "mcp-jobs";
 const JOB_TIMEOUT = 30000; // 30 seconds
@@ -66,7 +67,7 @@ export async function initQueue(): Promise<Queue<McpJobData, McpJobResult>> {
   queueEvents = new QueueEvents(QUEUE_NAME, { connection });
   await queueEvents.waitUntilReady();
 
-  console.log("[MCP Queue] Queue initialized (server mode)");
+  logger.debug("[MCP Queue] Queue initialized (server mode)");
   return queue;
 }
 
@@ -98,7 +99,7 @@ export async function queueJob(
     jobId: envelope.requestId, // Use requestId as jobId for deduplication
   });
 
-  console.log(`[MCP Queue] Job ${job.id} queued for tenant ${tenantId || "unknown"}`);
+  logger.debug(`[MCP Queue] Job ${job.id} queued for tenant ${tenantId || "unknown"}`);
 
   // Wait for job completion
   const result = await job.waitUntilFinished(queueEvents, JOB_TIMEOUT);
@@ -125,13 +126,13 @@ export async function initWorker(
     QUEUE_NAME,
     async (job: Job<McpJobData, McpJobResult>) => {
       const startTime = Date.now();
-      console.log(`[MCP Worker ${nodeId}] Processing job ${job.id} for tenant ${job.data.tenantId || "unknown"}`);
+      logger.debug(`[MCP Worker ${nodeId}] Processing job ${job.id} for tenant ${job.data.tenantId || "unknown"}`);
 
       try {
         const response = await processor(job.data.envelope);
         const durationMs = Date.now() - startTime;
 
-        console.log(`[MCP Worker ${nodeId}] Job ${job.id} completed in ${durationMs}ms`);
+        logger.debug(`[MCP Worker ${nodeId}] Job ${job.id} completed in ${durationMs}ms`);
 
         return {
           response,
@@ -140,7 +141,7 @@ export async function initWorker(
           durationMs,
         };
       } catch (error: unknown) {
-        console.error(`[MCP Worker ${nodeId}] Job ${job.id} failed:`, getErrorMessage(error));
+        logger.error(`[MCP Worker ${nodeId}] Job ${job.id} failed:`, getErrorMessage(error));
         throw error;
       }
     },
@@ -155,18 +156,18 @@ export async function initWorker(
   );
 
   worker.on("completed", (job) => {
-    console.log(`[MCP Worker ${nodeId}] Job ${job.id} marked complete`);
+    logger.debug(`[MCP Worker ${nodeId}] Job ${job.id} marked complete`);
   });
 
   worker.on("failed", (job, error) => {
-    console.error(`[MCP Worker ${nodeId}] Job ${job?.id} failed:`, error.message);
+    logger.error(`[MCP Worker ${nodeId}] Job ${job?.id} failed:`, error.message);
   });
 
   worker.on("error", (error) => {
-    console.error(`[MCP Worker ${nodeId}] Worker error:`, error);
+    logger.error(`[MCP Worker ${nodeId}] Worker error:`, error);
   });
 
-  console.log(`[MCP Worker ${nodeId}] Worker initialized (node mode, concurrency=3)`);
+  logger.debug(`[MCP Worker ${nodeId}] Worker initialized (node mode, concurrency=3)`);
   return worker;
 }
 
@@ -212,5 +213,5 @@ export async function shutdownQueue(): Promise<void> {
     await queue.close();
     queue = null;
   }
-  console.log("[MCP Queue] Shutdown complete");
+  logger.debug("[MCP Queue] Shutdown complete");
 }

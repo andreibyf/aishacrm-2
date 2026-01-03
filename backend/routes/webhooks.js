@@ -6,6 +6,7 @@
 import express from 'express';
 import { validateTenantScopedId } from '../lib/validation.js';
 import { cacheList } from '../lib/cacheMiddleware.js';
+import logger from '../lib/logger.js';
 
 export default function createWebhookRoutes(_pgPool) {
   const router = express.Router();
@@ -44,7 +45,7 @@ export default function createWebhookRoutes(_pgPool) {
         }
       });
     } catch (error) {
-      console.error('Error fetching webhooks:', error);
+      logger.error('Error fetching webhooks:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -73,7 +74,7 @@ export default function createWebhookRoutes(_pgPool) {
 
       res.json({ status: 'success', data: { webhook: data } });
     } catch (error) {
-      console.error('Error fetching webhook:', error);
+      logger.error('Error fetching webhook:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -109,7 +110,7 @@ export default function createWebhookRoutes(_pgPool) {
         data: { webhook: data }
       });
     } catch (error) {
-      console.error('Error creating webhook:', error);
+      logger.error('Error creating webhook:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -156,7 +157,7 @@ export default function createWebhookRoutes(_pgPool) {
         data: { webhook: data }
       });
     } catch (error) {
-      console.error('Error updating webhook:', error);
+      logger.error('Error updating webhook:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -190,7 +191,7 @@ export default function createWebhookRoutes(_pgPool) {
         data: { id: data.id }
       });
     } catch (error) {
-      console.error('Error deleting webhook:', error);
+      logger.error('Error deleting webhook:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

@@ -5,6 +5,7 @@
 
 import express from 'express';
 import { validateTenantScopedId } from '../lib/validation.js';
+import logger from '../lib/logger.js';
 
 export default function createApikeyRoutes(_pgPool) {
   const router = express.Router();
@@ -26,7 +27,7 @@ export default function createApikeyRoutes(_pgPool) {
       if (error) throw new Error(error.message);
       return res.json({ status: 'success', data: { apikeys: data || [] } });
     } catch (error) {
-      console.error('apikeys:list error', error);
+      logger.error('apikeys:list error', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -51,7 +52,7 @@ export default function createApikeyRoutes(_pgPool) {
       if (error) throw new Error(error.message);
       return res.json({ status: 'success', message: 'API key created', data });
     } catch (error) {
-      console.error('apikeys:create error', error);
+      logger.error('apikeys:create error', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -76,7 +77,7 @@ export default function createApikeyRoutes(_pgPool) {
       if (error) throw new Error(error.message);
       return res.json({ status: 'success', data });
     } catch (error) {
-      console.error('apikeys:get error', error);
+      logger.error('apikeys:get error', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -102,7 +103,7 @@ export default function createApikeyRoutes(_pgPool) {
       if (!data) return res.status(404).json({ status: 'error', message: 'Not found' });
       return res.json({ status: 'success', message: 'Deleted', data: { id: data.id } });
     } catch (error) {
-      console.error('apikeys:delete error', error);
+      logger.error('apikeys:delete error', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

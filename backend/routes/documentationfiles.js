@@ -7,6 +7,7 @@
 import express from 'express';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
 import { getSupabaseAdmin, getBucketName } from '../lib/supabaseFactory.js';
+import logger from '../lib/logger.js';
 
 export default function createDocumentationFileRoutes(_pgPool) {
   const router = express.Router();
@@ -70,7 +71,7 @@ export default function createDocumentationFileRoutes(_pgPool) {
         }
       });
     } catch (error) {
-      console.error('Error fetching documentation files:', error);
+      logger.error('Error fetching documentation files:', error);
       res.status(500).json({
         status: 'error',
         message: error.message
@@ -105,7 +106,7 @@ export default function createDocumentationFileRoutes(_pgPool) {
         data: normalizeDocumentFile(data)
       });
     } catch (error) {
-      console.error('Error fetching documentation file:', error);
+      logger.error('Error fetching documentation file:', error);
       res.status(500).json({
         status: 'error',
         message: error.message
@@ -173,7 +174,7 @@ export default function createDocumentationFileRoutes(_pgPool) {
         data: normalizeDocumentFile(data)
       });
     } catch (error) {
-      console.error('Error creating documentation file:', error);
+      logger.error('Error creating documentation file:', error);
       res.status(500).json({
         status: 'error',
         message: error.message
@@ -248,7 +249,7 @@ export default function createDocumentationFileRoutes(_pgPool) {
         data: normalizeDocumentFile(data)
       });
     } catch (error) {
-      console.error('Error updating documentation file:', error);
+      logger.error('Error updating documentation file:', error);
       res.status(500).json({
         status: 'error',
         message: error.message
@@ -294,10 +295,10 @@ export default function createDocumentationFileRoutes(_pgPool) {
           const supabaseAdmin = getSupabaseAdmin();
           const bucket = getBucketName();
           await supabaseAdmin.storage.from(bucket).remove([fileRecord.filepath]);
-          console.log(`[documentationfiles] Deleted file from storage: ${fileRecord.filepath}`);
+          logger.debug(`[documentationfiles] Deleted file from storage: ${fileRecord.filepath}`);
         }
       } catch (storageError) {
-        console.warn(`[documentationfiles] Failed to delete file from storage:`, storageError);
+        logger.warn(`[documentationfiles] Failed to delete file from storage:`, storageError);
         // Continue even if storage deletion fails
       }
 
@@ -306,7 +307,7 @@ export default function createDocumentationFileRoutes(_pgPool) {
         message: 'Documentation file deleted successfully'
       });
     } catch (error) {
-      console.error('Error deleting documentation file:', error);
+      logger.error('Error deleting documentation file:', error);
       res.status(500).json({
         status: 'error',
         message: error.message

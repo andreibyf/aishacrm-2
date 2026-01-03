@@ -5,9 +5,10 @@
 import { getRequestDbTime } from '../lib/requestContext.js';
 import { getSupabaseClient as _getSupabaseClient } from '../lib/supabase-db.js';
 import { enqueuePerformanceLog } from '../lib/perfLogBatcher.js';
+import logger from '../lib/logger.js';
 
 export function performanceLogger(pgPool) {
-  console.log('[Performance Logger] Middleware initialized with pgPool:', !!pgPool);
+  logger.debug('[Performance Logger] Middleware initialized with pgPool:', !!pgPool);
   return async (req, res, next) => {
     const startTime = Date.now();
     // Time to first byte (TTFB) tracking
@@ -40,7 +41,7 @@ export function performanceLogger(pgPool) {
 
     // Wait for response to complete
     res.on('finish', async () => {
-      console.log(`[Performance Logger] Finish event for ${req.method} ${req.originalUrl || req.url}`);
+      logger.debug(`[Performance Logger] Finish event for ${req.method} ${req.originalUrl || req.url}`);
       try {
         const duration = Date.now() - startTime;
         
@@ -93,14 +94,14 @@ export function performanceLogger(pgPool) {
           } catch (dbError) {
             // Don't throw - logging failure shouldn't break the app
             // Always log errors so we can debug
-            console.error('[Performance Logger] Failed to log:', dbError.message);
-            console.error('[Performance Logger] Stack:', dbError.stack);
+            logger.error('[Performance Logger] Failed to log:', dbError.message);
+            logger.error('[Performance Logger] Stack:', dbError.stack);
           }
         });
       } catch (error) {
         // Swallow errors - performance logging is non-critical
         if (process.env.NODE_ENV !== 'production') {
-          console.error('[Performance Logger] Error:', error.message);
+          logger.error('[Performance Logger] Error:', error.message);
         }
       }
     });

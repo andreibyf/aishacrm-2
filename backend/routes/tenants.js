@@ -6,6 +6,7 @@
 import express from "express";
 import { createAuditLog, getUserEmailFromRequest, getClientIP } from "../lib/auditLogger.js";
 import { getSupabaseAdmin, getBucketName } from "../lib/supabaseFactory.js";
+import logger from '../lib/logger.js';
 
 /**
  * Default modules that should be initialized for every new tenant.
@@ -56,7 +57,7 @@ async function generateUniqueTenantId(supabase, name) {
     .maybeSingle();
 
   if (!existing) {
-    console.log(`[generateUniqueTenantId] Generated slug: ${slug}`);
+    logger.debug(`[generateUniqueTenantId] Generated slug: ${slug}`);
     return slug;
   }
 
@@ -72,7 +73,7 @@ async function generateUniqueTenantId(supabase, name) {
       .maybeSingle();
     
     if (!check) {
-      console.log(`[generateUniqueTenantId] Generated slug with counter: ${candidate}`);
+      logger.debug(`[generateUniqueTenantId] Generated slug with counter: ${candidate}`);
       return candidate;
     }
     
@@ -110,14 +111,14 @@ async function initializeModuleSettingsForTenant(supabase, tenantId) {
       .select();
 
     if (error) {
-      console.error(`[Tenants] Failed to initialize module settings for tenant ${tenantId}:`, error.message);
+      logger.error(`[Tenants] Failed to initialize module settings for tenant ${tenantId}:`, error.message);
       return { success: false, count: 0, error: error.message };
     }
 
-    console.log(`[Tenants] Initialized ${data?.length || 0} module settings for tenant ${tenantId}`);
+    logger.debug(`[Tenants] Initialized ${data?.length || 0} module settings for tenant ${tenantId}`);
     return { success: true, count: data?.length || 0 };
   } catch (err) {
-    console.error(`[Tenants] Error initializing module settings for tenant ${tenantId}:`, err.message);
+    logger.error(`[Tenants] Error initializing module settings for tenant ${tenantId}:`, err.message);
     return { success: false, count: 0, error: err.message };
   }
 }
@@ -225,7 +226,7 @@ export default function createTenantRoutes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error("Error listing tenants:", error);
+      logger.error("Error listing tenants:", error);
       res.status(500).json({ status: "error", message: error.message });
     }
   });
@@ -233,7 +234,7 @@ export default function createTenantRoutes(_pgPool) {
   // POST /api/tenants - Create tenant
   router.post("/", async (req, res) => {
     try {
-      console.log("[Tenants POST] Received request body:", JSON.stringify(req.body, null, 2));
+      logger.debug("[Tenants POST] Received request body:", JSON.stringify(req.body, null, 2));
       
       let {
         tenant_id,
@@ -256,18 +257,18 @@ export default function createTenantRoutes(_pgPool) {
         domain,
       } = req.body;
 
-      console.log("[Tenants POST] Parsed tenant_id:", tenant_id, "name:", name);
+      logger.debug("[Tenants POST] Parsed tenant_id:", tenant_id, "name:", name);
 
       // Auto-generate tenant_id from name if not provided
       if (!tenant_id && name) {
         const { getSupabaseClient } = await import('../lib/supabase-db.js');
         const supabase = getSupabaseClient();
         tenant_id = await generateUniqueTenantId(supabase, name);
-        console.log("[Tenants POST] Auto-generated tenant_id:", tenant_id);
+        logger.debug("[Tenants POST] Auto-generated tenant_id:", tenant_id);
       }
 
       if (!tenant_id) {
-        console.warn("[Tenants POST] Missing tenant_id and name in request");
+        logger.warn("[Tenants POST] Missing tenant_id and name in request");
         return res.status(400).json({
           status: "error",
           message: "Either tenant_id or name is required",
@@ -308,7 +309,7 @@ export default function createTenantRoutes(_pgPool) {
         updated_at: nowIso,
       };
 
-      console.log("[Tenants POST] Attempting to insert:", JSON.stringify(insertData, null, 2));
+      logger.debug("[Tenants POST] Attempting to insert:", JSON.stringify(insertData, null, 2));
       
       const { data: created, error } = await supabase
         .from('tenant')
@@ -317,11 +318,11 @@ export default function createTenantRoutes(_pgPool) {
         .single();
       
       if (error) {
-        console.error("[Tenants POST] Database error:", error);
+        logger.error("[Tenants POST] Database error:", error);
         throw new Error(error.message);
       }
       
-      console.log("[Tenants POST] Tenant created successfully:", created?.id);
+      logger.debug("[Tenants POST] Tenant created successfully:", created?.id);
 
       // Create audit log for tenant creation
       try {
@@ -340,7 +341,7 @@ export default function createTenantRoutes(_pgPool) {
           user_agent: req.headers['user-agent'],
         });
       } catch (auditError) {
-        console.warn('[AUDIT] Failed to log tenant creation:', auditError.message);
+        logger.warn('[AUDIT] Failed to log tenant creation:', auditError.message);
       }
 
       // Auto-provision tenant storage prefix by creating a placeholder object
@@ -357,17 +358,17 @@ export default function createTenantRoutes(_pgPool) {
               upsert: true,
             });
           if (upErr) {
-            console.warn(
+            logger.warn(
               "[Tenants] Failed to provision storage prefix for",
               tenant_id,
               upErr.message,
             );
           } else {
-            console.log("[Tenants] Provisioned storage prefix for", tenant_id);
+            logger.debug("[Tenants] Provisioned storage prefix for", tenant_id);
           }
         }
       } catch (provisionErr) {
-        console.warn(
+        logger.warn(
           "[Tenants] Storage provisioning error:",
           provisionErr.message,
         );
@@ -379,10 +380,10 @@ export default function createTenantRoutes(_pgPool) {
       try {
         const moduleResult = await initializeModuleSettingsForTenant(supabase, created.id);
         if (!moduleResult.success) {
-          console.warn(`[Tenants] Module settings initialization warning: ${moduleResult.error}`);
+          logger.warn(`[Tenants] Module settings initialization warning: ${moduleResult.error}`);
         }
       } catch (moduleErr) {
-        console.warn('[Tenants] Module settings initialization error:', moduleErr.message);
+        logger.warn('[Tenants] Module settings initialization error:', moduleErr.message);
         // Non-fatal: tenant is created, settings can be initialized on first access
       }
 
@@ -392,7 +393,7 @@ export default function createTenantRoutes(_pgPool) {
         data: created,
       });
     } catch (error) {
-      console.error("Error creating tenant:", error);
+      logger.error("Error creating tenant:", error);
 
       // Handle unique constraint violation
       if (error.code === "23505") {
@@ -509,7 +510,7 @@ export default function createTenantRoutes(_pgPool) {
         data: normalized,
       });
     } catch (error) {
-      console.error("Error getting tenant:", error);
+      logger.error("Error getting tenant:", error);
       res.status(500).json({ status: "error", message: error.message });
     }
   });
@@ -775,9 +776,9 @@ export default function createTenantRoutes(_pgPool) {
           }]);
         if (auditErr) throw new Error(auditErr.message);
 
-        console.log("[AUDIT] Tenant updated:", id, "by", auditLog.user_email);
+        logger.debug("[AUDIT] Tenant updated:", id, "by", auditLog.user_email);
       } catch (auditError) {
-        console.error(
+        logger.error(
           "[AUDIT] Failed to create audit log:",
           auditError.message,
         );
@@ -790,7 +791,7 @@ export default function createTenantRoutes(_pgPool) {
         data: normalized,
       });
     } catch (error) {
-      console.error("[ERROR] Error updating tenant:", error);
+      logger.error("[ERROR] Error updating tenant:", error);
       res.status(500).json({ status: "error", message: error.message });
     }
   });
@@ -832,7 +833,7 @@ export default function createTenantRoutes(_pgPool) {
           user_agent: req.headers['user-agent'],
         });
       } catch (auditError) {
-        console.warn('[AUDIT] Failed to log tenant deletion:', auditError.message);
+        logger.warn('[AUDIT] Failed to log tenant deletion:', auditError.message);
       }
 
       res.json({
@@ -841,7 +842,7 @@ export default function createTenantRoutes(_pgPool) {
         data,
       });
     } catch (error) {
-      console.error("Error deleting tenant:", error);
+      logger.error("Error deleting tenant:", error);
       res.status(500).json({ status: "error", message: error.message });
     }
   });

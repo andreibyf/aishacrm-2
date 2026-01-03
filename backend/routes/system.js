@@ -6,6 +6,7 @@
 import express from 'express';
 import { getCacheStats } from '../lib/cacheMiddleware.js';
 import { getLLMActivity, getLLMActivityStats, clearLLMActivity } from '../lib/aiEngine/activityLogger.js';
+import logger from '../lib/logger.js';
 
 export default function createSystemRoutes(_pgPool) {
   const router = express.Router();
@@ -282,7 +283,7 @@ export default function createSystemRoutes(_pgPool) {
 
       res.json({ status: 'success', data });
     } catch (error) {
-      console.error('Error fetching system logs:', error);
+      logger.error('Error fetching system logs:', error);
       res.status(500).json({
         status: 'error',
         message: error.message,
@@ -362,7 +363,7 @@ export default function createSystemRoutes(_pgPool) {
         data: stats
       });
     } catch (err) {
-      console.error('[System] Cache stats error:', err);
+      logger.error('[System] Cache stats error:', err);
       return res.status(500).json({ status: 'error', message: err.message });
     }
   });
@@ -394,7 +395,7 @@ export default function createSystemRoutes(_pgPool) {
         },
       });
     } catch (err) {
-      console.error('[System] LLM activity error:', err);
+      logger.error('[System] LLM activity error:', err);
       return res.status(500).json({ status: 'error', message: err.message });
     }
   });
@@ -409,7 +410,7 @@ export default function createSystemRoutes(_pgPool) {
         data: stats,
       });
     } catch (err) {
-      console.error('[System] LLM activity stats error:', err);
+      logger.error('[System] LLM activity stats error:', err);
       return res.status(500).json({ status: 'error', message: err.message });
     }
   });
@@ -424,7 +425,7 @@ export default function createSystemRoutes(_pgPool) {
         message: 'LLM activity logs cleared',
       });
     } catch (err) {
-      console.error('[System] LLM activity clear error:', err);
+      logger.error('[System] LLM activity clear error:', err);
       return res.status(500).json({ status: 'error', message: err.message });
     }
   });

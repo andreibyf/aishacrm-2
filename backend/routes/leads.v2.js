@@ -9,6 +9,7 @@ import { getSupabaseClient } from '../lib/supabase-db.js';
 import { sanitizeUuidInput } from '../lib/uuidValidator.js';
 import { buildLeadAiContext } from '../lib/aiContextEnricher.js';
 import { cacheList, cacheDetail, invalidateCache, invalidateTenantCache } from '../lib/cacheMiddleware.js';
+import logger from '../lib/logger.js';
 
 export default function createLeadsV2Routes() {
   const router = express.Router();
@@ -129,7 +130,7 @@ export default function createLeadsV2Routes() {
 
       res.json({ status: 'success', data: stats });
     } catch (err) {
-      console.error('[Leads v2 GET /stats] Error:', err.message);
+      logger.error('[Leads v2 GET /stats] Error:', err.message);
       res.status(500).json({ status: 'error', message: err.message });
     }
   });
@@ -169,7 +170,7 @@ export default function createLeadsV2Routes() {
       const limit = parseInt(req.query.limit || '50', 10);
       const offset = parseInt(req.query.offset || '0', 10);
 
-      console.log('[V2 Leads GET] Called with:', { tenant_id, filter, status, assigned_to, account_id, is_test_data, searchQuery });
+      logger.debug('[V2 Leads GET] Called with:', { tenant_id, filter, status, assigned_to, account_id, is_test_data, searchQuery });
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -186,7 +187,7 @@ export default function createLeadsV2Routes() {
 
         // Text search across name and email fields
         if (searchQuery && searchQuery.trim()) {
-          console.log('[V2 Leads] Applying text search:', searchQuery);
+          logger.debug('[V2 Leads] Applying text search:', searchQuery);
           const searchTerm = searchQuery.trim();
           const searchPattern = `%${searchTerm}%`;
           
@@ -209,12 +210,12 @@ export default function createLeadsV2Routes() {
               const firstPart = `%${parts[0]}%`;
               const lastPart = `%${parts[parts.length - 1]}%`;
               orConditions.push(`first_name.ilike.${firstPart},last_name.ilike.${lastPart}`);
-              console.log('[V2 Leads] Added full name search condition for parts:', parts);
+              logger.debug('[V2 Leads] Added full name search condition for parts:', parts);
             }
           }
           
           query = query.or(orConditions.join(','));
-          console.log('[V2 Leads] Search OR conditions:', orConditions.join(','));
+          logger.debug('[V2 Leads] Search OR conditions:', orConditions.join(','));
         }
 
         // Handle filter parameter with $or support
@@ -223,7 +224,7 @@ export default function createLeadsV2Routes() {
           if (typeof filter === 'string' && filter.startsWith('{')) {
             try {
               parsedFilter = JSON.parse(filter);
-              console.log('[V2 Leads] Parsed filter:', JSON.stringify(parsedFilter, null, 2));
+              logger.debug('[V2 Leads] Parsed filter:', JSON.stringify(parsedFilter, null, 2));
             } catch {
               // treat as literal
             }
@@ -249,7 +250,7 @@ export default function createLeadsV2Routes() {
               });
               
               if (orConditions.length > 0) {
-                console.log('[V2 Leads] Applying text search filter:', orConditions.join(','));
+                logger.debug('[V2 Leads] Applying text search filter:', orConditions.join(','));
                 query = query.or(orConditions.join(','));
               }
             } else {
@@ -263,10 +264,10 @@ export default function createLeadsV2Routes() {
                 .filter(val => val !== undefined && val !== null && String(val).trim() !== '');
 
               if (hasUnassigned && nonEmptyAssignedTo.length === 0) {
-                console.log('[V2 Leads] Applying unassigned-only filter');
+                logger.debug('[V2 Leads] Applying unassigned-only filter');
                 query = query.is('assigned_to', null);
               } else if (nonEmptyAssignedTo.length > 0) {
-                console.log('[V2 Leads] Applying assigned_to $or filter:', nonEmptyAssignedTo);
+                logger.debug('[V2 Leads] Applying assigned_to $or filter:', nonEmptyAssignedTo);
                 const orParts = nonEmptyAssignedTo.map(val => `assigned_to.eq.${val}`);
                 query = query.or(orParts.join(','));
               }
@@ -275,7 +276,7 @@ export default function createLeadsV2Routes() {
 
           // Handle is_test_data filter from parsed filter
           if (typeof parsedFilter === 'object' && parsedFilter.is_test_data !== undefined) {
-            console.log('[V2 Leads] Applying is_test_data filter:', parsedFilter.is_test_data);
+            logger.debug('[V2 Leads] Applying is_test_data filter:', parsedFilter.is_test_data);
             if (parsedFilter.is_test_data === false) {
               query = query.or('is_test_data.is.false,is_test_data.is.null');
             } else {
@@ -296,7 +297,7 @@ export default function createLeadsV2Routes() {
           }
           // Handle $nin (not-in) operator for status filtering
           if (typeof parsedStatus === 'object' && parsedStatus.$nin) {
-            console.log('[V2 Leads] Applying status $nin from query param:', parsedStatus.$nin);
+            logger.debug('[V2 Leads] Applying status $nin from query param:', parsedStatus.$nin);
             // Use NOT IN with Supabase
             query = query.not('status', 'in', `(${parsedStatus.$nin.join(',')})`);
           } else {
@@ -307,7 +308,7 @@ export default function createLeadsV2Routes() {
         // Filter by account_id if provided
         const safeAccountId = sanitizeUuidInput(account_id);
         if (safeAccountId) {
-          console.log('[V2 Leads] Filtering by account_id:', safeAccountId);
+          logger.debug('[V2 Leads] Filtering by account_id:', safeAccountId);
           query = query.eq('account_id', safeAccountId);
         }
         // Sanitize potential UUID query params to avoid "invalid input syntax for type uuid" errors
@@ -320,10 +321,10 @@ export default function createLeadsV2Routes() {
         if (is_test_data !== undefined && !filter) {
           const flag = String(is_test_data).toLowerCase();
           if (flag === 'false') {
-            console.log('[V2 Leads] Excluding test data from query param');
+            logger.debug('[V2 Leads] Excluding test data from query param');
             query = query.or('is_test_data.is.false,is_test_data.is.null');
           } else if (flag === 'true') {
-            console.log('[V2 Leads] Including only test data from query param');
+            logger.debug('[V2 Leads] Including only test data from query param');
             query = query.eq('is_test_data', true);
           }
         }
@@ -344,7 +345,7 @@ export default function createLeadsV2Routes() {
       
       // If FK join fails (constraint doesn't exist), fall back to simple query
       if (error && (error.message?.includes('relationship') || error.message?.includes('hint') || error.code === 'PGRST200')) {
-        console.warn('[V2 Leads GET] FK join failed, falling back to simple query:', error.message);
+        logger.warn('[V2 Leads GET] FK join failed, falling back to simple query:', error.message);
         result = await buildBaseQuery(simpleSelect);
         ({ data, error, count } = result);
       }
@@ -369,7 +370,7 @@ export default function createLeadsV2Routes() {
         data: { leads, total: count || leads.length },
       });
     } catch (err) {
-      console.error('[Leads v2 GET] Error:', err.message);
+      logger.error('[Leads v2 GET] Error:', err.message);
       res.status(500).json({ status: 'error', message: err.message });
     }
   });
@@ -501,7 +502,7 @@ export default function createLeadsV2Routes() {
         data: { lead: created, aiContext },
       });
     } catch (err) {
-      console.error('[Leads v2 POST] Error:', err.message);
+      logger.error('[Leads v2 POST] Error:', err.message);
       res.status(500).json({ status: 'error', message: err.message });
     }
   });
@@ -559,7 +560,7 @@ export default function createLeadsV2Routes() {
         data: { lead, aiContext },
       });
     } catch (err) {
-      console.error('[Leads v2 GET/:id] Error:', err.message);
+      logger.error('[Leads v2 GET/:id] Error:', err.message);
       res.status(500).json({ status: 'error', message: err.message });
     }
   });
@@ -641,7 +642,7 @@ export default function createLeadsV2Routes() {
         data: expandMetadata(data),
       });
     } catch (err) {
-      console.error('[Leads v2 PUT] Error:', err.message);
+      logger.error('[Leads v2 PUT] Error:', err.message);
       res.status(500).json({ status: 'error', message: err.message });
     }
   });
@@ -698,7 +699,7 @@ export default function createLeadsV2Routes() {
         data: { id: data.id },
       });
     } catch (err) {
-      console.error('[Leads v2 DELETE] Error:', err.message);
+      logger.error('[Leads v2 DELETE] Error:', err.message);
       res.status(500).json({ status: 'error', message: err.message });
     }
   });

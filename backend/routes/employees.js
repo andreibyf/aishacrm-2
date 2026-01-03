@@ -5,6 +5,7 @@
 
 import express from 'express';
 import { cacheList } from '../lib/cacheMiddleware.js';
+import logger from '../lib/logger.js';
 
 export default function createEmployeeRoutes(_pgPool) {
   const router = express.Router();
@@ -41,7 +42,7 @@ export default function createEmployeeRoutes(_pgPool) {
     if (error) {
       throw error;
     }
-    console.log('[EmployeeRoutes] tenant email check', {
+    logger.debug('[EmployeeRoutes] tenant email check', {
       tenantId,
       email: normalized,
       matchCount: Array.isArray(data) ? data.length : 0,
@@ -165,7 +166,7 @@ export default function createEmployeeRoutes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error('Error listing employees:', error);
+      logger.error('Error listing employees:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -243,7 +244,7 @@ export default function createEmployeeRoutes(_pgPool) {
         data: { employee },
       });
     } catch (error) {
-      console.error('Error getting employee:', error);
+      logger.error('Error getting employee:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -302,7 +303,7 @@ export default function createEmployeeRoutes(_pgPool) {
   // POST /api/employees - Create employee
   router.post('/', async (req, res) => {
     try {
-      console.log('[EmployeeRoutes] POST body', req.body);
+      logger.debug('[EmployeeRoutes] POST body', req.body);
       const { tenant_id, first_name, last_name, email, role, status, phone, department, metadata, ...additionalFields } = req.body;
 
       if (!tenant_id) {
@@ -378,7 +379,7 @@ export default function createEmployeeRoutes(_pgPool) {
         data: { employee },
       });
     } catch (error) {
-      console.error('Error creating employee:', error);
+      logger.error('Error creating employee:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -519,7 +520,7 @@ export default function createEmployeeRoutes(_pgPool) {
         data: { employee },
       });
     } catch (error) {
-      console.error('Error updating employee:', error);
+      logger.error('Error updating employee:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -593,7 +594,7 @@ export default function createEmployeeRoutes(_pgPool) {
         data: { employee },
       });
     } catch (error) {
-      console.error('Error deleting employee:', error);
+      logger.error('Error deleting employee:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

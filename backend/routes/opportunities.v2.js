@@ -3,6 +3,7 @@ import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/va
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildOpportunityAiContext } from '../lib/opportunityAiContext.js';
 import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
+import logger from '../lib/logger.js';
 
 // NOTE: v2 opportunities router for Phase 4.2 internal pilot.
 // This implementation is dev-focused and gated by FEATURE_OPPORTUNITIES_V2.
@@ -97,7 +98,7 @@ export default function createOpportunityV2Routes(_pgPool) {
         data: stats,
       });
     } catch (error) {
-      console.error('Error in v2 opportunities stats:', error);
+      logger.error('Error in v2 opportunities stats:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -161,7 +162,7 @@ export default function createOpportunityV2Routes(_pgPool) {
             }
           }
         } catch (e) {
-          console.error('Error parsing filter in count:', e);
+          logger.error('Error parsing filter in count:', e);
         }
       }
 
@@ -173,7 +174,7 @@ export default function createOpportunityV2Routes(_pgPool) {
         data: { count: count || 0 },
       });
     } catch (error) {
-      console.error('Error in v2 opportunities count:', error);
+      logger.error('Error in v2 opportunities count:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -183,7 +184,7 @@ export default function createOpportunityV2Routes(_pgPool) {
     try {
       const { tenant_id, filter, stage, account_id, assigned_to, is_test_data, $or } = req.query;
 
-      console.log('[V2 Opportunities GET] Called with:', { tenant_id, filter, stage, account_id, assigned_to, is_test_data, $or });
+      logger.debug('[V2 Opportunities GET] Called with:', { tenant_id, filter, stage, account_id, assigned_to, is_test_data, $or });
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -207,36 +208,36 @@ export default function createOpportunityV2Routes(_pgPool) {
               cond.assigned_to === null
             );
             if (isUnassignedFilter) {
-              console.log('[V2 Opportunities] Applying unassigned filter from $or query param');
+              logger.debug('[V2 Opportunities] Applying unassigned filter from $or query param');
               // Only match NULL; empty string is invalid for UUID columns
               q = q.is('assigned_to', null);
             }
           }
         } catch (e) {
-          console.error('[V2 Opportunities] Failed to parse $or:', e);
+          logger.error('[V2 Opportunities] Failed to parse $or:', e);
         }
       }
       // Handle direct assigned_to parameter
       else if (assigned_to !== undefined) {
         // Treat explicit null or empty string as unassigned
         if (assigned_to === null || assigned_to === 'null' || assigned_to === '') {
-          console.log('[V2 Opportunities] Applying unassigned filter from assigned_to query param');
+          logger.debug('[V2 Opportunities] Applying unassigned filter from assigned_to query param');
           q = q.is('assigned_to', null);
         } else {
-          console.log('[V2 Opportunities] Applying assigned_to filter from query param:', assigned_to);
+          logger.debug('[V2 Opportunities] Applying assigned_to filter from query param:', assigned_to);
           q = q.eq('assigned_to', assigned_to);
         }
       }
 
       // Handle stage filter
       if (stage && stage !== 'all' && stage !== 'any' && stage !== '' && stage !== 'undefined') {
-        console.log('[V2 Opportunities] Applying stage filter from query param:', stage);
+        logger.debug('[V2 Opportunities] Applying stage filter from query param:', stage);
         q = q.eq('stage', stage.toLowerCase());
       }
 
       // Handle account_id filter (filter opportunities by account)
       if (account_id) {
-        console.log('[V2 Opportunities] Filtering by account_id:', account_id);
+        logger.debug('[V2 Opportunities] Filtering by account_id:', account_id);
         q = q.eq('account_id', account_id);
       }
 
@@ -244,10 +245,10 @@ export default function createOpportunityV2Routes(_pgPool) {
       if (is_test_data !== undefined) {
         const flag = String(is_test_data).toLowerCase();
         if (flag === 'false') {
-          console.log('[V2 Opportunities] Excluding test data from query param');
+          logger.debug('[V2 Opportunities] Excluding test data from query param');
           q = q.or('is_test_data.is.false,is_test_data.is.null');
         } else if (flag === 'true') {
-          console.log('[V2 Opportunities] Including only test data from query param');
+          logger.debug('[V2 Opportunities] Including only test data from query param');
           q = q.eq('is_test_data', true);
         }
       }
@@ -258,7 +259,7 @@ export default function createOpportunityV2Routes(_pgPool) {
         if (typeof filter === 'string' && filter.startsWith('{')) {
           try {
             parsedFilter = JSON.parse(filter);
-            console.log('[V2 Opportunities] Parsed filter:', JSON.stringify(parsedFilter, null, 2));
+            logger.debug('[V2 Opportunities] Parsed filter:', JSON.stringify(parsedFilter, null, 2));
           } catch {
             // treat as literal
           }
@@ -268,17 +269,17 @@ export default function createOpportunityV2Routes(_pgPool) {
         if (typeof parsedFilter === 'object' && parsedFilter.assigned_to !== undefined) {
           const at = parsedFilter.assigned_to;
           if (at === null || at === '' || at === 'null') {
-            console.log('[V2 Opportunities] Applying unassigned filter via parsed filter');
+            logger.debug('[V2 Opportunities] Applying unassigned filter via parsed filter');
             q = q.is('assigned_to', null);
           } else {
-            console.log('[V2 Opportunities] Applying assigned_to filter:', at);
+            logger.debug('[V2 Opportunities] Applying assigned_to filter:', at);
             q = q.eq('assigned_to', at);
           }
         }
 
         // Handle is_test_data filter
         if (typeof parsedFilter === 'object' && parsedFilter.is_test_data !== undefined) {
-          console.log('[V2 Opportunities] Applying is_test_data filter:', parsedFilter.is_test_data);
+          logger.debug('[V2 Opportunities] Applying is_test_data filter:', parsedFilter.is_test_data);
           q = q.eq('is_test_data', parsedFilter.is_test_data);
         }
 
@@ -290,7 +291,7 @@ export default function createOpportunityV2Routes(_pgPool) {
           );
           
           if (isUnassignedFilter) {
-            console.log('[V2 Opportunities] Applying unassigned filter');
+            logger.debug('[V2 Opportunities] Applying unassigned filter');
             // For unassigned, only match NULL (empty string is invalid for UUID)
             q = q.is('assigned_to', null);
           } else {
@@ -318,7 +319,7 @@ export default function createOpportunityV2Routes(_pgPool) {
         // Use keyset pagination for better performance
         // WHERE (updated_at, id) < (cursor_updated_at, cursor_id)
         // This matches the composite index order and avoids OFFSET scans
-        console.log('[V2 Opportunities] Using keyset pagination with cursor:', { cursorUpdatedAt, cursorId });
+        logger.debug('[V2 Opportunities] Using keyset pagination with cursor:', { cursorUpdatedAt, cursorId });
         q = q.or(`updated_at.lt.${cursorUpdatedAt},and(updated_at.eq.${cursorUpdatedAt},id.lt.${cursorId})`);
       }
 
@@ -361,7 +362,7 @@ export default function createOpportunityV2Routes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error('Error in v2 opportunities list:', error);
+      logger.error('Error in v2 opportunities list:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -412,7 +413,7 @@ export default function createOpportunityV2Routes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error('Error in v2 opportunity create:', error);
+      logger.error('Error in v2 opportunity create:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -454,7 +455,7 @@ export default function createOpportunityV2Routes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error('Error in v2 opportunity get:', error);
+      logger.error('Error in v2 opportunity get:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -508,7 +509,7 @@ export default function createOpportunityV2Routes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error('Error in v2 opportunity update:', error);
+      logger.error('Error in v2 opportunity update:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -543,7 +544,7 @@ export default function createOpportunityV2Routes(_pgPool) {
         message: 'Opportunity deleted successfully',
       });
     } catch (error) {
-      console.error('Error in v2 opportunity delete:', error);
+      logger.error('Error in v2 opportunity delete:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

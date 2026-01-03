@@ -4,6 +4,7 @@
 
 import express from 'express';
 import { cacheList } from '../lib/cacheMiddleware.js';
+import logger from '../lib/logger.js';
 
 // Helper: attempt to count rows from a table safely (optionally by tenant)
 // options:
@@ -132,7 +133,7 @@ export default function createReportRoutes(_pgPool) {
         });
       }
       
-      console.log('[Reports] clear-cache called via redis:', { tenant_id });
+      logger.debug('[Reports] clear-cache called via redis:', { tenant_id });
       
       if (tenant_id) {
         // Clear specific tenant cache: delete dashboard bundle keys for this tenant
@@ -144,9 +145,9 @@ export default function createReportRoutes(_pgPool) {
             deletedCount = await cacheManager.client.del(keys);
           }
         } catch (err) {
-          console.warn('[Reports] Error clearing redis keys:', err);
+          logger.warn('[Reports] Error clearing redis keys:', err);
         }
-        console.log('[Reports] Deleted redis cache entries:', { tenant_id, deletedCount });
+        logger.debug('[Reports] Deleted redis cache entries:', { tenant_id, deletedCount });
       } else {
         // Clear all dashboard bundle cache (global pattern)
         let deletedCount = 0;
@@ -156,9 +157,9 @@ export default function createReportRoutes(_pgPool) {
             deletedCount = await cacheManager.client.del(keys);
           }
         } catch (err) {
-          console.warn('[Reports] Error clearing all redis keys:', err);
+          logger.warn('[Reports] Error clearing all redis keys:', err);
         }
-        console.log('[Reports] Cleared all dashboard bundle cache');
+        logger.debug('[Reports] Cleared all dashboard bundle cache');
       }
       
       res.json({
@@ -167,7 +168,7 @@ export default function createReportRoutes(_pgPool) {
         data: { cleared: true }
       });
     } catch (error) {
-      console.error('[Reports] clear-cache error:', error);
+      logger.error('[Reports] clear-cache error:', error);
       res.status(500).json({
         status: 'error',
         message: error.message
@@ -209,7 +210,7 @@ export default function createReportRoutes(_pgPool) {
     try {
       let { tenant_id } = req.query;
 
-      console.log('[dashboard-stats] Received tenant_id:', tenant_id);
+      logger.debug('[dashboard-stats] Received tenant_id:', tenant_id);
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -294,14 +295,14 @@ export default function createReportRoutes(_pgPool) {
         try {
           const cached = await cacheManager.get(cacheKey);
           if (cached) {
-            console.log(`[dashboard-bundle] Cache HIT key=${cacheKey} (redis)`);
+            logger.debug(`[dashboard-bundle] Cache HIT key=${cacheKey} (redis)`);
             return res.json({ status: 'success', data: cached, cached: true });
           }
         } catch (err) {
-          console.warn(`[dashboard-bundle] Redis cache read error: ${err.message}`);
+          logger.warn(`[dashboard-bundle] Redis cache read error: ${err.message}`);
         }
       }
-      console.log(`[dashboard-bundle] Cache MISS key=${cacheKey} (compute from db)`);
+      logger.debug(`[dashboard-bundle] Cache MISS key=${cacheKey} (compute from db)`);
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
@@ -335,13 +336,13 @@ export default function createReportRoutes(_pgPool) {
           });
           const elapsed = Date.now() - startTime;
           if (rpcError) {
-            console.warn(`[dashboard-bundle] Bundle RPC error (${elapsed}ms): ${rpcError.message}`);
+            logger.warn(`[dashboard-bundle] Bundle RPC error (${elapsed}ms): ${rpcError.message}`);
           } else if (rpcData) {
             bundleData = rpcData;
-            console.log(`[dashboard-bundle] Single RPC success (${elapsed}ms) source=${bundleData?.meta?.source || 'unknown'}`);
+            logger.debug(`[dashboard-bundle] Single RPC success (${elapsed}ms) source=${bundleData?.meta?.source || 'unknown'}`);
           }
         } catch (rpcErr) {
-          console.warn(`[dashboard-bundle] Bundle RPC fallback: ${rpcErr.message}`);
+          logger.warn(`[dashboard-bundle] Bundle RPC fallback: ${rpcErr.message}`);
         }
       }
 
@@ -379,7 +380,7 @@ export default function createReportRoutes(_pgPool) {
           try {
             await cacheManager.set(cacheKey, bundle, BUNDLE_TTL_SECONDS);
           } catch (err) {
-            console.warn(`[dashboard-bundle] Redis cache write error: ${err.message}`);
+            logger.warn(`[dashboard-bundle] Redis cache write error: ${err.message}`);
           }
         }
         return res.json({ status: 'success', data: bundle, cached: false });
@@ -396,13 +397,13 @@ export default function createReportRoutes(_pgPool) {
         try {
           const { data: mvData, error: mvError } = await supabase.rpc('get_dashboard_stats', { p_tenant_id: tenant_id });
           if (mvError) {
-            console.warn(`[dashboard-bundle] MV stats RPC error: ${mvError.message}`);
+            logger.warn(`[dashboard-bundle] MV stats RPC error: ${mvError.message}`);
           } else if (mvData) {
             mvStats = mvData;
-            console.log(`[dashboard-bundle] Using MV stats (fallback 1) for tenant ${tenant_id}`);
+            logger.debug(`[dashboard-bundle] Using MV stats (fallback 1) for tenant ${tenant_id}`);
           }
         } catch (mvErr) {
-          console.warn(`[dashboard-bundle] MV stats fallback: ${mvErr.message}`);
+          logger.warn(`[dashboard-bundle] MV stats fallback: ${mvErr.message}`);
         }
       }
 
@@ -478,7 +479,7 @@ export default function createReportRoutes(_pgPool) {
           try {
             await cacheManager.set(cacheKey, bundle, BUNDLE_TTL_SECONDS);
           } catch (err) {
-            console.warn(`[dashboard-bundle] Redis cache write error: ${err.message}`);
+            logger.warn(`[dashboard-bundle] Redis cache write error: ${err.message}`);
           }
         }
         return res.json({ status: 'success', data: bundle, cached: false });
@@ -496,7 +497,7 @@ export default function createReportRoutes(_pgPool) {
        * Performance: ~214ms average (faster than RPC's 389ms)
        * Cache TTL: 60 seconds
        */
-      console.log(`[dashboard-bundle] Falling back to individual queries`);
+      logger.debug(`[dashboard-bundle] Falling back to individual queries`);
       const commonOpts = { includeTestData, countMode: 'exact', confirmSmallCounts: false };
       const totalContactsP = safeCount(null, 'contacts', tenant_id, undefined, commonOpts);
       const totalAccountsP = safeCount(null, 'accounts', tenant_id, undefined, commonOpts);
@@ -607,7 +608,7 @@ export default function createReportRoutes(_pgPool) {
           const { data } = await q;
           return Array.isArray(data) && data.length > 0 ? data[0] : null;
         } catch (err) {
-          if (process.env.NODE_ENV === 'development') console.warn('[dashboard-bundle] Funnel MV unavailable:', err.message);
+          if (process.env.NODE_ENV === 'development') logger.warn('[dashboard-bundle] Funnel MV unavailable:', err.message);
           return null;
         }
       })();
@@ -624,7 +625,7 @@ export default function createReportRoutes(_pgPool) {
       const needsLeadSources = visibleWidgets.length === 0 || widgetSet.has('leadSourceChart');
       const leadSourcesP = needsLeadSources ? (async () => {
         try {
-          console.log('[dashboard-bundle] Fetching lead sources for tenant:', tenant_id);
+          logger.debug('[dashboard-bundle] Fetching lead sources for tenant:', tenant_id);
           let q = supabase.from('leads').select('source');
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
           if (!includeTestData) {
@@ -632,10 +633,10 @@ export default function createReportRoutes(_pgPool) {
           }
           const { data, error } = await q;
           if (error) {
-            console.error('[dashboard-bundle] Lead sources query error:', error);
+            logger.error('[dashboard-bundle] Lead sources query error:', error);
             return {};
           }
-          console.log('[dashboard-bundle] Lead sources query returned:', data?.length, 'rows');
+          logger.debug('[dashboard-bundle] Lead sources query returned:', data?.length, 'rows');
           if (!Array.isArray(data)) return {};
 
           // Aggregate sources client-side (still faster than fetching full records)
@@ -644,10 +645,10 @@ export default function createReportRoutes(_pgPool) {
             const source = row.source || 'other';
             sources[source] = (sources[source] || 0) + 1;
           });
-          console.log('[dashboard-bundle] Lead sources aggregated:', sources);
+          logger.debug('[dashboard-bundle] Lead sources aggregated:', sources);
           return sources;
         } catch (err) {
-          console.error('[dashboard-bundle] Lead sources fetch error:', err);
+          logger.error('[dashboard-bundle] Lead sources fetch error:', err);
           return {};
         }
       })() : Promise.resolve({});
@@ -751,14 +752,14 @@ export default function createReportRoutes(_pgPool) {
         },
       };
 
-      console.log('[dashboard-bundle] Bundle stats.leadsBySource:', bundle.stats.leadsBySource);
+      logger.debug('[dashboard-bundle] Bundle stats.leadsBySource:', bundle.stats.leadsBySource);
 
       // Store in redis cache (5-minute TTL, shared across instances)
       if (cacheManager && cacheManager.client) {
         try {
           await cacheManager.set(cacheKey, bundle, BUNDLE_TTL_SECONDS);
         } catch (err) {
-          console.warn(`[dashboard-bundle] Redis cache write error: ${err.message}`);
+          logger.warn(`[dashboard-bundle] Redis cache write error: ${err.message}`);
         }
       }
       res.json({ status: 'success', data: bundle, cached: false });
@@ -994,7 +995,7 @@ export default function createReportRoutes(_pgPool) {
         const { data, error } = await query;
         
         if (error) {
-          console.error(`Error analyzing ${tableName}:`, error);
+          logger.error(`Error analyzing ${tableName}:`, error);
           return { total: 0, missingFields: {} };
         }
         
@@ -1095,7 +1096,7 @@ export default function createReportRoutes(_pgPool) {
         } 
       });
     } catch (error) {
-      console.error('Error analyzing data quality:', error);
+      logger.error('Error analyzing data quality:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -1667,7 +1668,7 @@ export default function createReportRoutes(_pgPool) {
       res.end(pdfData);
 
     } catch (error) {
-      console.error('Error generating AI insights PDF:', error);
+      logger.error('Error generating AI insights PDF:', error);
       res.status(500).json({ status: 'error', message: error.message, details: 'Failed to generate PDF report' });
     } finally {
       if (browser) await browser.close();
@@ -2039,7 +2040,7 @@ export default function createReportRoutes(_pgPool) {
       res.end(pdfData);
 
     } catch (error) {
-      console.error('Error generating PDF:', error);
+      logger.error('Error generating PDF:', error);
       res.status(500).json({ 
         status: 'error', 
         message: error.message,

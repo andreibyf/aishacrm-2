@@ -2,6 +2,7 @@ import express from 'express';
 import { getSupabaseAdmin } from '../lib/supabaseFactory.js';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
 import { cacheList } from '../lib/cacheMiddleware.js';
+import logger from '../lib/logger.js';
 
 export default function createDashboardFunnelRoutes(_pgPool) {
   const router = express.Router();
@@ -215,7 +216,7 @@ router.get('/funnel-counts', cacheList('funnel_counts', 120), validateTenantAcce
     });
 
   } catch (error) {
-    console.error('[Dashboard Funnel] Error fetching counts:', error);
+    logger.error('[Dashboard Funnel] Error fetching counts:', error);
     res.status(500).json({ 
       error: 'Failed to fetch funnel counts',
       message: error.message 
@@ -242,7 +243,7 @@ router.post('/funnel-counts/refresh', validateTenantAccess, async (req, res) => 
     });
 
   } catch (error) {
-    console.error('[Dashboard Funnel] Error refreshing counts:', error);
+    logger.error('[Dashboard Funnel] Error refreshing counts:', error);
     res.status(500).json({ 
       error: 'Failed to refresh funnel counts',
       message: error.message 

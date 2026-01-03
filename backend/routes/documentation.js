@@ -6,6 +6,7 @@
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
+import logger from '../lib/logger.js';
 
 export default function createDocumentationRoutes(_pgPool) {
   const router = express.Router();
@@ -125,7 +126,7 @@ export default function createDocumentationRoutes(_pgPool) {
       res.writeHead(200, headers);
       return res.end(out);
     } catch (err) {
-      console.error('[documentation] Failed to generate user-guide.pdf:', err?.message || err);
+      logger.error('[documentation] Failed to generate user-guide.pdf:', err?.message || err);
       return res.status(500).json({ status: 'error', message: err?.message || 'Failed to generate PDF' });
     } finally {
       if (browser) {

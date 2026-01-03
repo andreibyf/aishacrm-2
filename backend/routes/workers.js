@@ -10,6 +10,7 @@ import {
 } from "../middleware/validateTenant.js";
 import { tenantScopedId } from "../middleware/tenantScopedId.js";
 import { cacheList, invalidateCache } from "../lib/cacheMiddleware.js";
+import logger from '../lib/logger.js';
 
 export default function createWorkersRoutes(_pgPool) {
   const router = express.Router();
@@ -70,7 +71,7 @@ export default function createWorkersRoutes(_pgPool) {
       const { data, error, count } = await q;
 
       if (error) {
-        console.error("[workers] GET error:", error);
+        logger.error("[workers] GET error:", error);
         return res.status(500).json({ status: "error", message: error.message });
       }
 
@@ -82,7 +83,7 @@ export default function createWorkersRoutes(_pgPool) {
         },
       });
     } catch (err) {
-      console.error("[workers] GET exception:", err);
+      logger.error("[workers] GET exception:", err);
       res.status(500).json({ status: "error", message: err.message });
     }
   });
@@ -110,13 +111,13 @@ export default function createWorkersRoutes(_pgPool) {
         if (error.code === "PGRST116") {
           return res.status(404).json({ status: "error", message: "Worker not found" });
         }
-        console.error("[workers] GET/:id error:", error);
+        logger.error("[workers] GET/:id error:", error);
         return res.status(500).json({ status: "error", message: error.message });
       }
 
       res.json({ status: "success", data });
     } catch (err) {
-      console.error("[workers] GET/:id exception:", err);
+      logger.error("[workers] GET/:id exception:", err);
       res.status(500).json({ status: "error", message: err.message });
     }
   });
@@ -190,7 +191,7 @@ export default function createWorkersRoutes(_pgPool) {
         .single();
 
       if (error) {
-        console.error("[workers] POST error:", error);
+        logger.error("[workers] POST error:", error);
         return res.status(500).json({ status: "error", message: error.message });
       }
 
@@ -200,7 +201,7 @@ export default function createWorkersRoutes(_pgPool) {
         data,
       });
     } catch (err) {
-      console.error("[workers] POST exception:", err);
+      logger.error("[workers] POST exception:", err);
       res.status(500).json({ status: "error", message: err.message });
     }
   });
@@ -272,7 +273,7 @@ export default function createWorkersRoutes(_pgPool) {
         if (error.code === "PGRST116") {
           return res.status(404).json({ status: "error", message: "Worker not found" });
         }
-        console.error("[workers] PUT error:", error);
+        logger.error("[workers] PUT error:", error);
         return res.status(500).json({ status: "error", message: error.message });
       }
 
@@ -282,7 +283,7 @@ export default function createWorkersRoutes(_pgPool) {
         data,
       });
     } catch (err) {
-      console.error("[workers] PUT exception:", err);
+      logger.error("[workers] PUT exception:", err);
       res.status(500).json({ status: "error", message: err.message });
     }
   });
@@ -308,7 +309,7 @@ export default function createWorkersRoutes(_pgPool) {
         .maybeSingle();
 
       if (error) {
-        console.error("[workers] DELETE error:", error);
+        logger.error("[workers] DELETE error:", error);
         return res.status(500).json({ status: "error", message: error.message });
       }
 
@@ -322,7 +323,7 @@ export default function createWorkersRoutes(_pgPool) {
         data: { id: data.id },
       });
     } catch (err) {
-      console.error("[workers] DELETE exception:", err);
+      logger.error("[workers] DELETE exception:", err);
       res.status(500).json({ status: "error", message: err.message });
     }
   });

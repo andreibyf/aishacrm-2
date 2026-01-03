@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { isMemoryAvailable, getMemoryClient } from '../lib/memoryClient.js';
 import { cacheList } from '../lib/cacheMiddleware.js';
+import logger from '../lib/logger.js';
 
 export default function createActivityRoutes(_pgPool) {
   const router = express.Router();
@@ -301,7 +302,7 @@ export default function createActivityRoutes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error('Error searching activities:', error);
+      logger.error('Error searching activities:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -593,7 +594,7 @@ export default function createActivityRoutes(_pgPool) {
         }
       });
     } catch (error) {
-      console.error('Error fetching activities:', error);
+      logger.error('Error fetching activities:', error);
       res.status(500).json({
         status: 'error',
         message: error.message
@@ -695,7 +696,7 @@ export default function createActivityRoutes(_pgPool) {
           data: normalizeActivity(data)
         });
     } catch (error) {
-      console.error('Error fetching activity:', error);
+      logger.error('Error fetching activity:', error);
       res.status(500).json({
         status: 'error',
         message: error.message
@@ -820,7 +821,7 @@ export default function createActivityRoutes(_pgPool) {
             });
           })
           .catch(err => {
-            console.error('[ACTIVITY_MEMORY_INGESTION] Failed:', err.message);
+            logger.error('[ACTIVITY_MEMORY_INGESTION] Failed:', err.message);
           });
       }
       
@@ -829,7 +830,7 @@ export default function createActivityRoutes(_pgPool) {
         data: normalizeActivity(data)
       });
     } catch (error) {
-      console.error('Error creating activity:', error);
+      logger.error('Error creating activity:', error);
       res.status(500).json({
         status: 'error',
         message: error.message
@@ -1000,7 +1001,7 @@ export default function createActivityRoutes(_pgPool) {
             });
           })
           .catch(err => {
-            console.error('[ACTIVITY_MEMORY_INGESTION] Failed:', err.message);
+            logger.error('[ACTIVITY_MEMORY_INGESTION] Failed:', err.message);
           });
       }
       
@@ -1009,7 +1010,7 @@ export default function createActivityRoutes(_pgPool) {
         data: normalizeActivity(data)
       });
     } catch (error) {
-      console.error('Error updating activity:', error);
+      logger.error('Error updating activity:', error);
       res.status(500).json({
         status: 'error',
         message: error.message
@@ -1049,7 +1050,7 @@ export default function createActivityRoutes(_pgPool) {
         message: 'Activity deleted successfully'
       });
     } catch (error) {
-      console.error('Error deleting activity:', error);
+      logger.error('Error deleting activity:', error);
       res.status(500).json({
         status: 'error',
         message: error.message
@@ -1101,7 +1102,7 @@ export default function createActivityRoutes(_pgPool) {
         }
       });
     } catch (e) {
-      console.error('[activities.stats-monitor] Error:', e.message);
+      logger.error('[activities.stats-monitor] Error:', e.message);
       return res.status(500).json({ status: 'error', message: e.message });
     }
   });

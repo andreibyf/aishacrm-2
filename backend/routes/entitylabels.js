@@ -1,5 +1,6 @@
 import express from 'express';
 import { requireAdminRole } from '../middleware/validateTenant.js';
+import logger from '../lib/logger.js';
 
 // UUID format regex pattern
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -27,7 +28,7 @@ async function resolveTenantUUID(pool, tenantIdOrSlug) {
     );
     return result.rows[0]?.id || null;
   } catch (err) {
-    console.error('[entitylabels] Error resolving tenant slug:', err.message);
+    logger.error('[entitylabels] Error resolving tenant slug:', err.message);
     return null;
   }
 }
@@ -117,7 +118,7 @@ export default function createEntityLabelsRoutes(pool) {
         } 
       });
     } catch (error) {
-      console.error('Error fetching entity labels:', error);
+      logger.error('Error fetching entity labels:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -250,7 +251,7 @@ export default function createEntityLabelsRoutes(pool) {
         } 
       });
     } catch (error) {
-      console.error('Error updating entity labels:', error);
+      logger.error('Error updating entity labels:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -289,7 +290,7 @@ export default function createEntityLabelsRoutes(pool) {
         data: { labels: DEFAULT_LABELS, customized: [] }
       });
     } catch (error) {
-      console.error('Error resetting entity labels:', error);
+      logger.error('Error resetting entity labels:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

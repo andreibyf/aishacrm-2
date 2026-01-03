@@ -104,7 +104,7 @@ export function v1UsageLogger(req, res, next) {
 
     // Log at debug level to avoid noise
     if (process.env.LOG_V1_USAGE === 'true') {
-      console.log('[v1-usage]', JSON.stringify(logData));
+      logger.debug('[v1-usage]', JSON.stringify(logData));
     }
   }
 

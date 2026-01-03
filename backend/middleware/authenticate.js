@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
+import logger from '../lib/logger.js';
 
 /**
  * Authenticate request and populate req.user from:
@@ -16,18 +17,18 @@ function getJWKSClient() {
     const supabaseUrl = process.env.SUPABASE_URL;
     const apiKey = process.env.SUPABASE_ANON_KEY;
     if (!supabaseUrl) {
-      console.warn('[Auth] SUPABASE_URL not set, JWKS verification disabled');
+      logger.warn('[Auth] SUPABASE_URL not set, JWKS verification disabled');
       return null;
     }
     if (!apiKey) {
-      console.warn('[Auth] SUPABASE_ANON_KEY not set, JWKS verification may fail');
+      logger.warn('[Auth] SUPABASE_ANON_KEY not set, JWKS verification may fail');
     }
     // Correct JWKS URL per OpenID Connect discovery
     const jwksUrl = new URL('/auth/v1/.well-known/jwks.json', supabaseUrl);
     // Supabase requires API key header for JWKS endpoint
     const headers = apiKey ? { apikey: apiKey } : {};
     jwksClient = createRemoteJWKSet(jwksUrl, { headers });
-    console.log('[Auth] JWKS client initialized:', jwksUrl.toString());
+    logger.debug('[Auth] JWKS client initialized:', jwksUrl.toString());
   }
   return jwksClient;
 }
@@ -39,7 +40,7 @@ export async function authenticateRequest(req, _res, next) {
     const hasCookie = !!req.cookies?.aisha_access;
     const hasBearer = authHeader.startsWith('Bearer ');
     if (process.env.NODE_ENV !== 'production' || process.env.AUTH_DEBUG === 'true') {
-      console.log('[Auth Debug]', {
+      logger.debug('[Auth Debug]', {
         path: req.path,
         method: req.method,
         hasCookie,
@@ -66,7 +67,7 @@ export async function authenticateRequest(req, _res, next) {
           tenant_uuid: payload.tenant_uuid || null,
         };
         if (process.env.AUTH_DEBUG === 'true') {
-          console.log('[Auth Debug] Cookie JWT verified (HS256):', { 
+          logger.debug('[Auth Debug] Cookie JWT verified (HS256):', { 
             path: req.path, 
             userId: req.user.id, 
             email: req.user.email,
@@ -77,7 +78,7 @@ export async function authenticateRequest(req, _res, next) {
       } catch (cookieErr) {
         // Log warning in production if verification fails, to help diagnose 401s
         if (process.env.NODE_ENV === 'production' || process.env.AUTH_DEBUG === 'true') {
-          console.warn('[Auth] Cookie JWT verification failed:', { 
+          logger.warn('[Auth] Cookie JWT verification failed:', { 
             path: req.path, 
             error: cookieErr?.message,
             hasSecret: !!process.env.JWT_SECRET
@@ -96,7 +97,7 @@ export async function authenticateRequest(req, _res, next) {
 
     if (bearer) {
       if (process.env.AUTH_DEBUG === 'true') {
-        console.log('[Auth Debug] Processing bearer token:', { path: req.path, tokenLength: bearer.length });
+        logger.debug('[Auth Debug] Processing bearer token:', { path: req.path, tokenLength: bearer.length });
       }
       
       let payload = null;
@@ -118,7 +119,7 @@ export async function authenticateRequest(req, _res, next) {
               internal: true
             };
             if (process.env.AUTH_DEBUG === 'true') {
-              console.log('[Auth Debug] Internal service token verified:', { 
+              logger.debug('[Auth Debug] Internal service token verified:', { 
                 path: req.path, 
                 userId: req.user.id, 
                 tenant_id: req.user.tenant_id 
@@ -132,7 +133,7 @@ export async function authenticateRequest(req, _res, next) {
         } catch (internalErr) {
           // Not a valid internal token, continue to JWKS
           if (process.env.AUTH_DEBUG === 'true') {
-            console.log('[Auth Debug] Not an internal token, trying JWKS:', { 
+            logger.debug('[Auth Debug] Not an internal token, trying JWKS:', { 
               path: req.path, 
               error: internalErr?.message?.substring(0, 50) 
             });
@@ -150,7 +151,7 @@ export async function authenticateRequest(req, _res, next) {
             });
             payload = verifiedPayload;
             if (process.env.AUTH_DEBUG === 'true') {
-              console.log('[Auth Debug] Bearer JWKS verified:', { 
+              logger.debug('[Auth Debug] Bearer JWKS verified:', { 
                 path: req.path, 
                 sub: payload.sub, 
                 email: payload.email,
@@ -159,7 +160,7 @@ export async function authenticateRequest(req, _res, next) {
             }
           } catch (jwksErr) {
             if (process.env.AUTH_DEBUG === 'true') {
-              console.log('[Auth Debug] Bearer JWKS verification failed:', { 
+              logger.debug('[Auth Debug] Bearer JWKS verification failed:', { 
                 path: req.path, 
                 error: jwksErr?.message,
                 code: jwksErr?.code 
@@ -175,14 +176,14 @@ export async function authenticateRequest(req, _res, next) {
         try {
           payload = jwt.decode(bearer) || {};
           if (process.env.AUTH_DEBUG === 'true') {
-            console.log('[Auth Debug] Bearer decoded (unverified fallback):', { 
+            logger.debug('[Auth Debug] Bearer decoded (unverified fallback):', { 
               path: req.path, 
               hasEmail: !!payload?.email 
             });
           }
         } catch (decodeErr) {
           if (process.env.AUTH_DEBUG === 'true') {
-            console.log('[Auth Debug] Bearer decode failed:', { error: decodeErr?.message });
+            logger.debug('[Auth Debug] Bearer decode failed:', { error: decodeErr?.message });
           }
         }
       }
@@ -208,7 +209,7 @@ export async function authenticateRequest(req, _res, next) {
               tenant_uuid: row.tenant_uuid ?? null,
             };
             if (process.env.AUTH_DEBUG === 'true') {
-              console.log('[Auth Debug] Bearer: resolved user from DB:', { 
+              logger.debug('[Auth Debug] Bearer: resolved user from DB:', { 
                 email, 
                 role: req.user.role, 
                 tenant_id: req.user.tenant_id 
@@ -217,12 +218,12 @@ export async function authenticateRequest(req, _res, next) {
             return next();
           } else {
             if (process.env.AUTH_DEBUG === 'true') {
-              console.log('[Auth Debug] Bearer: user not found in DB:', { email });
+              logger.debug('[Auth Debug] Bearer: user not found in DB:', { email });
             }
           }
         } catch (dbErr) {
           if (process.env.AUTH_DEBUG === 'true') {
-            console.log('[Auth Debug] Bearer DB lookup failed:', { email, error: dbErr?.message });
+            logger.debug('[Auth Debug] Bearer DB lookup failed:', { email, error: dbErr?.message });
           }
         }
       }
@@ -232,7 +233,7 @@ export async function authenticateRequest(req, _res, next) {
     return next();
   } catch (err) {
     if (process.env.AUTH_DEBUG === 'true') {
-      console.log('[Auth Debug] Unexpected error:', { error: err?.message });
+      logger.debug('[Auth Debug] Unexpected error:', { error: err?.message });
     }
     return next();
   }

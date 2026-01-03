@@ -7,6 +7,8 @@
  * @module backend/utils/errorHandler
  */
 
+import logger from '../lib/logger.js';
+
 /**
  * Standard error response structure
  * 
@@ -84,7 +86,7 @@ export function sendErrorResponse(res, error, defaultStatus = HttpStatus.INTERNA
   
   // Log error details for debugging
   if (statusCode >= 500) {
-    console.error('[API Error]', error);
+    logger.error({ err: error }, '[API Error]');
   }
   
   res.status(statusCode).json(errorResponse);

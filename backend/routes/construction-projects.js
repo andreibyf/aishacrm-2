@@ -11,6 +11,7 @@ import {
 } from "../middleware/validateTenant.js";
 import { tenantScopedId } from "../middleware/tenantScopedId.js";
 import { cacheList, invalidateCache } from "../lib/cacheMiddleware.js";
+import logger from '../lib/logger.js';
 
 export default function createConstructionProjectsRoutes(_pgPool) {
   const router = express.Router();
@@ -96,7 +97,7 @@ export default function createConstructionProjectsRoutes(_pgPool) {
       const { data, error, count } = await q;
 
       if (error) {
-        console.error("[construction-projects] GET error:", error);
+        logger.error("[construction-projects] GET error:", error);
         return res.status(500).json({ status: "error", message: error.message });
       }
 
@@ -108,7 +109,7 @@ export default function createConstructionProjectsRoutes(_pgPool) {
         },
       });
     } catch (err) {
-      console.error("[construction-projects] GET exception:", err);
+      logger.error("[construction-projects] GET exception:", err);
       res.status(500).json({ status: "error", message: err.message });
     }
   });
@@ -148,13 +149,13 @@ export default function createConstructionProjectsRoutes(_pgPool) {
         if (error.code === "PGRST116") {
           return res.status(404).json({ status: "error", message: "Project not found" });
         }
-        console.error("[construction-projects] GET/:id error:", error);
+        logger.error("[construction-projects] GET/:id error:", error);
         return res.status(500).json({ status: "error", message: error.message });
       }
 
       res.json({ status: "success", data });
     } catch (err) {
-      console.error("[construction-projects] GET/:id exception:", err);
+      logger.error("[construction-projects] GET/:id exception:", err);
       res.status(500).json({ status: "error", message: err.message });
     }
   });
@@ -219,7 +220,7 @@ export default function createConstructionProjectsRoutes(_pgPool) {
         .single();
 
       if (error) {
-        console.error("[construction-projects] POST error:", error);
+        logger.error("[construction-projects] POST error:", error);
         return res.status(500).json({ status: "error", message: error.message });
       }
 
@@ -229,7 +230,7 @@ export default function createConstructionProjectsRoutes(_pgPool) {
         data,
       });
     } catch (err) {
-      console.error("[construction-projects] POST exception:", err);
+      logger.error("[construction-projects] POST exception:", err);
       res.status(500).json({ status: "error", message: err.message });
     }
   });
@@ -295,7 +296,7 @@ export default function createConstructionProjectsRoutes(_pgPool) {
         if (error.code === "PGRST116") {
           return res.status(404).json({ status: "error", message: "Project not found" });
         }
-        console.error("[construction-projects] PUT error:", error);
+        logger.error("[construction-projects] PUT error:", error);
         return res.status(500).json({ status: "error", message: error.message });
       }
 
@@ -305,7 +306,7 @@ export default function createConstructionProjectsRoutes(_pgPool) {
         data,
       });
     } catch (err) {
-      console.error("[construction-projects] PUT exception:", err);
+      logger.error("[construction-projects] PUT exception:", err);
       res.status(500).json({ status: "error", message: err.message });
     }
   });
@@ -331,7 +332,7 @@ export default function createConstructionProjectsRoutes(_pgPool) {
         .maybeSingle();
 
       if (error) {
-        console.error("[construction-projects] DELETE error:", error);
+        logger.error("[construction-projects] DELETE error:", error);
         return res.status(500).json({ status: "error", message: error.message });
       }
 
@@ -345,7 +346,7 @@ export default function createConstructionProjectsRoutes(_pgPool) {
         data: { id: data.id },
       });
     } catch (err) {
-      console.error("[construction-projects] DELETE exception:", err);
+      logger.error("[construction-projects] DELETE exception:", err);
       res.status(500).json({ status: "error", message: err.message });
     }
   });

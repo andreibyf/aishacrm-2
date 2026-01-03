@@ -7,6 +7,7 @@
 
 import express from 'express';
 import { getSupabaseClient } from '../lib/supabase-db.js';
+import logger from '../lib/logger.js';
 
 /**
  * Substitute parameter values into template nodes
@@ -165,7 +166,7 @@ export default function createWorkflowTemplateRoutes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error('[workflow-templates] GET / error:', error);
+      logger.error('[workflow-templates] GET / error:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -213,7 +214,7 @@ export default function createWorkflowTemplateRoutes(_pgPool) {
         data,
       });
     } catch (error) {
-      console.error('[workflow-templates] GET /:id error:', error);
+      logger.error('[workflow-templates] GET /:id error:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -348,7 +349,7 @@ export default function createWorkflowTemplateRoutes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error('[workflow-templates] POST /:id/instantiate error:', error);
+      logger.error('[workflow-templates] POST /:id/instantiate error:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -392,7 +393,7 @@ export default function createWorkflowTemplateRoutes(_pgPool) {
         data: categories,
       });
     } catch (error) {
-      console.error('[workflow-templates] GET /categories error:', error);
+      logger.error('[workflow-templates] GET /categories error:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -463,7 +464,7 @@ export default function createWorkflowTemplateRoutes(_pgPool) {
         data,
       });
     } catch (error) {
-      console.error('[workflow-templates] POST / error:', error);
+      logger.error('[workflow-templates] POST / error:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

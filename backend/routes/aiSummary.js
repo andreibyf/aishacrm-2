@@ -1,5 +1,6 @@
 import express from 'express';
 import { getSupabaseClient } from '../lib/supabase-db.js';
+import logger from '../lib/logger.js';
 
 const router = express.Router();
 
@@ -34,7 +35,7 @@ router.post('/summarize-person-profile', async (req, res) => {
       if (existingSummaryText) {
         // For now, always regenerate since ai_summary_updated_at column may not exist
         // TODO: Once migration is applied, add cache check
-        console.log(`[AI Summary] Found existing summary for ${person_id}; using fallback for now`);
+        logger.debug(`[AI Summary] Found existing summary for ${person_id}; using fallback for now`);
       }
     }
 
@@ -54,7 +55,7 @@ Focus on:
 
 Keep it professional and actionable.`;
 
-    console.log(`[AI Summary] Generating new summary for ${person_id}...`);
+    logger.debug(`[AI Summary] Generating new summary for ${person_id}...`);
     
     // Generate summary using fallback (AI integration TODO for future)
     // TODO: Integrate with LLM provider via selectLLMConfigForTenant + generateChatCompletion
@@ -62,11 +63,11 @@ Keep it professional and actionable.`;
     const ai_summary = generateFallbackSummary(profile_data, person_type);
     
     if (!ai_summary) {
-      console.warn('[AI Summary] Failed to generate fallback summary');
+      logger.warn('[AI Summary] Failed to generate fallback summary');
       return res.status(400).json({ error: 'Could not generate AI summary' });
     }
     
-    console.log('[AI Summary] Generated fallback summary for ' + person_id);
+    logger.debug('[AI Summary] Generated fallback summary for ' + person_id);
 
     // Store summary in database
     // Note: ai_summary may be typed as text[] array in Supabase; wrap if needed
@@ -84,7 +85,7 @@ Keep it professional and actionable.`;
 
     return res.json({ ai_summary });
   } catch (err) {
-    console.error('[AI Summary] Error:', err?.message || err);
+    logger.error('[AI Summary] Error:', err?.message || err);
     return res.status(500).json({ error: 'Failed to generate AI summary', details: err?.message });
   }
 });

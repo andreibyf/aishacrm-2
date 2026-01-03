@@ -3,6 +3,7 @@ import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/va
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildActivityAiContext } from '../lib/aiContextEnricher.js';
 import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
+import logger from '../lib/logger.js';
 
 /**
  * Look up the name and email for a related entity (lead, contact, account, opportunity)
@@ -33,7 +34,7 @@ async function lookupRelatedEntity(supabase, relatedTo, relatedId) {
       .single();
     
     if (error || !data) {
-      console.warn('[Activities] lookupRelatedEntity failed:', { relatedTo, relatedId, error: error?.message });
+      logger.warn('[Activities] lookupRelatedEntity failed:', { relatedTo, relatedId, error: error?.message });
       return { name: null, email: null };
     }
     
@@ -58,7 +59,7 @@ async function lookupRelatedEntity(supabase, relatedTo, relatedId) {
     
     return { name, email: data.email || null };
   } catch (err) {
-    console.warn('[Activities] Failed to lookup related entity:', err.message);
+    logger.warn('[Activities] Failed to lookup related entity:', err.message);
     return { name: null, email: null };
   }
 }
@@ -178,7 +179,7 @@ export default function createActivityV2Routes(_pgPool) {
         if (resolvedAssignee) {
           q = q.eq('assigned_to', resolvedAssignee);
         } else {
-          console.warn(`[Activities V2] Could not resolve assigned_to: ${assigned_to}`);
+          logger.warn(`[Activities V2] Could not resolve assigned_to: ${assigned_to}`);
         }
       }
 
@@ -229,7 +230,7 @@ export default function createActivityV2Routes(_pgPool) {
         if (typeof filter === 'string' && filter.startsWith('{')) {
           try {
             parsed = JSON.parse(filter);
-            console.log('[Activities V2] Parsed filter:', JSON.stringify(parsed, null, 2));
+            logger.debug('[Activities V2] Parsed filter:', JSON.stringify(parsed, null, 2));
           } catch {
             // ignore
           }
@@ -237,12 +238,12 @@ export default function createActivityV2Routes(_pgPool) {
         if (parsed && typeof parsed === 'object') {
           // Handle assigned_to filter from filter object (supports UUID or email)
           if (parsed.assigned_to !== undefined && parsed.assigned_to !== null && parsed.assigned_to !== '') {
-            console.log('[Activities V2] Applying assigned_to filter:', parsed.assigned_to);
+            logger.debug('[Activities V2] Applying assigned_to filter:', parsed.assigned_to);
             const resolvedFilterAssignee = await resolveAssignedTo(parsed.assigned_to, tenant_id, supabase);
             if (resolvedFilterAssignee) {
               q = q.eq('assigned_to', resolvedFilterAssignee);
             } else {
-              console.warn(`[Activities V2] Could not resolve filter assigned_to: ${parsed.assigned_to}`);
+              logger.warn(`[Activities V2] Could not resolve filter assigned_to: ${parsed.assigned_to}`);
             }
           }
 
@@ -253,7 +254,7 @@ export default function createActivityV2Routes(_pgPool) {
             );
 
             if (isUnassignedFilter) {
-              console.log('[Activities V2] Applying unassigned filter');
+              logger.debug('[Activities V2] Applying unassigned filter');
               q = q.or('assigned_to.is.null,assigned_to.eq.');
             }
           }
@@ -332,7 +333,7 @@ export default function createActivityV2Routes(_pgPool) {
         },
       });
     } catch (error) {
-      console.error('Error in v2 activities list:', error);
+      logger.error('Error in v2 activities list:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -392,7 +393,7 @@ export default function createActivityV2Routes(_pgPool) {
         data: { activity: created, aiContext },
       });
     } catch (error) {
-      console.error('Error in v2 activity create:', error);
+      logger.error('Error in v2 activity create:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -424,7 +425,7 @@ export default function createActivityV2Routes(_pgPool) {
       
       res.json({ status: 'success', data: { activity, aiContext } });
     } catch (error) {
-      console.error('Error in v2 activity get:', error);
+      logger.error('Error in v2 activity get:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -462,7 +463,7 @@ export default function createActivityV2Routes(_pgPool) {
           const extractedTime = timeMatch[1];
           // Normalize to HH:mm:ss format
           updatePayload.due_time = extractedTime.length === 5 ? `${extractedTime}:00` : extractedTime;
-          console.log('[Activities V2] Extracted time from due_date:', { due_date: datePart, due_time: updatePayload.due_time });
+          logger.debug('[Activities V2] Extracted time from due_date:', { due_date: datePart, due_time: updatePayload.due_time });
         }
       }
 
@@ -504,7 +505,7 @@ export default function createActivityV2Routes(_pgPool) {
       const updated = expandMetadata(data);
       res.json({ status: 'success', data: { activity: updated } });
     } catch (error) {
-      console.error('Error in v2 activity update:', error);
+      logger.error('Error in v2 activity update:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -534,7 +535,7 @@ export default function createActivityV2Routes(_pgPool) {
 
       res.json({ status: 'success', message: 'Activity deleted successfully' });
     } catch (error) {
-      console.error('Error in v2 activity delete:', error);
+      logger.error('Error in v2 activity delete:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

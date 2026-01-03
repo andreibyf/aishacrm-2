@@ -7,6 +7,7 @@
 
 import { initiateOutboundCall } from '../lib/outboundCallService.js';
 import { generateChatCompletion } from '../lib/aiEngine/llmClient.js';
+import logger from '../lib/logger.js';
 
 // Helper: lift workflow fields from metadata and align shape with frontend expectations
 function normalizeWorkflow(row) {
@@ -19,7 +20,7 @@ function normalizeWorkflow(row) {
     try {
       meta = JSON.parse(meta);
     } catch (e) {
-      console.warn('[normalizeWorkflow] Failed to parse metadata string:', e);
+      logger.warn('[normalizeWorkflow] Failed to parse metadata string:', e);
       meta = {};
     }
   }
@@ -29,7 +30,7 @@ function normalizeWorkflow(row) {
 
   // Log if nodes are missing but expected (debugging)
   if ((!meta.nodes || meta.nodes.length === 0) && row.name) {
-    console.log(`[normalizeWorkflow] Workflow "${row.name}" (id: ${row.id}) has no nodes in metadata. Raw metadata type: ${typeof row.metadata}`);
+    logger.debug(`[normalizeWorkflow] Workflow "${row.name}" (id: ${row.id}) has no nodes in metadata. Raw metadata type: ${typeof row.metadata}`);
   }
 
   return {
@@ -99,7 +100,7 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
       .single();
     
     if (exError) {
-      console.error('[WorkflowExecution] Failed to create execution record:', exError);
+      logger.error('[WorkflowExecution] Failed to create execution record:', exError);
       return { status: 'error', httpStatus: 500, data: { message: 'Failed to create execution record' } };
     }
     
@@ -1080,7 +1081,7 @@ Respond with ONLY a JSON object in this exact format:
                 created_at: new Date().toISOString()
               }, { onConflict: 'workflow_id,execution_id,node_id' });
             } catch (e) {
-              console.log('[Workflow] wait_for_webhook state (table may not exist):', waitState);
+              logger.debug('[Workflow] wait_for_webhook state (table may not exist):', waitState);
             }
 
             log.output = {
@@ -1259,7 +1260,7 @@ Respond with ONLY a JSON object in this exact format:
     };
 
   } catch (error) {
-    console.error('[WorkflowExecution] Error:', error);
+    logger.error('[WorkflowExecution] Error:', error);
     
     // Try to update execution record if we have one
     if (executionId) {
@@ -1274,7 +1275,7 @@ Respond with ONLY a JSON object in this exact format:
           })
           .eq('id', executionId);
       } catch (e) {
-        console.error('[WorkflowExecution] Failed to update execution record:', e);
+        logger.error('[WorkflowExecution] Failed to update execution record:', e);
       }
     }
     

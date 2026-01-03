@@ -7,6 +7,7 @@ import express from 'express';
 import workflowQueue from '../services/workflowQueue.js';
 import { initiateOutboundCall } from '../lib/outboundCallService.js';
 import { executeWorkflowById as executeWorkflowByIdService } from '../services/workflowExecutionService.js';
+import logger from '../lib/logger.js';
 
 // Re-export the service function for backwards compatibility
 export { executeWorkflowByIdService as executeWorkflowById };
@@ -22,7 +23,7 @@ function normalizeWorkflow(row) {
     try {
       meta = JSON.parse(meta);
     } catch (e) {
-      console.warn('[normalizeWorkflow] Failed to parse metadata string:', e);
+      logger.warn('[normalizeWorkflow] Failed to parse metadata string:', e);
       meta = {};
     }
   }
@@ -32,7 +33,7 @@ function normalizeWorkflow(row) {
 
   // Log if nodes are missing but expected (debugging)
   if ((!meta.nodes || meta.nodes.length === 0) && row.name) {
-    console.log(`[normalizeWorkflow] Workflow "${row.name}" (id: ${row.id}) has no nodes in metadata. Raw metadata type: ${typeof row.metadata}`);
+    logger.debug(`[normalizeWorkflow] Workflow "${row.name}" (id: ${row.id}) has no nodes in metadata. Raw metadata type: ${typeof row.metadata}`);
   }
 
   return {
@@ -1073,7 +1074,7 @@ export default function createWorkflowRoutes(pgPool) {
         }
       });
     } catch (error) {
-      console.error('Error fetching workflows:', error);
+      logger.error('Error fetching workflows:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -1083,8 +1084,8 @@ export default function createWorkflowRoutes(pgPool) {
     try {
       const { tenant_id, name, description, trigger, nodes, connections, is_active } = req.body;
 
-      console.log('[Workflows POST] Received nodes:', nodes);
-      console.log('[Workflows POST] Received connections:', connections);
+      logger.debug('[Workflows POST] Received nodes:', nodes);
+      logger.debug('[Workflows POST] Received connections:', connections);
 
       if (!tenant_id || !name) {
         return res.status(400).json({ 
@@ -1102,7 +1103,7 @@ export default function createWorkflowRoutes(pgPool) {
         last_executed: null
       };
 
-      console.log('[Workflows POST] Metadata to store:', metadata);
+      logger.debug('[Workflows POST] Metadata to store:', metadata);
 
       // Extract trigger type and config
       const trigger_type = trigger?.type || 'webhook';
@@ -1142,7 +1143,7 @@ export default function createWorkflowRoutes(pgPool) {
         data: workflow
       });
     } catch (error) {
-      console.error('Error creating workflow:', error);
+      logger.error('Error creating workflow:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -1197,8 +1198,8 @@ export default function createWorkflowRoutes(pgPool) {
       const { id } = req.params;
       const { tenant_id, name, description, trigger, nodes, connections, is_active } = req.body;
 
-      console.log('[Workflows PUT] Received nodes:', nodes);
-      console.log('[Workflows PUT] Received connections:', connections);
+      logger.debug('[Workflows PUT] Received nodes:', nodes);
+      logger.debug('[Workflows PUT] Received connections:', connections);
 
       if (!tenant_id) {
         return res.status(400).json({ 
@@ -1223,21 +1224,21 @@ export default function createWorkflowRoutes(pgPool) {
       const existingWorkflow = checkResult.rows[0];
       let existingMetadata = existingWorkflow.metadata || {};
 
-      console.log('[Workflows PUT] Existing metadata type:', typeof existingMetadata);
-      console.log('[Workflows PUT] Existing metadata value:', JSON.stringify(existingMetadata));
+      logger.debug('[Workflows PUT] Existing metadata type:', typeof existingMetadata);
+      logger.debug('[Workflows PUT] Existing metadata value:', JSON.stringify(existingMetadata));
 
       // Handle stringified JSON in database
       if (typeof existingMetadata === 'string') {
         try {
           existingMetadata = JSON.parse(existingMetadata);
         } catch (e) {
-          console.warn('[Workflows PUT] Failed to parse existing metadata:', e);
+          logger.warn('[Workflows PUT] Failed to parse existing metadata:', e);
           existingMetadata = {};
         }
       }
 
-      console.log('[Workflows PUT] Parsed existing metadata:', existingMetadata);
-      console.log('[Workflows PUT] Incoming nodes:', nodes ? `Array(${nodes.length})` : 'undefined');
+      logger.debug('[Workflows PUT] Parsed existing metadata:', existingMetadata);
+      logger.debug('[Workflows PUT] Incoming nodes:', nodes ? `Array(${nodes.length})` : 'undefined');
 
       // Build updated metadata - use explicit property assignment to avoid TDZ issues
       const updatedNodes = nodes !== undefined ? nodes : (existingMetadata.nodes || []);
@@ -1249,9 +1250,9 @@ export default function createWorkflowRoutes(pgPool) {
         connections: updatedConnections
       };
 
-      console.log('[Workflows PUT] Final merged metadata:', JSON.stringify(metadata));
+      logger.debug('[Workflows PUT] Final merged metadata:', JSON.stringify(metadata));
 
-      console.log('[Workflows PUT] Metadata to store:', metadata);
+      logger.debug('[Workflows PUT] Metadata to store:', metadata);
 
       // Extract trigger type and config if provided
       const trigger_type = trigger?.type || existingWorkflow.trigger_type;
@@ -1289,7 +1290,7 @@ export default function createWorkflowRoutes(pgPool) {
         data: workflow
       });
     } catch (error) {
-      console.error('Error updating workflow:', error);
+      logger.error('Error updating workflow:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -1324,7 +1325,7 @@ export default function createWorkflowRoutes(pgPool) {
         data: { id: result.rows[0].id, deleted: true }
       });
     } catch (error) {
-      console.error('Error deleting workflow:', error);
+      logger.error('Error deleting workflow:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -1399,7 +1400,7 @@ export default function createWorkflowRoutes(pgPool) {
         data: result.rows[0]
       });
     } catch (error) {
-      console.error('Error updating workflow status:', error);
+      logger.error('Error updating workflow status:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -1454,7 +1455,7 @@ export default function createWorkflowRoutes(pgPool) {
         }
       });
     } catch (error) {
-      console.error('[Workflow Execute] Error queuing workflow:', error);
+      logger.error('[Workflow Execute] Error queuing workflow:', error);
       return res.status(500).json({ status: 'error', message: error.message });
     }
   });
