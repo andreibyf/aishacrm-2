@@ -7,7 +7,8 @@
 -- 
 -- Affected tables: bizdev_sources, system_logs
 -- 
--- Note: DO NOT DROP the column - migration guide says "Do NOT drop columns until confirmed cutover"
+-- Status: Column cleanup complete. See migrations 110-112 for final legacy column removal.
+-- Note: Migrations 110-112 contain the DROP COLUMN statements for production deployment.
 
 -- Make tenant_id_legacy nullable on bizdev_sources table
 DO $$

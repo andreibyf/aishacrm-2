@@ -180,7 +180,6 @@ import createMetricsRoutes from "./routes/metrics.js";
 import createEdgeFunctionRoutes from "./routes/edgeFunctions.js";
 import createAISummaryRoutes from "./routes/aiSummary.js";
 import createUtilsRoutes from "./routes/utils.js";
-import createBizDevRoutes from "./routes/bizdev.js";
 import createClientRoutes from "./routes/clients.js";
 import createWorkflowRoutes from "./routes/workflows.js";
 import createWorkflowExecutionRoutes from "./routes/workflowexecutions.js";
@@ -265,7 +264,6 @@ app.use("/api/cron", createCronRoutes(measuredPgPool));
 // Metrics routes read from performance_logs; use resilient wrapper to avoid ended pool errors
 app.use("/api/metrics", createMetricsRoutes(resilientPerfDb));
 app.use("/api/utils", createUtilsRoutes(measuredPgPool));
-app.use("/api/bizdev", createBizDevRoutes(measuredPgPool));
 app.use("/api/bizdevsources", createBizDevSourceRoutes(measuredPgPool));
 app.use("/api/clients", createClientRoutes(measuredPgPool));
 app.use("/api/workflows", createWorkflowRoutes(measuredPgPool));

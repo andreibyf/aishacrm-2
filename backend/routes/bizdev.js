@@ -1,6 +1,13 @@
 /**
  * BizDev Routes
  * Business development sources and tracking
+ * 
+ * @deprecated This route is deprecated. Use /api/bizdevsources instead.
+ * @see backend/routes/bizdevsources.js
+ * 
+ * Status: DEPRECATED - Scheduled for removal
+ * Replacement: /api/bizdevsources
+ * Migration: All functionality moved to bizdevsources.js
  */
 
 import express from 'express';
