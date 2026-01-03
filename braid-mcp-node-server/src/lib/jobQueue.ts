@@ -141,7 +141,7 @@ export async function initWorker(
           durationMs,
         };
       } catch (error: unknown) {
-        logger.error(`[MCP Worker ${nodeId}] Job ${job.id} failed:`, getErrorMessage(error));
+        logger.error(`[MCP Worker ${nodeId}] Job ${job.id} failed: ${getErrorMessage(error)}`);
         throw error;
       }
     },
@@ -160,11 +160,11 @@ export async function initWorker(
   });
 
   worker.on("failed", (job, error) => {
-    logger.error(`[MCP Worker ${nodeId}] Job ${job?.id} failed:`, error.message);
+    logger.error(`[MCP Worker ${nodeId}] Job ${job?.id} failed: ${error.message}`);
   });
 
   worker.on("error", (error) => {
-    logger.error(`[MCP Worker ${nodeId}] Worker error:`, error);
+    logger.error(`[MCP Worker ${nodeId}] Worker error: ${error}`);
   });
 
   logger.debug(`[MCP Worker ${nodeId}] Worker initialized (node mode, concurrency=3)`);

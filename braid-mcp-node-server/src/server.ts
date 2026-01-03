@@ -78,7 +78,7 @@ async function initializeRole(): Promise<void> {
     await initMemory(process.env.REDIS_URL);
     logger.debug(`[MCP] Memory layer ${isMemoryAvailable() ? 'available' : 'unavailable'}`);
   } catch (e: unknown) {
-    logger.warn('[MCP] Memory init failed:', getErrorMessage(e));
+    logger.warn(`[MCP] Memory init failed: ${getErrorMessage(e)}`);
   }
 
   if (MCP_ROLE === "server") {
@@ -215,7 +215,7 @@ app.post("/mcp/run", async (req: Request, res: Response) => {
 
     res.json(response);
   } catch (err: unknown) {
-    logger.error("Error in /mcp/run", err);
+    logger.error(`Error in /mcp/run: ${err}`);
     res.status(500).json({
       error: "MCP_EXECUTION_ERROR",
       message: getErrorMessage(err),
