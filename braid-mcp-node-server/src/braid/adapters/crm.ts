@@ -118,7 +118,7 @@ function logToMemory(action: BraidAction, ctx: BraidAdapterContext, event: Recor
       });
     }
   } catch (e: unknown) {
-    ctx.debug('Memory trace (CRM) failed', { error: e?.message ?? String(e) });
+    ctx.debug('Memory trace (CRM) failed', { error: getErrorMessage(e) });
   }
 }
 
@@ -311,7 +311,7 @@ async function callBackend(
             await supa.from('audit_log').insert([auditRow]);
             ctx.debug('Audit log inserted for CRM action', { actionId: action.id, entity: entityType });
           } catch (e: unknown) {
-            ctx.warn('Failed to insert audit_log entry', { error: e?.message ?? String(e) });
+            ctx.warn('Failed to insert audit_log entry', { error: getErrorMessage(e) });
           }
         })();
       }
