@@ -69,10 +69,10 @@ export const DEFAULT_BUDGET = {
  */
 export const DEFAULT_MEMORY = {
   // Number of memory chunks to retrieve
-  TOP_K: 3,
+  TOP_K: 8,
   
   // Max characters per memory chunk (before token estimation)
-  MAX_CHUNK_CHARS: 300,
+  MAX_CHUNK_CHARS: 3500,
   
   // Minimum similarity score for memory retrieval
   MIN_SIMILARITY: 0.7,

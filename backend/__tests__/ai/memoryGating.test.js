@@ -198,11 +198,11 @@ describe('Memory Gating', () => {
     it('should return reduced defaults', () => {
       const config = getMemoryConfig();
       
-      // Verify reduced from 8 to 3
-      assert.strictEqual(config.topK, 3);
+      // Verify defaults match aiBudgetConfig.js DEFAULT_MEMORY
+      assert.strictEqual(config.topK, 8);
       
-      // Verify reduced from 500 to 300
-      assert.strictEqual(config.maxChunkChars, 300);
+      // Verify defaults match aiBudgetConfig.js DEFAULT_MEMORY
+      assert.strictEqual(config.maxChunkChars, 3500);
     });
 
     it('should respect environment overrides', () => {

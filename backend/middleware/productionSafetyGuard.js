@@ -9,7 +9,6 @@
  * 
  * Usage:
  *   import { productionSafetyGuard } from '../middleware/productionSafetyGuard.js';
-import logger from '../lib/logger.js';
  *   
  *   // Apply globally in server.js (before routes):
  *   app.use(productionSafetyGuard());
@@ -22,6 +21,8 @@ import logger from '../lib/logger.js';
  *   - Or send header: X-Allow-Production-Write: <secret-token>
  *   - Configure PRODUCTION_WRITE_TOKEN for header-based bypass
  */
+
+import logger from '../lib/logger.js';
 
 /**
  * Helper to log security events to system_logs table
