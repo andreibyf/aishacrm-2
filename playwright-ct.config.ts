@@ -1,9 +1,14 @@
+/* eslint-env node */
+/* global process */
 import { defineConfig, devices } from '@playwright/experimental-ct-react';
 import { fileURLToPath } from 'url';
 import path from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Safe environment check for CI
+const isCI = typeof process !== 'undefined' && process.env?.CI;
 
 /**
  * Playwright Component Testing Configuration
@@ -19,13 +24,13 @@ export default defineConfig({
   timeout: 30000,
   
   // Fail the build on CI if you accidentally left test.only in the source code
-  forbidOnly: !!process.env.CI,
+  forbidOnly: !!isCI,
   
   // Retry on CI only
-  retries: process.env.CI ? 2 : 0,
+  retries: isCI ? 2 : 0,
   
   // Limit workers on CI
-  workers: process.env.CI ? 1 : undefined,
+  workers: isCI ? 1 : undefined,
   
   // Reporter to use
   reporter: [
