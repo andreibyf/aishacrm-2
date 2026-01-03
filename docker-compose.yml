@@ -107,8 +107,8 @@ services:
       - DEFAULT_TENANT_ID=a11dfb63-4b18-4eb8-872e-747af2e37c46
       - CRM_BACKEND_URL=http://backend:3001
       - LLM_PROVIDER=anthropic
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     dns:
       - 8.8.8.8
       - 8.8.4.4

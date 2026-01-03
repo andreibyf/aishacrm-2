@@ -50,6 +50,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // Polyfill Node.js events module for browser (required by opossum/CircuitBreaker)
+      'events': 'events'
     },
     extensions: ['.mjs', '.js', '.jsx', '.ts', '.tsx', '.json']
   },
