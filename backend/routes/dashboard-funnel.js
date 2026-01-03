@@ -10,8 +10,8 @@ export default function createDashboardFunnelRoutes(_pgPool) {
   // Lazy-load Supabase client to avoid initialization errors when credentials not configured
   const getSupabase = () => getSupabaseAdmin({ throwOnMissing: false }) || getSupabaseAdmin();
 
-/**
- * GET /api/dashboard/funnel-counts
+  /**
+   * GET /api/dashboard/funnel-counts
  * Returns pre-computed funnel counts AND pipeline data from materialized view
  * Query params:
  *   - include_test_data: boolean (default: true)
@@ -23,6 +23,7 @@ export default function createDashboardFunnelRoutes(_pgPool) {
  */
 router.get('/funnel-counts', cacheList('funnel_counts', 120), validateTenantAccess, async (req, res) => {
   try {
+    const supabase = getSupabase();
     const tenantId = req.tenant?.id || req.query.tenant_id;
     const includeTestData = req.query.include_test_data !== 'false';
     const period = req.query.period; // year|quarter|month|week
