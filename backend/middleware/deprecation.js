@@ -9,6 +9,8 @@
  * - Link: Alternate v2 endpoint
  */
 
+import logger from '../lib/logger.js';
+
 // Configuration
 const DEPRECATION_DATE = '2027-02-01';  // Stop receiving updates
 const SUNSET_DATE = '2027-08-01';       // Complete removal
@@ -51,6 +53,7 @@ function isV1ApiPath(path) {
 /**
  * Deprecation warning middleware
  * Adds headers to all v1 API responses when a v2 alternative exists
+ * After sunset date, returns 410 Gone for v1 endpoints with v2 alternatives
  */
 export function deprecationMiddleware(req, res, next) {
   // Only apply to v1 API routes
@@ -62,7 +65,23 @@ export function deprecationMiddleware(req, res, next) {
   const v2Alternative = getV2Alternative(req.path);
   
   if (v2Alternative) {
-    // Add deprecation headers
+    // Check if we're past the sunset date
+    const now = new Date();
+    const sunsetDate = new Date(SUNSET_DATE);
+    
+    if (now > sunsetDate) {
+      // Enforce 410 Gone after sunset date
+      return res.status(410).json({
+        status: 'error',
+        code: 'API_VERSION_SUNSET',
+        message: 'API v1 has been retired. Please use API v2.',
+        migrationGuide: MIGRATION_GUIDE_URL,
+        v2Endpoint: v2Alternative,
+        sunsetDate: SUNSET_DATE,
+      });
+    }
+    
+    // Before sunset: Add deprecation headers
     res.set('X-API-Version', 'v1');
     res.set('X-API-Deprecation-Date', DEPRECATION_DATE);
     res.set('X-API-Sunset-Date', SUNSET_DATE);
