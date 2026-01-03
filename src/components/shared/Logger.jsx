@@ -11,11 +11,10 @@ const LOG_LEVELS = {
   ERROR: "ERROR",
 };
 
-// DEPRECATED: In-memory buffer no longer used - we now delegate to systemLogBatcher.js
-// These are kept for backward compatibility but the batcher handles buffering
+// NOTE: Buffering is now handled by systemLogBatcher.js
+// These are kept for backward compatibility with the useLogger hook's local buffer
 let logBuffer = [];
 let flushTimeout = null;
-const FLUSH_INTERVAL = 5000; // Flush every 5 seconds (handled by batcher)
 const MAX_BUFFER_SIZE = 50;
 
 async function flushLogs() {

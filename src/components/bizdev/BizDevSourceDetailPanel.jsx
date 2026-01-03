@@ -58,7 +58,6 @@ export default function BizDevSourceDetailPanel({
 
   // Determine if we're in B2C mode (person-first display)
   const isB2C = businessModel === 'b2c';
-  const isHybrid = businessModel === 'hybrid';
 
   // Update currentSource when bizDevSource prop changes
   useEffect(() => {

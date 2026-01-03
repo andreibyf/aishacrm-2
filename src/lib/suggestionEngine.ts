@@ -28,7 +28,6 @@ const MAX_HISTORY = 20;
 const STORAGE_KEY = 'aisha_suggestion_history';
 const MAX_SUGGESTIONS = 6;
 const HISTORY_WEIGHT = 0.85;
-const CONTEXT_WEIGHT = 0.7;
 const PLAYBOOK_WEIGHT = 0.55;
 
 const PLAYBOOK_SUGGESTIONS: Record<string, Array<{ label: string; command: string }>> = {
@@ -177,7 +176,7 @@ const buildContextSuggestions = (context: SuggestionContext): Suggestion[] => {
     id: `context:${context.entity}:${index}`,
     label: item.label,
     command: item.command,
-    confidence: Number((CONTEXT_WEIGHT - index * 0.05).toFixed(2)),
+    confidence: Number((PLAYBOOK_WEIGHT - index * 0.05).toFixed(2)),
     source: 'context' as const
   }));
 };

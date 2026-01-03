@@ -46,9 +46,6 @@ export default function FunnelChart3D({
   // Ellipse parameters for 3D effect (viewing from above)
   const ellipseRatio = 0.3;
   
-  // Calculate minimum height needed if all layers were at minimum
-  const totalMinHeight = activeData.length * minLayerHeight;
-  
   // Calculate layer heights with minimum floor
   // If pure proportional would make layers too small, use adjusted heights
   const layerHeights = activeData.map(d => {

@@ -36,7 +36,6 @@ import { useConfirmDialog } from "../components/shared/ConfirmDialog";
 import StatusHelper from "../components/shared/StatusHelper";
 import { createPageUrl } from "@/utils";
 import { Link } from "react-router-dom";
-import { getCurrentTimezoneOffset } from '../components/shared/timezoneUtils';
 import { useTimezone } from '../components/shared/TimezoneContext';
 import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
