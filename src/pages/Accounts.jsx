@@ -351,8 +351,8 @@ export default function AccountsPage() {
       if ((user.role === 'superadmin' || user.role === 'admin') && !currentTenantFilter.tenant_id) {
         setAccounts([]);
         setTotalItems(0);
-        setLoading(false);
-        return;
+        loadingToast.dismiss();
+        return; // Will hit finally block
       }
 
       // Include limit parameter to fetch all accounts for client-side filtering
@@ -399,8 +399,8 @@ export default function AccountsPage() {
       const startIndex = (currentPage - 1) * pageSize;
       if (startIndex >= filtered.length && currentPage > 1) {
         setCurrentPage(currentPage - 1);
-        setLoading(false);
-        return;
+        loadingToast.dismiss();
+        return; // Will hit finally block
       }
 
       const endIndex = startIndex + pageSize;
