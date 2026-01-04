@@ -13,6 +13,6 @@
   },
   "postCreateCommand": "docker compose up -d",
   "remoteEnv": {
-    "DOPPLER_TOKEN": "${{ secrets.DOPPLER_TOKEN_2 }}"
+    "DOPPLER_TOKEN": "${{ secrets.DOPPLER_TOKEN}}"
     }
 }
