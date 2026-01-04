@@ -43,6 +43,22 @@ export default function HistoricalTrends({ tenantFilter }) {
   const loadTrendsData = useCallback(async () => {
     setLoading(true);
     try {
+      // DEFENSIVE UNWRAPPING - handle both array and wrapped responses
+      const unwrap = (result) => {
+        // Already an array - return as-is
+        if (Array.isArray(result)) return result;
+        
+        // Wrapped in { data: [...] } shape
+        if (result?.data && Array.isArray(result.data)) return result.data;
+        
+        // Wrapped in { status: "success", data: [...] } shape
+        if (result?.status === 'success' && Array.isArray(result.data)) return result.data;
+        
+        // Invalid response - log warning and return empty array
+        console.warn("HistoricalTrends: API response not in expected format:", result);
+        return [];
+      };
+
       console.log("HistoricalTrends: Using filter:", tenantFilter);
 
       // Calculate date range
@@ -63,11 +79,15 @@ export default function HistoricalTrends({ tenantFilter }) {
         effectiveFilter.is_test_data = false;
       }
 
-      const [contacts, leads, opportunities] = await Promise.all([
-        Contact.filter(effectiveFilter).catch(() => []),
-        Lead.filter(effectiveFilter).catch(() => []),
-        Opportunity.filter(effectiveFilter).catch(() => []),
+      const [contactsResult, leadsResult, opportunitiesResult] = await Promise.all([
+        Contact.filter(effectiveFilter).catch(() => null),
+        Lead.filter(effectiveFilter).catch(() => null),
+        Opportunity.filter(effectiveFilter).catch(() => null),
       ]);
+
+      const contacts = unwrap(contactsResult);
+      const leads = unwrap(leadsResult);
+      const opportunities = unwrap(opportunitiesResult);
 
       console.log("HistoricalTrends: Fetched data:", {
         contacts: contacts.length,
