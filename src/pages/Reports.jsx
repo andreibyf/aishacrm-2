@@ -35,6 +35,28 @@ import DataQualityReport from "../components/reports/DataQualityReport";
 import { exportReportToCSV } from "@/api/functions";
 import { getBackendUrl } from "@/api/backendUrl";
 
+const normalizeEntityList = (response, key) => {
+  if (Array.isArray(response)) return response;
+  if (response && typeof response === "object") {
+    if (Array.isArray(response?.[key])) return response[key];
+    if (Array.isArray(response?.data?.[key])) return response.data[key];
+    const nestedArray = Object.values(response).find(Array.isArray);
+    if (Array.isArray(nestedArray)) return nestedArray;
+  }
+  return [];
+};
+
+const countMatching = (items, predicate) => {
+  if (!Array.isArray(items)) return 0;
+  let count = 0;
+  for (const item of items) {
+    if (predicate(item)) {
+      count += 1;
+    }
+  }
+  return count;
+};
+
 export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState("overview");
   const { user: currentUser, loading: userLoading } = useUser();
@@ -142,19 +164,24 @@ export default function ReportsPage() {
         const startOfPreviousMonth = new Date(currentYear, currentMonth - 1, 1);
         const endOfPreviousMonth = new Date(currentYear, currentMonth, 0, 23, 59, 59, 999);
 
-        const activitiesThisMonth = activities?.filter(a => {
+        const allLeads = normalizeEntityList(leads, 'leads');
+        const allContacts = normalizeEntityList(contacts, 'contacts');
+        const allOpportunities = normalizeEntityList(opportunities, 'opportunities');
+        const activitiesArray = normalizeEntityList(activities, 'activities');
+
+        const activitiesThisMonth = countMatching(activitiesArray, (a) => {
           const createdDate = new Date(a.created_date);
           return createdDate >= startOfCurrentMonth && createdDate <= endOfCurrentMonth;
-        }).length || 0;
+        });
 
-        const activitiesLastMonth = activities?.filter(a => {
+        const activitiesLastMonth = countMatching(activitiesArray, (a) => {
           const createdDate = new Date(a.created_date);
           return createdDate >= startOfPreviousMonth && createdDate <= endOfPreviousMonth;
-        }).length || 0;
+        });
 
-        const totalLeads = leads?.length || 0;
-        const totalContacts = contacts?.length || 0;
-        const totalOpportunities = opportunities?.length || 0;
+        const totalLeads = allLeads.length;
+        const totalContacts = allContacts.length;
+        const totalOpportunities = allOpportunities.length;
 
         setStats({
           totalLeads,

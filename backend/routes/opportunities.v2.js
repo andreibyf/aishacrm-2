@@ -326,11 +326,66 @@ export default function createOpportunityV2Routes(_pgPool) {
       // Sort by updated_at DESC, id DESC to match composite index (tenant_id, stage, updated_at DESC)
       // This enables index-only scans and avoids sorts in query plan
       q = q.order('updated_at', { ascending: false })
-        .order('id', { ascending: false })
-        .range(offset, offset + limit - 1);
+        .order('id', { ascending: false });
+      
+      // Get count first without range to avoid Supabase errors on empty sets with offset
+      const { count, error: countError } = await supabase
+        .from('opportunities')
+        .select('id', { count: 'exact', head: true })
+        .eq('tenant_id', tenant_id);
+      
+      if (countError) {
+        logger.error('[V2 Opportunities] Count query error:', countError);
+        throw new Error(countError.message || 'Failed to get opportunities count');
+      }
+      
+      // If offset exceeds count, return empty result early (prevents Supabase range errors)
+      if (offset >= (count || 0)) {
+        logger.debug('[V2 Opportunities] Offset exceeds count, returning empty:', { offset, count });
+        return res.json({
+          status: 'success',
+          data: {
+            opportunities: [],
+            total: count || 0,
+            limit,
+            offset
+          }
+        });
+      }
+      
+      // Only use offset/range if NOT using cursor pagination
+      if (!cursorUpdatedAt || !cursorId) {
+        q = q.range(offset, offset + limit - 1);
+      } else {
+        // With cursor, just limit the results (cursor already filters position)
+        q = q.limit(limit);
+      }
 
-      const { data, error, count } = await q;
-      if (error) throw new Error(error.message);
+      const { data, error } = await q;
+      
+      // Early return if offset exceeds total count (prevents Supabase range errors on empty sets)
+      if (!error && count !== null && offset >= count) {
+        logger.debug('[V2 Opportunities] Offset exceeds count, returning empty result:', { offset, count });
+        return res.json({
+          status: 'success',
+          data: {
+            opportunities: [],
+            total: count,
+            limit,
+            offset
+          }
+        });
+      }
+
+      if (error) {
+        console.log('[V2 Opportunities] Supabase error object:', error);
+        console.log('[V2 Opportunities] Supabase error type:', typeof error);
+        console.log('[V2 Opportunities] Supabase error properties:', Object.getOwnPropertyNames(error));
+        logger.error('[V2 Opportunities] Supabase query error:', error);
+        // Supabase errors may not have a message property
+        const errorMsg = error.message || error.details || error.hint || error.code || 'Unknown Supabase error';
+        throw new Error(errorMsg);
+      }
 
       const opportunities = (data || []).map(opp => {
         const expanded = expandMetadata(opp);

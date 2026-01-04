@@ -80,11 +80,16 @@ export default function OverviewStats({ tenantFilter }) {
         const result = await response.json();
 
         // Fetch additional data for charts and specific stats that backend might not provide
-        const [allLeads, allOpportunities, allAccounts] = await Promise.all([
+        const [leadsResp, oppsResp, accountsResp] = await Promise.all([
           Lead.filter(effectiveFilter),
           Opportunity.filter(effectiveFilter),
           Account.filter(effectiveFilter),
         ]);
+
+        // Handle both array responses and wrapped responses for backward compatibility
+        const allLeads = Array.isArray(leadsResp) ? leadsResp : (leadsResp?.data?.leads || leadsResp?.leads || []);
+        const allOpportunities = Array.isArray(oppsResp) ? oppsResp : (oppsResp?.data?.opportunities || oppsResp?.opportunities || []);
+        const allAccounts = Array.isArray(accountsResp) ? accountsResp : (accountsResp?.data?.accounts || accountsResp?.accounts || []);
 
         if (result.status === 'success' && result.data) {
           const dashboardStats = result.data;

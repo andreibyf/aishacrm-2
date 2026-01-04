@@ -108,8 +108,7 @@ export default function createContactV2Routes(_pgPool) {
         .from('contacts')
         .select('*, employee:employees!contacts_assigned_to_fkey(id, first_name, last_name, email), account:accounts!contacts_account_id_fkey(id, name)', { count: 'exact' })
         .eq('tenant_id', tenant_id)
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1);
+        .order('created_at', { ascending: false });
 
       // Handle filter object
       if (filter) {
@@ -172,7 +171,29 @@ export default function createContactV2Routes(_pgPool) {
       const safeAssignedTo = sanitizeUuidInput(assigned_to);
       if (safeAssignedTo !== undefined && safeAssignedTo !== null) q = q.eq('assigned_to', safeAssignedTo);
 
-      const { data, error, count } = await q;
+      // Get count first without range to avoid Supabase errors on empty sets with offset
+      const { count: totalCount, error: countError } = await q.select('id', { count: 'exact', head: true });
+      
+      if (countError) {
+        logger.error('[V2 Contacts] Count query error:', countError);
+        throw new Error(countError.message || 'Failed to get contacts count');
+      }
+      
+      // If offset exceeds count, return empty result early (prevents Supabase range errors)
+      if (offset > 0 && offset >= (totalCount || 0)) {
+        logger.debug('[V2 Contacts] Offset exceeds count, returning empty:', { offset, totalCount });
+        return res.json({
+          status: 'success',
+          data: {
+            contacts: [],
+            total: totalCount || 0,
+            limit,
+            offset
+          }
+        });
+      }
+
+      const { data, error, count } = await q.range(offset, offset + limit - 1);
       if (error) throw new Error(error.message);
 
       const contacts = (data || []).map(contact => {
