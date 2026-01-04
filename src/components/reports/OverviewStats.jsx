@@ -53,9 +53,14 @@ export default function OverviewStats({ tenantFilter }) {
     opportunityStages: [],
   });
 
+  const [error, setError] = useState(null);
+
   useEffect(() => {
     const fetchStats = async () => {
       try {
+        // Clear any previous errors
+        setError(null);
+        
         console.log("OverviewStats: Fetching stats with filter:", tenantFilter);
 
         // Ensure test data is excluded unless explicitly included for direct entity fetches
@@ -80,11 +85,27 @@ export default function OverviewStats({ tenantFilter }) {
         const result = await response.json();
 
         // Fetch additional data for charts and specific stats that backend might not provide
-        const [allLeads, allOpportunities, allAccounts] = await Promise.all([
+        const [leadsResult, opportunitiesResult, accountsResult] = await Promise.all([
           Lead.filter(effectiveFilter),
           Opportunity.filter(effectiveFilter),
           Account.filter(effectiveFilter),
         ]);
+
+        // Validate and ensure results are arrays - defensive programming
+        const allLeads = Array.isArray(leadsResult) ? leadsResult : [];
+        const allOpportunities = Array.isArray(opportunitiesResult) ? opportunitiesResult : [];
+        const allAccounts = Array.isArray(accountsResult) ? accountsResult : [];
+
+        // Log warnings if data is not in expected format
+        if (!Array.isArray(leadsResult)) {
+          console.warn("OverviewStats: Lead.filter() did not return an array:", leadsResult);
+        }
+        if (!Array.isArray(opportunitiesResult)) {
+          console.warn("OverviewStats: Opportunity.filter() did not return an array:", opportunitiesResult);
+        }
+        if (!Array.isArray(accountsResult)) {
+          console.warn("OverviewStats: Account.filter() did not return an array:", accountsResult);
+        }
 
         if (result.status === 'success' && result.data) {
           const dashboardStats = result.data;
@@ -190,6 +211,21 @@ export default function OverviewStats({ tenantFilter }) {
         });
       } catch (error) {
         console.error("Error fetching overview stats:", error);
+        setError(error.message || "Failed to load overview stats. Please try again later.");
+        
+        // Set default empty state on error
+        setStats({
+          contacts: 0,
+          accounts: 0,
+          leads: 0,
+          opportunities: 0,
+          activities: 0,
+          pipelineValue: 0,
+        });
+        setChartData({
+          leadSources: [],
+          opportunityStages: [],
+        });
       }
     };
 
@@ -243,6 +279,35 @@ export default function OverviewStats({ tenantFilter }) {
 
   return (
     <div className="space-y-6">
+      {error && (
+        <Card className="bg-red-900/20 border-red-700">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <div className="text-red-400">
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-red-300 font-medium mb-1">
+                  Failed to load overview stats
+                </h3>
+                <p className="text-red-200 text-sm">{error}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {statItems.map((stat, index) => (
           <Card
