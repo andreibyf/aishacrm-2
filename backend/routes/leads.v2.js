@@ -329,9 +329,30 @@ export default function createLeadsV2Routes() {
           }
         }
 
-        return query.order('created_at', { ascending: false })
-          .range(offset, offset + limit - 1);
+        return query.order('created_at', { ascending: false });
       };
+
+      // Get count first without range to avoid Supabase errors on empty sets with offset
+      const { count: totalCount, error: countError } = await buildBaseQuery('id');
+      
+      if (countError) {
+        logger.error('[V2 Leads] Count query error:', countError);
+        throw new Error(countError.message || 'Failed to get leads count');
+      }
+      
+      // If offset exceeds count, return empty result early (prevents Supabase range errors)
+      if (offset > 0 && offset >= (totalCount || 0)) {
+        logger.debug('[V2 Leads] Offset exceeds count, returning empty:', { offset, totalCount });
+        return res.json({
+          status: 'success',
+          data: {
+            leads: [],
+            total: totalCount || 0,
+            limit,
+            offset
+          }
+        });
+      }
 
       // Try with FK join first (requires leads_assigned_to_fkey constraint)
       // Falls back to simple query without join if FK constraint doesn't exist
@@ -340,13 +361,13 @@ export default function createLeadsV2Routes() {
       const fkJoinSelect = '*, employee:employees!leads_assigned_to_fkey(id, first_name, last_name, email)';
       const simpleSelect = '*';
       
-      let result = await buildBaseQuery(fkJoinSelect);
+      let result = await buildBaseQuery(fkJoinSelect).range(offset, offset + limit - 1);
       ({ data, error, count } = result);
       
       // If FK join fails (constraint doesn't exist), fall back to simple query
       if (error && (error.message?.includes('relationship') || error.message?.includes('hint') || error.code === 'PGRST200')) {
         logger.warn('[V2 Leads GET] FK join failed, falling back to simple query:', error.message);
-        result = await buildBaseQuery(simpleSelect);
+        result = await buildBaseQuery(simpleSelect).range(offset, offset + limit - 1);
         ({ data, error, count } = result);
       }
       

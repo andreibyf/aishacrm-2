@@ -52,10 +52,10 @@ export default function ProductivityAnalytics({ tenantFilter }) {
         // Handle API response - ensure we have arrays
         const rawActivities = Array.isArray(rawActivitiesResult) 
           ? rawActivitiesResult 
-          : [];
+          : (rawActivitiesResult?.data?.activities || rawActivitiesResult?.activities || []);
         const users = Array.isArray(usersResult) 
           ? usersResult 
-          : [];
+          : (usersResult?.data?.users || usersResult?.users || []);
 
         console.log('[ProductivityAnalytics] Fetched data:', {
           activitiesCount: rawActivities.length,

@@ -80,10 +80,13 @@ export default function ForecastingDashboard() {
     try {
       const tenantFilter = getTenantFilter(user, selectedTenantId);
       
-      const [opportunities, leads] = await Promise.all([
+      const [oppsResp, leadsResp] = await Promise.all([
         Opportunity.filter(tenantFilter).catch(() => []),
         Lead.filter(tenantFilter).catch(() => [])
       ]);
+
+      const opportunities = Array.isArray(oppsResp) ? oppsResp : (oppsResp?.data?.opportunities || oppsResp?.opportunities || []);
+      const leads = Array.isArray(leadsResp) ? leadsResp : (leadsResp?.data?.leads || leadsResp?.leads || []);
 
       // Calculate pipeline metrics
       const activeOpportunities = opportunities.filter(opp => 

@@ -166,18 +166,24 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
   const isLead = entityName === 'Lead';
   const isDebugEntity = isOpportunity || isActivity || entityName === 'Employee' || isAccount || isContact;
   
-  // Use V2 API paths for all core CRM entities (better performance + AI support)
-  const entityPath = isOpportunity
-    ? 'v2/opportunities'
-    : isActivity
-      ? 'v2/activities'
-      : isAccount
-        ? 'v2/accounts'
-        : isContact
-          ? 'v2/contacts'
-          : isLead
-            ? 'v2/leads'
-            : pluralize(entityName);
+  // Use V2 API paths for ALL entities (V1 routes removed)
+  // Exceptions: system routes that don't have V2 versions yet
+  const v1OnlyEntities = [
+    'Database', 'Integration', 'Telephony', 'Ai', 'Mcp', 'Devai', 'Validation', 
+    'Billing', 'Storage', 'Webhook', 'System', 'SystemSettings', 'User', 'Employee', 
+    'Permission', 'Testing', 'DocumentationFile', 'Documentation', 'Cashflow', 
+    'Cron', 'Metrics', 'EdgeFunction', 'AISummary', 'Utils', 'Client', 
+    'WorkflowExecution', 'WorkflowTemplate', 'Notification', 
+    'AuditLog', 'ModuleSettings', 'EntityLabels', 'TenantIntegration', 'BizDevSource', 
+    'Tenant', 'TenantResolve', 'Announcement', 'Apikey', 'Note', 'SystemBranding', 
+    'SyncHealth', 'AICampaign', 'Security', 'Memory', 'Auth', 'GitHubIssue', 
+    'SupabaseProxy', 'Suggestion', 'ConstructionProject', 'ConstructionAssignment', 
+    'Worker', 'DashboardFunnel', 'BraidAudit', 'BraidChain', 'BraidMetrics', 'BraidGraph', 'AiSettings'
+  ];
+  
+  const pluralEntityName = pluralize(entityName);
+  const useV2 = !v1OnlyEntities.some(e => e.toLowerCase() === entityName.toLowerCase());
+  const entityPath = useV2 ? `v2/${pluralEntityName}` : pluralEntityName;
   let url = `${BACKEND_URL}/api/${entityPath}`;
 
   // Determine tenant_id preference order:
@@ -524,8 +530,12 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     );
     if (entityKey && Array.isArray(result.data[entityKey])) {
       // Only activities responses should return the full object with counts/total
+      // and only if it looks like a paginated request (has limit or offset)
       if (entityKey === 'activities' && (result.data.counts || typeof result.data.total === 'number')) {
-        return result.data; // Preserve { activities: [...], counts, total, limit, offset }
+        const isPaginated = data && (data.limit !== undefined || data.offset !== undefined);
+        if (isPaginated) {
+          return result.data; // Preserve { activities: [...], counts, total, limit, offset }
+        }
       }
       return result.data[entityKey]; // All other entities: return plain array
     }
@@ -572,16 +582,26 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
 const createEntity = (entityName) => {
   return {
     // Add filter method as alias for list with better parameter handling
-    filter: async (filterObj, _sortField, _limit) => {
-      return callBackendAPI(entityName, "GET", filterObj);
+    // CRITICAL: Properly handle limit and offset for pagination
+    filter: async (filterObj, _sortField, limit, offset) => {
+      const params = { ...filterObj };
+      if (limit !== undefined) params.limit = limit;
+      if (offset !== undefined) params.offset = offset;
+      return callBackendAPI(entityName, "GET", params);
     },
     // List method - handle both string orderBy and object filters
-    list: async (filterObjOrOrderBy, _sortField, _limit) => {
+    list: async (filterObjOrOrderBy, _sortField, limit, offset) => {
       // If first param is a string starting with - or contains only alphanumeric/underscore, treat as orderBy
       if (typeof filterObjOrOrderBy === 'string') {
-        return callBackendAPI(entityName, "GET", { orderBy: filterObjOrOrderBy });
+        const params = { orderBy: filterObjOrOrderBy };
+        if (limit !== undefined) params.limit = limit;
+        if (offset !== undefined) params.offset = offset;
+        return callBackendAPI(entityName, "GET", params);
       }
-      return callBackendAPI(entityName, "GET", filterObjOrOrderBy);
+      const params = { ...filterObjOrOrderBy };
+      if (limit !== undefined) params.limit = limit;
+      if (offset !== undefined) params.offset = offset;
+      return callBackendAPI(entityName, "GET", params);
     },
     // Get by ID
     get: async (id) => {

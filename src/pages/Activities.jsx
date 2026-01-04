@@ -105,7 +105,7 @@ export default function ActivitiesPage() {
   const [pageSize, setPageSize] = useState(25);
   const [totalItems, setTotalItems] = useState(0);
 
-  const { cachedRequest, clearCache } = useApiManager();
+  const { cachedRequest, clearCache, clearCacheByKey } = useApiManager();
   const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
   const { isCardVisible, getCardLabel } = useStatusCardPreferences();
   
@@ -489,6 +489,7 @@ export default function ActivitiesPage() {
       await new Promise(resolve => setTimeout(resolve, 100));
       
       clearCache('');
+      clearCacheByKey("Activity");
       await loadActivities(currentPage, pageSize);
     } catch (error) {
       console.error("Failed to delete activity:", error);
@@ -537,6 +538,7 @@ export default function ActivitiesPage() {
         // Refresh in background to ensure sync
         setTimeout(() => {
           clearCache('');
+          clearCacheByKey("Activity");
           loadActivities(1, pageSize);
         }, 500);
         
@@ -566,6 +568,7 @@ export default function ActivitiesPage() {
         // Refresh in background to ensure sync
         setTimeout(() => {
           clearCache('');
+          clearCacheByKey("Activity");
           loadActivities(currentPage, pageSize);
         }, 500);
         
@@ -608,6 +611,7 @@ export default function ActivitiesPage() {
         setSelectedActivities(new Set());
         setSelectAllMode(false);
         clearCache('');
+        clearCacheByKey("Activity");
         await loadActivities(currentPage, pageSize);
         toast.success(`Updated ${updateCount} activity/activities to ${newStatus}`);
       } catch (error) {
@@ -628,6 +632,7 @@ export default function ActivitiesPage() {
         await Promise.all(promises);
         setSelectedActivities(new Set());
         clearCache('');
+        clearCacheByKey("Activity");
         await loadActivities(currentPage, pageSize);
         toast.success(`Updated ${promises.length} activity/activities to ${newStatus}`);
       } catch (error) {
@@ -668,6 +673,7 @@ export default function ActivitiesPage() {
         setSelectedActivities(new Set());
         setSelectAllMode(false);
         clearCache('');
+        clearCacheByKey("Activity");
         await loadActivities(currentPage, pageSize);
         toast.success(`Assigned ${updateCount} activity/activities`);
       } catch (error) {
@@ -688,6 +694,7 @@ export default function ActivitiesPage() {
         await Promise.all(promises);
         setSelectedActivities(new Set());
         clearCache('');
+        clearCacheByKey("Activity");
         await loadActivities(currentPage, pageSize);
         toast.success(`Assigned ${promises.length} activity/activities`);
       } catch (error) {

@@ -351,8 +351,8 @@ export default function AccountsPage() {
       if ((user.role === 'superadmin' || user.role === 'admin') && !currentTenantFilter.tenant_id) {
         setAccounts([]);
         setTotalItems(0);
-        setLoading(false);
-        return;
+        loadingToast.dismiss();
+        return; // Will hit finally block
       }
 
       // Include limit parameter to fetch all accounts for client-side filtering
@@ -399,8 +399,8 @@ export default function AccountsPage() {
       const startIndex = (currentPage - 1) * pageSize;
       if (startIndex >= filtered.length && currentPage > 1) {
         setCurrentPage(currentPage - 1);
-        setLoading(false);
-        return;
+        loadingToast.dismiss();
+        return; // Will hit finally block
       }
 
       const endIndex = startIndex + pageSize;
@@ -617,45 +617,11 @@ export default function AccountsPage() {
       await Account.delete(id);
       clearCacheByKey("Account");
       
-      // Force reload with fresh data (bypass cache)
-      const currentTenantFilter = getTenantFilter();
-      const filterWithLimit = { ...currentTenantFilter, limit: 10000 };
-      const freshAccounts = await Account.filter(filterWithLimit);
-      
-      // Update state with fresh data
-      let filtered = freshAccounts || [];
-      
-      // Apply current filters
-      if (searchTerm) {
-        const search = searchTerm.toLowerCase();
-        filtered = filtered.filter((account) =>
-          account.name?.toLowerCase().includes(search) ||
-          account.website?.toLowerCase().includes(search) ||
-          account.email?.toLowerCase().includes(search) ||
-          account.phone?.includes(searchTerm)
-        );
-      }
-      
-      if (typeFilter !== "all") {
-        filtered = filtered.filter((account) => account.type === typeFilter);
-      }
-      
-      if (selectedTags.length > 0) {
-        filtered = filtered.filter((account) =>
-          Array.isArray(account.tags) &&
-          selectedTags.every((tag) => account.tags.includes(tag))
-        );
-      }
-      
-      filtered.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
-      setTotalItems(filtered.length);
-      
-      const startIndex = (currentPage - 1) * pageSize;
-      const endIndex = startIndex + pageSize;
-      const paginatedAccounts = filtered.slice(startIndex, endIndex);
-      
-      setAccounts(paginatedAccounts);
-      await loadTotalStats();
+      // Reload data properly
+      await Promise.all([
+        loadAccounts(),
+        loadTotalStats()
+      ]);
       
       toast.success("Account deleted successfully");
     } catch (error) {
@@ -782,48 +748,12 @@ export default function AccountsPage() {
         // Clear selection BEFORE reloading to prevent race condition
         setSelectedAccounts(new Set());
         
-        // Clear cache and force reload with fresh data
+        // Clear cache and reload data properly
         clearCacheByKey("Account");
-        
-        // Force reload by calling Account.filter directly (bypass cache)
-        const currentTenantFilter = getTenantFilter();
-        const filterWithLimit = { ...currentTenantFilter, limit: 10000 };
-        const freshAccounts = await Account.filter(filterWithLimit);
-        
-        // Update state with fresh data
-        let filtered = freshAccounts || [];
-        
-        // Apply current filters
-        if (searchTerm) {
-          const search = searchTerm.toLowerCase();
-          filtered = filtered.filter((account) =>
-            account.name?.toLowerCase().includes(search) ||
-            account.website?.toLowerCase().includes(search) ||
-            account.email?.toLowerCase().includes(search) ||
-            account.phone?.includes(searchTerm)
-          );
-        }
-        
-        if (typeFilter !== "all") {
-          filtered = filtered.filter((account) => account.type === typeFilter);
-        }
-        
-        if (selectedTags.length > 0) {
-          filtered = filtered.filter((account) =>
-            Array.isArray(account.tags) &&
-            selectedTags.every((tag) => account.tags.includes(tag))
-          );
-        }
-        
-        filtered.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
-        setTotalItems(filtered.length);
-        
-        const startIndex = (currentPage - 1) * pageSize;
-        const endIndex = startIndex + pageSize;
-        const paginatedAccounts = filtered.slice(startIndex, endIndex);
-        
-        setAccounts(paginatedAccounts);
-        await loadTotalStats();
+        await Promise.all([
+          loadAccounts(),
+          loadTotalStats()
+        ]);
         
         if (failed > 0) {
           toast.error(`${succeeded} deleted, ${failed} failed`);

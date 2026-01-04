@@ -160,8 +160,7 @@ export default function createActivityV2Routes(_pgPool) {
         .from('activities')
         .select('*, employee:employees!activities_assigned_to_fkey(id, first_name, last_name, email)', { count: 'exact' })
         .eq('tenant_id', tenant_id)
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1);
+        .order('created_at', { ascending: false });
 
       // Handle direct query parameters (compatibility with generic frontend filters)
       const { type, status, related_id, related_to_type, related_to_id, assigned_to, is_test_data } = req.query;
@@ -266,7 +265,29 @@ export default function createActivityV2Routes(_pgPool) {
         }
       }
 
-      const { data, error, count } = await q;
+      // Get count first without range to avoid Supabase errors on empty sets with offset
+      const { count: totalCount, error: countError } = await q.select('id', { count: 'exact', head: true });
+      
+      if (countError) {
+        logger.error('[V2 Activities] Count query error:', countError);
+        throw new Error(countError.message || 'Failed to get activities count');
+      }
+      
+      // If offset exceeds count, return empty result early (prevents Supabase range errors)
+      if (offset > 0 && offset >= (totalCount || 0)) {
+        logger.debug('[V2 Activities] Offset exceeds count, returning empty:', { offset, totalCount });
+        return res.json({
+          status: 'success',
+          data: {
+            activities: [],
+            total: totalCount || 0,
+            limit,
+            offset
+          }
+        });
+      }
+
+      const { data, error, count } = await q.range(offset, offset + limit - 1);
       if (error) throw new Error(error.message);
 
       const activities = (data || []).map(activity => {

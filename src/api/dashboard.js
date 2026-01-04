@@ -85,7 +85,7 @@ async function _fetchDashboardBundle(tenant_id, include_test_data, widgets = [])
       queryParams.append('widgets', widgets.join(','));
     }
 
-    const url = `${BACKEND_URL}/api/reports/dashboard-bundle?${queryParams}`;
+    const url = `${BACKEND_URL}/api/v2/reports/dashboard-bundle?${queryParams}`;
     const response = await fetch(url, {
       credentials: 'include',
       headers: {

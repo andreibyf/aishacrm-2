@@ -157,9 +157,15 @@ import createTelephonyRoutes from "./routes/telephony.js";
 import createAiRoutes from "./routes/ai.js";
 import createMcpRoutes from "./routes/mcp.js";
 import devaiRoutes from "./routes/devai.js"; // Phase 6: Developer AI approvals
-import createAccountRoutes from "./routes/accounts.js";
-import createLeadRoutes from "./routes/leads.js";
-import createContactRoutes from "./routes/contacts.js";
+// V1 routes removed - all core CRM entities use V2 exclusively
+// import createAccountRoutes from "./routes/accounts.js";
+// import createLeadRoutes from "./routes/leads.js";
+// import createContactRoutes from "./routes/contacts.js";
+// import createActivityRoutes from "./routes/activities.js";
+// import createOpportunityRoutes from "./routes/opportunities.js";
+import createReportRoutes from "./routes/reports.js"; // V1 reports (dashboard-stats, etc.)
+// import createDocumentRoutes from "./routes/documents.js";
+// import createWorkflowRoutes from "./routes/workflows.js";
 import createValidationRoutes from "./routes/validation.js";
 import createBillingRoutes from "./routes/billing.js";
 import createStorageRoutes from "./routes/storage.js";
@@ -170,9 +176,7 @@ import createUserRoutes from "./routes/users.js";
 import createEmployeeRoutes from "./routes/employees.js";
 import createPermissionRoutes from "./routes/permissions.js";
 import createTestingRoutes from "./routes/testing.js";
-import createDocumentRoutes from "./routes/documents.js";
 import createDocumentationFileRoutes from "./routes/documentationfiles.js";
-import createReportRoutes from "./routes/reports.js";
 import createDocumentationRoutes from "./routes/documentation.js";
 import createCashflowRoutes from "./routes/cashflow.js";
 import createCronRoutes from "./routes/cron.js";
@@ -181,10 +185,8 @@ import createEdgeFunctionRoutes from "./routes/edgeFunctions.js";
 import createAISummaryRoutes from "./routes/aiSummary.js";
 import createUtilsRoutes from "./routes/utils.js";
 import createClientRoutes from "./routes/clients.js";
-import createWorkflowRoutes from "./routes/workflows.js";
 import createWorkflowExecutionRoutes from "./routes/workflowexecutions.js";
-import createActivityRoutes from "./routes/activities.js";
-import createOpportunityRoutes from "./routes/opportunities.js";
+// V2 Routes (replace V1)
 import createOpportunityV2Routes from "./routes/opportunities.v2.js";
 import createActivityV2Routes from "./routes/activities.v2.js";
 import createContactV2Routes from "./routes/contacts.v2.js";
@@ -242,9 +244,15 @@ app.use("/api/ai", authenticateRequest, createAiRoutes(measuredPgPool));
 app.use("/api/ai-settings", authenticateRequest, aiSettingsRoutes); // AI configuration settings
 app.use("/api/mcp", createMcpRoutes(measuredPgPool));
 app.use("/api/devai", devaiRoutes); // Phase 6: Developer AI approvals (superadmin only)
-app.use("/api/accounts", createAccountRoutes(measuredPgPool));
-app.use("/api/leads", createLeadRoutes(measuredPgPool));
-app.use("/api/contacts", createContactRoutes(measuredPgPool));
+// V1 routes removed - frontend now calls V2 exclusively
+// app.use("/api/accounts", createAccountRoutes(measuredPgPool));
+// app.use("/api/leads", createLeadRoutes(measuredPgPool));
+// app.use("/api/contacts", createContactRoutes(measuredPgPool));
+// app.use("/api/activities", createActivityRoutes(measuredPgPool));
+// app.use("/api/opportunities", createOpportunityRoutes(measuredPgPool));
+app.use("/api/reports", createReportRoutes(measuredPgPool)); // V1 reports (dashboard-stats, etc.)
+// app.use("/api/documents", createDocumentRoutes(measuredPgPool));
+// app.use("/api/workflows", createWorkflowRoutes(measuredPgPool));
 app.use("/api/validation", createValidationRoutes(measuredPgPool));
 app.use("/api/billing", createBillingRoutes(measuredPgPool));
 app.use("/api/storage", createStorageRoutes(measuredPgPool));
@@ -255,9 +263,7 @@ app.use("/api/users", createUserRoutes(measuredPgPool, supabaseAuth));
 app.use("/api/employees", createEmployeeRoutes(measuredPgPool));
 app.use("/api/permissions", createPermissionRoutes(measuredPgPool));
 app.use("/api/testing", createTestingRoutes(measuredPgPool));
-app.use("/api/documents", createDocumentRoutes(measuredPgPool));
 app.use("/api/documentationfiles", createDocumentationFileRoutes(measuredPgPool));
-app.use("/api/reports", createReportRoutes(measuredPgPool));
 app.use("/api/documentation", createDocumentationRoutes(measuredPgPool));
 app.use("/api/cashflow", createCashflowRoutes(measuredPgPool));
 app.use("/api/cron", createCronRoutes(measuredPgPool));
@@ -266,33 +272,30 @@ app.use("/api/metrics", createMetricsRoutes(resilientPerfDb));
 app.use("/api/utils", createUtilsRoutes(measuredPgPool));
 app.use("/api/bizdevsources", createBizDevSourceRoutes(measuredPgPool));
 app.use("/api/clients", createClientRoutes(measuredPgPool));
-app.use("/api/workflows", createWorkflowRoutes(measuredPgPool));
 app.use("/api/workflowexecutions", createWorkflowExecutionRoutes(measuredPgPool));
-// Route activities through Supabase API (primary test target)
-app.use("/api/activities", createActivityRoutes(measuredPgPool));
-app.use("/api/opportunities", createOpportunityRoutes(measuredPgPool));
-// v2 opportunities endpoints (Phase 4.2 internal pilot).
-// Always mounted in local/dev backend; production gating is handled via CI/CD.
-logger.debug("Mounting /api/v2/opportunities routes (dev/internal)");
+// V2 routes replace V1 for all core CRM entities
+logger.debug("Mounting /api/v2/opportunities routes");
 app.use("/api/v2/opportunities", createOpportunityV2Routes(measuredPgPool));
-logger.debug("Mounting /api/v2/activities routes (dev/internal)");
+logger.debug("Mounting /api/v2/activities routes");
 app.use("/api/v2/activities", createActivityV2Routes(measuredPgPool));
-logger.debug("Mounting /api/v2/contacts routes (dev/internal)");
+logger.debug("Mounting /api/v2/contacts routes");
 app.use("/api/v2/contacts", createContactV2Routes(measuredPgPool));
-logger.debug("Mounting /api/v2/accounts routes (dev/internal)");
+logger.debug("Mounting /api/v2/accounts routes");
 app.use("/api/v2/accounts", createAccountV2Routes(measuredPgPool));
-logger.debug("Mounting /api/v2/leads routes (dev/internal)");
+logger.debug("Mounting /api/v2/leads routes");
 app.use("/api/v2/leads", createLeadsV2Routes(measuredPgPool));
-logger.debug("Mounting /api/v2/reports routes (dev/internal)");
+logger.debug("Mounting /api/v2/reports routes");
 app.use("/api/v2/reports", createReportsV2Routes(measuredPgPool));
-logger.debug("Mounting /api/v2/workflows routes (dev/internal)");
+logger.debug("Mounting /api/v2/workflows routes");
 app.use("/api/v2/workflows", createWorkflowV2Routes(measuredPgPool));
-logger.debug("Mounting /api/v2/documents routes (dev/internal)");
+logger.debug("Mounting /api/v2/documents routes");
 app.use("/api/v2/documents", createDocumentV2Routes(measuredPgPool));
 logger.debug("Mounting /api/workflow-templates routes");
 app.use("/api/workflow-templates", createWorkflowTemplateRoutes(measuredPgPool));
 app.use("/api/notifications", createNotificationRoutes(measuredPgPool));
 app.use("/api/system-logs", createSystemLogRoutes(measuredPgPool));
+logger.debug("Mounting /api/v2/system-logs routes (alias to V1)");
+app.use("/api/v2/system-logs", createSystemLogRoutes(measuredPgPool));
 app.use("/api/audit-logs", createAuditLogRoutes(measuredPgPool));
 app.use("/api/modulesettings", createModuleSettingsRoutes(measuredPgPool));
 app.use("/api/entity-labels", createEntityLabelsRoutes(measuredPgPool));
