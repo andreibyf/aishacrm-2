@@ -43,6 +43,22 @@ export default function ProductivityAnalytics({ tenantFilter }) {
     const fetchProductivityData = async () => {
       setIsLoading(true);
       try {
+        // DEFENSIVE UNWRAPPING - handle both array and wrapped responses
+        const unwrap = (result) => {
+          // Already an array - return as-is
+          if (Array.isArray(result)) return result;
+          
+          // Wrapped in { data: [...] } shape
+          if (result?.data && Array.isArray(result.data)) return result.data;
+          
+          // Wrapped in { status: "success", data: [...] } shape
+          if (result?.status === 'success' && Array.isArray(result.data)) return result.data;
+          
+          // Invalid response - log warning and return empty array
+          console.warn("ProductivityAnalytics: API response not in expected format:", result);
+          return [];
+        };
+
         // Assuming Activity and User from "@/api/entities" have a similar .filter method as the mocks
         const [rawActivitiesResult, usersResult] = await Promise.all([
           Activity.filter(tenantFilter),
@@ -50,12 +66,8 @@ export default function ProductivityAnalytics({ tenantFilter }) {
         ]);
 
         // Handle API response - ensure we have arrays
-        const rawActivities = Array.isArray(rawActivitiesResult) 
-          ? rawActivitiesResult 
-          : [];
-        const users = Array.isArray(usersResult) 
-          ? usersResult 
-          : [];
+        const rawActivities = unwrap(rawActivitiesResult);
+        const users = unwrap(usersResult);
 
         console.log('[ProductivityAnalytics] Fetched data:', {
           activitiesCount: rawActivities.length,

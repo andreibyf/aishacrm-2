@@ -49,9 +49,26 @@ export default function SalesAnalytics({ tenantFilter }) {
   // useEffect to fetch and process data when tenantFilter or period changes
   useEffect(() => {
     const fetchAndProcessSalesData = async () => {
+      // DEFENSIVE UNWRAPPING - handle both array and wrapped responses
+      const unwrap = (result) => {
+        // Already an array - return as-is
+        if (Array.isArray(result)) return result;
+        
+        // Wrapped in { data: [...] } shape
+        if (result?.data && Array.isArray(result.data)) return result.data;
+        
+        // Wrapped in { status: "success", data: [...] } shape
+        if (result?.status === 'success' && Array.isArray(result.data)) return result.data;
+        
+        // Invalid response - log warning and return empty array
+        console.warn("SalesAnalytics: API response not in expected format:", result);
+        return [];
+      };
+
       // Assuming Opportunity.filter is an async function that fetches opportunities
       // based on the provided tenantFilter (e.g., tenantId, or 'all' for superadmin)
-      const fetchedOpportunities = await Opportunity.filter(tenantFilter);
+      const fetchedOpportunitiesResult = await Opportunity.filter(tenantFilter);
+      const fetchedOpportunities = unwrap(fetchedOpportunitiesResult);
       setOpportunities(fetchedOpportunities); // Store the raw fetched opportunities
 
       // Process the fetched data for various analytics charts

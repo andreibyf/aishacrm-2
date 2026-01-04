@@ -78,12 +78,31 @@ export default function ForecastingDashboard() {
     
     setLoading(true);
     try {
+      // DEFENSIVE UNWRAPPING - handle both array and wrapped responses
+      const unwrap = (result) => {
+        // Already an array - return as-is
+        if (Array.isArray(result)) return result;
+        
+        // Wrapped in { data: [...] } shape
+        if (result?.data && Array.isArray(result.data)) return result.data;
+        
+        // Wrapped in { status: "success", data: [...] } shape
+        if (result?.status === 'success' && Array.isArray(result.data)) return result.data;
+        
+        // Invalid response - log warning and return empty array
+        console.warn("ForecastingDashboard: API response not in expected format:", result);
+        return [];
+      };
+
       const tenantFilter = getTenantFilter(user, selectedTenantId);
       
-      const [opportunities, leads] = await Promise.all([
-        Opportunity.filter(tenantFilter).catch(() => []),
-        Lead.filter(tenantFilter).catch(() => [])
+      const [opportunitiesResult, leadsResult] = await Promise.all([
+        Opportunity.filter(tenantFilter).catch(() => null),
+        Lead.filter(tenantFilter).catch(() => null)
       ]);
+
+      const opportunities = unwrap(opportunitiesResult);
+      const leads = unwrap(leadsResult);
 
       // Calculate pipeline metrics
       const activeOpportunities = opportunities.filter(opp => 

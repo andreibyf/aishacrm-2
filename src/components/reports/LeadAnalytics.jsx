@@ -52,6 +52,22 @@ export default function LeadAnalytics({ tenantFilter }) {
       setLoading(true);
       setError(null);
       try {
+        // DEFENSIVE UNWRAPPING - handle both array and wrapped responses
+        const unwrap = (result) => {
+          // Already an array - return as-is
+          if (Array.isArray(result)) return result;
+          
+          // Wrapped in { data: [...] } shape
+          if (result?.data && Array.isArray(result.data)) return result.data;
+          
+          // Wrapped in { status: "success", data: [...] } shape
+          if (result?.status === 'success' && Array.isArray(result.data)) return result.data;
+          
+          // Invalid response - log warning and return empty array
+          console.warn("LeadAnalytics: API response not in expected format:", result);
+          return [];
+        };
+
         // Guard: require a tenant_id to avoid cross-tenant loads for admins/superadmins
         if (!tenantFilter || (tenantFilter && !tenantFilter.tenant_id)) {
           setAllLeads([]);
@@ -73,7 +89,8 @@ export default function LeadAnalytics({ tenantFilter }) {
         }
 
         // Fetch leads from real API/entity layer
-        const fetchedLeads = await Lead.filter(effectiveFilter).catch(() => []);
+        const fetchedLeadsResult = await Lead.filter(effectiveFilter).catch(() => null);
+        const fetchedLeads = unwrap(fetchedLeadsResult);
         setAllLeads(fetchedLeads); // Store raw leads if needed elsewhere, otherwise just process
 
       // --- Calculate Key Metrics ---
