@@ -129,7 +129,7 @@ export default function OverviewStats({ tenantFilter }) {
 
           // Calculate pipeline value from opportunities
           const pipelineValue = allOpportunities.reduce((sum, opp) => {
-            const value = parseFloat(opp.value) || 0;
+            const value = parseFloat(opp.amount) || 0;
             return sum + value;
           }, 0);
 
