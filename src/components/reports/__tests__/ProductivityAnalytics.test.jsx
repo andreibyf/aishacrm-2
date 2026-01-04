@@ -143,4 +143,61 @@ describe('ProductivityAnalytics', () => {
     expect(screen.getByText('Completion Rate')).toBeInTheDocument();
     expect(screen.getByText('0.0%')).toBeInTheDocument();
   });
+
+  it('should unwrap V2 API responses with { activities: [...], total, counts } shape', async () => {
+    // Setup: V2 API format (actual backend response structure)
+    Activity.filter.mockResolvedValue({
+      activities: [
+        { id: '1', userId: 'user1', status: 'completed', type: 'call', due_date: '2024-01-01', created_date: '2024-01-01' },
+        { id: '2', userId: 'user1', status: 'in_progress', type: 'email', due_date: '2024-01-02', created_date: '2024-01-01' },
+      ],
+      total: 2,
+      limit: 50,
+      offset: 0,
+      counts: {
+        scheduled: 0,
+        in_progress: 1,
+        completed: 1,
+        cancelled: 0,
+      },
+    });
+    User.filter.mockResolvedValue([
+      { id: 'user1', name: 'John Doe' },
+    ]);
+
+    render(<ProductivityAnalytics tenantFilter={{ tenant_id: 'test-tenant' }} />);
+
+    // Wait for component to load
+    await waitFor(() => {
+      expect(screen.getByText('Total Activities')).toBeInTheDocument();
+    });
+
+    // Should correctly unwrap and process the activities array
+    expect(screen.getByText('2')).toBeInTheDocument();
+  });
+
+  it('should unwrap nested V2 API responses with { data: { activities: [...] } } shape', async () => {
+    // Setup: Nested V2 API format (entities.js unwrapping may produce this)
+    Activity.filter.mockResolvedValue({
+      data: {
+        activities: [
+          { id: '1', userId: 'user1', status: 'completed', type: 'call', due_date: '2024-01-01', created_date: '2024-01-01' },
+        ],
+        total: 1,
+      },
+    });
+    User.filter.mockResolvedValue([
+      { id: 'user1', name: 'John Doe' },
+    ]);
+
+    render(<ProductivityAnalytics tenantFilter={{ tenant_id: 'test-tenant' }} />);
+
+    // Wait for component to load
+    await waitFor(() => {
+      expect(screen.getByText('Total Activities')).toBeInTheDocument();
+    });
+
+    // Should correctly unwrap and process the activities array
+    expect(screen.getByText('1')).toBeInTheDocument();
+  });
 });

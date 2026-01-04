@@ -54,6 +54,12 @@ export default function ProductivityAnalytics({ tenantFilter }) {
           // Wrapped in { status: "success", data: [...] } shape
           if (result?.status === 'success' && Array.isArray(result.data)) return result.data;
           
+          // Activities-specific: { activities: [...], total, counts } shape
+          if (result?.activities && Array.isArray(result.activities)) return result.activities;
+          
+          // Wrapped in { data: { activities: [...] } } shape (V2 API format)
+          if (result?.data?.activities && Array.isArray(result.data.activities)) return result.data.activities;
+          
           // Invalid response - log warning and return empty array
           console.warn("ProductivityAnalytics: API response not in expected format:", result);
           return [];
