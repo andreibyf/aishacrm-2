@@ -459,7 +459,7 @@ export default function ReportsPage() {
                 </h2>
               </div>
               <div className="space-y-4">
-                {report.component}
+                {activeTab === report.id ? report.component : null}
               </div>
             </TabsContent>
           ))}

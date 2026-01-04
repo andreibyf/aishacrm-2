@@ -980,7 +980,7 @@ export default function TenantSetup() {
       // Try alternative loading method for debugging
       try {
         console.log("Trying alternative tenant loading...");
-        const altTenants = await Tenant.filter({});
+        const altTenants = await Tenant.list();
         console.log("Alternative method result:", altTenants);
         setTenants(altTenants);
         if (altTenants.length === 0) {

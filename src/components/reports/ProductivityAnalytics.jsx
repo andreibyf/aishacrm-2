@@ -40,6 +40,8 @@ export default function ProductivityAnalytics({ tenantFilter }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    if (!tenantFilter?.tenant_id) return;
+    
     const fetchProductivityData = async () => {
       setIsLoading(true);
       try {
@@ -65,7 +67,6 @@ export default function ProductivityAnalytics({ tenantFilter }) {
           return [];
         };
 
-        // Assuming Activity and User from "@/api/entities" have a similar .filter method as the mocks
         const [rawActivitiesResult, usersResult] = await Promise.all([
           Activity.filter(tenantFilter),
           User.filter(tenantFilter),
@@ -132,7 +133,7 @@ export default function ProductivityAnalytics({ tenantFilter }) {
     };
 
     fetchProductivityData();
-  }, [tenantFilter]);
+  }, [tenantFilter?.tenant_id]);
 
   // Calculate key productivity metrics with defensive array checks
   const safeActivities = Array.isArray(activities) ? activities : [];

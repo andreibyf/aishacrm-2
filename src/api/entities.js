@@ -1284,7 +1284,12 @@ export const WorkflowExecution = createEntity("WorkflowExecution");
 // ============================================
 // Using Supabase Auth instead of Base44 for independent authentication
 
+const baseUserEntity = createEntity("User");
+
 export const User = {
+  // Entity-style methods (needed by reports/ProductivityAnalytics)
+  ...baseUserEntity,
+
   /**
    * Get current authenticated user
    * Uses Supabase Auth with local dev fallback
