@@ -65,9 +65,13 @@ export default function ProductivityAnalytics({ tenantFilter }) {
           User.filter(tenantFilter),
         ]);
 
-        // Handle API response - ensure we have arrays
-        const rawActivities = unwrap(rawActivitiesResult);
-        const users = unwrap(usersResult);
+        // Handle API response - ensure we have arrays with explicit validation
+        const rawActivities = Array.isArray(unwrap(rawActivitiesResult)) 
+          ? unwrap(rawActivitiesResult) 
+          : [];
+        const users = Array.isArray(unwrap(usersResult)) 
+          ? unwrap(usersResult) 
+          : [];
 
         console.log('[ProductivityAnalytics] Fetched data:', {
           activitiesCount: rawActivities.length,
@@ -124,24 +128,26 @@ export default function ProductivityAnalytics({ tenantFilter }) {
     fetchProductivityData();
   }, [tenantFilter]);
 
-  // Calculate key productivity metrics
-  const completedActivities = activities.filter((act) =>
+  // Calculate key productivity metrics with defensive array checks
+  const safeActivities = Array.isArray(activities) ? activities : [];
+  const completedActivities = safeActivities.filter((act) =>
     act.status === "completed"
   );
-  const completionRate = activities.length > 0
-    ? (completedActivities.length / activities.length) * 100
+  const completionRate = safeActivities.length > 0
+    ? (completedActivities.length / safeActivities.length) * 100
     : 0;
-  const todaysActivities = activities.filter((act) =>
+  const todaysActivities = safeActivities.filter((act) =>
     act.due_date && isToday(new Date(act.due_date))
   );
-  const thisWeekActivities = activities.filter((act) =>
+  const thisWeekActivities = safeActivities.filter((act) =>
     act.due_date && isThisWeek(new Date(act.due_date))
   );
 
   // Activity type distribution
   const getActivityTypeData = () => {
     const types = {};
-    activities.forEach((activity) => {
+    const activitiesList = Array.isArray(activities) ? activities : [];
+    activitiesList.forEach((activity) => {
       const type = activity.type || "other";
       if (!types[type]) {
         types[type] = { total: 0, completed: 0 };
@@ -164,6 +170,7 @@ export default function ProductivityAnalytics({ tenantFilter }) {
 
   // Weekly activity trends
   const getWeeklyActivityTrend = () => {
+    const activitiesList = Array.isArray(activities) ? activities : [];
     const weeklyData = [];
     // Go back 7 weeks from the current week
     for (let i = 7; i >= 0; i--) {
@@ -176,7 +183,7 @@ export default function ProductivityAnalytics({ tenantFilter }) {
       });
       const weekName = format(weekStart, "MMM dd"); // Display the start date of the week
 
-      const weekActivities = activities.filter((activity) => {
+      const weekActivities = activitiesList.filter((activity) => {
         const actCreatedDate = new Date(activity.created_date);
         return actCreatedDate >= weekStart && actCreatedDate < weekEnd;
       });
@@ -199,8 +206,9 @@ export default function ProductivityAnalytics({ tenantFilter }) {
 
   // Priority distribution
   const getPriorityDistribution = () => {
+    const activitiesList = Array.isArray(activities) ? activities : [];
     const priorities = {};
-    activities.forEach((activity) => {
+    activitiesList.forEach((activity) => {
       const priority = activity.priority || "normal";
       priorities[priority] = (priorities[priority] || 0) + 1;
     });
@@ -209,13 +217,14 @@ export default function ProductivityAnalytics({ tenantFilter }) {
 
   // Activity efficiency metrics
   const getEfficiencyMetrics = () => {
+    const activitiesList = Array.isArray(activities) ? activities : [];
     const metrics = {
       onTime: 0,
       late: 0,
       upcoming: 0,
     };
 
-    activities.forEach((activity) => {
+    activitiesList.forEach((activity) => {
       if (!activity.due_date) return;
 
       const dueDate = new Date(activity.due_date);
@@ -350,7 +359,7 @@ export default function ProductivityAnalytics({ tenantFilter }) {
                   Total Activities
                 </p>
                 <p className="text-2xl font-bold text-slate-100">
-                  {activities.length}
+                  {safeActivities.length}
                 </p>
               </div>
               <ActivityIcon className="w-8 h-8 text-blue-400" />{" "}
