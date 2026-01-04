@@ -183,7 +183,8 @@ import createUtilsRoutes from "./routes/utils.js";
 import createClientRoutes from "./routes/clients.js";
 import createWorkflowRoutes from "./routes/workflows.js";
 import createWorkflowExecutionRoutes from "./routes/workflowexecutions.js";
-import createActivityRoutes from "./routes/activities.js";
+// V1 activities route RETIRED - import kept for reference only
+// import createActivityRoutes from "./routes/activities.js";
 import createOpportunityRoutes from "./routes/opportunities.js";
 import createOpportunityV2Routes from "./routes/opportunities.v2.js";
 import createActivityV2Routes from "./routes/activities.v2.js";
@@ -268,8 +269,8 @@ app.use("/api/bizdevsources", createBizDevSourceRoutes(measuredPgPool));
 app.use("/api/clients", createClientRoutes(measuredPgPool));
 app.use("/api/workflows", createWorkflowRoutes(measuredPgPool));
 app.use("/api/workflowexecutions", createWorkflowExecutionRoutes(measuredPgPool));
-// Route activities through Supabase API (primary test target)
-app.use("/api/activities", createActivityRoutes(measuredPgPool));
+// V1 activities route RETIRED - use /api/v2/activities (tenant-isolated, secure DELETE)
+// app.use("/api/activities", createActivityRoutes(measuredPgPool));
 app.use("/api/opportunities", createOpportunityRoutes(measuredPgPool));
 // v2 opportunities endpoints (Phase 4.2 internal pilot).
 // Always mounted in local/dev backend; production gating is handled via CI/CD.

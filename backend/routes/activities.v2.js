@@ -520,6 +520,33 @@ export default function createActivityV2Routes(_pgPool) {
 
       const supabase = getSupabaseClient();
 
+      // DEBUG: First verify the activity exists before attempting delete
+      const { data: existing, error: fetchErr } = await supabase
+        .from('activities')
+        .select('id, tenant_id')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (fetchErr) {
+        logger.error('[Activities V2 DELETE] Fetch error:', fetchErr);
+        throw new Error(fetchErr.message);
+      }
+
+      if (!existing) {
+        logger.warn('[Activities V2 DELETE] Activity not found:', { id, tenant_id });
+        return res.status(404).json({ status: 'error', message: 'Activity not found' });
+      }
+
+      // Verify tenant ownership
+      if (existing.tenant_id !== tenant_id) {
+        logger.warn('[Activities V2 DELETE] Tenant mismatch:', {
+          id,
+          requested: tenant_id,
+          actual: existing.tenant_id
+        });
+        return res.status(404).json({ status: 'error', message: 'Activity not found' });
+      }
+
       const { data, error } = await supabase
         .from('activities')
         .delete()
@@ -528,8 +555,13 @@ export default function createActivityV2Routes(_pgPool) {
         .select('*')
         .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') throw new Error(error.message);
+      if (error && error.code !== 'PGRST116') {
+        logger.error('[Activities V2 DELETE] Delete error:', error);
+        throw new Error(error.message);
+      }
+      
       if (!data) {
+        logger.warn('[Activities V2 DELETE] Delete returned no data:', { id, tenant_id });
         return res.status(404).json({ status: 'error', message: 'Activity not found' });
       }
 
