@@ -11,5 +11,8 @@
     "3000": { "label": "AiSHA UI", "onAutoForward": "openBrowser" },
     "4001": { "label": "AiSHA API" }
   },
-  "postCreateCommand": "docker compose up -d"
+  "postCreateCommand": "docker compose up -d",
+  "remoteEnv": {
+    "DOPPLER_TOKEN": "${{ secrets.DOPPLER_TOKEN_2 }}"
+    }
 }
