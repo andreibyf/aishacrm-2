@@ -63,15 +63,11 @@ export default function HistoricalTrends({ tenantFilter }) {
         effectiveFilter.is_test_data = false;
       }
 
-      const [contactsResp, leadsResp, opportunitiesResp] = await Promise.all([
+      const [contacts, leads, opportunities] = await Promise.all([
         Contact.filter(effectiveFilter).catch(() => []),
         Lead.filter(effectiveFilter).catch(() => []),
         Opportunity.filter(effectiveFilter).catch(() => []),
       ]);
-
-      const contacts = Array.isArray(contactsResp) ? contactsResp : (contactsResp?.data?.contacts || contactsResp?.contacts || []);
-      const leads = Array.isArray(leadsResp) ? leadsResp : (leadsResp?.data?.leads || leadsResp?.leads || []);
-      const opportunities = Array.isArray(opportunitiesResp) ? opportunitiesResp : (opportunitiesResp?.data?.opportunities || opportunitiesResp?.opportunities || []);
 
       console.log("HistoricalTrends: Fetched data:", {
         contacts: contacts.length,

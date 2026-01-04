@@ -73,9 +73,7 @@ export default function LeadAnalytics({ tenantFilter }) {
         }
 
         // Fetch leads from real API/entity layer
-        const resp = await Lead.filter(effectiveFilter).catch(() => []);
-        // Handle both array responses and wrapped responses for backward compatibility
-        const fetchedLeads = Array.isArray(resp) ? resp : (resp?.data?.leads || resp?.leads || []);
+        const fetchedLeads = await Lead.filter(effectiveFilter).catch(() => []);
         setAllLeads(fetchedLeads); // Store raw leads if needed elsewhere, otherwise just process
 
       // --- Calculate Key Metrics ---

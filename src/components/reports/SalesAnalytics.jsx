@@ -51,9 +51,7 @@ export default function SalesAnalytics({ tenantFilter }) {
     const fetchAndProcessSalesData = async () => {
       // Assuming Opportunity.filter is an async function that fetches opportunities
       // based on the provided tenantFilter (e.g., tenantId, or 'all' for superadmin)
-      const resp = await Opportunity.filter(tenantFilter);
-      // Handle both array responses and wrapped responses for backward compatibility
-      const fetchedOpportunities = Array.isArray(resp) ? resp : (resp?.data?.opportunities || resp?.opportunities || []);
+      const fetchedOpportunities = await Opportunity.filter(tenantFilter);
       setOpportunities(fetchedOpportunities); // Store the raw fetched opportunities
 
       // Process the fetched data for various analytics charts

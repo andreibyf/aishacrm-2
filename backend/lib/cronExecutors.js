@@ -4,73 +4,45 @@
  */
 
 import logger from './logger.js';
-import { getSupabaseClient } from './supabase-db.js';
 /**
  * Mark users offline when last_seen is older than threshold
  */
-export async function markUsersOffline(_pgPool, jobMetadata = {}) {
+export async function markUsersOffline(pgPool, jobMetadata = {}) {
   const timeoutMinutes = jobMetadata.timeout_minutes || 5;
   const threshold = new Date(Date.now() - timeoutMinutes * 60 * 1000);
-  const thresholdISO = threshold.toISOString();
   
   try {
-    const supabase = getSupabaseClient();
-
-    // Update users table (Supabase doesn't support RETURNING with UPDATE, so we'll count separately)
-    const { data: usersToUpdate, error: usersFetchErr } = await supabase
-      .from('users')
-      .select('id')
-      .or(`metadata->>last_seen.lt.${thresholdISO},metadata->>last_login.lt.${thresholdISO}`);
-
-    if (usersFetchErr) throw usersFetchErr;
-
-    let usersCount = 0;
-    if (usersToUpdate && usersToUpdate.length > 0) {
-      const userIds = usersToUpdate.map(u => u.id);
-      const { error: usersUpdateErr } = await supabase
-        .from('users')
-        .update({
-          metadata: { live_status: 'offline' },
-          updated_at: new Date().toISOString()
-        })
-        .in('id', userIds);
-
-      if (usersUpdateErr) throw usersUpdateErr;
-      usersCount = usersToUpdate.length;
-    }
+    // Update users table
+    const usersResult = await pgPool.query(
+      `UPDATE users
+       SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('live_status', 'offline'),
+           updated_at = NOW()
+       WHERE (metadata->>'last_seen')::timestamptz < $1
+         OR (metadata->>'last_login')::timestamptz < $1
+       RETURNING id, email`,
+      [threshold]
+    );
 
     // Update employees table
-    const { data: employeesToUpdate, error: employeesFetchErr } = await supabase
-      .from('employees')
-      .select('id')
-      .or(`metadata->>last_seen.lt.${thresholdISO},metadata->>last_login.lt.${thresholdISO}`);
+    const employeesResult = await pgPool.query(
+      `UPDATE employees
+       SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('live_status', 'offline'),
+           updated_at = NOW()
+       WHERE (metadata->>'last_seen')::timestamptz < $1
+         OR (metadata->>'last_login')::timestamptz < $1
+       RETURNING id, email`,
+      [threshold]
+    );
 
-    if (employeesFetchErr) throw employeesFetchErr;
-
-    let employeesCount = 0;
-    if (employeesToUpdate && employeesToUpdate.length > 0) {
-      const employeeIds = employeesToUpdate.map(e => e.id);
-      const { error: employeesUpdateErr } = await supabase
-        .from('employees')
-        .update({
-          metadata: { live_status: 'offline' },
-          updated_at: new Date().toISOString()
-        })
-        .in('id', employeeIds);
-
-      if (employeesUpdateErr) throw employeesUpdateErr;
-      employeesCount = employeesToUpdate.length;
-    }
-
-    const totalMarked = usersCount + employeesCount;
+    const totalMarked = usersResult.rowCount + employeesResult.rowCount;
 
     return {
       success: true,
       message: `Marked ${totalMarked} users as offline`,
       details: {
-        users: usersCount,
-        employees: employeesCount,
-        threshold: thresholdISO
+        users: usersResult.rowCount,
+        employees: employeesResult.rowCount,
+        threshold: threshold.toISOString()
       }
     };
   } catch (error) {
@@ -85,27 +57,24 @@ export async function markUsersOffline(_pgPool, jobMetadata = {}) {
 /**
  * Clean old activities (placeholder)
  */
-export async function cleanOldActivities(_pgPool, jobMetadata = {}) {
+export async function cleanOldActivities(pgPool, jobMetadata = {}) {
   const retentionDays = jobMetadata.retention_days || 365;
   const cutoffDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
   
   try {
-    const supabase = getSupabaseClient();
-
     // For now, just count how many would be affected
-    const { count, error } = await supabase
-      .from('activities')
-      .select('*', { count: 'exact', head: true })
-      .lt('created_at', cutoffDate.toISOString());
-
-    if (error) throw error;
+    const result = await pgPool.query(
+      `SELECT COUNT(*) as count FROM activity 
+       WHERE created_at < $1`,
+      [cutoffDate]
+    );
 
     return {
       success: true,
-      message: `Would archive ${count || 0} activities`,
+      message: `Would archive ${result.rows[0].count} activities`,
       details: {
         cutoff_date: cutoffDate.toISOString(),
-        count: count || 0
+        count: result.rows[0].count
       }
     };
   } catch (error) {
@@ -122,33 +91,65 @@ export async function cleanOldActivities(_pgPool, jobMetadata = {}) {
  * Updates activities with status 'scheduled' or 'in_progress' to 'overdue'
  * if their due_date is before today
  */
-export async function markActivitiesOverdue(_pgPool, _jobMetadata = {}) {
+export async function markActivitiesOverdue(pgPool, jobMetadata = {}) {
   const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
 
   try {
-    const supabase = getSupabaseClient();
+    // Try to use supabase client from metadata if pgPool is not available
+    if (!pgPool && jobMetadata.supabase) {
+      const supabase = jobMetadata.supabase;
 
-    const { data, error } = await supabase
-      .from('activities')
-      .update({
-        status: 'overdue',
-        updated_at: new Date().toISOString()
-      })
-      .in('status', ['scheduled', 'in_progress'])
-      .not('due_date', 'is', null)
-      .lt('due_date', today)
-      .select('id, subject, due_date, status');
+      const { data, error } = await supabase
+        .from('activities')
+        .update({
+          status: 'overdue',
+          updated_at: new Date().toISOString()
+        })
+        .in('status', ['scheduled', 'in_progress'])
+        .not('due_date', 'is', null)
+        .lt('due_date', today)
+        .select('id, subject, due_date, status');
 
-    if (error) throw error;
+      if (error) throw error;
+
+      return {
+        success: true,
+        message: `Marked ${data?.length || 0} activities as overdue`,
+        details: {
+          updated_count: data?.length || 0,
+          today: today,
+          activities: (data || []).slice(0, 10)
+        }
+      };
+    }
+
+    // Fallback to pgPool if available
+    if (pgPool) {
+      const result = await pgPool.query(
+        `UPDATE activities
+         SET status = 'overdue',
+             updated_at = NOW()
+         WHERE status IN ('scheduled', 'in_progress')
+           AND due_date IS NOT NULL
+           AND due_date < $1
+         RETURNING id, subject, due_date, status`,
+        [today]
+      );
+
+      return {
+        success: true,
+        message: `Marked ${result.rowCount} activities as overdue`,
+        details: {
+          updated_count: result.rowCount,
+          today: today,
+          activities: result.rows.slice(0, 10)
+        }
+      };
+    }
 
     return {
-      success: true,
-      message: `Marked ${data?.length || 0} activities as overdue`,
-      details: {
-        updated_count: data?.length || 0,
-        today: today,
-        activities: (data || []).slice(0, 10)
-      }
+      success: false,
+      error: 'No database connection available (pgPool or supabase)'
     };
   } catch (error) {
     logger.error({ err: error }, 'Error in markActivitiesOverdue');
@@ -433,7 +434,7 @@ export const jobExecutors = {
 /**
  * Execute a cron job by function name
  */
-export async function executeJob(functionName, _pgPool, jobMetadata) {
+export async function executeJob(functionName, pgPool, jobMetadata) {
   const executor = jobExecutors[functionName];
   
   if (!executor) {
@@ -444,7 +445,7 @@ export async function executeJob(functionName, _pgPool, jobMetadata) {
   }
 
   try {
-    return await executor(_pgPool, jobMetadata);
+    return await executor(pgPool, jobMetadata);
   } catch (error) {
     logger.error({ err: error, functionName }, `Error executing job ${functionName}`);
     return {

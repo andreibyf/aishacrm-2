@@ -122,7 +122,8 @@ export default function createAccountV2Routes(_pgPool) {
         .from('accounts')
         .select('*, employee:employees!accounts_assigned_to_fkey(id, first_name, last_name, email)', { count: 'exact' })
         .eq('tenant_id', tenant_id)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
 
       if (type) query = query.eq('type', type);
       if (industry) query = query.eq('industry', industry);
@@ -186,29 +187,7 @@ export default function createAccountV2Routes(_pgPool) {
         query = query.eq('assigned_to', safeAssignedTo);
       }
 
-      // Get count first without range to avoid Supabase errors on empty sets with offset
-      const { count: totalCount, error: countError } = await query.select('id', { count: 'exact', head: true });
-      
-      if (countError) {
-        logger.error('[V2 Accounts] Count query error:', countError);
-        throw new Error(countError.message || 'Failed to get accounts count');
-      }
-      
-      // If offset exceeds count, return empty result early (prevents Supabase range errors)
-      if (offset > 0 && offset >= (totalCount || 0)) {
-        logger.debug('[V2 Accounts] Offset exceeds count, returning empty:', { offset, totalCount });
-        return res.json({
-          status: 'success',
-          data: {
-            accounts: [],
-            total: totalCount || 0,
-            limit,
-            offset
-          }
-        });
-      }
-
-      const { data, error, count } = await query.range(offset, offset + limit - 1);
+      const { data, error, count } = await query;
 
       if (error) {
         logger.error('[accounts.v2] List error:', error);

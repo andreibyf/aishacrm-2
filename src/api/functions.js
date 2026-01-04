@@ -268,7 +268,7 @@ const createFunctionProxy = (functionName) => {
                 const params = new URLSearchParams();
                 if (opts.tenant_id) params.append('tenant_id', opts.tenant_id);
                 if (typeof opts.include_test_data !== 'undefined') params.append('include_test_data', String(!!opts.include_test_data));
-                const resp = await fetch(`${BACKEND_URL}/api/v2/reports/dashboard-bundle?${params}`, {
+                const resp = await fetch(`${BACKEND_URL}/api/reports/dashboard-bundle?${params}`, {
                   method: 'GET',
                   headers: { 'Content-Type': 'application/json' },
                   credentials: 'include',
@@ -911,7 +911,7 @@ const createFunctionProxy = (functionName) => {
         const params = new URLSearchParams();
         if (opts.tenant_id) params.append('tenant_id', opts.tenant_id);
         if (typeof opts.include_test_data !== 'undefined') params.append('include_test_data', String(!!opts.include_test_data));
-        const resp = await fetch(`${BACKEND_URL}/api/v2/reports/dashboard-bundle?${params}`, {
+        const resp = await fetch(`${BACKEND_URL}/api/reports/dashboard-bundle?${params}`, {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',

@@ -375,7 +375,7 @@ export default function OpportunitiesPage() {
       }
 
       // KANBAN VIEW: Load ALL records (no pagination) to show full pipeline
-      // TABLE/GRID VIEW: Use offset pagination (V1 API doesn't support cursors)
+      // TABLE/GRID VIEW: Use pagination for performance
       const effectiveSize = viewMode === "kanban" ? 10000 : size;
       const skip = viewMode === "kanban" ? 0 : (page - 1) * size;
 
@@ -392,19 +392,55 @@ export default function OpportunitiesPage() {
         viewMode,
         "filter:",
         effectiveFilter,
+        "cursor:",
+        paginationCursors[page - 1],
       );
+
+      // Build API query with keyset cursor if available (only for paginated views)
+      const apiFilter = { ...effectiveFilter };
+      
+      // Add cursor for keyset pagination if navigating forward (skip for Kanban)
+      if (viewMode !== "kanban") {
+        const cursor = paginationCursors[page - 1];
+        if (cursor && cursor.updated_at && cursor.id) {
+          apiFilter.cursor_updated_at = cursor.updated_at;
+          apiFilter.cursor_id = cursor.id;
+          logDev("[Opportunities] Using keyset cursor:", cursor);
+        }
+      }
 
       // Sort by updated_at DESC, id DESC to match composite index (tenant_id, stage, updated_at DESC)
       // This aligns with query optimization guidance for indexed scans
       const opportunitiesData = await Opportunity.filter(
-        effectiveFilter,
+        apiFilter,
         "-updated_at,-id",
         effectiveSize,
         skip,
       );
 
+      // Track last record for keyset pagination (only for paginated views)
+      if (viewMode !== "kanban" && opportunitiesData && opportunitiesData.length > 0) {
+        const lastRecord = opportunitiesData[opportunitiesData.length - 1];
+        setLastSeenRecord({
+          updated_at: lastRecord.updated_at,
+          id: lastRecord.id,
+          page: page
+        });
+      }
+
       // Use optimized count endpoint - server-side COUNT instead of fetching 10k records
-      const totalCount = await Opportunity.getCount(effectiveFilter);
+      const countFilter = { ...effectiveFilter };
+      if (searchTerm) {
+        // Convert search term to filter format for count endpoint
+        const searchRegex = { $regex: searchTerm, $options: "i" };
+        countFilter.$or = [
+          { name: searchRegex },
+          { account_name: searchRegex },
+          { contact_name: searchRegex },
+          { description: searchRegex },
+        ];
+      }
+      const totalCount = await Opportunity.getCount(countFilter);
 
       logDev(
         "[Opportunities] Loaded:",
