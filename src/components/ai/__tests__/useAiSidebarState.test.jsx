@@ -1,21 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 
-vi.mock('@/ai/engine/processChatCommand', () => ({
+vi.mock('@/api/functions', () => ({
   processChatCommand: vi.fn().mockResolvedValue({
-    route: 'ai_chat',
-    assistantMessage: { content: 'acknowledged' },
-    classification: {
-      rawText: '',
-      normalized: '',
-      intent: 'generic_question',
-      entity: 'general',
-      filters: {},
-      confidence: 0.5,
-      matchedKeywords: [],
-      parserResult: null
+    data: {
+      response: 'acknowledged',
+      route: 'ai_chat',
+      classification: {
+        rawText: '',
+        normalized: '',
+        intent: 'generic_question',
+        entity: 'general',
+        filters: {},
+        confidence: 0.5,
+        matchedKeywords: [],
+        parserResult: null
+      }
     }
-  })
+  }),
+  processDeveloperCommand: vi.fn()
 }));
 
 vi.mock('@/lib/suggestionEngine', () => ({
@@ -25,7 +28,7 @@ vi.mock('@/lib/suggestionEngine', () => ({
 }));
 
 import { AiSidebarProvider, useAiSidebarState } from '../useAiSidebarState.jsx';
-import { processChatCommand } from '@/ai/engine/processChatCommand';
+import { processChatCommand } from '@/api/functions';
 import { addHistoryEntry, getSuggestions } from '@/lib/suggestionEngine';
 
 beforeEach(() => {
@@ -84,10 +87,12 @@ describe('useAiSidebarState', () => {
 
   it('records parser-driven history entries after successful send', async () => {
     processChatCommand.mockResolvedValueOnce({
-      route: 'ai_chat',
-      assistantMessage: { content: 'done' },
-      classification: {
-        parserResult: { intent: 'query', entity: 'leads' }
+      data: {
+        response: 'done',
+        route: 'ai_chat',
+        classification: {
+          parserResult: { intent: 'query', entity: 'leads' }
+        }
       }
     });
 
