@@ -91,21 +91,25 @@ export default function OverviewStats({ tenantFilter }) {
           Account.filter(effectiveFilter),
         ]);
 
-        // Validate and ensure results are arrays - defensive programming
-        const allLeads = Array.isArray(leadsResult) ? leadsResult : [];
-        const allOpportunities = Array.isArray(opportunitiesResult) ? opportunitiesResult : [];
-        const allAccounts = Array.isArray(accountsResult) ? accountsResult : [];
+        // DEFENSIVE UNWRAPPING - handle both array and wrapped responses
+        const unwrap = (result) => {
+          // Already an array - return as-is
+          if (Array.isArray(result)) return result;
+          
+          // Wrapped in { data: [...] } shape
+          if (result?.data && Array.isArray(result.data)) return result.data;
+          
+          // Wrapped in { status: "success", data: [...] } shape
+          if (result?.status === 'success' && Array.isArray(result.data)) return result.data;
+          
+          // Invalid response - log warning and return empty array
+          console.warn("OverviewStats: API response not in expected format:", result);
+          return [];
+        };
 
-        // Log warnings if data is not in expected format
-        if (!Array.isArray(leadsResult)) {
-          console.warn("OverviewStats: Lead.filter() did not return an array:", leadsResult);
-        }
-        if (!Array.isArray(opportunitiesResult)) {
-          console.warn("OverviewStats: Opportunity.filter() did not return an array:", opportunitiesResult);
-        }
-        if (!Array.isArray(accountsResult)) {
-          console.warn("OverviewStats: Account.filter() did not return an array:", accountsResult);
-        }
+        const allLeads = unwrap(leadsResult);
+        const allOpportunities = unwrap(opportunitiesResult);
+        const allAccounts = unwrap(accountsResult);
 
         if (result.status === 'success' && result.data) {
           const dashboardStats = result.data;

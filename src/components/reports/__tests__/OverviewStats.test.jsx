@@ -106,6 +106,82 @@ describe('OverviewStats', () => {
     expect(screen.queryByText('Failed to load overview stats')).not.toBeInTheDocument();
   });
 
+  it('should unwrap responses with { data: [...] } shape', async () => {
+    // Setup: API calls return wrapped responses with data property
+    Lead.filter.mockResolvedValue({
+      data: [
+        { id: '1', source: 'website' },
+        { id: '2', source: 'referral' },
+      ],
+    });
+    Opportunity.filter.mockResolvedValue({
+      data: [
+        { id: '1', stage: 'prospecting', value: '1000' },
+      ],
+    });
+    Account.filter.mockResolvedValue({
+      data: [
+        { id: '1', name: 'Account 1' },
+        { id: '2', name: 'Account 2' },
+      ],
+    });
+
+    render(<OverviewStats tenantFilter={{ tenant_id: 'test-tenant' }} />);
+
+    // Wait for component to load
+    await waitFor(() => {
+      expect(screen.getByText('Total Contacts')).toBeInTheDocument();
+    });
+
+    // Should correctly process the unwrapped data
+    expect(screen.getByText('Total Leads')).toBeInTheDocument();
+    expect(screen.getByText('Opportunities')).toBeInTheDocument();
+    expect(screen.getByText('Active Accounts')).toBeInTheDocument();
+    
+    // Should not show error message
+    expect(screen.queryByText('Failed to load overview stats')).not.toBeInTheDocument();
+  });
+
+  it('should unwrap responses with { status: "success", data: [...] } shape', async () => {
+    // Setup: API calls return wrapped responses with status and data properties
+    Lead.filter.mockResolvedValue({
+      status: 'success',
+      data: [
+        { id: '1', source: 'website' },
+        { id: '2', source: 'email' },
+        { id: '3', source: 'referral' },
+      ],
+    });
+    Opportunity.filter.mockResolvedValue({
+      status: 'success',
+      data: [
+        { id: '1', stage: 'proposal', value: '5000' },
+        { id: '2', stage: 'negotiation', value: '3000' },
+      ],
+    });
+    Account.filter.mockResolvedValue({
+      status: 'success',
+      data: [
+        { id: '1', name: 'Account 1' },
+      ],
+    });
+
+    render(<OverviewStats tenantFilter={{ tenant_id: 'test-tenant' }} />);
+
+    // Wait for component to load
+    await waitFor(() => {
+      expect(screen.getByText('Total Contacts')).toBeInTheDocument();
+    });
+
+    // Should correctly process the unwrapped data
+    expect(screen.getByText('Total Leads')).toBeInTheDocument();
+    expect(screen.getByText('Opportunities')).toBeInTheDocument();
+    expect(screen.getByText('Active Accounts')).toBeInTheDocument();
+    
+    // Should not show error message
+    expect(screen.queryByText('Failed to load overview stats')).not.toBeInTheDocument();
+  });
+
   it('should display error message when API calls fail', async () => {
     // Setup: API calls throw errors
     Lead.filter.mockRejectedValue(new Error('Network error'));
