@@ -157,8 +157,8 @@ export default function ReportsPage() {
           if (result && typeof result === 'object' && Array.isArray(result[lowerEntityName])) {
             return result[lowerEntityName];
           }
-          // Fallback: return empty array
-          console.warn(`Reports.jsx: Expected array for ${entityName}, got:`, typeof result, result);
+          // Only warn if unwrapping failed - if we reach here, result is not an array and not a valid pagination object
+          console.warn(`Reports.jsx: Failed to unwrap ${entityName}, got:`, typeof result, result);
           return [];
         };
 
