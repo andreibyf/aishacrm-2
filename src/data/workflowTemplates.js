@@ -126,7 +126,7 @@ export const workflowTemplates = [
           duration_value: 3,
           duration_unit: 'days'
         },
-        position: { x: 400, y: 900 }
+        position: { x: 400, y: 700 }
       },
       {
         id: 'node-4',
