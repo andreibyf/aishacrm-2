@@ -565,6 +565,36 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     }
   }
 
+  // SAFETY CHECK: Always return an array for GET list operations
+  if (method === "GET" && !id) {
+    if (!Array.isArray(result)) {
+      // Log to window for debugging
+      if (typeof window !== 'undefined') {
+        window.__ENTITY_DEBUG = window.__ENTITY_DEBUG || [];
+        window.__ENTITY_DEBUG.push({
+          timestamp: new Date().toISOString(),
+          entity: entityName,
+          method,
+          expectedArray: true,
+          gotType: typeof result,
+          gotValue: result,
+        });
+        alert(`ENTITY ERROR: ${entityName}.filter() returned ${typeof result} instead of array. Check window.__ENTITY_DEBUG`);
+      }
+      
+      console.warn(`[callBackendAPI] Expected array for GET ${entityName}, got:`, typeof result, result);
+      // If it's an object with an array property, try to extract it
+      if (result && typeof result === 'object') {
+        const arrayProp = Object.keys(result).find(key => Array.isArray(result[key]));
+        if (arrayProp) {
+          console.warn(`[callBackendAPI] Extracting array from property: ${arrayProp}`);
+          return result[arrayProp];
+        }
+      }
+      return []; // Fail-safe: return empty array
+    }
+  }
+
   return result;
 };
 
@@ -573,7 +603,9 @@ const createEntity = (entityName) => {
   return {
     // Add filter method as alias for list with better parameter handling
     filter: async (filterObj, _sortField, _limit) => {
-      return callBackendAPI(entityName, "GET", filterObj);
+      const result = await callBackendAPI(entityName, "GET", filterObj);
+      console.log(`[Entity.filter] ${entityName}:`, { type: typeof result, isArray: Array.isArray(result), length: result?.length, result });
+      return result;
     },
     // List method - handle both string orderBy and object filters
     list: async (filterObjOrOrderBy, _sortField, _limit) => {

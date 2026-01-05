@@ -25,11 +25,32 @@ import { Account, Lead, Opportunity } from "@/api/entities";
 import TrendIndicator from "./TrendIndicator";
 import { getBackendUrl } from "@/api/backendUrl";
 
+// DEBUG: Check what entities are actually imported
+const importDebug = {
+  Account: typeof Account,
+  Lead: typeof Lead,
+  Opportunity: typeof Opportunity,
+  AccountFilter: typeof Account?.filter,
+  LeadFilter: typeof Lead?.filter,
+  OpportunityFilter: typeof Opportunity?.filter,
+  LeadKeys: Lead ? Object.keys(Lead).join(', ') : 'null',
+};
+console.log("OverviewStats IMPORT CHECK:", importDebug);
+if (typeof Lead?.filter !== 'function') {
+  alert(`ERROR: Lead.filter is ${typeof Lead?.filter}. Lead keys: ${importDebug.LeadKeys}`);
+}
+
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
 
 const BACKEND_URL = getBackendUrl();
 
 export default function OverviewStats({ tenantFilter }) {
+  // DEBUG: Log every render to catch state corruption
+  console.log("OverviewStats RENDER:", {
+    timestamp: new Date().toISOString(),
+    tenantFilter,
+  });
+
   const [stats, setStats] = useState({
     contacts: 0,
     accounts: 0,
@@ -54,6 +75,15 @@ export default function OverviewStats({ tenantFilter }) {
   });
 
   const [error, setError] = useState(null);
+
+  // DEBUG: Log chartData state on every render
+  console.log("OverviewStats chartData state:", {
+    chartData,
+    leadSourcesType: typeof chartData?.leadSources,
+    leadSourcesIsArray: Array.isArray(chartData?.leadSources),
+    opportunityStagesType: typeof chartData?.opportunityStages,
+    opportunityStagesIsArray: Array.isArray(chartData?.opportunityStages),
+  });
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -85,11 +115,31 @@ export default function OverviewStats({ tenantFilter }) {
         const result = await response.json();
 
         // Fetch additional data for charts and specific stats that backend might not provide
-        const [leadsResult, opportunitiesResult, accountsResult] = await Promise.all([
-          Lead.filter(effectiveFilter),
-          Opportunity.filter(effectiveFilter),
-          Account.filter(effectiveFilter),
-        ]);
+        console.log("OverviewStats: About to fetch entity data with filter:", effectiveFilter);
+        let leadsResult, opportunitiesResult, accountsResult;
+        try {
+          [leadsResult, opportunitiesResult, accountsResult] = await Promise.all([
+            Lead.filter(effectiveFilter),
+            Opportunity.filter(effectiveFilter),
+            Account.filter(effectiveFilter),
+          ]);
+          console.log("OverviewStats: Raw API results:", {
+            leadsResult: leadsResult,
+            leadsType: typeof leadsResult,
+            leadsIsArray: Array.isArray(leadsResult),
+            opportunitiesResult: opportunitiesResult,
+            opportunitiesType: typeof opportunitiesResult,
+            opportunitiesIsArray: Array.isArray(opportunitiesResult),
+            accountsResult: accountsResult,
+            accountsType: typeof accountsResult,
+            accountsIsArray: Array.isArray(accountsResult)
+          });
+        } catch (err) {
+          console.error("OverviewStats: Error fetching entity data:", err);
+          leadsResult = [];
+          opportunitiesResult = [];
+          accountsResult = [];
+        }
 
         // DEFENSIVE UNWRAPPING - handle both array and wrapped responses
         const unwrap = (result) => {
@@ -107,9 +157,18 @@ export default function OverviewStats({ tenantFilter }) {
           return [];
         };
 
-        const allLeads = unwrap(leadsResult);
-        const allOpportunities = unwrap(opportunitiesResult);
-        const allAccounts = unwrap(accountsResult);
+        const allLeads = Array.isArray(unwrap(leadsResult)) ? unwrap(leadsResult) : [];
+        const allOpportunities = Array.isArray(unwrap(opportunitiesResult)) ? unwrap(opportunitiesResult) : [];
+        const allAccounts = Array.isArray(unwrap(accountsResult)) ? unwrap(accountsResult) : [];
+
+        console.log("OverviewStats: Unwrapped data:", {
+          leadsCount: allLeads.length,
+          opportunitiesCount: allOpportunities.length,
+          accountsCount: allAccounts.length,
+          leadsIsArray: Array.isArray(allLeads),
+          opportunitiesIsArray: Array.isArray(allOpportunities),
+          accountsIsArray: Array.isArray(allAccounts)
+        });
 
         if (result.status === 'success' && result.data) {
           const dashboardStats = result.data;
@@ -165,14 +224,17 @@ export default function OverviewStats({ tenantFilter }) {
           "other": 0,
         };
 
-        allLeads.forEach((lead) => {
-          const source = (lead.source || "").toLowerCase();
-          const key =
-            Object.prototype.hasOwnProperty.call(allLeadSources, source)
-              ? source
-              : "other";
-          allLeadSources[key]++;
-        });
+        // Defensive: Ensure allLeads is an array before iterating
+        if (Array.isArray(allLeads)) {
+          allLeads.forEach((lead) => {
+            const source = (lead.source || "").toLowerCase();
+            const key =
+              Object.prototype.hasOwnProperty.call(allLeadSources, source)
+                ? source
+                : "other";
+            allLeadSources[key]++;
+          });
+        }
 
         // Initialize all possible opportunity stages
         const allOpportunityStages = {
@@ -184,16 +246,19 @@ export default function OverviewStats({ tenantFilter }) {
           "closed_lost": 0,
         };
 
-        allOpportunities.forEach((opp) => {
-          const stage = (opp.stage || "").toLowerCase();
-          const key =
-            Object.prototype.hasOwnProperty.call(allOpportunityStages, stage)
-              ? stage
-              : "prospecting";
-          allOpportunityStages[key]++;
-        });
+        // Defensive: Ensure allOpportunities is an array before iterating
+        if (Array.isArray(allOpportunities)) {
+          allOpportunities.forEach((opp) => {
+            const stage = (opp.stage || "").toLowerCase();
+            const key =
+              Object.prototype.hasOwnProperty.call(allOpportunityStages, stage)
+                ? stage
+                : "prospecting";
+            allOpportunityStages[key]++;
+          });
+        }
 
-        setChartData({
+        const newChartData = {
           leadSources: Object.entries(allLeadSources).map(([name, value]) => ({
             name: name.replace(/_/g, " ").replace(
               /\b\w/g,
@@ -212,7 +277,16 @@ export default function OverviewStats({ tenantFilter }) {
             value,
             originalKey: name,
           })),
+        };
+        
+        console.log("OverviewStats: Setting chartData:", {
+          leadSourcesIsArray: Array.isArray(newChartData.leadSources),
+          leadSourcesLength: newChartData.leadSources?.length,
+          opportunityStagesIsArray: Array.isArray(newChartData.opportunityStages),
+          opportunityStagesLength: newChartData.opportunityStages?.length,
         });
+        
+        setChartData(newChartData);
       } catch (error) {
         console.error("Error fetching overview stats:", error);
         setError(error.message || "Failed to load overview stats. Please try again later.");
@@ -352,7 +426,15 @@ export default function OverviewStats({ tenantFilter }) {
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
-                  data={chartData.leadSources.filter((item) => item.value > 0)} // Only show slices with data
+                  data={(() => {
+                    const sources = chartData.leadSources || [];
+                    if (!Array.isArray(sources)) {
+                      console.error("leadSources is not an array:", typeof sources, sources);
+                      alert(`ERROR: leadSources is ${typeof sources}, not array. Check console.`);
+                      return [];
+                    }
+                    return sources.filter((item) => item.value > 0);
+                  })()} // Only show slices with data
                   cx="50%"
                   cy="50%"
                   outerRadius={80}
@@ -366,7 +448,7 @@ export default function OverviewStats({ tenantFilter }) {
                     return "";
                   }}
                 >
-                  {chartData.leadSources.filter((item) => item.value > 0).map((
+                  {(chartData.leadSources || []).filter((item) => item.value > 0).map((
                     entry,
                     index,
                   ) => (
@@ -394,7 +476,7 @@ export default function OverviewStats({ tenantFilter }) {
                     fontSize: "12px",
                   }}
                   payload={chartData.leadSources.map((item) => {
-                    const filteredItems = chartData.leadSources.filter((d) =>
+                    const filteredItems = (chartData.leadSources || []).filter((d) =>
                       d.value > 0
                     );
                     const itemInFiltered = filteredItems.find((fItem) =>
@@ -450,7 +532,7 @@ export default function OverviewStats({ tenantFilter }) {
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart
-                data={chartData.opportunityStages.filter((item) =>
+                data={(chartData.opportunityStages || []).filter((item) =>
                   item.value > 0
                 )}
               >

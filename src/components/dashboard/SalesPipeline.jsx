@@ -82,6 +82,17 @@ function SalesPipeline(props) {
           stages[stageKey].count++;
           const amount = parseFloat(opp.amount) || 0;
           stages[stageKey].value += amount;
+          
+          // Debug logging for Labor Depot
+          if (amount === 0 && opp.amount !== 0 && opp.amount !== null) {
+            console.log('[SalesPipeline] Opportunity with non-zero amount parsed as 0:', {
+              name: opp.name,
+              rawAmount: opp.amount,
+              amountType: typeof opp.amount,
+              parsedAmount: amount,
+              stage: stageKey
+            });
+          }
         }
       });
 
@@ -162,6 +173,14 @@ function SalesPipeline(props) {
               tenant_id: tenantFilter?.tenant_id,
               include_test_data: showTestData 
             });
+            
+            console.log('[SalesPipeline] Dashboard funnel data:', {
+              tenantId: tenantFilter?.tenant_id,
+              includeTestData: showTestData,
+              pipelineData: dashboardData?.pipeline,
+              sampleStage: dashboardData?.pipeline?.[0]
+            });
+            
             if (mounted && dashboardData?.pipeline) {
               // Map pre-computed pipeline data to chart format
               const suffix = showTestData ? 'total' : 'real';

@@ -19,6 +19,21 @@ import { Contact } from "@/api/entities";
 import { Opportunity } from "@/api/entities";
 import { Activity } from "@/api/entities";
 import { Tenant } from "@/api/entities";
+
+// DEBUG: Check imports in Reports.jsx
+console.log("Reports.jsx IMPORT CHECK:", {
+  Lead: typeof Lead,
+  Contact: typeof Contact,
+  Opportunity: typeof Opportunity,
+  Activity: typeof Activity,
+  LeadFilter: typeof Lead?.filter,
+  OpportunityFilter: typeof Opportunity?.filter,
+  LeadKeys: Lead ? Object.keys(Lead).join(', ') : 'null',
+});
+if (typeof Lead?.filter !== 'function') {
+  alert(`Reports.jsx: Lead.filter is ${typeof Lead?.filter}. Lead = ${JSON.stringify(Object.keys(Lead || {}))}`);
+}
+
 import { useTenant } from "../components/shared/tenantContext";
 import { useEmployeeScope } from "../components/shared/EmployeeScopeContext";
 import { useApiManager } from "../components/shared/ApiManager";
@@ -133,6 +148,25 @@ export default function ReportsPage() {
           cachedRequest('Activity', 'filter', { filter: currentScopedFilter }, () => Activity.filter(currentScopedFilter)),
         ]);
 
+        // UNWRAP: cachedRequest may return pagination objects like { activities: [], total, limit, offset }
+        // We need to extract the actual array from these objects
+        const unwrapResult = (result, entityName) => {
+          if (Array.isArray(result)) return result;
+          // Check if it's a pagination object with the entity name as a property
+          const lowerEntityName = entityName.toLowerCase() + 's'; // "activity" -> "activities"
+          if (result && typeof result === 'object' && Array.isArray(result[lowerEntityName])) {
+            return result[lowerEntityName];
+          }
+          // Fallback: return empty array
+          console.warn(`Reports.jsx: Expected array for ${entityName}, got:`, typeof result, result);
+          return [];
+        };
+
+        const safeLeads = unwrapResult(leads, 'lead');
+        const safeContacts = unwrapResult(contacts, 'contact');
+        const safeOpportunities = unwrapResult(opportunities, 'opportunity');
+        const safeActivities = unwrapResult(activities, 'activity');
+
         const now = new Date();
         const currentYear = now.getFullYear();
         const currentMonth = now.getMonth();
@@ -142,19 +176,19 @@ export default function ReportsPage() {
         const startOfPreviousMonth = new Date(currentYear, currentMonth - 1, 1);
         const endOfPreviousMonth = new Date(currentYear, currentMonth, 0, 23, 59, 59, 999);
 
-        const activitiesThisMonth = activities?.filter(a => {
+        const activitiesThisMonth = safeActivities.filter(a => {
           const createdDate = new Date(a.created_date);
           return createdDate >= startOfCurrentMonth && createdDate <= endOfCurrentMonth;
         }).length || 0;
 
-        const activitiesLastMonth = activities?.filter(a => {
+        const activitiesLastMonth = safeActivities.filter(a => {
           const createdDate = new Date(a.created_date);
           return createdDate >= startOfPreviousMonth && createdDate <= endOfPreviousMonth;
         }).length || 0;
 
-        const totalLeads = leads?.length || 0;
-        const totalContacts = contacts?.length || 0;
-        const totalOpportunities = opportunities?.length || 0;
+        const totalLeads = safeLeads.length || 0;
+        const totalContacts = safeContacts.length || 0;
+        const totalOpportunities = safeOpportunities.length || 0;
 
         setStats({
           totalLeads,
