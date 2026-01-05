@@ -171,7 +171,8 @@ function SalesPipeline(props) {
           try {
             const dashboardData = await getDashboardFunnelCounts({ 
               tenant_id: tenantFilter?.tenant_id,
-              include_test_data: showTestData 
+              include_test_data: showTestData,
+              bust_cache: props?.bustCache || false // Allow parent to force cache refresh
             });
             
             console.log('[SalesPipeline] Dashboard funnel data:', {
@@ -252,7 +253,7 @@ function SalesPipeline(props) {
       loadingRef.current = false;
     }; // Cleanup function for unmounting
      
-  }, [props?.tenantFilter?.tenant_id, props?.showTestData, props?.prefetchedOpportunities, cachedRequest, userLoading, authCookiesReady, visibleOpportunityCards]); // Include all relevant props and cachedRequest in dependencies
+  }, [props?.tenantFilter?.tenant_id, props?.showTestData, props?.prefetchedOpportunities, props?.refreshKey, cachedRequest, userLoading, authCookiesReady, visibleOpportunityCards]); // Include refreshKey to trigger reload on refresh
 
   return (
     <Card className="bg-slate-800 border-slate-700 h-full flex flex-col">

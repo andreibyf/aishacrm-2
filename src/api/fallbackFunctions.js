@@ -148,12 +148,16 @@ export function getCurrentHealthStatus() {
  * @param {Object} options - Query options
  * @param {string} options.tenant_id - Tenant ID for filtering
  * @param {boolean} options.include_test_data - Include test data (default: true)
+ * @param {boolean} options.bust_cache - Force fresh data bypassing cache (default: false)
  * @returns {Promise<{funnel: Object, pipeline: Array}>}
  */
-export async function getDashboardFunnelCounts({ tenant_id, include_test_data = true } = {}) {
+export async function getDashboardFunnelCounts({ tenant_id, include_test_data = true, bust_cache = false } = {}) {
   const params = new URLSearchParams({ include_test_data: String(include_test_data) });
   if (tenant_id) {
     params.append('tenant_id', tenant_id);
+  }
+  if (bust_cache) {
+    params.append('_t', Date.now()); // Cache busting timestamp
   }
   const response = await fetch(`${localFunctions.getBaseUrl()}/api/dashboard/funnel-counts?${params}`, {
     credentials: 'include',
@@ -167,9 +171,29 @@ export async function getDashboardFunnelCounts({ tenant_id, include_test_data = 
   return response.json();
 }
 
+/**
+ * Refresh materialized views for dashboard funnel counts
+ * Forces immediate recalculation of pre-computed dashboard data
+ * @returns {Promise<{success: boolean, message: string}>}
+ */
+export async function refreshDashboardFunnelCounts() {
+  const response = await fetch(`${localFunctions.getBaseUrl()}/api/dashboard/funnel-counts/refresh`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Dashboard funnel refresh failed: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
 export default {
   checkHealth,
   getCurrentHealthStatus,
   getCircuitBreakerStatus,
   getDashboardFunnelCounts,
+  refreshDashboardFunnelCounts,
 };
