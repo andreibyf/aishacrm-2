@@ -1,6 +1,9 @@
 /**
  * Workflow Templates Library
  * Pre-built automation patterns for common CRM scenarios
+ * 
+ * Updated: January 5, 2026
+ * Change: Increased vertical spacing from 150px to 200px between nodes for better visual clarity
  */
 
 export const workflowTemplates = [
@@ -26,7 +29,7 @@ export const workflowTemplates = [
           search_field: 'email',
           search_value: '{{email}}'
         },
-        position: { x: 400, y: 250 }
+        position: { x: 400, y: 300 }
       },
       {
         id: 'node-2',
@@ -36,7 +39,7 @@ export const workflowTemplates = [
           operator: 'greater_than',
           value: '70'
         },
-        position: { x: 400, y: 400 }
+        position: { x: 400, y: 500 }
       },
       {
         id: 'node-3',
@@ -46,7 +49,7 @@ export const workflowTemplates = [
             { lead_field: 'status', webhook_field: 'qualified' }
           ]
         },
-        position: { x: 600, y: 550 }
+        position: { x: 600, y: 900 }
       },
       {
         id: 'node-4',
@@ -55,7 +58,7 @@ export const workflowTemplates = [
           method: 'round_robin',
           group: 'sales_team'
         },
-        position: { x: 600, y: 700 }
+        position: { x: 600, y: 900 }
       },
       {
         id: 'node-5',
@@ -66,7 +69,7 @@ export const workflowTemplates = [
           description: 'High score lead needs immediate attention',
           assigned_to: 'record_owner'
         },
-        position: { x: 600, y: 850 }
+        position: { x: 600, y: 1100 }
       }
     ],
     connections: [
@@ -104,7 +107,7 @@ export const workflowTemplates = [
             { lead_field: 'source', webhook_field: 'website' }
           ]
         },
-        position: { x: 400, y: 250 }
+        position: { x: 400, y: 300 }
       },
       {
         id: 'node-2',
@@ -114,7 +117,7 @@ export const workflowTemplates = [
           subject: 'Welcome to AiSHA CRM!',
           body: 'Hi {{first_name}},\n\nThank you for your interest! We\'re excited to help you achieve your goals.\n\nBest regards,\nThe Team'
         },
-        position: { x: 400, y: 400 }
+        position: { x: 400, y: 500 }
       },
       {
         id: 'node-3',
@@ -123,7 +126,7 @@ export const workflowTemplates = [
           duration_value: 3,
           duration_unit: 'days'
         },
-        position: { x: 400, y: 550 }
+        position: { x: 400, y: 900 }
       },
       {
         id: 'node-4',
@@ -133,7 +136,7 @@ export const workflowTemplates = [
           subject: 'Quick check-in',
           body: 'Hi {{first_name}},\n\nJust following up to see if you have any questions. Would love to schedule a quick call.\n\nBest,\nThe Team'
         },
-        position: { x: 400, y: 700 }
+        position: { x: 400, y: 900 }
       }
     ],
     connections: [
@@ -165,7 +168,7 @@ export const workflowTemplates = [
           search_field: 'email',
           search_value: '{{email}}'
         },
-        position: { x: 400, y: 250 }
+        position: { x: 400, y: 300 }
       },
       {
         id: 'node-2',
@@ -178,7 +181,7 @@ export const workflowTemplates = [
             { opportunity_field: 'close_date', webhook_field: 'expected_close' }
           ]
         },
-        position: { x: 400, y: 400 }
+        position: { x: 400, y: 500 }
       },
       {
         id: 'node-3',
@@ -187,7 +190,7 @@ export const workflowTemplates = [
           method: 'least_assigned',
           group: 'sales_reps'
         },
-        position: { x: 400, y: 550 }
+        position: { x: 400, y: 900 }
       },
       {
         id: 'node-4',
@@ -198,7 +201,7 @@ export const workflowTemplates = [
           description: 'Discuss opportunity: {{opportunity_name}}',
           assigned_to: 'record_owner'
         },
-        position: { x: 400, y: 700 }
+        position: { x: 400, y: 900 }
       },
       {
         id: 'node-5',
@@ -208,7 +211,7 @@ export const workflowTemplates = [
           subject: 'Next Steps for {{opportunity_name}}',
           body: 'Hi {{first_name}},\n\nThank you for the opportunity to work together. Your account manager will reach out shortly to discuss next steps.\n\nBest regards'
         },
-        position: { x: 400, y: 850 }
+        position: { x: 400, y: 1100 }
       }
     ],
     connections: [
@@ -241,7 +244,7 @@ export const workflowTemplates = [
           search_field: 'email',
           search_value: '{{email}}'
         },
-        position: { x: 400, y: 250 }
+        position: { x: 400, y: 300 }
       },
       {
         id: 'node-2',
@@ -251,7 +254,7 @@ export const workflowTemplates = [
           operator: 'equals',
           value: 'contacted'
         },
-        position: { x: 400, y: 400 }
+        position: { x: 400, y: 500 }
       },
       {
         id: 'node-3',
@@ -261,7 +264,7 @@ export const workflowTemplates = [
           subject: 'Still interested in {{company}}?',
           body: 'Hi {{first_name}},\n\nI wanted to follow up on our previous conversation. Are you still interested in learning more?\n\nLet me know if you\'d like to schedule a quick call.\n\nBest'
         },
-        position: { x: 600, y: 550 }
+        position: { x: 600, y: 900 }
       },
       {
         id: 'node-4',
@@ -271,7 +274,7 @@ export const workflowTemplates = [
             { lead_field: 'status', webhook_field: 'reengaged' }
           ]
         },
-        position: { x: 600, y: 700 }
+        position: { x: 600, y: 900 }
       }
     ],
     connections: [
@@ -303,7 +306,7 @@ export const workflowTemplates = [
           search_field: 'email',
           search_value: '{{email}}'
         },
-        position: { x: 400, y: 250 }
+        position: { x: 400, y: 300 }
       },
       {
         id: 'node-2',
@@ -312,7 +315,7 @@ export const workflowTemplates = [
           record_type: 'opportunity',
           new_status: 'closed won'
         },
-        position: { x: 400, y: 400 }
+        position: { x: 400, y: 500 }
       },
       {
         id: 'node-3',
@@ -322,7 +325,7 @@ export const workflowTemplates = [
           subject: '🎉 Welcome aboard!',
           body: 'Hi {{first_name}},\n\nWelcome to the team! We\'re thrilled to have you as a customer.\n\nYour onboarding specialist will reach out within 24 hours.\n\nBest regards'
         },
-        position: { x: 400, y: 550 }
+        position: { x: 400, y: 900 }
       },
       {
         id: 'node-4',
@@ -333,7 +336,7 @@ export const workflowTemplates = [
           description: 'Schedule onboarding call and send welcome materials',
           assigned_to: 'round_robin'
         },
-        position: { x: 400, y: 700 }
+        position: { x: 400, y: 900 }
       },
       {
         id: 'node-5',
@@ -344,7 +347,7 @@ export const workflowTemplates = [
           body_type: 'raw',
           body: '{"text": "🎉 New deal won! {{first_name}} {{last_name}} from {{company}}"}'
         },
-        position: { x: 400, y: 850 }
+        position: { x: 400, y: 1100 }
       }
     ],
     connections: [
@@ -377,7 +380,7 @@ export const workflowTemplates = [
           search_field: 'phone',
           search_value: '{{phone}}'
         },
-        position: { x: 400, y: 250 }
+        position: { x: 400, y: 300 }
       },
       {
         id: 'node-2',
@@ -386,7 +389,7 @@ export const workflowTemplates = [
           to: '{{phone}}',
           message: 'Hi {{first_name}}! Thanks for your interest. Check your email for details from {{company}}.'
         },
-        position: { x: 400, y: 400 }
+        position: { x: 400, y: 500 }
       },
       {
         id: 'node-3',
@@ -395,7 +398,7 @@ export const workflowTemplates = [
           duration_value: 2,
           duration_unit: 'minutes'
         },
-        position: { x: 400, y: 550 }
+        position: { x: 400, y: 900 }
       },
       {
         id: 'node-4',
@@ -405,7 +408,7 @@ export const workflowTemplates = [
           subject: 'Follow-up: Your inquiry with {{company}}',
           body: 'Hi {{first_name}},\n\nThank you for reaching out. Here\'s the information you requested...\n\nBest regards,\nThe Team'
         },
-        position: { x: 400, y: 700 }
+        position: { x: 400, y: 900 }
       }
     ],
     connections: [
@@ -442,7 +445,7 @@ export const workflowTemplates = [
             { lead_field: 'country', webhook_field: 'country' }
           ]
         },
-        position: { x: 400, y: 250 }
+        position: { x: 400, y: 300 }
       },
       {
         id: 'node-2',
@@ -452,7 +455,7 @@ export const workflowTemplates = [
           operator: 'contains',
           value: 'CA,OR,WA'
         },
-        position: { x: 400, y: 400 }
+        position: { x: 400, y: 500 }
       },
       {
         id: 'node-3',
@@ -461,7 +464,7 @@ export const workflowTemplates = [
           method: 'round_robin',
           group: 'west_coast_team'
         },
-        position: { x: 600, y: 550 }
+        position: { x: 600, y: 900 }
       },
       {
         id: 'node-4',
@@ -470,7 +473,7 @@ export const workflowTemplates = [
           method: 'round_robin',
           group: 'general_team'
         },
-        position: { x: 200, y: 550 }
+        position: { x: 200, y: 900 }
       },
       {
         id: 'node-5',
@@ -480,7 +483,7 @@ export const workflowTemplates = [
           subject: 'Welcome from your local rep',
           body: 'Hi {{first_name}},\n\nYour dedicated account manager will reach out soon.\n\nBest'
         },
-        position: { x: 400, y: 700 }
+        position: { x: 400, y: 900 }
       }
     ],
     connections: [
@@ -514,7 +517,7 @@ export const workflowTemplates = [
           search_field: 'email',
           search_value: '{{email}}'
         },
-        position: { x: 400, y: 250 }
+        position: { x: 400, y: 300 }
       },
       {
         id: 'node-2',
@@ -525,7 +528,7 @@ export const workflowTemplates = [
           description: 'First outreach to lead',
           assigned_to: 'record_owner'
         },
-        position: { x: 400, y: 400 }
+        position: { x: 400, y: 500 }
       },
       {
         id: 'node-3',
@@ -534,7 +537,7 @@ export const workflowTemplates = [
           record_type: 'lead',
           new_status: 'contacted'
         },
-        position: { x: 400, y: 550 }
+        position: { x: 400, y: 900 }
       }
     ],
     connections: [
@@ -565,7 +568,7 @@ export const workflowTemplates = [
           search_field: 'email',
           search_value: '{{email}}'
         },
-        position: { x: 400, y: 250 }
+        position: { x: 400, y: 300 }
       },
       {
         id: 'node-2',
@@ -576,7 +579,7 @@ export const workflowTemplates = [
           description: 'Schedule a call with {{first_name}} to discuss next steps',
           assigned_to: 'record_owner'
         },
-        position: { x: 600, y: 400 }
+        position: { x: 600, y: 500 }
       },
       {
         id: 'node-3',
@@ -586,7 +589,7 @@ export const workflowTemplates = [
           subject: 'Let\'s Connect',
           body: 'Hi {{first_name}},\n\nThanks for engaging with us! I\'d love to learn more about your needs. Let\'s schedule a quick call.\n\nBest regards'
         },
-        position: { x: 600, y: 550 }
+        position: { x: 600, y: 900 }
       },
       {
         id: 'node-4',
@@ -595,7 +598,7 @@ export const workflowTemplates = [
           duration_value: 2,
           duration_unit: 'days'
         },
-        position: { x: 600, y: 700 }
+        position: { x: 600, y: 900 }
       },
       {
         id: 'node-5',
@@ -605,7 +608,7 @@ export const workflowTemplates = [
           subject: 'Just Checking In',
           body: 'Hi {{first_name}},\n\nJust following up to see if you had a chance to consider our previous conversation. I\'m here to answer any questions.\n\nCheers'
         },
-        position: { x: 600, y: 850 }
+        position: { x: 600, y: 1100 }
       }
     ],
     connections: [
@@ -638,7 +641,7 @@ export const workflowTemplates = [
           search_field: 'phone',
           search_value: '{{phone}}'
         },
-        position: { x: 400, y: 250 }
+        position: { x: 400, y: 300 }
       },
       {
         id: 'node-2',
@@ -647,7 +650,7 @@ export const workflowTemplates = [
           to: '{{phone}}',
           message: 'Hi {{first_name}}, sorry we missed your call! We\'ll get back to you shortly. Feel free to reply with any details.'
         },
-        position: { x: 400, y: 400 }
+        position: { x: 400, y: 500 }
       },
       {
         id: 'node-3',
@@ -657,7 +660,7 @@ export const workflowTemplates = [
           subject: 'We missed your call',
           body: 'Hi {{first_name}},\n\nWe noticed we missed your call and we\'re sorry about that. Our team will call you back shortly. In the meantime, please reply with any information that might help us assist you better.\n\nBest regards'
         },
-        position: { x: 400, y: 550 }
+        position: { x: 400, y: 900 }
       },
       {
         id: 'node-4',
@@ -668,7 +671,7 @@ export const workflowTemplates = [
           description: 'Customer call was missed; follow up ASAP',
           assigned_to: 'customer_service_team'
         },
-        position: { x: 400, y: 700 }
+        position: { x: 400, y: 900 }
       },
       {
         id: 'node-5',
@@ -678,7 +681,7 @@ export const workflowTemplates = [
           note_content: 'Missed call on {{date}}. SMS and email sent for follow-up.',
           assigned_to: 'record_owner'
         },
-        position: { x: 400, y: 850 }
+        position: { x: 400, y: 1100 }
       }
     ],
     connections: [
@@ -715,7 +718,7 @@ export const workflowTemplates = [
           search_field: 'id',
           search_value: '{{entity_id}}'
         },
-        position: { x: 400, y: 250 }
+        position: { x: 400, y: 300 }
       },
       {
         id: 'node-2',
@@ -724,7 +727,7 @@ export const workflowTemplates = [
           summary_type: 'status_update',
           provider: 'openai'
         },
-        position: { x: 400, y: 400 }
+        position: { x: 400, y: 500 }
       },
       {
         id: 'node-3',
@@ -734,7 +737,7 @@ export const workflowTemplates = [
           related_record_type: 'lead',
           provider: 'openai'
         },
-        position: { x: 400, y: 550 }
+        position: { x: 400, y: 900 }
       },
       {
         id: 'node-4',
@@ -744,7 +747,7 @@ export const workflowTemplates = [
           operator: 'equals',
           value: 'new'
         },
-        position: { x: 400, y: 700 }
+        position: { x: 400, y: 900 }
       },
       {
         id: 'node-5',
@@ -755,7 +758,7 @@ export const workflowTemplates = [
           prompt: 'Write an introductory email for a new lead. Mention we saw their interest and would love to schedule a call.',
           sender_name: 'Sales Team'
         },
-        position: { x: 600, y: 850 }
+        position: { x: 600, y: 1100 }
       },
       {
         id: 'node-6',
@@ -765,7 +768,7 @@ export const workflowTemplates = [
           subject: '{{ai_email.subject}}',
           body: '{{ai_email.body}}'
         },
-        position: { x: 600, y: 1000 }
+        position: { x: 600, y: 1700 }
       },
       {
         id: 'node-7',
@@ -775,7 +778,7 @@ export const workflowTemplates = [
             { lead_field: 'status', webhook_field: 'contacted' }
           ]
         },
-        position: { x: 600, y: 1150 }
+        position: { x: 600, y: 1500 }
       },
       {
         id: 'node-8',
@@ -786,7 +789,7 @@ export const workflowTemplates = [
           description: 'AI-initiated outreach completed. Follow up in 2 days if no response.',
           assigned_to: 'record_owner'
         },
-        position: { x: 600, y: 1300 }
+        position: { x: 600, y: 1700 }
       },
       {
         id: 'node-9',
@@ -797,7 +800,7 @@ export const workflowTemplates = [
           custom_prompt: 'Sales Manager Workflow completed. Summarize actions taken and next steps.',
           provider: 'openai'
         },
-        position: { x: 400, y: 1450 }
+        position: { x: 400, y: 1900 }
       }
     ],
     connections: [
@@ -834,7 +837,7 @@ export const workflowTemplates = [
           search_field: 'id',
           search_value: '{{entity_id}}'
         },
-        position: { x: 400, y: 250 }
+        position: { x: 400, y: 300 }
       },
       {
         id: 'node-2',
@@ -843,7 +846,7 @@ export const workflowTemplates = [
           summary_type: 'status_update',
           provider: 'openai'
         },
-        position: { x: 400, y: 400 }
+        position: { x: 400, y: 500 }
       },
       {
         id: 'node-3',
@@ -854,7 +857,7 @@ export const workflowTemplates = [
           custom_prompt: 'Customer Service Manager starting to handle inquiry. Log initial assessment.',
           provider: 'openai'
         },
-        position: { x: 400, y: 550 }
+        position: { x: 400, y: 900 }
       },
       {
         id: 'node-4',
@@ -864,7 +867,7 @@ export const workflowTemplates = [
           operator: 'equals',
           value: 'urgent'
         },
-        position: { x: 400, y: 700 }
+        position: { x: 400, y: 900 }
       },
       {
         id: 'node-5',
@@ -876,7 +879,7 @@ export const workflowTemplates = [
           assigned_to: 'customer_service_team',
           priority: 'high'
         },
-        position: { x: 600, y: 850 }
+        position: { x: 600, y: 1100 }
       },
       {
         id: 'node-6',
@@ -887,7 +890,7 @@ export const workflowTemplates = [
           prompt: 'Write a helpful response acknowledging their inquiry. Let them know we are working on it and will be in touch soon.',
           sender_name: 'Customer Service'
         },
-        position: { x: 200, y: 850 }
+        position: { x: 200, y: 1100 }
       },
       {
         id: 'node-7',
@@ -897,7 +900,7 @@ export const workflowTemplates = [
           subject: '{{ai_email.subject}}',
           body: '{{ai_email.body}}'
         },
-        position: { x: 200, y: 1000 }
+        position: { x: 200, y: 1700 }
       },
       {
         id: 'node-8',
@@ -908,7 +911,7 @@ export const workflowTemplates = [
           description: 'Initial response sent. Follow up to ensure issue is resolved.',
           assigned_to: 'record_owner'
         },
-        position: { x: 200, y: 1150 }
+        position: { x: 200, y: 1500 }
       },
       {
         id: 'node-9',
@@ -919,7 +922,7 @@ export const workflowTemplates = [
           custom_prompt: 'Customer Service Workflow completed. Summarize actions taken, response sent, and follow-up scheduled.',
           provider: 'openai'
         },
-        position: { x: 400, y: 1300 }
+        position: { x: 400, y: 1700 }
       }
     ],
     connections: [
@@ -963,7 +966,7 @@ export const workflowTemplates = [
             { lead_field: 'source', webhook_field: 'pabbly' }
           ]
         },
-        position: { x: 400, y: 250 }
+        position: { x: 400, y: 300 }
       },
       {
         id: 'node-2',
@@ -971,7 +974,7 @@ export const workflowTemplates = [
         config: {
           summary_type: 'status_update'
         },
-        position: { x: 400, y: 400 }
+        position: { x: 400, y: 500 }
       },
       {
         id: 'node-3',
@@ -980,7 +983,7 @@ export const workflowTemplates = [
           note_type: 'progress_update',
           related_record_type: 'lead'
         },
-        position: { x: 400, y: 550 }
+        position: { x: 400, y: 900 }
       },
       {
         id: 'node-4',
@@ -989,7 +992,7 @@ export const workflowTemplates = [
           webhook_url: '',
           payload_type: 'full'
         },
-        position: { x: 400, y: 700 }
+        position: { x: 400, y: 900 }
       }
     ],
     connections: [
@@ -1021,7 +1024,7 @@ export const workflowTemplates = [
           search_field: 'email',
           search_value: '{{email}}'
         },
-        position: { x: 400, y: 250 }
+        position: { x: 400, y: 300 }
       },
       {
         id: 'node-2',
@@ -1029,7 +1032,7 @@ export const workflowTemplates = [
         config: {
           summary_type: 'executive_summary'
         },
-        position: { x: 400, y: 400 }
+        position: { x: 400, y: 500 }
       },
       {
         id: 'node-3',
@@ -1039,7 +1042,7 @@ export const workflowTemplates = [
           purpose: 'Follow-up on recent inquiry',
           talking_points: ['Introduce yourself', 'Ask about their needs', 'Offer next steps']
         },
-        position: { x: 400, y: 550 }
+        position: { x: 400, y: 900 }
       },
       {
         id: 'node-4',
@@ -1048,7 +1051,7 @@ export const workflowTemplates = [
           match_field: 'call_id',
           timeout_minutes: 30
         },
-        position: { x: 400, y: 700 }
+        position: { x: 400, y: 900 }
       },
       {
         id: 'node-5',
@@ -1058,7 +1061,7 @@ export const workflowTemplates = [
           operator: 'equals',
           value: 'answered'
         },
-        position: { x: 400, y: 850 }
+        position: { x: 400, y: 1100 }
       },
       {
         id: 'node-6',
@@ -1067,7 +1070,7 @@ export const workflowTemplates = [
           tone: 'friendly',
           prompt: 'Write a follow-up email thanking them for the call and summarizing next steps.'
         },
-        position: { x: 600, y: 1000 }
+        position: { x: 600, y: 1700 }
       },
       {
         id: 'node-7',
@@ -1077,7 +1080,7 @@ export const workflowTemplates = [
           to: '{{phone}}',
           message: 'Sorry we missed you! Would love to connect. Reply with a good time to call back.'
         },
-        position: { x: 200, y: 1000 }
+        position: { x: 200, y: 1700 }
       },
       {
         id: 'node-8',
@@ -1087,7 +1090,7 @@ export const workflowTemplates = [
           subject: '{{ai_email.subject}}',
           body: '{{ai_email.body}}'
         },
-        position: { x: 600, y: 1150 }
+        position: { x: 600, y: 1500 }
       },
       {
         id: 'node-9',
@@ -1096,7 +1099,7 @@ export const workflowTemplates = [
           webhook_url: '',
           payload_type: 'full'
         },
-        position: { x: 400, y: 1300 }
+        position: { x: 400, y: 1700 }
       }
     ],
     connections: [
@@ -1134,7 +1137,7 @@ export const workflowTemplates = [
           search_field: 'id',
           search_value: '{{lead_id}}'
         },
-        position: { x: 400, y: 250 }
+        position: { x: 400, y: 300 }
       },
       {
         id: 'node-2',
@@ -1144,7 +1147,7 @@ export const workflowTemplates = [
           to: '{{phone}}',
           message: 'Hi {{first_name}}! Thanks for your interest. Quick question - what\'s your biggest challenge right now?'
         },
-        position: { x: 400, y: 400 }
+        position: { x: 400, y: 500 }
       },
       {
         id: 'node-3',
@@ -1153,7 +1156,7 @@ export const workflowTemplates = [
           note_type: 'progress_update',
           custom_prompt: 'Log that SMS #1 was sent in the nurture sequence.'
         },
-        position: { x: 400, y: 550 }
+        position: { x: 400, y: 900 }
       },
       {
         id: 'node-4',
@@ -1162,7 +1165,7 @@ export const workflowTemplates = [
           duration_value: 2,
           duration_unit: 'days'
         },
-        position: { x: 400, y: 700 }
+        position: { x: 400, y: 900 }
       },
       {
         id: 'node-5',
@@ -1172,7 +1175,7 @@ export const workflowTemplates = [
           to: '{{phone}}',
           message: 'Hey {{first_name}}, just checking in. Did you get a chance to think about your goals? We\'d love to help.'
         },
-        position: { x: 400, y: 850 }
+        position: { x: 400, y: 1100 }
       },
       {
         id: 'node-6',
@@ -1182,7 +1185,7 @@ export const workflowTemplates = [
             { lead_field: 'status', webhook_field: 'nurturing' }
           ]
         },
-        position: { x: 400, y: 1000 }
+        position: { x: 400, y: 1700 }
       }
     ],
     connections: [
