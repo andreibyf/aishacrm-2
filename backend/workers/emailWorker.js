@@ -25,6 +25,11 @@ async function getTenantSMTPConfig(tenantId) {
   if (!tenantId) return null;
   
   try {
+    // Debug: Check ALL gmail_smtp integrations first
+    const debugQuery = `SELECT tenant_id, integration_type, is_active FROM tenant_integrations WHERE integration_type = 'gmail_smtp'`;
+    const debugResult = await pgPool.query(debugQuery);
+    logger.info(`[EmailWorker] DEBUG: Found ${debugResult.rows.length} gmail_smtp integrations total:`, JSON.stringify(debugResult.rows));
+    
     const query = `
       SELECT api_credentials, configuration, is_active
       FROM tenant_integrations
@@ -314,17 +319,42 @@ async function loop() {
   }
 }
 
-logger.debug('[EmailWorker] Starting email worker...');
-loop();
-
-process.on('SIGTERM', async () => {
-  logger.debug('[EmailWorker] SIGTERM received, shutting down...');
-  try {
-    if (pgPool) {
-      await pgPool.end();
-    }
-  } catch (e) {
-    logger.warn('[EmailWorker] Error during pool shutdown:', e?.message);
+/**
+ * Start the email worker (called from server.js)
+ * @param {object} pool - PostgreSQL connection pool (optional, uses module-level pgPool if not provided)
+ */
+export function startEmailWorker(pool) {
+  if (pool) {
+    // Use provided pool (when called from server.js)
+    Object.assign(pgPool, pool);
   }
-  process.exit(0);
-});
+  
+  logger.info('[EmailWorker] Starting email worker...');
+  logger.info(`[EmailWorker] Poll interval: ${POLL_INTERVAL_MS}ms, Batch limit: ${BATCH_LIMIT}`);
+  loop();
+  
+  return {
+    stop: () => {
+      logger.info('[EmailWorker] Stopping email worker...');
+      // The setTimeout in loop() will naturally stop being scheduled
+    }
+  };
+}
+
+// Auto-start if run directly (for standalone mode)
+if (import.meta.url === `file://${process.argv[1]}`) {
+  logger.debug('[EmailWorker] Running in standalone mode');
+  startEmailWorker();
+  
+  process.on('SIGTERM', async () => {
+    logger.debug('[EmailWorker] SIGTERM received, shutting down...');
+    try {
+      if (pgPool) {
+        await pgPool.end();
+      }
+    } catch (e) {
+      logger.warn('[EmailWorker] Error during pool shutdown:', e?.message);
+    }
+    process.exit(0);
+  });
+}

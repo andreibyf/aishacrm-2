@@ -20,6 +20,7 @@ import workflowQueue from "./services/workflowQueue.js";
 // Import background workers
 import { startCampaignWorker } from "./lib/campaignWorker.js";
 import { startAiTriggersWorker } from "./lib/aiTriggersWorker.js";
+import { startEmailWorker } from "./workers/emailWorker.js";
 
 // Import UUID validation
 import { sanitizeUuidInput } from "./lib/uuidValidator.js";
@@ -661,6 +662,14 @@ server.listen(PORT, async () => {
     startAiTriggersWorker(pgPool, triggersInterval);
   } else {
     logger.debug('[AiTriggersWorker] Disabled (set AI_TRIGGERS_WORKER_ENABLED=true to enable)');
+  }
+
+  // Start email worker (always enabled if database is available)
+  if (pgPool) {
+    logger.info('[EmailWorker] Starting email worker (processes queued email activities)');
+    startEmailWorker(pgPool);
+  } else {
+    logger.warn('[EmailWorker] Disabled (no database connection)');
   }
 
   // Keep-alive interval to prevent process from exiting
