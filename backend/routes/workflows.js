@@ -1492,10 +1492,15 @@ export default function createWorkflowRoutes(pgPool) {
     try {
       const { id } = req.params;
       const payload = req.body?.payload ?? req.body ?? {};
+      logger.info(`[Webhook] Received request for workflow ${id}`);
+      
       // Use the service function (Supabase-based) instead of local pgPool function
       const result = await executeWorkflowByIdService(id, payload);
+      
+      logger.info(`[Webhook] Workflow ${id} execution completed with status: ${result.status}`);
       return res.status(result.httpStatus).json({ status: result.status, data: result.data });
     } catch (error) {
+      logger.error(`[Webhook] Error executing workflow: ${error.message}`, error);
       return res.status(500).json({ status: 'error', message: error.message });
     }
   });
