@@ -1460,12 +1460,12 @@ export default function createWorkflowRoutes(pgPool) {
     }
   });
 
-  // POST /api/workflows/:id/test - Convenience endpoint to execute a workflow by ID with payload
+  // POST /api/workflows/:id/webhook - Webhook endpoint to trigger workflow execution
   /**
    * @openapi
-   * /api/workflows/{id}/test:
+   * /api/workflows/{id}/webhook:
    *   post:
-   *     summary: Test-execute a workflow
+   *     summary: Trigger workflow execution via webhook
    *     tags: [workflows]
    *     parameters:
    *       - in: path
@@ -1488,7 +1488,7 @@ export default function createWorkflowRoutes(pgPool) {
    *             schema:
    *               $ref: '#/components/schemas/Success'
    */
-  router.post('/:id/test', async (req, res) => {
+  router.post('/:id/webhook', async (req, res) => {
     try {
       const { id } = req.params;
       const payload = req.body?.payload ?? req.body ?? {};
