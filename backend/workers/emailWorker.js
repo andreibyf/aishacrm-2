@@ -140,7 +140,7 @@ function parseEmailMeta(metadata) {
 }
 
 async function markActivity(activityId, status, newMeta) {
-  const q = `UPDATE activities SET status = $1, metadata = $2, updated_date = NOW() WHERE id = $3`;
+  const q = `UPDATE activities SET status = $1, metadata = $2 WHERE id = $3`;
   await pgPool.query(q, [status, JSON.stringify(newMeta || {}), activityId]);
 }
 
