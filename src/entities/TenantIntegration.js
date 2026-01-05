@@ -17,6 +17,7 @@ export const TenantIntegrationSchema = {
         "google_drive",
         "google_calendar",
         "gmail",
+        "gmail_smtp",
         "outlook_email",
         "onedrive",
         "outlook_calendar",

@@ -25,6 +25,7 @@ import {
   SelectValue } from
 "@/components/ui/select";
 import WebhookEmailSettings from './WebhookEmailSettings';
+import GmailSMTPSettings from './GmailSMTPSettings';
 import { getTenantFilter } from "../shared/tenantUtils";
 import { useTenant } from "../shared/tenantContext";
 import { useUser } from "@/components/shared/useUser.js";
@@ -201,6 +202,7 @@ export default function TenantIntegrationSettings() {
   const getIntegrationIcon = (type) => {
     const iconMap = {
       webhook_email: Mail,
+      gmail_smtp: Mail,
       openai_llm: Bot,
       google_drive: Cloud,
       zapier: Zap,
@@ -284,9 +286,12 @@ export default function TenantIntegrationSettings() {
             {/* Email Webhook Integration - Special Component */}
             <WebhookEmailSettings />
 
+            {/* Gmail SMTP Integration - Special Component */}
+            <GmailSMTPSettings />
+
             {/* Other Integrations */}
             <div className="grid gap-4">
-                {integrations.filter((integration) => integration.integration_type !== 'webhook_email').map((integration) => {
+                {integrations.filter((integration) => integration.integration_type !== 'webhook_email' && integration.integration_type !== 'gmail_smtp').map((integration) => {
           const IconComponent = getIntegrationIcon(integration.integration_type);
           const isTestingThis = testingIntegration === integration.id;
 
@@ -374,7 +379,7 @@ export default function TenantIntegrationSettings() {
         })}
             </div>
 
-            {integrations.filter((integration) => integration.integration_type !== 'webhook_email').length === 0 &&
+            {integrations.filter((integration) => integration.integration_type !== 'webhook_email' && integration.integration_type !== 'gmail_smtp').length === 0 &&
       <Card className="text-center py-8">
                     <CardContent>
                         <Zap className="w-12 h-12 text-slate-400 mx-auto mb-4" />

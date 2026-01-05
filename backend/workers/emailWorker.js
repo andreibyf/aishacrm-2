@@ -17,16 +17,86 @@ if (!pgPool) {
   logger.error('[EmailWorker] No database configured (ensure Supabase client is initialized)');
 }
 
-// SMTP transporter
-let transporter = null;
-function ensureTransporter() {
-  if (!process.env.SMTP_HOST) {
-    logger.warn('[EmailWorker] SMTP_HOST is not configured; skipping email send');
-    transporter = null;
+/**
+ * Get tenant-specific SMTP configuration from tenant_integrations
+ * Returns null if not configured
+ */
+async function getTenantSMTPConfig(tenantId) {
+  if (!tenantId) return null;
+  
+  try {
+    const query = `
+      SELECT api_credentials, configuration, is_active
+      FROM tenant_integrations
+      WHERE tenant_id = $1
+        AND integration_type = 'gmail_smtp'
+        AND is_active = true
+      LIMIT 1
+    `;
+    const result = await pgPool.query(query, [tenantId]);
+    
+    if (result.rows.length === 0) {
+      logger.debug(`[EmailWorker] No Gmail SMTP integration found for tenant ${tenantId}`);
+      return null;
+    }
+    
+    const integration = result.rows[0];
+    const credentials = integration.api_credentials || {};
+    const config = integration.configuration || {};
+    
+    if (!credentials.smtp_user || !credentials.smtp_password) {
+      logger.warn(`[EmailWorker] Incomplete Gmail SMTP credentials for tenant ${tenantId}`);
+      return null;
+    }
+    
+    return {
+      host: config.smtp_host || 'smtp.gmail.com',
+      port: parseInt(config.smtp_port || '587'),
+      secure: config.smtp_secure === true || config.smtp_port === '465',
+      auth: {
+        user: credentials.smtp_user,
+        pass: credentials.smtp_password
+      },
+      from: config.smtp_from || credentials.smtp_user
+    };
+  } catch (err) {
+    logger.error(`[EmailWorker] Error fetching tenant SMTP config: ${err.message}`);
     return null;
   }
-  if (transporter) return transporter;
-  transporter = nodemailer.createTransport({
+}
+
+/**
+ * Create SMTP transporter for specific configuration
+ * Returns null if config invalid
+ */
+function createTransporter(config) {
+  if (!config || !config.host || !config.auth?.user) {
+    return null;
+  }
+  
+  try {
+    return nodemailer.createTransport({
+      host: config.host,
+      port: config.port,
+      secure: config.secure,
+      auth: config.auth
+    });
+  } catch (err) {
+    logger.error(`[EmailWorker] Error creating transporter: ${err.message}`);
+    return null;
+  }
+}
+
+// SYSADMIN SMTP transporter (NEVER use for tenant workflows)
+let sysadminTransporter = null;
+function getSysadminTransporter() {
+  if (!process.env.SMTP_HOST) {
+    logger.warn('[EmailWorker] Sysadmin SMTP_HOST is not configured');
+    sysadminTransporter = null;
+    return null;
+  }
+  if (sysadminTransporter) return sysadminTransporter;
+  sysadminTransporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: parseInt(process.env.SMTP_PORT || '587'),
     secure: process.env.SMTP_SECURE === 'true',
@@ -35,10 +105,10 @@ function ensureTransporter() {
       pass: process.env.SMTP_PASS,
     } : undefined,
   });
-  return transporter;
+  return sysadminTransporter;
 }
 
-const FROM_DEFAULT = process.env.SMTP_FROM || 'no-reply@localhost';
+const FROM_DEFAULT_SYSADMIN = process.env.SMTP_FROM || 'no-reply@localhost';
 const POLL_INTERVAL_MS = parseInt(process.env.EMAIL_WORKER_POLL_MS || '5000');
 const BATCH_LIMIT = parseInt(process.env.EMAIL_WORKER_BATCH_LIMIT || '10');
 
@@ -113,7 +183,6 @@ async function processActivity(activity) {
   const toValue = email.to || activity.subject; // fallback if needed
   const subject = email.subject || activity.subject || 'Notification';
   const body = activity.body || email.body || '';
-  const from = email.from || FROM_DEFAULT;
 
   if (!toValue) {
     const failedMeta = { ...meta, delivery: { error: 'Missing recipient', failed_at: new Date().toISOString() } };
@@ -123,25 +192,66 @@ async function processActivity(activity) {
   }
 
   const toList = Array.isArray(toValue) ? toValue : String(toValue).split(',').map(s => s.trim()).filter(Boolean);
-  const t = ensureTransporter();
-  if (!t) {
-    // Leave queued; do not mark failed when transporter is not configured
+  
+  // Get tenant-specific SMTP configuration
+  const tenantSMTPConfig = await getTenantSMTPConfig(activity.tenant_id);
+  
+  if (!tenantSMTPConfig) {
+    // No tenant SMTP configured - fail with helpful error
+    const failedMeta = { 
+      ...meta, 
+      delivery: { 
+        error: 'No Gmail SMTP integration configured for this client. Please configure Gmail SMTP in Settings > Client Integrations.',
+        failed_at: new Date().toISOString() 
+      } 
+    };
+    await markActivity(activity.id, 'failed', failedMeta);
+    logger.error(`[EmailWorker] No Gmail SMTP configured for tenant ${activity.tenant_id}, activity ${activity.id}`);
+    
+    // Create notification for admins
+    await createNotification({
+      tenant_id: activity.tenant_id,
+      title: 'Email delivery failed - No SMTP configured',
+      message: `Email could not be sent. Please configure Gmail SMTP in Settings > Client Integrations.`,
+      type: 'error',
+    });
     return;
   }
 
+  // Create transporter with tenant-specific config
+  const transporter = createTransporter(tenantSMTPConfig);
+  
+  if (!transporter) {
+    const failedMeta = { 
+      ...meta, 
+      delivery: { 
+        error: 'Invalid SMTP configuration',
+        failed_at: new Date().toISOString() 
+      } 
+    };
+    await markActivity(activity.id, 'failed', failedMeta);
+    logger.error(`[EmailWorker] Invalid SMTP config for tenant ${activity.tenant_id}, activity ${activity.id}`);
+    return;
+  }
+
+  // Use tenant SMTP from address or email.from override
+  const from = email.from || tenantSMTPConfig.from;
+
   try {
-    const info = await t.sendMail({
+    const info = await transporter.sendMail({
       from,
       to: toList.join(','),
       subject,
       text: body,
       html: /<\w+/.test(body) ? body : undefined,
     });
+    
     const sentMeta = {
       ...meta,
       delivery: {
         ...(meta.delivery || {}),
-        provider: 'smtp',
+        provider: 'gmail_smtp',
+        smtp_user: tenantSMTPConfig.auth.user,
         messageId: info?.messageId,
         sent_at: new Date().toISOString(),
         attempts: ((meta.delivery && meta.delivery.attempts) || 0) + 1,
@@ -149,7 +259,15 @@ async function processActivity(activity) {
     };
     await markActivity(activity.id, 'sent', sentMeta);
     logger.debug('[EmailWorker] Sent email activity', activity.id, info?.messageId);
-    await postStatusWebhook({ event: 'email.sent', activity_id: activity.id, tenant_id: activity.tenant_id, to: toList, subject, messageId: info?.messageId });
+    await postStatusWebhook({ 
+      event: 'email.sent', 
+      activity_id: activity.id, 
+      tenant_id: activity.tenant_id, 
+      to: toList, 
+      subject, 
+      messageId: info?.messageId,
+      smtp_user: tenantSMTPConfig.auth.user
+    });
   } catch (err) {
     const prevAttempts = (meta.delivery && meta.delivery.attempts) ? parseInt(meta.delivery.attempts) : 0;
     const attempts = prevAttempts + 1;
