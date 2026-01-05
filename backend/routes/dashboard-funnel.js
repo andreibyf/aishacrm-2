@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '../lib/supabaseFactory.js';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
 import { cacheList } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
+import cacheManager from '../lib/cacheManager.js';
 
 export default function createDashboardFunnelRoutes(_pgPool) {
   const router = express.Router();
@@ -12,25 +13,15 @@ export default function createDashboardFunnelRoutes(_pgPool) {
 
   /**
    * GET /api/dashboard/funnel-counts
- * Returns pre-computed funnel counts AND pipeline data from materialized view
- * Query params:
- *   - include_test_data: boolean (default: true)
- *   - period: string (year|quarter|month|week) - optional
- *   - year: number - required if period is set
- *   - quarter: number (1-4) - required if period=quarter
- *   - month: number (1-12) - required if period=month
- *   - week: number (1-53) - required if period=week
- */
+   * Returns pre-computed funnel counts AND pipeline data from materialized view
+   * Query params:
+   *   - include_test_data: boolean (default: true)
+   */
 router.get('/funnel-counts', cacheList('funnel_counts', 120), validateTenantAccess, async (req, res) => {
   try {
     const supabase = getSupabase();
     const tenantId = req.tenant?.id || req.query.tenant_id;
     const includeTestData = req.query.include_test_data !== 'false';
-    const period = req.query.period; // year|quarter|month|week
-    const year = parseInt(req.query.year);
-    const quarter = parseInt(req.query.quarter);
-    const month = parseInt(req.query.month);
-    const week = parseInt(req.query.week);
 
     if (!tenantId) {
       return res.status(400).json({ 
@@ -39,75 +30,7 @@ router.get('/funnel-counts', cacheList('funnel_counts', 120), validateTenantAcce
       });
     }
 
-    // Use period-based view if period filter is specified
-    if (period && year) {
-      let query = supabase
-        .from('dashboard_funnel_counts_by_period')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .eq('period_year', year);
-
-      // Add period-specific filters
-      if (period === 'quarter' && quarter) {
-        query = query.eq('period_quarter', quarter);
-      } else if (period === 'month' && month) {
-        query = query.eq('period_month', month);
-      } else if (period === 'week' && week) {
-        query = query.eq('period_week', week);
-      }
-
-      const { data: periodData, error: periodError } = await query;
-
-      if (periodError) throw periodError;
-
-      // Aggregate the period data
-      const suffix = includeTestData ? '_total' : '_real';
-      
-      const aggregated = (periodData || []).reduce((acc, row) => {
-        acc.funnel.sources += row[`sources${suffix}`] || 0;
-        acc.funnel.leads += row[`leads${suffix}`] || 0;
-        acc.funnel.contacts += row[`contacts${suffix}`] || 0;
-        acc.funnel.accounts += row[`accounts${suffix}`] || 0;
-        
-        acc.pipeline[0].count += row[`prospecting_count${suffix}`] || 0;
-        acc.pipeline[0].value += parseFloat(row[`prospecting_value${suffix}`]) || 0;
-        acc.pipeline[1].count += row[`qualification_count${suffix}`] || 0;
-        acc.pipeline[1].value += parseFloat(row[`qualification_value${suffix}`]) || 0;
-        acc.pipeline[2].count += row[`proposal_count${suffix}`] || 0;
-        acc.pipeline[2].value += parseFloat(row[`proposal_value${suffix}`]) || 0;
-        acc.pipeline[3].count += row[`negotiation_count${suffix}`] || 0;
-        acc.pipeline[3].value += parseFloat(row[`negotiation_value${suffix}`]) || 0;
-        acc.pipeline[4].count += row[`closed_won_count${suffix}`] || 0;
-        acc.pipeline[4].value += parseFloat(row[`closed_won_value${suffix}`]) || 0;
-        acc.pipeline[5].count += row[`closed_lost_count${suffix}`] || 0;
-        acc.pipeline[5].value += parseFloat(row[`closed_lost_value${suffix}`]) || 0;
-        
-        return acc;
-      }, {
-        funnel: { sources: 0, leads: 0, contacts: 0, accounts: 0 },
-        pipeline: [
-          { stage: 'Prospecting', count: 0, value: 0 },
-          { stage: 'Qualification', count: 0, value: 0 },
-          { stage: 'Proposal', count: 0, value: 0 },
-          { stage: 'Negotiation', count: 0, value: 0 },
-          { stage: 'Closed Won', count: 0, value: 0 },
-          { stage: 'Closed Lost', count: 0, value: 0 },
-        ]
-      });
-
-      return res.json({
-        ...aggregated,
-        period: period,
-        year: year,
-        quarter: quarter,
-        month: month,
-        week: week,
-        last_refreshed: periodData?.[0]?.last_refreshed,
-        cached: true
-      });
-    }
-
-    // Default: Query all-time aggregated view
+    // Query all-time aggregated view (no period filtering)
     const { data, error } = await supabase
       .from('dashboard_funnel_counts')
       .select('*')
@@ -232,10 +155,24 @@ router.get('/funnel-counts', cacheList('funnel_counts', 120), validateTenantAcce
 router.post('/funnel-counts/refresh', validateTenantAccess, async (req, res) => {
   try {
     const supabase = getSupabase();
-    // Call the refresh function
+    const tenantId = req.tenant?.id;
+    
+    // Call the refresh function for materialized view
     const { error } = await supabase.rpc('refresh_dashboard_funnel_counts');
 
     if (error) throw error;
+
+    // CRITICAL: Clear Redis cache for funnel_counts to force fresh data
+    if (tenantId) {
+      try {
+        // Clear all funnel_counts cache entries for this tenant
+        await cacheManager.invalidateTenant(tenantId, 'funnel_counts');
+        logger.info(`[Dashboard Funnel] Cleared Redis cache for tenant: ${tenantId}`);
+      } catch (cacheError) {
+        logger.warn('[Dashboard Funnel] Failed to clear Redis cache:', cacheError);
+        // Don't fail the request if cache clear fails
+      }
+    }
 
     res.json({ 
       success: true, 

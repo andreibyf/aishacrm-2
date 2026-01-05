@@ -108,8 +108,8 @@ export default function ConversionRates({ stats = {} }) {
             key={index} 
             className={`p-3 rounded-lg transition-all ${
               step.isHighlight 
-                ? 'bg-gradient-to-r from-blue-900/30 to-cyan-900/30 border border-cyan-500/30' 
-                : 'bg-slate-700/30 hover:bg-slate-700/50'
+                ? 'bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/30 dark:to-cyan-900/30 border border-cyan-200 dark:border-cyan-500/30' 
+                : 'bg-slate-100/80 hover:bg-slate-100 dark:bg-slate-700/30 dark:hover:bg-slate-700/50'
             }`}
           >
             {/* Header row */}

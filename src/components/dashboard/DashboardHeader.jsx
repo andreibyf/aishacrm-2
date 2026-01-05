@@ -29,8 +29,6 @@ function getExactTime(timestamp) {
 }
 
 export default function DashboardHeader({ user, showTestData, onTestDataToggle, onCustomizeClick, onRefresh, isRefreshing, isCached, cachedAt }) {
-  const [activeFilter, setActiveFilter] = React.useState('Month');
-  const filters = ['Week', 'Month', 'Quarter', 'Year'];
   const [briefingLoading, setBriefingLoading] = React.useState(false);
   // Feature flag: hide Daily Voice Briefing button
   const SHOW_DAILY_BRIEFING = false;
@@ -148,24 +146,6 @@ export default function DashboardHeader({ user, showTestData, onTestDataToggle, 
               {briefingLoading ? 'Generating...' : 'Daily Voice Briefing'}
             </Button>
           )}
-        </div>
-      </div>
-      <div className="mt-6 border-t border-white/20 pt-4">
-        <div className="flex items-center gap-2">
-          {filters.map(filter => (
-            <Button
-              key={filter}
-              variant={activeFilter === filter ? 'secondary' : 'ghost'}
-              size="sm"
-              onClick={() => setActiveFilter(filter)}
-              className={activeFilter === filter 
-                ? 'bg-white text-blue-700 hover:bg-white/90' 
-                : 'text-blue-100 hover:bg-white/10 backdrop-blur-sm'
-              }
-            >
-              {filter}
-            </Button>
-          ))}
         </div>
       </div>
     </div>

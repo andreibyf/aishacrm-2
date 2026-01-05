@@ -34,6 +34,7 @@ import LeadAgeReport from "../components/dashboard/LeadAgeReport";
 import SalesFunnelWidget from "../components/dashboard/SalesFunnelWidget";
 import ConversionRates from "../components/dashboard/ConversionRates";
 import { getDashboardBundleFast } from "@/api/dashboard";
+import { refreshDashboardFunnelCounts } from "@/api/fallbackFunctions";
 import { getCachedDashboardData, cacheDashboardData } from "@/api/dashboardCache";
 import WidgetPickerModal from "../components/dashboard/WidgetPickerModal";
 import { toast } from "sonner";
@@ -116,6 +117,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [refreshTimestamp, setRefreshTimestamp] = useState(Date.now()); // For forcing widget cache busts
   const [bundleLists, setBundleLists] = useState(null);
   const [stats, setStats] = useState({
     totalContacts: 0,
@@ -138,7 +140,7 @@ export default function DashboardPage() {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [showTestData, setShowTestData] = useState(true); // Default to showing all data
 
-  const { cachedRequest } = useApiManager();
+  const { cachedRequest, clearCacheByKey } = useApiManager();
   const { selectedEmail } = useEmployeeScope();
   const logger = useLogger();
   const loadingToast = useLoadingToast();
@@ -635,7 +637,21 @@ export default function DashboardPage() {
     }
     
     setRefreshing(true);
+    
     try {
+      // CRITICAL: Refresh the materialized view FIRST before clearing caches
+      // This ensures the database has fresh counts before we fetch them
+      await refreshDashboardFunnelCounts();
+      
+      // Clear all entity caches to ensure fresh data across all widgets
+      clearCacheByKey("Opportunity");
+      clearCacheByKey("Lead");
+      clearCacheByKey("Contact");
+      clearCacheByKey("Account");
+      clearCacheByKey("Activity");
+      clearCacheByKey("BizDevSource");
+      clearCacheByKey("DashboardFunnel"); // Clear sales funnel cache
+      
       const bundleResp = await cachedRequest(
         "Dashboard",
         "bundle",
@@ -661,6 +677,7 @@ export default function DashboardPage() {
       }
       
       setLastUpdated(Date.now());
+      setRefreshTimestamp(Date.now()); // Force widgets to re-fetch with cache bust
       toast.success("Dashboard refreshed");
     } catch (e) {
       toast.error("Failed to refresh dashboard");
@@ -839,6 +856,8 @@ export default function DashboardPage() {
                         prefetchProps.prefetchedOpportunities = (showTestData
                           ? bundleLists.recentOpportunities
                           : bundleLists.recentOpportunities.filter(o => o?.is_test_data !== true));
+                        prefetchProps.bustCache = refreshing; // Pass cache busting flag during refresh
+                        prefetchProps.refreshKey = refreshTimestamp; // Force re-render on refresh
                       }
                       /**
                        * LeadSourceChart Optimization (v3.6.18+)
