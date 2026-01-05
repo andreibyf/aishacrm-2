@@ -95,13 +95,13 @@ export default function GmailSMTPSettings() {
     }
 
     if (!smtpUser || !smtpPassword) {
-      toast.error("Gmail address and App Password are required.");
+      toast.error("Email address and App Password are required.");
       return;
     }
 
-    // Validate Gmail format
-    if (!smtpUser.endsWith('@gmail.com')) {
-      toast.error("Please use a valid Gmail address (must end with @gmail.com)");
+    // Validate email format
+    if (!smtpUser.includes('@') || !smtpUser.includes('.')) {
+      toast.error("Please enter a valid email address");
       return;
     }
 
@@ -196,7 +196,7 @@ export default function GmailSMTPSettings() {
             <div>
               <CardTitle className="text-slate-100">Gmail SMTP (Organization)</CardTitle>
               <CardDescription className="text-slate-400">
-                Configure organization-wide Gmail for workflow email sending
+                Configure organization-wide Gmail/Google Workspace for workflow email sending
               </CardDescription>
             </div>
           </div>
@@ -209,37 +209,37 @@ export default function GmailSMTPSettings() {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Gmail Setup Instructions */}
+        {/* Gmail/Google Workspace Setup Instructions */}
         <Alert className="bg-blue-900/20 border-blue-700">
           <Info className="h-4 w-4 text-blue-400" />
           <AlertDescription className="text-blue-200 text-sm">
-            <strong>Important:</strong> You must create a Gmail App Password. 
+            <strong>Important:</strong> Works with Gmail and Google Workspace accounts. You must create an App Password.
             <ol className="list-decimal ml-4 mt-2 space-y-1">
               <li>Go to <a href="https://myaccount.google.com/security" target="_blank" rel="noopener noreferrer" className="underline">Google Account Security</a></li>
               <li>Enable 2-Step Verification (required)</li>
               <li>Generate an App Password for "Mail"</li>
-              <li>Use the 16-character password below (not your regular Gmail password)</li>
+              <li>Use the 16-character password below (not your regular password)</li>
             </ol>
           </AlertDescription>
         </Alert>
 
-        {/* Gmail Address */}
+        {/* Email Address */}
         <div className="space-y-2">
-          <Label htmlFor="smtp_user" className="text-slate-200">Gmail Address</Label>
+          <Label htmlFor="smtp_user" className="text-slate-200">Email Address</Label>
           <Input
             id="smtp_user"
             type="email"
-            placeholder="your-company@gmail.com"
+            placeholder="your-email@company.com"
             value={smtpUser}
             onChange={(e) => setSmtpUser(e.target.value)}
             className="bg-slate-900 border-slate-700 text-slate-100"
           />
-          <p className="text-xs text-slate-400">Organization Gmail account for automated emails</p>
+          <p className="text-xs text-slate-400">Gmail or Google Workspace account for automated emails</p>
         </div>
 
         {/* App Password */}
         <div className="space-y-2">
-          <Label htmlFor="smtp_password" className="text-slate-200">Gmail App Password</Label>
+          <Label htmlFor="smtp_password" className="text-slate-200">App Password</Label>
           <div className="relative">
             <Input
               id="smtp_password"
@@ -257,7 +257,7 @@ export default function GmailSMTPSettings() {
               {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
-          <p className="text-xs text-slate-400">16-character App Password from Google (NOT your regular password)</p>
+          <p className="text-xs text-slate-400">16-character App Password from Google Account (NOT your regular password)</p>
         </div>
 
         {/* From Address (optional override) */}
