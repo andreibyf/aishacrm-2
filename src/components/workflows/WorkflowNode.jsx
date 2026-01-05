@@ -168,22 +168,22 @@ export default function WorkflowNode({ node, isSelected, isConnecting, onClick, 
 
         {/* Connection points on sides like regular nodes */}
         <div 
-          className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-blue-400 border-2 border-white cursor-pointer hover:scale-150 transition-transform z-20"
+          className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-blue-400 border border-white cursor-pointer hover:scale-150 transition-transform z-20"
           onClick={(e) => { e.stopPropagation(); onStartConnect('top'); }}
           title="Connect from top"
         />
         <div 
-          className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-3 h-3 rounded-full bg-blue-400 border-2 border-white cursor-pointer hover:scale-150 transition-transform z-20"
+          className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-2 h-2 rounded-full bg-blue-400 border border-white cursor-pointer hover:scale-150 transition-transform z-20"
           onClick={(e) => { e.stopPropagation(); onStartConnect('bottom'); }}
           title="Connect from bottom"
         />
         <div 
-          className="absolute top-1/2 left-0 -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-blue-400 border-2 border-white cursor-pointer hover:scale-150 transition-transform z-20"
+          className="absolute top-1/2 left-0 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-blue-400 border border-white cursor-pointer hover:scale-150 transition-transform z-20"
           onClick={(e) => { e.stopPropagation(); onStartConnect('left'); }}
           title="Connect from left"
         />
         <div 
-          className="absolute top-1/2 right-0 translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-blue-400 border-2 border-white cursor-pointer hover:scale-150 transition-transform z-20"
+          className="absolute top-1/2 right-0 translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-blue-400 border border-white cursor-pointer hover:scale-150 transition-transform z-20"
           onClick={(e) => { e.stopPropagation(); onStartConnect('right'); }}
           title="Connect from right"
         />
@@ -272,22 +272,22 @@ export default function WorkflowNode({ node, isSelected, isConnecting, onClick, 
       
       {/* Connection points on rectangle sides */}
       <div 
-        className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-blue-400 border-2 border-white cursor-pointer hover:scale-150 transition-transform z-20"
+        className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-blue-400 border border-white cursor-pointer hover:scale-150 transition-transform z-20"
         onClick={(e) => { e.stopPropagation(); onStartConnect('top'); }}
         title="Connect from top"
       />
       <div 
-        className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-3 h-3 rounded-full bg-blue-400 border-2 border-white cursor-pointer hover:scale-150 transition-transform z-20"
+        className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-2 h-2 rounded-full bg-blue-400 border border-white cursor-pointer hover:scale-150 transition-transform z-20"
         onClick={(e) => { e.stopPropagation(); onStartConnect('bottom'); }}
         title="Connect from bottom"
       />
       <div 
-        className="absolute top-1/2 left-0 -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-blue-400 border-2 border-white cursor-pointer hover:scale-150 transition-transform z-20"
+        className="absolute top-1/2 left-0 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-blue-400 border border-white cursor-pointer hover:scale-150 transition-transform z-20"
         onClick={(e) => { e.stopPropagation(); onStartConnect('left'); }}
         title="Connect from left"
       />
       <div 
-        className="absolute top-1/2 right-0 translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-blue-400 border-2 border-white cursor-pointer hover:scale-150 transition-transform z-20"
+        className="absolute top-1/2 right-0 translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-blue-400 border border-white cursor-pointer hover:scale-150 transition-transform z-20"
         onClick={(e) => { e.stopPropagation(); onStartConnect('right'); }}
         title="Connect from right"
       />

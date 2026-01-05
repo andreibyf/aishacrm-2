@@ -43,8 +43,9 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
   const handleSelectTemplate = (template) => {
     setName(template.name);
     setDescription(template.description);
-    setNodes(template.nodes || []);
-    setConnections(template.connections || []);
+    // Deep clone to avoid reference issues
+    setNodes(JSON.parse(JSON.stringify(template.nodes || [])));
+    setConnections(JSON.parse(JSON.stringify(template.connections || [])));
     setShowTemplates(false);
     toast.success(`Template "${template.name}" loaded successfully!`);
   };
@@ -66,8 +67,9 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
 
       setName(workflow.name || '');
       setDescription(workflow.description || '');
-      setNodes(workflow.nodes || []);
-      setConnections(workflow.connections || []);
+      // Deep clone to avoid reference issues
+      setNodes(workflow.nodes ? JSON.parse(JSON.stringify(workflow.nodes)) : []);
+      setConnections(workflow.connections ? JSON.parse(JSON.stringify(workflow.connections)) : []);
 
       if (workflow.nodes && workflow.nodes.length > 0) {
         setSelectedNodeId(workflow.nodes[0].id);
