@@ -334,10 +334,15 @@ export default function createWorkflowRoutes(pgPool) {
             case 'create_lead': {
               const mappings = cfg.field_mappings || [];
               if (!mappings.length) { log.status = 'error'; log.error = 'No field mappings configured'; break; }
-              const cols = ['tenant_id'];
+              const cols = ['tenant_id', 'created_at', 'created_date'];
               const vals = [workflow.tenant_id];
               const ph = ['$1'];
               let idx = 2;
+              // Add timestamp values
+              vals.push(new Date().toISOString());
+              ph.push(`$${idx++}`);
+              vals.push(new Date().toISOString());
+              ph.push(`$${idx++}`);
               for (const m of mappings) {
                 if (m.lead_field && m.webhook_field) {
                   const v = replaceVariables(`{{${m.webhook_field}}}`);

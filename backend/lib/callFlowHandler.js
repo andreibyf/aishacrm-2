@@ -534,8 +534,8 @@ async function createLeadFromCall(pgPool, tenant_id, phone, callerInfo = {}) {
   delete leadMetadata.email; // Will be in email column if provided
 
   const insertQuery = `
-    INSERT INTO leads (tenant_id, phone, first_name, last_name, email, source, status, metadata, created_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+    INSERT INTO leads (tenant_id, phone, first_name, last_name, email, source, status, metadata, created_at, created_date)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
     RETURNING id, CONCAT(first_name, ' ', COALESCE(last_name, '')) as name
   `;
 
