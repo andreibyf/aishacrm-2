@@ -228,7 +228,7 @@ describe('Entity Context Integration Tests', { skip: !SHOULD_RUN }, () => {
                   }
                 }
               }
-            } catch (err) {
+            } catch (_err) {
               // Ignore parse errors
             }
           }
@@ -239,7 +239,7 @@ describe('Entity Context Integration Tests', { skip: !SHOULD_RUN }, () => {
         );
       };
       
-      const entityContext = extractEntityContext(createToolInteractions);
+      const entityContext = extractEntityContext(toolInteractions);
       
       assert.ok(entityContext.lead_id, 'Should extract lead_id from create result');
       assert.strictEqual(entityContext.lead_id, 'a1b2c3d4-e5f6-4789-a012-b3c4d5e6f789');

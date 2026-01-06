@@ -613,6 +613,7 @@ export default function DashboardPage() {
     cachedRequest,
     logger,
     loadingToast,
+    widgetPreferences,
   ]);
   // Removed getTenantFilter from dependencies - it's called inside the effect instead
 
@@ -685,7 +686,7 @@ export default function DashboardPage() {
     } finally {
       setRefreshing(false);
     }
-  }, [user, authCookiesReady, selectedTenantId, showTestData, cachedRequest]);
+  }, [user, authCookiesReady, selectedTenantId, showTestData, cachedRequest, clearCacheByKey]);
 
   const handleSaveWidgetPreferences = async (newPreferences) => {
     try {

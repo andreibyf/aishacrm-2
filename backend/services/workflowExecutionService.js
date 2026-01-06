@@ -351,7 +351,7 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
             let value = replaceVariables(cfg.search_value || '{{email}}');
             if (typeof value === 'string') value = value.replace(/^["']|["']$/g, '').trim();
             
-            const { data: leadData, error: leadError } = await supabase
+            const { data: leadData, error: _leadError } = await supabase
               .from('leads')
               .select('*')
               .eq('tenant_id', workflow.tenant_id)
@@ -650,7 +650,7 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
             const related_to = lead ? 'lead' : (contact ? 'contact' : (account ? 'account' : (opportunity ? 'opportunity' : null)));
             const related_id = lead ? lead.id : (contact ? contact.id : (account ? account.id : (opportunity ? opportunity.id : null)));
             
-            const { data: actData, error: actError } = await supabase
+            const { data: actData, error: _actError } = await supabase
               .from('activities')
               .insert({
                 tenant_id: workflow.tenant_id,

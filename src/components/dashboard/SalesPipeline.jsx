@@ -253,7 +253,7 @@ function SalesPipeline(props) {
       loadingRef.current = false;
     }; // Cleanup function for unmounting
      
-  }, [props?.tenantFilter?.tenant_id, props?.showTestData, props?.prefetchedOpportunities, props?.refreshKey, cachedRequest, userLoading, authCookiesReady, visibleOpportunityCards]); // Include refreshKey to trigger reload on refresh
+  }, [props?.tenantFilter?.tenant_id, props?.tenantFilter, props?.showTestData, props?.bustCache, props?.prefetchedOpportunities, props?.refreshKey, cachedRequest, userLoading, authCookiesReady, visibleOpportunityCards]); // Include refreshKey to trigger reload on refresh
 
   return (
     <Card className="bg-slate-800 border-slate-700 h-full flex flex-col">

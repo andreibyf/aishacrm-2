@@ -133,7 +133,7 @@ export default function ProductivityAnalytics({ tenantFilter }) {
     };
 
     fetchProductivityData();
-  }, [tenantFilter?.tenant_id]);
+  }, [tenantFilter?.tenant_id, tenantFilter]);
 
   // Calculate key productivity metrics with defensive array checks
   const safeActivities = Array.isArray(activities) ? activities : [];

@@ -539,7 +539,7 @@ export default function LeadsPage() {
     if (selectedEmail !== null) {
       clearCache("Lead"); clearCacheByKey("Lead");
     }
-  }, [selectedEmail, clearCache]);
+  }, [selectedEmail, clearCache, clearCacheByKey]);
 
   // Handle page change
   const handlePageChange = useCallback((newPage) => {

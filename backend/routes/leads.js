@@ -964,6 +964,7 @@ export default function createLeadRoutes(_pgPool) {
 
         // Determine conversion action
         const conversionAction = determineConversionAction(lead.status);
+        logger.info(`[Lead Conversion] Converting lead ${lead.id} with action: ${conversionAction}`);
 
         // Create contact from lead (v3.0.0: preserves account_id, captures full provenance)
         const nowIso = new Date().toISOString();
