@@ -1,5 +1,11 @@
 -- Create artifact_refs table: pointers to large artifacts stored in R2 (or other stores)
 -- Run in Supabase SQL editor or your migration pipeline.
+--
+-- SECURITY NOTE:
+-- artifact_refs is intended to be accessed ONLY by the backend using the Supabase service role key.
+-- Do NOT allow 'authenticated' client access here; otherwise any logged-in user could potentially
+-- read/write artifact pointers across tenants if they can query the table directly.
+-- Tenant isolation must be enforced server-side and/or via separate, tenant-scoped tables/policies.
 
 create table if not exists public.artifact_refs (
   id uuid primary key default gen_random_uuid(),
@@ -27,20 +33,28 @@ create unique index if not exists uq_artifact_refs_tenant_r2_key
 -- RLS: Enable row level security
 alter table public.artifact_refs enable row level security;
 
--- Backend service has full access (matches pattern in 008_supabase_rls_policies.sql)
+-- Tighten table privileges (defense in depth)
+revoke all on table public.artifact_refs from anon, authenticated;
+grant all on table public.artifact_refs to service_role;
+
+-- Backend service has full access (SERVICE ROLE ONLY)
 do $$
 begin
-  if not exists (
-    select 1 from pg_policies 
-    where schemaname='public' 
-    and tablename='artifact_refs' 
-    and policyname='Backend service has full access to artifact_refs'
+  if exists (
+    select 1 from pg_policies
+    where schemaname='public'
+      and tablename='artifact_refs'
+      and policyname='Backend service has full access to artifact_refs'
   ) then
+    execute 'drop policy "Backend service has full access to artifact_refs" on public.artifact_refs';
+  end if;
+
+  execute $p$
     create policy "Backend service has full access to artifact_refs"
       on public.artifact_refs
       for all
-      to authenticated, service_role
+      to service_role
       using (true)
-      with check (true);
-  end if;
+      with check (true)
+  $p$;
 end $$;

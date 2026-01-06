@@ -4,6 +4,8 @@
 
 ---
 
+## Note: This file provides comprehensive instructions and guidelines for working on the AiSHA CRM project. It covers critical architectural decisions, coding patterns, testing strategies, and deployment protocols to ensure consistency and reliability across the codebase. Please keep explanations concise and focused on essential information. It is not necessary to explain thought process while exercising critical thinking.
+
 ## ✅ Test Coverage Matrix (Latest Verification)
 
 | Test Suite | Category | Pass Rate | Status |
