@@ -3,9 +3,6 @@
 npm run lint
 
 # Run build to catch compile errors
-# Use build:ci when Doppler is not available (CI environment)
-if command -v doppler >/dev/null 2>&1; then
-  npm run build
-else
-  npm run build:ci
-fi
+# Use build:ci for local development (Doppler has Windows compatibility issues)
+# Production/CI will use Doppler in Docker where it works correctly
+npm run build:ci
