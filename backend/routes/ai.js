@@ -22,6 +22,7 @@ import { classifyIntent, extractEntityMentions, getIntentConfidence } from '../l
 import { routeIntentToTool, getToolsForIntent, shouldForceToolChoice, getRelevantToolsForIntent } from '../lib/intentRouter.js';
 import { buildStatusLabelMap, normalizeToolArgs } from '../lib/statusCardLabelResolver.js';
 import logger from '../lib/logger.js';
+import { buildTenantKey, putObject } from '../lib/r2.js';
 // Phase 7 RAG helpers
 import {
   queryMemory,
@@ -468,12 +469,102 @@ export default function createAIRoutes(pgPool) {
     return cleanedContext;
   };
 
+
+// --- R2 AI Artifact Offload (keep Postgres metadata small) ---
+const ARTIFACT_META_THRESHOLD_BYTES = Number(process.env.AI_ARTIFACT_META_THRESHOLD_BYTES || 8000);
+
+const writeArtifactRef = async ({ tenantId, kind, entityType = null, entityId = null, payload }) => {
+  const contentType = 'application/json';
+  const body = Buffer.from(JSON.stringify(payload), 'utf-8');
+  const r2Key = buildTenantKey({ tenantId, kind, ext: 'json' });
+  const uploaded = await putObject({ key: r2Key, body, contentType });
+
+  const { rows } = await pgPool.query(
+    `insert into public.artifact_refs
+      (tenant_id, kind, entity_type, entity_id, r2_key, content_type, size_bytes, sha256)
+     values
+      ($1::uuid, $2, $3, $4::uuid, $5, $6, $7, $8)
+     returning id, tenant_id, kind, entity_type, entity_id, r2_key, content_type, size_bytes, sha256, created_at`,
+    [
+      tenantId,
+      kind,
+      entityType,
+      entityId,
+      uploaded.key,
+      uploaded.contentType,
+      uploaded.sizeBytes,
+      uploaded.sha256,
+    ]
+  );
+  return rows?.[0] || null;
+};
+
+const maybeOffloadMetadata = async ({ tenantId, metadata, kind, entityType = null, entityId = null }) => {
+  if (!tenantId || !metadata || typeof metadata !== 'object') return metadata;
+
+  // Offload known heavy fields first
+  if (metadata.tool_interactions) {
+    try {
+      const ref = await writeArtifactRef({
+        tenantId,
+        kind: `${kind || 'ai_message'}_tool_interactions`,
+        entityType,
+        entityId,
+        payload: metadata.tool_interactions,
+      });
+      if (ref) {
+        metadata.tool_interactions_ref = ref.id;
+        metadata.tool_interactions_count = Array.isArray(metadata.tool_interactions) ? metadata.tool_interactions.length : null;
+        delete metadata.tool_interactions;
+      }
+    } catch (e) {
+      logger.warn('[AI][Artifacts] Failed to offload tool_interactions (continuing):', e?.message || e);
+    }
+  }
+
+  // If still too large, offload the remaining metadata payload
+  try {
+    const sizeBytes = Buffer.byteLength(JSON.stringify(metadata), 'utf-8');
+    if (sizeBytes > ARTIFACT_META_THRESHOLD_BYTES) {
+      const ref = await writeArtifactRef({
+        tenantId,
+        kind: `${kind || 'ai_message'}_metadata`,
+        entityType,
+        entityId,
+        payload: metadata,
+      });
+      if (ref) {
+        // Keep only a minimal envelope + pointer
+        const keep = {
+          tenant_id: tenantId,
+          model: metadata.model || null,
+          iterations: metadata.iterations ?? null,
+          reason: metadata.reason || null,
+          usage: metadata.usage || null,
+          artifact_metadata_ref: ref.id,
+          artifact_metadata_kind: ref.kind,
+        };
+        // Preserve extracted entity IDs if present
+        for (const k of ['lead_id','contact_id','account_id','opportunity_id','activity_id','project_id','site_id']) {
+          if (metadata[k]) keep[k] = metadata[k];
+        }
+        return keep;
+      }
+    }
+  } catch (e) {
+    logger.warn('[AI][Artifacts] Failed to evaluate/offload metadata (continuing):', e?.message || e);
+  }
+
+  return metadata;
+};
   const insertAssistantMessage = async (conversationId, content, metadata = {}) => {
     try {
       const supabase = getSupabaseClient();
+      const tenantId = metadata?.tenant_id || null;
+      const safeMetadata = await maybeOffloadMetadata({ tenantId, metadata: { ...metadata }, kind: 'assistant_message', entityType: 'conversation', entityId: conversationId });
       const { data: inserted, error } = await supabase
         .from('conversation_messages')
-        .insert({ conversation_id: conversationId, role: 'assistant', content, metadata })
+        .insert({ conversation_id: conversationId, role: 'assistant', content, metadata: safeMetadata })
         .select()
         .single();
       if (error) throw error;
@@ -491,7 +582,7 @@ export default function createAIRoutes(pgPool) {
         .then(({ updateConversationSummary }) => {
           return updateConversationSummary({
             conversationId,
-            tenantId: metadata.tenant_id,
+            tenantId,
             assistantMessage: content
           });
         })
@@ -603,7 +694,8 @@ export default function createAIRoutes(pgPool) {
         });
 
         await insertAssistantMessage(conversationId, `I cannot reach the AI model right now because no API key is configured for ${modelConfig.provider}. Please contact an administrator.`, {
-          reason: 'missing_api_key',
+            tenant_id: tenantUuid,
+            reason: 'missing_api_key',
         });
         return;
       }
@@ -628,7 +720,8 @@ export default function createAIRoutes(pgPool) {
         });
 
         await insertAssistantMessage(conversationId, 'I was unable to initialize the AI model for this request. Please try again later.', {
-          reason: 'client_init_failed',
+            tenant_id: tenantUuid,
+            reason: 'client_init_failed',
         });
         return;
       }
@@ -1033,18 +1126,32 @@ Use this summary for context about prior discussion topics, goals, and decisions
             return `[${t.name}] ${content.substring(0, 600)}`;
           }).join('\n');
 
-          if (toolContextSummary) {
-            try {
+          if (toolContextSummary) {            try {
+              let toolResultsRef = null;
+              try {
+                toolResultsRef = await writeArtifactRef({
+                  tenantId: tenantUuid,
+                  kind: 'tool_context_results',
+                  entityType: 'conversation',
+                  entityId: conversationId,
+                  payload: executedTools,
+                });
+              } catch (e) {
+                logger.warn('[AI][Artifacts] Failed to offload tool_context results (continuing):', e?.message || e);
+              }
+
               await supa
                 .from('conversation_messages')
                 .insert({
                   conversation_id: conversationId,
                   role: 'assistant',
-                  content: `[TOOL_CONTEXT] The following tool results are available for reference:\n${toolContextSummary}`,
+                  content: `[TOOL_CONTEXT] The following tool results are available for reference:
+${toolContextSummary}`,
                   metadata: {
                     type: 'tool_context',
-                    tool_results: executedTools,
-                    hidden: true // UI should hide these messages
+                    hidden: true, // UI should hide these messages
+                    tool_results_ref: toolResultsRef?.id || null,
+                    tool_results_count: Array.isArray(executedTools) ? executedTools.length : null,
                   }
                 });
             } catch (contextErr) {
@@ -1061,6 +1168,7 @@ Use this summary for context about prior discussion topics, goals, and decisions
           const entityContext = extractEntityContext(executedTools);
           
           await insertAssistantMessage(conversationId, assistantText, {
+            tenant_id: tenantUuid,
             model: response.model || model,
             usage: response.usage || null,
             tool_interactions: executedTools,
@@ -1095,6 +1203,7 @@ Use this summary for context about prior discussion topics, goals, and decisions
           if (summaryText) {
             const entityContext = extractEntityContext(executedTools);
             await insertAssistantMessage(conversationId, summaryText, {
+              tenant_id: tenantUuid,
               model: summaryResponse.model || model,
               usage: summaryResponse.usage || null,
               tool_interactions: executedTools,
@@ -1116,6 +1225,7 @@ Use this summary for context about prior discussion topics, goals, and decisions
           conversationId,
           'I could not complete that request right now. Please try again shortly.',
           {
+            tenant_id: tenantUuid,
             reason: 'empty_response',
             tool_interactions: executedTools,
             ...entityContext, // Spread entity IDs at top level
