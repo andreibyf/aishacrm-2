@@ -1542,8 +1542,40 @@ BizDev Sources sit at the very top of your pipeline, representing unqualified pr
 - **Delete**: Permanently remove sources (use with caution).
 - **Update Status**: Change status for multiple records (e.g., "Contacted", "Not Interested").
 
+### Aging Timeline & Follow-Up Alerts
+
+**Automatic Aging Tracking:**
+BizDev Sources are automatically tracked by how long they've been in the system without action. Visual indicators help you prioritize follow-up:
+
+**Aging Buckets:**
+- **0-7 days** 🟢 - Fresh sources, recently added
+- **7-14 days** 🟡 - Moderate aging, schedule initial outreach
+- **15-21 days** ⚠️ **Warning** - Requires attention, risk of going stale
+- **21-30 days** 🟠 - High priority follow-up needed
+- **30+ days** 🔴 - Critical, likely cold - promote or archive
+
+**Warning Triangle Indicator:**
+When you see the ⚠️ warning triangle with a number (e.g., "⚠️ 1"):
+- Indicates number of sources in that aging bucket requiring attention
+- Click to filter and view those specific sources
+- Prevents leads from going cold in your pipeline
+- Helps prioritize daily outreach activities
+
+**Timeline Display:**
+Each source card shows:
+- **Age in days** (e.g., "15-21 days")
+- **Creation/Last Contact Date** (e.g., "16d Dec 21" = 16 days ago, created Dec 21)
+- **Action Required indicator** - visual alert for aging sources
+
+**Best Practice:**
+✓ Review sources in "15-21 days" bucket daily
+✓ Promote qualified sources to Leads before they hit 21 days
+✓ Archive or delete sources past 30 days if no potential
+✓ Use aging filters to identify stale pipeline segments
+
 ### Filtering & Search
 - **Status**: Filter by Active, Promoted, Archived.
+- **Aging Bucket**: Filter by 0-7, 7-14, 15-21, 21-30, 30+ days since creation
 - **Source Type**: Filter by how the data was acquired (e.g., "Trade Show", "Web Scraping").
 - **Industry**: Target specific market segments.
 - **License Status**: For regulated industries, filter by Active, Suspended, Revoked, Expired, Not Required.
@@ -1572,10 +1604,13 @@ For industries requiring specific certifications or licenses, track their status
 ## Best Practices
 
 ✓ **Use descriptive source names** (e.g., "Construction Expo 2024", "LinkedIn Scrape Q3")
-✓ **Regular cleanup** - archive or delete old/irrelevant sources to keep your pipeline clean.
-✓ **Track conversion rates** - analyze which BizDev Sources convert best into Leads and Opportunities.
-✓ **Don't promote prematurely** - only promote to Lead when you're ready for active engagement.
-✓ **Use Tags** for additional categorization
+✓ **Monitor aging indicators** - address sources in "15-21 days" bucket daily before they go stale
+✓ **Act on warning triangles** - ⚠️ indicators show sources needing immediate attention
+✓ **Regular cleanup** - archive or delete old/irrelevant sources (30+ days) to keep your pipeline clean
+✓ **Track conversion rates** - analyze which BizDev Sources convert best into Leads and Opportunities
+✓ **Don't promote prematurely** - only promote to Lead when you're ready for active engagement
+✓ **Set aging goals** - aim to promote or disqualify sources within 14 days of creation
+✓ **Use Tags** for additional categorization (campaign, quality tier, follow-up status)
       `,
     },
     {

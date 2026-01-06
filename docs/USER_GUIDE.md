@@ -41,6 +41,11 @@
 - [6.2 Lead Qualification](#62-lead-qualification)
 - [6.3 Converting Leads](#63-converting-leads)
 - [6.4 Lead Source Tracking](#64-lead-source-tracking)
+- [6.5 BizDev Sources - Top of Funnel](#65-bizdev-sources---top-of-funnel)
+  - [6.5.1 Understanding BizDev Sources](#651-understanding-bizdev-sources)
+  - [6.5.2 Aging Timeline & Follow-Up Alerts](#652-aging-timeline--follow-up-alerts)
+  - [6.5.3 Creating and Managing Sources](#653-creating-and-managing-sources)
+  - [6.5.4 Promoting to Leads](#654-promoting-to-leads)
 
 ### Chapter 7: Opportunity Management
 - [7.1 Creating Opportunities](#71-creating-opportunities)
@@ -997,6 +1002,275 @@ The system automatically logs:
 2. Click **Bulk Actions** > **Export**
 3. Choose fields to include
 4. Click **Download CSV**
+
+## 6.5 BizDev Sources - Top of Funnel
+
+### 6.5.1 Understanding BizDev Sources
+
+**BizDev Sources** are the very top of your sales funnel - raw prospect data from various channels that feeds into your lead pipeline. This is where you manage large lists of potential customers before active engagement.
+
+#### CRM Lifecycle Position
+
+```
+BizDev Source → Promote to Lead → Qualify → Convert to Contact + Account + Opportunity
+```
+
+BizDev Sources represent:
+- Unqualified prospects from directories, trade shows, purchased lists
+- Web-scraped company data
+- Industry-specific prospects (e.g., licensed contractors)
+- Partner referrals requiring vetting
+- Trade show attendee lists
+
+**Why Not Leads Yet?**
+- Haven't verified contact information
+- No engagement or intent shown
+- May not meet qualification criteria
+- Require compliance checks (license status)
+- Need initial scrubbing/validation
+
+### 6.5.2 Aging Timeline & Follow-Up Alerts
+
+**⚡ Critical Feature:** BizDev Sources are automatically tracked by age to prevent leads from going cold.
+
+#### Visual Aging Indicators
+
+Every source displays its age since creation, helping you prioritize follow-up:
+
+**Aging Buckets:**
+
+| Time Range | Status | Priority | Action |
+|------------|--------|----------|--------|
+| **0-7 days** | 🟢 Fresh | Low | Initial review, tag for outreach |
+| **7-14 days** | 🟡 Moderate | Medium | Schedule initial contact attempt |
+| **15-21 days** | ⚠️ **Warning** | High | **Requires immediate attention** |
+| **21-30 days** | 🟠 Urgent | Critical | Promote or disqualify today |
+| **30+ days** | 🔴 Stale | Overdue | Archive or delete if no potential |
+
+#### Understanding the Warning Triangle ⚠️
+
+**What You'll See:**
+```
+┌────────────────────────────────────┐
+│  15-21 days                  ⚠️ 1 │
+│                                    │
+│  Jack Russel             N/A  16d  │
+│  JR Corporation           Dec 21   │
+└────────────────────────────────────┘
+```
+
+**Warning Triangle Meaning:**
+- **⚠️** = Sources in this aging bucket need attention
+- **Number next to triangle** = Count of sources requiring action (e.g., "⚠️ 1" = 1 source)
+- **"15-21 days"** = Aging bucket category
+- **"16d Dec 21"** = 16 days ago, created on December 21
+
+**Why 15-21 Days is Critical:**
+- Prospects are forgetting initial interest
+- Competitors may have already reached out
+- Contact information may become stale
+- Optimal conversion window is closing
+- After 21 days, response rates drop 60%
+
+#### Timeline Display Components
+
+Each source card shows:
+
+**Age Indicator:**
+- Displays how long since creation or last activity
+- Format: "16d" = 16 days, "3h" = 3 hours, "2m" = 2 months
+
+**Creation/Last Contact Date:**
+- Shows when source was added to system
+- Format: "Dec 21" or "Jan 5"
+
+**Action Required Badge:**
+- Visual alert for aging sources
+- Appears when source enters warning zone (15+ days)
+
+#### Using Aging Filters
+
+**Filter by Age:**
+1. Navigate to **BizDev Sources**
+2. Click **Filter** dropdown
+3. Select aging bucket:
+   - 0-7 days
+   - 7-14 days
+   - **15-21 days** (Warning)
+   - 21-30 days (Urgent)
+   - 30+ days (Stale)
+4. Review and take action on filtered sources
+
+**Quick View Warning Sources:**
+1. Look for ⚠️ indicator at top of list
+2. Click the aging bucket (e.g., "15-21 days ⚠️ 3")
+3. System auto-filters to show only those sources
+4. Bulk select and promote or archive
+
+#### Best Practices for Aging Management
+
+✓ **Daily Review:** Check "15-21 days" bucket every morning
+✓ **Weekly Cleanup:** Archive sources past 30 days with no potential
+✓ **Set Goals:** Aim to promote or disqualify within 14 days
+✓ **Batch Processing:** Handle aging sources in bulk (promote 10-20 at once)
+✓ **Track Patterns:** If many sources hit 15+ days, increase outreach capacity
+✓ **Use Reminders:** Set personal reminders for high-priority aging sources
+
+> **💡 TIP:**
+> 
+> Sources in the "15-21 days" bucket have the highest urgency-to-effort ratio. Spend 30 minutes daily clearing this bucket for maximum pipeline health.
+
+> **⚠️ WARNING:**
+> 
+> Sources past 30 days have <15% promotion success rate. Archive them unless they have exceptional value indicators.
+
+### 6.5.3 Creating and Managing Sources
+
+#### Adding BizDev Sources
+
+**Method 1: Manual Entry**
+1. Click **+ Add BizDev Source**
+2. Enter company/contact details:
+   - Company Name *
+   - Contact Person
+   - Email
+   - Phone
+   - Industry
+   - License Status (for regulated industries)
+3. Assign **Source Type** (e.g., "Trade Show", "Web Scraping")
+4. Add **Tags** for categorization
+5. Click **Save**
+
+**Method 2: Bulk CSV Import**
+1. Navigate to **BizDev Sources**
+2. Click **Import** button
+3. Download CSV template
+4. Fill with prospect data (Company, Contact, Email, Phone, etc.)
+5. Upload completed file
+6. Map columns to CRM fields
+7. Review and confirm
+8. System creates multiple source records
+
+> **📝 NOTE:**
+> 
+> CSV imports support up to 5,000 sources per file. Larger lists should be split into batches.
+
+**Method 3: API Integration**
+- Integrate with data providers or web scraping tools
+- Automatically push new prospects to BizDev Sources
+- Ensures continuous flow of fresh leads
+
+#### Source Information Fields
+
+**Required Fields:**
+- Company Name or Contact Person (at least one)
+- Tenant ID (auto-assigned)
+
+**Recommended Fields:**
+- Contact Person
+- Email Address
+- Phone Number
+- Company Name
+- Industry
+- Source Type
+- Tags
+
+**Optional Fields:**
+- License Number
+- License Status
+- DBA Name
+- Address (street, city, state, zip)
+- Website
+- Notes
+
+#### License Tracking (Regulated Industries)
+
+For contractors, healthcare, finance, and other licensed professions:
+
+| License Status | Meaning | Action |
+|---------------|---------|--------|
+| **Active** 🟢 | Valid license | Proceed with outreach |
+| **Suspended** 🟡 | Temporarily inactive | Follow up on reinstatement |
+| **Expired** 🟠 | Needs renewal | Low priority, offer renewal help |
+| **Revoked** 🔴 | Permanently invalid | Disqualify |
+| **Not Required** ⚪ | No license needed | N/A |
+
+**Compliance Alerts:**
+- Set up automated alerts for expiring licenses
+- Filter by license status for targeted campaigns
+- Track license renewal dates
+
+### 6.5.4 Promoting to Leads
+
+#### When to Promote
+
+**Promotion Criteria:**
+- ✅ Contact information verified
+- ✅ Meets target customer profile
+- ✅ Ready for active engagement
+- ✅ Passed compliance checks
+- ✅ Within optimal aging window (< 14 days preferred)
+
+**Reasons to Wait:**
+- ❌ Missing critical contact information
+- ❌ Outside target market
+- ❌ License suspended/revoked
+- ❌ Duplicate of existing lead/contact
+
+#### Promotion Process
+
+**Single Promotion:**
+1. Open BizDev Source detail panel
+2. Review all information for completeness
+3. Click **Promote to Lead** button
+4. System creates new Lead record
+5. All data transfers automatically
+6. Original source marked as "Promoted"
+7. Link maintained between source and lead
+
+**Bulk Promotion:**
+1. Filter sources (e.g., "Active", "License: Active", Age: "7-14 days")
+2. Select sources using checkboxes
+3. Click **Bulk Actions** > **Promote to Lead**
+4. Confirm promotion of X sources
+5. System creates all leads simultaneously
+6. Progress bar shows completion
+
+**After Promotion:**
+- Original BizDev Source status → "Promoted"
+- New Lead created with all source data
+- Bi-directional link maintained
+- Source can be archived (recommended)
+- Lead appears in Leads module
+
+#### Data Transfer on Promotion
+
+**Fields Copied to Lead:**
+- Company Name → Account Name
+- Contact Person → Lead Name
+- Email → Lead Email
+- Phone → Lead Phone
+- Industry → Industry
+- Source Type → Lead Source
+- Tags → Lead Tags
+- Notes → Lead Notes
+- All custom fields
+
+**Fields Added to Lead:**
+- Lead Status: "New"
+- Lead Score: Auto-calculated
+- Owner: Current user
+- Created Date: Current timestamp
+- Source Link: Reference to BizDev Source
+
+#### Post-Promotion Workflow
+
+**Recommended Next Steps:**
+1. **Immediate:** Log first contact attempt (call/email)
+2. **Day 1-2:** Follow up if no response
+3. **Day 3-7:** Qualify lead based on engagement
+4. **Day 7-14:** Convert qualified leads to opportunities
+5. **Archive:** Promoted BizDev Source after lead is active
 
 ---
 
