@@ -32,6 +32,8 @@
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
+    "@aws-sdk/client-s3": "^3.962.0",
+    "@aws-sdk/s3-request-presigner": "^3.962.0",
     "@supabase/supabase-js": "^2.76.1",
     "bull": "^4.16.5",
     "compression": "^1.7.4",
