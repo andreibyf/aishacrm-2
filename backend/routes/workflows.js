@@ -36,12 +36,19 @@ function normalizeWorkflow(row) {
   // Ensure meta is an object
   meta = meta && typeof meta === 'object' ? meta : {};
 
+  console.log(`[normalizeWorkflow] Processing workflow "${row.name}" (id: ${row.id})`);
+  console.log(`[normalizeWorkflow] Metadata has nodes: ${!!meta.nodes}, length: ${meta.nodes?.length || 0}`);
+  console.log(`[normalizeWorkflow] Metadata has connections: ${!!meta.connections}, length: ${meta.connections?.length || 0}`);
+
   // Log if nodes are missing but expected (debugging)
   if ((!meta.nodes || meta.nodes.length === 0) && row.name) {
     logger.debug(`[normalizeWorkflow] Workflow "${row.name}" (id: ${row.id}) has no nodes in metadata. Raw metadata type: ${typeof row.metadata}`);
+    logger.debug(`[normalizeWorkflow] Metadata value:`, JSON.stringify(row.metadata).substring(0, 200));
+  } else {
+    logger.debug(`[normalizeWorkflow] Workflow "${row.name}" (id: ${row.id}) has ${meta.nodes?.length || 0} nodes, ${meta.connections?.length || 0} connections`);
   }
 
-  return {
+  const normalized = {
     ...row,
     // Frontend expects trigger object
     trigger: row.trigger_type || row.trigger_config
@@ -54,6 +61,11 @@ function normalizeWorkflow(row) {
     execution_count: meta.execution_count || 0,
     last_executed: meta.last_executed || null,
   };
+
+  console.log(`[normalizeWorkflow] Returning workflow with ${normalized.nodes.length} nodes, ${normalized.connections.length} connections`);
+  console.log(`[normalizeWorkflow] Returning connections:`, JSON.stringify(normalized.connections));
+
+  return normalized;
 }
 
 export default function createWorkflowRoutes(pgPool) {
@@ -1208,8 +1220,8 @@ export default function createWorkflowRoutes(pgPool) {
       const { id } = req.params;
       const { tenant_id, name, description, trigger, nodes, connections, is_active } = req.body;
 
-      logger.debug('[Workflows PUT] Received nodes:', nodes);
-      logger.debug('[Workflows PUT] Received connections:', connections);
+      console.log('[Workflows PUT] Received nodes:', nodes ? `Array(${nodes.length})` : 'undefined', JSON.stringify(nodes || []).substring(0, 300));
+      console.log('[Workflows PUT] Received connections:', connections ? `Array(${connections.length})` : 'undefined', JSON.stringify(connections || []));
 
       if (!tenant_id) {
         return res.status(400).json({ 
@@ -1249,10 +1261,14 @@ export default function createWorkflowRoutes(pgPool) {
 
       logger.debug('[Workflows PUT] Parsed existing metadata:', existingMetadata);
       logger.debug('[Workflows PUT] Incoming nodes:', nodes ? `Array(${nodes.length})` : 'undefined');
+      logger.debug('[Workflows PUT] Incoming connections:', connections ? `Array(${connections.length})` : 'undefined');
 
       // Build updated metadata - use explicit property assignment to avoid TDZ issues
       const updatedNodes = nodes !== undefined ? nodes : (existingMetadata.nodes || []);
       const updatedConnections = connections !== undefined ? connections : (existingMetadata.connections || []);
+
+      console.log('[Workflows PUT] Updated nodes:', updatedNodes ? `Array(${updatedNodes.length})` : 'undefined');
+      console.log('[Workflows PUT] Updated connections:', updatedConnections ? `Array(${updatedConnections.length})` : 'undefined');
 
       const metadata = {
         ...existingMetadata,
@@ -1260,7 +1276,8 @@ export default function createWorkflowRoutes(pgPool) {
         connections: updatedConnections
       };
 
-      logger.debug('[Workflows PUT] Final merged metadata:', JSON.stringify(metadata));
+      console.log('[Workflows PUT] Final merged metadata nodes:', metadata.nodes?.length, 'connections:', metadata.connections?.length);
+      console.log('[Workflows PUT] Metadata connections:', JSON.stringify(metadata.connections));
 
       logger.debug('[Workflows PUT] Metadata to store:', metadata);
 
@@ -1294,6 +1311,9 @@ export default function createWorkflowRoutes(pgPool) {
 
       const result = await pgPool.query(query, values);
       const workflow = normalizeWorkflow(result.rows[0]);
+
+      console.log('[Workflows PUT] Returning workflow nodes:', workflow.nodes?.length, 'connections:', workflow.connections?.length);
+      console.log('[Workflows PUT] Returning connections:', JSON.stringify(workflow.connections));
 
       res.json({
         status: 'success',
