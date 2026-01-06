@@ -197,10 +197,10 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
       // Get the current latest execution timestamp
       const currentExecutions = await WorkflowExecution.filter(
         { workflow_id: workflow.id },
-        '-created_date',
+        '-created_at',
         1
       );
-      const lastTimestamp = currentExecutions[0]?.created_date || new Date(0).toISOString();
+      const lastTimestamp = currentExecutions[0]?.created_at || new Date(0).toISOString();
 
       // Poll for new executions
       let attempts = 0;
@@ -211,7 +211,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
         
         const latestExecutions = await WorkflowExecution.filter(
           { workflow_id: workflow.id },
-          '-created_date',
+          '-created_at',
           1
         );
 
@@ -219,7 +219,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           const latest = latestExecutions[0];
           
           // Check if this is a new execution
-          if (latest.created_date > lastTimestamp && latest.trigger_data) {
+          if (latest.created_at > lastTimestamp && latest.trigger_data) {
             setTestPayload(latest.trigger_data);
             setShowPayload(true);
             setWaitingForWebhook(false);
@@ -265,7 +265,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
         workflow_id: workflow.id,
         limit: executionLimit,
         offset: executionOffset,
-        order: '-created_date'
+        order: '-created_at'
       });
       setRecentExecutions(executions || []);
       setShowExecutions(true); // Show the executions list
@@ -462,7 +462,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                             {execution.status}
                           </span>
                           <span className="text-xs text-slate-500">
-                            {new Date(execution.created_date).toLocaleString()}
+                            {new Date(execution.created_at).toLocaleString()}
                           </span>
                         </div>
                         

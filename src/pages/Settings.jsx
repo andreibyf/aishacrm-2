@@ -184,6 +184,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
     if (isAdmin && !isSuperadmin) {
       items.push(
         { id: 'users', label: 'User Management', description: 'Invite and manage team members', icon: Users, category: 'team', roles: ['admin'] },
+        { id: 'tenant-integrations', label: 'Client Integrations', description: 'Configure Gmail SMTP, webhooks, and other integrations', icon: Puzzle, category: 'integrations', roles: ['admin'] },
         { id: 'entity-labels', label: 'Entity Labels', description: 'Customize terminology for your organization', icon: Tags, category: 'system', roles: ['admin'] },
         { id: 'status-cards', label: 'Status Cards', description: 'Customize status card visibility', icon: LayoutGrid, category: 'system', roles: ['admin'] },
       );
@@ -192,6 +193,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
     // Manager items
     if (isManager && !isAdmin) {
       items.push(
+        { id: 'tenant-integrations', label: 'Client Integrations', description: 'Configure Gmail SMTP, webhooks, and other integrations', icon: Puzzle, category: 'integrations', roles: ['manager'] },
         { id: 'data-consistency', label: 'Data Consistency', description: 'Check and fix data integrity issues', icon: Database, category: 'data', roles: ['manager'] },
       );
     }

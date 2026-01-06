@@ -4,10 +4,15 @@
  */
 
 import express from 'express';
+import crypto from 'crypto';
+import Redis from 'ioredis';
 import workflowQueue from '../services/workflowQueue.js';
 import { initiateOutboundCall } from '../lib/outboundCallService.js';
 import { executeWorkflowById as executeWorkflowByIdService } from '../services/workflowExecutionService.js';
 import logger from '../lib/logger.js';
+
+// Redis client for idempotency checks
+const redisCache = new Redis(process.env.REDIS_CACHE_URL || 'redis://redis-cache:6380');
 
 // Re-export the service function for backwards compatibility
 export { executeWorkflowByIdService as executeWorkflowById };
@@ -1492,24 +1497,79 @@ export default function createWorkflowRoutes(pgPool) {
     try {
       const { id } = req.params;
       const payload = req.body?.payload ?? req.body ?? {};
-      logger.info(`[Webhook] Received request for workflow ${id}`);
       
-      // Queue workflow for async execution to avoid timeout
-      await workflowQueue.add('execute-workflow', {
-        workflow_id: id,
-        payload: payload,
-        trigger: 'webhook'
+      // Compute idempotency key for deduplication
+      // Hash the payload for deterministic jobId
+      const payloadHash = crypto.createHash('sha256')
+        .update(JSON.stringify(payload))
+        .digest('hex')
+        .substring(0, 8);
+      
+      // CRITICAL: jobId should NOT include time - only workflow+payload hash
+      // This ensures Bull rejects exact duplicates
+      const jobId = `${id}:${payloadHash}`;
+      const idempotencyKey = `webhook:${id}:${payloadHash}`;
+      
+      logger.info(`[Webhook] Received request for workflow ${id}`, { 
+        payload,
+        jobId,
+        idempotencyKey,
+        sourceIp: req.ip,
+        requestId: req.headers['x-request-id'] || 'none'
       });
       
-      logger.info(`[Webhook] Workflow ${id} queued for execution`);
+      // Check Redis for idempotency (prevents duplicate processing within 60s)
+      const existing = await redisCache.get(idempotencyKey);
+      if (existing) {
+        logger.info(`[Webhook] Duplicate webhook detected (idempotency key exists) - returning cached response`, {
+          workflow_id: id,
+          idempotencyKey,
+          cachedJobId: existing
+        });
+        return res.status(202).json({ 
+          status: 'accepted', 
+          message: 'Workflow already queued (duplicate prevented by idempotency)',
+          workflow_id: id,
+          job_id: existing
+        });
+      }
+      
+      // Queue workflow for async execution with deterministic jobId
+      // If jobId already exists, Bull will reject the duplicate
+      await workflowQueue.add('execute-workflow', {
+        workflow_id: id,
+        trigger_data: payload,  // Match what the processor expects
+        trigger: 'webhook'
+      }, {
+        jobId // CRITICAL: Prevents duplicate enqueues
+      });
+      
+      // Store idempotency key in Redis (60s TTL)
+      await redisCache.setex(idempotencyKey, 60, jobId);
+      
+      logger.info(`[Webhook] Workflow ${id} queued for execution with jobId ${jobId}`);
       
       // Return 202 Accepted immediately
       return res.status(202).json({ 
         status: 'accepted', 
         message: 'Workflow queued for execution',
-        workflow_id: id 
+        workflow_id: id,
+        job_id: jobId
       });
     } catch (error) {
+      // If job already exists, Bull throws an error - this is OK (idempotency)
+      if (error.message?.includes('already exists') || error.message?.includes('duplicate')) {
+        logger.info(`[Webhook] Duplicate job detected by Bull - returning success (idempotent)`, {
+          workflow_id: id,
+          error: error.message
+        });
+        return res.status(202).json({ 
+          status: 'accepted', 
+          message: 'Workflow already queued (duplicate prevented by Bull)',
+          workflow_id: id
+        });
+      }
+      
       logger.error(`[Webhook] Error queueing workflow: ${error.message}`, error);
       return res.status(500).json({ status: 'error', message: error.message });
     }

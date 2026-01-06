@@ -80,6 +80,10 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
     }
     
     const workflow = normalizeWorkflow(wfData);
+    
+    // 🔍 DEBUG: Log workflow tenant assignment
+    logger.info(`[WorkflowExecution] Workflow ${workflow.id} belongs to tenant_id: ${workflow.tenant_id}`);
+    
     if (workflow.is_active === false) {
       return { status: 'error', httpStatus: 400, data: { message: 'Workflow is not active' } };
     }
@@ -109,6 +113,14 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
 
     // Execution context
     const context = { payload: triggerPayload ?? {}, variables: {} };
+    
+    // 🔍 DEBUG: Log initial context setup
+    logger.info(`[WorkflowExecution] Initial context created:`, {
+      payload_keys: Object.keys(context.payload),
+      payload: JSON.stringify(context.payload),
+      has_email: 'email' in context.payload,
+      email_value: context.payload.email
+    });
 
     // Helper: resolve next node
     function getNextNode(currentNodeId) {
@@ -131,17 +143,31 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
       if (typeof template !== 'string') return template;
       return template.replace(/\{\{([^}]+)\}\}/g, (match, variable) => {
         const trimmed = String(variable).trim();
-        if (context.payload && context.payload[trimmed] !== undefined) return context.payload[trimmed];
+        
+        // Check payload first
+        if (context.payload && context.payload[trimmed] !== undefined) {
+          logger.debug(`[replaceVariables] Found "${trimmed}" in payload:`, context.payload[trimmed]);
+          return context.payload[trimmed];
+        }
+        
+        // Check nested paths
         const parts = trimmed.split('.');
         if (parts.length > 1) {
           let value = context.variables[parts[0]];
           for (let i = 1; i < parts.length; i++) {
             if (value && value[parts[i]] !== undefined) value = value[parts[i]]; else { value = undefined; break; }
           }
-          if (value !== undefined) return value;
+          if (value !== undefined) {
+            logger.debug(`[replaceVariables] Found "${trimmed}" in nested variables:`, value);
+            return value;
+          }
         } else if (context.variables && context.variables[trimmed] !== undefined) {
+          logger.debug(`[replaceVariables] Found "${trimmed}" in variables:`, context.variables[trimmed]);
           return context.variables[trimmed];
         }
+        
+        // Variable not found
+        logger.warn(`[replaceVariables] Variable "${trimmed}" not found in context. Payload keys: ${Object.keys(context.payload).join(', ')}`);
         return match;
       });
     }
@@ -248,13 +274,22 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
             const subject = String(replaceVariables(subjectRaw));
             const body = String(replaceVariables(bodyRaw));
 
+            logger.info(`[WorkflowExecution] 📧 Email variables resolved: to="${toValue}", subject="${subject}", toRaw="${toRaw}"`);
+            logger.info(`[WorkflowExecution] 📦 Context payload:`, JSON.stringify(context.payload));
+
             const lead = context.variables.found_lead;
             const contact = context.variables.found_contact;
             const related_to = lead ? 'lead' : (contact ? 'contact' : null);
             const related_id = lead ? lead.id : (contact ? contact.id : null);
+            
+            // Compute dedupe_key to prevent duplicate email activities
+            // Format: workflow_id:node_id:email:timestamp_bucket
+            const timeBucket = Math.floor(Date.now() / 60000); // 1-minute bucket
+            const dedupeKey = `${workflow.id}:${node.id}:${toValue}:${timeBucket}`;
 
             const emailMeta = {
               created_by_workflow: workflow.id,
+              dedupe_key: dedupeKey, // CRITICAL: Prevents duplicate activities
               email: {
                 to: toValue,
                 subject,
@@ -264,6 +299,25 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
               }
             };
 
+            // 🔍 DEBUG: Log tenant_id being used for email activity
+            logger.info(`[WorkflowExecution] Creating email activity with tenant_id: ${workflow.tenant_id} (workflow: ${workflow.id}), dedupeKey: ${dedupeKey}`);
+            
+            // Check if activity already exists with this dedupe_key
+            const { data: existingAct } = await supabase
+              .from('activities')
+              .select('id')
+              .eq('tenant_id', workflow.tenant_id)
+              .eq('type', 'email')
+              .contains('metadata', { dedupe_key: dedupeKey })
+              .limit(1)
+              .single();
+            
+            if (existingAct) {
+              logger.info(`[WorkflowExecution] Email activity already exists (dedupe prevented): ${existingAct.id}`);
+              log.output = { email_queued: false, duplicate_prevented: true, existing_activity_id: existingAct.id };
+              break;
+            }
+            
             const { data: actData, error: actError } = await supabase
               .from('activities')
               .insert({
@@ -280,6 +334,13 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
               })
               .select()
               .single();
+            
+            if (actData) {
+              logger.info(`[WorkflowExecution] Email activity created: ${actData.id} with tenant_id: ${actData.tenant_id}`);
+            }
+            if (actError) {
+              logger.error(`[WorkflowExecution] Failed to create email activity: ${actError.message}`);
+            }
             
             log.output = { email_queued: true, to: toValue, subject, activity_id: actData?.id };
             break;
@@ -1221,6 +1282,8 @@ Respond with ONLY a JSON object in this exact format:
       currentNode = getNextNode(currentNode.id);
     }
 
+    logger.debug('[WorkflowExecution] All nodes executed - updating execution record...');
+    
     // Update execution as completed
     await supabase.from('workflow_execution')
       .update({
@@ -1230,6 +1293,8 @@ Respond with ONLY a JSON object in this exact format:
       })
       .eq('id', executionId);
 
+    logger.debug('[WorkflowExecution] Execution record updated - fetching workflow metadata...');
+    
     // Update workflow metadata with execution stats
     const { data: currMeta } = await supabase
       .from('workflow')
@@ -1237,17 +1302,21 @@ Respond with ONLY a JSON object in this exact format:
       .eq('id', workflow.id)
       .single();
     
+    logger.debug('[WorkflowExecution] Workflow metadata fetched - updating stats...');
+    
     const newMeta = {
       ...(currMeta?.metadata || {}),
       execution_count: ((currMeta?.metadata || {}).execution_count || 0) + 1,
       last_executed: new Date().toISOString()
     };
     
+    logger.debug('[WorkflowExecution] Updating workflow metadata...');
     await supabase.from('workflow')
       .update({ metadata: newMeta, updated_at: new Date().toISOString() })
       .eq('id', workflow.id);
 
-    return {
+    logger.info('[WorkflowExecution] ✅ Execution complete - preparing return value');
+    const returnValue = {
       status: 'success',
       httpStatus: 200,
       data: {
@@ -1258,6 +1327,9 @@ Respond with ONLY a JSON object in this exact format:
         variables: context.variables
       }
     };
+    
+    logger.debug('[WorkflowExecution] Returning:', { status: returnValue.status, execution_id: executionId });
+    return returnValue;
 
   } catch (error) {
     logger.error('[WorkflowExecution] Error:', error);

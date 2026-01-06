@@ -5,7 +5,7 @@
 
 import dotenv from 'dotenv';
 import nodemailer from 'nodemailer';
-import { pool as pgPool } from '../lib/supabase-db.js';
+import { pool as pgPool, getSupabaseClient } from '../lib/supabase-db.js';
 import logger from '../lib/logger.js';
 
 // Load environment (.env.local first, then .env)
@@ -28,7 +28,11 @@ async function getTenantSMTPConfig(tenantId) {
     // Debug: Check ALL gmail_smtp integrations first
     const debugQuery = `SELECT tenant_id, integration_type, is_active FROM tenant_integrations WHERE integration_type = 'gmail_smtp'`;
     const debugResult = await pgPool.query(debugQuery);
-    logger.info(`[EmailWorker] DEBUG: Found ${debugResult.rows.length} gmail_smtp integrations total:`, JSON.stringify(debugResult.rows));
+    logger.info(`[EmailWorker] 📧 Found ${debugResult.rows.length} gmail_smtp integrations total:`);
+    debugResult.rows.forEach((row, idx) => {
+      logger.info(`[EmailWorker]   ${idx + 1}. Tenant: ${row.tenant_id} | Active: ${row.is_active}`);
+    });
+    logger.info(`[EmailWorker] 🎯 Looking for tenant_id: ${tenantId}`);
     
     const query = `
       SELECT api_credentials, configuration, is_active
@@ -41,7 +45,7 @@ async function getTenantSMTPConfig(tenantId) {
     const result = await pgPool.query(query, [tenantId]);
     
     if (result.rows.length === 0) {
-      logger.debug(`[EmailWorker] No Gmail SMTP integration found for tenant ${tenantId}`);
+      logger.debug(`[EmailWorker] ❌ No Gmail SMTP integration found for tenant ${tenantId}`);
       return null;
     }
     
@@ -118,19 +122,27 @@ const POLL_INTERVAL_MS = parseInt(process.env.EMAIL_WORKER_POLL_MS || '5000');
 const BATCH_LIMIT = parseInt(process.env.EMAIL_WORKER_BATCH_LIMIT || '10');
 
 async function fetchQueuedEmails() {
-  const q = `
-    SELECT * FROM activities
-    WHERE type = 'email'
-      AND status = 'queued'
-      AND (
-        (metadata->'delivery'->>'next_attempt_at') IS NULL
-        OR (metadata->'delivery'->>'next_attempt_at')::timestamptz <= NOW()
-      )
-    ORDER BY created_date ASC
-    LIMIT $1
-  `;
-  const r = await pgPool.query(q, [BATCH_LIMIT]);
-  return r.rows || [];
+  const supabase = getSupabaseClient();
+  const now = new Date().toISOString();
+  
+  const { data: activities, error } = await supabase
+    .from('activities')
+    .select('*')
+    .eq('type', 'email')
+    .eq('status', 'queued')
+    .or(`metadata->delivery->>next_attempt_at.is.null,metadata->delivery->>next_attempt_at.lte.${now}`)
+    .order('created_date', { ascending: true })
+    .limit(BATCH_LIMIT);
+  
+  if (error) {
+    logger.error('[fetchQueuedEmails] Error fetching queued emails:', error.message);
+    return [];
+  }
+  
+  if (activities && activities.length > 0) {
+    logger.debug(`[fetchQueuedEmails] Found ${activities.length} queued emails:`, activities.map(a => ({ id: a.id, status: a.status })));
+  }
+  return activities || [];
 }
 
 function parseEmailMeta(metadata) {
@@ -140,8 +152,27 @@ function parseEmailMeta(metadata) {
 }
 
 async function markActivity(activityId, status, newMeta) {
-  const q = `UPDATE activities SET status = $1, metadata = $2 WHERE id = $3`;
-  await pgPool.query(q, [status, JSON.stringify(newMeta || {}), activityId]);
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('activities')
+      .update({
+        status: status,
+        metadata: newMeta || {}
+      })
+      .eq('id', activityId)
+      .select();
+    
+    if (error) {
+      logger.error(`[markActivity] Failed to update activity ${activityId} to status '${status}':`, error.message);
+      throw error;
+    }
+    
+    logger.debug(`[markActivity] Updated activity ${activityId} to status '${status}', rows affected: ${data?.length || 0}`);
+  } catch (err) {
+    logger.error(`[markActivity] Failed to update activity ${activityId} to status '${status}':`, err.message);
+    throw err;
+  }
 }
 
 const MAX_ATTEMPTS = parseInt(process.env.EMAIL_MAX_ATTEMPTS || '5');
@@ -185,6 +216,10 @@ async function processActivity(activity) {
   const meta = (activity.metadata && typeof activity.metadata === 'object') ? activity.metadata : {};
   const email = parseEmailMeta(meta);
 
+  // 🔍 DEBUG: Log activity tenant_id
+  logger.info(`[EmailWorker] Processing email activity ${activity.id} with tenant_id: ${activity.tenant_id}`);
+  logger.info(`[EmailWorker] 📧 Email metadata:`, { email, subject: activity.subject });
+
   const toValue = email.to || activity.subject; // fallback if needed
   const subject = email.subject || activity.subject || 'Notification';
   const body = activity.body || email.body || '';
@@ -199,10 +234,17 @@ async function processActivity(activity) {
   const toList = Array.isArray(toValue) ? toValue : String(toValue).split(',').map(s => s.trim()).filter(Boolean);
   
   // Get tenant-specific SMTP configuration
+  logger.info(`[EmailWorker] Looking up Gmail SMTP config for tenant_id: ${activity.tenant_id}`);
   const tenantSMTPConfig = await getTenantSMTPConfig(activity.tenant_id);
+  
+  // Log SMTP config details (masking password)
+  if (tenantSMTPConfig) {
+    logger.info(`[EmailWorker] 🔧 SMTP Config: host=${tenantSMTPConfig.host}, port=${tenantSMTPConfig.port}, user=${tenantSMTPConfig.auth?.user}, from=${tenantSMTPConfig.from}`);
+  }
   
   if (!tenantSMTPConfig) {
     // No tenant SMTP configured - fail with helpful error
+    logger.error(`[EmailWorker] ❌ No Gmail SMTP configured for tenant ${activity.tenant_id}, activity ${activity.id}`);
     const failedMeta = { 
       ...meta, 
       delivery: { 
@@ -242,6 +284,16 @@ async function processActivity(activity) {
   // Use tenant SMTP from address or email.from override
   const from = email.from || tenantSMTPConfig.from;
 
+  // Log email details before sending
+  logger.info(`[EmailWorker] 📤 Attempting to send email:`, {
+    from,
+    to: toList,
+    subject,
+    smtp_host: tenantSMTPConfig.host,
+    smtp_port: tenantSMTPConfig.port,
+    smtp_user: tenantSMTPConfig.auth?.user
+  });
+
   try {
     const info = await transporter.sendMail({
       from,
@@ -263,7 +315,14 @@ async function processActivity(activity) {
       }
     };
     await markActivity(activity.id, 'sent', sentMeta);
-    logger.debug('[EmailWorker] Sent email activity', activity.id, info?.messageId);
+    logger.info(`[EmailWorker] ✅ Email sent successfully`, {
+      activity_id: activity.id,
+      messageId: info?.messageId,
+      response: info?.response,
+      accepted: info?.accepted,
+      rejected: info?.rejected,
+      to: toList
+    });
     await postStatusWebhook({ 
       event: 'email.sent', 
       activity_id: activity.id, 
@@ -293,7 +352,7 @@ async function processActivity(activity) {
     } else {
       const failedMeta = { ...meta, delivery: { ...delivery, failed_at: new Date().toISOString() } };
       await markActivity(activity.id, 'failed', failedMeta);
-      logger.error('[EmailWorker] Failed to send email activity (max attempts reached)', activity.id, err.message);
+      logger.error(`[EmailWorker] ❌ Failed to send email activity (max attempts reached). Activity: ${activity.id}, Error: ${err.message}`, { stack: err.stack });
       await postStatusWebhook({ event: 'email.failed', activity_id: activity.id, tenant_id: activity.tenant_id, attempts, error: err.message });
       await createNotification({
         tenant_id: activity.tenant_id,
@@ -323,19 +382,35 @@ async function loop() {
  * Start the email worker (called from server.js)
  * @param {object} pool - PostgreSQL connection pool (optional, uses module-level pgPool if not provided)
  */
+// Singleton guard to prevent multiple worker loops
+let workerStarted = false;
+
 export function startEmailWorker(pool) {
+  // Prevent double initialization
+  if (workerStarted) {
+    logger.warn('[EmailWorker] Worker already started - ignoring duplicate init');
+    return {
+      stop: () => {
+        logger.debug('[EmailWorker] Stop called on already-running worker');
+      }
+    };
+  }
+  
+  workerStarted = true;
+  
   if (pool) {
     // Use provided pool (when called from server.js)
     Object.assign(pgPool, pool);
   }
   
-  logger.info('[EmailWorker] Starting email worker...');
+  logger.info('[EmailWorker] Starting email worker (singleton)...');
   logger.info(`[EmailWorker] Poll interval: ${POLL_INTERVAL_MS}ms, Batch limit: ${BATCH_LIMIT}`);
   loop();
   
   return {
     stop: () => {
       logger.info('[EmailWorker] Stopping email worker...');
+      workerStarted = false; // Allow restart after stop
       // The setTimeout in loop() will naturally stop being scheduled
     }
   };
