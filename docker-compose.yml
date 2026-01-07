@@ -85,9 +85,10 @@ services:
         condition: service_healthy
     ports:
       - "4001:3001"  # Host:Container - prod port 4001 maps to dev port 3001
-    # REMOVED: env_file - now using Doppler
+    env_file:
+      - .env.docker
     environment:
-      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      # DOPPLER_TOKEN loaded from .env.docker
       - DOPPLER_PROJECT=aishacrm
       - DOPPLER_CONFIG=dev
       - NODE_ENV=development
