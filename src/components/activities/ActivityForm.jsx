@@ -116,7 +116,12 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
     if (activity?.due_date && activity?.due_time) {
       try {
         const datePart = activity.due_date.split('T')[0]; // Ensure only date part is used
-        const timePart = activity.due_time.includes(':') ? activity.due_time : `${activity.due_time}:00`;
+        // Ensure time is in HH:MM format (strip seconds if present)
+        let timePart = activity.due_time.includes(':') ? activity.due_time : `${activity.due_time}:00`;
+        // If time already has seconds (HH:MM:SS), strip them
+        if (timePart.split(':').length === 3) {
+          timePart = timePart.split(':').slice(0, 2).join(':');
+        }
         const utcString = `${datePart}T${timePart}:00.000Z`;
         
         const localDate = utcToLocal(utcString, offsetMinutes);
