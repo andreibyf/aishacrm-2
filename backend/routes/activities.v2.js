@@ -247,8 +247,9 @@ export default function createActivityV2Routes(_pgPool) {
             }
           }
 
-          // Handle $or for unassigned
+          // Handle $or filters (unassigned, search with $regex, etc.)
           if (parsed.$or && Array.isArray(parsed.$or)) {
+            // Check if this is an unassigned filter
             const isUnassignedFilter = parsed.$or.some(cond =>
               cond.assigned_to === null || cond.assigned_to === ''
             );
@@ -256,6 +257,47 @@ export default function createActivityV2Routes(_pgPool) {
             if (isUnassignedFilter) {
               logger.debug('[Activities V2] Applying unassigned filter');
               q = q.or('assigned_to.is.null,assigned_to.eq.');
+            }
+            
+            // Check if this is a search filter with $regex (MongoDB-style from frontend)
+            // Convert MongoDB $regex to Supabase ILIKE for PostgreSQL compatibility
+            const hasRegexConditions = parsed.$or.some(cond => {
+              return Object.values(cond).some(val => 
+                val && typeof val === 'object' && val.$regex
+              );
+            });
+            
+            if (hasRegexConditions && !isUnassignedFilter) {
+              logger.debug('[Activities V2] Applying search filter with $regex translation');
+              
+              // Build OR conditions for Supabase
+              const orConditions = [];
+              
+              for (const condition of parsed.$or) {
+                for (const [field, value] of Object.entries(condition)) {
+                  if (value && typeof value === 'object' && value.$regex) {
+                    // Extract regex pattern and convert to ILIKE pattern
+                    const pattern = value.$regex;
+                    const likePattern = `%${pattern}%`;
+                    
+                    // Map frontend field names to database columns
+                    let dbField = field;
+                    if (field === 'description') {
+                      dbField = 'body'; // 'description' is stored as 'body' in DB
+                    }
+                    
+                    // Build Supabase ILIKE condition
+                    orConditions.push(`${dbField}.ilike.${likePattern}`);
+                  }
+                }
+              }
+              
+              if (orConditions.length > 0) {
+                // Apply all OR conditions at once using Supabase's .or() method
+                const orQuery = orConditions.join(',');
+                logger.debug('[Activities V2] Applying OR search:', orQuery);
+                q = q.or(orQuery);
+              }
             }
           }
 

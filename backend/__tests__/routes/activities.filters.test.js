@@ -249,3 +249,79 @@ after(async () => {
     console.log('Stats not returned (counts may be null when not requested)');
   }
 });
+
+// Test: MongoDB-style $or filter with $regex (from frontend search)
+(SHOULD_RUN ? test : test.skip)('Filter with $or and $regex operators works correctly', async () => {
+  if (createdIds.filter(Boolean).length < 2) {
+    console.log('Skipping: test activities not created');
+    return;
+  }
+
+  // Create a filter object matching what the frontend sends during search
+  // This simulates searching for "Activity A" across subject, description, and related_name
+  const searchFilter = {
+    $or: [
+      { subject: { $regex: 'Activity A', $options: 'i' } },
+      { description: { $regex: 'Activity A', $options: 'i' } },
+      { related_name: { $regex: 'Activity A', $options: 'i' } }
+    ]
+  };
+
+  const url = `${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&include_stats=false&filter=${encodeURIComponent(JSON.stringify(searchFilter))}`;
+  
+  console.log('Testing search filter with $regex. URL length:', url.length);
+  
+  const res = await fetch(url);
+  assert.equal(res.status, 200, `Expected 200 OK, got ${res.status}`);
+
+  const json = await res.json();
+  assert.equal(json.status, 'success', 'Response should have success status');
+  
+  const activities = json.data?.activities || [];
+  console.log(`Search returned ${activities.length} activities`);
+
+  // Should find Activity A (which has "Activity A" in the subject)
+  const foundActivityA = activities.find(a => a.subject?.includes('Activity A'));
+  assert.ok(foundActivityA, 'Should find Activity A in search results');
+
+  // Should NOT find Activity B (which doesn't have "Activity A" in any field)
+  const foundActivityB = activities.find(a => a.subject?.includes('Activity B'));
+  assert.ok(!foundActivityB, 'Should NOT find Activity B in search results');
+});
+
+// Test: Search with special characters in $regex
+(SHOULD_RUN ? test : test.skip)('Filter with special characters in $regex pattern', async () => {
+  // Create activity with special characters
+  const specialActivity = await createActivity({
+    subject: `${TEST_SUBJECT_PREFIX} Initial contact: ABC Inc`,
+    body: 'Test activity with special characters',
+    status: 'scheduled'
+  });
+
+  assert.ok([200, 201].includes(specialActivity.status), 'Should create activity with special characters');
+  const specialId = extractActivityId(specialActivity.json);
+  createdIds.push(specialId);
+
+  // Search for it using the exact pattern from the bug report
+  const searchFilter = {
+    $or: [
+      { subject: { $regex: 'Initial contact: ABC Inc', $options: 'i' } },
+      { description: { $regex: 'Initial contact: ABC Inc', $options: 'i' } },
+      { related_name: { $regex: 'Initial contact: ABC Inc', $options: 'i' } }
+    ]
+  };
+
+  const url = `${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&include_stats=false&filter=${encodeURIComponent(JSON.stringify(searchFilter))}`;
+  
+  const res = await fetch(url);
+  assert.equal(res.status, 200, `Expected 200 OK for special character search, got ${res.status}`);
+
+  const json = await res.json();
+  assert.equal(json.status, 'success', 'Response should have success status');
+  
+  const activities = json.data?.activities || [];
+  const found = activities.find(a => a.id === specialId);
+  
+  assert.ok(found, 'Should find activity with special characters in search results');
+  console.log('Successfully searched for activity with special characters');
+});
