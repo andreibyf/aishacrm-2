@@ -461,6 +461,106 @@ export default function createActivityV2Routes(_pgPool) {
     }
   });
 
+  // ============================================================================
+  // POST /api/v2/activities/search - WAF-safe search endpoint
+  // Accepts search parameters in POST body instead of URL query string
+  // This avoids WAF blocking MongoDB-style operators in URLs
+  // ============================================================================
+  router.post('/search', async (req, res) => {
+    try {
+      const tenantId = req.query.tenant_id || req.body.tenant_id;
+      if (!tenantId) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      const {
+        q,                    // Search term
+        fields = ['subject', 'body', 'notes'],  // Fields to search
+        limit = 50,           // Max results
+        offset = 0,           // Pagination offset
+        status,               // Filter by status
+        type,                 // Filter by activity type
+        assigned_to,          // Filter by assigned user
+        related_to,           // Filter by related entity type
+        related_id,           // Filter by related entity ID
+        date_from,            // Filter by date range start
+        date_to,              // Filter by date range end
+        sort_by = 'due_date', // Sort field
+        sort_order = 'desc'   // Sort direction
+      } = req.body;
+
+      const supabase = getSupabaseClient();
+      let query = supabase
+        .from('activities')
+        .select('*', { count: 'exact' })
+        .eq('tenant_id', tenantId);
+
+      // Apply text search using PostgreSQL ILIKE
+      if (q && q.trim()) {
+        const searchTerm = q.trim();
+        const likePattern = `%${searchTerm}%`;
+        
+        // Build OR condition for specified fields
+        const searchConditions = fields
+          .filter(f => ['subject', 'body', 'notes', 'related_name'].includes(f))
+          .map(f => `${f}.ilike.${likePattern}`)
+          .join(',');
+        
+        if (searchConditions) {
+          query = query.or(searchConditions);
+        }
+        logger.debug('[Activities V2 Search] Text search:', { searchTerm, fields, searchConditions });
+      }
+
+      // Apply filters
+      if (status) query = query.eq('status', status);
+      if (type) query = query.eq('type', type);
+      if (assigned_to) query = query.eq('assigned_to', assigned_to);
+      if (related_to) query = query.eq('related_to', related_to);
+      if (related_id) query = query.eq('related_id', related_id);
+      if (date_from) query = query.gte('due_date', date_from);
+      if (date_to) query = query.lte('due_date', date_to);
+
+      // Apply sorting
+      const validSortFields = ['due_date', 'created_at', 'updated_at', 'subject', 'status', 'type'];
+      const sortField = validSortFields.includes(sort_by) ? sort_by : 'due_date';
+      const ascending = sort_order.toLowerCase() === 'asc';
+      query = query.order(sortField, { ascending, nullsFirst: false });
+
+      // Apply pagination
+      const safeLimit = Math.min(Math.max(1, parseInt(limit, 10) || 50), 1000);
+      const safeOffset = Math.max(0, parseInt(offset, 10) || 0);
+      query = query.range(safeOffset, safeOffset + safeLimit - 1);
+
+      const { data, error, count } = await query;
+
+      if (error) throw new Error(error.message);
+
+      const activities = (data || []).map(expandMetadata);
+
+      res.json({
+        status: 'success',
+        data: {
+          activities,
+          pagination: {
+            total: count || 0,
+            limit: safeLimit,
+            offset: safeOffset,
+            hasMore: (safeOffset + activities.length) < (count || 0)
+          }
+        }
+      });
+    } catch (error) {
+      logger.error('Error in v2 activity search:', error);
+      if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
+        res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
+        res.setHeader('Vary', 'Origin');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+      }
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   router.get('/:id', cacheDetail('activities', 300), async (req, res) => {
     try {
       const { id } = req.params;
