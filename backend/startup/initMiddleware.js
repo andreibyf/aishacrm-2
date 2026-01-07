@@ -133,7 +133,17 @@ export function initMiddleware(app, pgPool) {
       }
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'X-Internal-AI-Key'],
+    exposedHeaders: ['Content-Range', 'X-Content-Range'],
+    maxAge: 86400, // 24 hours - cache preflight for performance
   }));
+
+  // Explicit OPTIONS handler for all API routes (preflight requests)
+  // This ensures preflight requests are handled before any other middleware
+  app.options('/api/*', (req, res) => {
+    res.status(200).end();
+  });
 
   // Apply limiter to API routes AFTER CORS so 429 responses include CORS headers
   app.use('/api', rateLimiter);
