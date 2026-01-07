@@ -178,16 +178,26 @@ router.post('/', async (req, res) => {
   try {
     const { tenant_id, module_name, settings, is_enabled } = req.body;
     
-    const result = await pool.query(
-      `INSERT INTO modulesettings (tenant_id, module_name, settings, is_enabled) 
-       VALUES ($1, $2, $3, $4) 
-       ON CONFLICT (tenant_id, module_name) 
-       DO UPDATE SET settings = $3, is_enabled = $4, updated_at = now()
-       RETURNING *`,
-      [tenant_id, module_name, settings || {}, is_enabled !== undefined ? is_enabled : true]
-    );
+    const { data, error } = await supabase
+      .from('modulesettings')
+      .upsert(
+        {
+          tenant_id,
+          module_name,
+          settings: settings || {},
+          is_enabled: is_enabled !== undefined ? is_enabled : true,
+          updated_at: new Date().toISOString()
+        },
+        {
+          onConflict: 'tenant_id,module_name'
+        }
+      )
+      .select()
+      .single();
+
+    if (error) throw error;
     
-    res.status(201).json({ status: 'success', data: result.rows[0] });
+    res.status(201).json({ status: 'success', data });
   } catch (error) {
     logger.error('Error creating module setting:', error);
     res.status(500).json({ status: 'error', message: error.message });
@@ -285,20 +295,33 @@ router.put('/:id', async (req, res) => {
     params.push(id);
     const idParamIndex = paramIndex++;
 
-    const query = `UPDATE modulesettings SET ${updates.join(', ')} WHERE tenant_id = $${tenantParamIndex} AND id = $${idParamIndex} RETURNING *`;
-    const result = await pool.query(query, params);
+    // Build update object from params
+    const updateData = {};
+    let idx = 0;
+    if (module_name !== undefined) updateData.module_name = params[idx++];
+    if (settings !== undefined) updateData.settings = params[idx++];
+    if (is_enabled !== undefined) updateData.is_enabled = params[idx++];
+    updateData.updated_at = new Date().toISOString();
 
-    if (result.rows.length === 0) {
+    const { data, error } = await supabase
+      .from('modulesettings')
+      .update(updateData)
+      .eq('tenant_id', tenant_id)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error || !data) {
       return res.status(404).json({ status: 'error', message: 'Module setting not found' });
     }
 
     // Safety check: verify returned row matches tenant
-    if (result.rows[0].tenant_id !== tenant_id) {
-      logger.error('[ModuleSettings PUT] Mismatched tenant_id', { expected: tenant_id, got: result.rows[0].tenant_id });
+    if (data.tenant_id !== tenant_id) {
+      logger.error('[ModuleSettings PUT] Mismatched tenant_id', { expected: tenant_id, got: data.tenant_id });
       return res.status(404).json({ status: 'error', message: 'Module setting not found' });
     }
 
-    res.json({ status: 'success', data: result.rows[0] });
+    res.json({ status: 'success', data });
   } catch (error) {
     logger.error('Error updating module setting:', error);
     res.status(500).json({ status: 'error', message: error.message });
@@ -344,22 +367,25 @@ router.put('/:id', async (req, res) => {
       }
 
       // CRITICAL: Filter by tenant_id FIRST, then id (tenant isolation)
-      const result = await pool.query(
-        'DELETE FROM modulesettings WHERE tenant_id = $1 AND id = $2 RETURNING *',
-        [tenant_id, id]
-      );
+      const { data, error } = await supabase
+        .from('modulesettings')
+        .delete()
+        .eq('tenant_id', tenant_id)
+        .eq('id', id)
+        .select()
+        .single();
 
-      if (result.rows.length === 0) {
+      if (error || !data) {
         return res.status(404).json({ status: 'error', message: 'Module setting not found' });
       }
 
       // Safety check: verify deleted row matched tenant
-      if (result.rows[0].tenant_id !== tenant_id) {
-        logger.error('[ModuleSettings DELETE] Mismatched tenant_id', { expected: tenant_id, got: result.rows[0].tenant_id });
+      if (data.tenant_id !== tenant_id) {
+        logger.error('[ModuleSettings DELETE] Mismatched tenant_id', { expected: tenant_id, got: data.tenant_id });
         return res.status(404).json({ status: 'error', message: 'Module setting not found' });
       }
 
-      res.json({ status: 'success', data: result.rows[0] });
+      res.json({ status: 'success', data });
     } catch (error) {
       logger.error('Error deleting module setting:', error);
       res.status(500).json({ status: 'error', message: error.message });
