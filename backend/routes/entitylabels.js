@@ -1,6 +1,7 @@
 import express from 'express';
 import { requireAdminRole } from '../middleware/validateTenant.js';
 import logger from '../lib/logger.js';
+import { supabase } from '../services/supabaseClient.js';
 
 // UUID format regex pattern
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -8,11 +9,10 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 /**
  * Resolve tenant identifier to UUID.
  * Accepts either a UUID (returned as-is) or a text slug (resolved via tenant table).
- * @param {import('pg').Pool} pool - Database pool
  * @param {string} tenantIdOrSlug - UUID or text slug
  * @returns {Promise<string|null>} UUID or null if not found
  */
-async function resolveTenantUUID(pool, tenantIdOrSlug) {
+async function resolveTenantUUID(tenantIdOrSlug) {
   if (!tenantIdOrSlug) return null;
   
   // If already a UUID, return as-is
@@ -22,11 +22,19 @@ async function resolveTenantUUID(pool, tenantIdOrSlug) {
   
   // Otherwise, look up by text slug (tenant.tenant_id)
   try {
-    const result = await pool.query(
-      'SELECT id FROM tenant WHERE tenant_id = $1 LIMIT 1',
-      [tenantIdOrSlug]
-    );
-    return result.rows[0]?.id || null;
+    const { data, error } = await supabase
+      .from('tenant')
+      .select('id')
+      .eq('tenant_id', tenantIdOrSlug)
+      .limit(1)
+      .single();
+    
+    if (error) {
+      logger.error('[entitylabels] Error resolving tenant slug:', error.message);
+      return null;
+    }
+    
+    return data?.id || null;
   } catch (err) {
     logger.error('[entitylabels] Error resolving tenant slug:', err.message);
     return null;
@@ -45,7 +53,7 @@ const DEFAULT_LABELS = {
 
 export const ENTITY_KEYS = Object.keys(DEFAULT_LABELS);
 
-export default function createEntityLabelsRoutes(pool) {
+export default function createEntityLabelsRoutes() {
   const router = express.Router();
 
   // GET /api/entity-labels/:tenant_id - Get entity labels for a tenant (no auth required for reads)
@@ -79,7 +87,7 @@ export default function createEntityLabelsRoutes(pool) {
       }
 
       // Resolve to UUID (handles both UUID and text slug)
-      const tenantUUID = await resolveTenantUUID(pool, tenant_id);
+      const tenantUUID = await resolveTenantUUID(tenant_id);
       
       if (!tenantUUID) {
         // Return defaults if tenant not found (graceful degradation)
@@ -93,17 +101,17 @@ export default function createEntityLabelsRoutes(pool) {
       }
 
       // Fetch custom labels for this tenant
-      const result = await pool.query(
-        `SELECT entity_key, custom_label, custom_label_singular 
-         FROM entity_labels 
-         WHERE tenant_id = $1::uuid`,
-        [tenantUUID]
-      );
+      const { data: rows, error } = await supabase
+        .from('entity_labels')
+        .select('entity_key, custom_label, custom_label_singular')
+        .eq('tenant_id', tenantUUID);
+      
+      if (error) throw error;
 
       // Build response: merge defaults with custom labels
       const labels = { ...DEFAULT_LABELS };
       
-      for (const row of result.rows) {
+      for (const row of (rows || [])) {
         labels[row.entity_key] = {
           plural: row.custom_label || DEFAULT_LABELS[row.entity_key]?.plural,
           singular: row.custom_label_singular || DEFAULT_LABELS[row.entity_key]?.singular,
@@ -114,7 +122,7 @@ export default function createEntityLabelsRoutes(pool) {
         status: 'success', 
         data: { 
           labels,
-          customized: result.rows.map(r => r.entity_key)
+          customized: (rows || []).map(r => r.entity_key)
         } 
       });
     } catch (error) {
@@ -202,24 +210,27 @@ export default function createEntityLabelsRoutes(pool) {
         if (plural === DEFAULT_LABELS[entityKey].plural && 
             singular === DEFAULT_LABELS[entityKey].singular) {
           upsertPromises.push(
-            pool.query(
-              `DELETE FROM entity_labels WHERE tenant_id = $1::uuid AND entity_key = $2`,
-              [tenantUUID, entityKey]
-            )
+            supabase
+              .from('entity_labels')
+              .delete()
+              .eq('tenant_id', tenantUUID)
+              .eq('entity_key', entityKey)
           );
         } else {
           // Upsert custom label
           upsertPromises.push(
-            pool.query(
-              `INSERT INTO entity_labels (tenant_id, entity_key, custom_label, custom_label_singular, updated_at)
-               VALUES ($1::uuid, $2, $3, $4, NOW())
-               ON CONFLICT (tenant_id, entity_key) 
-               DO UPDATE SET 
-                 custom_label = EXCLUDED.custom_label,
-                 custom_label_singular = EXCLUDED.custom_label_singular,
-                 updated_at = NOW()`,
-              [tenantUUID, entityKey, plural, singular]
-            )
+            supabase
+              .from('entity_labels')
+              .upsert(
+                {
+                  tenant_id: tenantUUID,
+                  entity_key: entityKey,
+                  custom_label: plural,
+                  custom_label_singular: singular,
+                  updated_at: new Date().toISOString()
+                },
+                { onConflict: 'tenant_id,entity_key' }
+              )
           );
         }
       }
@@ -227,15 +238,15 @@ export default function createEntityLabelsRoutes(pool) {
       await Promise.all(upsertPromises);
 
       // Return updated labels
-      const result = await pool.query(
-        `SELECT entity_key, custom_label, custom_label_singular 
-         FROM entity_labels 
-         WHERE tenant_id = $1::uuid`,
-        [tenantUUID]
-      );
+      const { data: updatedRows, error: fetchError } = await supabase
+        .from('entity_labels')
+        .select('entity_key, custom_label, custom_label_singular')
+        .eq('tenant_id', tenantUUID);
+      
+      if (fetchError) throw fetchError;
 
       const updatedLabels = { ...DEFAULT_LABELS };
-      for (const row of result.rows) {
+      for (const row of (updatedRows || [])) {
         updatedLabels[row.entity_key] = {
           plural: row.custom_label,
           singular: row.custom_label_singular,
@@ -247,7 +258,7 @@ export default function createEntityLabelsRoutes(pool) {
         message: 'Entity labels updated',
         data: { 
           labels: updatedLabels,
-          customized: result.rows.map(r => r.entity_key)
+          customized: (updatedRows || []).map(r => r.entity_key)
         } 
       });
     } catch (error) {
@@ -270,7 +281,7 @@ export default function createEntityLabelsRoutes(pool) {
       const { tenant_id } = req.params;
 
       // Resolve to UUID (handles both UUID and text slug)
-      const tenantUUID = await resolveTenantUUID(pool, tenant_id);
+      const tenantUUID = await resolveTenantUUID(tenant_id);
       
       if (!tenantUUID) {
         return res.status(404).json({ 
@@ -279,10 +290,12 @@ export default function createEntityLabelsRoutes(pool) {
         });
       }
 
-      await pool.query(
-        `DELETE FROM entity_labels WHERE tenant_id = $1::uuid`,
-        [tenantUUID]
-      );
+      const { error } = await supabase
+        .from('entity_labels')
+        .delete()
+        .eq('tenant_id', tenantUUID);
+      
+      if (error) throw error;
 
       res.json({ 
         status: 'success', 
