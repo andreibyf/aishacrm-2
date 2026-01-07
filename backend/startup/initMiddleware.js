@@ -134,7 +134,7 @@ export function initMiddleware(app, pgPool) {
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'X-Internal-AI-Key'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'X-Internal-AI-Key', 'Cache-Control', 'Pragma'],
     exposedHeaders: ['Content-Range', 'X-Content-Range'],
     maxAge: 86400, // 24 hours - cache preflight for performance
   }));
