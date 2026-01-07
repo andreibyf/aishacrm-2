@@ -548,7 +548,6 @@ export default function createLeadRoutes(_pgPool) {
         status: normalizedStatus,
         metadata: combinedMetadata,
         created_at: nowIso,
-        created_date: nowIso,
         updated_at: nowIso,
       };
 

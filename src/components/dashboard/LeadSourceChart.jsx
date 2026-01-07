@@ -174,7 +174,7 @@ function LeadSourceChart(props) { // Changed to receive `props`
       mounted = false;
     };
     // Depend on filter, test toggle, cachedRequest, and leadsData from parent
-  }, [props.tenantFilter, props.showTestData, props.leadsData, props.stats.leadsBySource, cachedRequest, userLoading, authCookiesReady]);
+  }, [props.tenantFilter, props.showTestData, props.leadsData, props.stats?.leadsBySource, cachedRequest, userLoading, authCookiesReady]);
 
   return (
     <Card className="bg-slate-800 border-slate-700 h-full">

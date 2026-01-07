@@ -60,12 +60,6 @@ export default function FunnelChart3D({
   const totalCalculatedHeight = layerHeights.reduce((a, b) => a + b, 0);
   const scaleFactor = coneHeight / totalCalculatedHeight;
   const normalizedHeights = layerHeights.map(h => h * scaleFactor);
-  
-  // Calculate radius at a given Y position (0 = top of cone, coneHeight = bottom)
-  const radiusAtY = (y) => {
-    const ratio = y / coneHeight;
-    return maxRadius - (maxRadius - minRadius) * ratio;
-  };
 
   // AISHA brand color gradient: Teal/Cyan at top → Yellow/Lime at bottom
   const getLayerColors = (index, totalLayers) => {
@@ -93,13 +87,35 @@ export default function FunnelChart3D({
   let currentY = 0;
   const layers = [];
   const labelData = [];
+  let verticalSegmentRadius = null; // Track shared radius for all vertical segments
 
   activeData.forEach((segment, idx) => {
     const layerHeight = normalizedHeights[idx];
     const topY = coneTopY + currentY;
     const bottomY = coneTopY + currentY + layerHeight;
-    const topRadius = radiusAtY(currentY);
-    const bottomRadius = radiusAtY(currentY + layerHeight);
+    
+    // Check if this segment should have vertical sides (Contact or Account)
+    const isVerticalSegment = segment.label && 
+      (segment.label.toLowerCase().includes('contact') || 
+       segment.label.toLowerCase().includes('account'));
+    
+    // For vertical segments, use same radius top and bottom
+    // For tapered segments, calculate radius at each Y position
+    let topRadius, bottomRadius;
+    
+    if (isVerticalSegment) {
+      // All vertical segments share the same radius (calculated at first vertical segment)
+      if (verticalSegmentRadius === null) {
+        verticalSegmentRadius = maxRadius - (maxRadius - minRadius) * (currentY / coneHeight);
+      }
+      topRadius = verticalSegmentRadius;
+      bottomRadius = verticalSegmentRadius;
+    } else {
+      // Tapered cone: normal calculation
+      topRadius = maxRadius - (maxRadius - minRadius) * (currentY / coneHeight);
+      bottomRadius = maxRadius - (maxRadius - minRadius) * ((currentY + layerHeight) / coneHeight);
+    }
+    
     const topEllipseRy = topRadius * ellipseRatio;
     const bottomEllipseRy = bottomRadius * ellipseRatio;
 

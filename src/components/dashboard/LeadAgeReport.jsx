@@ -242,8 +242,8 @@ function LeadAgeReport(props) {
 
                   {/* Expanded view showing leads in this bucket */}
                   {selectedBucket === index && bucket.leads.length > 0 && (
-                    <div className="mt-2 ml-4 space-y-2 border-l-2 border-slate-600 pl-4">
-                      {bucket.leads.slice(0, 5).map((lead) => (
+                    <div className="mt-2 ml-4 space-y-2 border-l-2 border-slate-600 pl-4 max-h-96 overflow-y-auto">
+                      {bucket.leads.map((lead) => (
                         <div key={lead.id} className="flex items-center justify-between p-2 rounded bg-slate-700/30">
                           <div className="flex items-center gap-2 min-w-0 flex-1">
                             <User className="w-4 h-4 text-slate-400 flex-shrink-0" />
@@ -269,11 +269,6 @@ function LeadAgeReport(props) {
                           </div>
                         </div>
                       ))}
-                      {bucket.leads.length > 5 && (
-                        <p className="text-xs text-slate-500 text-center pt-2">
-                          +{bucket.leads.length - 5} more leads
-                        </p>
-                      )}
                     </div>
                   )}
                 </div>

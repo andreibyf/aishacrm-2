@@ -21,6 +21,7 @@ import {
   AlertCircle,
   Edit,
   Eye,
+  Globe,
   Grid,
   List,
   Loader2,
@@ -1508,6 +1509,29 @@ export default function AccountsPage() {
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      try {
+                                        const href = `/accounts/${account.id}`;
+                                        window.open(href, '_blank', 'noopener,noreferrer');
+                                      } catch (err) {
+                                        console.error('Failed to open account profile:', err);
+                                      }
+                                    }}
+                                    className="h-8 w-8 text-slate-400 hover:text-blue-400"
+                                  >
+                                    <Globe className="w-4 h-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Open web profile</p>
+                                </TooltipContent>
+                              </Tooltip>
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button

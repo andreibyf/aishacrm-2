@@ -35,13 +35,26 @@ function StatusPill({ status }) {
 }
 
 /**
- * Lead Profile Page (Direct Edge Function)
- * Route: /leads/:leadId
+ * Universal Profile Page (Direct Edge Function)
+ * Routes: /leads/:leadId | /accounts/:accountId | /contacts/:contactId | /bizdev/:bizdevId
  * Fetches person-profile directly from Supabase Edge Function using Authorization.
  */
 export default function LeadProfilePage() {
-  const { leadId = "" } = useParams();
+  const params = useParams();
   const [searchParams] = useSearchParams();
+
+  // Detect entity type from URL path and get ID
+  const entityType = useMemo(() => {
+    if (params.leadId) return 'lead';
+    if (params.accountId) return 'account';
+    if (params.contactId) return 'contact';
+    if (params.bizdevId) return 'bizdev';
+    return 'lead'; // default
+  }, [params]);
+
+  const entityId = useMemo(() => {
+    return params.leadId || params.accountId || params.contactId || params.bizdevId || '';
+  }, [params]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -94,39 +107,63 @@ export default function LeadProfilePage() {
   useEffect(() => {
     let aborted = false;
     async function load() {
-      if (!leadId) return;
+      if (!entityId) return;
       setLoading(true);
       setError(null);
       try {
-        // Get session and access token following Supabase pattern
-        const { data: session } = await supabase.auth.getSession();
-        const token = session?.session?.access_token;
-        if (!token) throw new Error("Not authenticated");
+        // Use backend API instead of Edge Function to avoid CORS/404 issues
+        const backendUrl = getRuntimeEnv('VITE_AISHACRM_BACKEND_URL') || 'http://localhost:4001';
+        const effectiveTenantId = tenantId || (typeof window !== 'undefined' ? window.localStorage.getItem('tenant_id') : null);
         
-        // Call Supabase Edge Function directly
-        const supabaseUrl = getRuntimeEnv('VITE_SUPABASE_URL') || '';
-        if (!supabaseUrl) throw new Error("SUPABASE_URL not configured");
+        if (!effectiveTenantId) {
+          throw new Error("Tenant ID not available");
+        }
         
-        const functionsBase = supabaseUrl.replace(/\/$/, '').replace('.supabase.co', '.functions.supabase.co');
-        const anonKey = getRuntimeEnv('VITE_SUPABASE_ANON_KEY') || '';
-        const url = `${functionsBase}/person-refresh?person_id=${encodeURIComponent(leadId)}&max_wait_ms=1200`;
-        
-        const headers = {
-          'Authorization': `Bearer ${token}`,
-          'apikey': anonKey,
-          'Content-Type': 'application/json',
-          'x-tenant-id': tenantId,
-        };
+        // Fetch entity data from backend
+        let url;
+        if (entityType === 'lead') {
+          url = `${backendUrl}/api/leads/${entityId}?tenant_id=${effectiveTenantId}`;
+        } else if (entityType === 'account') {
+          url = `${backendUrl}/api/v2/accounts/${entityId}?tenant_id=${effectiveTenantId}`;
+        } else if (entityType === 'contact') {
+          url = `${backendUrl}/api/v2/contacts/${entityId}?tenant_id=${effectiveTenantId}`;
+        } else if (entityType === 'bizdev') {
+          url = `${backendUrl}/api/bizdevsources/${entityId}?tenant_id=${effectiveTenantId}`;
+        } else {
+          throw new Error("Unknown entity type");
+        }
         
         const res = await fetch(url, {
           method: 'GET',
-          headers,
+          headers: { 'Content-Type': 'application/json' },
         });
         if (!res.ok) {
           const msg = await res.text().catch(() => "");
           throw new Error(`Failed to load (${res.status}). ${msg}`);
         }
         let data = await res.json();
+        if (import.meta.env.DEV) console.log('[Profile] Raw API response:', data);
+        
+        // Normalize data structure for different entity types
+        // Leads returns: { status: 'success', data: { lead: {...} } }
+        // Accounts/Contacts return: { status: 'success', data: { account/contact: {...}, aiContext: {...} } }
+        // BizDev returns: { source: {...} }
+        if (data.data) {
+          if (data.data.lead) {
+            data = data.data.lead;
+          } else if (data.data.account) {
+            data = data.data.account;
+          } else if (data.data.contact) {
+            data = data.data.contact;
+          } else {
+            // Fallback - just use data.data if it's a direct object
+            data = data.data;
+          }
+        } else if (data.source) {
+          // BizDev API returns { source: { ... } }
+          data = data.source;
+        }
+        if (import.meta.env.DEV) console.log('[Profile] After normalization:', data);
         
         // Resolve assigned_to UUIDs to names
         if (data.assigned_to) {
@@ -134,62 +171,104 @@ export default function LeadProfilePage() {
           if (name) data.assigned_to_name = name;
         }
         
-        // Resolve activity assigned_to fields
-        if (data.activities && Array.isArray(data.activities)) {
-          for (const activity of data.activities) {
-            if (activity.assigned_to) {
-              const name = await resolveEmployeeName(activity.assigned_to);
-              if (name) activity.assigned_to_name = name;
+        // Fetch related activities
+        try {
+          const activitiesUrl = `${backendUrl}/api/v2/activities?tenant_id=${effectiveTenantId}&related_to=${entityId}`;
+          const activitiesRes = await fetch(activitiesUrl, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          if (activitiesRes.ok) {
+            const activitiesData = await activitiesRes.json();
+            if (import.meta.env.DEV) console.log('[Profile] Activities response:', activitiesData);
+            
+            // Ensure activities is always an array
+            const rawActivities = activitiesData.data || activitiesData;
+            data.activities = Array.isArray(rawActivities) ? rawActivities : [];
+            
+            // Resolve activity assigned_to fields
+            for (const activity of data.activities) {
+              if (activity.assigned_to) {
+                const name = await resolveEmployeeName(activity.assigned_to);
+                if (name) activity.assigned_to_name = name;
+              }
             }
           }
+        } catch (e) {
+          console.error('Failed to load activities:', e);
+          data.activities = [];
         }
         
-        // Get tenant_id: use tenantId from query params or localStorage
-        const effectiveTenantId = tenantId || (typeof window !== 'undefined' ? window.localStorage.getItem('tenant_id') : null);
+        // Fetch related notes
+        try {
+          const notesUrl = `${backendUrl}/api/notes?tenant_id=${effectiveTenantId}&related_type=${entityType}&related_id=${entityId}`;
+          const notesRes = await fetch(notesUrl, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          if (notesRes.ok) {
+            const notesData = await notesRes.json();
+            if (import.meta.env.DEV) console.log('[Profile] Notes response:', notesData);
+            
+            // Extract notes array from response
+            const rawNotes = notesData.data?.notes || notesData.notes || notesData.data || notesData;
+            data.notes = Array.isArray(rawNotes) ? rawNotes : [];
+          }
+        } catch (e) {
+          console.error('Failed to load notes:', e);
+          data.notes = [];
+        }
         
-        if (import.meta.env.DEV) console.log('[LeadProfile] tenantId available:', !!effectiveTenantId);
+        if (import.meta.env.DEV) console.log('[Profile] tenantId available:', !!effectiveTenantId);
         
         // Generate AI summary only if missing and not recently generated (cache for 24 hours)
         if (effectiveTenantId && (!data.ai_summary || shouldRefreshSummary(data.ai_summary_updated_at))) {
           try {
-            const backendUrl = getRuntimeEnv('VITE_AISHACRM_BACKEND_URL') || 'http://localhost:4001';
-            if (import.meta.env.DEV) console.log('[LeadProfile] Calling AI summary endpoint...', { leadId, tenant_id: effectiveTenantId });
+            if (import.meta.env.DEV) console.log('[Profile] Calling AI summary endpoint...', { entityId, tenant_id: effectiveTenantId });
             const summaryRes = await fetch(`${backendUrl}/api/ai/summarize-person-profile`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                person_id: leadId,
-                person_type: 'lead',
+                person_id: entityId,
+                person_type: entityType,
                 profile_data: data,
                 tenant_id: effectiveTenantId,
               }),
             });
             if (summaryRes.ok) {
               const respData = await summaryRes.json();
-              if (import.meta.env.DEV) console.log('[LeadProfile] AI summary response:', respData);
+              if (import.meta.env.DEV) console.log('[Profile] AI summary response:', respData);
               const { ai_summary } = respData;
               if (ai_summary) {
                 data.ai_summary = ai_summary;
                 data.ai_summary_updated_at = new Date().toISOString();
-                if (import.meta.env.DEV) console.log('[LeadProfile] AI summary stored:', ai_summary.substring(0, 100));
+                if (import.meta.env.DEV) console.log('[Profile] AI summary stored:', ai_summary.substring(0, 100));
               }
             } else {
               const errText = await summaryRes.text().catch(() => "");
-              if (import.meta.env.DEV) console.error('[LeadProfile] AI summary endpoint error:', summaryRes.status, errText);
+              if (import.meta.env.DEV) console.error('[Profile] AI summary endpoint error:', summaryRes.status, errText);
             }
           } catch (e) {
-            console.error('[LeadProfile] Failed to generate AI summary:', e?.message);
+            console.error('[Profile] Failed to generate AI summary:', e?.message);
           }
         } else {
-          if (import.meta.env.DEV) console.log('[LeadProfile] Skipping AI summary:', { 
+          if (import.meta.env.DEV) console.log('[Profile] Skipping AI summary:', { 
             has_tenant: !!effectiveTenantId, 
             has_summary: !!data.ai_summary, 
             needs_refresh: data.ai_summary ? shouldRefreshSummary(data.ai_summary_updated_at) : 'N/A' 
           });
         }
         
-        if (!aborted) setProfile(data || null);
+        if (import.meta.env.DEV) console.log('[Profile] Final data before setProfile:', data);
+        // Set profile if we have any data object
+        if (!aborted) {
+          setProfile(data || {});
+          if (!data || Object.keys(data).length === 0) {
+            console.warn('[Profile] Empty data received');
+          }
+        }
       } catch (e) {
+        console.error('[Profile] Load error:', e);
         if (!aborted) setError(e?.message || "Failed to load");
       } finally {
         if (!aborted) setLoading(false);
@@ -199,7 +278,7 @@ export default function LeadProfilePage() {
     return () => {
       aborted = true;
     };
-  }, [leadId, tenantId]);
+  }, [entityId, tenantId]);
 
   if (loading) {
     return (
@@ -221,15 +300,17 @@ export default function LeadProfilePage() {
   }
 
   if (error || !profile) {
+    const debugInfo = profile ? `Profile keys: ${Object.keys(profile).length}` : 'Profile is null/undefined';
     return (
       <div className="min-h-screen bg-zinc-50">
         <div className="mx-auto max-w-3xl px-4 py-10">
           <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-            <div className="text-lg font-semibold text-zinc-900">Could not load lead</div>
+            <div className="text-lg font-semibold text-zinc-900">Could not load {entityType}</div>
             <div className="mt-2 text-sm text-zinc-600">{error || "Missing profile data"}</div>
+            {import.meta.env.DEV && <div className="mt-2 text-xs text-gray-500">{debugInfo}</div>}
             <div className="mt-6 flex gap-2">
-              <Link to="/leads" className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white">
-                Back to Leads
+              <Link to={`/${entityType}s`} className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white">
+                Back to {entityType}s
               </Link>
               <button
                 type="button"
@@ -245,9 +326,28 @@ export default function LeadProfilePage() {
     );
   }
 
-  const lead = profile;
-  const name = [lead.first_name, lead.last_name].filter(Boolean).join(" ") || "Lead";
-  const companyName = lead.account_name || "—";
+  const lead = profile || {};
+  
+  // Build display name based on entity type
+  let name, companyName, subtitle;
+  if (entityType === 'account') {
+    name = lead.name || lead.account_name || "Account";
+    companyName = lead.industry || "—";
+    subtitle = lead.type || "Customer";
+  } else if (entityType === 'contact') {
+    name = [lead.first_name, lead.last_name].filter(Boolean).join(" ") || "Contact";
+    companyName = lead.account_name || lead.company || "—";
+    subtitle = lead.job_title || lead.title || "—";
+  } else if (entityType === 'bizdev') {
+    name = lead.contact_name || [lead.first_name, lead.last_name].filter(Boolean).join(" ") || "BizDev Source";
+    companyName = lead.company || lead.account_name || "—";
+    subtitle = lead.source || "—";
+  } else {
+    // lead
+    name = [lead.first_name, lead.last_name].filter(Boolean).join(" ") || "Lead";
+    companyName = lead.company || lead.account_name || "—";
+    subtitle = lead.job_title || lead.title || "—";
+  }
 
   function ActivityBadge({ status }) {
     const s = (status || "unknown").toLowerCase();
@@ -262,7 +362,7 @@ export default function LeadProfilePage() {
       {/* Sidebar */}
       <aside className="fixed top-0 left-0 bottom-0 w-64 bg-gray-900 text-white p-6 overflow-y-auto">
         <h1 className="text-2xl font-bold mb-1">{name}</h1>
-        <p className="text-gray-400 text-sm mb-2">{lead.job_title}</p>
+        {subtitle && <p className="text-gray-400 text-sm mb-2">{subtitle}</p>}
         <p className="text-gray-500 text-xs font-semibold uppercase tracking-widest mb-6">{companyName}</p>
         <nav className="border-t border-gray-700 pt-4">
           <a href="#overview" className="text-white block py-3 text-sm font-medium">Overview</a>
@@ -301,6 +401,46 @@ export default function LeadProfilePage() {
                   {lead.phone ? <a href={`tel:${lead.phone}`} className="text-indigo-600 hover:underline">{lead.phone}</a> : "—"}
                 </div>
               </div>
+              {entityType === 'account' && (
+                <>
+                  <div>
+                    <div className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">Website</div>
+                    <div className="text-sm text-gray-900">
+                      {lead.website ? <a href={lead.website} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">{lead.website}</a> : "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">Type</div>
+                    <div className="text-sm text-gray-900">{lead.type || "—"}</div>
+                  </div>
+                  {lead.address_1 && (
+                    <div className="col-span-2">
+                      <div className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">Address</div>
+                      <div className="text-sm text-gray-900">
+                        {[lead.address_1, lead.address_2, lead.city, lead.state, lead.zip_code, lead.country].filter(Boolean).join(", ")}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+              {(entityType === 'contact' || entityType === 'lead') && lead.company && (
+                <div>
+                  <div className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">Company</div>
+                  <div className="text-sm text-gray-900">{lead.company}</div>
+                </div>
+              )}
+              {(entityType === 'bizdev') && (
+                <>
+                  <div>
+                    <div className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">Source</div>
+                    <div className="text-sm text-gray-900">{lead.source || "—"}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">License Status</div>
+                    <div className="text-sm text-gray-900">{lead.license_status || "—"}</div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -356,7 +496,7 @@ export default function LeadProfilePage() {
             <div className="mb-4">
               <h3 className="text-lg font-bold text-gray-900">⚡ Activities</h3>
             </div>
-            {lead.activities && lead.activities.length > 0 ? (
+            {Array.isArray(lead.activities) && lead.activities.length > 0 ? (
               <div className="space-y-4">
                 {lead.activities.map((activity) => (
                   <div key={activity.id} className="pb-4 border-b border-gray-200 last:border-b-0">

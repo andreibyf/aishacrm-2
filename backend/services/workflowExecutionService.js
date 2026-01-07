@@ -223,6 +223,19 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
                   }
                 }
               }
+              
+              // Inject timestamps for record create/update operations
+              if (requestBody && typeof requestBody === 'object') {
+                const nowIso = new Date().toISOString();
+                if (method === 'POST') {
+                  // Creating new record - add created_at and updated_at
+                  if (!requestBody.created_at) requestBody.created_at = nowIso;
+                  if (!requestBody.updated_at) requestBody.updated_at = nowIso;
+                } else if (method === 'PUT' || method === 'PATCH') {
+                  // Updating record - add updated_at
+                  if (!requestBody.updated_at) requestBody.updated_at = nowIso;
+                }
+              }
             }
 
             try {

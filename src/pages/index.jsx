@@ -72,8 +72,11 @@ function PagesContent() {
                 {/* Public route - password reset (no Layout wrapper) */}
                 <Route path="/auth/reset" element={<AuthResetPage />} />
 
-                {/* Public route - lead profile webpage (standalone, no Layout wrapper) */}
+                {/* Public routes - profile webpages (standalone, no Layout wrapper) */}
                 <Route path="/leads/:leadId" element={<PAGES.LeadProfilePage />} />
+                <Route path="/accounts/:accountId" element={<PAGES.LeadProfilePage />} />
+                <Route path="/contacts/:contactId" element={<PAGES.LeadProfilePage />} />
+                <Route path="/bizdev/:bizdevId" element={<PAGES.LeadProfilePage />} />
 
                 {/* Public route - funnel demo (standalone, no Layout wrapper) */}
                 <Route path="/funnel-demo" element={<PAGES.FunnelDemo />} />

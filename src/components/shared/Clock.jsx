@@ -11,7 +11,7 @@ export default function Clock() {
 
   return (
     <div className="text-center p-3 rounded-lg">
-        <p className="text-sky-400 text-sm font-semibold">AI-Powered Business Growth Platform</p>
+        <p className="text-sky-400 text-sm font-semibold">Cognitive Relationship Management Platform</p>
         <p className="text-yellow-500 mt-1 text-sm font-extrabold">{format(currentDate, "MMM dd, yyyy")}</p>
         <p className="text-green-400 text-base font-bold">{format(currentDate, "hh:mm:ss a")}</p>
     </div>);

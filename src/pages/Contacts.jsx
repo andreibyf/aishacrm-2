@@ -20,6 +20,7 @@ import {
   AlertCircle,
   Edit,
   Eye,
+  Globe,
   Grid,
   List,
   Loader2,
@@ -1268,6 +1269,31 @@ export default function ContactsPage() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-2">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      try {
+                                        const href = `/contacts/${contact.id}`;
+                                        window.open(href, '_blank', 'noopener,noreferrer');
+                                      } catch (err) {
+                                        console.error('Failed to open contact profile:', err);
+                                      }
+                                    }}
+                                    className="h-8 w-8 text-slate-400 hover:text-slate-300 hover:bg-slate-700"
+                                  >
+                                    <Globe className="w-4 h-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Open web profile</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>

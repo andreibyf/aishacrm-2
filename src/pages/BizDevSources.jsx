@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -501,6 +502,7 @@ export default function BizDevSourcesPage() {
   }
 
   return (
+    <TooltipProvider>
     <div className="min-h-screen bg-slate-900 p-4 sm:p-6">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
@@ -899,5 +901,6 @@ export default function BizDevSourcesPage() {
         />
       )}
     </div>
+    </TooltipProvider>
   );
 }

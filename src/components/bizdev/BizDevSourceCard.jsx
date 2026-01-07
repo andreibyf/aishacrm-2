@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Building2,
   Mail,
@@ -373,6 +374,30 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
           </div>
 
           <div className="flex items-center gap-1">
+            {/* Globe icon for web profile */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    try {
+                      const href = `/bizdev/${source.id}`;
+                      window.open(href, '_blank', 'noopener,noreferrer');
+                    } catch (err) {
+                      console.error('Failed to open bizdev source profile:', err);
+                    }
+                  }}
+                  className="text-slate-400 hover:text-blue-400 hover:bg-slate-700"
+                >
+                  <Globe className="w-4 h-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Open web profile</p>
+              </TooltipContent>
+            </Tooltip>
             {/* Eye icon for view */}
             <Button
               variant="ghost"
