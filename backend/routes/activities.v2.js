@@ -334,6 +334,12 @@ export default function createActivityV2Routes(_pgPool) {
       });
     } catch (error) {
       logger.error('Error in v2 activities list:', error);
+      // Ensure CORS headers are present in error responses
+      if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
+        res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
+        res.setHeader('Vary', 'Origin');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+      }
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -393,8 +399,12 @@ export default function createActivityV2Routes(_pgPool) {
         data: { activity: created, aiContext },
       });
     } catch (error) {
-      logger.error('Error in v2 activity create:', error);
-      res.status(500).json({ status: 'error', message: error.message });
+      logger.error('Error in v2 activity create:', error);      // Ensure CORS headers are present in error responses
+      if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
+        res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
+        res.setHeader('Vary', 'Origin');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+      }      res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
@@ -425,8 +435,12 @@ export default function createActivityV2Routes(_pgPool) {
       
       res.json({ status: 'success', data: { activity, aiContext } });
     } catch (error) {
-      logger.error('Error in v2 activity get:', error);
-      res.status(500).json({ status: 'error', message: error.message });
+      logger.error('Error in v2 activity get:', error);      // Ensure CORS headers are present in error responses
+      if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
+        res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
+        res.setHeader('Vary', 'Origin');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+      }      res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
@@ -506,6 +520,12 @@ export default function createActivityV2Routes(_pgPool) {
       res.json({ status: 'success', data: { activity: updated } });
     } catch (error) {
       logger.error('Error in v2 activity update:', error);
+      // Ensure CORS headers are present in error responses
+      if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
+        res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
+        res.setHeader('Vary', 'Origin');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+      }
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -568,6 +588,12 @@ export default function createActivityV2Routes(_pgPool) {
       res.json({ status: 'success', message: 'Activity deleted successfully' });
     } catch (error) {
       logger.error('Error in v2 activity delete:', error);
+      // Ensure CORS headers are present in error responses
+      if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
+        res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
+        res.setHeader('Vary', 'Origin');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+      }
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
