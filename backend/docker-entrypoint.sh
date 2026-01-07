@@ -11,15 +11,15 @@ if [ -n "$DOPPLER_TOKEN" ]; then
   
   echo "[ENTRYPOINT] Doppler secrets downloaded to /tmp/.env"
   
-  # Source the file to load all secrets into current shell
+  # Export all variables from the env file (set -a before sourcing)
   set -a
   . /tmp/.env
   set +a
   
   echo "[ENTRYPOINT] GitHub secrets loaded: GH_TOKEN=${GH_TOKEN:0:20}..."
   
-  # Run node directly WITHOUT exec so environment persists
-  node server.js
+  # Use exec to replace shell with node process
+  exec node server.js
 else
   echo "[ENTRYPOINT] WARNING: DOPPLER_TOKEN not set, running without Doppler"
   exec node server.js

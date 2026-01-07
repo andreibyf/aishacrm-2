@@ -110,6 +110,11 @@ services:
       - LLM_PROVIDER=anthropic
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # GitHub Issues integration
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - GH_TOKEN=${GH_TOKEN:-}
+      - REPO_OWNER=${REPO_OWNER:-andreibyf}
+      - REPO_NAME=${REPO_NAME:-aishacrm-2}
     dns:
       - 8.8.8.8
       - 8.8.4.4
