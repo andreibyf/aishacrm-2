@@ -3,6 +3,7 @@ import cacheManager from '../lib/cacheManager.js';
 import { initializePerformanceLogBatcher } from '../lib/perfLogBatcher.js';
 import { pool as perfLogPool } from '../lib/supabase-db.js';
 import logger from '../lib/logger.js';
+import { validateRedisConfig } from '../lib/redisConfigValidator.js';
 
 export async function initServices(app, pgPool) {
   // Initialize Redis/Valkey memory client (non-blocking for app startup)
@@ -12,6 +13,15 @@ export async function initServices(app, pgPool) {
     if (memClient) {
       app.locals.memoryClient = memClient;
       logger.info({ redisUrl: process.env.REDIS_MEMORY_URL || process.env.REDIS_URL }, 'Memory layer available');
+      
+      // Validate Redis configuration for memory storage
+      // Note: Using 'allkeys-lru' in production is acceptable for cache-like workloads
+      // Using 'noeviction' is recommended only if data loss is unacceptable
+      try {
+        await validateRedisConfig(memClient, 'memory');
+      } catch (configErr) {
+        logger.debug({ err: configErr }, 'Redis config validation skipped (client may not support CONFIG commands)');
+      }
     } else {
       logger.info({ redisUrl: process.env.REDIS_MEMORY_URL || process.env.REDIS_URL }, 'Memory layer unavailable');
     }
@@ -24,6 +34,16 @@ export async function initServices(app, pgPool) {
     await cacheManager.connect();
     logger.info({ redisUrl: process.env.REDIS_CACHE_URL || 'redis://localhost:6380' }, 'API cache layer connected');
     app.locals.cacheManager = cacheManager;
+
+    // Validate Redis configuration for cache
+    // Note: 'allkeys-lru' is the RECOMMENDED policy for cache workloads
+    try {
+      if (cacheManager.client) {
+        await validateRedisConfig(cacheManager.client, 'cache');
+      }
+    } catch (configErr) {
+      logger.debug({ err: configErr }, 'Redis cache config validation skipped');
+    }
 
     // In development mode, flush cache on startup to avoid stale data after code changes
     if (process.env.NODE_ENV === 'development' || process.env.FLUSH_CACHE_ON_STARTUP === 'true') {

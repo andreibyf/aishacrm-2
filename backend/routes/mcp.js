@@ -381,8 +381,16 @@ export default function createMCPRoutes(_pgPool) {
         'GH_TOKEN'
       ];
 
-      // Check if Doppler is enabled
+      // Check if Doppler is enabled (optional - not required for production)
       const dopplerEnabled = !!process.env.DOPPLER_TOKEN;
+      const dopplerInfo = dopplerEnabled ? {
+        enabled: true,
+        project: process.env.DOPPLER_PROJECT || 'unknown',
+        config: process.env.DOPPLER_CONFIG || 'unknown'
+      } : {
+        enabled: false,
+        note: 'Doppler is optional - production can use environment variables directly'
+      };
 
       // Helper function to safely mask secret values
       const maskSecret = (value) => {
@@ -426,15 +434,17 @@ export default function createMCPRoutes(_pgPool) {
         status: 'success',
         data: {
           environment: process.env.NODE_ENV || 'development',
-          dopplerEnabled,
-          dopplerProject: process.env.DOPPLER_PROJECT || null,
-          dopplerConfig: process.env.DOPPLER_CONFIG || null,
+          doppler: dopplerInfo,
           secrets,
           summary: {
             totalRequired,
             configuredRequired,
             missingRequired,
             allConfigured: missingRequired.length === 0
+          },
+          notes: {
+            doppler: 'Doppler is optional - environment variables can be managed directly in production',
+            redisPolicy: 'Redis eviction policy "allkeys-lru" is expected for cache workloads'
           }
         }
       });
