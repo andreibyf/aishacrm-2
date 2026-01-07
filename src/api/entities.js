@@ -180,6 +180,26 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
             : pluralize(entityName);
   let url = `${BACKEND_URL}/api/${entityPath}`;
 
+  // MongoDB operators that should be wrapped in 'filter' parameter
+  const MONGO_OPERATORS = ['$or', '$and', '$nor', '$not', '$in', '$nin', '$all', '$regex', '$options'];
+  
+  /**
+   * Check if a value contains MongoDB operators (nested detection)
+   * @param {*} value - Value to check
+   * @returns {boolean} True if value contains MongoDB operators
+   */
+  const containsMongoOperators = (value) => {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      return Object.keys(value).some(k => MONGO_OPERATORS.includes(k));
+    }
+    if (Array.isArray(value)) {
+      return value.some(item => 
+        item && typeof item === 'object' && Object.keys(item).some(k => MONGO_OPERATORS.includes(k))
+      );
+    }
+    return false;
+  };
+
   // Determine tenant_id preference order:
   // 1) Explicit data.tenant_id (including null to indicate cross-tenant reads for superadmin)
   // 2) URL param (?tenant=...)
@@ -329,21 +349,8 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
       // Add filter parameters if provided
       if (data && Object.keys(data).length > 0) {
         // Detect MongoDB-style operators that need to be wrapped in 'filter' parameter
-        const mongoOperators = ['$or', '$and', '$nor', '$not', '$in', '$nin', '$all', '$regex', '$options'];
-        const hasMongoOperators = Object.keys(data).some(key => mongoOperators.includes(key));
-        
-        // Check if any value contains MongoDB operators (nested case)
-        const hasNestedMongoOperators = Object.values(data).some(value => {
-          if (value && typeof value === 'object' && !Array.isArray(value)) {
-            return Object.keys(value).some(k => mongoOperators.includes(k));
-          }
-          if (Array.isArray(value)) {
-            return value.some(item => 
-              item && typeof item === 'object' && Object.keys(item).some(k => mongoOperators.includes(k))
-            );
-          }
-          return false;
-        });
+        const hasMongoOperators = Object.keys(data).some(key => MONGO_OPERATORS.includes(key));
+        const hasNestedMongoOperators = Object.values(data).some(value => containsMongoOperators(value));
         
         if (hasMongoOperators || hasNestedMongoOperators) {
           // Wrap complex MongoDB-style filters in 'filter' parameter
@@ -353,12 +360,7 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
           Object.entries(data).forEach(([key, value]) => {
             if (key !== "tenant_id") {
               // MongoDB operators go into filter object
-              if (mongoOperators.includes(key) || 
-                  (typeof value === 'object' && value !== null && 
-                   (Object.keys(value).some(k => mongoOperators.includes(k)) ||
-                    (Array.isArray(value) && value.some(item => 
-                      item && typeof item === 'object' && Object.keys(item).some(k => mongoOperators.includes(k))
-                    ))))) {
+              if (MONGO_OPERATORS.includes(key) || containsMongoOperators(value)) {
                 filterObj[key] = value;
               } else {
                 // Simple parameters stay as direct query params
