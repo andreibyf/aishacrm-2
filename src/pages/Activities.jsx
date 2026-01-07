@@ -251,27 +251,12 @@ export default function ActivitiesPage() {
         return;
       }
       
+      // Use simple 'q' parameter for text search (WAF-safe, no MongoDB operators in URL)
       if (searchTerm) {
-        const searchRegex = { $regex: searchTerm, $options: 'i' };
-        const searchConditions = [
-          { subject: searchRegex },
-          { description: searchRegex },
-          { related_name: searchRegex }
-        ];
-
-        // If $or already exists (e.g., from unassigned filter), combine via $and
-        if (currentFilter.$or) {
-          currentFilter = {
-            ...currentFilter,
-            $and: [...(currentFilter.$and || []), { $or: currentFilter.$or }, { $or: searchConditions }],
-          };
-          delete currentFilter.$or;
-        } else {
-          currentFilter = {
-            ...currentFilter,
-            $or: searchConditions
-          };
-        }
+        currentFilter = {
+          ...currentFilter,
+          q: searchTerm.trim()
+        };
       }
 
       if (selectedTags.length > 0) {
@@ -506,15 +491,11 @@ export default function ActivitiesPage() {
       try {
         let currentFilter = buildFilter();
         
+        // Use simple 'q' parameter for text search (WAF-safe)
         if (searchTerm) {
-          const searchRegex = { $regex: searchTerm, $options: 'i' };
           currentFilter = {
             ...currentFilter,
-            $or: [
-              { subject: searchRegex },
-              { description: searchRegex },
-              { related_name: searchRegex }
-            ]
+            q: searchTerm.trim()
           };
         }
 
@@ -587,15 +568,11 @@ export default function ActivitiesPage() {
       try {
         let currentFilter = buildFilter();
         
+        // Use simple 'q' parameter for text search (WAF-safe)
         if (searchTerm) {
-          const searchRegex = { $regex: searchTerm, $options: 'i' };
           currentFilter = {
             ...currentFilter,
-            $or: [
-              { subject: searchRegex },
-              { description: searchRegex },
-              { related_name: searchRegex }
-            ]
+            q: searchTerm.trim()
           };
         }
 
@@ -649,15 +626,11 @@ export default function ActivitiesPage() {
       try {
         let currentFilter = buildFilter();
         
+        // Use simple 'q' parameter for text search (WAF-safe)
         if (searchTerm) {
-          const searchRegex = { $regex: searchTerm, $options: 'i' };
           currentFilter = {
             ...currentFilter,
-            $or: [
-              { subject: searchRegex },
-              { description: searchRegex },
-              { related_name: searchRegex }
-            ]
+            q: searchTerm.trim()
           };
         }
 

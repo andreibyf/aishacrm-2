@@ -183,6 +183,17 @@ export default function createActivityV2Routes(_pgPool) {
         }
       }
 
+      // Handle simple text search via 'q' parameter (WAF-safe alternative to MongoDB $regex)
+      // Searches subject, body (description), and notes fields using PostgreSQL ILIKE
+      const searchQuery = req.query.q;
+      if (searchQuery && searchQuery.trim()) {
+        const searchTerm = searchQuery.trim();
+        const likePattern = `%${searchTerm}%`;
+        logger.debug('[Activities V2] Applying text search:', { searchTerm, likePattern });
+        // Search across subject, body (description), and notes with case-insensitive ILIKE
+        q = q.or(`subject.ilike.${likePattern},body.ilike.${likePattern},notes.ilike.${likePattern}`);
+      }
+
       // Handle is_test_data filter
       if (is_test_data !== undefined) {
         const flag = String(is_test_data).toLowerCase();
