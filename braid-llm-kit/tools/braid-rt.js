@@ -395,12 +395,18 @@ export async function getAuditStats(supabase, tenantId, period = 'day') {
   const interval = periodMap[period] || periodMap.day;
   
   try {
-    // Get basic counts
-    const { data: logs, error } = await supabase
+    // Build query conditionally - if tenantId is null, fetch all tenants (superadmin view)
+    let query = supabase
       .from('braid_audit_log')
       .select('tool_name, policy, result_tag, execution_time_ms, cache_hit')
-      .eq('tenant_id', tenantId)
       .gte('created_at', new Date(Date.now() - (period === 'hour' ? 3600000 : period === 'day' ? 86400000 : period === 'week' ? 604800000 : 2592000000)).toISOString());
+    
+    // Only filter by tenant if tenantId is provided
+    if (tenantId) {
+      query = query.eq('tenant_id', tenantId);
+    }
+    
+    const { data: logs, error } = await query;
     
     if (error || !logs) {
       return { error: error?.message || 'No data' };
@@ -468,12 +474,19 @@ export async function getToolMetrics(supabase, tenantId, period = 'day') {
   const since = new Date(Date.now() - (periodMs[period] || periodMs.day)).toISOString();
   
   try {
-    const { data: logs, error } = await supabase
+    // Build query conditionally - if tenantId is null, fetch all tenants (superadmin view)
+    let query = supabase
       .from('braid_audit_log')
       .select('tool_name, policy, result_tag, execution_time_ms, cache_hit, error_type, created_at')
-      .eq('tenant_id', tenantId)
       .gte('created_at', since)
       .order('created_at', { ascending: false });
+    
+    // Only filter by tenant if tenantId is provided
+    if (tenantId) {
+      query = query.eq('tenant_id', tenantId);
+    }
+    
+    const { data: logs, error } = await query;
     
     if (error) return { error: error.message };
     if (!logs || logs.length === 0) return { tools: [], summary: {} };
@@ -596,12 +609,19 @@ export async function getMetricsTimeSeries(supabase, tenantId, granularity = 'ho
   const since = new Date(Date.now() - (interval * points)).toISOString();
   
   try {
-    const { data: logs, error } = await supabase
+    // Build query conditionally - if tenantId is null, fetch all tenants (superadmin view)
+    let query = supabase
       .from('braid_audit_log')
       .select('result_tag, execution_time_ms, cache_hit, created_at')
-      .eq('tenant_id', tenantId)
       .gte('created_at', since)
       .order('created_at', { ascending: true });
+    
+    // Only filter by tenant if tenantId is provided
+    if (tenantId) {
+      query = query.eq('tenant_id', tenantId);
+    }
+    
+    const { data: logs, error } = await query;
     
     if (error) return { error: error.message };
 
@@ -676,14 +696,21 @@ export async function getErrorAnalysis(supabase, tenantId, period = 'day') {
   const since = new Date(Date.now() - (periodMs[period] || periodMs.day)).toISOString();
   
   try {
-    const { data: errors, error } = await supabase
+    // Build query conditionally - if tenantId is null, fetch all tenants (superadmin view)
+    let query = supabase
       .from('braid_audit_log')
       .select('tool_name, policy, error_type, error_message, user_email, created_at')
-      .eq('tenant_id', tenantId)
       .eq('result_tag', 'Err')
       .gte('created_at', since)
       .order('created_at', { ascending: false })
       .limit(100);
+    
+    // Only filter by tenant if tenantId is provided
+    if (tenantId) {
+      query = query.eq('tenant_id', tenantId);
+    }
+    
+    const { data: errors, error } = await query;
     
     if (error) return { error: error.message };
     
