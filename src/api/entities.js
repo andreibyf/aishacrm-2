@@ -328,14 +328,68 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
 
       // Add filter parameters if provided
       if (data && Object.keys(data).length > 0) {
-        Object.entries(data).forEach(([key, value]) => {
-          if (key !== "tenant_id") { // Don't duplicate tenant_id
-            params.append(
-              key,
-              typeof value === "object" ? JSON.stringify(value) : value,
+        // Detect MongoDB-style operators that need to be wrapped in 'filter' parameter
+        const mongoOperators = ['$or', '$and', '$nor', '$not', '$in', '$nin', '$all', '$regex', '$options'];
+        const hasMongoOperators = Object.keys(data).some(key => mongoOperators.includes(key));
+        
+        // Check if any value contains MongoDB operators (nested case)
+        const hasNestedMongoOperators = Object.values(data).some(value => {
+          if (value && typeof value === 'object' && !Array.isArray(value)) {
+            return Object.keys(value).some(k => mongoOperators.includes(k));
+          }
+          if (Array.isArray(value)) {
+            return value.some(item => 
+              item && typeof item === 'object' && Object.keys(item).some(k => mongoOperators.includes(k))
             );
           }
+          return false;
         });
+        
+        if (hasMongoOperators || hasNestedMongoOperators) {
+          // Wrap complex MongoDB-style filters in 'filter' parameter
+          const filterObj = {};
+          const directParams = {};
+          
+          Object.entries(data).forEach(([key, value]) => {
+            if (key !== "tenant_id") {
+              // MongoDB operators go into filter object
+              if (mongoOperators.includes(key) || 
+                  (typeof value === 'object' && value !== null && 
+                   (Object.keys(value).some(k => mongoOperators.includes(k)) ||
+                    (Array.isArray(value) && value.some(item => 
+                      item && typeof item === 'object' && Object.keys(item).some(k => mongoOperators.includes(k))
+                    ))))) {
+                filterObj[key] = value;
+              } else {
+                // Simple parameters stay as direct query params
+                directParams[key] = value;
+              }
+            }
+          });
+          
+          // Add filter parameter if we have MongoDB operators
+          if (Object.keys(filterObj).length > 0) {
+            params.append('filter', JSON.stringify(filterObj));
+          }
+          
+          // Add direct parameters
+          Object.entries(directParams).forEach(([key, value]) => {
+            params.append(
+              key,
+              typeof value === "object" ? JSON.stringify(value) : value
+            );
+          });
+        } else {
+          // No MongoDB operators - use original behavior
+          Object.entries(data).forEach(([key, value]) => {
+            if (key !== "tenant_id") { // Don't duplicate tenant_id
+              params.append(
+                key,
+                typeof value === "object" ? JSON.stringify(value) : value,
+              );
+            }
+          });
+        }
       }
       url += params.toString() ? `?${params.toString()}` : "";
     }
