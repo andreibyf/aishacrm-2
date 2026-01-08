@@ -3276,37 +3276,94 @@ ${conversationSummary}`;
             // Check for navigation action: {action: "navigate", path, page, record_id, message}
             if (value.action === 'navigate' && value.page) {
               let resolvedRecordId = value.record_id || null;
+              const originalRecordName = resolvedRecordId; // Keep original for logging
               
               // If record_id is provided but is not a UUID, try to resolve it
               const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
               if (resolvedRecordId && !UUID_PATTERN.test(resolvedRecordId)) {
                 // It's a name/title, try to look up the record
                 const tableName = value.page; // leads, contacts, accounts, opportunities
+                console.log('[AI Chat] Resolving record name to UUID:', JSON.stringify({ 
+                  name: resolvedRecordId, 
+                  table: tableName,
+                  tenant_id: tenantRecord?.id 
+                }));
                 try {
                   const supabaseClient = getSupabaseClient();
-                  // Search by various name fields
-                  const searchTerm = `%${resolvedRecordId}%`;
-                  const { data: searchResults } = await supabaseClient
+                  
+                  // Split search term into words and search for each word
+                  // This handles "xyx corporation" matching "XYX Corp" by finding "xyx"
+                  const searchWords = resolvedRecordId.toLowerCase().split(/\s+/).filter(w => w.length >= 2);
+                  console.log('[AI Chat] Search words extracted:', JSON.stringify(searchWords));
+                  
+                  // Different tables have different column structures
+                  // leads: first_name, last_name, company
+                  // contacts: first_name, last_name, company_name
+                  // accounts: name
+                  // opportunities: name, title
+                  let selectColumns, columns;
+                  
+                  if (tableName === 'leads') {
+                    selectColumns = 'id, first_name, last_name, company';
+                    columns = ['first_name', 'last_name', 'company'];
+                  } else if (tableName === 'contacts') {
+                    selectColumns = 'id, first_name, last_name, company_name';
+                    columns = ['first_name', 'last_name', 'company_name'];
+                  } else if (tableName === 'accounts') {
+                    selectColumns = 'id, name';
+                    columns = ['name'];
+                  } else if (tableName === 'opportunities') {
+                    selectColumns = 'id, name, title';
+                    columns = ['name', 'title'];
+                  } else if (tableName === 'activities') {
+                    selectColumns = 'id, title, subject';
+                    columns = ['title', 'subject'];
+                  } else {
+                    selectColumns = 'id, name, title';
+                    columns = ['name'];
+                  }
+                  
+                  // Build OR filter: match any column containing any search word
+                  // e.g., "first_name.ilike.%jack%,last_name.ilike.%jack%,first_name.ilike.%smith%,..."
+                  const orFilters = [];
+                  for (const word of searchWords) {
+                    const pattern = `%${word}%`;
+                    for (const col of columns) {
+                      orFilters.push(`${col}.ilike.${pattern}`);
+                    }
+                  }
+                  const orFilter = orFilters.join(',');
+                  console.log('[AI Chat] Supabase OR filter:', orFilter);
+                  
+                  const { data: searchResults, error: searchError } = await supabaseClient
                     .from(tableName)
-                    .select('id, name, title, company_name, first_name, last_name')
+                    .select(selectColumns)
                     .eq('tenant_id', tenantRecord.id)
-                    .or(`name.ilike.${searchTerm},title.ilike.${searchTerm},company_name.ilike.${searchTerm},first_name.ilike.${searchTerm},last_name.ilike.${searchTerm}`)
+                    .or(orFilter)
                     .limit(1);
                   
-                  if (searchResults && searchResults.length > 0 && searchResults[0].id) {
-                    logger.debug('[AI Chat] Resolved record name to UUID:', { 
-                      originalName: resolvedRecordId, 
-                      resolvedId: searchResults[0].id 
-                    });
+                  if (searchError) {
+                    console.log('[AI Chat] Supabase search error:', JSON.stringify({ error: searchError.message, code: searchError.code, table: tableName }));
+                    resolvedRecordId = null; // Don't pass invalid name to frontend
+                  } else if (searchResults && searchResults.length > 0 && searchResults[0].id) {
+                    console.log('[AI Chat] Resolved record name to UUID:', JSON.stringify({ 
+                      originalName: originalRecordName, 
+                      resolvedId: searchResults[0].id,
+                      matchedRecord: searchResults[0]
+                    }));
                     resolvedRecordId = searchResults[0].id;
                   } else {
-                    logger.warn('[AI Chat] Could not resolve record name to UUID:', { 
-                      name: resolvedRecordId, 
-                      table: tableName 
-                    });
+                    console.log('[AI Chat] Could not resolve record name - no match found:', JSON.stringify({ 
+                      name: originalRecordName, 
+                      table: tableName,
+                      searchResultsCount: searchResults?.length || 0
+                    }));
+                    // CRITICAL: Don't pass invalid name to frontend - set to null
+                    resolvedRecordId = null;
                   }
                 } catch (lookupErr) {
-                  logger.warn('[AI Chat] Failed to lookup record by name:', lookupErr?.message);
+                  console.log('[AI Chat] Failed to lookup record by name:', lookupErr?.message);
+                  resolvedRecordId = null; // Don't pass invalid name to frontend
                 }
               }
               

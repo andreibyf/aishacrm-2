@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { AlertCircle, Building2, CheckSquare, Loader2, Send, Sparkles, Target, TrendingUp, Users, X, Mic, Volume2, Trash2, ClipboardList, BarChart3, ListTodo, Ear, Briefcase, Code, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { AlertCircle, Building2, CheckSquare, ChevronRight, Loader2, Send, Sparkles, Target, TrendingUp, Users, X, Mic, Volume2, Trash2, ClipboardList, BarChart3, ListTodo, Ear, Briefcase, Code, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useAiSidebarState } from './useAiSidebarState.jsx';
@@ -1399,7 +1399,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     <>
       <ConfirmDialogPortal />
       <div
-        className={`aisha-sidebar ${isOpen ? 'open' : ''}`}
+        className={`aisha-sidebar ai-sidebar-container ${isOpen ? 'open' : ''}`}
         aria-hidden={!isOpen}
         data-testid="ai-sidebar-root"
       >
@@ -1408,8 +1408,10 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
         .aisha-sidebar.open { width: 540px; }
         .aisha-sidebar .sidebar-panel { position: absolute; right: 0; top: 0; width: 540px; height: 100%; display: flex; flex-direction: column; background: #ffffff; color: #0f172a; border-left: 1px solid rgba(15,23,42,0.08); box-shadow: -12px 0 35px rgba(15,23,42,0.12); }
         .theme-dark .aisha-sidebar .sidebar-panel { background: #0b0f19; color: #f8fafc; border-left: 1px solid rgba(255,255,255,0.05); box-shadow: -12px 0 35px rgba(0,0,0,0.65); }
-        .aisha-sidebar .sidebar-backdrop { position: fixed; top: 0; left: 0; width: calc(100% - 540px); height: 100%; background: rgba(15,23,42,0.2); backdrop-filter: blur(2px); }
+        .aisha-sidebar .sidebar-backdrop { position: fixed; top: 0; left: 0; width: calc(100% - 540px); height: 100%; background: rgba(15,23,42,0.2); backdrop-filter: blur(2px); z-index: 1999; }
         .theme-dark .aisha-sidebar .sidebar-backdrop { background: rgba(2,6,23,0.35); }
+        .aisha-sidebar .sidebar-header { position: relative; z-index: 10; pointer-events: auto; }
+        .aisha-sidebar .sidebar-close-btn { position: relative; z-index: 20; cursor: pointer; }
         .aisha-message.assistant .prose, .aisha-message.assistant .prose p, .aisha-message.assistant .prose li, .aisha-message.assistant .prose code, .aisha-message.assistant .prose strong, .aisha-message.assistant .prose em { color: #111827; }
         .theme-dark .aisha-message.assistant .prose, .theme-dark .aisha-message.assistant .prose p, .theme-dark .aisha-message.assistant .prose li, .theme-dark .aisha-message.assistant .prose code, .theme-dark .aisha-message.assistant .prose strong, .theme-dark .aisha-message.assistant .prose em { color: #f8fafc; }
         `}</style>
@@ -1419,8 +1421,29 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
         aria-modal="true"
         aria-label="AiSHA Assistant"
       >
-          <header className="flex items-center justify-between border-b border-slate-200 px-5 py-4 text-slate-900 dark:border-slate-800/70 dark:text-slate-100">
+          <header className="sidebar-header flex items-center justify-between border-b border-slate-200 px-5 py-4 text-slate-900 dark:border-slate-800/70 dark:text-slate-100">
             <div className="flex items-center gap-3">
+              {/* Close button moved to left side as text */}
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  // Use mousedown instead of click to prevent event from reaching Sheet overlay
+                  e.stopPropagation();
+                  e.preventDefault();
+                  e.nativeEvent.stopImmediatePropagation();
+                  closeSidebar();
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                }}
+                className="sidebar-close-btn flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 transition-colors mr-2"
+                aria-label="Close assistant"
+              >
+                <ChevronRight className="h-4 w-4" />
+                <span>Close</span>
+              </button>
+              <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-600/90 shadow-md shadow-indigo-500/20">
                 <Sparkles className="h-4.5 w-4.5 text-white" />
             </div>
@@ -1458,17 +1481,6 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                   <Code className="h-4 w-4" />
                 </Button>
               )}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={closeSidebar}
-              className="text-slate-500 hover:text-slate-900 dark:text-slate-300"
-              title="Close assistant"
-              aria-label="Close assistant"
-              type="button"
-            >
-              <X className="h-5 w-5" />
-            </Button>
           </div>
         </header>
 
@@ -1986,7 +1998,21 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
         </div>
         </aside>
         {isOpen && (
-          <div className="sidebar-backdrop" onClick={closeSidebar} aria-hidden="true" />
+          <div 
+            className="sidebar-backdrop" 
+            onMouseDown={(e) => {
+              // Use mousedown to close before click event reaches Sheet overlay
+              e.stopPropagation();
+              e.preventDefault();
+              e.nativeEvent.stopImmediatePropagation();
+              closeSidebar();
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+            }}
+            aria-hidden="true" 
+          />
         )}
       </div>
     </>

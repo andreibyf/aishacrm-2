@@ -594,6 +594,20 @@ export default function UniversalDetailPanel({
         side="right" 
         className="!w-1/2 !max-w-none bg-slate-900 text-slate-100 border-l border-slate-700 overflow-y-auto"
         style={{ width: '50%' }}
+        onPointerDownOutside={(e) => {
+          // Prevent closing when clicking inside AI sidebar
+          const aiSidebar = document.querySelector('.ai-sidebar-container');
+          if (aiSidebar && aiSidebar.contains(e.target)) {
+            e.preventDefault();
+          }
+        }}
+        onInteractOutside={(e) => {
+          // Prevent closing when interacting with AI sidebar
+          const aiSidebar = document.querySelector('.ai-sidebar-container');
+          if (aiSidebar && aiSidebar.contains(e.target)) {
+            e.preventDefault();
+          }
+        }}
       >
         <SheetHeader className="border-b border-slate-700 pb-4">
           <div className="flex items-start justify-between">
