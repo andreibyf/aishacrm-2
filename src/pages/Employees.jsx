@@ -115,7 +115,7 @@ export default function Employees() {
 
       const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
       setEmployees(paginated);
-      loadingToast.showSuccess("Employees loaded! ✨");
+      loadingToast.showSuccess("Employees loading! ✨");
     } catch (error) {
       console.error("Error loading employees:", error);
       loadingToast.showError("Failed to load employees");

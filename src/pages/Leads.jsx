@@ -492,7 +492,7 @@ export default function LeadsPage() {
       setTotalItems(estimatedTotal);
       setCurrentPage(page);
       initialLoadDone.current = true;
-      loadingToast.showSuccess(`${leadsLabel} loaded! ✨`);
+      loadingToast.showSuccess(`${leadsLabel} loading! ✨`);
     } catch (error) {
       console.error("Failed to load leads:", error);
       loadingToast.showError(`Failed to load ${leadsLabel.toLowerCase()}`);

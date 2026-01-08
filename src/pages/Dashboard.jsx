@@ -360,7 +360,7 @@ export default function DashboardPage() {
             setLoading(false);
             
             // Dismiss loading toast since we have cached data
-            loadingToast.showSuccess("Dashboard loaded! 📊");
+            loadingToast.showSuccess("Dashboard loading! 📊");
 
             // Fetch fresh data in background (don't block UI)
             (async () => {
@@ -576,7 +576,7 @@ export default function DashboardPage() {
         
         // Dismiss loading toast and show success
         if (!forceRefresh) {
-          loadingToast.showSuccess("Dashboard loaded! 📊");
+          loadingToast.showSuccess("Dashboard loading! 📊");
         } else {
           loadingToast.dismiss();
         }

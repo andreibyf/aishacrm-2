@@ -49,7 +49,7 @@ export function useLoadingToast() {
     return toastIdRef.current;
   }, [funnyMessages]);
 
-  const showSuccess = useCallback((message = "Data loaded! ✨", options = {}) => {
+  const showSuccess = useCallback((message = "Data loading! ✨", options = {}) => {
     // Calculate minimum display time (500ms) for loading toast
     const minDisplayTime = 500;
     const elapsed = showTimeRef.current ? Date.now() - showTimeRef.current : minDisplayTime;

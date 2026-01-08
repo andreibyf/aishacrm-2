@@ -100,7 +100,7 @@ export default function DashboardHeader({ user, showTestData, onTestDataToggle, 
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Welcome to Ai-SHA CRM</h1>
-          <p className="text-blue-100 mt-1">AI-powered customer relationship management and business growth</p>
+          <p className="text-blue-100 mt-1">AI-powered cognitive relationship management and business growth</p>
         </div>
         <div className="flex items-center gap-4 mt-4 md:mt-0 flex-wrap">
           {isSuperadmin && (

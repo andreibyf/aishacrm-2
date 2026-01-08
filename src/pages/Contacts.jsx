@@ -403,7 +403,7 @@ export default function ContactsPage() {
           selectedTags,
         },
       );
-      loadingToast.showSuccess(`${contactsLabel} loaded! ✨`);
+      loadingToast.showSuccess(`${contactsLabel} loading! ✨`);
     } catch (error) {
       console.error("[Contacts] Failed to load contacts:", error);
       loadingToast.showError(`Failed to load ${contactsLabel.toLowerCase()}`);

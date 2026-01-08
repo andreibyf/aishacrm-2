@@ -342,7 +342,7 @@ export default function ActivitiesPage() {
 
       setCurrentPage(page);
       initialLoadDone.current = true;
-      loadingToast.showSuccess(`${activitiesLabel} loaded! ✨`);
+      loadingToast.showSuccess(`${activitiesLabel} loading! ✨`);
     } catch (error) {
       console.error("Failed to load activities:", error);
       loadingToast.showError(`Failed to load ${activitiesLabel.toLowerCase()}`);

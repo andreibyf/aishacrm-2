@@ -121,7 +121,7 @@ export default function WorkersPage() {
     try {
       const data = await Worker.list({ tenant_id: effectiveTenantId });
       setWorkers(data || []);
-      loadingToast.showSuccess(`${workersLabel} loaded! ✨`);
+      loadingToast.showSuccess(`${workersLabel} loading! ✨`);
     } catch (error) {
       console.error("Failed to load workers:", error);
       loadingToast.showError(`Failed to load ${workersLabel.toLowerCase()}`);

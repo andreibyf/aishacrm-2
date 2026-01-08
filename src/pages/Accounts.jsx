@@ -408,7 +408,7 @@ export default function AccountsPage() {
       const paginatedAccounts = filtered.slice(startIndex, endIndex);
 
       setAccounts(paginatedAccounts);
-      loadingToast.showSuccess(`${accountsLabel} loaded! ✨`);
+      loadingToast.showSuccess(`${accountsLabel} loading! ✨`);
     } catch (error) {
       console.error("[Accounts] Failed to load accounts:", error);
       loadingToast.showError(`Failed to load ${accountsLabel.toLowerCase()}`);

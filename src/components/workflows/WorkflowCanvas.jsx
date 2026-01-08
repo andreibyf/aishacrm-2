@@ -133,12 +133,26 @@ export default function WorkflowCanvas({ nodes, connections, onUpdateNode, onDel
       setNodePositions(positions);
     };
 
-    // Initial update
-    updatePositions();
+    // Use requestAnimationFrame to ensure DOM has been painted before calculating positions
+    // This fixes the issue where connectors don't align properly when loading saved workflows
+    const rafId = requestAnimationFrame(() => {
+      // Double RAF ensures layout is complete (first RAF = commit, second RAF = paint)
+      requestAnimationFrame(() => {
+        updatePositions();
+      });
+    });
 
     // Update on window resize
     window.addEventListener('resize', updatePositions);
-    return () => window.removeEventListener('resize', updatePositions);
+    
+    // Also update after a short delay as fallback for slow renders
+    const timeoutId = setTimeout(updatePositions, 100);
+    
+    return () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(timeoutId);
+      window.removeEventListener('resize', updatePositions);
+    };
   }, [nodes, connections]);
 
   // Generate SVG path for connection line

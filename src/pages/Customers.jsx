@@ -395,7 +395,7 @@ export default function CustomersPage() {
       const paginatedAccounts = filtered.slice(startIndex, endIndex);
 
       setCustomers(paginatedAccounts);
-      loadingToast.showSuccess(`${customersLabel} loaded! ✨`);
+      loadingToast.showSuccess(`${customersLabel} loading! ✨`);
     } catch (error) {
       console.error("[Accounts] Failed to load accounts:", error);
       loadingToast.showError(`Failed to load ${customersLabel.toLowerCase()}`);

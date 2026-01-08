@@ -453,7 +453,7 @@ export default function OpportunitiesPage() {
       setTotalItems(totalCount);
       setCurrentPage(page);
       initialLoadDone.current = true;
-      loadingToast.showSuccess(`${opportunitiesLabel} loaded! ✨`);
+      loadingToast.showSuccess(`${opportunitiesLabel} loading! ✨`);
     } catch (error) {
       console.error("Failed to load opportunities:", error);
       loadingToast.showError(`Failed to load ${opportunitiesLabel.toLowerCase()}`);
