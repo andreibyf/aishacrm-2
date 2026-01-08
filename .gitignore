@@ -112,3 +112,4 @@ query-*.sql
 # MCP Development Tools
 braid-mcp-wrapper/
 !braid-mcp-wrapper/README.md
+nul

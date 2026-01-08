@@ -32,6 +32,193 @@ function getAnthropicClient() {
   return anthropicClient;
 }
 
+/**
+ * Check if running inside Docker container
+ * Used to determine log access method
+ */
+async function isRunningInDocker() {
+  try {
+    await fs.access('/.dockerenv');
+    return true;
+  } catch {
+    try {
+      const content = await fs.readFile('/proc/1/cgroup', 'utf-8');
+      return content.includes('docker') || content.includes('kubepods');
+    } catch {
+      return false;
+    }
+  }
+}
+
+/**
+ * Get comprehensive execution context for Developer AI self-awareness
+ * This tells Developer AI exactly where and how it's running
+ */
+async function getExecutionContext() {
+  const isDocker = await isRunningInDocker();
+  const nodeEnv = process.env.NODE_ENV || 'development';
+  const isProduction = nodeEnv === 'production';
+  
+  // Memory stats (use RSS for actual memory, not misleading heap%)
+  const memUsage = process.memoryUsage();
+  const rssInMB = Math.round(memUsage.rss / (1024 * 1024));
+  const heapUsedMB = Math.round(memUsage.heapUsed / (1024 * 1024));
+  const heapTotalMB = Math.round(memUsage.heapTotal / (1024 * 1024));
+  
+  // Uptime
+  const uptimeSeconds = Math.floor(process.uptime());
+  const uptimeFormatted = uptimeSeconds >= 3600
+    ? `${Math.floor(uptimeSeconds / 3600)}h ${Math.floor((uptimeSeconds % 3600) / 60)}m`
+    : uptimeSeconds >= 60
+      ? `${Math.floor(uptimeSeconds / 60)}m ${uptimeSeconds % 60}s`
+      : `${uptimeSeconds}s`;
+
+  // Redis connectivity check
+  let redisStatus = { memory: 'unknown', cache: 'unknown' };
+  try {
+    const { isRedisReady } = await import('./memoryClient.js');
+    redisStatus.memory = isRedisReady() ? 'connected' : 'disconnected';
+  } catch { /* Redis memory not available */ }
+  
+  try {
+    const { getCacheStats } = await import('./cacheMiddleware.js');
+    const cacheStats = await getCacheStats();
+    redisStatus.cache = cacheStats?.connected ? 'connected' : 'disconnected';
+    if (cacheStats?.keyCount !== undefined) {
+      redisStatus.cacheKeys = cacheStats.keyCount;
+    }
+  } catch { /* Cache stats not available */ }
+
+  // Database connectivity (quick check)
+  let dbStatus = 'unknown';
+  try {
+    const { getSupabaseClient } = await import('./supabase-db.js');
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.from('tenants').select('id').limit(1);
+    dbStatus = error ? `error: ${error.message}` : 'connected';
+  } catch (e) {
+    dbStatus = `error: ${e.message}`;
+  }
+
+  // Port configuration
+  const internalPort = process.env.PORT || 3001;
+  const externalPort = isDocker ? 4001 : internalPort;
+
+  // Docker-specific context
+  const dockerContext = isDocker ? {
+    containerized: true,
+    containerName: process.env.HOSTNAME || 'aishacrm-backend',
+    internalApiUrl: `http://localhost:${internalPort}`,
+    externalApiUrl: `http://localhost:${externalPort}`,
+    logAccess: 'Use system_logs table or run `docker logs` from HOST machine',
+    fileSystemAccess: 'Full read/write within /app',
+    dockerCLI: 'NOT AVAILABLE - running inside container',
+  } : {
+    containerized: false,
+    apiUrl: `http://localhost:${internalPort}`,
+    logAccess: 'Direct file access or process stdout',
+    fileSystemAccess: 'Full access',
+    dockerCLI: 'Available if Docker is installed on host',
+  };
+
+  // Production-specific warnings
+  const productionContext = isProduction ? {
+    environment: 'PRODUCTION',
+    warnings: [
+      'File writes may not persist (ephemeral filesystem)',
+      'Logs accessed via platform dashboard, not docker logs',
+      'Be cautious with database mutations',
+    ],
+    logsAccess: 'Platform logging dashboard (Railway, Render, etc.)',
+  } : {
+    environment: nodeEnv.toUpperCase(),
+    warnings: [],
+    logsAccess: isDocker ? 'system_logs table or docker logs from host' : 'Console output',
+  };
+
+  return {
+    timestamp: new Date().toISOString(),
+    runtime: {
+      nodeVersion: process.version,
+      platform: process.platform,
+      arch: process.arch,
+      pid: process.pid,
+      uptime: uptimeFormatted,
+      uptimeSeconds,
+    },
+    memory: {
+      rss: `${rssInMB} MB`,
+      heapUsed: `${heapUsedMB} MB`,
+      heapTotal: `${heapTotalMB} MB`,
+      note: 'RSS is actual memory used; heap% is misleading',
+    },
+    connectivity: {
+      database: dbStatus,
+      redisMemory: redisStatus.memory,
+      redisCache: redisStatus.cache,
+      cacheKeyCount: redisStatus.cacheKeys,
+    },
+    ports: {
+      internal: internalPort,
+      external: externalPort,
+      note: isDocker ? 'Internal port for self-checks, external for outside access' : 'Same port for all access',
+    },
+    docker: dockerContext,
+    production: productionContext,
+    capabilities: {
+      canReadFiles: true,
+      canWriteFiles: !isProduction, // Discourage in prod
+      canRunCommands: true,
+      canAccessDocker: !isDocker, // Only from host
+      canQueryDatabase: true,
+      canAccessLogs: true,
+      logMethod: isDocker ? 'system_logs table' : 'docker logs or stdout',
+    },
+  };
+}
+
+/**
+ * Format execution context for system prompt injection
+ */
+async function getExecutionContextSummary() {
+  try {
+    const ctx = await getExecutionContext();
+    
+    return `
+## 🖥️ EXECUTION CONTEXT (Self-Awareness)
+
+**I am running:** ${ctx.docker.containerized ? 'INSIDE Docker container' : 'On host machine'}
+**Environment:** ${ctx.production.environment}
+**Uptime:** ${ctx.runtime.uptime} | **Memory:** ${ctx.memory.rss} RSS
+**Node:** ${ctx.runtime.nodeVersion} | **PID:** ${ctx.runtime.pid}
+
+**Connectivity:**
+- Database: ${ctx.connectivity.database}
+- Redis Memory: ${ctx.connectivity.redisMemory}
+- Redis Cache: ${ctx.connectivity.redisCache}${ctx.connectivity.cacheKeyCount !== undefined ? ` (${ctx.connectivity.cacheKeyCount} keys)` : ''}
+
+**Port Configuration:**
+- Internal (for self-checks): ${ctx.ports.internal}
+- External (for clients): ${ctx.ports.external}
+
+**What I CAN do:**
+- ✅ Read/write files in /app
+- ✅ Query database directly
+- ✅ Run shell commands (with approval)
+- ✅ Access logs via: ${ctx.capabilities.logMethod}
+
+**What I CANNOT do:**
+${ctx.docker.containerized ? '- ❌ Run docker CLI commands (I\'m inside the container)\n- ❌ Access host filesystem outside /app' : ''}
+${ctx.production.environment === 'PRODUCTION' ? '- ❌ Rely on file persistence (ephemeral FS)\n- ❌ Access logs via docker (use platform dashboard)' : ''}
+
+${ctx.production.warnings.length > 0 ? '**⚠️ Environment Warnings:**\n' + ctx.production.warnings.map(w => `- ${w}`).join('\n') : ''}
+`;
+  } catch (error) {
+    console.warn('[Developer AI] Failed to get execution context:', error.message);
+    return '\n## 🖥️ EXECUTION CONTEXT\n\n_Unable to determine execution context._\n';
+  }
+}
+
 // Allowed directories for file operations (security boundary)
 const ALLOWED_PATHS = [
   '/app/backend',
@@ -129,7 +316,7 @@ const DEVELOPER_TOOLS = [
   },
   {
     name: 'read_logs',
-    description: 'Read application logs from the container. Use this to diagnose issues or understand runtime behavior.',
+    description: 'Read application logs from the container. Use analyze_patterns=true to auto-detect recurring errors, performance issues, and anomalies.',
     input_schema: {
       type: 'object',
       properties: {
@@ -145,6 +332,10 @@ const DEVELOPER_TOOLS = [
         filter: {
           type: 'string',
           description: 'Optional: Filter logs containing this string',
+        },
+        analyze_patterns: {
+          type: 'boolean',
+          description: 'Auto-analyze logs for recurring errors, performance degradation, and security issues',
         },
       },
       required: ['log_type'],
@@ -310,6 +501,28 @@ Use this to troubleshoot AiSHA behavior before users encounter issues.`,
       required: ['message'],
     },
   },
+  {
+    name: 'get_execution_context',
+    description: `Get real-time information about the execution environment I'm running in.
+This provides:
+- Runtime info (Node version, uptime, memory usage)
+- Connectivity status (database, Redis cache, Redis memory)
+- Port configuration (internal vs external)
+- Docker container status
+- What capabilities I have (file access, docker CLI, logs)
+- Production warnings if applicable
+Use this to understand my environment before making assumptions about log access, docker commands, or file operations.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        include_connectivity_check: {
+          type: 'boolean',
+          description: 'If true, verify database and Redis connectivity in real-time (adds ~100ms latency). Default: true',
+        },
+      },
+      required: [],
+    },
+  },
 ];
 
 // Security check for file paths
@@ -464,9 +677,10 @@ async function searchCode({ pattern, directory = 'backend', file_pattern, case_i
   }
 }
 
-async function readLogs({ log_type, lines = 100, filter }) {
+async function readLogs({ log_type, lines = 100, filter, analyze_patterns = false }) {
   const maxLines = Math.min(lines, 500);
   const isProduction = process.env.NODE_ENV === 'production';
+  const isDocker = process.env.DOCKER_CONTAINER === 'true' || await isRunningInDocker();
   
   // In production, logs aren't accessible via docker - they're in the platform's logging system
   if (isProduction) {
@@ -477,8 +691,86 @@ async function readLogs({ log_type, lines = 100, filter }) {
     };
   }
   
+  // When running inside Docker, we can't call docker CLI
+  // Instead, query the database for logged entries or suggest using docker logs from host
+  if (isDocker) {
+    try {
+      // Try to fetch recent logs from system_logs table instead
+      const { getSupabaseClient } = await import('./supabase-db.js');
+      const supabase = getSupabaseClient();
+      
+      let query = supabase
+        .from('system_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(maxLines);
+      
+      // Apply log type filter
+      if (log_type === 'errors') {
+        query = query.in('level', ['error', 'critical', 'fatal']);
+      } else if (log_type === 'ai') {
+        query = query.or('category.ilike.%ai%,category.ilike.%braid%,message.ilike.%LLM%');
+      } else if (log_type === 'braid') {
+        query = query.ilike('category', '%braid%');
+      }
+      
+      // Apply text filter if provided
+      if (filter) {
+        query = query.ilike('message', `%${filter}%`);
+      }
+      
+      const { data: logs, error } = await query;
+      
+      if (error) {
+        return {
+          log_type,
+          note: 'Running inside Docker container. Cannot access docker logs directly.',
+          suggestion: 'Run `docker logs aishacrm-backend --tail 100` from the HOST machine to view container logs.',
+          db_logs_error: error.message,
+        };
+      }
+      
+      if (!logs || logs.length === 0) {
+        return {
+          log_type,
+          lines_found: 0,
+          note: 'No matching logs found in system_logs table.',
+          suggestion: 'For real-time container output, run `docker logs aishacrm-backend --tail 100` from the HOST machine.',
+          system_status: 'Backend is running (this response proves it). No errors logged recently.',
+        };
+      }
+      
+      // Format logs for display
+      const formattedLogs = logs.map(log => 
+        `[${log.created_at}] [${log.level || 'info'}] ${log.category || 'general'}: ${log.message}`
+      ).join('\n');
+      
+      const result = {
+        log_type,
+        source: 'system_logs table',
+        lines_found: logs.length,
+        content: formattedLogs,
+        note: 'Logs retrieved from database. For raw container stdout, run `docker logs` from host.',
+      };
+      
+      if (analyze_patterns && formattedLogs) {
+        result.pattern_analysis = analyzeLogPatterns(formattedLogs, log_type);
+      }
+      
+      return result;
+    } catch (dbError) {
+      return {
+        log_type,
+        note: 'Running inside Docker container. Cannot access docker logs directly.',
+        suggestion: 'Run `docker logs aishacrm-backend --tail 100` from the HOST machine to view container logs.',
+        error: dbError.message,
+        system_status: 'Backend is running (this response proves it).',
+      };
+    }
+  }
+  
   try {
-    // Local development: Read from container stdout/stderr (captured by Docker)
+    // Local development outside Docker: Read from container stdout/stderr (captured by Docker)
     let cmd;
     
     switch (log_type) {
@@ -505,20 +797,134 @@ async function readLogs({ log_type, lines = 100, filter }) {
     }
     
     const { stdout } = await execAsync(cmd, { maxBuffer: 1024 * 1024 });
+    const logContent = stdout || 'No logs found matching criteria';
     
-    return {
+    const result = {
       log_type,
       lines_requested: maxLines,
       filter: filter || null,
-      content: stdout || 'No logs found matching criteria',
+      content: logContent,
     };
+    
+    // Analyze patterns if requested
+    if (analyze_patterns && logContent && logContent !== 'No logs found matching criteria') {
+      const analysis = analyzeLogPatterns(logContent, log_type);
+      result.pattern_analysis = analysis;
+    }
+    
+    return result;
   } catch (error) {
     return {
       log_type,
       error: `Log retrieval failed: ${error.message}`,
-      note: 'Local dev logs require docker to be running. Use docker compose logs backend directly.',
+      note: 'This runs outside Docker. Ensure docker is installed and containers are running.',
+      suggestion: 'Run `docker compose ps` to check container status.',
     };
   }
+}
+
+/**
+ * Analyze log patterns for anomalies and trends
+ */
+function analyzeLogPatterns(logContent, logType) {
+  const lines = logContent.split('\n').filter(l => l.trim());
+  const analysis = {
+    total_lines: lines.length,
+    error_patterns: {},
+    warnings: [],
+    anomalies: [],
+    recommendations: [],
+  };
+  
+  // Extract error patterns (recurring errors)
+  const errorRegex = /error:?\s*([^:\n]+)|exception:?\s*([^:\n]+)/gi;
+  const errors = {};
+  
+  lines.forEach(line => {
+    const matches = [...line.matchAll(errorRegex)];
+    matches.forEach(match => {
+      const errorMsg = (match[1] || match[2] || '').trim().substring(0, 100);
+      if (errorMsg) {
+        errors[errorMsg] = (errors[errorMsg] || 0) + 1;
+      }
+    });
+  });
+  
+  // Find recurring errors (appear 3+ times)
+  Object.entries(errors).forEach(([msg, count]) => {
+    if (count >= 3) {
+      analysis.error_patterns[msg] = count;
+    }
+  });
+  
+  // Detect error spikes
+  if (Object.keys(analysis.error_patterns).length > 0) {
+    const totalRecurringErrors = Object.values(analysis.error_patterns).reduce((a, b) => a + b, 0);
+    if (totalRecurringErrors > 10) {
+      analysis.anomalies.push({
+        type: 'error_spike',
+        severity: 'high',
+        message: `${totalRecurringErrors} recurring errors detected`,
+        top_error: Object.entries(analysis.error_patterns).sort((a, b) => b[1] - a[1])[0],
+      });
+      analysis.recommendations.push('Investigate recurring errors - they may indicate a systemic issue');
+    }
+  }
+  
+  // Check for slow response times (if AI/Braid logs)
+  if (logType === 'ai' || logType === 'braid') {
+    const slowQueries = lines.filter(line => {
+      const timeMatch = line.match(/(\d+)ms|(\d+\.\d+)s/);
+      if (timeMatch) {
+        const time = parseFloat(timeMatch[1] || timeMatch[2] * 1000);
+        return time > 2000; // > 2 seconds
+      }
+      return false;
+    });
+    
+    if (slowQueries.length > 5) {
+      analysis.anomalies.push({
+        type: 'performance_degradation',
+        severity: 'medium',
+        message: `${slowQueries.length} slow operations detected (>2s)`,
+        examples: slowQueries.slice(0, 3),
+      });
+      analysis.recommendations.push('Check for slow database queries or API calls');
+    }
+  }
+  
+  // Check for authentication failures
+  const authFailures = lines.filter(line => 
+    line.match(/unauthorized|authentication failed|invalid.*token|forbidden/i)
+  );
+  
+  if (authFailures.length > 5) {
+    analysis.warnings.push({
+      type: 'security',
+      message: `${authFailures.length} authentication/authorization failures`,
+      suggestion: 'Check for brute force attempts or misconfigured API keys',
+    });
+  }
+  
+  // Check for rate limiting
+  const rateLimitHits = lines.filter(line => 
+    line.match(/rate limit|too many requests|429/i)
+  );
+  
+  if (rateLimitHits.length > 0) {
+    analysis.warnings.push({
+      type: 'rate_limiting',
+      message: `${rateLimitHits.length} rate limit events`,
+      suggestion: 'External API may be throttling requests',
+    });
+  }
+  
+  // Summary recommendation
+  if (analysis.anomalies.length === 0 && Object.keys(analysis.error_patterns).length === 0) {
+    analysis.recommendations.push('No significant issues detected in logs');
+  }
+  
+  return analysis;
 }
 
 async function getFileOutline({ file_path }) {
@@ -1138,6 +1544,8 @@ async function executeDeveloperTool(toolName, args, userId = null) {
       return applyPatch(args, userId);
     case 'test_aisha':
       return testAisha(args);
+    case 'get_execution_context':
+      return getExecutionContext();
     default:
       return { error: `Unknown tool: ${toolName}` };
   }
@@ -1331,20 +1739,73 @@ export async function developerChat(messages, userId) {
   
   console.log('[Developer AI] Starting chat with', messages.length, 'messages');
   
+  // Load execution context for self-awareness (what environment am I in?)
+  let executionContextStr = '';
+  try {
+    executionContextStr = await getExecutionContextSummary();
+    console.log('[Developer AI] Loaded execution context');
+  } catch (ctxErr) {
+    console.warn('[Developer AI] Failed to load execution context:', ctxErr.message);
+  }
+  
+  // Load recent health alerts to inject into system prompt
+  let healthAlertsContext = '';
+  try {
+    const { getActiveAlerts } = await import('./healthMonitor.js');
+    const activeAlerts = await getActiveAlerts(5); // Get top 5 active alerts
+    
+    if (activeAlerts && activeAlerts.length > 0) {
+      healthAlertsContext = `\n\n## 🚨 ACTIVE SYSTEM ALERTS\n\n${activeAlerts.length} issue(s) detected by autonomous health monitoring:\n\n`;
+      activeAlerts.forEach((alert, idx) => {
+        healthAlertsContext += `${idx + 1}. **[${alert.severity.toUpperCase()}] ${alert.title}**\n`;
+        healthAlertsContext += `   - Category: ${alert.category}\n`;
+        healthAlertsContext += `   - Detected: ${new Date(alert.detected_at).toLocaleString()}\n`;
+        healthAlertsContext += `   - Summary: ${alert.summary}\n`;
+        if (alert.recommendation) {
+          healthAlertsContext += `   - Recommendation: ${alert.recommendation}\n`;
+        }
+        healthAlertsContext += `\n`;
+      });
+      healthAlertsContext += `These alerts were auto-detected by the health monitoring system. The user may want to investigate these issues.\n`;
+      healthAlertsContext += `Use the read_logs tool with analyze_patterns=true for detailed diagnostics.\n`;
+    }
+  } catch (alertErr) {
+    console.warn('[Developer AI] Failed to load health alerts:', alertErr.message);
+    // Don't block chat if alert loading fails
+  }
+  
+  // Inject execution context and health alerts into system prompt
+  const contextualSystemPrompt = DEVELOPER_SYSTEM_PROMPT + executionContextStr + healthAlertsContext;
+  
   // Helper to make Anthropic API calls with retry logic
   async function callAnthropic(conversationMessages, retryCount = 0) {
     const MAX_RETRIES = 1;
+
+    // Filter and validate messages - Anthropic requires non-empty content
+    const validMessages = conversationMessages
+      .map(m => ({
+        role: m.role,
+        content: m.content,
+      }))
+      .filter(m => {
+        // Check if content is valid
+        if (!m.content) return false;
+        if (typeof m.content === 'string' && m.content.trim() === '') return false;
+        if (Array.isArray(m.content) && m.content.length === 0) return false;
+        return true;
+      });
+
+    if (validMessages.length === 0) {
+      throw new Error('No valid messages to send. Please provide a message.');
+    }
 
     try {
       return await client.messages.create({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 16384,
-        system: DEVELOPER_SYSTEM_PROMPT,
+        system: contextualSystemPrompt,
         tools: DEVELOPER_TOOLS,
-        messages: conversationMessages.map(m => ({
-          role: m.role,
-          content: m.content,
-        })),
+        messages: validMessages,
       });
     } catch (error) {
       console.error(`[Developer AI] API call failed (attempt ${retryCount + 1}):`, error.message);
@@ -1461,4 +1922,4 @@ export function isSuperadmin(user) {
   return user?.role === 'superadmin';
 }
 
-export { DEVELOPER_TOOLS, executeDeveloperTool };
+export { DEVELOPER_TOOLS, executeDeveloperTool, getExecutionContext, getExecutionContextSummary };

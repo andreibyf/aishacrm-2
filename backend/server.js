@@ -21,6 +21,7 @@ import workflowQueue from "./services/workflowQueue.js";
 import { startCampaignWorker } from "./lib/campaignWorker.js";
 import { startAiTriggersWorker } from "./lib/aiTriggersWorker.js";
 import { startEmailWorker } from "./workers/emailWorker.js";
+import { startHealthMonitoring } from "./lib/healthMonitor.js";
 
 // Import UUID validation
 import { sanitizeUuidInput } from "./lib/uuidValidator.js";
@@ -158,6 +159,7 @@ import createTelephonyRoutes from "./routes/telephony.js";
 import createAiRoutes from "./routes/ai.js";
 import createMcpRoutes from "./routes/mcp.js";
 import devaiRoutes from "./routes/devai.js"; // Phase 6: Developer AI approvals
+import devaiHealthAlertsRoutes from "./routes/devaiHealthAlerts.js"; // Health monitoring alerts
 import createAccountRoutes from "./routes/accounts.js";
 import createLeadRoutes from "./routes/leads.js";
 import createContactRoutes from "./routes/contacts.js";
@@ -244,6 +246,7 @@ app.use("/api/ai", authenticateRequest, createAiRoutes(measuredPgPool));
 app.use("/api/ai-settings", authenticateRequest, aiSettingsRoutes); // AI configuration settings
 app.use("/api/mcp", createMcpRoutes(measuredPgPool));
 app.use("/api/devai", devaiRoutes); // Phase 6: Developer AI approvals (superadmin only)
+app.use("/api/devai", devaiHealthAlertsRoutes); // Health monitoring alerts (superadmin only)
 app.use("/api/accounts", createAccountRoutes(measuredPgPool));
 app.use("/api/leads", createLeadRoutes(measuredPgPool));
 app.use("/api/contacts", createContactRoutes(measuredPgPool));
@@ -670,6 +673,14 @@ server.listen(PORT, async () => {
     startEmailWorker(pgPool);
   } else {
     logger.warn('[EmailWorker] Disabled (no database connection)');
+  }
+
+  // Start health monitoring system for Developer AI
+  if (process.env.HEALTH_MONITORING_ENABLED !== 'false') {
+    logger.info('[HealthMonitor] Starting autonomous health monitoring system');
+    startHealthMonitoring();
+  } else {
+    logger.debug('[HealthMonitor] Disabled (set HEALTH_MONITORING_ENABLED=true to enable)');
   }
 
   // Keep-alive interval to prevent process from exiting
