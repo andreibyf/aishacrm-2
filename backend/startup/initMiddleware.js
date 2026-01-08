@@ -142,7 +142,7 @@ export function initMiddleware(app, pgPool) {
   // Explicit OPTIONS handler for all API routes (preflight requests)
   // This ensures preflight requests are handled before any other middleware
   app.options('/api/*', (req, res) => {
-    res.status(200).end();
+    res.status(204).end();
   });
 
   // Apply limiter to API routes AFTER CORS so 429 responses include CORS headers

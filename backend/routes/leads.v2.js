@@ -160,17 +160,21 @@ export default function createLeadsV2Routes() {
    *       - in: query
    *         name: offset
    *         schema: { type: integer, default: 0 }
+   *       - in: query
+   *         name: exclude_status
+   *         schema: { type: string }
+   *         description: Comma-separated list of statuses to exclude (e.g., "converted,lost")
    *     responses:
    *       200:
    *         description: Leads list with flattened metadata
    */
   router.get('/', cacheList('leads', 180), async (req, res) => {
     try {
-      const { tenant_id, status, source, filter, assigned_to, account_id, is_test_data, query: searchQuery } = req.query;
+      const { tenant_id, status, source, filter, assigned_to, account_id, is_test_data, query: searchQuery, exclude_status } = req.query;
       const limit = parseInt(req.query.limit || '50', 10);
       const offset = parseInt(req.query.offset || '0', 10);
 
-      logger.debug('[V2 Leads GET] Called with:', { tenant_id, filter, status, assigned_to, account_id, is_test_data, searchQuery });
+      logger.debug('[V2 Leads GET] Called with:', { tenant_id, filter, status, exclude_status, assigned_to, account_id, is_test_data, searchQuery });
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -304,6 +308,17 @@ export default function createLeadsV2Routes() {
             query = query.eq('status', status);
           }
         }
+        
+        // Handle exclude_status parameter (WAF-safe alternative to $nin in filter)
+        // Usage: exclude_status=converted,lost
+        if (exclude_status && typeof exclude_status === 'string') {
+          const excludeList = exclude_status.split(',').map(s => s.trim()).filter(Boolean);
+          if (excludeList.length > 0) {
+            logger.debug('[V2 Leads] Applying exclude_status filter:', excludeList);
+            query = query.not('status', 'in', `(${excludeList.join(',')})`);
+          }
+        }
+        
         if (source) query = query.eq('source', source);
         // Filter by account_id if provided
         const safeAccountId = sanitizeUuidInput(account_id);

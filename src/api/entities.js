@@ -348,16 +348,27 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
 
       // Add filter parameters if provided
       if (data && Object.keys(data).length > 0) {
+        // First, extract status.$nin as exclude_status (WAF-safe alternative to MongoDB operators in URL)
+        // This prevents Cloudflare from blocking requests that look like NoSQL injection
+        let processedData = { ...data };
+        if (processedData.status && typeof processedData.status === 'object' && processedData.status.$nin) {
+          const excludeList = processedData.status.$nin;
+          if (Array.isArray(excludeList) && excludeList.length > 0) {
+            params.append('exclude_status', excludeList.join(','));
+          }
+          delete processedData.status; // Remove from data to avoid duplicate filter
+        }
+        
         // Detect MongoDB-style operators that need to be wrapped in 'filter' parameter
-        const hasMongoOperators = Object.keys(data).some(key => MONGO_OPERATORS.includes(key));
-        const hasNestedMongoOperators = Object.values(data).some(value => containsMongoOperators(value));
+        const hasMongoOperators = Object.keys(processedData).some(key => MONGO_OPERATORS.includes(key));
+        const hasNestedMongoOperators = Object.values(processedData).some(value => containsMongoOperators(value));
         
         if (hasMongoOperators || hasNestedMongoOperators) {
           // Wrap complex MongoDB-style filters in 'filter' parameter
           const filterObj = {};
           const directParams = {};
           
-          Object.entries(data).forEach(([key, value]) => {
+          Object.entries(processedData).forEach(([key, value]) => {
             if (key !== "tenant_id") {
               // MongoDB operators go into filter object
               if (MONGO_OPERATORS.includes(key) || containsMongoOperators(value)) {
@@ -383,7 +394,7 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
           });
         } else {
           // No MongoDB operators - use original behavior
-          Object.entries(data).forEach(([key, value]) => {
+          Object.entries(processedData).forEach(([key, value]) => {
             if (key !== "tenant_id") { // Don't duplicate tenant_id
               params.append(
                 key,
