@@ -86,12 +86,40 @@ export default function AiShaActionHandler() {
         // Handle navigation requests from AI
         let targetPath = action.path;
         
-        // If record_id is provided, navigate to detail view
-        if (action.record_id && action.page) {
-          targetPath = `/${action.page}/${action.record_id}`;
+        // Skip actions with placeholder record_id - wait for the real one
+        if (action.record_id === '<UNKNOWN>') {
+          console.log('[AiSHA Action Handler] Skipping navigation with <UNKNOWN> record_id');
+          return;
         }
         
-        if (targetPath) {
+        // If record_id is provided, dispatch open-details event to open detail panel
+        // instead of navigating to the profile page
+        if (action.record_id && action.page) {
+          // Check if we're already on the correct page
+          const listPath = `/${action.page}`;
+          const currentPath = window.location.pathname;
+          const needsNavigation = currentPath !== listPath;
+          
+          if (needsNavigation) {
+            // Navigate first, then dispatch event after component mounts
+            navigate(listPath);
+          }
+          
+          // Dispatch event to open the detail panel for this record
+          // Longer delay if navigating to ensure component is mounted
+          const delay = needsNavigation ? 500 : 100;
+          setTimeout(() => {
+            console.log('[AiSHA Action Handler] Dispatching aisha:open-details:', { id: action.record_id, type: action.page });
+            window.dispatchEvent(new CustomEvent('aisha:open-details', {
+              detail: { 
+                id: action.record_id, 
+                type: action.page 
+              }
+            }));
+          }, delay);
+          
+          toast.success(`Opening ${action.page} details`);
+        } else if (targetPath) {
           navigate(targetPath);
           toast.success(`Navigated to ${action.page || targetPath}`);
         }

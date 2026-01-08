@@ -420,6 +420,17 @@ export function AiSidebarProvider({ children }) {
         window.dispatchEvent(new CustomEvent('aisha:ai-local-action', { detail: result.localAction }));
       }
 
+      // Handle ui_actions from backend (navigation, edit, form, refresh actions)
+      // Backend extracts these from tool results like navigate_to_page
+      if (backendData.ui_actions && Array.isArray(backendData.ui_actions) && typeof window !== 'undefined') {
+        for (const uiAction of backendData.ui_actions) {
+          window.dispatchEvent(new CustomEvent('aisha:ai-local-action', { detail: uiAction }));
+          if (import.meta.env?.DEV) {
+            console.log('[AI Sidebar] Dispatched UI action:', uiAction);
+          }
+        }
+      }
+
       const parserSummary = backendData?.classification?.parserResult || backendData?.classification?.effectiveParser || result?.classification?.parserResult;
       if (parserSummary) {
         addHistoryEntry({

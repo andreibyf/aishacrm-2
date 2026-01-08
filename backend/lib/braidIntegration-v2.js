@@ -559,7 +559,7 @@ const TOOL_DESCRIPTIONS = {
   trigger_suggestion_generation: 'Manually trigger AI suggestion generation for a specific trigger ID. Runs the trigger logic immediately.',
 
   // CRM Navigation (v3.0.0 - allows AI to navigate user to pages)
-  navigate_to_page: 'Navigate the user to a specific CRM page. Use this when the user says "take me to", "go to", "show me", or "open" a page. Valid pages: dashboard, leads, contacts, accounts, opportunities, activities, calendar, settings, workflows, reports, bizdev-sources, projects, workers, user-management. Optionally pass a record_id to go directly to a specific record.',
+  navigate_to_page: 'Navigate the user to a specific CRM page or open a record detail panel. CRITICAL: When user says "open lead details for XYX Corp", you MUST pass "XYX Corp" as the record_identifier - the system will resolve it to a UUID. Example: navigate_to_page(tenant, "leads", "XYX Corp"). Valid pages: dashboard, leads, contacts, accounts, opportunities, activities, calendar, settings, workflows, reports. Do NOT pass null for record_identifier when user mentions a specific company or person name.',
   get_current_page: 'Get information about the current page the user is viewing. Useful for context-aware responses.',
 
   // Documents Management
@@ -715,10 +715,37 @@ Example response: "You're welcome! Let me know if you need anything else. Going 
 
 **CRM NAVIGATION (IMPORTANT):**
 - You CAN navigate users to different CRM pages using the navigate_to_page tool
-- When user says "take me to", "go to", "show me", "open", or "navigate to" a page, USE the navigate_to_page tool
+- NAVIGATION triggers (USE navigate_to_page tool):
+  - "take me to", "go to", "navigate to" a page
+  - "open [entity] details for [name]" - e.g., "open lead details for Jack Smith"
+  - "view [entity] for [name]" when user wants to see the detail panel
+- DATA QUERY triggers (just fetch and show in chat, do NOT navigate):
+  - "show me the lead for [name]" → fetch lead data and display in chat
+  - "what are the notes for [name]" → fetch notes and display in chat  
+  - "tell me about [name]" → fetch data and summarize in chat
 - Valid pages: dashboard, leads, contacts, accounts, opportunities, activities, calendar, settings, workflows, reports, bizdev-sources, projects, workers, user-management
-- Example: User says "Take me to the Leads page" → Call navigate_to_page with page="leads"
-- You can also navigate to specific records by passing record_id parameter
+
+**CRITICAL: "OPEN" vs "SHOW ME" DISTINCTION:**
+When user says "OPEN the [entity] details for [name]" - this is a NAVIGATION request, NOT a data query!
+- "OPEN the lead details for XYX Corp" → You MUST call navigate_to_page to open the detail panel
+- "SHOW ME the lead for XYX Corp" → Fetch data and display in chat
+- The word "OPEN" means the user wants to see the record in the CRM detail panel, not in chat
+- NEVER respond with data when user says "OPEN" - always call navigate_to_page
+
+**ENTITY TYPE REQUIRED FOR RECORD NAVIGATION:**
+When user asks to open/view a specific record, they MUST specify the entity type:
+- GOOD: "Open lead details for Jack Smith" → navigate_to_page(tenant, "leads", "Jack Smith")
+- GOOD: "View account details for Acme Corp" → navigate_to_page(tenant, "accounts", "Acme Corp")  
+- AMBIGUOUS: "Open details for Jack Smith" → ASK: "Which record would you like to open - a lead, contact, or account?"
+- If user says just a name without entity type, first search the most likely entity based on conversation context, or ask for clarification
+
+**RECORD NAVIGATION FLOW:**
+1. User says "Open lead details for XYX Corp"
+2. Call navigate_to_page(tenant, "leads", "XYX Corp") - pass the company/person name directly
+3. The system will resolve the name to a UUID and open the detail panel
+4. DO NOT pass null as record_identifier when user mentions a name!
+5. DO NOT just fetch notes/activities - actually call navigate_to_page with the name!
+
 - ALWAYS use the tool for navigation requests - do NOT tell users you cannot navigate
 
 **CONVERSATION CONTINUITY & CONTEXT AWARENESS (CRITICAL):**
@@ -1215,6 +1242,13 @@ export function summarizeToolResult(result, toolName) {
 /**
  * Generate OpenAI tool schemas from all registered Braid tools
  */
+// Parameter description overrides for tools that need clearer parameter hints
+const TOOL_PARAM_OVERRIDES = {
+  navigate_to_page: {
+    record_identifier: 'The company name, person name, or record identifier mentioned by the user. REQUIRED when user says "open lead details for [name]" - pass the name directly (e.g., "XYX Corp", "Jack Smith"). The system will resolve it to a UUID. Do NOT pass null if user mentions a name.'
+  }
+};
+
 export async function generateToolSchemas(allowedTools = null) {
   const schemas = [];
   console.log('[Braid] Generating tool schemas from', TOOLS_DIR);
@@ -1237,6 +1271,14 @@ export async function generateToolSchemas(allowedTools = null) {
       // Use human-readable description if available
       if (TOOL_DESCRIPTIONS[toolName]) {
         schema.function.description = TOOL_DESCRIPTIONS[toolName];
+      }
+      // Apply parameter description overrides if defined
+      if (TOOL_PARAM_OVERRIDES[toolName] && schema.function.parameters?.properties) {
+        for (const [paramName, description] of Object.entries(TOOL_PARAM_OVERRIDES[toolName])) {
+          if (schema.function.parameters.properties[paramName]) {
+            schema.function.parameters.properties[paramName].description = description;
+          }
+        }
       }
       schemas.push(schema);
     } catch (error) {
@@ -2891,7 +2933,7 @@ const BRAID_PARAM_ORDER = {
   suggestNextActions: ['tenant', 'entity_type', 'entity_id', 'limit'],
 
   // CRM Navigation (v3.0.0)
-  navigateTo: ['tenant', 'page', 'record_id'],
+  navigateTo: ['tenant', 'page', 'record_identifier'],
   getCurrentPage: ['tenant']
 };
 

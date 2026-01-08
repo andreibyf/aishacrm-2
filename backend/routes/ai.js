@@ -3275,14 +3275,49 @@ ${conversationSummary}`;
             
             // Check for navigation action: {action: "navigate", path, page, record_id, message}
             if (value.action === 'navigate' && value.page) {
+              let resolvedRecordId = value.record_id || null;
+              
+              // If record_id is provided but is not a UUID, try to resolve it
+              const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+              if (resolvedRecordId && !UUID_PATTERN.test(resolvedRecordId)) {
+                // It's a name/title, try to look up the record
+                const tableName = value.page; // leads, contacts, accounts, opportunities
+                try {
+                  const supabaseClient = getSupabaseClient();
+                  // Search by various name fields
+                  const searchTerm = `%${resolvedRecordId}%`;
+                  const { data: searchResults } = await supabaseClient
+                    .from(tableName)
+                    .select('id, name, title, company_name, first_name, last_name')
+                    .eq('tenant_id', tenantRecord.id)
+                    .or(`name.ilike.${searchTerm},title.ilike.${searchTerm},company_name.ilike.${searchTerm},first_name.ilike.${searchTerm},last_name.ilike.${searchTerm}`)
+                    .limit(1);
+                  
+                  if (searchResults && searchResults.length > 0 && searchResults[0].id) {
+                    logger.debug('[AI Chat] Resolved record name to UUID:', { 
+                      originalName: resolvedRecordId, 
+                      resolvedId: searchResults[0].id 
+                    });
+                    resolvedRecordId = searchResults[0].id;
+                  } else {
+                    logger.warn('[AI Chat] Could not resolve record name to UUID:', { 
+                      name: resolvedRecordId, 
+                      table: tableName 
+                    });
+                  }
+                } catch (lookupErr) {
+                  logger.warn('[AI Chat] Failed to lookup record by name:', lookupErr?.message);
+                }
+              }
+              
               uiActions.push({
                 action: 'navigate',
                 path: value.path || `/${value.page}`,
                 page: value.page,
-                record_id: value.record_id || null,
+                record_id: resolvedRecordId,
                 message: value.message || `Navigating to ${value.page}`
               });
-              logger.debug('[AI Chat] Extracted navigation action:', { page: value.page, path: value.path });
+              logger.debug('[AI Chat] Extracted navigation action:', { page: value.page, path: value.path, record_id: resolvedRecordId });
             }
             // Check for edit action: {action: "edit_record", entity_type, entity_id}
             else if (value.action === 'edit_record' && value.entity_type && value.entity_id) {

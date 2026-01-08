@@ -67,8 +67,13 @@ export async function executeBraid(braidFilePath, functionName, policy, deps, ar
       throw new Error(`Function '${functionName}' not found in ${braidFilePath}`);
     }
     
+    // Check if function is effectful (async) by inspecting its constructor name
+    // Effectful functions are transpiled as async and expect (policy, deps, ...args)
+    // Pure functions don't expect policy/deps in their signature
+    const isEffectful = fn.constructor.name === 'AsyncFunction';
+    
     const result = await Promise.race([
-      fn(policy, deps, ...args),
+      isEffectful ? fn(policy, deps, ...args) : fn(...args),
       new Promise((_, reject) => 
         setTimeout(() => reject(new Error(`[BRAID_TIMEOUT] ${functionName} exceeded ${timeout}ms`)), timeout)
       )

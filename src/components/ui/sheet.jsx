@@ -6,7 +6,10 @@ import { X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
-const Sheet = SheetPrimitive.Root
+const Sheet = React.forwardRef(({ modal = true, ...props }, ref) => (
+  <SheetPrimitive.Root modal={modal} {...props} />
+));
+Sheet.displayName = "Sheet"
 
 const SheetTrigger = SheetPrimitive.Trigger
 

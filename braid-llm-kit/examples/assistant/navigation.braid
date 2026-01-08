@@ -6,18 +6,19 @@ import { Result, CRMError } from "../../spec/types.braid"
 fn navigateTo(
   tenant: String,
   page: String,
-  record_id: String
+  record_identifier: String
 ) -> Result<Object, CRMError> {
   // The frontend will handle validation and mapping
-  // We just return the navigation command with the page name
+  // record_identifier may be a UUID or a name - the adapter will resolve it
   
   let path = "/" + page;
+  let rec_id = record_identifier;
   
   return Ok({
     action: "navigate",
     path: path,
     page: page,
-    record_id: record_id,
+    record_id: rec_id,
     message: "Navigating to " + page
   });
 }

@@ -279,10 +279,14 @@ const INTENT_PATTERNS = {
     /\b(what\s+has)\s+(the\s+)?(sales\s+manager|customer\s+service)\s+(done|accomplished)\b/i
   ],
 
-  // NAVIGATION
+  // NAVIGATION - open/view details triggers navigation, simple "show me X" is just a query
   NAVIGATE_TO_PAGE: [
-    /\b(go to|take me to|show me|open|navigate to)\s+(the\s+)?(\w+)\s+(page|view|screen)\b/i,
-    /\b(open|show)\s+(the\s+)?(dashboard|leads|contacts|accounts|opportunities|activities|calendar|settings|workflows|reports)\b/i
+    /\b(go to|take me to|navigate to)\s+(the\s+)?(\w+)\s*(page|view|screen)?\b/i,
+    /\b(open)\s+(the\s+)?(dashboard|leads|contacts|accounts|opportunities|activities|calendar|settings|workflows|reports|details)\b/i,
+    /\b(show|open|view)\s+(the\s+)?details\s+(for|of)\b/i,
+    /\b(open|view)\s+(the\s+)?(record|lead|contact|account|opportunity)\s+(for|named|called)?\b/i,
+    /\b(open)\s+(the\s+)?(lead|contact|account|opportunity)\s+details\s+(for|of)\b/i,
+    /\b(open)\s+(the\s+)?details\s+(panel|page)?\s*(for|of)?\b/i
   ],
 
   // REPORTS

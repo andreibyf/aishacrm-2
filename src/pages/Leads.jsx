@@ -541,6 +541,37 @@ export default function LeadsPage() {
     }
   }, [selectedEmail, clearCache, clearCacheByKey]);
 
+  // Listen for AiSHA open-details events to open the detail panel
+  useEffect(() => {
+    const handleAiShaOpenDetails = (event) => {
+      const { id, type } = event.detail || {};
+      // Only handle leads type
+      if (type !== 'leads' || !id) return;
+      
+      console.log('[Leads] AiSHA open-details event received:', { id, type });
+      
+      // Find the lead in current data or fetch it
+      const lead = leads.find(l => l.id === id);
+      if (lead) {
+        setDetailLead(lead);
+        setIsDetailOpen(true);
+      } else {
+        // Lead not in current page, fetch it directly
+        Lead.get(id).then(fetchedLead => {
+          if (fetchedLead) {
+            setDetailLead(fetchedLead);
+            setIsDetailOpen(true);
+          }
+        }).catch(err => {
+          console.error('[Leads] Failed to fetch lead for detail panel:', err);
+        });
+      }
+    };
+
+    window.addEventListener('aisha:open-details', handleAiShaOpenDetails);
+    return () => window.removeEventListener('aisha:open-details', handleAiShaOpenDetails);
+  }, [leads]);
+
   // Handle page change
   const handlePageChange = useCallback((newPage) => {
     setCurrentPage(newPage);
