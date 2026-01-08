@@ -54,7 +54,16 @@ export function utcToLocal(utcString, offsetMinutes) {
     throw new Error('utcString is required');
   }
   
-  const utcDate = new Date(utcString);
+  // Sanitize malformed timestamps (e.g., "2026-01-15T19:30:00:00.000Z" -> "2026-01-15T19:30:00.000Z")
+  // This handles data corruption where an extra ":00" was inserted
+  let sanitizedString = utcString;
+  const malformedPattern = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}):(\d{2}\.\d{3}Z)$/;
+  if (malformedPattern.test(utcString)) {
+    sanitizedString = utcString.replace(malformedPattern, '$1.$2');
+    console.warn(`[timezoneUtils] Corrected malformed timestamp: ${utcString} -> ${sanitizedString}`);
+  }
+  
+  const utcDate = new Date(sanitizedString);
   
   // Check if date is valid
   if (isNaN(utcDate.getTime())) {

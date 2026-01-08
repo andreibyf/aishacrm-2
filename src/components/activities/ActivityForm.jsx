@@ -824,7 +824,15 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
                     <div key={note.id} className="bg-slate-800 rounded p-3 border border-slate-600">
                       <p className="text-sm text-slate-300 whitespace-pre-wrap">{note.content}</p>
                       <p className="text-xs text-slate-500 mt-2">
-                        {format(new Date(note.created_date), 'MMM d, yyyy h:mm a')} by {note.created_by || 'Unknown'}
+                        {(() => {
+                          try {
+                            const d = new Date(note.created_date);
+                            if (isNaN(d.getTime())) return note.created_date || 'Unknown date';
+                            return format(d, 'MMM d, yyyy h:mm a');
+                          } catch {
+                            return note.created_date || 'Unknown date';
+                          }
+                        })()} by {note.created_by || 'Unknown'}
                       </p>
                     </div>
                   ))}

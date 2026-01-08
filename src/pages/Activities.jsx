@@ -282,6 +282,11 @@ export default function ActivitiesPage() {
         try {
           // Handle date-only strings (yyyy-MM-dd) and full ISO datetimes
           const asDate = typeof d === 'string' ? new Date(d) : d;
+          // Validate the date - new Date() returns Invalid Date for malformed strings
+          if (isNaN(asDate.getTime())) {
+            console.warn('[Activities] Invalid date value:', d);
+            return null;
+          }
           return asDate;
         } catch {
           return null;
@@ -825,13 +830,35 @@ export default function ActivitiesPage() {
         const hours = parseInt(parts[0], 10);
         const minutes = parseInt(parts[1] || '0', 10);
 
+        // Validate parsed values
+        if (isNaN(hours) || isNaN(minutes)) {
+          console.warn('[Activities] Invalid time parts:', activity.due_time);
+          return activity.due_date;
+        }
+
         // due_time is stored as LOCAL time, not UTC - just display it directly
         const [year, month, day] = datePart.split('-').map(Number);
+        if (isNaN(year) || isNaN(month) || isNaN(day)) {
+          console.warn('[Activities] Invalid date parts:', datePart);
+          return activity.due_date;
+        }
         const localDate = new Date(year, month - 1, day, hours, minutes);
+        if (isNaN(localDate.getTime())) {
+          console.warn('[Activities] Invalid Date constructed:', { year, month, day, hours, minutes });
+          return activity.due_date;
+        }
         return format(localDate, 'MMM d, yyyy h:mm a');
       } else {
         const parts = activity.due_date.split('-').map(Number);
+        if (parts.length < 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) {
+          console.warn('[Activities] Invalid date format:', activity.due_date);
+          return activity.due_date;
+        }
         const localCalendarDate = new Date(parts[0], parts[1] - 1, parts[2]);
+        if (isNaN(localCalendarDate.getTime())) {
+          console.warn('[Activities] Invalid Date constructed from:', parts);
+          return activity.due_date;
+        }
         return format(localCalendarDate, 'MMM d, yyyy');
       }
     } catch (error) {

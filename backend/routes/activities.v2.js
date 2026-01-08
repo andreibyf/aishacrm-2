@@ -184,14 +184,14 @@ export default function createActivityV2Routes(_pgPool) {
       }
 
       // Handle simple text search via 'q' parameter (WAF-safe alternative to MongoDB $regex)
-      // Searches subject, body (description), and notes fields using PostgreSQL ILIKE
+      // Searches subject, body (description), and related_name fields using PostgreSQL ILIKE
       const searchQuery = req.query.q;
       if (searchQuery && searchQuery.trim()) {
         const searchTerm = searchQuery.trim();
         const likePattern = `%${searchTerm}%`;
         logger.debug('[Activities V2] Applying text search:', { searchTerm, likePattern });
-        // Search across subject, body (description), and notes with case-insensitive ILIKE
-        q = q.or(`subject.ilike.${likePattern},body.ilike.${likePattern},notes.ilike.${likePattern}`);
+        // Search across subject, body (description), and related_name with case-insensitive ILIKE
+        q = q.or(`subject.ilike.${likePattern},body.ilike.${likePattern},related_name.ilike.${likePattern}`);
       }
 
       // Handle is_test_data filter
@@ -475,7 +475,7 @@ export default function createActivityV2Routes(_pgPool) {
 
       const {
         q,                    // Search term
-        fields = ['subject', 'body', 'notes'],  // Fields to search
+        fields = ['subject', 'body', 'related_name'],  // Fields to search (valid columns only)
         limit = 50,           // Max results
         offset = 0,           // Pagination offset
         status,               // Filter by status
@@ -500,9 +500,9 @@ export default function createActivityV2Routes(_pgPool) {
         const searchTerm = q.trim();
         const likePattern = `%${searchTerm}%`;
         
-        // Build OR condition for specified fields
+        // Build OR condition for specified fields (only valid activity columns)
         const searchConditions = fields
-          .filter(f => ['subject', 'body', 'notes', 'related_name'].includes(f))
+          .filter(f => ['subject', 'body', 'related_name'].includes(f))
           .map(f => `${f}.ilike.${likePattern}`)
           .join(',');
         

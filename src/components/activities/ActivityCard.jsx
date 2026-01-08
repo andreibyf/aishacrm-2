@@ -130,7 +130,15 @@ export default function ActivityCard({
           <div className="flex items-center gap-2 text-sm text-slate-400">
             <Calendar className="w-4 h-4 flex-shrink-0" />
             <span className={isDue ? 'text-red-400 font-semibold' : isTodayActivity ? 'text-yellow-400 font-semibold' : ''}>
-              {format(new Date(activity.due_date), 'MMM d, yyyy')}
+              {(() => {
+                try {
+                  const d = new Date(activity.due_date);
+                  if (isNaN(d.getTime())) return activity.due_date;
+                  return format(d, 'MMM d, yyyy');
+                } catch {
+                  return activity.due_date;
+                }
+              })()}
               {activity.due_time && ` at ${activity.due_time}`}
             </span>
           </div>
