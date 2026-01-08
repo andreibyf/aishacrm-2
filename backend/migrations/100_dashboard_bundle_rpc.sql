@@ -74,6 +74,7 @@ BEGIN
       SELECT COUNT(*) as cnt FROM leads 
       WHERE tenant_id = p_tenant_id 
         AND created_date >= v_since
+        AND status NOT IN ('converted', 'lost')
         AND (p_include_test_data OR COALESCE(is_test_data, false) = false)
     ),
     activities_30days AS (

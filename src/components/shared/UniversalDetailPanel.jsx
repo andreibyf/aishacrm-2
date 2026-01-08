@@ -167,14 +167,17 @@ export default function UniversalDetailPanel({
   };
 
   const mapNoteTypeToActivityType = (noteType) => {
+    // Valid activity types: task, email, call, meeting, demo, proposal, note, scheduled_ai_call, scheduled_ai_email
     switch (noteType) {
       case 'call_log': return 'call';
       case 'meeting': return 'meeting';
       case 'email': return 'email';
-      case 'follow_up': return 'task'; // Follow-up notes create tasks
-      // For other specific note types like 'task', 'important', 'demo', 'proposal',
-      // if not explicitly mapped to a specific activity type, they default to 'note' activity.
-      default: return 'note'; // 'general', 'task', 'important', 'demo', 'proposal' notes will result in 'note' activities
+      case 'follow_up': return 'task'; // Follow-up creates a task
+      case 'task': return 'task';
+      case 'demo': return 'demo';
+      case 'proposal': return 'proposal';
+      case 'important': return 'task'; // Important notes create tasks
+      default: return 'note'; // Fallback for unmapped types
     }
   };
 
@@ -240,24 +243,26 @@ export default function UniversalDetailPanel({
       if (newNoteType !== "general") {
         const activityType = mapNoteTypeToActivityType(newNoteType); // Use the updated helper
         
-        // Determine activity status and due date based on note type
-        const isScheduledActivity = ['follow_up', 'call_log', 'meeting', 'email'].includes(newNoteType);
-        
         // Get entity email for denormalized activity fields (entityName already calculated above)
         const entityEmail = entity.email || null;
 
+        // Set due date to tomorrow by default
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+        
         const activityData = {
           tenant_id: effectiveTenantId,
           type: activityType,
           subject: newNoteTitle || newNoteContent.substring(0, 50), // Use newNoteTitle, or first 50 chars of content
           description: newNoteContent,
-          status: isScheduledActivity ? 'scheduled' : 'completed', // Updated status logic
+          status: 'scheduled', // Activities from notes are always scheduled
           related_to: relatedTo,
           related_id: entity.id,
           related_name: entityName, // Denormalized entity name for display
           related_email: entityEmail, // Denormalized entity email for display
           assigned_to: entity.assigned_to || null, // Use entity's assigned_to (UUID) or null
-          due_date: new Date().toISOString().split('T')[0] // Always set due_date so activity shows on calendar
+          due_date: tomorrowStr // Default to tomorrow so activity shows on calendar
         };
 
         try {

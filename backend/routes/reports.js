@@ -516,6 +516,7 @@ export default function createReportRoutes(_pgPool) {
           let q = supabase.from('leads').select('*', { count: 'exact', head: true });
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
           q = q.gte('created_date', sinceISO);
+          q = q.not('status', 'in', '("converted","lost")'); // Exclude converted/lost leads
           if (!includeTestData) {
             try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ void 0; }
           }

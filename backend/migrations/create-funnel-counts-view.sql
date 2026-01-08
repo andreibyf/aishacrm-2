@@ -40,8 +40,8 @@ WITH tenant_counts AS (
     -- Last updated timestamp
     NOW() as last_refreshed
   FROM tenant t
-  LEFT JOIN bizdev_sources bs ON bs.tenant_id = t.id
-  LEFT JOIN leads l ON l.tenant_id = t.id
+  LEFT JOIN bizdev_sources bs ON bs.tenant_id = t.id AND bs.status != 'Promoted'
+  LEFT JOIN leads l ON l.tenant_id = t.id AND l.status NOT IN ('converted', 'lost')
   LEFT JOIN contacts c ON c.tenant_id = t.id
   LEFT JOIN accounts a ON a.tenant_id = t.id
   GROUP BY t.id, t.tenant_id  -- tenant.tenant_id is TEXT slug, t.id is UUID
