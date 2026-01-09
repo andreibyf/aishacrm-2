@@ -183,8 +183,14 @@ describe('OverviewStats', () => {
   });
 
   it('should display error message when API calls fail', async () => {
-    // Setup: API calls throw errors
-    Lead.filter.mockRejectedValue(new Error('Network error'));
+    // Setup: Backend API call fails with network error
+    // NOTE: The component catches entity filter errors internally and continues,
+    // but throws when the main backend fetch fails
+    globalThis.fetch = vi.fn(() =>
+      Promise.reject(new Error('Network error'))
+    );
+    
+    Lead.filter.mockResolvedValue([]);
     Opportunity.filter.mockResolvedValue([]);
     Account.filter.mockResolvedValue([]);
 
@@ -192,7 +198,7 @@ describe('OverviewStats', () => {
 
     // Wait for error to appear
     await waitFor(() => {
-      expect(screen.getByText('Failed to load overview stats')).toBeInTheDocument();
+      expect(screen.getByText(/Failed to load overview stats/i)).toBeInTheDocument();
     });
 
     // Error message should contain details

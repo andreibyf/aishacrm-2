@@ -182,6 +182,11 @@ export default function OpportunitiesPage() {
   }, [user, selectedTenantId, selectedEmail, showTestData]);
 
   // Load supporting data (accounts, contacts, users, employees) ONCE - OPTIMIZED WITH CONCURRENT FETCHING
+  //
+  // NOTE: Bundle endpoints exist (src/api/bundles.js → /api/bundles/opportunities) that could
+  // consolidate this into a single request. The bundle infrastructure is available for simpler
+  // use cases but wasn't integrated here to avoid risk. See: docs/BUNDLE_ENDPOINTS_TESTING.md
+  //
   useEffect(() => {
   // CRITICAL: Only load once if supportingDataLoaded.current is true or if user is not available yet.
   if (!user || supportingDataLoaded.current) return;

@@ -12,6 +12,7 @@
     "test:safe": "bash scripts/run-tests-safe.sh",
     "test:routes": "node --test --test-reporter tap __tests__/routes/*.test.js",
     "test:auth": "node --test --test-reporter tap __tests__/auth/*.test.js",
+    "test:bundles": "BACKEND_URL=http://localhost:3001 node --test --test-reporter tap __tests__/bundles.test.js",
     "test:system": "node --test --test-reporter tap __tests__/system/*.test.js",
     "test:integration": "node --test --test-reporter tap __tests__/integration/*.test.js",
     "test:validation": "node --test --test-reporter tap __tests__/validation/*.test.js",

@@ -264,6 +264,12 @@ export default function LeadsPage() {
   }, [user, selectedTenantId, showTestData, selectedEmail, employees]);
 
   // Load supporting data (accounts, users, employees) ONCE with delays and error handling
+  //
+  // NOTE: Bundle endpoints exist (src/api/bundles.js → /api/bundles/leads) that could
+  // consolidate this into a single request. However, this page uses complex age filtering
+  // with hybrid client/server pagination that the bundle endpoints don't support.
+  // The bundle infrastructure is available for simpler use cases. See: docs/BUNDLE_ENDPOINTS_TESTING.md
+  //
   useEffect(() => {
     if (supportingDataLoaded.current || !user) return;
 

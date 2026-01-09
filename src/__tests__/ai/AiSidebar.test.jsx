@@ -48,7 +48,8 @@ describe('AiSidebar + AvatarWidget integration', () => {
     expect(sidebarRoot).toHaveAttribute('aria-hidden', 'false');
 
     const closeButton = screen.getByLabelText(/Close assistant/i);
-    fireEvent.click(closeButton);
+    // The close button uses onMouseDown instead of onClick to prevent event bubbling issues
+    fireEvent.mouseDown(closeButton);
 
     expect(sidebarRoot).toHaveAttribute('aria-hidden', 'true');
   });

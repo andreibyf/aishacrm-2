@@ -165,6 +165,9 @@ export default function ContactsPage() {
   useEffect(() => {
     if (supportingDataLoaded.current || !user) return;
 
+    // NOTE: Bundle endpoints exist (src/api/bundles.js → /api/bundles/contacts) that could
+    // consolidate this into a single request. The bundle infrastructure is available for
+    // simpler use cases but wasn't integrated here to avoid risk. See: docs/BUNDLE_ENDPOINTS_TESTING.md
     const loadSupportingData = async () => {
       logger.info(
         "Loading supporting data for contacts (accounts, users, employees)",

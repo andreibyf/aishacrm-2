@@ -228,6 +228,7 @@ import braidChainRoutes from "./routes/braidChain.js";
 import braidMetricsRoutes from "./routes/braidMetrics.js";
 import braidGraphRoutes from "./routes/braidGraph.js";
 import aiSettingsRoutes from "./routes/aiSettings.js";
+import createBundleRoutes from "./routes/bundles.js";
 import { createDeprecationMiddleware } from "./middleware/deprecation.js";
 import { authenticateRequest } from "./middleware/authenticate.js";
 
@@ -263,6 +264,7 @@ app.use("/api/testing", createTestingRoutes(measuredPgPool));
 app.use("/api/documents", createDocumentRoutes(measuredPgPool));
 app.use("/api/documentationfiles", createDocumentationFileRoutes(measuredPgPool));
 app.use("/api/reports", createReportRoutes(measuredPgPool));
+app.use("/api/bundles", authenticateRequest, createBundleRoutes(measuredPgPool)); // Bundle endpoints for optimized page loading
 app.use("/api/documentation", createDocumentationRoutes(measuredPgPool));
 app.use("/api/cashflow", createCashflowRoutes(measuredPgPool));
 app.use("/api/cron", createCronRoutes(measuredPgPool));
