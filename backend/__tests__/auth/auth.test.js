@@ -9,7 +9,7 @@
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
 
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:4001';
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 const RATE_LIMIT_DELAY = 100; // ms between requests to avoid rate limiting
 
 // Helper to wait between tests
