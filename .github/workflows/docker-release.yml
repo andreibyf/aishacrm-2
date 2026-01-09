@@ -170,6 +170,24 @@ jobs:
             cd /opt/aishacrm
             echo "Deploying version: $VERSION_TAG"
             
+            # === REFRESH DOPPLER SECRETS ===
+            # Regenerate .env.from-doppler to pick up any new secrets added to Doppler
+            echo "Refreshing secrets from Doppler..."
+            if command -v doppler &> /dev/null && [ -n "$DOPPLER_TOKEN" ]; then
+              DOPPLER_TOKEN="$DOPPLER_TOKEN" doppler secrets download \
+                -p aishacrm -c prd_prd \
+                --no-file --format env > .env.from-doppler.new
+              if [ -s .env.from-doppler.new ]; then
+                mv .env.from-doppler.new .env.from-doppler
+                echo "Successfully refreshed .env.from-doppler from Doppler"
+              else
+                echo "WARNING: Doppler download returned empty file, keeping existing .env.from-doppler"
+                rm -f .env.from-doppler.new
+              fi
+            else
+              echo "WARNING: Doppler CLI not available or DOPPLER_TOKEN not set, skipping secrets refresh"
+            fi
+            
             # === FULL CLEANUP: Remove orphaned containers and broken references ===
             echo "Cleaning up orphaned containers and broken Docker state..."
             docker compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
