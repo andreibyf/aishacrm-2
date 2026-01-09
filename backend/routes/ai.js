@@ -479,24 +479,28 @@ const writeArtifactRef = async ({ tenantId, kind, entityType = null, entityId = 
   const r2Key = buildTenantKey({ tenantId, kind, ext: 'json' });
   const uploaded = await putObject({ key: r2Key, body, contentType });
 
-  const { rows } = await pgPool.query(
-    `insert into public.artifact_refs
-      (tenant_id, kind, entity_type, entity_id, r2_key, content_type, size_bytes, sha256)
-     values
-      ($1::uuid, $2, $3, $4::uuid, $5, $6, $7, $8)
-     returning id, tenant_id, kind, entity_type, entity_id, r2_key, content_type, size_bytes, sha256, created_at`,
-    [
-      tenantId,
+  // Use Supabase client for database insert (not pgPool)
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from('artifact_refs')
+    .insert({
+      tenant_id: tenantId,
       kind,
-      entityType,
-      entityId,
-      uploaded.key,
-      uploaded.contentType,
-      uploaded.sizeBytes,
-      uploaded.sha256,
-    ]
-  );
-  return rows?.[0] || null;
+      entity_type: entityType,
+      entity_id: entityId,
+      r2_key: uploaded.key,
+      content_type: uploaded.contentType,
+      size_bytes: uploaded.sizeBytes,
+      sha256: uploaded.sha256,
+    })
+    .select('id, tenant_id, kind, entity_type, entity_id, r2_key, content_type, size_bytes, sha256, created_at')
+    .single();
+
+  if (error) {
+    logger.error('[AI][Artifacts] Failed to insert artifact_ref:', error.message);
+    throw error;
+  }
+  return data;
 };
 
 const maybeOffloadMetadata = async ({ tenantId, metadata, kind, entityType = null, entityId = null }) => {
@@ -3161,6 +3165,36 @@ ${conversationSummary}`;
 
               if (toolContextSummary) {
                 try {
+                  // R2 ARTIFACT OFFLOAD: Store full tool results in R2 only if they exceed threshold
+                  let toolResultsRef = null;
+                  const toolPayloadSize = Buffer.byteLength(JSON.stringify(toolInteractions), 'utf-8');
+                  
+                  if (toolPayloadSize > ARTIFACT_META_THRESHOLD_BYTES) {
+                    try {
+                      toolResultsRef = await writeArtifactRef({
+                        tenantId: tenantRecord.id,
+                        kind: 'tool_context_results',
+                        entityType: 'conversation',
+                        entityId: conversation_id,
+                        payload: toolInteractions,
+                      });
+                      logger.debug('[AI][Artifacts] Offloaded tool_context results to R2:', {
+                        refId: toolResultsRef?.id,
+                        r2Key: toolResultsRef?.r2_key,
+                        sizeBytes: toolResultsRef?.size_bytes,
+                        reason: `payload ${toolPayloadSize} bytes > threshold ${ARTIFACT_META_THRESHOLD_BYTES}`,
+                      });
+                    } catch (r2Err) {
+                      logger.warn('[AI][Artifacts] Failed to offload tool_context results (continuing):', r2Err?.message || r2Err);
+                    }
+                  } else {
+                    logger.debug('[AI][Artifacts] Tool context kept inline:', {
+                      sizeBytes: toolPayloadSize,
+                      threshold: ARTIFACT_META_THRESHOLD_BYTES,
+                      reason: 'below threshold',
+                    });
+                  }
+
                   await supa
                     .from('conversation_messages')
                     .insert({
@@ -3169,7 +3203,10 @@ ${conversationSummary}`;
                       content: `[TOOL_CONTEXT] The following tool results are available for reference:\n${toolContextSummary}`,
                       metadata: {
                         type: 'tool_context',
-                        tool_results: toolInteractions.map(({ full_result, ...rest }) => rest),
+                        tool_results_ref: toolResultsRef?.id || null,
+                        tool_results_count: toolInteractions.length,
+                        // Store inline if small, otherwise just the reference
+                        tool_interactions: toolResultsRef ? undefined : toolInteractions,
                         hidden: true // UI should hide these messages
                       }
                     });

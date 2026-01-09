@@ -9,6 +9,7 @@ import multer from "multer";
 import { getSupabaseAdmin, getBucketName } from "../lib/supabaseFactory.js";
 import { checkR2Access, buildTenantKey, putObject, getObject } from "../lib/r2.js";
 import logger from '../lib/logger.js';
+import { getSupabaseClient } from '../lib/supabase-db.js';
 
 // Multer memory storage to forward buffer to Supabase
 const upload = multer({ storage: multer.memoryStorage() });
@@ -440,6 +441,74 @@ export default function createStorageRoutes(_pgPool) {
   });
 
   /**
+   * GET /api/storage/artifacts
+   * List artifact_refs for a tenant with optional filters.
+   *
+   * Query params:
+   *   tenant_id (required via header or query)
+   *   kind - filter by kind (e.g., 'tool_context_results')
+   *   entity_type - filter by entity_type
+   *   entity_id - filter by entity_id
+   *   limit - max rows (default 50, max 200)
+   *   offset - pagination offset
+   */
+  router.get("/artifacts", async (req, res) => {
+    try {
+      const tenantId =
+        req.tenant?.id?.toString() ||
+        req.headers["x-tenant-id"]?.toString() ||
+        req.query?.tenant_id?.toString() ||
+        null;
+
+      if (!tenantId) {
+        return res.status(400).json({ status: "error", message: "tenant_id is required (x-tenant-id header preferred)" });
+      }
+
+      const kind = req.query?.kind?.toString() || null;
+      const entityType = req.query?.entity_type?.toString() || null;
+      const entityId = req.query?.entity_id?.toString() || null;
+      const limit = Math.min(parseInt(req.query?.limit) || 50, 200);
+      const offset = parseInt(req.query?.offset) || 0;
+
+      // Use Supabase client directly for artifact_refs queries
+      const supabase = getSupabaseClient();
+      let query = supabase
+        .from('artifact_refs')
+        .select('id, tenant_id, kind, entity_type, entity_id, r2_key, content_type, size_bytes, sha256, created_at')
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (kind) {
+        query = query.eq('kind', kind);
+      }
+      if (entityType) {
+        query = query.eq('entity_type', entityType);
+      }
+      if (entityId) {
+        query = query.eq('entity_id', entityId);
+      }
+
+      const { data: rows, error } = await query;
+      if (error) {
+        logger.error('[storage.artifacts.list] Supabase error:', error.message);
+        throw error;
+      }
+
+      return res.status(200).json({
+        status: "ok",
+        count: rows.length,
+        limit,
+        offset,
+        artifacts: rows,
+      });
+    } catch (err) {
+      logger.error("[storage.artifacts.list] error:", err);
+      return res.status(500).json({ status: "error", message: err?.message || "Failed to list artifacts" });
+    }
+  });
+
+  /**
    * POST /api/storage/artifacts
    * Stores a JSON artifact in R2 and registers a pointer in Postgres (artifact_refs).
    *
@@ -481,27 +550,27 @@ export default function createStorageRoutes(_pgPool) {
 
       const uploaded = await putObject({ key: r2Key, body, contentType });
 
-      // Register pointer in DB (artifact_refs)
-      const insertSql = `
-        insert into public.artifact_refs
-          (tenant_id, kind, entity_type, entity_id, r2_key, content_type, size_bytes, sha256)
-        values
-          ($1::uuid, $2, $3, $4::uuid, $5, $6, $7, $8)
-        returning id, tenant_id, kind, entity_type, entity_id, r2_key, content_type, size_bytes, sha256, created_at
-      `;
-      const params = [
-        tenantId,
-        kind,
-        entityType,
-        entityId,
-        uploaded.key,
-        uploaded.contentType,
-        uploaded.sizeBytes,
-        uploaded.sha256,
-      ];
+      // Register pointer in DB (artifact_refs) using Supabase client
+      const supabase = getSupabaseClient();
+      const { data: row, error } = await supabase
+        .from('artifact_refs')
+        .insert({
+          tenant_id: tenantId,
+          kind,
+          entity_type: entityType,
+          entity_id: entityId,
+          r2_key: uploaded.key,
+          content_type: uploaded.contentType,
+          size_bytes: uploaded.sizeBytes,
+          sha256: uploaded.sha256,
+        })
+        .select('id, tenant_id, kind, entity_type, entity_id, r2_key, content_type, size_bytes, sha256, created_at')
+        .single();
 
-      const result = await _pgPool.query(insertSql, params);
-      const row = result?.rows?.[0];
+      if (error) {
+        logger.error('[storage.artifacts.post] Supabase error:', error.message);
+        throw error;
+      }
 
       return res.status(201).json({
         status: "ok",
@@ -535,10 +604,19 @@ export default function createStorageRoutes(_pgPool) {
         return res.status(400).json({ status: "error", message: "id is required" });
       }
 
-      const { rows } = await _pgPool.query(
-        "select * from public.artifact_refs where id = $1::uuid and tenant_id = $2::uuid limit 1",
-        [id, tenantId]
-      );
+      // Use Supabase client for artifact_refs lookup
+      const supabase = getSupabaseClient();
+      const { data: rows, error } = await supabase
+        .from('artifact_refs')
+        .select('*')
+        .eq('id', id)
+        .eq('tenant_id', tenantId)
+        .limit(1);
+
+      if (error) {
+        logger.error('[storage.artifacts.get] Supabase error:', error.message);
+        throw error;
+      }
       const ref = rows?.[0];
       if (!ref) {
         return res.status(404).json({ status: "error", message: "Artifact not found" });

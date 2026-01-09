@@ -303,7 +303,7 @@ curl "http://localhost:4001/api/storage/artifacts/artifact-uuid" \
 - **Savings:** ~$25/month per 10GB of AI data
 
 **When to use R2:**
-- Payloads > 100KB (chat transcripts, traces)
+- Payloads > 100KB (chat transcripts, traces, large documents)
 - Variable/unpredictable growth (AI output sizes)
 - Compliance/archival (immutable storage)
 
@@ -311,6 +311,26 @@ curl "http://localhost:4001/api/storage/artifacts/artifact-uuid" \
 - Small metadata (<10KB)
 - Frequently updated data
 - Transactional integrity required
+
+### Automatic Metadata Offloading
+
+The AI chat system automatically offloads large metadata to R2 using a **two-phase strategy**:
+
+1. **Phase 1:** `tool_interactions` arrays are always offloaded (often large)
+   - Creates `tool_interactions_ref` pointer in Postgres
+   - Preserves `tool_interactions_count` for quick access
+
+2. **Phase 2:** If remaining metadata exceeds threshold → offload entire metadata
+   - Creates `artifact_metadata_ref` pointer
+   - Keeps minimal envelope (model, iterations, usage, entity IDs)
+
+**Threshold Configuration:**
+```bash
+# Default: 8KB (8000 bytes) - tuned for Postgres TOAST efficiency
+AI_ARTIFACT_META_THRESHOLD_BYTES=8000
+```
+
+> **Note:** The 100KB guideline above is for **architectural decisions** (choosing R2 vs Postgres for new features). The 8KB implementation threshold is for **metadata column optimization** to keep `conversation_messages.metadata` fast and small.
 
 ---
 
