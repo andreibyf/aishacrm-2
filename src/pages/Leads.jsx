@@ -80,6 +80,8 @@ export default function LeadsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [ageFilter, setAgeFilter] = useState("all");
+  const [sortField, setSortField] = useState("created_date");
+  const [sortDirection, setSortDirection] = useState("desc");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingLead, setEditingLead] = useState(null);
   const [viewMode, setViewMode] = useState("list");
@@ -136,17 +138,31 @@ export default function LeadsPage() {
     },
   ], []);
 
+  // Sort options for leads
+  const sortOptions = useMemo(() => [
+    { label: "Newest First", field: "created_date", direction: "desc" },
+    { label: "Oldest First", field: "created_date", direction: "asc" },
+    { label: "Company A-Z", field: "company", direction: "asc" },
+    { label: "Company Z-A", field: "company", direction: "desc" },
+    { label: "Name A-Z", field: "last_name", direction: "asc" },
+    { label: "Name Z-A", field: "last_name", direction: "desc" },
+    { label: "Status", field: "status", direction: "asc" },
+    { label: "Recently Updated", field: "updated_date", direction: "desc" },
+  ], []);
+
   // Helper function to calculate lead age
-  const calculateLeadAge = (createdDate) => {
+  const calculateLeadAge = (lead) => {
+    // Use created_date if available, otherwise fall back to created_at
+    const dateValue = lead?.created_date || lead?.created_at || lead;
     const today = new Date();
-    const created = new Date(createdDate);
+    const created = new Date(dateValue);
     if (isNaN(created.getTime())) return -1; // Return -1 or handle as error for invalid dates
     return Math.floor((today - created) / (1000 * 60 * 60 * 24));
   };
 
   // Helper function to get age bucket for a lead
   const getLeadAgeBucket = (lead) => {
-    const age = calculateLeadAge(lead.created_date);
+    const age = calculateLeadAge(lead);
     return ageBuckets.find((bucket) =>
       bucket.value !== "all" && age >= bucket.min && age <= bucket.max
     );
@@ -432,10 +448,14 @@ export default function LeadsPage() {
         offset: fetchOffset
       };
 
+      // Build sort string: prefix with - for descending
+      const sortString = sortDirection === "desc" ? `-${sortField}` : sortField;
+      console.log('[Leads] loadLeads called with sortField:', sortField, 'sortDirection:', sortDirection, 'sortString:', sortString);
+
       // Fetch leads with server-side pagination
       const response = await Lead.filter(
         currentFilter,
-        "-created_date",
+        sortString,
       );
 
       // Apply client-side age filter if needed
@@ -516,6 +536,8 @@ export default function LeadsPage() {
     statusFilter,
     selectedTags,
     ageFilter,
+    sortField,
+    sortDirection,
     leadsLabel,
     loadingToast,
     ageBuckets,
@@ -533,6 +555,8 @@ export default function LeadsPage() {
     statusFilter,
     ageFilter,
     selectedTags,
+    sortField,
+    sortDirection,
     currentPage,
     pageSize,
     loadLeads,
@@ -1198,6 +1222,8 @@ export default function LeadsPage() {
     setStatusFilter("all");
     setAgeFilter("all");
     setSelectedTags([]);
+    setSortField("created_date");
+    setSortDirection("desc");
     setCurrentPage(1);
     handleClearSelection();
   };
@@ -1237,8 +1263,8 @@ export default function LeadsPage() {
 
   const hasActiveFilters = useMemo(() => {
     return searchTerm !== "" || statusFilter !== "all" || ageFilter !== "all" ||
-      selectedTags.length > 0;
-  }, [searchTerm, statusFilter, ageFilter, selectedTags]);
+      selectedTags.length > 0 || sortField !== "created_date" || sortDirection !== "desc";
+  }, [searchTerm, statusFilter, ageFilter, selectedTags, sortField, sortDirection]);
 
   // Matching the stat card colors - semi-transparent backgrounds
   const statusColors = {
@@ -1582,6 +1608,37 @@ export default function LeadsPage() {
               }}
             />
 
+            {/* Sort Dropdown */}
+            <Select
+              value={`${sortField}:${sortDirection}`}
+              onValueChange={(value) => {
+                console.log('[Leads] Sort dropdown changed to:', value);
+                const option = sortOptions.find(o => `${o.field}:${o.direction}` === value);
+                console.log('[Leads] Found option:', option);
+                if (option) {
+                  console.log('[Leads] Setting sortField to:', option.field, 'sortDirection to:', option.direction);
+                  setSortField(option.field);
+                  setSortDirection(option.direction);
+                  setCurrentPage(1);
+                }
+              }}
+            >
+              <SelectTrigger className="w-44 bg-slate-800 border-slate-700 text-slate-200">
+                <SelectValue placeholder="Sort by..." />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-800 border-slate-700">
+                {sortOptions.map((option) => (
+                  <SelectItem
+                    key={`${option.field}:${option.direction}`}
+                    value={`${option.field}:${option.direction}`}
+                    className="text-slate-200 hover:bg-slate-700"
+                  >
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
             {hasActiveFilters && (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -1730,7 +1787,7 @@ export default function LeadsPage() {
                     </thead>
                     <tbody className="divide-y divide-slate-700">
                       {leads.map((lead) => {
-                        const age = calculateLeadAge(lead.created_date);
+                        const age = calculateLeadAge(lead);
                         const ageBucket = getLeadAgeBucket(lead);
                         const isConverted = lead.status === 'converted';
 

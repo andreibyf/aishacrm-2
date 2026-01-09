@@ -170,14 +170,28 @@ export default function createLeadsV2Routes() {
    */
   router.get('/', cacheList('leads', 180), async (req, res) => {
     try {
-      const { tenant_id, status, source, filter, assigned_to, account_id, is_test_data, query: searchQuery, exclude_status } = req.query;
+      const { tenant_id, status, source, filter, assigned_to, account_id, is_test_data, query: searchQuery, exclude_status, sort } = req.query;
       const limit = parseInt(req.query.limit || '50', 10);
       const offset = parseInt(req.query.offset || '0', 10);
 
-      logger.debug('[V2 Leads GET] Called with:', { tenant_id, filter, status, exclude_status, assigned_to, account_id, is_test_data, searchQuery });
+      logger.debug('[V2 Leads GET] Called with:', { tenant_id, filter, status, exclude_status, assigned_to, account_id, is_test_data, searchQuery, sort });
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+      
+      // Parse sort parameter: -field for descending, field for ascending
+      let sortField = 'created_at';
+      let sortAscending = false;
+      if (sort) {
+        if (sort.startsWith('-')) {
+          sortField = sort.substring(1);
+          sortAscending = false;
+        } else {
+          sortField = sort;
+          sortAscending = true;
+        }
+        logger.debug('[V2 Leads] Sorting by:', sortField, 'ascending:', sortAscending);
       }
 
       const supabase = getSupabaseClient();
@@ -344,7 +358,7 @@ export default function createLeadsV2Routes() {
           }
         }
 
-        return query.order('created_at', { ascending: false })
+        return query.order(sortField, { ascending: sortAscending })
           .range(offset, offset + limit - 1);
       };
 

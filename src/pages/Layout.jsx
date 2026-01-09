@@ -2590,7 +2590,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   const SidebarContent = ({ onNavClick }) => (
     <div className="flex flex-col h-full bg-slate-900 border-r border-slate-800">
       <div
-        className="border-b border-slate-800 px-6 py-4 flex flex-col items-center"
+        className="border-b border-slate-800 px-4 py-2 flex flex-col items-center"
         data-testid="sidebar-header"
       >
         {logoUrl
@@ -2598,7 +2598,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
             <img
               src={displayedLogoUrl}
               alt={companyName}
-              className="h-32 w-auto max-w-[400px] object-contain"
+              className="h-20 w-auto max-w-[180px] object-contain"
               onError={(e) => {
                 // Hard fallback to global app logo so branding is always visible
                 try {
@@ -2647,12 +2647,12 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
           : null}
 
         <div
-          className={`h-16 flex items-center justify-center ${
+          className={`h-12 flex items-center justify-center ${
             logoUrl ? "hidden" : ""
           }`}
         >
           <div
-            className="w-14 h-14 rounded-lg flex items-center justify-center"
+            className="w-10 h-10 rounded-lg flex items-center justify-center"
             style={{ backgroundColor: primaryColor }}
           >
             <span className="text-on-primary font-bold text-xl">
@@ -2667,7 +2667,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         {(user?.role === "superadmin" || user?.role === "admin") &&
           selectedTenantId && selectedTenant &&
           (
-            <p className="text-xs text-slate-400 mt-2 text-center">
+            <p className="text-xs text-slate-400 mt-1 text-center">
               Managing Client:{" "}
               <span className="font-medium text-slate-300">
                 {selectedTenant.name}
@@ -2677,13 +2677,13 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         {(user?.role === "superadmin" || user?.role === "admin") &&
           !selectedTenantId &&
           (
-            <p className="text-xs text-orange-400 mt-2 text-center">
+            <p className="text-xs text-orange-400 mt-1 text-center">
               ⚠️ No Client Selected
             </p>
           )}
       </div>
 
-      <div className="p-4">
+      <div className="px-4 py-2">
         <Clock />
       </div>
 
@@ -2713,7 +2713,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         </div>
       </div>
       <nav
-        className="flex-1 px-4 py-2 overflow-y-auto"
+        className="flex-1 px-4 py-1 overflow-y-auto"
         data-testid="main-navigation"
       >
         <DndContext

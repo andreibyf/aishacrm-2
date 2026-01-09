@@ -669,9 +669,14 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
 const createEntity = (entityName) => {
   return {
     // Add filter method as alias for list with better parameter handling
-    filter: async (filterObj, _sortField, _limit) => {
-      const result = await callBackendAPI(entityName, "GET", filterObj);
-      console.log(`[Entity.filter] ${entityName}:`, { type: typeof result, isArray: Array.isArray(result), length: result?.length, result });
+    filter: async (filterObj, sortField, _limit) => {
+      // Merge sort field into filter object if provided
+      const queryObj = sortField 
+        ? { ...filterObj, sort: sortField }
+        : filterObj;
+      console.log(`[Entity.filter] ${entityName} CALLING with sort:`, sortField, 'queryObj:', queryObj);
+      const result = await callBackendAPI(entityName, "GET", queryObj);
+      console.log(`[Entity.filter] ${entityName}:`, { type: typeof result, isArray: Array.isArray(result), length: result?.length });
       return result;
     },
     // List method - handle both string orderBy and object filters

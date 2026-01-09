@@ -95,7 +95,7 @@ export default function createContactV2Routes(_pgPool) {
    */
   router.get('/', cacheList('contacts', 180), async (req, res) => {
     try {
-      const { tenant_id, status, account_id, filter, assigned_to } = req.query;
+      const { tenant_id, status, account_id, filter, assigned_to, sort } = req.query;
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
@@ -104,11 +104,24 @@ export default function createContactV2Routes(_pgPool) {
       const limit = parseInt(req.query.limit || '50', 10);
       const offset = parseInt(req.query.offset || '0', 10);
 
+      // Parse sort parameter: -field for descending, field for ascending
+      let sortField = 'created_at';
+      let sortAscending = false;
+      if (sort) {
+        if (sort.startsWith('-')) {
+          sortField = sort.substring(1);
+          sortAscending = false;
+        } else {
+          sortField = sort;
+          sortAscending = true;
+        }
+      }
+
       let q = supabase
         .from('contacts')
         .select('*, employee:employees!contacts_assigned_to_fkey(id, first_name, last_name, email), account:accounts!contacts_account_id_fkey(id, name)', { count: 'exact' })
         .eq('tenant_id', tenant_id)
-        .order('created_at', { ascending: false })
+        .order(sortField, { ascending: sortAscending })
         .range(offset, offset + limit - 1);
 
       // Handle filter object

@@ -29,6 +29,13 @@ import {
   X,
 } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import CsvExportButton from "../components/shared/CsvExportButton";
 import CsvImportDialog from "../components/shared/CsvImportDialog";
 import { useTenant } from "../components/shared/tenantContext";
@@ -111,6 +118,23 @@ export default function OpportunitiesPage() {
   const [showTestData] = useState(true); // Default to showing all data
 
   const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
+
+  // Sort state
+  const [sortField, setSortField] = useState("updated_at");
+  const [sortDirection, setSortDirection] = useState("desc");
+
+  // Sort options for opportunities
+  const sortOptions = useMemo(() => [
+    { label: "Recently Updated", field: "updated_at", direction: "desc" },
+    { label: "Oldest Updated", field: "updated_at", direction: "asc" },
+    { label: "Newest First", field: "created_at", direction: "desc" },
+    { label: "Oldest First", field: "created_at", direction: "asc" },
+    { label: "Name A-Z", field: "name", direction: "asc" },
+    { label: "Name Z-A", field: "name", direction: "desc" },
+    { label: "Value (Highest)", field: "value", direction: "desc" },
+    { label: "Value (Lowest)", field: "value", direction: "asc" },
+    { label: "Close Date", field: "close_date", direction: "asc" },
+  ], []);
 
   // Stats for ALL opportunities (not just current page)
   const [totalStats, setTotalStats] = useState({
@@ -414,11 +438,13 @@ export default function OpportunitiesPage() {
         }
       }
 
-      // Sort by updated_at DESC, id DESC to match composite index (tenant_id, stage, updated_at DESC)
-      // This aligns with query optimization guidance for indexed scans
+      // Sort by user selection, with secondary id sort for stable pagination
+      // Build sort string: prefix with - for descending
+      const sortString = sortDirection === "desc" ? `-${sortField},-id` : `${sortField},-id`;
+      
       const opportunitiesData = await Opportunity.filter(
         apiFilter,
-        "-updated_at,-id",
+        sortString,
         effectiveSize,
         skip,
       );
@@ -468,7 +494,7 @@ export default function OpportunitiesPage() {
     } finally {
       setLoading(false);
     }
-  }, [user, searchTerm, stageFilter, selectedTags, getTenantFilter, viewMode, loadingToast, opportunitiesLabel, paginationCursors]); // Added viewMode dependency
+  }, [user, searchTerm, stageFilter, selectedTags, getTenantFilter, viewMode, loadingToast, opportunitiesLabel, paginationCursors, sortField, sortDirection]); // Added viewMode dependency
 
   // Load opportunities when dependencies change
   useEffect(() => {
@@ -1419,6 +1445,34 @@ export default function OpportunitiesPage() {
                   setCurrentPage(1);
                 }}
               />
+
+              {/* Sort Dropdown */}
+              <Select
+                value={`${sortField}:${sortDirection}`}
+                onValueChange={(value) => {
+                  const option = sortOptions.find(o => `${o.field}:${o.direction}` === value);
+                  if (option) {
+                    setSortField(option.field);
+                    setSortDirection(option.direction);
+                    setCurrentPage(1);
+                  }
+                }}
+              >
+                <SelectTrigger className="w-44 bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue placeholder="Sort by..." />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  {sortOptions.map((option) => (
+                    <SelectItem
+                      key={`${option.field}:${option.direction}`}
+                      value={`${option.field}:${option.direction}`}
+                      className="text-slate-200 hover:bg-slate-700"
+                    >
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
               {hasActiveFilters && (
                 <Tooltip>

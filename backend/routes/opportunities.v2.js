@@ -323,9 +323,22 @@ export default function createOpportunityV2Routes(_pgPool) {
         q = q.or(`updated_at.lt.${cursorUpdatedAt},and(updated_at.eq.${cursorUpdatedAt},id.lt.${cursorId})`);
       }
 
-      // Sort by updated_at DESC, id DESC to match composite index (tenant_id, stage, updated_at DESC)
-      // This enables index-only scans and avoids sorts in query plan
-      q = q.order('updated_at', { ascending: false })
+      // Parse sort parameter: -field for descending, field for ascending
+      const sortParam = req.query.sort;
+      let sortField = 'updated_at';
+      let sortAscending = false;
+      if (sortParam) {
+        if (sortParam.startsWith('-')) {
+          sortField = sortParam.substring(1);
+          sortAscending = false;
+        } else {
+          sortField = sortParam;
+          sortAscending = true;
+        }
+      }
+
+      // Sort with secondary id sort for stable pagination
+      q = q.order(sortField, { ascending: sortAscending })
         .order('id', { ascending: false })
         .range(offset, offset + limit - 1);
 

@@ -359,13 +359,27 @@ export default function createLeadRoutes(_pgPool) {
   // GET /api/leads - List leads
   router.get('/', cacheList('leads', 180), async (req, res) => {
     try {
-      let { tenant_id, status, account_id, filter } = req.query;
+      let { tenant_id, status, account_id, filter, sort } = req.query;
       const isTestData = req.query.is_test_data;
       const limit = parseInt(req.query.limit || '50', 10);
       const offset = parseInt(req.query.offset || '0', 10);
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+      
+      // Parse sort parameter: -field for descending, field for ascending
+      let sortField = 'created_at';
+      let sortAscending = false;
+      if (sort) {
+        if (sort.startsWith('-')) {
+          sortField = sort.substring(1);
+          sortAscending = false;
+        } else {
+          sortField = sort;
+          sortAscending = true;
+        }
+        logger.debug('[Leads] Sorting by:', sortField, 'ascending:', sortAscending);
       }
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
@@ -459,7 +473,9 @@ export default function createLeadRoutes(_pgPool) {
         }
       }
       if (account_id) q = q.eq('account_id', account_id);
-      q = q.order('created_at', { ascending: false }).range(offset, offset + limit - 1);
+      
+      // Apply dynamic sorting (default: created_at descending)
+      q = q.order(sortField, { ascending: sortAscending }).range(offset, offset + limit - 1);
 
       const { data, error, count } = await q;
       if (error) throw new Error(error.message);
@@ -548,6 +564,7 @@ export default function createLeadRoutes(_pgPool) {
         status: normalizedStatus,
         metadata: combinedMetadata,
         created_at: nowIso,
+        created_date: nowIso,
         updated_at: nowIso,
       };
 

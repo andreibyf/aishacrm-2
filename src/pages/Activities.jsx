@@ -15,6 +15,13 @@ import ActivityDetailPanel from "../components/activities/ActivityDetailPanel";
 import BulkActionsMenu from "../components/activities/BulkActionsMenu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Plus, Search, Upload, Loader2, Grid, List, AlertCircle, X, Edit, Eye, Trash2 } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
 import CsvExportButton from "../components/shared/CsvExportButton";
@@ -91,6 +98,22 @@ export default function ActivitiesPage() {
   const { selectedEmail } = useEmployeeScope();
 
   const { selectedTimezone } = useTimezone();
+
+  // Sort state
+  const [sortField, setSortField] = useState("due_date");
+  const [sortDirection, setSortDirection] = useState("desc");
+
+  // Sort options for activities
+  const sortOptions = useMemo(() => [
+    { label: "Due Date (Latest)", field: "due_date", direction: "desc" },
+    { label: "Due Date (Earliest)", field: "due_date", direction: "asc" },
+    { label: "Newest First", field: "created_at", direction: "desc" },
+    { label: "Oldest First", field: "created_at", direction: "asc" },
+    { label: "Subject A-Z", field: "subject", direction: "asc" },
+    { label: "Subject Z-A", field: "subject", direction: "desc" },
+    { label: "Type", field: "type", direction: "asc" },
+    { label: "Status", field: "status", direction: "asc" },
+  ], []);
 
   const [totalStats, setTotalStats] = useState({
     total: 0,
@@ -265,9 +288,12 @@ export default function ActivitiesPage() {
 
       const skip = (page - 1) * size;
 
-      console.log('[Activities] Loading page:', page, 'size:', size, 'skip:', skip, 'filter:', currentFilter);
+      // Build sort string: prefix with - for descending
+      const sortString = sortDirection === "desc" ? `-${sortField}` : sortField;
 
-      const activitiesResult = await Activity.filter(currentFilter, '-due_date', size, skip);
+      console.log('[Activities] Loading page:', page, 'size:', size, 'skip:', skip, 'filter:', currentFilter, 'sort:', sortString);
+
+      const activitiesResult = await Activity.filter(currentFilter, sortString, size, skip);
       // activitiesResult may be array (legacy) or object with meta
       let items = Array.isArray(activitiesResult) ? activitiesResult : activitiesResult.activities;
       const totalCount = !Array.isArray(activitiesResult) && typeof activitiesResult.total === 'number'
@@ -352,7 +378,7 @@ export default function ActivitiesPage() {
     } finally {
       setLoading(false);
     }
-  }, [user, searchTerm, selectedTags, buildFilter, loadStats, loadingToast, activitiesLabel, selectedEmail]);
+  }, [user, searchTerm, selectedTags, buildFilter, loadStats, loadingToast, activitiesLabel, selectedEmail, sortField, sortDirection]);
 
   useEffect(() => {
     if (user) {
@@ -1122,6 +1148,34 @@ export default function ActivitiesPage() {
               contentClassName="bg-slate-800 border-slate-700"
               itemClassName="text-slate-200 hover:bg-slate-700"
             />
+
+            {/* Sort Dropdown */}
+            <Select
+              value={`${sortField}:${sortDirection}`}
+              onValueChange={(value) => {
+                const option = sortOptions.find(o => `${o.field}:${o.direction}` === value);
+                if (option) {
+                  setSortField(option.field);
+                  setSortDirection(option.direction);
+                  setCurrentPage(1);
+                }
+              }}
+            >
+              <SelectTrigger className="w-44 bg-slate-800 border-slate-700 text-slate-200">
+                <SelectValue placeholder="Sort by..." />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-800 border-slate-700">
+                {sortOptions.map((option) => (
+                  <SelectItem
+                    key={`${option.field}:${option.direction}`}
+                    value={`${option.field}:${option.direction}`}
+                    className="text-slate-200 hover:bg-slate-700"
+                  >
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
             {hasActiveFilters && (
               <Tooltip>

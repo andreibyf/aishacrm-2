@@ -17,6 +17,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   AlertCircle,
   Edit,
   Eye,
@@ -87,6 +94,22 @@ export default function ContactsPage() {
   // Added showTestData state to support the new getTenantFilter logic from the outline
   const [showTestData] = useState(true); // Default to showing all data
   const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
+
+  // Sort state
+  const [sortField, setSortField] = useState("created_at");
+  const [sortDirection, setSortDirection] = useState("desc");
+
+  // Sort options for contacts
+  const sortOptions = useMemo(() => [
+    { label: "Newest First", field: "created_at", direction: "desc" },
+    { label: "Oldest First", field: "created_at", direction: "asc" },
+    { label: "First Name A-Z", field: "first_name", direction: "asc" },
+    { label: "First Name Z-A", field: "first_name", direction: "desc" },
+    { label: "Last Name A-Z", field: "last_name", direction: "asc" },
+    { label: "Last Name Z-A", field: "last_name", direction: "desc" },
+    { label: "Email A-Z", field: "email", direction: "asc" },
+    { label: "Recently Updated", field: "updated_at", direction: "desc" },
+  ], []);
 
   const [totalStats, setTotalStats] = useState({
     total: 0,
@@ -355,11 +378,15 @@ export default function ContactsPage() {
 
       // Include limit parameter to fetch all contacts (not just default 50)
       const filterWithLimit = { ...scopedFilter, limit: 10000 };
+      
+      // Build sort string: prefix with - for descending
+      const sortString = sortDirection === "desc" ? `-${sortField}` : sortField;
+      
       const allContacts = await cachedRequest(
         "Contact",
         "filter",
-        { filter: filterWithLimit },
-        () => Contact.filter(filterWithLimit),
+        { filter: filterWithLimit, sort: sortString },
+        () => Contact.filter(filterWithLimit, sortString),
       );
 
       let filtered = allContacts || [];
@@ -378,9 +405,7 @@ export default function ContactsPage() {
         );
       }
 
-      filtered.sort((a, b) =>
-        new Date(b.created_date) - new Date(a.created_date)
-      );
+      // Server already sorted, no need for client-side sort
 
       setTotalItems(filtered.length);
 
@@ -438,6 +463,8 @@ export default function ContactsPage() {
     selectedTags,
     currentPage,
     pageSize,
+    sortField,
+    sortDirection,
     cachedRequest,
     getTenantFilter,
     selectedEmail,
@@ -1090,6 +1117,34 @@ export default function ContactsPage() {
           selectedTags={selectedTags}
           onTagsChange={setSelectedTags}
         />
+        
+        {/* Sort Dropdown */}
+        <Select
+          value={`${sortField}:${sortDirection}`}
+          onValueChange={(value) => {
+            const option = sortOptions.find(o => `${o.field}:${o.direction}` === value);
+            if (option) {
+              setSortField(option.field);
+              setSortDirection(option.direction);
+              setCurrentPage(1);
+            }
+          }}
+        >
+          <SelectTrigger className="w-44 bg-slate-800 border-slate-700 text-slate-200">
+            <SelectValue placeholder="Sort by..." />
+          </SelectTrigger>
+          <SelectContent className="bg-slate-800 border-slate-700">
+            {sortOptions.map((option) => (
+              <SelectItem
+                key={`${option.field}:${option.direction}`}
+                value={`${option.field}:${option.direction}`}
+                className="text-slate-200 hover:bg-slate-700"
+              >
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Bulk Actions */}

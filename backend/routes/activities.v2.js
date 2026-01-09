@@ -145,7 +145,7 @@ export default function createActivityV2Routes(_pgPool) {
 
   router.get('/', cacheList('activities', 180), async (req, res) => {
     try {
-      const { tenant_id, filter } = req.query;
+      const { tenant_id, filter, sort } = req.query;
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
@@ -156,11 +156,24 @@ export default function createActivityV2Routes(_pgPool) {
       // Enable stats when explicitly requested via query param
       const includeStats = req.query.include_stats === 'true' || req.query.include_stats === '1';
 
+      // Parse sort parameter: -field for descending, field for ascending
+      let sortField = 'created_at';
+      let sortAscending = false;
+      if (sort) {
+        if (sort.startsWith('-')) {
+          sortField = sort.substring(1);
+          sortAscending = false;
+        } else {
+          sortField = sort;
+          sortAscending = true;
+        }
+      }
+
       let q = supabase
         .from('activities')
         .select('*, employee:employees!activities_assigned_to_fkey(id, first_name, last_name, email)', { count: 'exact' })
         .eq('tenant_id', tenant_id)
-        .order('created_at', { ascending: false })
+        .order(sortField, { ascending: sortAscending })
         .range(offset, offset + limit - 1);
 
       // Handle direct query parameters (compatibility with generic frontend filters)

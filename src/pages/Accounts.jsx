@@ -18,6 +18,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   AlertCircle,
   Edit,
   Eye,
@@ -78,6 +85,21 @@ export default function AccountsPage() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState([]);
   const [showTestData] = useState(true); // Default to showing all data
+
+  // Sort state
+  const [sortField, setSortField] = useState("created_at");
+  const [sortDirection, setSortDirection] = useState("desc");
+
+  // Sort options for accounts
+  const sortOptions = useMemo(() => [
+    { label: "Newest First", field: "created_at", direction: "desc" },
+    { label: "Oldest First", field: "created_at", direction: "asc" },
+    { label: "Name A-Z", field: "name", direction: "asc" },
+    { label: "Name Z-A", field: "name", direction: "desc" },
+    { label: "Industry A-Z", field: "industry", direction: "asc" },
+    { label: "Type", field: "type", direction: "asc" },
+    { label: "Recently Updated", field: "updated_at", direction: "desc" },
+  ], []);
 
   // Stats for ALL accounts (not just current page)
   const [totalStats, setTotalStats] = useState({
@@ -358,11 +380,15 @@ export default function AccountsPage() {
 
       // Include limit parameter to fetch all accounts for client-side filtering
       const filterWithLimit = { ...currentTenantFilter, limit: 10000 };
+      
+      // Build sort string: prefix with - for descending
+      const sortString = sortDirection === "desc" ? `-${sortField}` : sortField;
+      
       const allAccounts = await cachedRequest(
         "Account",
         "filter",
-        { filter: filterWithLimit },
-        () => Account.filter(filterWithLimit),
+        { filter: filterWithLimit, sort: sortString },
+        () => Account.filter(filterWithLimit, sortString),
       );
 
       let filtered = allAccounts || [];
@@ -426,6 +452,8 @@ export default function AccountsPage() {
     selectedTags,
     currentPage,
     pageSize,
+    sortField,
+    sortDirection,
     cachedRequest,
     getTenantFilter,
     accountsLabel,
@@ -1302,6 +1330,34 @@ export default function AccountsPage() {
                 // currentPage reset handled by useEffect for filters
               }}
             />
+
+            {/* Sort Dropdown */}
+            <Select
+              value={`${sortField}:${sortDirection}`}
+              onValueChange={(value) => {
+                const option = sortOptions.find(o => `${o.field}:${o.direction}` === value);
+                if (option) {
+                  setSortField(option.field);
+                  setSortDirection(option.direction);
+                  setCurrentPage(1);
+                }
+              }}
+            >
+              <SelectTrigger className="w-44 bg-slate-800 border-slate-700 text-slate-200">
+                <SelectValue placeholder="Sort by..." />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-800 border-slate-700">
+                {sortOptions.map((option) => (
+                  <SelectItem
+                    key={`${option.field}:${option.direction}`}
+                    value={`${option.field}:${option.direction}`}
+                    className="text-slate-200 hover:bg-slate-700"
+                  >
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
             {hasActiveFilters && (
               <Tooltip>
