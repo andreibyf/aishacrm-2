@@ -144,6 +144,16 @@ after(async () => {
   assert.ok(json.data?.opportunities, 'expected opportunities array in response');
 });
 
+(SHOULD_RUN ? test : test.skip)('GET /api/v2/opportunities rejects invalid field names', async () => {
+  // Test with SQL injection attempt - should ignore invalid fields
+  const res = await fetch(`${BASE_URL}/api/v2/opportunities?tenant_id=${TENANT_ID}&sort=-malicious_field,invalid_column`);
+  assert.equal(res.status, 200, 'expected 200 (invalid fields should be ignored)');
+  const json = await res.json();
+  assert.equal(json.status, 'success');
+  assert.ok(json.data?.opportunities, 'expected opportunities array in response');
+  // Should fall back to default sort since all fields are invalid
+});
+
 (SHOULD_RUN ? test : test.skip)('GET /api/v2/opportunities with pagination and sort', async () => {
   const res = await fetch(`${BASE_URL}/api/v2/opportunities?tenant_id=${TENANT_ID}&sort=-updated_at,-id&limit=10&offset=0`);
   assert.equal(res.status, 200, 'expected 200 from v2 opportunities with pagination and sort');

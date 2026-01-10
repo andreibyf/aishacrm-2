@@ -14,6 +14,14 @@ export default function createOpportunityV2Routes(_pgPool) {
   router.use(validateTenantAccess);
   router.use(enforceEmployeeDataScope);
 
+  // Allowed sort fields to prevent column injection attacks
+  const ALLOWED_SORT_FIELDS = [
+    'id', 'name', 'stage', 'amount', 'probability', 'close_date', 
+    'expected_close_date', 'account_id', 'contact_id', 'assigned_to',
+    'created_at', 'updated_at', 'created_date', 'lead_source', 
+    'next_step', 'description', 'expected_revenue', 'ai_health'
+  ];
+
   const expandMetadata = (record) => {
     if (!record) return record;
     const { metadata, ...rest } = record;
@@ -334,10 +342,22 @@ export default function createOpportunityV2Routes(_pgPool) {
           const fields = sortParam.split(',').map(f => f.trim()).filter(Boolean);
           
           for (const field of fields) {
+            let fieldName;
+            let ascending;
+            
             if (field.startsWith('-')) {
-              sortFields.push({ field: field.substring(1), ascending: false });
+              fieldName = field.substring(1);
+              ascending = false;
             } else {
-              sortFields.push({ field, ascending: true });
+              fieldName = field;
+              ascending = true;
+            }
+            
+            // Validate field name against allowlist to prevent column injection
+            if (ALLOWED_SORT_FIELDS.includes(fieldName)) {
+              sortFields.push({ field: fieldName, ascending });
+            } else {
+              logger.warn('[V2 Opportunities] Invalid sort field ignored:', fieldName);
             }
           }
         } catch (e) {
