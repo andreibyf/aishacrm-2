@@ -15,11 +15,18 @@ export default function createOpportunityV2Routes(_pgPool) {
   router.use(enforceEmployeeDataScope);
 
   // Allowed sort fields to prevent column injection attacks
+  // Organized by category for maintainability
   const ALLOWED_SORT_FIELDS = [
-    'id', 'name', 'stage', 'amount', 'probability', 'close_date', 
-    'expected_close_date', 'account_id', 'contact_id', 'assigned_to',
-    'created_at', 'updated_at', 'created_date', 'lead_source', 
-    'next_step', 'description', 'expected_revenue', 'ai_health'
+    // Core fields
+    'id', 'name', 'stage', 'description',
+    // Financial fields
+    'amount', 'probability', 'expected_revenue',
+    // Relationship fields
+    'account_id', 'contact_id', 'assigned_to',
+    // Date fields
+    'close_date', 'expected_close_date', 'created_at', 'updated_at', 'created_date',
+    // Other fields
+    'lead_source', 'next_step', 'ai_health'
   ];
 
   const expandMetadata = (record) => {
@@ -339,6 +346,7 @@ export default function createOpportunityV2Routes(_pgPool) {
       if (sortParam) {
         try {
           // Split by comma to handle multiple sort fields
+          // filter(Boolean) removes empty strings after trimming
           const fields = sortParam.split(',').map(f => f.trim()).filter(Boolean);
           
           for (const field of fields) {
