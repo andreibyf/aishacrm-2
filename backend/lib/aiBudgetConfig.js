@@ -111,9 +111,11 @@ export const CORE_TOOLS = [
   'search_contacts', 
   'search_accounts',
   'search_activities',
+  'search_notes',
   'list_activities',
   'create_lead',
   'create_activity',
+  'create_note',
   'update_activity',
   'suggest_next_actions',
 ];

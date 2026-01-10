@@ -7,12 +7,44 @@
  * - Workflow definitions (v3.0.0)
  * - Business model context (B2B/B2C/Hybrid)
  * - Module visibility settings
+ * - Intent-to-response field mappings
  * 
  * This dictionary is reviewed by AI at session start to ensure accurate understanding
  * of tenant-specific terminology and workflows.
+ * 
+ * CACHING: Dictionary is cached in Redis for 5 minutes per tenant to avoid
+ * repeated database queries on every chat message.
  */
 
 import { fetchEntityLabels } from './entityLabelInjector.js';
+import cacheManager from './cacheManager.js';
+
+// Cache TTL in seconds (5 minutes)
+const CONTEXT_CACHE_TTL = 300;
+
+/**
+ * Intent-to-Response Field Mapping
+ * Defines what fields the AI should include when responding to specific intents
+ */
+export const INTENT_RESPONSE_FIELDS = {
+  // Entity detail requests - show contact info
+  ENTITY_DETAILS: {
+    leads: ['first_name', 'last_name', 'job_title', 'company', 'email', 'phone', 'mobile', 'street', 'city', 'state', 'zip', 'country', 'status', 'source'],
+    contacts: ['first_name', 'last_name', 'job_title', 'email', 'phone', 'mobile', 'street', 'city', 'state', 'zip', 'country', 'account_name'],
+    accounts: ['name', 'industry', 'website', 'email', 'phone', 'street', 'city', 'state', 'zip', 'country', 'annual_revenue', 'employee_count'],
+    opportunities: ['name', 'amount', 'stage', 'probability', 'close_date', 'account_name', 'contact_name'],
+    activities: ['type', 'subject', 'body', 'status', 'due_date', 'assigned_to_name']
+  },
+  
+  // Fields to NEVER show to users
+  NEVER_SHOW: ['id', 'tenant_id', 'account_id', 'contact_id', 'assigned_to', 'created_at', 'updated_at', 'created_by', 'updated_by', 'metadata', 'is_test_data'],
+  
+  // Phone field priority: if phone is empty, use mobile; if both, show both
+  PHONE_FIELDS: ['phone', 'mobile'],
+  
+  // Address fields to combine into a single line
+  ADDRESS_FIELDS: ['street', 'city', 'state', 'zip', 'country']
+};
 
 // v3.0.0 Workflow Definitions - static but tenant can customize terminology
 const V3_WORKFLOW_DEFINITIONS = {
@@ -163,14 +195,19 @@ async function fetchModuleSettings(pool, tenantId) {
  * Build complete tenant context dictionary
  * This is the main export - builds everything the AI needs to know about a tenant
  * 
+ * CACHING: Results are cached in Redis for 5 minutes per tenant.
+ * 
  * @param {import('pg').Pool} pool - Database pool
  * @param {string} tenantIdOrSlug - Tenant UUID or slug
+ * @param {Object} options - Options
+ * @param {boolean} options.bypassCache - If true, skip cache and rebuild
  * @returns {Promise<Object>} Complete context dictionary
  */
-export async function buildTenantContextDictionary(pool, tenantIdOrSlug) {
+export async function buildTenantContextDictionary(pool, tenantIdOrSlug, options = {}) {
   const startTime = Date.now();
+  const { bypassCache = false } = options;
   
-  // Resolve tenant UUID
+  // Resolve tenant UUID first (needed for cache key)
   let tenantId = tenantIdOrSlug;
   const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   
@@ -193,6 +230,22 @@ export async function buildTenantContextDictionary(pool, tenantIdOrSlug) {
       timestamp: new Date().toISOString(),
       durationMs: Date.now() - startTime
     };
+  }
+  
+  // Check Redis cache first
+  const cacheKey = `tenant_context:${tenantId}`;
+  if (!bypassCache) {
+    try {
+      const cached = await cacheManager.get(cacheKey);
+      if (cached) {
+        cached.fromCache = true;
+        cached.cacheAge = Date.now() - new Date(cached.timestamp).getTime();
+        console.log(`[TenantContextDictionary] Cache HIT for ${tenantId} (age: ${cached.cacheAge}ms)`);
+        return cached;
+      }
+    } catch (cacheErr) {
+      console.warn('[TenantContextDictionary] Cache read error:', cacheErr.message);
+    }
   }
   
   // Fetch all context components in parallel
@@ -256,10 +309,22 @@ export async function buildTenantContextDictionary(pool, tenantIdOrSlug) {
       enabledCount: Object.values(moduleSettings).filter(m => m.enabled).length
     },
     
+    // Intent-to-response field mappings
+    responseFields: INTENT_RESPONSE_FIELDS,
+    
     // AI-ready summary
     aiContextSummary: buildAIContextSummary(tenantConfig, terminology, statusCards)
   };
   
+  // Cache the dictionary in Redis
+  try {
+    await cacheManager.set(cacheKey, dictionary, CONTEXT_CACHE_TTL);
+    console.log(`[TenantContextDictionary] Cached for ${tenantId} (TTL: ${CONTEXT_CACHE_TTL}s)`);
+  } catch (cacheErr) {
+    console.warn('[TenantContextDictionary] Cache write error:', cacheErr.message);
+  }
+  
+  dictionary.fromCache = false;
   return dictionary;
 }
 
@@ -400,6 +465,29 @@ export function generateContextDictionaryPrompt(dictionary) {
       prompt += `- ${entity}: ${statusList}\n`;
     }
   }
+  
+  // Add intent response field mappings
+  prompt += `\n**REQUIRED RESPONSE FIELDS (CRITICAL):**\n`;
+  prompt += `When showing entity details, ALWAYS include these fields if data exists:\n\n`;
+  
+  prompt += `For Leads:\n`;
+  prompt += `  Name, Job Title, Company, Email, Phone (check both phone & mobile), Address\n\n`;
+  
+  prompt += `For Contacts:\n`;
+  prompt += `  Name, Job Title, Account/Company, Email, Phone (check both phone & mobile), Address\n\n`;
+  
+  prompt += `For Accounts:\n`;
+  prompt += `  Name, Industry, Website, Email, Phone, Address, Revenue, Employee Count\n\n`;
+  
+  prompt += `NEVER include in responses:\n`;
+  prompt += `  - UUIDs (id, tenant_id, account_id, contact_id)\n`;
+  prompt += `  - Technical fields (created_at, updated_at, metadata)\n`;
+  prompt += `  - "Type: Contact/Lead" labels (users already know what they asked for)\n\n`;
+  
+  prompt += `Phone number rules:\n`;
+  prompt += `  - If 'phone' is empty but 'mobile' has data → show mobile as Phone\n`;
+  prompt += `  - If both have data → show both as "Phone: xxx, Mobile: yyy"\n`;
+  prompt += `  - Only say "Phone: Not on file" if BOTH are empty\n`;
   
   prompt += `\n**═══════════════════════════════════════════════**\n`;
   

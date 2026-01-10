@@ -204,6 +204,7 @@ export default function createNoteRoutes(_pgPool) {
           tenant_id: n.tenant_id,
           title: n.title || null,
           content: n.content,
+          type: n.type || 'general',
           related_type: n.related_type || null,
           related_id: n.related_id || null,
           created_by: n.created_by || null,

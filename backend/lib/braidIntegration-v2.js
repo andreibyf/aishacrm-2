@@ -242,6 +242,7 @@ const TOOL_CACHE_TTL = {
   search_leads: 60,             // 1 minute - search results
   search_accounts: 60,
   search_contacts: 60,
+  get_contact_by_name: 60,      // 1 minute - name search
   search_opportunities: 60,
   search_activities: 60,
   search_documents: 60,
@@ -358,6 +359,7 @@ export const TOOL_REGISTRY = {
   list_contacts_for_account: { file: 'contacts.braid', function: 'listContactsForAccount', policy: 'READ_ONLY' },
   list_all_contacts: { file: 'contacts.braid', function: 'listAllContacts', policy: 'READ_ONLY' },
   get_contact_details: { file: 'contacts.braid', function: 'getContactDetails', policy: 'READ_ONLY' },
+  get_contact_by_name: { file: 'contacts.braid', function: 'getContactByName', policy: 'READ_ONLY' },
   search_contacts: { file: 'contacts.braid', function: 'searchContacts', policy: 'READ_ONLY' },
   search_contacts_by_status: { file: 'contacts.braid', function: 'searchContactsByStatus', policy: 'READ_ONLY' },
   delete_contact: { file: 'contacts.braid', function: 'deleteContact', policy: 'DELETE_OPERATIONS' },
@@ -480,8 +482,8 @@ const TOOL_DESCRIPTIONS = {
   get_lead_details: 'Get the full details of a specific Lead by its UUID. Only use when you already have the lead_id from a previous search or list.',
 
   // Activities
-  create_activity: 'Create a new Activity (task, meeting, call, email) in the CRM. For related entities use entity_type (lead/contact/account/opportunity) and entity_id (the UUID).',
-  update_activity: 'Update/reschedule an existing Activity by its ID. Use this for rescheduling - pass activity_id and updates object with new due_date (ISO format like "2025-12-20T13:00:00"). IMPORTANT: Use the activity ID from the previous list/search result - you do NOT need to query again.',
+  create_activity: 'Create a new Activity (task, meeting, call, email). REQUIRED: subject (title), activity_type, due_date (ISO format), entity_type, entity_id. OPTIONAL: assigned_to, body (leave empty unless user specifies notes). DATE RULES: 1) Use due_date for when - NEVER in subject or body. 2) NEVER past dates. 3) "today" = 5:00 PM today. 4) "tomorrow" = 9:00 AM tomorrow. 5) Default = tomorrow 9:00 AM. 6) ISO format: "2026-01-10T09:00:00".',
+  update_activity: 'Update/reschedule an existing Activity by its ID. Pass activity_id and updates object with new due_date (ISO format). Put dates in due_date field only. NEVER set dates in the past.',
   mark_activity_complete: 'Mark an Activity as completed by its ID. Use the ID from previous list/search results.',
   get_upcoming_activities: 'Get upcoming activities for a user. The assigned_to parameter must be a user UUID (not email). Use search_users first to find the user UUID if needed. Use list_activities for general calendar queries.',
   schedule_meeting: 'Schedule a new meeting with attendees. Creates a meeting-type activity with date, time, duration, and attendee list.',
@@ -494,7 +496,7 @@ const TOOL_DESCRIPTIONS = {
 
 
   // Notes
-  create_note: 'Create a new Note attached to a CRM record. REQUIRED: content (the note text), entity_type (one of: "lead", "account", "contact", "opportunity"), entity_id (the UUID of the record).',
+  create_note: 'Create a new Note attached to a CRM record. USE THIS when user says "create a note", "add a note", "make a note". REQUIRED parameters in order: title (short subject line), content (the full note text body), entity_type (one of: "lead", "account", "contact", "opportunity"), entity_id (the UUID of the record to attach note to), note_type (one of: "general", "call_log", "meeting", "email", "task", "follow_up", "important", "demo", "proposal"). Choose note_type based on context.',
   update_note: 'Update an existing Note by its ID.',
   search_notes: 'Search notes by keyword across all records.',
   get_notes_for_record: 'Get all notes attached to a specific record. REQUIRED: entity_type (one of: "lead", "account", "contact", "opportunity"), entity_id (the UUID of the record).',
@@ -514,7 +516,8 @@ const TOOL_DESCRIPTIONS = {
   update_contact: 'Update an existing Contact by its ID.',
   list_contacts_for_account: 'List all Contacts belonging to a specific Account. IMPORTANT: If more than 5 results, summarize the count and tell user to check the Contacts page in the UI for the full list.',
   get_contact_details: 'Get the full details of a specific Contact by its ID. Returns first_name, last_name, email, phone, job_title, account_id.',
-  search_contacts: 'Search contacts by name, email, or other fields.',
+  get_contact_by_name: 'Search for and retrieve a specific Contact by their name. USE THIS when user asks for contact details by name. Returns full contact info including first_name, last_name, email, phone, mobile, job_title, address.',
+  search_contacts: 'Search contacts by name, email, or other fields. Returns full contact details including phone, email, job_title.',
 
   // Web Research
   search_web: 'Search the web for information using a query. Returns search results.',
@@ -613,11 +616,62 @@ const TOOL_DESCRIPTIONS = {
 
 /**
  * Enhanced system prompt for Executive Assistant
+ * Now a function to get fresh date each time
  */
-export const BRAID_SYSTEM_PROMPT = `
+export function getBraidSystemPrompt() {
+  const now = new Date();
+  const currentDate = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const currentYear = now.getFullYear();
+  
+  return `
 You are AI-SHA - an AI Super Hi-performing Assistant designed to be an Executive Assistant for CRM operations.
 
-**� STOP! BEFORE ANSWERING "HOW MANY" QUESTIONS - READ THIS! 🛑**
+**!!! CRITICAL: DATE AND TIME AWARENESS !!!**
+- The current date is: ${currentDate}
+- The current year is: ${currentYear}
+- NEVER create activities, tasks, or meetings with due dates in the past
+- When user says "today", use today's date with a future time (e.g., 5:00 PM if morning)
+- When user says "tomorrow", use tomorrow's date
+- If no date specified, default to tomorrow at 9:00 AM
+- Use ISO 8601 format for dates: YYYY-MM-DDTHH:MM:SS
+
+**!!! CRITICAL: ENTITY DETAILS RESPONSE FORMAT - READ FIRST !!!**
+
+When showing details for ANY Lead, Contact, or Account, you MUST follow these rules:
+
+ALWAYS INCLUDE (if data exists):
+- Name (full name for people, company name for accounts)
+- Title/Job Title
+- Company (for leads/contacts)
+- Email
+- Phone (check BOTH 'phone' AND 'mobile' fields - show whichever has data)
+- Address (street, city, state, zip formatted together)
+
+NEVER SHOW TO USERS:
+- ID fields (UUIDs like "b4148a58-b4f3-4f10-af56-72551c7f2dfa") - ABSOLUTELY NEVER!
+- tenant_id, account_id, contact_id - NEVER!
+- Technical fields (created_at, updated_at, metadata)
+- "Type: Contact" or "Type: Lead" labels - users already know what they asked for
+
+CORRECT Response Example:
+User: "Give me details for Jackie Knight"
+Response:
+"Here are the details for Jackie Knight:
+- Title: Director
+- Email: optional@email.com
+- Phone: +1 (555) 266-7799
+- Company: [account name if linked]"
+
+WRONG Response (DO NOT DO THIS):
+"Jackie Knight
+- ID: b4148a58-b4f3-4f10-af56-...
+- Title: Director
+- Type: Contact"
+
+If a phone field is empty, check the mobile field. If mobile is empty, check phone. Report whichever has data.
+If BOTH are empty, say "Phone: Not on file"
+
+**STOP! BEFORE ANSWERING "HOW MANY" QUESTIONS - READ THIS!**
 
 When users ask "how many", "count", "total number of" ANY entity (leads, accounts, contacts, opportunities):
 
@@ -800,11 +854,28 @@ User: "What should be my next steps?"
 → NEVER say "I'm not sure" - the tool provides intelligent recommendations
 
 **Data Structure Guide (CRITICAL - Matches DB):**
-- Accounts: {id, name, annual_revenue, industry, website, email, phone, assigned_to, metadata}
-- Leads: {id, first_name, last_name, email, company, status, source, phone, job_title, assigned_to}
-- Contacts: {id, first_name, last_name, email, phone, job_title, account_id, assigned_to}
+- Accounts: {id, name, annual_revenue, industry, website, email, phone, street, city, state, zip, country, assigned_to, metadata}
+- Leads: {id, first_name, last_name, email, company, status, source, phone, mobile, job_title, street, city, state, zip, country, assigned_to}
+- Contacts: {id, first_name, last_name, email, phone, mobile, job_title, account_id, street, city, state, zip, country, assigned_to}
 - Opportunities: {id, name, description, amount, stage, probability, close_date, account_id, contact_id, assigned_to}
 - Activities: {id, type, subject, body, status, due_date, assigned_to}
+
+**CONTACT INFORMATION DISPLAY (CRITICAL):**
+When showing details for Leads, Contacts, or Accounts, ALWAYS include these fields if available:
+- **Name** (first_name + last_name for leads/contacts, name for accounts)
+- **Title/Job Title** (job_title)
+- **Company** (company for leads, account name for contacts)
+- **Email** (email)
+- **Phone Numbers** - Include ALL phone fields: phone AND mobile (show both if available)
+- **Address** (street, city, state, zip, country - format as single line if present)
+
+**NEVER include in user-facing responses:**
+- Internal UUIDs (id, tenant_id, account_id, contact_id)
+- Technical metadata fields
+- System timestamps (created_at, updated_at)
+
+If a phone field shows as null/empty but another phone field has data, use the one with data.
+Example: If phone is empty but mobile has "+1 (555) 123-4567", show: "Phone: +1 (555) 123-4567"
 
 **CRITICAL - Getting Counts vs Listing Records:**
 **Priority 1: Use Dashboard Aggregations for Counts**
@@ -929,6 +1000,11 @@ Tool errors now return SPECIFIC error types. Handle each appropriately:
 - When user asks to navigate to a page, USE navigate_to_page tool immediately
 - When search returns empty, NEVER assume "network error" - ask user to verify
 `;
+}
+
+// Backwards compatibility - BRAID_SYSTEM_PROMPT as a getter that calls the function
+// This ensures existing code that imports BRAID_SYSTEM_PROMPT still works
+export const BRAID_SYSTEM_PROMPT = getBraidSystemPrompt();
 
 /**
  * Post-tool summarization layer
@@ -1068,7 +1144,15 @@ export function summarizeToolResult(result, toolName) {
       const isTest = l.is_test_data === true ? ' [TEST DATA]' : '';
       const phone = l.phone ? `, Phone: ${l.phone}` : '';
       const email = l.email ? `, Email: ${l.email}` : '';
-      return `• ID: ${l.id}, EXACT Name: "${fullName}", Company: "${l.company || 'N/A'}", Status: ${l.status || 'unknown'}${phone}${email}${isTest}`;
+      const assignedTo = l.assigned_to_name || l.assigned_to || '';
+      const account = l.account_name || '';
+      const addressParts = [l.city, l.state, l.country].filter(Boolean);
+      const address = addressParts.length > 0 ? addressParts.join(', ') : '';
+      let details = `• ID: ${l.id}, Name: "${fullName}", Company: "${l.company || 'N/A'}", Status: ${l.status || 'unknown'}${phone}${email}`;
+      if (account) details += `, Account: "${account}"`;
+      if (assignedTo) details += `, Assigned To: ${assignedTo}`;
+      if (address) details += `, Location: ${address}`;
+      return details + isTest;
     });
 
     let summary = `Found ${uniqueLeads.length} Lead${uniqueLeads.length === 1 ? '' : 's'} (REPORT THESE EXACT NAMES - do not substitute):\n${summaryItems.join('\n')}`;
@@ -1164,7 +1248,17 @@ export function summarizeToolResult(result, toolName) {
 
     const summaryItems = uniqueAccounts.slice(0, 10).map(a => {
       const isTest = a.is_test_data === true ? ' [TEST DATA]' : '';
-      return `• ID: ${a.id}, EXACT Name: "${a.name || 'Unnamed'}", Industry: "${a.industry || 'N/A'}", Revenue: $${(a.annual_revenue || 0).toLocaleString()}${isTest}`;
+      const phone = a.phone || '';
+      const email = a.email || '';
+      const assignedTo = a.assigned_to_name || a.assigned_to || '';
+      const addressParts = [a.city, a.state, a.country].filter(Boolean);
+      const address = addressParts.length > 0 ? addressParts.join(', ') : '';
+      let details = `• ID: ${a.id}, Name: "${a.name || 'Unnamed'}", Industry: "${a.industry || 'N/A'}", Revenue: $${(a.annual_revenue || 0).toLocaleString()}`;
+      if (phone) details += `, Phone: ${phone}`;
+      if (email) details += `, Email: ${email}`;
+      if (assignedTo) details += `, Assigned To: ${assignedTo}`;
+      if (address) details += `, Location: ${address}`;
+      return details + isTest;
     });
 
     let summary = `Found ${uniqueAccounts.length} Account${uniqueAccounts.length === 1 ? '' : 's'} (REPORT THESE EXACT NAMES - do not substitute):\n${summaryItems.join('\n')}`;
@@ -1203,7 +1297,17 @@ export function summarizeToolResult(result, toolName) {
     const summaryItems = uniqueContacts.slice(0, 10).map(c => {
       const fullName = [c.first_name, c.last_name].filter(Boolean).join(' ') || 'Unnamed';
       const isTest = c.is_test_data === true ? ' [TEST DATA]' : '';
-      return `• ID: ${c.id}, EXACT Name: "${fullName}", Title: "${c.job_title || 'N/A'}"${isTest}`;
+      const email = c.email || 'N/A';
+      const phone = c.phone || c.mobile || 'N/A';
+      const company = c.account_name || c.company || '';
+      const assignedTo = c.assigned_to_name || c.assigned_to || '';
+      const addressParts = [c.city, c.state, c.country].filter(Boolean);
+      const address = addressParts.length > 0 ? addressParts.join(', ') : '';
+      let details = `• ID: ${c.id}, Name: "${fullName}", Title: "${c.job_title || 'N/A'}", Email: ${email}, Phone: ${phone}`;
+      if (company) details += `, Account: "${company}"`;
+      if (assignedTo) details += `, Assigned To: ${assignedTo}`;
+      if (address) details += `, Location: ${address}`;
+      return details + isTest;
     });
 
     let summary = `Found ${uniqueContacts.length} Contact${uniqueContacts.length === 1 ? '' : 's'} (REPORT THESE EXACT NAMES - do not substitute):\n${summaryItems.join('\n')}`;
@@ -1966,13 +2070,21 @@ export const TOOL_GRAPH = {
     effects: ['read'],
     description: 'Retrieve contact details by ID'
   },
+  get_contact_by_name: {
+    category: 'CONTACTS',
+    dependencies: [],
+    inputs: ['name'],
+    outputs: ['contact'],
+    effects: ['read'],
+    description: 'Find and retrieve a contact by their name. Returns full contact details including email, phone, job_title, address.'
+  },
   search_contacts: {
     category: 'CONTACTS',
     dependencies: [],
-    inputs: [],
+    inputs: ['query'],
     outputs: ['contacts[]'],
     effects: ['read'],
-    description: 'Search contacts with filters'
+    description: 'Search contacts by name or other fields. Returns full contact details.'
   },
   update_contact: {
     category: 'CONTACTS',

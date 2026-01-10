@@ -8,7 +8,7 @@ import multer from 'multer';
 import OpenAI from 'openai';
 import { buildSystemPrompt, getOpenAIClient } from '../lib/aiProvider.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
-import { summarizeToolResult, BRAID_SYSTEM_PROMPT, generateToolSchemas, executeBraidTool, TOOL_ACCESS_TOKEN } from '../lib/braidIntegration-v2.js';
+import { summarizeToolResult, getBraidSystemPrompt, generateToolSchemas, executeBraidTool, TOOL_ACCESS_TOKEN } from '../lib/braidIntegration-v2.js';
 import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
 import { runTask } from '../lib/aiBrain.js';
 import createAiRealtimeRoutes from './aiRealtime.js';
@@ -16,6 +16,7 @@ import { routeChat } from '../flows/index.js';
 import { resolveLLMApiKey, pickModel, getTenantIdFromRequest, selectLLMConfigForTenant } from '../lib/aiEngine/index.js';
 import { logLLMActivity } from '../lib/aiEngine/activityLogger.js';
 import { enhanceSystemPromptSmart, fetchEntityLabels, updateToolSchemasWithLabels, applyToolHardCap } from '../lib/entityLabelInjector.js';
+import { CORE_TOOLS } from '../lib/aiBudgetConfig.js';
 import { buildTenantContextDictionary, generateContextDictionaryPrompt } from '../lib/tenantContextDictionary.js';
 import { developerChat, isSuperadmin } from '../lib/developerAI.js';
 import { classifyIntent, extractEntityMentions, getIntentConfidence } from '../lib/intentClassifier.js';
@@ -743,7 +744,7 @@ const maybeOffloadMetadata = async ({ tenantId, metadata, kind, entityType = nul
         : '';
       const baseSystemPrompt = `${buildSystemPrompt({ tenantName, agentName: agentNameForPrompt })}
 
-${BRAID_SYSTEM_PROMPT}${userContext}
+${getBraidSystemPrompt()}${userContext}
 
 **CRITICAL INSTRUCTIONS:**
 - You MUST call fetch_tenant_snapshot tool before answering ANY questions about CRM data
@@ -982,8 +983,12 @@ Use this summary for context about prior discussion topics, goals, and decisions
           // Medium-high confidence: Provide subset of relevant tools (reduces token overhead)
           const relevantTools = getRelevantToolsForIntent(classifiedIntent, entityMentions);
           if (relevantTools.length > 0 && relevantTools.length < tools.length) {
-            focusedTools = tools.filter(t => relevantTools.includes(t.function.name));
-            logger.debug('[Intent Routing] Focused to', focusedTools.length, 'tools from', tools.length);
+            // Start with intent-relevant tools
+            const focusedToolNames = new Set(relevantTools);
+            // ALWAYS add CORE_TOOLS so they're never filtered out
+            CORE_TOOLS.forEach(name => focusedToolNames.add(name));
+            focusedTools = tools.filter(t => focusedToolNames.has(t.function.name));
+            logger.debug('[Intent Routing] Focused to', focusedTools.length, 'tools (includes', CORE_TOOLS.length, 'core)');
           }
         }
         // Low confidence (< 0.7): Use all tools with auto selection
@@ -2715,7 +2720,7 @@ ${toolContextSummary}`,
       }
 
       const tenantName = tenantRecord?.name || tenantRecord?.tenant_id || 'CRM Tenant';
-      const baseSystemPrompt = `${buildSystemPrompt({ tenantName })}\n\n${BRAID_SYSTEM_PROMPT}\n\n- ALWAYS call fetch_tenant_snapshot before answering tenant data questions.\n- NEVER hallucinate records; only reference tool data.\n`;
+      const baseSystemPrompt = `${buildSystemPrompt({ tenantName })}\n\n${getBraidSystemPrompt()}\n\n- ALWAYS call fetch_tenant_snapshot before answering tenant data questions.\n- NEVER hallucinate records; only reference tool data.\n`;
       
       // Get current user message for context detection
       const currentUserMessage = messages.filter(m => m.role === 'user').pop()?.content || '';
@@ -2930,8 +2935,12 @@ ${conversationSummary}`;
           // Medium-high confidence: Provide subset of relevant tools (reduces token overhead)
           const relevantTools = getRelevantToolsForIntent(classifiedIntent, entityMentions);
           if (relevantTools.length > 0 && relevantTools.length < tools.length) {
-            focusedTools = tools.filter(t => relevantTools.includes(t.function.name));
-            logger.debug('[Intent Routing] Focused to', focusedTools.length, 'tools from', tools.length);
+            // Start with intent-relevant tools
+            const focusedToolNames = new Set(relevantTools);
+            // ALWAYS add CORE_TOOLS so they're never filtered out
+            CORE_TOOLS.forEach(name => focusedToolNames.add(name));
+            focusedTools = tools.filter(t => focusedToolNames.has(t.function.name));
+            logger.debug('[Intent Routing] Focused to', focusedTools.length, 'tools (includes', CORE_TOOLS.length, 'core)');
           }
         }
         // Low confidence (< 0.7): Use all tools with auto selection

@@ -5,17 +5,20 @@ import { Result, Note, CRMError } from "../../spec/types.braid"
 
 fn createNote(
   tenant: String,
+  title: String,
   content: String,
   entity_type: String,
-  entity_id: String
+  entity_id: String,
+  note_type: String
 ) -> Result<Note, CRMError> !net {
   let url = "/api/notes";
   let body = {
     tenant_id: tenant,
+    title: title,
     content: content,
     related_type: entity_type,
     related_id: entity_id,
-    metadata: {}
+    type: note_type
   };
   
   let response = http.post(url, { body: body });

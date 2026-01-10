@@ -56,7 +56,8 @@ const INTENT_PATTERNS = {
   // LEADS
   LEAD_CREATE: [
     /\b(create|add|new)\s+(an?\s+)?(lead|prospect)\b/i,
-    /\b(add|create)\s+.+\s+(as\s+)?(an?\s+)?lead\b/i
+    // More specific: "add X as a lead" but NOT "create a note about lead"
+    /\b(add|create)\s+[\w\s]{1,30}\s+as\s+(an?\s+)?lead\b/i
   ],
   
   LEAD_UPDATE: [
@@ -105,7 +106,11 @@ const INTENT_PATTERNS = {
   // ACTIVITIES
   ACTIVITY_CREATE: [
     /\b(create|add|new|schedule)\s+(an?\s+)?(activity|task|meeting|call|email)\b/i,
-    /\b(add|create)\s+.+\s+(activity|task|meeting)\b/i
+    /\b(schedule|book|set up)\s+(an?\s+)?(call|meeting|appointment)\b/i,
+    /\b(remind|follow up|follow-up)\s+(me\s+)?(to|about)\b/i,
+    /\b(set|create)\s+(an?\s+)?reminder\b/i,
+    /\b(schedule|create|add)\s+(an?\s+)?(call|meeting|task|activity)\s+(with|for|about|regarding)\b/i,
+    /\b(follow\s*up|call|meet)\s+(with\s+)?.+(lead|contact|account)\b/i
   ],
   
   ACTIVITY_UPDATE: [
@@ -147,7 +152,9 @@ const INTENT_PATTERNS = {
   // NOTES
   NOTE_CREATE: [
     /\b(create|add|new|write)\s+(an?\s+)?note\b/i,
-    /\b(add|create)\s+.+\s+note\b/i
+    /\bnote\s+(to\s+)?(follow\s*up|remind|remember)\b/i,
+    /\b(make|create|add)\s+(an?\s+)?note\s+(about|for|on|to|regarding)\b/i,
+    /\b(note|reminder)\s+(about|for|on|regarding)\s+.+(lead|contact|account|opportunity)\b/i
   ],
   
   NOTE_UPDATE: [

@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] - 2026-01-09
+
+### Added
+- **Dynamic Date Awareness for AI** - System prompt now includes current date/time dynamically
+  - Converted `BRAID_SYSTEM_PROMPT` to `getBraidSystemPrompt()` function for fresh dates per request
+  - AI always knows current date (e.g., "Thursday, January 9, 2026")
+  - Critical date rules added: never set past due dates, default to tomorrow at 9:00 AM
+- **Enhanced Entity Summarizers** - AI now includes richer details in search results
+  - Leads: Added Account, Assigned To, Location (city/state/country)
+  - Contacts: Added Account, Assigned To, Location (city/state/country)
+  - Accounts: Added Phone, Email, Assigned To, Location (city/state/country)
+- **Contact Full Name Search** - API now splits full names for better matching
+  - "Jackie Knight" now searches first_name OR last_name for "Jackie" OR "Knight"
+
+### Fixed
+- **Braid contacts.braid syntax** - Simplified `getContactByName` match pattern (Braid doesn't support let/if-else in match arms)
+- **Notes type storage** - `create_note` now stores type in `metadata.type` instead of top-level field
+- **AI date confusion** - Fixed AI setting dates in 2024 when current year is 2026
+  - Added year awareness to system prompt and tool descriptions
+  - Added explicit date format rules (ISO 8601)
+
+### Changed
+- `create_activity` tool description updated with critical date rules
+- `update_activity` tool description updated with date validation guidance
+- `create_note` tool description now lists all valid note types (general, call_log, meeting, email, task, follow_up, important, demo, proposal)
+
+---
+
 ## [Unreleased] - 2026-01-01
 
 ### Added

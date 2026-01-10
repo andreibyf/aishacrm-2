@@ -244,28 +244,36 @@ export function getRelevantToolsForIntent(intentCode, entityMentions = {}) {
     relevantTools.push(
       'create_lead', 'update_lead', 'list_leads', 
       'search_leads', 'get_lead_details', 'qualify_lead', 
-      'convert_lead_to_account'
+      'convert_lead_to_account',
+      'create_note', 'search_notes', 'get_notes_for_record',
+      'create_activity', 'list_activities'
     );
   }
 
   if (entityMentions.account) {
     relevantTools.push(
       'create_account', 'update_account', 'list_accounts',
-      'search_accounts', 'get_account_details'
+      'search_accounts', 'get_account_details',
+      'create_note', 'search_notes', 'get_notes_for_record',
+      'create_activity', 'list_activities'
     );
   }
 
   if (entityMentions.contact) {
     relevantTools.push(
       'create_contact', 'update_contact', 'search_contacts',
-      'get_contact_details', 'list_contacts_for_account'
+      'get_contact_details', 'list_contacts_for_account',
+      'create_note', 'search_notes', 'get_notes_for_record',
+      'create_activity', 'list_activities'
     );
   }
 
   if (entityMentions.opportunity) {
     relevantTools.push(
       'create_opportunity', 'update_opportunity', 'search_opportunities',
-      'get_opportunity_details', 'list_opportunities_by_stage'
+      'get_opportunity_details', 'list_opportunities_by_stage',
+      'create_note', 'search_notes', 'get_notes_for_record',
+      'create_activity', 'list_activities'
     );
   }
 

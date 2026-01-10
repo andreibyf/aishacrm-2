@@ -81,19 +81,45 @@ fn searchContacts(
   query: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
-  // Use list endpoint - v2 contacts doesn't have dedicated search
+  // Search contacts by name using the search parameter
   let url = "/api/v2/contacts";
   let params = {
     tenant_id: tenant,
+    search: query,
     limit: limit
   };
   
   let response = http.get(url, { params: params });
   
+  // Returns FULL contact details including: first_name, last_name, email, phone, mobile, job_title, etc.
   // Note: Empty array is a VALID result (no matches found), not an error
   return match response {
     Ok{value} => Ok(value.data.contacts),
     Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_contacts", query: query }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+// Get a specific contact by name - searches for contact and returns full details
+// Use this when user asks for details about a specific contact by name
+fn getContactByName(
+  tenant: String,
+  name: String
+) -> Result<Contact, CRMError> !net {
+  let url = "/api/v2/contacts";
+  let params = {
+    tenant_id: tenant,
+    search: name,
+    limit: 1
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  // Returns FULL contact details: first_name, last_name, email, phone, mobile, job_title, address, etc.
+  // If no contact found, returns empty array - AI should inform user
+  return match response {
+    Ok{value} => Ok(value.data.contacts),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_contact_by_name", name: name }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }

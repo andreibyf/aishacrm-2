@@ -187,7 +187,7 @@ braid-llm-kit/examples/assistant/  # All Braid tool definitions
 
 ### Key Braid Files
 
-- `backend/lib/braidIntegration-v2.js` — Tool registry, system prompt, execution
+- `backend/lib/braidIntegration-v2.js` — Tool registry, system prompt (via `getBraidSystemPrompt()` for dynamic dates), execution
 - `backend/lib/entityLabelInjector.js` — Custom entity terminology
 - `backend/lib/tenantContextDictionary.js` — Tenant context for AI
 - `backend/routes/ai.js` — AI chat endpoint (lines 491, 1706 load context)
@@ -201,7 +201,7 @@ braid-llm-kit/examples/assistant/  # All Braid tool definitions
 
 **Modify backend integration when:**
 - Changing how tools are loaded or registered
-- Adding new system prompts or context
+- Adding new system prompts or context (use `getBraidSystemPrompt()` for dynamic content)
 - Implementing new MCP server features
 - Debugging tool execution or error handling
 

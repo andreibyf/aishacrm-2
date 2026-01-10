@@ -3128,9 +3128,9 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
             background-color: #e2e8f0 !important; /* slate-200 - light gray background */
           }
 
-          .theme-light .bg-slate-900 { background-color: #f8fafc !important; } /* page bg */
+          .theme-light .bg-slate-900 { background-color: #ffffff !important; } /* page bg - pure white */
           .theme-light .bg-slate-800 { background-color: #ffffff !important; } /* cards/dialogs */
-          .theme-light .bg-slate-700 { background-color: #f1f5f9 !important; }
+          .theme-light .bg-slate-700 { background-color: #f8fafc !important; } /* slate-50 - very light */
           .theme-light [class*="bg-slate-700/"] { background-color: rgba(241,245,249,0.6) !important; }
           .theme-light .border-slate-800 { border-color: #e2e8f0 !important; }
           .theme-light .border-slate-700 { border-color: #e5e7eb !important; }
@@ -3408,22 +3408,32 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
           .theme-light .prose code { color: #db2777; }
 
           /* NEW: Force documentation to dark text in light theme even if 'prose-invert' is present */
-          .theme-light .prose.prose-invert,
-          .theme-light .prose.prose-invert p,
-          .theme-light .prose.prose-invert li,
-          .theme-light .prose.prose-invert ins,
-          .theme-light .prose.prose-invert del,
-          .theme-light .prose.prose-invert ol,
-          .theme-light .prose.prose-invert ul,
-          .theme-light .prose.prose-invert blockquote {
+          /* Exception: Skip user messages in AiSHA chat which need white text on indigo background */
+          .theme-light .prose.prose-invert:not(.aisha-user-message *),
+          .theme-light .prose.prose-invert p:not(.aisha-user-message *),
+          .theme-light .prose.prose-invert li:not(.aisha-user-message *),
+          .theme-light .prose.prose-invert ins:not(.aisha-user-message *),
+          .theme-light .prose.prose-invert del:not(.aisha-user-message *),
+          .theme-light .prose.prose-invert ol:not(.aisha-user-message *),
+          .theme-light .prose.prose-invert ul:not(.aisha-user-message *),
+          .theme-light .prose.prose-invert blockquote:not(.aisha-user-message *) {
             color: #1f2937 !important; /* slate-800/700 */
           }
-          .theme-light .prose.prose-invert h1,
-          .theme-light .prose.prose-invert h2,
-          .theme-light .prose.prose-invert h3,
-          .theme-light .prose.prose-invert h4,
-          .theme-light .prose.prose-invert h5,
-          .theme-light .prose.prose-invert h6 {
+          /* AiSHA user messages MUST be white on indigo background */
+          .theme-light .aisha-user-message .prose.prose-invert,
+          .theme-light .aisha-user-message .prose.prose-invert p,
+          .theme-light .aisha-user-message .prose.prose-invert li,
+          .theme-light .aisha-user-message .prose.prose-invert ol,
+          .theme-light .aisha-user-message .prose.prose-invert ul,
+          .theme-light .aisha-user-message .prose.prose-invert strong {
+            color: #ffffff !important;
+          }
+          .theme-light .prose.prose-invert h1:not(.aisha-user-message *),
+          .theme-light .prose.prose-invert h2:not(.aisha-user-message *),
+          .theme-light .prose.prose-invert h3:not(.aisha-user-message *),
+          .theme-light .prose.prose-invert h4:not(.aisha-user-message *),
+          .theme-light .prose.prose-invert h5:not(.aisha-user-message *),
+          .theme-light .prose.prose-invert h6:not(.aisha-user-message *) {
             color: #0f172a !important; /* slate-900 */
           }
           .theme-light .prose.prose-invert a {

@@ -89,13 +89,17 @@ export default function createContactV2Routes(_pgPool) {
    *       - in: query
    *         name: offset
    *         schema: { type: integer, default: 0 }
+   *       - in: query
+   *         name: search
+   *         schema: { type: string }
+   *         description: Search contacts by name (first_name or last_name)
    *     responses:
    *       200:
    *         description: Contacts list with flattened metadata
    */
   router.get('/', cacheList('contacts', 180), async (req, res) => {
     try {
-      const { tenant_id, status, account_id, filter, assigned_to, sort } = req.query;
+      const { tenant_id, status, account_id, filter, assigned_to, sort, search } = req.query;
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
@@ -123,6 +127,25 @@ export default function createContactV2Routes(_pgPool) {
         .eq('tenant_id', tenant_id)
         .order(sortField, { ascending: sortAscending })
         .range(offset, offset + limit - 1);
+
+      // Handle name search - search by first_name or last_name
+      // Supports: "Jackie", "Knight", "Jackie Knight" (splits and searches each part)
+      if (search && search.trim()) {
+        const searchTerm = search.trim();
+        const parts = searchTerm.split(/\s+/).filter(p => p.length > 0);
+        
+        if (parts.length === 1) {
+          // Single word: search first_name OR last_name
+          q = q.or(`first_name.ilike.%${parts[0]}%,last_name.ilike.%${parts[0]}%`);
+        } else if (parts.length >= 2) {
+          // Multiple words: assume first part is first_name, last part is last_name
+          // Search: (first_name ILIKE first_part AND last_name ILIKE last_part)
+          // OR (first_name ILIKE full_search OR last_name ILIKE full_search)
+          const firstName = parts[0];
+          const lastName = parts[parts.length - 1];
+          q = q.or(`first_name.ilike.%${firstName}%,last_name.ilike.%${lastName}%,first_name.ilike.%${searchTerm}%,last_name.ilike.%${searchTerm}%`);
+        }
+      }
 
       // Handle filter object
       if (filter) {

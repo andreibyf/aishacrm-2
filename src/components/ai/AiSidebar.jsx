@@ -302,13 +302,13 @@ function MessageBubble({ message, isWelcomeCard = false, conversationId }) {
           {/* Message content */}
           <div className="flex-1 rounded-2xl rounded-tl-sm border border-slate-200 bg-gradient-to-br from-white to-slate-50 px-4 py-3 shadow-md dark:border-slate-700/70 dark:from-slate-900/90 dark:to-slate-800/80">
             <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">AiSHA Assistant</p>
-            <div className="prose prose-sm max-w-none text-slate-700 dark:text-slate-200">
+            <div className="prose prose-base max-w-none text-slate-700 dark:text-slate-200">
               <ReactMarkdown
                 components={{
-                  p: ({ children }) => <p className="mb-2 last:mb-0 break-words leading-relaxed">{children}</p>,
+                  p: ({ children }) => <p className="mb-2 last:mb-0 break-words leading-relaxed text-base">{children}</p>,
                   ul: ({ children }) => <ul className="mb-2 last:mb-0 ml-4 list-disc">{children}</ul>,
                   ol: ({ children }) => <ol className="mb-2 last:mb-0 ml-4 list-decimal">{children}</ol>,
-                  li: ({ children }) => <li className="mb-1 leading-6">{children}</li>,
+                  li: ({ children }) => <li className="mb-1 leading-6 text-base">{children}</li>,
                   strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
                   code: ({ children }) => (
                     <code className="rounded bg-slate-800/80 px-1.5 py-0.5 text-xs text-slate-100">{children}</code>
@@ -330,12 +330,12 @@ function MessageBubble({ message, isWelcomeCard = false, conversationId }) {
   // User message - right aligned, indigo gradient
   if (isUser) {
     return (
-      <div className="mb-4 flex justify-end aisha-message">
-        <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-gradient-to-br from-indigo-600 to-indigo-700 px-4 py-3 text-white shadow-lg shadow-indigo-500/25">
-          <div className="prose prose-sm prose-invert max-w-none">
+      <div className="mb-4 flex justify-end aisha-message aisha-user-message">
+        <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-gradient-to-br from-indigo-600 to-indigo-700 px-4 py-3 shadow-lg shadow-indigo-500/25">
+          <div className="prose prose-base prose-invert max-w-none">
             <ReactMarkdown
               components={{
-                p: ({ children }) => <p className="mb-2 last:mb-0 break-words text-[13px] leading-relaxed">{children}</p>,
+                p: ({ children }) => <p className="mb-2 last:mb-0 break-words text-base leading-relaxed">{children}</p>,
                 ul: ({ children }) => <ul className="mb-2 last:mb-0 ml-4 list-disc">{children}</ul>,
                 ol: ({ children }) => <ol className="mb-2 last:mb-0 ml-4 list-decimal">{children}</ol>,
                 li: ({ children }) => <li className="mb-1 leading-6">{children}</li>,
@@ -364,10 +364,10 @@ function MessageBubble({ message, isWelcomeCard = false, conversationId }) {
             </div>
           </div>
           <div className="flex-1 rounded-2xl rounded-tl-sm border border-rose-300 bg-rose-50 px-4 py-3 shadow-sm dark:border-rose-700/60 dark:bg-rose-950/40">
-            <div className="prose prose-sm max-w-none text-rose-900 dark:text-rose-100">
+            <div className="prose prose-base max-w-none text-rose-900 dark:text-rose-100">
               <ReactMarkdown
                 components={{
-                  p: ({ children }) => <p className="mb-2 last:mb-0 break-words leading-relaxed">{children}</p>,
+                  p: ({ children }) => <p className="mb-2 last:mb-0 break-words leading-relaxed text-base">{children}</p>,
                 }}
               >
                 {sanitizeMessageText(message.content)}
@@ -400,13 +400,13 @@ function MessageBubble({ message, isWelcomeCard = false, conversationId }) {
             className="relative rounded-2xl rounded-tl-sm border border-slate-200 bg-gradient-to-br from-white to-slate-50 px-4 py-3 shadow-md dark:border-slate-700/70 dark:from-slate-900/90 dark:to-slate-800/80"
             style={{ borderLeftColor: 'var(--accent-color, #6366f1)', borderLeftWidth: '3px' }}
           >
-            <div className="prose prose-sm max-w-none text-slate-700 dark:text-slate-200">
+            <div className="prose prose-base max-w-none text-slate-700 dark:text-slate-200">
               <ReactMarkdown
                 components={{
-                  p: ({ children }) => <p className="mb-2 last:mb-0 break-words leading-relaxed">{children}</p>,
+                  p: ({ children }) => <p className="mb-2 last:mb-0 break-words leading-relaxed text-base">{children}</p>,
                   ul: ({ children }) => <ul className="mb-2 last:mb-0 ml-4 list-disc">{children}</ul>,
                   ol: ({ children }) => <ol className="mb-2 last:mb-0 ml-4 list-decimal">{children}</ol>,
-                  li: ({ children }) => <li className="mb-1 leading-6">{children}</li>,
+                  li: ({ children }) => <li className="mb-1 leading-6 text-base">{children}</li>,
                   strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
                   code: ({ children }) => (
                     <code className="rounded bg-slate-800/80 px-1.5 py-0.5 text-xs text-slate-100">{children}</code>
