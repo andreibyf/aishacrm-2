@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { Loader2, FolderOpen, Search, Trash2, Eye, RefreshCw, FileText, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { DocumentationFile } from "@/api/entities";
@@ -23,6 +25,9 @@ export default function DocumentManagement() {
   const { selectedTenantId } = useTenant();
   const { user } = useUser();
   const [error, setError] = useState(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [documentToDelete, setDocumentToDelete] = useState(null);
+  const [deletionReason, setDeletionReason] = useState('');
 
   const categories = [
     { value: 'all', label: 'All Categories' },
@@ -67,20 +72,58 @@ export default function DocumentManagement() {
     }
   };
 
-  const handleDelete = async (docId) => {
-    if (!confirm("Are you sure you want to delete this document? This action cannot be undone.")) {
+  const openDeleteDialog = (doc) => {
+    setDocumentToDelete(doc);
+    setDeletionReason('');
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!documentToDelete) return;
+    
+    if (!deletionReason.trim()) {
+      toast.error("Please provide a reason for deletion");
       return;
     }
     
-    setDeletingId(docId);
+    setDeletingId(documentToDelete.id);
     try {
-      // Delete the entity record (file cleanup will be handled by backend if needed)
-      await DocumentationFile.delete(docId);
-      setDocuments(prev => prev.filter(doc => doc.id !== docId));
-      toast.success("Document deleted successfully!");
+      // Use tenant from context (already available from useTenant hook at top level)
+      const tenantId = selectedTenantId || user?.tenant_id;
+      
+      // Call backend v2 API with reason parameter
+      const response = await fetch(
+        `${import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001'}/api/v2/documents/${documentToDelete.id}?tenant_id=${encodeURIComponent(tenantId)}&reason=${encodeURIComponent(deletionReason.trim())}`,
+        {
+          method: 'DELETE',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to delete document');
+      }
+
+      const result = await response.json();
+      
+      setDocuments(prev => prev.filter(doc => doc.id !== documentToDelete.id));
+      
+      if (result.audit_logged) {
+        toast.success("Document deleted and audit logged successfully!");
+      } else {
+        toast.success("Document deleted successfully!");
+      }
+      
+      setDeleteDialogOpen(false);
+      setDocumentToDelete(null);
+      setDeletionReason('');
     } catch (error) {
       console.error("Failed to delete document:", error);
-      toast.error("Failed to delete document. Please try again.");
+      toast.error(error.message || "Failed to delete document. Please try again.");
     } finally {
       setDeletingId(null);
     }
@@ -221,7 +264,7 @@ export default function DocumentManagement() {
                             size="icon" 
                             disabled={deletingId === doc.id} 
                             title="Delete"
-                            onClick={() => handleDelete(doc.id, doc.file_uri)}
+                            onClick={() => openDeleteDialog(doc)}
                           >
                             {deletingId === doc.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4 text-red-500" />}
                           </Button>
@@ -235,6 +278,72 @@ export default function DocumentManagement() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Deletion Reason Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="bg-slate-800 border-slate-700 text-slate-200">
+          <DialogHeader>
+            <DialogTitle className="text-slate-100">Delete Document</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              You are about to delete: <span className="font-semibold text-slate-300">{documentToDelete?.title}</span>
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-300">
+                Reason for deletion <span className="text-red-400">*</span>
+              </label>
+              <Textarea
+                value={deletionReason}
+                onChange={(e) => setDeletionReason(e.target.value)}
+                placeholder="Enter the reason for deleting this document (required for audit trail)..."
+                className="bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-500 min-h-[100px]"
+                autoFocus
+              />
+              <p className="text-xs text-slate-400">
+                This will be recorded in the audit log along with your user details and timestamp.
+              </p>
+            </div>
+            
+            {user && (
+              <div className="text-xs text-slate-500 border-t border-slate-700 pt-3">
+                <p>Deleted by: <span className="text-slate-400">{user.email}</span></p>
+                <p>Role: <span className="text-slate-400 capitalize">{user.role}</span></p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleteDialogOpen(false);
+                setDocumentToDelete(null);
+                setDeletionReason('');
+              }}
+              className="bg-slate-700 hover:bg-slate-600 text-slate-200 border-slate-600"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={!deletionReason.trim() || deletingId === documentToDelete?.id}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deletingId === documentToDelete?.id ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete Document'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
