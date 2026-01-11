@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { lazy, useState, useEffect, useMemo } from "react";
 import {
   BarChart3, Building2, CheckSquare, Database, DollarSign,
   FileDigit, FileSpreadsheet, Loader2, Target, TrendingUp, Brain,
@@ -39,12 +39,15 @@ import { useEmployeeScope } from "../components/shared/EmployeeScopeContext";
 import { useApiManager } from "../components/shared/ApiManager";
 import { toast } from "react-hot-toast";
 
-import OverviewStats from "../components/reports/OverviewStats";
-import SalesAnalytics from "../components/reports/SalesAnalytics";
-import LeadAnalytics from "../components/reports/LeadAnalytics";
-import ProductivityAnalytics from "../components/reports/ProductivityAnalytics";
-import HistoricalTrends from "../components/reports/HistoricalTrends";
-import ForecastingDashboard from "../components/reports/ForecastingDashboard";
+// Lazy load chart-heavy components to reduce entry bundle size
+// These components use Recharts (~385KB) which gets split into separate chunk
+const OverviewStats = lazy(() => import("../components/reports/OverviewStats"));
+const SalesAnalytics = lazy(() => import("../components/reports/SalesAnalytics"));
+const LeadAnalytics = lazy(() => import("../components/reports/LeadAnalytics"));
+const ProductivityAnalytics = lazy(() => import("../components/reports/ProductivityAnalytics"));
+const HistoricalTrends = lazy(() => import("../components/reports/HistoricalTrends"));
+const ForecastingDashboard = lazy(() => import("../components/reports/ForecastingDashboard"));
+
 import AIMarketInsights from "../components/reports/AIMarketInsights";
 import DataQualityReport from "../components/reports/DataQualityReport";
 import { exportReportToCSV } from "@/api/functions";

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, useCallback, useEffect, useMemo, useState } from "react";
 import {
   DndContext,
   closestCenter,
@@ -26,13 +26,16 @@ import DashboardHeader from "../components/dashboard/DashboardHeader";
 import StatsGrid from "../components/dashboard/StatsGrid";
 import LazyWidgetLoader from "../components/dashboard/LazyWidgetLoader";
 import SortableWidget from "../components/dashboard/SortableWidget";
-import SalesPipeline from "../components/dashboard/SalesPipeline";
-import LeadSourceChart from "../components/dashboard/LeadSourceChart";
 import TopAccounts from "../components/dashboard/TopAccounts";
-import RecentActivities from "../components/dashboard/RecentActivities";
-import LeadAgeReport from "../components/dashboard/LeadAgeReport";
-import SalesFunnelWidget from "../components/dashboard/SalesFunnelWidget";
-import ConversionRates from "../components/dashboard/ConversionRates";
+
+// Lazy load chart components to reduce entry bundle size
+// These components use Recharts (~385KB) which gets split into separate chunk
+const SalesPipeline = lazy(() => import("../components/dashboard/SalesPipeline"));
+const LeadSourceChart = lazy(() => import("../components/dashboard/LeadSourceChart"));
+const RecentActivities = lazy(() => import("../components/dashboard/RecentActivities"));
+const LeadAgeReport = lazy(() => import("../components/dashboard/LeadAgeReport"));
+const SalesFunnelWidget = lazy(() => import("../components/dashboard/SalesFunnelWidget"));
+const ConversionRates = lazy(() => import("../components/dashboard/ConversionRates"));
 import { getDashboardBundleFast } from "@/api/dashboard";
 import { refreshDashboardFunnelCounts } from "@/api/fallbackFunctions";
 import { getCachedDashboardData, cacheDashboardData } from "@/api/dashboardCache";

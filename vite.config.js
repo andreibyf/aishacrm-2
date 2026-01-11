@@ -90,9 +90,9 @@ export default defineConfig({
           if (id.includes('node_modules/date-fns')) {
             return 'date-utils';
           }
-          // Recharts - heavy charting library (~100KB), split for better caching
+          // Recharts - heavy charting library (~385KB), split for better caching
           if (id.includes('node_modules/recharts')) {
-            return 'generateCategoricalChart';
+            return 'recharts';
           }
           // Let Vite/Rollup handle all other chunking automatically
           // This avoids circular dependency issues with d3/radix
