@@ -173,6 +173,45 @@ export function requireAdminRole(req, res, next) {
 }
 
 /**
+ * Middleware to require admin or manager role
+ * Managers can perform certain operations like document deletion
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+export function requireAdminOrManagerRole(req, res, next) {
+  const { user } = req;
+  
+  // In local dev mode without auth, create a mock superadmin user
+  if (!user && process.env.NODE_ENV === 'development') {
+    req.user = {
+      id: 'local-dev-superadmin',
+      email: 'dev@localhost',
+      role: 'superadmin',
+      tenant_id: null
+    };
+    return next();
+  }
+  
+  if (!user) {
+    return res.status(401).json({ 
+      status: 'error', 
+      message: 'Authentication required' 
+    });
+  }
+
+  // Allow superadmin, admin, or manager
+  if (user.role !== 'superadmin' && user.role !== 'admin' && user.role !== 'manager') {
+    return res.status(403).json({ 
+      status: 'error', 
+      message: 'Access denied. Only administrators and managers can perform this action.' 
+    });
+  }
+
+  next();
+}
+
+/**
  * Middleware to enforce Employee "own data only" restriction
  * Employees can only access records where they are the owner/creator
  * @param {Object} req - Express request object
@@ -258,6 +297,7 @@ export function requireSuperAdminRole(req, res, next) {
 export default {
   validateTenantAccess,
   requireAdminRole,
+  requireAdminOrManagerRole,
   requireSuperAdminRole,
   enforceEmployeeDataScope
 };

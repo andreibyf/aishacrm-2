@@ -9,7 +9,7 @@
  */
 
 import express from 'express';
-import { validateTenantAccess, requireAdminRole } from '../middleware/validateTenant.js';
+import { validateTenantAccess, requireAdminOrManagerRole } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
@@ -502,39 +502,98 @@ export default function createDocumentV2Routes(_pgPool) {
    * @openapi
    * /api/v2/documents/{id}:
    *   delete:
-   *     summary: Delete document (admin only)
+   *     summary: Delete document (admin/manager)
    *     tags: [documents-v2]
    *     security:
    *       - bearerAuth: []
-   *     description: Only superadmin or tenant admins can delete documents
+   *     description: Only superadmin, tenant admins, or managers can delete documents. Requires a deletion reason for audit trail.
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: reason
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Reason for deletion (required for audit trail)
    */
-  router.delete('/:id', requireAdminRole, async (req, res) => {
+  router.delete('/:id', requireAdminOrManagerRole, async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id } = req.query;
+      const { tenant_id, reason } = req.query;
+      const { user } = req;
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
 
+      if (!reason || reason.trim() === '') {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'Deletion reason is required for audit trail' 
+        });
+      }
+
       const supabase = getSupabaseClient();
 
-      const { data, error } = await supabase
+      // First, get the document details before deletion for audit log
+      const { data: documentToDelete, error: fetchError } = await supabase
+        .from('documents')
+        .select('*')
+        .eq('id', id)
+        .eq('tenant_id', tenant_id)
+        .maybeSingle();
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        throw new Error(fetchError.message);
+      }
+
+      if (!documentToDelete) {
+        return res.status(404).json({ status: 'error', message: 'Document not found' });
+      }
+
+      // Delete the document
+      const { error: deleteError } = await supabase
         .from('documents')
         .delete()
         .eq('id', id)
-        .eq('tenant_id', tenant_id)
-        .select('*')
-        .maybeSingle();
+        .eq('tenant_id', tenant_id);
 
-      if (error && error.code !== 'PGRST116') throw new Error(error.message);
-      if (!data) {
-        return res.status(404).json({ status: 'error', message: 'Document not found' });
+      if (deleteError) throw new Error(deleteError.message);
+
+      // Log the deletion to system_logs for audit trail
+      try {
+        await supabase.from('system_logs').insert({
+          tenant_id,
+          level: 'INFO',
+          source: 'documents.v2',
+          message: `Document deleted: ${documentToDelete.name || documentToDelete.id}`,
+          metadata: {
+            action: 'document_delete',
+            document_id: id,
+            document_name: documentToDelete.name,
+            document_type: documentToDelete.type,
+            deleted_by_user_id: user.id,
+            deleted_by_email: user.email,
+            deleted_by_role: user.role,
+            deletion_reason: reason.trim(),
+            ip_address: req.ip || req.connection?.remoteAddress,
+            user_agent: req.get('user-agent'),
+            timestamp: new Date().toISOString()
+          }
+        });
+      } catch (logError) {
+        // Log error but don't fail the deletion
+        logger.error('Failed to write audit log for document deletion:', logError);
       }
 
       res.json({
         status: 'success',
         message: 'Document deleted successfully',
+        audit_logged: true
       });
     } catch (error) {
       logger.error('Error in v2 document delete:', error);
