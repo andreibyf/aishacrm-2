@@ -14,6 +14,21 @@ export default function createOpportunityV2Routes(_pgPool) {
   router.use(validateTenantAccess);
   router.use(enforceEmployeeDataScope);
 
+  // Allowed sort fields to prevent column injection attacks
+  // Organized by category for maintainability
+  const ALLOWED_SORT_FIELDS = [
+    // Core fields
+    'id', 'name', 'stage', 'description',
+    // Financial fields
+    'amount', 'probability', 'expected_revenue',
+    // Relationship fields
+    'account_id', 'contact_id', 'assigned_to',
+    // Date fields
+    'close_date', 'expected_close_date', 'created_at', 'updated_at', 'created_date',
+    // Other fields
+    'lead_source', 'next_step', 'ai_health'
+  ];
+
   const expandMetadata = (record) => {
     if (!record) return record;
     const { metadata, ...rest } = record;
@@ -323,24 +338,55 @@ export default function createOpportunityV2Routes(_pgPool) {
         q = q.or(`updated_at.lt.${cursorUpdatedAt},and(updated_at.eq.${cursorUpdatedAt},id.lt.${cursorId})`);
       }
 
-      // Parse sort parameter: -field for descending, field for ascending
+      // Parse sort parameter: supports multiple fields separated by commas
+      // Format: -field for descending, field for ascending (e.g., "-updated_at,-id")
       const sortParam = req.query.sort;
-      let sortField = 'updated_at';
-      let sortAscending = false;
+      const sortFields = [];
+      
       if (sortParam) {
-        if (sortParam.startsWith('-')) {
-          sortField = sortParam.substring(1);
-          sortAscending = false;
-        } else {
-          sortField = sortParam;
-          sortAscending = true;
+        try {
+          // Split by comma to handle multiple sort fields
+          // filter(Boolean) removes empty strings after trimming
+          const fields = sortParam.split(',').map(f => f.trim()).filter(Boolean);
+          
+          for (const field of fields) {
+            let fieldName;
+            let ascending;
+            
+            if (field.startsWith('-')) {
+              fieldName = field.substring(1);
+              ascending = false;
+            } else {
+              fieldName = field;
+              ascending = true;
+            }
+            
+            // Validate field name against allowlist to prevent column injection
+            if (ALLOWED_SORT_FIELDS.includes(fieldName)) {
+              sortFields.push({ field: fieldName, ascending });
+            } else {
+              logger.warn('[V2 Opportunities] Invalid sort field ignored:', fieldName);
+            }
+          }
+        } catch (e) {
+          logger.error('[V2 Opportunities] Error parsing sort parameter:', e);
+          // Fall back to default sort
+          sortFields.push({ field: 'updated_at', ascending: false });
         }
       }
+      
+      // Apply default sort if no valid sort fields
+      if (sortFields.length === 0) {
+        sortFields.push({ field: 'updated_at', ascending: false });
+      }
 
-      // Sort with secondary id sort for stable pagination
-      q = q.order(sortField, { ascending: sortAscending })
-        .order('id', { ascending: false })
-        .range(offset, offset + limit - 1);
+      // Apply all sort fields in order
+      for (const { field, ascending } of sortFields) {
+        q = q.order(field, { ascending });
+      }
+      
+      // Apply pagination range
+      q = q.range(offset, offset + limit - 1);
 
       const { data, error, count } = await q;
       if (error) throw new Error(error.message);
