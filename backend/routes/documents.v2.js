@@ -9,7 +9,7 @@
  */
 
 import express from 'express';
-import { validateTenantAccess } from '../middleware/validateTenant.js';
+import { validateTenantAccess, requireAdminRole } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
@@ -502,10 +502,13 @@ export default function createDocumentV2Routes(_pgPool) {
    * @openapi
    * /api/v2/documents/{id}:
    *   delete:
-   *     summary: Delete document
+   *     summary: Delete document (admin only)
    *     tags: [documents-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     description: Only superadmin or tenant admins can delete documents
    */
-  router.delete('/:id', async (req, res) => {
+  router.delete('/:id', requireAdminRole, async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query;

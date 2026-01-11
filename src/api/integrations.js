@@ -44,6 +44,7 @@ export const UploadFile = async ({ file, tenant_id }) => {
 
     const response = await fetch(`${backendUrl}/api/storage/upload`, {
       method: "POST",
+      credentials: 'include', // Include cookies for CORS
       // Don't set Content-Type for FormData; add tenant header if present
       headers: tenantId ? { "x-tenant-id": tenantId } : undefined,
       body: formData,
