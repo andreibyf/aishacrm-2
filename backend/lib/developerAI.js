@@ -316,7 +316,7 @@ const DEVELOPER_TOOLS = [
   },
   {
     name: 'read_logs',
-    description: 'Read application logs from the container. Use analyze_patterns=true to auto-detect recurring errors, performance issues, and anomalies.',
+    description: 'Read application logs from the container. Use analyze_patterns=true to auto-detect recurring errors, performance issues, and anomalies. Use since_minutes to filter to only recent logs (recommended for health checks).',
     input_schema: {
       type: 'object',
       properties: {
@@ -336,6 +336,10 @@ const DEVELOPER_TOOLS = [
         analyze_patterns: {
           type: 'boolean',
           description: 'Auto-analyze logs for recurring errors, performance degradation, and security issues',
+        },
+        since_minutes: {
+          type: 'integer',
+          description: 'Only return logs from the last N minutes. Recommended: 15-30 for health checks to avoid stale issues. Default: null (no time filter)',
         },
       },
       required: ['log_type'],
@@ -677,7 +681,7 @@ async function searchCode({ pattern, directory = 'backend', file_pattern, case_i
   }
 }
 
-async function readLogs({ log_type, lines = 100, filter, analyze_patterns = false }) {
+async function readLogs({ log_type, lines = 100, filter, analyze_patterns = false, since_minutes = null }) {
   const maxLines = Math.min(lines, 500);
   const isProduction = process.env.NODE_ENV === 'production';
   const isDocker = process.env.DOCKER_CONTAINER === 'true' || await isRunningInDocker();
@@ -704,6 +708,12 @@ async function readLogs({ log_type, lines = 100, filter, analyze_patterns = fals
         .select('*')
         .order('created_at', { ascending: false })
         .limit(maxLines);
+      
+      // Apply time-based filter if since_minutes is specified (prevents stale issue reporting)
+      if (since_minutes && since_minutes > 0) {
+        const cutoff = new Date(Date.now() - since_minutes * 60 * 1000).toISOString();
+        query = query.gte('created_at', cutoff);
+      }
       
       // Apply log type filter
       if (log_type === 'errors') {
@@ -734,9 +744,12 @@ async function readLogs({ log_type, lines = 100, filter, analyze_patterns = fals
         return {
           log_type,
           lines_found: 0,
+          time_filter: since_minutes ? `last ${since_minutes} minutes` : 'none (showing historical logs)',
           note: 'No matching logs found in system_logs table.',
           suggestion: 'For real-time container output, run `docker logs aishacrm-backend --tail 100` from the HOST machine.',
-          system_status: 'Backend is running (this response proves it). No errors logged recently.',
+          system_status: since_minutes 
+            ? `Backend is running (this response proves it). No errors in the last ${since_minutes} minutes.`
+            : 'Backend is running (this response proves it). No errors logged recently.',
         };
       }
       
@@ -748,9 +761,12 @@ async function readLogs({ log_type, lines = 100, filter, analyze_patterns = fals
       const result = {
         log_type,
         source: 'system_logs table',
+        time_filter: since_minutes ? `last ${since_minutes} minutes` : 'none (showing historical logs - may include stale issues)',
         lines_found: logs.length,
         content: formattedLogs,
-        note: 'Logs retrieved from database. For raw container stdout, run `docker logs` from host.',
+        note: since_minutes 
+          ? `Logs from the last ${since_minutes} minutes. For raw container stdout, run \`docker logs\` from host.`
+          : 'Logs retrieved from database (no time filter - may include resolved issues). For raw container stdout, run `docker logs` from host.',
       };
       
       if (analyze_patterns && formattedLogs) {
@@ -1713,6 +1729,7 @@ AiSHA CRM is a multi-tenant SaaS CRM platform with AI-powered features including
 4. Consider multi-tenant implications for any changes
 5. Follow existing code patterns and conventions
 6. For AI tool changes, remember to update both .braid files AND braidIntegration-v2.js
+7. **CRITICAL FOR HEALTH CHECKS:** When checking current system health or diagnosing live issues, ALWAYS use \`read_logs\` with \`since_minutes=15\` (or similar small value) to only analyze RECENT logs. The system_logs table contains historical entries that may include already-fixed issues. Without time filtering, you will report stale errors that no longer exist.
 
 ## SECURITY BOUNDARIES
 
@@ -1767,7 +1784,7 @@ export async function developerChat(messages, userId) {
         healthAlertsContext += `\n`;
       });
       healthAlertsContext += `These alerts were auto-detected by the health monitoring system. The user may want to investigate these issues.\n`;
-      healthAlertsContext += `Use the read_logs tool with analyze_patterns=true for detailed diagnostics.\n`;
+      healthAlertsContext += `**IMPORTANT:** When checking current system health, use \`read_logs\` with \`since_minutes=15\` to only analyze recent logs and avoid reporting stale/already-fixed issues.\n`;
     }
   } catch (alertErr) {
     console.warn('[Developer AI] Failed to load health alerts:', alertErr.message);

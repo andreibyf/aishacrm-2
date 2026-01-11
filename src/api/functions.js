@@ -990,6 +990,28 @@ const createFunctionProxy = (functionName) => {
       }
     }
 
+    // generateAIEmailDraft: always call backend route
+    if (functionName === 'generateAIEmailDraft') {
+      try {
+        const BACKEND_URL = getBackendUrl();
+        const payload = args[0] || {};
+        const response = await fetch(`${BACKEND_URL}/api/ai/generate-email-draft`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(payload),
+        });
+        const json = await response.json();
+        if (!response.ok) {
+          return { data: { status: 'error', error: json?.message || response.statusText } };
+        }
+        return { data: json.data || json };
+      } catch (err) {
+        console.error('[generateAIEmailDraft] Error:', err);
+        return { data: { status: 'error', error: err?.message || String(err) } };
+      }
+    }
+
     // Fallback: warn if function not found
     console.warn(`[Production Mode] Function '${functionName}' not available. Use backend routes.`);
     return Promise.reject(new Error(`Function '${functionName}' not available. Use backend routes.`));

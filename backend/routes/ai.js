@@ -4160,5 +4160,80 @@ ${conversationSummary}`;
     }
   });
 
+  // ============================================================================
+  // POST /api/ai/generate-email-draft - Generate AI email draft
+  // ============================================================================
+  router.post('/generate-email-draft', async (req, res) => {
+    const startedAt = Date.now();
+    try {
+      const { recipientEmail, recipientName, context, prompt } = req.body;
+
+      if (!prompt) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'prompt is required',
+        });
+      }
+
+      // Get OpenAI client
+      const openai = getOpenAIClient();
+      if (!openai) {
+        return res.status(500).json({
+          status: 'error',
+          message: 'AI provider not configured',
+        });
+      }
+
+      const systemPrompt = `You are a professional business email writer. Generate a polished, professional email based on the user's instructions. 
+Return ONLY the email content (subject line followed by body), no additional commentary.
+Format:
+Subject: [subject line here]
+
+[email body here]
+
+Guidelines:
+- Be professional and courteous
+- Keep emails concise but complete
+- Use appropriate greetings and sign-offs
+- Match the tone to the context provided`;
+
+      const userPrompt = `Write an email to ${recipientName || 'the recipient'}${recipientEmail ? ` (${recipientEmail})` : ''}.
+${context ? `Context: ${context}` : ''}
+Instructions: ${prompt}`;
+
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        max_tokens: 1000,
+        temperature: 0.7,
+      });
+
+      const draft = completion.choices?.[0]?.message?.content?.trim() || '';
+
+      logger.debug('[generate-email-draft] Generated draft for:', recipientEmail, 'length:', draft.length);
+
+      res.json({
+        status: 'success',
+        data: {
+          draft,
+          recipientEmail,
+          recipientName,
+        },
+        durationMs: Date.now() - startedAt,
+      });
+
+    } catch (error) {
+      logger.error('[generate-email-draft] Error:', error);
+      res.status(500).json({
+        status: 'error',
+        message: error.message || 'Failed to generate email draft',
+        durationMs: Date.now() - startedAt,
+      });
+    }
+  });
+
   return router;
 }
