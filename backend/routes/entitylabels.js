@@ -186,7 +186,7 @@ export default function createEntityLabelsRoutes() {
       }
 
       // Resolve to UUID (handles both UUID and text slug)
-      const tenantUUID = await resolveTenantUUID(pool, tenant_id);
+      const tenantUUID = await resolveTenantUUID(tenant_id);
       
       if (!tenantUUID) {
         return res.status(404).json({ 
