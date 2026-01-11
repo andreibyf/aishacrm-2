@@ -112,7 +112,7 @@ async function main() {
     const tenantSlug = process.env.STAGING_TENANT_SLUG;
     if (!tenantId && tenantSlug) {
       const { rows } = await pool.query(
-        'SELECT id FROM public.tenants WHERE slug = $1 LIMIT 1',
+        'SELECT id FROM public.tenant WHERE slug = $1 LIMIT 1',
         [tenantSlug]
       );
       tenantId = rows[0]?.id;

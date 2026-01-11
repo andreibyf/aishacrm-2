@@ -1168,6 +1168,10 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     setDraft('');
     setDraftOrigin('text');
     setVoiceWarning(null);
+    // Keep focus in input after sending
+    setTimeout(() => {
+      draftInputRef.current?.focus();
+    }, 10);
   }, [draft, draftOrigin, isRealtimeActive, isSending, sendMessage, sendViaRealtime]);
   const speakMessage = useCallback(async (msg) => {
     const text = (msg?.content || '').slice(0, 4000);
@@ -1802,8 +1806,8 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                   onChange={handleDraftChange}
                   onKeyDown={handleKeyDown}
                   placeholder="Type a message..."
-                  className="min-h-[44px] resize-none rounded-xl border-2 border-slate-200 bg-white py-2.5 pl-4 pr-12 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500"
-                  rows={1}
+                  className="min-h-[80px] resize-none rounded-xl border-2 border-slate-200 bg-white py-2.5 pl-4 pr-12 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500"
+                  rows={3}
                   disabled={isSending}
                 />
                 <Button
