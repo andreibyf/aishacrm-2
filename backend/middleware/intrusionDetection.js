@@ -23,6 +23,20 @@ import { getSupabaseClient } from '../lib/supabase-db.js';
 import { initMemoryClient, getMemoryClient } from '../lib/memoryClient.js';
 import logger from '../lib/logger.js';
 
+/**
+ * Ensure CORS headers are set on error responses so browsers can read the error
+ * This is critical for cross-origin requests - without CORS headers, browsers
+ * will show "CORS error" instead of the actual 403/401/etc status
+ */
+function ensureCorsHeaders(req, res) {
+  if (!res.getHeader('Access-Control-Allow-Origin')) {
+    const origin = req.headers.origin || '*';
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+}
+
 // In-memory tracking for rate limiting and pattern detection
 const suspiciousActivityTracker = new Map();
 const blockedIPs = new Set();
@@ -456,6 +470,7 @@ export async function intrusionDetection(req, res, next) {
 
   // Check if IP is blocked (async check with Redis)
   if (await isIPBlocked(ip)) {
+    ensureCorsHeaders(req, res);
     return res.status(403).json({
       status: 'error',
       message: 'Access denied: IP address temporarily blocked due to suspicious activity',
@@ -496,6 +511,7 @@ export async function intrusionDetection(req, res, next) {
       // Block IP immediately for SQL injection
       blockIP(ip, 60 * 60 * 1000); // 1 hour block
 
+      ensureCorsHeaders(req, res);
       return res.status(403).json({
         status: 'error',
         message: 'Security violation detected. This incident has been logged.',
@@ -556,6 +572,7 @@ export async function intrusionDetection(req, res, next) {
       if (recentViolations.length >= IDR_CONFIG.MAX_TENANT_VIOLATIONS_PER_HOUR) {
         await blockIP(ip);
 
+        ensureCorsHeaders(req, res);
         return res.status(403).json({
           status: 'error',
           message: 'Multiple security violations detected. Access temporarily blocked.',
