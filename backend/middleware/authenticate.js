@@ -226,11 +226,11 @@ export async function authenticateRequest(req, _res, next) {
         try {
           const { getSupabaseClient } = await import('../lib/supabase-db.js');
           const supa = getSupabaseClient();
-          // Lookup user by email to get full user record with tenant_id, role, and name
+          // Lookup user by email to get full user record with tenant_id, tenant_uuid, role, and name
           // Note: users table stores display_name in metadata JSONB
           const [usersResult, employeesResult] = await Promise.all([
-            supa.from('users').select('id, role, tenant_id, first_name, last_name, metadata').eq('email', email),
-            supa.from('employees').select('id, role, tenant_id, first_name, last_name').eq('email', email),
+            supa.from('users').select('id, role, tenant_id, tenant_uuid, first_name, last_name, metadata').eq('email', email),
+            supa.from('employees').select('id, role, tenant_id, tenant_uuid, first_name, last_name').eq('email', email),
           ]);
           const { data: uRows, error: uErr } = usersResult;
           const { data: eRows, error: eErr } = employeesResult;
@@ -255,6 +255,7 @@ export async function authenticateRequest(req, _res, next) {
               last_name: row.last_name || null,
               role: row.role || 'employee',
               tenant_id: row.tenant_id ?? null,
+              tenant_uuid: row.tenant_uuid ?? null,
             };
             if (process.env.AUTH_DEBUG === 'true') {
               logger.debug('[Auth Debug] Bearer: resolved user from DB email=' + email + ' name=' + displayName + ' role=' + req.user.role);
