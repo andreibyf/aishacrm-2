@@ -8,6 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Current Version:** 3.0.x (December 2025)
 
+**Production VPS:** `ssh andreibyf@147.189.173.237`
+
 ### Key Architecture
 
 | Component | Technology |

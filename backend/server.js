@@ -351,8 +351,13 @@ app.use("/api/supabase-proxy", createSupabaseProxyRoutes());
 // AI Suggestions routes (Phase 3 Autonomous Operations)
 app.use("/api/ai/suggestions", createSuggestionsRoutes(measuredPgPool));
 
-// 404 handler
+// 404 handler - Ensure CORS headers so browser shows real error, not "CORS error"
 app.use((req, res) => {
+  if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
   res.status(404).json({
     status: "error",
     message: "Endpoint not found",
