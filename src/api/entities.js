@@ -3,6 +3,7 @@ import { createMockUser, isLocalDevMode } from "./mockData";
 import { apiHealthMonitor } from "../utils/apiHealthMonitor";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { logDev } from "../utils/devLogger";
+import { getBackendUrl } from "./backendUrl";
 
 // Re-export for use by other components
 export { supabase, isSupabaseConfigured };
@@ -16,73 +17,11 @@ export const getBuildVersion = () => {
 export const ENTITIES_BUILD_VERSION = getBuildVersion();
 logDev('[Entities] Build version:', ENTITIES_BUILD_VERSION);
 
-// Backend base URL: in dev, use relative path and Vite proxy to avoid CORS
-// In production, normalize to HTTPS when the app is served over HTTPS to avoid mixed-content blocks
-const normalizeBackendUrl = (url) => {
-  try {
-    if (typeof window !== 'undefined' && window.location?.protocol === 'https:' && typeof url === 'string' && url.startsWith('http://')) {
-      const upgraded = 'https://' + url.substring('http://'.length);
-      if (!import.meta.env.DEV) {
-        console.warn('[Config] Upgrading backend URL to HTTPS to avoid mixed content:', upgraded);
-      }
-      return upgraded;
-    }
-  } catch {
-    // noop
-  }
-  return url;
-};
-
-// Get runtime environment variable (injected by frontend-entrypoint.sh) or build-time env
-const getRuntimeEnv = (key) => {
-  if (typeof window !== 'undefined' && window._env_) {
-    return window._env_[key];
-  }
-  return import.meta.env[key];
-};
-
-// Resolve a production-safe backend base URL.
-// Fallback logic: if build-time env missing or points at localhost or a raw IP, prefer window.location.origin
-// because Cloudflare Tunnel terminates TLS and routes /api/*.
-const resolveBackendBase = () => {
-  // Always use explicit backend URL (no empty string for dev mode)
-  // The Vite dev server proxy only works with `npm run dev:vite`, not with production builds
-  let raw = getRuntimeEnv('VITE_AISHACRM_BACKEND_URL') || 'http://localhost:4001';
-  try {
-    if (typeof window !== 'undefined') {
-      const origin = window.location.origin;
-      let hostname = '';
-      let protocol = '';
-      let port = '';
-      try {
-        const u = new URL(raw);
-        hostname = u.hostname;
-        protocol = u.protocol; // includes trailing ':'
-        port = u.port;
-      } catch {
-        // raw may be missing protocol; prepend http:// for parsing attempt
-        try {
-          const u2 = new URL(raw.startsWith('http') ? raw : 'http://' + raw);
-          hostname = u2.hostname;
-          protocol = u2.protocol;
-          port = u2.port;
-        } catch { /* ignore */ }
-      }
-      const isIPv4Host = /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname);
-      const isLocalHost = hostname === 'localhost';
-      // If page is served via HTTPS tunnel and backend env points to localhost/IP, force domain origin.
-      if (origin.startsWith('https://') && (isIPv4Host || isLocalHost)) {
-        raw = origin; // rely on Cloudflare tunnel /api routing
-      } else if (origin.startsWith('https://') && protocol === 'http:' && !raw.startsWith(origin)) {
-        // Same host but protocol mismatch or arbitrary http host; upgrade scheme
-        raw = 'https://' + (hostname || raw.replace(/^http:\/\//,'').split('/')[0]) + (port ? ':' + port : '');
-      }
-    }
-  } catch { /* ignore */ }
-  return normalizeBackendUrl(raw);
-};
-
-export const BACKEND_URL = resolveBackendBase();
+// Use centralized backend URL resolution (consistent with all APIs)
+// In production: https://api.aishacrm.com
+// In development: http://localhost:4001
+export const BACKEND_URL = getBackendUrl();
+logDev('[Entities] Backend URL:', BACKEND_URL);
 
 // Helper to properly pluralize entity names for API endpoints
 const pluralize = (entityName) => {

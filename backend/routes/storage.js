@@ -194,6 +194,12 @@ export default function createStorageRoutes(_pgPool) {
       });
     } catch (error) {
       logger.error("[storage.upload] Error:", error);
+      // Ensure CORS headers are present in error responses
+      if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
+        res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
+        res.setHeader('Vary', 'Origin');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+      }
       return res.status(500).json({
         status: "error",
         message: error.message || "Upload failed",
