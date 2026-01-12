@@ -38,24 +38,55 @@ export const UploadFile = async ({ file, tenant_id }) => {
     }
   }
 
+  console.log("[UploadFile] Starting upload:", {
+    fileName: file?.name,
+    fileSize: file?.size,
+    fileType: file?.type,
+    tenantId,
+    backendUrl,
+  });
+
   try {
     const formData = new FormData();
     formData.append("file", file);
 
+    // Build headers object - always pass an object, never undefined
+    const headers = {};
+    if (tenantId) {
+      headers["x-tenant-id"] = tenantId;
+    }
+
+    console.log("[UploadFile] Sending request to:", `${backendUrl}/api/storage/upload`);
+
     const response = await fetch(`${backendUrl}/api/storage/upload`, {
       method: "POST",
       credentials: 'include', // Include cookies for CORS
-      // Don't set Content-Type for FormData; add tenant header if present
-      headers: tenantId ? { "x-tenant-id": tenantId } : undefined,
+      // Don't set Content-Type for FormData; browser will set it with boundary
+      headers,
       body: formData,
     });
 
+    console.log("[UploadFile] Response status:", response.status);
+
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || "Upload failed");
+      let errorMessage = "Upload failed";
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.message || errorMessage;
+        console.error("[UploadFile] Error response:", errorData);
+      } catch (jsonErr) {
+        console.error("[UploadFile] Failed to parse error response:", jsonErr);
+        errorMessage = `Upload failed with status ${response.status}`;
+      }
+      throw new Error(errorMessage);
     }
 
     const result = await response.json();
+    console.log("[UploadFile] Upload successful:", {
+      file_url: result.data?.file_url,
+      filename: result.data?.filename,
+    });
+
     return {
       file_url: result.data.file_url,
       filename: result.data.filename,
@@ -63,6 +94,11 @@ export const UploadFile = async ({ file, tenant_id }) => {
     };
   } catch (error) {
     console.error("[UploadFile] Error:", error);
+    console.error("[UploadFile] Error details:", {
+      message: error.message,
+      name: error.name,
+      stack: error.stack,
+    });
     throw error;
   }
 };
