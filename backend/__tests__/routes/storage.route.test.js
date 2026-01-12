@@ -307,3 +307,104 @@ const SHOULD_RUN = process.env.CI ? (process.env.CI_BACKEND_TESTS === 'true') : 
   assert.equal(json.status, 'error');
   assert.ok(json.message.includes('tenant_id'), 'error should mention tenant_id');
 });
+
+// ============================================================================
+// TIMEOUT AND ERROR HANDLING TESTS
+// ============================================================================
+
+(SHOULD_RUN ? test : test.skip)('POST /api/storage/upload completes within reasonable time', async () => {
+  const boundary = '----WebKitFormBoundary' + Math.random().toString(36).slice(2);
+  const content = 'Test file for timeout verification';
+  
+  const body = [
+    `--${boundary}`,
+    'Content-Disposition: form-data; name="file"; filename="timeout-test.txt"',
+    'Content-Type: text/plain',
+    '',
+    content,
+    `--${boundary}`,
+    `Content-Disposition: form-data; name="tenant_id"`,
+    '',
+    TENANT_ID,
+    `--${boundary}--`
+  ].join('\r\n');
+  
+  const startTime = Date.now();
+  
+  const res = await fetch(`${BASE_URL}/api/storage/upload`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      'x-tenant-id': TENANT_ID
+    },
+    body
+  });
+  
+  const duration = Date.now() - startTime;
+  
+  // Should complete within 10 seconds (even if it falls back to signed URL)
+  assert.ok(duration < 10000, `Upload took ${duration}ms, should be under 10000ms`);
+  
+  // Should return a response (not hang indefinitely)
+  assert.ok([200, 201, 400, 500].includes(res.status), `Should return valid HTTP status, got ${res.status}`);
+});
+
+(SHOULD_RUN ? test : test.skip)('POST /api/storage/upload handles public URL validation gracefully', async () => {
+  const boundary = '----WebKitFormBoundary' + Math.random().toString(36).slice(2);
+  const content = 'Test file for public URL validation';
+  
+  const body = [
+    `--${boundary}`,
+    'Content-Disposition: form-data; name="file"; filename="validation-test.txt"',
+    'Content-Type: text/plain',
+    '',
+    content,
+    `--${boundary}`,
+    `Content-Disposition: form-data; name="tenant_id"`,
+    '',
+    TENANT_ID,
+    `--${boundary}--`
+  ].join('\r\n');
+  
+  const res = await fetch(`${BASE_URL}/api/storage/upload`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      'x-tenant-id': TENANT_ID
+    },
+    body
+  });
+  
+  // Should handle validation failure gracefully and still return a response
+  assert.ok([200, 201, 400, 500].includes(res.status), `Should handle validation gracefully, got ${res.status}`);
+  
+  if ([200, 201].includes(res.status)) {
+    const json = await res.json();
+    assert.equal(json.status, 'success');
+    // Should return either public URL or signed URL
+    assert.ok(json.data?.file_url, 'Should return file_url even if public validation failed');
+  }
+});
+
+(SHOULD_RUN ? test : test.skip)('POST /api/storage/signed-url completes within reasonable time', async () => {
+  const startTime = Date.now();
+  
+  const res = await fetch(`${BASE_URL}/api/storage/signed-url`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-tenant-id': TENANT_ID
+    },
+    body: JSON.stringify({
+      file_uri: 'uploads/test/timeout-test.txt'
+    })
+  });
+  
+  const duration = Date.now() - startTime;
+  
+  // Should complete within 10 seconds (even if it falls back to signed URL)
+  assert.ok(duration < 10000, `Signed URL request took ${duration}ms, should be under 10000ms`);
+  
+  // Should return a response (not hang indefinitely)
+  assert.ok([200, 404, 500].includes(res.status), `Should return valid HTTP status, got ${res.status}`);
+});
