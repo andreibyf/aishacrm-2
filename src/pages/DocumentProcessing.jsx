@@ -242,7 +242,20 @@ function StorageUploader({ onCancel, onProcessingChange }) {
   };
 
   const handleUpload = async () => {
-    if (!selectedFile) return;
+    if (!selectedFile) {
+      console.error("[StorageUploader] No file selected");
+      return;
+    }
+
+    console.log("[StorageUploader] Starting upload:", {
+      fileName: selectedFile.name,
+      fileSize: selectedFile.size,
+      fileType: selectedFile.type,
+      currentUser: currentUser ? {
+        email: currentUser.email,
+        tenant_id: currentUser.tenant_id
+      } : null
+    });
 
     setUploading(true);
     onProcessingChange(true);
@@ -256,15 +269,21 @@ function StorageUploader({ onCancel, onProcessingChange }) {
         throw new Error("User not loaded");
       }
 
+      console.log("[StorageUploader] Calling UploadFile API...");
+      
       // Upload file to storage
       const uploadResult = await UploadFile({ 
         file: selectedFile,
         tenant_id: currentUser.tenant_id 
       });
 
+      console.log("[StorageUploader] UploadFile result:", uploadResult);
+
       if (!uploadResult.file_url) {
         throw new Error("File upload failed - no URL returned");
       }
+
+      console.log("[StorageUploader] Creating DocumentationFile record...");
 
       // Create document record for storage
       const documentRecord = await DocumentationFile.create({
@@ -280,18 +299,22 @@ function StorageUploader({ onCancel, onProcessingChange }) {
         uploaded_by: currentUser.email || currentUser.username,
       });
 
+      console.log("[StorageUploader] Document record created:", documentRecord.id);
+
       setUploadResult({
         success: true,
         message: "Document uploaded successfully for storage!",
         documentId: documentRecord.id,
       });
     } catch (error) {
-      console.error("Storage upload error:", error);
+      console.error("[StorageUploader] Upload error:", error);
+      console.error("[StorageUploader] Error stack:", error.stack);
       setUploadResult({
         success: false,
         message: `Upload failed: ${error.message}`,
       });
     } finally {
+      console.log("[StorageUploader] Upload process complete");
       setUploading(false);
       onProcessingChange(false);
     }
