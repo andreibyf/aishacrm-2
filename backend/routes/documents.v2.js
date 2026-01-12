@@ -603,6 +603,91 @@ export default function createDocumentV2Routes(_pgPool) {
 
   /**
    * @openapi
+   * /api/v2/documents/deletion-history:
+   *   get:
+   *     summary: Get document deletion audit history
+   *     tags: [documents-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     description: Returns audit logs of all document deletions for this tenant. Accessible by all authenticated users.
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: limit
+   *         schema:
+   *           type: integer
+   *           default: 50
+   *         description: Maximum number of records to return
+   *       - in: query
+   *         name: offset
+   *         schema:
+   *           type: integer
+   *           default: 0
+   *         description: Number of records to skip for pagination
+   */
+  router.get('/deletion-history', async (req, res) => {
+    try {
+      const { tenant_id, limit = 50, offset = 0 } = req.query;
+
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      const supabase = getSupabaseClient();
+
+      // Query system_logs for document deletion events
+      const { data: deletionLogs, error, count } = await supabase
+        .from('system_logs')
+        .select('*', { count: 'exact' })
+        .eq('tenant_id', tenant_id)
+        .eq('source', 'documents.v2')
+        .filter('metadata->>action', 'eq', 'document_delete')
+        .order('created_at', { ascending: false })
+        .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      // Transform logs into a cleaner format for the frontend
+      const deletions = (deletionLogs || []).map(log => ({
+        id: log.id,
+        document_id: log.metadata?.document_id,
+        document_name: log.metadata?.document_name,
+        document_type: log.metadata?.document_type,
+        deleted_by: {
+          user_id: log.metadata?.deleted_by_user_id,
+          email: log.metadata?.deleted_by_email,
+          role: log.metadata?.deleted_by_role,
+        },
+        deletion_reason: log.metadata?.deletion_reason,
+        deleted_at: log.metadata?.timestamp || log.created_at,
+        ip_address: log.metadata?.ip_address,
+        user_agent: log.metadata?.user_agent,
+      }));
+
+      res.json({
+        status: 'success',
+        data: deletions,
+        pagination: {
+          total: count || 0,
+          limit: parseInt(limit),
+          offset: parseInt(offset),
+          hasMore: (parseInt(offset) + deletions.length) < (count || 0),
+        },
+      });
+    } catch (error) {
+      logger.error('Error fetching document deletion history:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  /**
+   * @openapi
    * /api/v2/documents/analyze:
    *   post:
    *     summary: Analyze document content with AI

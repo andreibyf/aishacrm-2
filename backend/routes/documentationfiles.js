@@ -79,6 +79,94 @@ export default function createDocumentationFileRoutes(_pgPool) {
     }
   });
 
+  // GET /api/documentationfiles/deletion-history - Get deletion audit trail
+  // IMPORTANT: This route MUST be defined BEFORE /:id to avoid matching "deletion-history" as an ID
+  router.get('/deletion-history', async (req, res) => {
+    try {
+      const { tenant_id, limit = 20, offset = 0 } = req.query;
+      
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+      
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      
+      // Retention policy: Delete logs older than 90 days (runs opportunistically)
+      // Only run cleanup occasionally to avoid performance impact
+      const shouldCleanup = Math.random() < 0.1; // 10% chance per request
+      if (shouldCleanup) {
+        try {
+          const retentionDays = 90;
+          const cutoffDate = new Date();
+          cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+          
+          const { error: cleanupError } = await supabase
+            .from('system_logs')
+            .delete()
+            .eq('source', 'documentationfiles')
+            .filter('metadata->>action', 'eq', 'document_delete')
+            .lt('created_at', cutoffDate.toISOString());
+          
+          if (cleanupError) {
+            logger.warn('[documentationfiles] Retention cleanup failed:', cleanupError.message);
+          } else {
+            logger.debug('[documentationfiles] Retention cleanup executed (90 days)');
+          }
+        } catch (cleanupErr) {
+          logger.warn('[documentationfiles] Retention cleanup exception:', cleanupErr.message);
+        }
+      }
+      
+      // Query system_logs for document deletions from documentationfiles source
+      const { data: logs, error, count } = await supabase
+        .from('system_logs')
+        .select('*', { count: 'exact' })
+        .eq('tenant_id', tenant_id)
+        .eq('source', 'documentationfiles')
+        .filter('metadata->>action', 'eq', 'document_delete')
+        .order('created_at', { ascending: false })
+        .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
+      
+      if (error) throw new Error(error.message);
+      
+      // Format the response for frontend consumption
+      const formattedData = (logs || []).map(log => {
+        const metadata = log.metadata || {};
+        return {
+          id: log.id,
+          document_id: metadata.document_id,
+          document_name: metadata.document_name || 'Unknown',
+          document_type: metadata.document_type || 'unknown',
+          deleted_by: {
+            user_id: metadata.deleted_by_user_id,
+            name: metadata.deleted_by_name || metadata.deleted_by_email || 'Unknown',
+            email: metadata.deleted_by_email || 'Unknown',
+            role: metadata.deleted_by_role || 'unknown'
+          },
+          deletion_reason: metadata.reason || 'No reason provided',
+          deleted_at: log.created_at,
+          ip_address: metadata.ip_address,
+          user_agent: metadata.user_agent
+        };
+      });
+      
+      res.json({
+        status: 'success',
+        data: formattedData,
+        pagination: {
+          total: count || 0,
+          limit: parseInt(limit),
+          offset: parseInt(offset),
+          hasMore: (parseInt(offset) + formattedData.length) < (count || 0)
+        }
+      });
+    } catch (error) {
+      logger.error('[documentationfiles] Error fetching deletion history:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   // GET /api/documentationfiles/:id - Get single documentation file
   router.get('/:id', async (req, res) => {
     try {
@@ -257,11 +345,12 @@ export default function createDocumentationFileRoutes(_pgPool) {
     }
   });
 
-  // DELETE /api/documentationfiles/:id - Delete documentation file
-  // This deletes the metadata record; the actual file in storage should be deleted separately if needed
+  // DELETE /api/documentationfiles/:id - Delete documentation file with audit logging
+  // This deletes the metadata record and logs the deletion to system_logs
   router.delete('/:id', async (req, res) => {
     try {
       const { id } = req.params;
+      const { tenant_id, reason } = req.query;
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
       
@@ -302,9 +391,46 @@ export default function createDocumentationFileRoutes(_pgPool) {
         // Continue even if storage deletion fails
       }
 
+      // Log deletion to system_logs for audit trail
+      let auditLogged = false;
+      try {
+        // Use name from auth middleware, fallback to email
+        const deletedByName = req.user?.name || req.user?.email || 'Unknown';
+
+        const { error: logError } = await supabase.from('system_logs').insert({
+          tenant_id: tenant_id || fileRecord.tenant_id,
+          source: 'documentationfiles',
+          level: 'info',
+          message: `Document deleted: ${fileRecord.filename || fileRecord.metadata?.title || 'Unknown'}`,
+          metadata: {
+            action: 'document_delete',
+            document_id: id,
+            document_name: fileRecord.filename || fileRecord.metadata?.title || 'Unknown',
+            document_type: fileRecord.mimetype || 'unknown',
+            file_path: fileRecord.filepath,
+            reason: reason || 'No reason provided',
+            deleted_by_user_id: req.user?.id || 'unknown',
+            deleted_by_name: deletedByName,
+            deleted_by_email: req.user?.email || 'unknown',
+            deleted_by_role: req.user?.role || 'unknown',
+            ip_address: req.ip,
+            user_agent: req.get('User-Agent')
+          }
+        });
+        if (!logError) {
+          auditLogged = true;
+          logger.info(`[documentationfiles] Audit log created for deleted document: ${id}`);
+        } else {
+          logger.warn(`[documentationfiles] Failed to create audit log:`, logError);
+        }
+      } catch (logErr) {
+        logger.warn(`[documentationfiles] Exception while creating audit log:`, logErr);
+      }
+
       res.json({
         status: 'success',
-        message: 'Documentation file deleted successfully'
+        message: 'Documentation file deleted successfully',
+        audit_logged: auditLogged
       });
     } catch (error) {
       logger.error('Error deleting documentation file:', error);

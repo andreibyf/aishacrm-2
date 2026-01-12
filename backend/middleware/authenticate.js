@@ -35,18 +35,12 @@ function getJWKSClient() {
 
 export async function authenticateRequest(req, _res, next) {
   try {
-    // DEBUG: Log auth context for diagnostics
+    // DEBUG: Log auth context for diagnostics (only when AUTH_DEBUG=true)
     const authHeader = req.headers?.authorization || '';
     const hasCookie = !!req.cookies?.aisha_access;
     const hasBearer = authHeader.startsWith('Bearer ');
-    if (process.env.NODE_ENV !== 'production' || process.env.AUTH_DEBUG === 'true') {
-      logger.debug('[Auth Debug]', {
-        path: req.path,
-        method: req.method,
-        hasCookie,
-        hasBearer,
-        bearerPreview: hasBearer ? authHeader.substring(7, 27) + '...' : null,
-      });
+    if (process.env.AUTH_DEBUG === 'true') {
+      logger.debug('[Auth Debug] path=' + req.path + ' hasCookie=' + hasCookie + ' hasBearer=' + hasBearer);
     }
 
     // 1) Try backend JWT access cookie first (primary auth method)
@@ -59,9 +53,46 @@ export async function authenticateRequest(req, _res, next) {
         
         // Explicitly verify with HS256 algorithm only
         const payload = jwt.verify(cookieToken, secret, { algorithms: ['HS256'] });
+        const email = (payload.email || '').toLowerCase().trim();
+        
+        // Look up user in DB to get full profile including name
+        let displayName = email;
+        let firstName = null;
+        let lastName = null;
+        
+        if (email) {
+          try {
+            const { getSupabaseClient } = await import('../lib/supabase-db.js');
+            const supa = getSupabaseClient();
+            // Note: users table stores display_name in metadata JSONB
+            const [{ data: uRows, error: uErr }, { data: eRows, error: eErr }] = await Promise.all([
+              supa.from('users').select('first_name, last_name, metadata').eq('email', email).maybeSingle(),
+              supa.from('employees').select('first_name, last_name').eq('email', email).maybeSingle(),
+            ]);
+            if (process.env.AUTH_DEBUG === 'true') {
+              logger.debug('[Auth Debug] Cookie: name lookup for email=' + email + ' uErr=' + (uErr?.message || 'none') + ' eErr=' + (eErr?.message || 'none'));
+            }
+            const row = uRows || eRows;
+            if (row) {
+              const metadataDisplayName = row.metadata?.display_name;
+              displayName = metadataDisplayName || [row.first_name, row.last_name].filter(Boolean).join(' ') || email;
+              firstName = row.first_name || null;
+              lastName = row.last_name || null;
+            }
+          } catch (dbErr) {
+            // Continue with email as fallback if DB lookup fails
+            if (process.env.AUTH_DEBUG === 'true') {
+              logger.debug('[Auth Debug] Cookie: name lookup failed for email=' + email + ' error=' + dbErr?.message);
+            }
+          }
+        }
+        
         req.user = {
           id: payload.sub || payload.user_id || payload.id || null,
           email: payload.email,
+          name: displayName,
+          first_name: firstName,
+          last_name: lastName,
           role: payload.role,
           tenant_id: payload.tenant_id || null,
           tenant_uuid: payload.tenant_uuid || null,
@@ -71,6 +102,7 @@ export async function authenticateRequest(req, _res, next) {
             path: req.path, 
             userId: req.user.id, 
             email: req.user.email,
+            name: req.user.name,
             hasId: !!req.user.id 
           });
         }
@@ -194,31 +226,43 @@ export async function authenticateRequest(req, _res, next) {
         try {
           const { getSupabaseClient } = await import('../lib/supabase-db.js');
           const supa = getSupabaseClient();
-          // Lookup user by email to get full user record with tenant_id and role
-          const [{ data: uRows }, { data: eRows }] = await Promise.all([
-            supa.from('users').select('id, role, tenant_id, tenant_uuid').eq('email', email),
-            supa.from('employees').select('id, role, tenant_id, tenant_uuid').eq('email', email),
+          // Lookup user by email to get full user record with tenant_id, role, and name
+          // Note: users table stores display_name in metadata JSONB
+          const [usersResult, employeesResult] = await Promise.all([
+            supa.from('users').select('id, role, tenant_id, first_name, last_name, metadata').eq('email', email),
+            supa.from('employees').select('id, role, tenant_id, first_name, last_name').eq('email', email),
           ]);
+          const { data: uRows, error: uErr } = usersResult;
+          const { data: eRows, error: eErr } = employeesResult;
+          
+          if (process.env.AUTH_DEBUG === 'true') {
+            logger.debug('[Auth Debug] DB lookup for email=' + email + ' usersCount=' + (uRows?.length || 0) + ' employeesCount=' + (eRows?.length || 0) + ' uErr=' + (uErr?.message || 'none') + ' eErr=' + (eErr?.message || 'none'));
+          }
+          
           const row = (uRows && uRows[0]) || (eRows && eRows[0]) || null;
           if (row) {
+            // Build display name from available fields
+            // Note: users table stores display_name in metadata JSONB
+            const metadataDisplayName = row.metadata?.display_name;
+            const displayName = metadataDisplayName || 
+              [row.first_name, row.last_name].filter(Boolean).join(' ') || 
+              email;
             req.user = {
               id: row.id,
               email,
+              name: displayName,
+              first_name: row.first_name || null,
+              last_name: row.last_name || null,
               role: row.role || 'employee',
               tenant_id: row.tenant_id ?? null,
-              tenant_uuid: row.tenant_uuid ?? null,
             };
             if (process.env.AUTH_DEBUG === 'true') {
-              logger.debug('[Auth Debug] Bearer: resolved user from DB:', { 
-                email, 
-                role: req.user.role, 
-                tenant_id: req.user.tenant_id 
-              });
+              logger.debug('[Auth Debug] Bearer: resolved user from DB email=' + email + ' name=' + displayName + ' role=' + req.user.role);
             }
             return next();
           } else {
             if (process.env.AUTH_DEBUG === 'true') {
-              logger.debug('[Auth Debug] Bearer: user not found in DB:', { email });
+              logger.debug('[Auth Debug] Bearer: user not found in DB for email=' + email);
             }
           }
         } catch (dbErr) {

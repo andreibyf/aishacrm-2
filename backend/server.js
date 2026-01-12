@@ -262,7 +262,7 @@ app.use("/api/employees", createEmployeeRoutes(measuredPgPool));
 app.use("/api/permissions", createPermissionRoutes(measuredPgPool));
 app.use("/api/testing", createTestingRoutes(measuredPgPool));
 app.use("/api/documents", createDocumentRoutes(measuredPgPool));
-app.use("/api/documentationfiles", createDocumentationFileRoutes(measuredPgPool));
+app.use("/api/documentationfiles", authenticateRequest, createDocumentationFileRoutes(measuredPgPool));
 app.use("/api/reports", createReportRoutes(measuredPgPool));
 app.use("/api/bundles", authenticateRequest, createBundleRoutes(measuredPgPool)); // Bundle endpoints for optimized page loading
 app.use("/api/documentation", createDocumentationRoutes(measuredPgPool));
