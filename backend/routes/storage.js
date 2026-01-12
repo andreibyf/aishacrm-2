@@ -14,6 +14,32 @@ import { getSupabaseClient } from '../lib/supabase-db.js';
 // Multer memory storage to forward buffer to Supabase
 const upload = multer({ storage: multer.memoryStorage() });
 
+/**
+ * Fetch with timeout wrapper
+ * @param {string} url - URL to fetch
+ * @param {object} options - Fetch options
+ * @param {number} timeout - Timeout in milliseconds (default: 5000)
+ */
+async function fetchWithTimeout(url, options = {}, timeout = 5000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error(`Request timeout after ${timeout}ms`);
+    }
+    throw error;
+  }
+}
+
 // Build a tenant-aware storage key
 function buildObjectKey({ tenantId, originalName }) {
   const now = new Date();
@@ -125,14 +151,27 @@ export default function createStorageRoutes(_pgPool) {
       let isPublicAccessible = false;
       if (fileUrl) {
         try {
-          const resp = await fetch(fileUrl, { method: "HEAD" });
+          logger.debug("[storage.upload] Validating public URL accessibility:", fileUrl);
+          const resp = await fetchWithTimeout(fileUrl, { method: "HEAD" }, 5000);
           isPublicAccessible = resp.ok;
-        } catch {
+          logger.debug("[storage.upload] Public URL validation result:", { 
+            status: resp.status, 
+            ok: resp.ok 
+          });
+        } catch (err) {
+          logger.warn("[storage.upload] Public URL validation failed:", {
+            error: err.message,
+            fileUrl
+          });
           isPublicAccessible = false;
         }
       }
 
       if (!fileUrl || !isPublicAccessible) {
+        logger.debug("[storage.upload] Falling back to signed URL", {
+          hasFileUrl: !!fileUrl,
+          isPublicAccessible
+        });
         // Fallback: generate a signed URL. Use the maximum allowed duration (7 days).
         // Note: The frontend should avoid appending cache-busting params to signed URLs.
         const expiresIn = 60 * 60 * 24 * 7; // 7 days
@@ -223,9 +262,18 @@ export default function createStorageRoutes(_pgPool) {
       // Check if public URL is accessible
       if (fileUrl) {
         try {
-          const resp = await fetch(fileUrl, { method: "HEAD" });
+          logger.debug("[storage.signed-url] Validating public URL accessibility:", fileUrl);
+          const resp = await fetchWithTimeout(fileUrl, { method: "HEAD" }, 5000);
           isPublicAccessible = resp.ok;
-        } catch {
+          logger.debug("[storage.signed-url] Public URL validation result:", { 
+            status: resp.status, 
+            ok: resp.ok 
+          });
+        } catch (err) {
+          logger.warn("[storage.signed-url] Public URL validation failed:", {
+            error: err.message,
+            fileUrl
+          });
           isPublicAccessible = false;
         }
       }
