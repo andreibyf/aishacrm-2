@@ -114,7 +114,7 @@ export default function NotesSection({ relatedTo, relatedId, className = "" }) {
         title: newNote.title.trim(),
         content: newNote.content.trim(),
         tenant_id: user.tenant_id,
-        related_to: relatedTo,
+        related_type: relatedTo, // Fixed: was 'related_to', should be 'related_type'
         related_id: relatedId,
         is_private: false, // Default value as the form doesn't support it
         tags: [], // Default value as the form doesn't support it

@@ -197,9 +197,9 @@ export default function createOpportunityV2Routes(_pgPool) {
   // GET /api/v2/opportunities - list opportunities (v2 shape, internal pilot)
   router.get('/', cacheList('opportunities', 180), async (req, res) => {
     try {
-      const { tenant_id, filter, stage, account_id, assigned_to, is_test_data, $or } = req.query;
+      const { tenant_id, filter, stage, account_id, contact_id, lead_id, assigned_to, is_test_data, $or } = req.query;
 
-      logger.debug('[V2 Opportunities GET] Called with:', { tenant_id, filter, stage, account_id, assigned_to, is_test_data, $or });
+      logger.debug('[V2 Opportunities GET] Called with:', { tenant_id, filter, stage, account_id, contact_id, lead_id, assigned_to, is_test_data, $or });
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -254,6 +254,18 @@ export default function createOpportunityV2Routes(_pgPool) {
       if (account_id) {
         logger.debug('[V2 Opportunities] Filtering by account_id:', account_id);
         q = q.eq('account_id', account_id);
+      }
+
+      // Handle contact_id filter (filter opportunities by contact)
+      if (contact_id) {
+        logger.debug('[V2 Opportunities] Filtering by contact_id:', contact_id);
+        q = q.eq('contact_id', contact_id);
+      }
+
+      // Handle lead_id filter (filter opportunities by lead)
+      if (lead_id) {
+        logger.debug('[V2 Opportunities] Filtering by lead_id:', lead_id);
+        q = q.eq('lead_id', lead_id);
       }
 
       // Handle is_test_data filter

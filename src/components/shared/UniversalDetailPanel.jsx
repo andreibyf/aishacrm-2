@@ -89,16 +89,33 @@ export default function UniversalDetailPanel({
     if (!entity) return;
     try {
       const relatedType = entityType.toLowerCase();
-      // Backend expects related_type. Include tenant_id for RLS.
-      const notesData = await Note.filter({
-        tenant_id: user?.tenant_id || entity.tenant_id,
-        related_type: relatedType,
-        related_id: entity.id
-      }, '-created_date');
-      setNotes(notesData || []);
+      const tenantId = user?.tenant_id || entity.tenant_id;
+      
+      // Use direct fetch like LeadProfilePage (Note.filter may not extract array correctly)
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4001';
+      const notesUrl = `${backendUrl}/api/notes?tenant_id=${tenantId}&related_type=${relatedType}&related_id=${entity.id}`;
+      
+      const notesRes = await fetch(notesUrl, {
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (notesRes.ok) {
+        const notesData = await notesRes.json();
+        // Extract notes array from response: { status, data: { notes: [...] } }
+        const rawNotes = notesData.data?.notes || notesData.notes || notesData.data || notesData;
+        const notesArray = Array.isArray(rawNotes) ? rawNotes : [];
+        // Sort by created_at descending
+        notesArray.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        setNotes(notesArray);
+      } else {
+        console.error("Failed to load notes:", notesRes.status, notesRes.statusText);
+        setNotes([]);
+      }
     } catch (error) {
       console.error("Failed to load notes:", error);
       toast.error("Failed to load notes");
+      setNotes([]);
     }
   }, [entity, entityType, user?.tenant_id]);
 
@@ -106,13 +123,73 @@ export default function UniversalDetailPanel({
     if (!entity) return;
     try {
       const relatedTo = entityType.toLowerCase();
-      // Assuming Activity.filter supports ordering and related_to/related_id, limit to 10
-      const activitiesData = await Activity.filter({ 
-        tenant_id: user?.tenant_id || entity.tenant_id,
-        related_to: relatedTo, 
-        related_id: entity.id 
-      }, '-created_date', 10);
-      setActivities(activitiesData || []);
+      const tenantId = user?.tenant_id || entity.tenant_id;
+      
+      // Use v2 API with proper filtering
+      const backendUrl = import.meta.env.VITE_AISHACRM_BACKEND_URL || 
+        (typeof window !== 'undefined' && window._env_?.VITE_AISHACRM_BACKEND_URL) || 
+        'http://localhost:4001';
+      
+      // Fetch activities directly linked to this entity
+      const url = `${backendUrl}/api/v2/activities?tenant_id=${tenantId}&related_to_type=${relatedTo}&related_to_id=${entity.id}&limit=10`;
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      let allActivities = [];
+      if (response.ok) {
+        const data = await response.json();
+        allActivities = data.data?.activities || data.activities || [];
+      }
+      
+      // Also fetch activities from related opportunities (for contacts, leads, accounts)
+      if (['contact', 'lead', 'account'].includes(relatedTo)) {
+        try {
+          // First get opportunities for this entity
+          let oppsUrl = `${backendUrl}/api/v2/opportunities?tenant_id=${tenantId}`;
+          if (relatedTo === 'contact') oppsUrl += `&contact_id=${entity.id}`;
+          else if (relatedTo === 'lead') oppsUrl += `&lead_id=${entity.id}`;
+          else if (relatedTo === 'account') oppsUrl += `&account_id=${entity.id}`;
+          
+          const oppsRes = await fetch(oppsUrl, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          
+          if (oppsRes.ok) {
+            const oppsData = await oppsRes.json();
+            const opportunities = oppsData.data?.opportunities || oppsData.opportunities || [];
+            
+            // Fetch activities for each opportunity
+            const existingIds = new Set(allActivities.map(a => a.id));
+            for (const opp of opportunities.slice(0, 5)) { // Limit to first 5 opps
+              const oppActUrl = `${backendUrl}/api/v2/activities?tenant_id=${tenantId}&related_to_type=opportunity&related_to_id=${opp.id}`;
+              const oppActRes = await fetch(oppActUrl, {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json' },
+              });
+              if (oppActRes.ok) {
+                const oppActData = await oppActRes.json();
+                const oppActivities = oppActData.data?.activities || oppActData.activities || [];
+                for (const act of oppActivities) {
+                  if (!existingIds.has(act.id)) {
+                    act._fromOpportunity = true;
+                    allActivities.push(act);
+                    existingIds.add(act.id);
+                  }
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Failed to load opportunity activities:', e);
+        }
+      }
+      
+      // Sort by created_date descending and limit
+      allActivities.sort((a, b) => new Date(b.created_date || b.created_at) - new Date(a.created_date || a.created_at));
+      setActivities(allActivities.slice(0, 10));
     } catch (error) {
       console.error("Failed to load activities:", error);
       toast.error("Failed to load activities");

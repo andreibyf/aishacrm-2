@@ -171,9 +171,9 @@ export default function LeadProfilePage() {
           if (name) data.assigned_to_name = name;
         }
         
-        // Fetch related activities
+        // Fetch related activities - use related_to_type and related_to_id for proper filtering
         try {
-          const activitiesUrl = `${backendUrl}/api/v2/activities?tenant_id=${effectiveTenantId}&related_to=${entityId}`;
+          const activitiesUrl = `${backendUrl}/api/v2/activities?tenant_id=${effectiveTenantId}&related_to_type=${entityType}&related_to_id=${entityId}`;
           const activitiesRes = await fetch(activitiesUrl, {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' },
@@ -182,8 +182,8 @@ export default function LeadProfilePage() {
             const activitiesData = await activitiesRes.json();
             if (import.meta.env.DEV) console.log('[Profile] Activities response:', activitiesData);
             
-            // Ensure activities is always an array
-            const rawActivities = activitiesData.data || activitiesData;
+            // Extract activities array from nested response: { data: { activities: [...] } }
+            const rawActivities = activitiesData.data?.activities || activitiesData.activities || activitiesData.data || activitiesData;
             data.activities = Array.isArray(rawActivities) ? rawActivities : [];
             
             // Resolve activity assigned_to fields
@@ -217,6 +217,78 @@ export default function LeadProfilePage() {
         } catch (e) {
           console.error('Failed to load notes:', e);
           data.notes = [];
+        }
+        
+        // Fetch related opportunities based on entity type
+        try {
+          let oppsUrl = `${backendUrl}/api/v2/opportunities?tenant_id=${effectiveTenantId}`;
+          if (entityType === 'lead') {
+            oppsUrl += `&lead_id=${entityId}`;
+          } else if (entityType === 'account') {
+            oppsUrl += `&account_id=${entityId}`;
+          } else if (entityType === 'contact') {
+            oppsUrl += `&contact_id=${entityId}`;
+          }
+          // Only fetch if we have a valid filter
+          if (oppsUrl.includes('_id=')) {
+            const oppsRes = await fetch(oppsUrl, {
+              method: 'GET',
+              headers: { 'Content-Type': 'application/json' },
+            });
+            if (oppsRes.ok) {
+              const oppsData = await oppsRes.json();
+              if (import.meta.env.DEV) console.log('[Profile] Opportunities response:', oppsData);
+              
+              // Extract opportunities array from nested response: { data: { opportunities: [...] } }
+              const rawOpps = oppsData.data?.opportunities || oppsData.opportunities || oppsData.data || oppsData;
+              data.opportunities = Array.isArray(rawOpps) ? rawOpps : [];
+            }
+          } else {
+            data.opportunities = [];
+          }
+        } catch (e) {
+          console.error('Failed to load opportunities:', e);
+          data.opportunities = [];
+        }
+        
+        // Fetch activities linked to this entity's opportunities
+        // This ensures activities created from opportunities appear in the profile
+        try {
+          if (data.opportunities && data.opportunities.length > 0) {
+            const oppIds = data.opportunities.map(o => o.id);
+            const oppActivitiesPromises = oppIds.map(async (oppId) => {
+              const oppActUrl = `${backendUrl}/api/v2/activities?tenant_id=${effectiveTenantId}&related_to_type=opportunity&related_to_id=${oppId}`;
+              const res = await fetch(oppActUrl, {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json' },
+              });
+              if (res.ok) {
+                const resData = await res.json();
+                return resData.data?.activities || resData.activities || [];
+              }
+              return [];
+            });
+            const oppActivitiesArrays = await Promise.all(oppActivitiesPromises);
+            const oppActivities = oppActivitiesArrays.flat();
+            
+            // Add opportunity activities that aren't already in the list
+            if (!data.activities) data.activities = [];
+            const existingIds = new Set(data.activities.map(a => a.id));
+            for (const activity of oppActivities) {
+              if (!existingIds.has(activity.id)) {
+                // Mark as opportunity-related for UI distinction
+                activity._fromOpportunity = true;
+                if (activity.assigned_to) {
+                  const name = await resolveEmployeeName(activity.assigned_to);
+                  if (name) activity.assigned_to_name = name;
+                }
+                data.activities.push(activity);
+              }
+            }
+            if (import.meta.env.DEV) console.log('[Profile] Added opportunity activities:', oppActivities.length);
+          }
+        } catch (e) {
+          console.error('Failed to load opportunity activities:', e);
         }
         
         if (import.meta.env.DEV) console.log('[Profile] tenantId available:', !!effectiveTenantId);
@@ -357,6 +429,37 @@ export default function LeadProfilePage() {
     return <span className="inline-block px-2 py-1 text-xs font-bold text-gray-700 bg-gray-200 rounded">Normal</span>;
   }
 
+  function StageBadge({ stage }) {
+    const s = (stage || "").toLowerCase().replace(/_/g, " ");
+    const cls = s.includes("won") ? "bg-emerald-100 text-emerald-800" 
+      : s.includes("lost") ? "bg-red-100 text-red-800"
+      : s.includes("proposal") ? "bg-purple-100 text-purple-800"
+      : s.includes("negotiation") ? "bg-orange-100 text-orange-800"
+      : s.includes("qualified") ? "bg-blue-100 text-blue-800"
+      : "bg-gray-100 text-gray-800";
+    return <span className={`inline-block px-2 py-1 text-xs font-semibold rounded capitalize ${cls}`}>{stage?.replace(/_/g, " ") || "Unknown"}</span>;
+  }
+
+  // Scroll to section helper
+  const scrollToSection = (sectionId) => {
+    const element = document.getElementById(sectionId);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  // Navigate to list page with filter
+  const navigateToFiltered = (entityListType) => {
+    // Build URL with filter for related records
+    const filterParam = encodeURIComponent(JSON.stringify({ related_id: entityId }));
+    window.location.href = `/${entityListType}?filter=${filterParam}`;
+  };
+
+  // Count helpers for sidebar badges
+  const notesCount = Array.isArray(lead.notes) ? lead.notes.length : 0;
+  const activitiesCount = Array.isArray(lead.activities) ? lead.activities.length : 0;
+  const opportunitiesCount = Array.isArray(lead.opportunities) ? lead.opportunities.length : 0;
+
   return (
     <div className="flex min-h-screen bg-gray-100">
       {/* Sidebar */}
@@ -366,9 +469,33 @@ export default function LeadProfilePage() {
         <p className="text-gray-500 text-xs font-semibold uppercase tracking-widest mb-6">{companyName}</p>
         <nav className="border-t border-gray-700 pt-4">
           <a href="#overview" className="text-white block py-3 text-sm font-medium">Overview</a>
-          <button className="text-gray-400 block py-3 text-sm hover:text-white w-full text-left">+ Notes</button>
-          <button className="text-gray-400 block py-3 text-sm hover:text-white w-full text-left">+ Activities</button>
-          <button className="text-gray-400 block py-3 text-sm hover:text-white w-full text-left">+ Opportunities</button>
+          <button 
+            onClick={() => scrollToSection('notes')} 
+            className="text-gray-400 hover:text-white w-full text-left py-3 text-sm flex items-center justify-between group"
+          >
+            <span>+ Notes</span>
+            {notesCount > 0 && (
+              <span className="bg-gray-700 group-hover:bg-gray-600 text-gray-300 text-xs px-2 py-0.5 rounded-full">{notesCount}</span>
+            )}
+          </button>
+          <button 
+            onClick={() => scrollToSection('activities')} 
+            className="text-gray-400 hover:text-white w-full text-left py-3 text-sm flex items-center justify-between group"
+          >
+            <span>+ Activities</span>
+            {activitiesCount > 0 && (
+              <span className="bg-gray-700 group-hover:bg-gray-600 text-gray-300 text-xs px-2 py-0.5 rounded-full">{activitiesCount}</span>
+            )}
+          </button>
+          <button 
+            onClick={() => scrollToSection('opportunities')} 
+            className="text-gray-400 hover:text-white w-full text-left py-3 text-sm flex items-center justify-between group"
+          >
+            <span>+ Opportunities</span>
+            {opportunitiesCount > 0 && (
+              <span className="bg-gray-700 group-hover:bg-gray-600 text-gray-300 text-xs px-2 py-0.5 rounded-full">{opportunitiesCount}</span>
+            )}
+          </button>
         </nav>
       </aside>
 
@@ -472,7 +599,7 @@ export default function LeadProfilePage() {
           </div>
 
           {/* Notes */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-6">
+          <div id="notes" className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-6">
             <div className="mb-4">
               <h3 className="text-lg font-bold text-gray-900">📝 Notes</h3>
             </div>
@@ -523,12 +650,37 @@ export default function LeadProfilePage() {
             <div className="mb-4">
               <h3 className="text-lg font-bold text-gray-900">🎯 Opportunities</h3>
             </div>
-            {lead.opportunity_stage && lead.opportunity_stage.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {lead.opportunity_stage.map((stage, idx) => (
-                  <span key={idx} className="px-3 py-1 bg-gray-200 text-gray-800 text-sm font-medium rounded-full">
-                    {stage}
-                  </span>
+            {Array.isArray(lead.opportunities) && lead.opportunities.length > 0 ? (
+              <div className="space-y-4">
+                {lead.opportunities.map((opp) => (
+                  <Link
+                    key={opp.id}
+                    to={`/opportunities?id=${opp.id}`}
+                    className="block p-4 border border-gray-200 rounded-lg hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <h4 className="font-semibold text-gray-900">{opp.name}</h4>
+                      <StageBadge stage={opp.stage} />
+                    </div>
+                    <div className="flex items-center gap-4 text-sm text-gray-600">
+                      {opp.amount != null && (
+                        <span className="font-medium text-green-700">
+                          ${Number(opp.amount).toLocaleString()}
+                        </span>
+                      )}
+                      {opp.close_date && (
+                        <span>Close: {formatDate(opp.close_date)}</span>
+                      )}
+                      {opp.probability != null && (
+                        <span>{opp.probability}% probability</span>
+                      )}
+                    </div>
+                    {opp.next_step && (
+                      <p className="mt-2 text-xs text-gray-500">
+                        <span className="font-medium">Next step:</span> {opp.next_step}
+                      </p>
+                    )}
+                  </Link>
                 ))}
               </div>
             ) : (

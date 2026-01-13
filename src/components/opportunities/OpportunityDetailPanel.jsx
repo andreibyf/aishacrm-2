@@ -60,19 +60,33 @@ export default function OpportunityDetailPanel({
     setLocalOpportunity(opportunity);
   }, [opportunity]);
 
-  // Load related activities
+  // Load related activities - use v2 API with proper filtering
   useEffect(() => {
     const loadActivities = async () => {
       if (!localOpportunity?.id || !localOpportunity?.tenant_id) return;
 
       setLoadingActivities(true);
       try {
-        const allActivities = await Activity.filter({ tenant_id: localOpportunity.tenant_id });
-        const filtered = Array.isArray(allActivities) ? allActivities.filter(
-          (a) => a.related_to === "opportunity" && a.related_id === localOpportunity.id
-        ) : [];
+        // Use v2 API with server-side filtering for activities linked to this opportunity
+        const backendUrl = import.meta.env.VITE_AISHACRM_BACKEND_URL || 
+          (typeof window !== 'undefined' && window._env_?.VITE_AISHACRM_BACKEND_URL) || 
+          'http://localhost:4001';
+        const url = `${backendUrl}/api/v2/activities?tenant_id=${localOpportunity.tenant_id}&related_to_type=opportunity&related_to_id=${localOpportunity.id}`;
+        
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to load activities: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const activities = data.data?.activities || data.activities || [];
+        
         // Sort by due date descending (most recent first). Null due_dates come last.
-        filtered.sort((a, b) => {
+        activities.sort((a, b) => {
           const dateA = a.due_date ? new Date(a.due_date).getTime() : -Infinity;
           const dateB = b.due_date ? new Date(b.due_date).getTime() : -Infinity;
 
@@ -84,7 +98,7 @@ export default function OpportunityDetailPanel({
 
           return dateB - dateA;
         });
-        setRelatedActivities(filtered);
+        setRelatedActivities(activities);
       } catch (error) {
         console.error("Failed to load activities:", error);
         setRelatedActivities([]);
@@ -185,20 +199,30 @@ export default function OpportunityDetailPanel({
 
       toast.success("Activity created successfully!");
 
-      // Reload activities
-      const allActivities = await Activity.filter({ tenant_id: localOpportunity.tenant_id });
-      const filtered = Array.isArray(allActivities) ? allActivities.filter(
-        (a) => a.related_to === "opportunity" && a.related_id === localOpportunity.id
-      ) : [];
-      filtered.sort((a, b) => {
-        const dateA = a.due_date ? new Date(a.due_date).getTime() : -Infinity;
-        const dateB = b.due_date ? new Date(b.due_date).getTime() : -Infinity;
-        if (dateA === -Infinity && dateB === -Infinity) return 0;
-        if (dateA === -Infinity) return 1;
-        if (dateB === -Infinity) return -1;
-        return dateB - dateA;
+      // Reload activities using v2 API with proper filtering
+      const backendUrl = import.meta.env.VITE_AISHACRM_BACKEND_URL || 
+        (typeof window !== 'undefined' && window._env_?.VITE_AISHACRM_BACKEND_URL) || 
+        'http://localhost:4001';
+      const url = `${backendUrl}/api/v2/activities?tenant_id=${localOpportunity.tenant_id}&related_to_type=opportunity&related_to_id=${localOpportunity.id}`;
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
       });
-      setRelatedActivities(filtered);
+      
+      if (response.ok) {
+        const data = await response.json();
+        const activities = data.data?.activities || data.activities || [];
+        activities.sort((a, b) => {
+          const dateA = a.due_date ? new Date(a.due_date).getTime() : -Infinity;
+          const dateB = b.due_date ? new Date(b.due_date).getTime() : -Infinity;
+          if (dateA === -Infinity && dateB === -Infinity) return 0;
+          if (dateA === -Infinity) return 1;
+          if (dateB === -Infinity) return -1;
+          return dateB - dateA;
+        });
+        setRelatedActivities(activities);
+      }
 
       // Navigate to the activity
       setTimeout(() => {
