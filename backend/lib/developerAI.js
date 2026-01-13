@@ -1326,7 +1326,8 @@ async function testAisha(args) {
   try {
     // Import the AI processing functions dynamically to avoid circular dependencies
     const { processMessage, getTenantSnapshot } = await import('./braidIntegration-v2.js');
-    const { supa } = await import('./supabase-db.js');
+    const { getSupabaseClient } = await import('./supabase-db.js');
+    const supa = getSupabaseClient();
 
     // Find a tenant to test with
     let testTenantId = tenant_id;
