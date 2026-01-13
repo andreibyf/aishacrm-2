@@ -127,3 +127,7 @@ GET /api/accounts/{id}?tenant_id={uuid}
 ```
 
 Frontend code (`src/api/entities.js`) already implements this correctly, so no frontend changes are needed.
+
+## Future Improvements
+- Consider extracting tenant_id validation into a reusable middleware function to reduce code duplication across v1 and v2 routes
+- This would ensure consistent error responses and make it easier to maintain

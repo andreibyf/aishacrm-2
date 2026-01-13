@@ -1,5 +1,6 @@
 /**
- * Test suite to verify tenant_id validation for accounts v2 GET by ID endpoint
+ * Test suite to verify tenant_id validation for accounts GET by ID endpoint
+ * Tests both v1 (/api/accounts) and v2 (/api/v2/accounts) routes
  * Related to issue: accounts GET by ID should require tenant_id parameter
  */
 
