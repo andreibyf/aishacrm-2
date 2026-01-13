@@ -12,6 +12,10 @@ import { useApiManager } from "../components/shared/ApiManager";
 import ActivityCard from "../components/activities/ActivityCard";
 import ActivityForm from "../components/activities/ActivityForm";
 import ActivityDetailPanel from "../components/activities/ActivityDetailPanel";
+import ContactDetailPanel from "../components/contacts/ContactDetailPanel";
+import AccountDetailPanel from "../components/accounts/AccountDetailPanel";
+import LeadDetailPanel from "../components/leads/LeadDetailPanel";
+import OpportunityDetailPanel from "../components/opportunities/OpportunityDetailPanel";
 import BulkActionsMenu from "../components/activities/BulkActionsMenu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -93,6 +97,10 @@ export default function ActivitiesPage() {
   const [detailActivity, setDetailActivity] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState([]);
+  // Related entity detail panel state (for viewing without navigating away)
+  const [viewingRelatedEntity, setViewingRelatedEntity] = useState(null);
+  const [relatedEntityType, setRelatedEntityType] = useState(null);
+  const [isRelatedDetailOpen, setIsRelatedDetailOpen] = useState(false);
   const [dateRange, setDateRange] = useState({ start: null, end: null });
   const [showTestData, setShowTestData] = useState(true); // Default to showing all data
   const { selectedEmail } = useEmployeeScope();
@@ -815,24 +823,40 @@ export default function ActivitiesPage() {
   const getRelatedEntityLink = (activity) => {
     if (!activity.related_to || !activity.related_id) return null;
 
+    // Map entity types to their API and label
     const entityMap = {
-      contact: { url: createPageUrl('Contacts'), label: 'Contact' },
-      account: { url: createPageUrl('Accounts'), label: 'Account' },
-      lead: { url: createPageUrl('Leads'), label: 'Lead' },
-      opportunity: { url: createPageUrl('Opportunities'), label: 'Opportunity' }
+      contact: { api: Contact, label: 'Contact' },
+      account: { api: Account, label: 'Account' },
+      lead: { api: Lead, label: 'Lead' },
+      opportunity: { api: Opportunity, label: 'Opportunity' }
     };
 
     const entity = entityMap[activity.related_to];
     if (!entity) return null;
 
+    // Open detail panel inline instead of navigating away
+    const handleClick = async (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      try {
+        const data = await entity.api.get(activity.related_id);
+        setViewingRelatedEntity(data);
+        setRelatedEntityType(activity.related_to);
+        setIsRelatedDetailOpen(true);
+      } catch (error) {
+        console.error(`Failed to load ${activity.related_to}:`, error);
+        toast.error(`Could not load ${entity.label} details`);
+      }
+    };
+
     return (
-      <Link 
-        to={entity.url} 
-        className="text-blue-400 hover:text-blue-300 hover:underline"
-        onClick={(e) => e.stopPropagation()}
+      <button 
+        type="button"
+        className="text-blue-400 hover:text-blue-300 hover:underline text-left"
+        onClick={handleClick}
       >
         {activity.related_name || `View ${entity.label}`}
-      </Link>
+      </button>
     );
   };
 
@@ -1496,6 +1520,65 @@ export default function ActivitiesPage() {
           </>
         )}
       </div>
+
+      {/* Related entity detail panels (opened from related entity links without navigation) */}
+      {relatedEntityType === 'contact' && (
+        <ContactDetailPanel
+          contact={viewingRelatedEntity}
+          open={isRelatedDetailOpen}
+          onOpenChange={(open) => {
+            setIsRelatedDetailOpen(open);
+            if (!open) {
+              setViewingRelatedEntity(null);
+              setRelatedEntityType(null);
+            }
+          }}
+          user={user}
+        />
+      )}
+      {relatedEntityType === 'account' && (
+        <AccountDetailPanel
+          account={viewingRelatedEntity}
+          open={isRelatedDetailOpen}
+          onOpenChange={(open) => {
+            setIsRelatedDetailOpen(open);
+            if (!open) {
+              setViewingRelatedEntity(null);
+              setRelatedEntityType(null);
+            }
+          }}
+          user={user}
+        />
+      )}
+      {relatedEntityType === 'lead' && (
+        <LeadDetailPanel
+          lead={viewingRelatedEntity}
+          open={isRelatedDetailOpen}
+          onOpenChange={(open) => {
+            setIsRelatedDetailOpen(open);
+            if (!open) {
+              setViewingRelatedEntity(null);
+              setRelatedEntityType(null);
+            }
+          }}
+          user={user}
+        />
+      )}
+      {relatedEntityType === 'opportunity' && (
+        <OpportunityDetailPanel
+          opportunity={viewingRelatedEntity}
+          open={isRelatedDetailOpen}
+          onOpenChange={(open) => {
+            setIsRelatedDetailOpen(open);
+            if (!open) {
+              setViewingRelatedEntity(null);
+              setRelatedEntityType(null);
+            }
+          }}
+          user={user}
+        />
+      )}
+
       <ConfirmDialogPortal />
     </TooltipProvider>
   );

@@ -207,6 +207,35 @@ export default function OpportunitiesPage() {
 
   // Load supporting data (accounts, contacts, users, employees) ONCE - OPTIMIZED WITH CONCURRENT FETCHING
   //
+  // Handle opening opportunity from URL parameter (e.g., from Activities page related_to link)
+  useEffect(() => {
+    const loadOpportunityFromUrl = async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const opportunityId = urlParams.get("opportunityId");
+
+      if (opportunityId) {
+        try {
+          // Fetch the specific opportunity by ID
+          const opportunity = await Opportunity.get(opportunityId);
+          if (opportunity) {
+            setDetailOpportunity(opportunity);
+            setIsDetailOpen(true);
+          }
+        } catch (error) {
+          console.error("[Opportunities] Failed to load opportunity from URL:", error);
+          toast.error("Opportunity not found");
+        } finally {
+          // Clear the URL parameter
+          window.history.replaceState({}, "", "/Opportunities");
+        }
+      }
+    };
+
+    if (user) {
+      loadOpportunityFromUrl();
+    }
+  }, [user]); // Only depend on user, not opportunities array
+
   // NOTE: Bundle endpoints exist (src/api/bundles.js → /api/bundles/opportunities) that could
   // consolidate this into a single request. The bundle infrastructure is available for simpler
   // use cases but wasn't integrated here to avoid risk. See: docs/BUNDLE_ENDPOINTS_TESTING.md

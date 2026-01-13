@@ -101,6 +101,7 @@ export default function ContactForm({
   const [allTags, setAllTags] = useState([]);
   const [showCreateAccount, setShowCreateAccount] = useState(false);
   const [newAccountName, setNewAccountName] = useState("");
+  const [createdAccount, setCreatedAccount] = useState(null); // Store newly created account for immediate display
 
   const [duplicateWarning, setDuplicateWarning] = useState(null);
   const [checkingDuplicates, setCheckingDuplicates] = useState(false);
@@ -393,6 +394,7 @@ export default function ContactForm({
 
   const handleCreateAccountSuccess = (newAccount) => {
     logDev('[ContactForm] New account created:', newAccount.id);
+    setCreatedAccount(newAccount); // Store for immediate display in selector
     setFormData(prev => ({ ...prev, account_id: newAccount.id }));
     setShowCreateAccount(false);
     toast({
@@ -827,6 +829,7 @@ export default function ContactForm({
                     setNewAccountName(name);
                     setShowCreateAccount(true);
                   }}
+                  newlyCreatedAccount={createdAccount}
                   placeholder="Link to an existing account..."
                   className="mt-1 bg-slate-700 border-slate-600 text-slate-200"
                   contentClassName="bg-slate-800 border-slate-700"
@@ -968,13 +971,38 @@ export default function ContactForm({
         </form>
       </div>
 
+      {/* Create Account Dialog - Direct DOM rendering outside React portal */}
       {showCreateAccount && (
-        <CreateAccountDialog
-          open={showCreateAccount}
-          onOpenChange={setShowCreateAccount}
-          onSuccess={handleCreateAccountSuccess}
-          initialName={newAccountName}
-        />
+        <>
+          <div 
+            className="fixed inset-0 bg-black/70" 
+            style={{ zIndex: 2147483646 }}
+            onClick={() => setShowCreateAccount(false)}
+          />
+          <div 
+            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-800 rounded-lg shadow-2xl border border-slate-700 w-[min(96vw,56rem)] max-h-[90vh] overflow-y-auto"
+            style={{ zIndex: 2147483647 }}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700 sticky top-0 bg-slate-800 z-10">
+              <h2 className="text-lg font-semibold text-slate-100">Create New Account</h2>
+              <button
+                onClick={() => setShowCreateAccount(false)}
+                className="text-slate-400 hover:text-slate-200 text-2xl leading-none"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-6">
+              <CreateAccountDialog
+                open={true}
+                onOpenChange={setShowCreateAccount}
+                onSuccess={handleCreateAccountSuccess}
+                initialName={newAccountName}
+              />
+            </div>
+          </div>
+        </>
       )}
     </>
   );

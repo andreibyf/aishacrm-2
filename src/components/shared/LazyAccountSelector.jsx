@@ -18,6 +18,7 @@ export default function LazyAccountSelector({
   onChange,
   onValueChange, // Support both prop names for backward compatibility
   onCreateNew,
+  newlyCreatedAccount = null, // Newly created account to add to list immediately
   placeholder = "Select account...",
   className = "",
   contentClassName = "",
@@ -38,6 +39,21 @@ export default function LazyAccountSelector({
 
   // Only load when dropdown opens
   const { user: contextUser } = useUser();
+
+  // When a newly created account is passed, add it to the list immediately and update label
+  useEffect(() => {
+    if (newlyCreatedAccount && newlyCreatedAccount.id) {
+      setAccounts((prev) => {
+        // Don't add duplicate
+        if (prev.some((acc) => acc.id === newlyCreatedAccount.id)) return prev;
+        return [newlyCreatedAccount, ...prev];
+      });
+      // Update the label if this is the selected account
+      if (value === newlyCreatedAccount.id) {
+        setSelectedAccountLabel(newlyCreatedAccount.name || "Unknown Account");
+      }
+    }
+  }, [newlyCreatedAccount, value]);
 
   const resolvedTenantFilter = useMemo(() => {
     if (tenantFilter && typeof tenantFilter === 'object' && Object.keys(tenantFilter).length > 0) {

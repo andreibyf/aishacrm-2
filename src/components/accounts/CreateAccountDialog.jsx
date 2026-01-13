@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Account } from "@/api/entities";
 import { Lead } from "@/api/entities";
 import { useUser } from '@/components/shared/useUser.js';
@@ -13,9 +13,18 @@ import { Loader2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "react-hot-toast";
 
-export default function CreateAccountDialog({ open, onOpenChange, onAccountCreated }) {
+export default function CreateAccountDialog({ 
+  open, 
+  onOpenChange, 
+  onAccountCreated, 
+  onSuccess,  // Alias for backward compatibility
+  initialName = "" 
+}) {
+  // Support both onAccountCreated and onSuccess for backward compatibility
+  const handleAccountCreatedCallback = onAccountCreated || onSuccess;
+
   const [formData, setFormData] = useState({
-    name: "",
+    name: initialName,
     type: "prospect",
     industry: "",
     website: "",
@@ -49,6 +58,12 @@ export default function CreateAccountDialog({ open, onOpenChange, onAccountCreat
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { user: currentUser } = useUser();
 
+  // Update name field when initialName prop changes (e.g., when user types in LazyAccountSelector)
+  useEffect(() => {
+    if (initialName) {
+      setFormData(prev => ({ ...prev, name: initialName }));
+    }
+  }, [initialName]);
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -88,8 +103,8 @@ export default function CreateAccountDialog({ open, onOpenChange, onAccountCreat
         toast.success("Account created successfully!");
       }
 
-      if (onAccountCreated) {
-        onAccountCreated(newAccount);
+      if (handleAccountCreatedCallback) {
+        handleAccountCreatedCallback(newAccount);
       }
       onOpenChange(false);
     } catch (error) {

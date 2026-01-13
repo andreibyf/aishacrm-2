@@ -8,6 +8,7 @@ import { loadUsersSafely } from "../components/shared/userLoader";
 import ContactCard from "../components/contacts/ContactCard";
 import ContactForm from "../components/contacts/ContactForm";
 import ContactDetailPanel from "../components/contacts/ContactDetailPanel";
+import AccountDetailPanel from "../components/accounts/AccountDetailPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -91,6 +92,9 @@ export default function ContactsPage() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [convertingContact, setConvertingContact] = useState(null);
   const [selectedTags, setSelectedTags] = useState([]);
+  // Account detail panel state (for viewing accounts without navigating away)
+  const [viewingAccount, setViewingAccount] = useState(null);
+  const [isAccountDetailOpen, setIsAccountDetailOpen] = useState(false);
   // Added showTestData state to support the new getTenantFilter logic from the outline
   const [showTestData] = useState(true); // Default to showing all data
   const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
@@ -184,6 +188,49 @@ export default function ContactsPage() {
 
     return filter;
   }, [user, selectedTenantId, showTestData, selectedEmail, employees]);
+
+  // Refresh accounts list (e.g., after creating a new account from the contact form)
+  const refreshAccounts = useCallback(async () => {
+    try {
+      const filterForSupportingData = getTenantFilter();
+      clearCacheByKey("Account");
+      const accountsData = await cachedRequest("Account", "filter", {
+        filter: filterForSupportingData,
+      }, () => Account.filter(filterForSupportingData));
+      setAccounts(accountsData || []);
+    } catch (error) {
+      console.error("[Contacts] Failed to refresh accounts:", error);
+    }
+  }, [getTenantFilter, cachedRequest, clearCacheByKey]);
+
+  // Handle opening contact from URL parameter (e.g., from Activities page related_to link)
+  useEffect(() => {
+    const loadContactFromUrl = async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const contactId = urlParams.get("contactId");
+
+      if (contactId) {
+        try {
+          // Fetch the specific contact by ID
+          const contact = await Contact.get(contactId);
+          if (contact) {
+            setDetailContact(contact);
+            setIsDetailOpen(true);
+          }
+        } catch (error) {
+          console.error("[Contacts] Failed to load contact from URL:", error);
+          toast.error("Contact not found");
+        } finally {
+          // Clear the URL parameter
+          window.history.replaceState({}, "", "/Contacts");
+        }
+      }
+    };
+
+    if (user) {
+      loadContactFromUrl();
+    }
+  }, [user]); // Only depend on user, not contacts array
 
   useEffect(() => {
     if (supportingDataLoaded.current || !user) return;
@@ -504,10 +551,12 @@ export default function ContactsPage() {
       setCurrentPage(1);
       
       // Clear cache and reload BEFORE closing the dialog
+      // Also refresh accounts in case a new account was created during contact creation
       clearCacheByKey("Contact");
       await Promise.all([
         loadContacts(),
         loadTotalStats(),
+        refreshAccounts(),
       ]);
       
       // Now close the dialog after data is fresh
@@ -531,11 +580,15 @@ export default function ContactsPage() {
     });
     
     // Just handle post-save actions
+    // Also refresh accounts in case a new account was created during contact update
     setIsFormOpen(false);
     setEditingContact(null);
     clearCacheByKey("Contact");
-    loadContacts();
-    loadTotalStats();
+    await Promise.all([
+      loadContacts(),
+      loadTotalStats(),
+      refreshAccounts(),
+    ]);
   };
 
   const handleDelete = async (id) => {
@@ -771,14 +824,22 @@ export default function ContactsPage() {
     });
   };
 
-  const handleViewAccount = (accountId, accountName) => {
-    // Navigate to Accounts page with query parameter (use capital A)
-    window.location.href = `/Accounts?accountId=${accountId}`;
-    logger.info("Navigating to account details", "ContactsPage", {
-      accountId,
-      accountName,
-      userId: user?.id || user?.email,
-    });
+  const handleViewAccount = async (accountId, accountName) => {
+    // Open AccountDetailPanel inline instead of navigating away
+    try {
+      // Fetch the account data
+      const accountData = await Account.get(accountId);
+      setViewingAccount(accountData);
+      setIsAccountDetailOpen(true);
+      logger.info("Opening account details panel", "ContactsPage", {
+        accountId,
+        accountName,
+        userId: user?.id || user?.email,
+      });
+    } catch (error) {
+      console.error("Failed to load account:", error);
+      toast.error("Could not load account details");
+    }
   };
 
   const handleEdit = (contact) => {
@@ -1612,6 +1673,17 @@ export default function ContactsPage() {
             }}
           />
         )}
+
+      {/* Account detail panel (opened from account links without navigation) */}
+      <AccountDetailPanel
+        account={viewingAccount}
+        open={isAccountDetailOpen}
+        onOpenChange={(open) => {
+          setIsAccountDetailOpen(open);
+          if (!open) setViewingAccount(null);
+        }}
+        user={user}
+      />
 
       <ConfirmDialogPortal />
     </div>

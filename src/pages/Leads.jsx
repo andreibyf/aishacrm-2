@@ -279,6 +279,49 @@ export default function LeadsPage() {
     return filter;
   }, [user, selectedTenantId, showTestData, selectedEmail, employees]);
 
+  // Refresh accounts list (e.g., after creating a new account from the lead form)
+  const refreshAccounts = useCallback(async () => {
+    try {
+      const filterForSupportingData = getTenantFilter();
+      clearCacheByKey("Account");
+      const accountsData = await cachedRequest("Account", "filter", {
+        filter: filterForSupportingData,
+      }, () => Account.filter(filterForSupportingData));
+      setAccounts(accountsData || []);
+    } catch (error) {
+      console.error("[Leads] Failed to refresh accounts:", error);
+    }
+  }, [getTenantFilter, cachedRequest, clearCacheByKey]);
+
+  // Handle opening lead from URL parameter (e.g., from Activities page related_to link)
+  useEffect(() => {
+    const loadLeadFromUrl = async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const leadId = urlParams.get("leadId");
+
+      if (leadId) {
+        try {
+          // Fetch the specific lead by ID
+          const lead = await Lead.get(leadId);
+          if (lead) {
+            setDetailLead(lead);
+            setIsDetailOpen(true);
+          }
+        } catch (error) {
+          console.error("[Leads] Failed to load lead from URL:", error);
+          toast.error("Lead not found");
+        } finally {
+          // Clear the URL parameter
+          window.history.replaceState({}, "", "/Leads");
+        }
+      }
+    };
+
+    if (user) {
+      loadLeadFromUrl();
+    }
+  }, [user]); // Only depend on user, not leads array
+
   // Load supporting data (accounts, users, employees) ONCE with delays and error handling
   //
   // NOTE: Bundle endpoints exist (src/api/bundles.js → /api/bundles/leads) that could
@@ -678,12 +721,14 @@ export default function LeadsPage() {
       setCurrentPage(1);
 
       // Clear cache and reload BEFORE closing the dialog
+      // Also refresh accounts in case a new account was created during lead save
       clearCache("Lead"); clearCacheByKey("Lead");
 
-      // Reload leads and stats
+      // Reload leads, stats, and accounts
       await Promise.all([
         loadLeads(1, pageSize), // Always load page 1 to show the lead
         loadTotalStats(),
+        refreshAccounts(),
       ]);
       
       // Now close the dialog after data is fresh

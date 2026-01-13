@@ -111,6 +111,8 @@ export default function LeadForm({
   const { selectedTenantId } = useTenant();
   const [allTags, setAllTags] = useState([]);
   const [showCreateAccountDialog, setShowCreateAccountDialog] = useState(false);
+  const [newAccountName, setNewAccountName] = useState("");  // Track typed account name for create dialog
+  const [createdAccount, setCreatedAccount] = useState(null); // Store newly created account for immediate display
   const { cachedRequest } = useApiManager();
 
   // Field-level validation errors for a11y
@@ -298,6 +300,7 @@ export default function LeadForm({
   };
 
   const handleCreateAccountSuccess = async (newAccount) => {
+      setCreatedAccount(newAccount); // Store for immediate display in selector
       handleChange('account_id', newAccount.id);
       handleChange('company', newAccount.name); // Also update company name field
       setShowCreateAccountDialog(false);
@@ -500,7 +503,11 @@ export default function LeadForm({
                   <LazyAccountSelector
                     value={formData.account_id}
                     onChange={(value) => handleChange('account_id', value)}
-                    onCreateNew={() => setShowCreateAccountDialog(true)}
+                    onCreateNew={(name) => {
+                      setNewAccountName(name);
+                      setShowCreateAccountDialog(true);
+                    }}
+                    newlyCreatedAccount={createdAccount}
                     tenantFilter={getTenantFilter(user, selectedTenantId)}
                     className="mt-1 bg-slate-700 border-slate-600 text-slate-200"
                     contentClassName="bg-slate-800 border-slate-700"
@@ -624,7 +631,11 @@ export default function LeadForm({
                   <LazyAccountSelector
                     value={formData.account_id}
                     onChange={(value) => handleChange('account_id', value)}
-                    onCreateNew={() => setShowCreateAccountDialog(true)}
+                    onCreateNew={(name) => {
+                      setNewAccountName(name);
+                      setShowCreateAccountDialog(true);
+                    }}
+                    newlyCreatedAccount={createdAccount}
                     tenantFilter={getTenantFilter(user, selectedTenantId)} // Pass current tenant filter
                     className="mt-1 bg-slate-700 border-slate-600 text-slate-200"
                     contentClassName="bg-slate-800 border-slate-700"
@@ -802,13 +813,38 @@ export default function LeadForm({
               </Button>
             </div>
           </form>
-      {/* Create Account Dialog for LazyAccountSelector */}
+      {/* Create Account Dialog - Direct DOM rendering outside React portal */}
       {showCreateAccountDialog && (
-        <CreateAccountDialog
-          open={showCreateAccountDialog}
-          onOpenChange={setShowCreateAccountDialog}
-          onSuccess={handleCreateAccountSuccess}
-        />
+        <>
+          <div 
+            className="fixed inset-0 bg-black/70" 
+            style={{ zIndex: 2147483646 }}
+            onClick={() => setShowCreateAccountDialog(false)}
+          />
+          <div 
+            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-800 rounded-lg shadow-2xl border border-slate-700 w-[min(96vw,56rem)] max-h-[90vh] overflow-y-auto"
+            style={{ zIndex: 2147483647 }}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700 sticky top-0 bg-slate-800 z-10">
+              <h2 className="text-lg font-semibold text-slate-100">Create New Account</h2>
+              <button
+                onClick={() => setShowCreateAccountDialog(false)}
+                className="text-slate-400 hover:text-slate-200 text-2xl leading-none"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-6">
+              <CreateAccountDialog
+                open={true}
+                onOpenChange={setShowCreateAccountDialog}
+                onSuccess={handleCreateAccountSuccess}
+                initialName={newAccountName}
+              />
+            </div>
+          </div>
+        </>
       )}
     </>
   );
