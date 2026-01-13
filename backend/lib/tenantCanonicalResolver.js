@@ -81,26 +81,15 @@ export async function resolveCanonicalTenant(identifier) {
   // UUID path
   if (isUuid(input)) {
     try {
-      // Primary lookup against canonical table name 'tenants' (schema uses plural elsewhere)
+      // Primary lookup against canonical table name 'tenant' (singular)
       let { data, error } = await supa
-        .from('tenants')
+        .from('tenant')
         .select('id, tenant_id')
         .eq('id', input)
         .limit(1)
         .single();
 
-      // Fallback for legacy singular table name if plural not found
-      // PGRST116 = no rows found, PGRST205 = table not found in schema
-      if ((error && (error.code === 'PGRST116' || error.code === 'PGRST205')) || (!data && !error)) {
-        const legacy = await supa
-          .from('tenant')
-          .select('id, tenant_id')
-          .eq('id', input)
-          .limit(1)
-          .single();
-        data = legacy.data;
-        error = legacy.error;
-      }
+      // PGRST116 = no rows found
       if (error && error.code !== 'PGRST116') throw error;
       if (data) {
         const result = { uuid: data.id, slug: data.tenant_id || null, source: 'db-id', found: true };
@@ -120,22 +109,12 @@ export async function resolveCanonicalTenant(identifier) {
   // Slug path
   try {
     let { data, error } = await supa
-      .from('tenants')
+      .from('tenant')
       .select('id, tenant_id')
       .eq('tenant_id', input)
       .limit(1)
       .single();
-    // PGRST116 = no rows found, PGRST205 = table not found in schema
-    if ((error && (error.code === 'PGRST116' || error.code === 'PGRST205')) || (!data && !error)) {
-      const legacy = await supa
-        .from('tenant')
-        .select('id, tenant_id')
-        .eq('tenant_id', input)
-        .limit(1)
-        .single();
-      data = legacy.data;
-      error = legacy.error;
-    }
+    // PGRST116 = no rows found
     if (error && error.code !== 'PGRST116') throw error;
     if (data) {
       const result = { uuid: data.id, slug: data.tenant_id, source: 'db-slug', found: true };

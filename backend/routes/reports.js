@@ -1912,7 +1912,7 @@ export default function createReportRoutes(_pgPool) {
         let tenantInfo = { name: 'Unknown Tenant', industry: 'Not specified' };
         if (tenant_id) {
           const { data: tenantData } = await supabase
-            .from('tenants')
+            .from('tenant')
             .select('name, industry, business_model, geographic_focus')
             .eq('id', tenant_id)
             .single();

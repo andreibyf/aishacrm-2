@@ -110,7 +110,7 @@ export default function createSystemRoutes(_pgPool) {
         const { getSupabaseClient } = await import('../lib/supabase-db.js');
         const supabase = getSupabaseClient();
         const { error } = await supabase
-          .from('tenants')
+          .from('tenant')
           .select('id', { count: 'exact', head: true })
           .limit(1);
         diagnostics.database.connected = !error;

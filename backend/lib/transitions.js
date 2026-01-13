@@ -6,7 +6,7 @@ async function resolveTenantIdForTransitions(supabase, tenantSlugOrId) {
   // Try to resolve the tenant UUID by slug; fall back to provided value if not found
   try {
     const { data, error } = await supabase
-      .from('tenants')
+      .from('tenant')
       .select('id')
       .eq('tenant_id', tenantSlugOrId)
       .limit(1)

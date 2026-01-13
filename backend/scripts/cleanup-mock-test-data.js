@@ -124,9 +124,9 @@ async function findTestRecords(table) {
     }
     
     // Special case: check tenant table for mock tenant
-    if (table === 'tenants') {
+    if (table === 'tenant') {
       const { data: mockTenants } = await supabase
-        .from('tenants')
+        .from('tenant')
         .select('id, name, slug')
         .in('id', MOCK_TENANT_IDS)
         .limit(10);

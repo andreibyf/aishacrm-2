@@ -94,7 +94,7 @@ async function getExecutionContext() {
   try {
     const { getSupabaseClient } = await import('./supabase-db.js');
     const supabase = getSupabaseClient();
-    const { error } = await supabase.from('tenants').select('id').limit(1);
+    const { error } = await supabase.from('tenant').select('id').limit(1);
     dbStatus = error ? `error: ${error.message}` : 'connected';
   } catch (e) {
     dbStatus = `error: ${e.message}`;
@@ -1335,19 +1335,19 @@ async function testAisha(args) {
 
     if (!testTenantId) {
       // Try to find the first available tenant
-      const { data: tenants } = await supa.from('tenants').select('tenant_id, name').limit(1);
+      const { data: tenants } = await supa.from('tenant').select('tenant_id, name').limit(1);
       if (tenants && tenants.length > 0) {
         testTenantId = tenants[0].tenant_id;
         tenantName = tenants[0].name;
       } else {
         return {
           error: 'No tenants found in database. Please provide a tenant_id or create a tenant first.',
-          suggestion: 'You can find available tenants by querying: SELECT tenant_id, name FROM tenants LIMIT 10'
+          suggestion: 'You can find available tenants by querying: SELECT tenant_id, name FROM tenant LIMIT 10'
         };
       }
     } else {
       // Verify the tenant exists
-      const { data: tenant } = await supa.from('tenants').select('name').eq('tenant_id', testTenantId).single();
+      const { data: tenant } = await supa.from('tenant').select('name').eq('tenant_id', testTenantId).single();
       if (tenant) {
         tenantName = tenant.name;
       }
