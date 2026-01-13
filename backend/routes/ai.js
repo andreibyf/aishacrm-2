@@ -1310,6 +1310,17 @@ ${toolContextSummary}`,
       if (process.env.NODE_ENV === 'development') {
         return { authorized: true };
       }
+      
+      // Production: Log detailed auth failure for diagnostics
+      logger.warn('[AI Security] Authentication required but no user context found', {
+        path: req.path,
+        origin: req.headers.origin,
+        hasCookie: !!req.cookies?.aisha_access,
+        hasAuthHeader: !!req.headers.authorization,
+        cookieDomain: process.env.COOKIE_DOMAIN || '(not set - cookies may not work across subdomains)',
+        hint: 'If using separate subdomains (api.X vs app.X), set COOKIE_DOMAIN=.X in .env'
+      });
+      
       return { 
         authorized: false, 
         status: 401,

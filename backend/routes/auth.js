@@ -35,6 +35,10 @@ function signRefresh(payload) {
 function cookieOpts(maxAgeMs) {
   const isProd = process.env.NODE_ENV === 'production';
   const domain = process.env.COOKIE_DOMAIN;
+  // IMPORTANT: If using separate subdomains (e.g., api.aishacrm.com and app.aishacrm.com),
+  // set COOKIE_DOMAIN=.aishacrm.com in .env to share cookies across subdomains.
+  // Without this, cookies set on app.X won't be sent to api.X, causing 401 errors.
+  // Recommended: Use same domain for frontend and backend (e.g., app.X/api) to avoid this issue.
   return {
     httpOnly: true,
     sameSite: 'lax',
