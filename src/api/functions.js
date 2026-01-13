@@ -1012,6 +1012,44 @@ const createFunctionProxy = (functionName) => {
       }
     }
 
+    // createAuditLog: call backend audit-logs route
+    // Maps frontend field names to backend schema
+    if (functionName === 'createAuditLog') {
+      try {
+        const BACKEND_URL = getBackendUrl();
+        const payload = args[0] || {};
+        // Map frontend fields (action_type, new_values, old_values) to backend schema (action, changes)
+        const backendPayload = {
+          tenant_id: payload.tenant_id,
+          user_email: payload.user_email,
+          action: payload.action_type || payload.action || 'unknown',
+          entity_type: payload.entity_type,
+          entity_id: payload.entity_id,
+          changes: {
+            description: payload.description,
+            old_values: payload.old_values,
+            new_values: payload.new_values,
+          },
+          ip_address: payload.ip_address,
+          user_agent: payload.user_agent || navigator?.userAgent,
+        };
+        const response = await fetch(`${BACKEND_URL}/api/audit-logs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(backendPayload),
+        });
+        const json = await response.json();
+        if (!response.ok) {
+          return { data: { status: 'error', error: json?.message || response.statusText } };
+        }
+        return { data: json.data || json };
+      } catch (err) {
+        console.error('[createAuditLog] Error:', err);
+        return { data: { status: 'error', error: err?.message || String(err) } };
+      }
+    }
+
     // Fallback: warn if function not found
     console.warn(`[Production Mode] Function '${functionName}' not available. Use backend routes.`);
     return Promise.reject(new Error(`Function '${functionName}' not available. Use backend routes.`));
