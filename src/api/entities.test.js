@@ -165,4 +165,31 @@ describe('entities.js', () => {
     const parsedFilter = JSON.parse(filterParam);
     expect(parsedFilter).toHaveProperty('$or');
   });
+
+  test('GET by ID includes tenant_id as query parameter', async () => {
+    const { Account } = await import('./entities');
+    
+    // Call Account.get with an ID
+    const testId = 'test-account-id-123';
+    
+    try {
+      await Account.get(testId);
+    } catch (err) {
+      // Expected to fail due to mocking
+    }
+    
+    const lastCall = mockFetchCalls[mockFetchCalls.length - 1];
+    const url = new URL(lastCall.url, 'http://localhost');
+    
+    // Should have ID in path
+    expect(url.pathname).toContain(testId);
+    
+    // Should have tenant_id as query parameter (not in body)
+    expect(url.searchParams.has('tenant_id')).toBe(true);
+    expect(url.searchParams.get('tenant_id')).toBe('test-tenant-id');
+    
+    // Should be a GET request with no body
+    expect(lastCall.options.method).toBe('GET');
+    expect(lastCall.options.body).toBeUndefined();
+  });
 });
