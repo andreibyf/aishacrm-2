@@ -496,10 +496,19 @@ export default function createAccountRoutes(_pgPool) {
    */
   router.get("/:id", tenantScopedId(), async (req, res) => {
     try {
+      // Validate tenant_id is present for security
+      if (!req.idScope.tenant_id) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'tenant_id is required'
+        });
+      }
+
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
-      let q = supabase.from('accounts').select('*').eq('id', req.idScope.id);
-      if (req.idScope.tenant_id) q = q.eq('tenant_id', req.idScope.tenant_id);
+      let q = supabase.from('accounts').select('*')
+        .eq('id', req.idScope.id)
+        .eq('tenant_id', req.idScope.tenant_id);
       const { data, error } = await q.single();
       if (error?.code === 'PGRST116') {
         return res.status(404).json({
