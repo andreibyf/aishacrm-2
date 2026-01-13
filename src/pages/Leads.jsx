@@ -16,6 +16,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -1338,6 +1339,11 @@ export default function LeadsPage() {
               <DialogTitle className="text-slate-100">
                 {editingLead ? `Edit ${leadLabel}` : `Add New ${leadLabel}`}
               </DialogTitle>
+              <DialogDescription className="text-slate-400">
+                {editingLead 
+                  ? `Update ${leadLabel.toLowerCase()} information and status` 
+                  : `Add a new ${leadLabel.toLowerCase()} to your sales pipeline`}
+              </DialogDescription>
             </DialogHeader>
             <Suspense fallback={<div className="p-4"><Loader2 className="w-4 h-4 animate-spin" /></div>}>
               <LeadForm
