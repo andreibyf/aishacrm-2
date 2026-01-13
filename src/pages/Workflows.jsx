@@ -17,6 +17,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Workflow } from "@/api/entities";
 import { useUser } from "../components/shared/useUser.js";
@@ -260,6 +261,11 @@ export default function WorkflowsPage() {
               <DialogTitle className="text-slate-100">
                 {editingWorkflow ? "Edit Workflow" : "Create New Workflow"}
               </DialogTitle>
+              <DialogDescription className="text-slate-400">
+                {editingWorkflow 
+                  ? "Configure your workflow triggers, conditions, and actions" 
+                  : "Create an automated workflow to streamline your CRM processes"}
+              </DialogDescription>
             </DialogHeader>
             <div className="h-[calc(90vh-4rem)] overflow-hidden">
               <WorkflowBuilder

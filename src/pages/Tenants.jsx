@@ -23,6 +23,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Table,
@@ -70,6 +71,11 @@ const TenantForm = ({ tenant, onSave, onCancel }) => {
           <DialogTitle>
             {tenant?.id ? "Edit Tenant" : "Create New Tenant"}
           </DialogTitle>
+          <DialogDescription className="text-slate-400">
+            {tenant?.id 
+              ? "Update tenant information, branding, and AI agent configuration" 
+              : "Add a new tenant organization with custom branding and settings"}
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
