@@ -270,15 +270,12 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
 
   if (method === "GET") {
     if (id) {
-      // GET by ID - append ID to URL
+      // GET by ID - append ID to URL and add tenant_id as query parameter
       url += `/${id}`;
-      if (data && method !== "DELETE") {
-        // Preserve explicit tenant_id if provided
-        const bodyData = data.tenant_id !== undefined
-          ? data
-          : { ...data, tenant_id: tenantId };
-        options.body = JSON.stringify(bodyData);
-      }
+      const params = new URLSearchParams();
+      // MANDATORY: Always include tenant_id for tenant isolation
+      params.append("tenant_id", tenantId);
+      url += `?${params.toString()}`;
     } else {
       // GET list/filter - convert to query params
       const params = new URLSearchParams();
