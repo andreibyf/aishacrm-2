@@ -174,13 +174,16 @@ export async function getDashboardFunnelCounts({ tenant_id, include_test_data = 
 /**
  * Refresh materialized views for dashboard funnel counts
  * Forces immediate recalculation of pre-computed dashboard data
+ * @param {Object} options - Options object
+ * @param {string} options.tenant_id - Tenant ID (required for superadmins)
  * @returns {Promise<{success: boolean, message: string}>}
  */
-export async function refreshDashboardFunnelCounts() {
+export async function refreshDashboardFunnelCounts({ tenant_id } = {}) {
   const response = await fetch(`${localFunctions.getBaseUrl()}/api/dashboard/funnel-counts/refresh`, {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' }
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tenant_id })
   });
 
   if (!response.ok) {

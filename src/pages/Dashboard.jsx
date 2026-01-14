@@ -645,7 +645,7 @@ export default function DashboardPage() {
     try {
       // CRITICAL: Refresh the materialized view FIRST before clearing caches
       // This ensures the database has fresh counts before we fetch them
-      await refreshDashboardFunnelCounts();
+      await refreshDashboardFunnelCounts({ tenant_id: tenantFilter.tenant_id });
       
       // Clear all entity caches to ensure fresh data across all widgets
       clearCacheByKey("Opportunity");

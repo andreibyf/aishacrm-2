@@ -35,11 +35,17 @@ export default function TopAccounts({ tenantFilter, showTestData }) {
         }
         
         // Load all necessary data
-        const [accountsData, opportunitiesData, contactsData] = await Promise.all([
+        // Won opportunities can have stage: 'won', 'closed_won', or 'closedwon' (legacy)
+        const [accountsData, allOpportunities, contactsData] = await Promise.all([
           Account.filter(filter),
-          Opportunity.filter({ ...filter, stage: 'won' }), // Only won opportunities
+          Opportunity.filter(filter), // Get all opportunities, filter won stages locally
           Contact.filter(filter)
         ]);
+        
+        // Filter for won opportunities - support all stage variants
+        const opportunitiesData = (allOpportunities || []).filter(opp => 
+          ['won', 'closed_won', 'closedwon'].includes(opp.stage?.toLowerCase())
+        );
         
         // Build contact lookup map (contact_id -> account_id)
         const contactToAccountMap = {};
