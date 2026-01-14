@@ -121,16 +121,49 @@ export default function createSystemLogRoutes(_pgPool) {
   // BULK INSERT endpoint to reduce per-log network overhead (client batches)
   // Accepts: { entries: [ { tenant_id, level, message, source, user_email, metadata, user_agent, url, stack_trace } ] }
   // Returns: { inserted: count }
+  
+  // Explicit OPTIONS handler for /bulk to ensure CORS preflight works
+  router.options('/bulk', (_req, res) => {
+    res.status(204).end();
+  });
+
   router.post('/bulk', async (req, res) => {
     try {
-      const { entries } = req.body || {};
-      if (!Array.isArray(entries) || entries.length === 0) {
-        return res.status(400).json({ status: 'error', message: 'entries array required' });
+      // Validate request body exists
+      if (!req.body) {
+        logger.warn('[System Logs Bulk] Request received with no body');
+        return res.status(400).json({ status: 'error', message: 'Request body is required' });
+      }
+
+      const { entries } = req.body;
+      
+      // Validate entries array
+      if (!entries) {
+        logger.warn('[System Logs Bulk] Request received with no entries field');
+        return res.status(400).json({ status: 'error', message: 'entries field is required' });
+      }
+      
+      if (!Array.isArray(entries)) {
+        logger.warn('[System Logs Bulk] entries field is not an array:', typeof entries);
+        return res.status(400).json({ status: 'error', message: 'entries must be an array' });
+      }
+      
+      if (entries.length === 0) {
+        logger.debug('[System Logs Bulk] Empty entries array received');
+        return res.status(200).json({ 
+          status: 'success', 
+          data: { inserted_count: 0 },
+          message: 'No entries to insert'
+        });
       }
 
       // Cap batch size defensively to avoid oversized payloads
       const MAX_BATCH = 200; // can be tuned; small for safety
       const slice = entries.slice(0, MAX_BATCH);
+      
+      if (entries.length > MAX_BATCH) {
+        logger.warn(`[System Logs Bulk] Batch size ${entries.length} exceeds max ${MAX_BATCH}, truncating`);
+      }
 
       const nowIso = new Date().toISOString();
       const rows = slice.map(e => {
@@ -177,15 +210,27 @@ export default function createSystemLogRoutes(_pgPool) {
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
       const { data, error } = await supabase.from('system_logs').insert(rows).select('id');
-      if (error) throw new Error(error.message);
+      if (error) {
+        logger.error('[System Logs Bulk] Supabase error:', error.message);
+        throw new Error(error.message);
+      }
+
+      const insertedCount = data?.length || 0;
+      logger.debug(`[System Logs Bulk] Successfully inserted ${insertedCount} log entries`);
 
       res.status(201).json({
         status: 'success',
-        data: { inserted_count: data?.length || 0 },
+        data: { inserted_count: insertedCount },
       });
     } catch (err) {
       logger.error('[System Logs Bulk] Error inserting logs:', err);
-      res.status(500).json({ status: 'error', message: err.message });
+      // Ensure we always return a valid JSON response
+      res.status(500).json({ 
+        status: 'error', 
+        message: err.message || 'Internal server error',
+        // Don't expose stack traces in production
+        ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+      });
     }
   });
 
