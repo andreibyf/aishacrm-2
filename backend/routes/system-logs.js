@@ -3,6 +3,9 @@ import { sanitizeUuidInput } from "../lib/uuidValidator.js";
 import { cacheList, invalidateTenantCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 
+// Configuration constants
+const MAX_BULK_BATCH_SIZE = parseInt(process.env.SYSTEM_LOGS_MAX_BULK_BATCH || '200', 10);
+
 export default function createSystemLogRoutes(_pgPool) {
   const router = express.Router();
 
@@ -131,13 +134,8 @@ export default function createSystemLogRoutes(_pgPool) {
 
   router.post('/bulk', async (req, res) => {
     try {
-      // Validate request body exists
-      if (!req.body) {
-        logger.warn('[System Logs Bulk] Request received with no body');
-        return res.status(400).json({ status: 'error', message: 'Request body is required' });
-      }
-
-      const { entries } = req.body;
+      // Note: express.json() sets req.body to {} when no body is provided
+      const { entries } = req.body || {};
       
       // Validate entries array
       if (!entries) {
@@ -160,11 +158,10 @@ export default function createSystemLogRoutes(_pgPool) {
       }
 
       // Cap batch size defensively to avoid oversized payloads
-      const MAX_BATCH = 200; // can be tuned; small for safety
-      const slice = entries.slice(0, MAX_BATCH);
+      const slice = entries.slice(0, MAX_BULK_BATCH_SIZE);
       
-      if (entries.length > MAX_BATCH) {
-        logger.warn(`[System Logs Bulk] Batch size ${entries.length} exceeds max ${MAX_BATCH}, truncating`);
+      if (entries.length > MAX_BULK_BATCH_SIZE) {
+        logger.warn(`[System Logs Bulk] Batch size ${entries.length} exceeds max ${MAX_BULK_BATCH_SIZE}, truncating`);
       }
 
       const nowIso = new Date().toISOString();
