@@ -1000,6 +1000,198 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
     });
   });
 
+  // POST /api/users/invite - Create new user AND send invitation in one step
+  // This is a convenience endpoint that combines user creation with invitation
+  router.post("/invite", mutateLimiter, invalidateCache('users'), async (req, res) => {
+    try {
+      const {
+        email,
+        full_name,
+        role,
+        tenant_id,
+        crm_access,
+        requested_access,
+        can_use_softphone,
+        phone,
+        permissions,
+        redirect_url,
+      } = req.body;
+
+      // Parse full_name into first/last
+      const nameParts = (full_name || '').trim().split(/\s+/);
+      const first_name = nameParts[0] || '';
+      const last_name = nameParts.slice(1).join(' ') || '';
+
+      // Normalize email
+      const normalizedEmail = email ? email.toLowerCase().trim() : email;
+
+      logger.debug("[POST /api/users/invite] Creating and inviting user:", {
+        email: normalizedEmail,
+        full_name,
+        role,
+        tenant_id,
+      });
+
+      if (!normalizedEmail || !first_name) {
+        return res.status(400).json({
+          status: "error",
+          message: "email and full_name are required",
+          success: false,
+        });
+      }
+
+      // Check for duplicates using Supabase
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      
+      const { data: existingUsers } = await supabase
+        .from('users')
+        .select('id, email')
+        .eq('email', normalizedEmail);
+      
+      const { data: existingEmployees } = await supabase
+        .from('employees')
+        .select('id, email')
+        .eq('email', normalizedEmail);
+
+      if ((existingUsers && existingUsers.length > 0) || (existingEmployees && existingEmployees.length > 0)) {
+        return res.status(409).json({
+          status: "error",
+          message: "An account with this email already exists",
+          success: false,
+        });
+      }
+
+      // Normalize tenant_id
+      const normalizedTenantId = (tenant_id === "" || tenant_id === "no-client" || tenant_id === undefined || tenant_id === null)
+        ? null
+        : tenant_id;
+
+      // Validate admin must have tenant
+      if (role === "admin" && !normalizedTenantId) {
+        return res.status(400).json({
+          status: "error",
+          message: "Admin users must be assigned to a tenant",
+          success: false,
+        });
+      }
+
+      // Build metadata
+      const metadata = {
+        crm_access: crm_access !== false,
+        requested_access: requested_access || "read_write",
+        can_use_softphone: can_use_softphone || false,
+        phone: phone || null,
+        permissions: permissions || {},
+      };
+
+      const isGlobalUser = role === "superadmin" && !normalizedTenantId;
+      let createdUser = null;
+
+      if (isGlobalUser || (role === "admin" && normalizedTenantId)) {
+        // Insert into users table using Supabase
+        const { data: insertedUser, error: insertError } = await supabase
+          .from('users')
+          .insert({
+            email: normalizedEmail,
+            first_name,
+            last_name,
+            role,
+            tenant_id: normalizedTenantId,
+            metadata,
+          })
+          .select('id, email, first_name, last_name, role, tenant_id, metadata')
+          .single();
+        
+        if (insertError) {
+          logger.error("[POST /api/users/invite] Users insert error:", insertError);
+          return res.status(500).json({
+            status: "error",
+            success: false,
+            message: insertError.message || "Failed to create user record",
+          });
+        }
+        createdUser = insertedUser;
+      } else {
+        // Insert into employees table for non-admin roles using Supabase
+        const { data: insertedEmployee, error: insertError } = await supabase
+          .from('employees')
+          .insert({
+            email: normalizedEmail,
+            first_name,
+            last_name,
+            role: role || 'employee',
+            tenant_id: normalizedTenantId,
+            metadata,
+            status: 'active',
+          })
+          .select('id, email, first_name, last_name, role, tenant_id, metadata')
+          .single();
+        
+        if (insertError) {
+          logger.error("[POST /api/users/invite] Employees insert error:", insertError);
+          return res.status(500).json({
+            status: "error",
+            success: false,
+            message: insertError.message || "Failed to create employee record",
+          });
+        }
+        createdUser = insertedEmployee;
+      }
+
+      logger.debug("[POST /api/users/invite] User created:", { id: createdUser.id, email: createdUser.email });
+
+      // Now send the invitation via Supabase Auth
+      const { data: authData, error: authError } = await inviteUserByEmail(
+        normalizedEmail,
+        {
+          first_name,
+          last_name,
+          role: role || 'employee',
+          tenant_id: normalizedTenantId,
+          display_name: full_name || first_name,
+        },
+        redirect_url
+      );
+
+      if (authError) {
+        logger.error("[POST /api/users/invite] Supabase Auth invitation error:", authError);
+        // User was created but invitation failed - still return success but with warning
+        return res.status(201).json({
+          status: "partial",
+          success: true,
+          message: `User created but invitation email failed: ${authError.message}. You can resend the invitation later.`,
+          data: {
+            user: createdUser,
+            invitation_sent: false,
+            invitation_error: authError.message,
+          },
+        });
+      }
+
+      logger.info("[POST /api/users/invite] User created and invited successfully:", normalizedEmail);
+
+      return res.status(201).json({
+        status: "success",
+        success: true,
+        message: `User created and invitation sent to ${normalizedEmail}`,
+        data: {
+          user: createdUser,
+          invitation_sent: true,
+          auth_user: authData,
+        },
+      });
+
+    } catch (error) {
+      logger.error("[POST /api/users/invite] Error:", error);
+      return res.status(500).json({
+        status: "error",
+        success: false,
+        message: error.message || "Failed to create user",
+      });
+    }
+  });
+
   // POST /api/users - Create new user (global admin or tenant employee)
   router.post("/", mutateLimiter, invalidateCache('users'), async (req, res) => {
     try {
