@@ -11,13 +11,17 @@ export default function createAuditLogRoutes(_pgPool) {
     try {
       const log = req.body;
       
+      // Fallback for user_email: try req.user.email, then default to 'system@aishacrm.com'
+      // This prevents NOT NULL constraint violations when callers don't provide user_email
+      const effectiveUserEmail = log.user_email || req.user?.email || 'system@aishacrm.com';
+      
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
         .from('audit_log')
         .insert([{
           tenant_id: log.tenant_id,
-          user_email: log.user_email,
+          user_email: effectiveUserEmail,
           action: log.action,
           entity_type: log.entity_type,
           entity_id: log.entity_id,

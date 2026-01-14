@@ -1018,10 +1018,31 @@ const createFunctionProxy = (functionName) => {
       try {
         const BACKEND_URL = getBackendUrl();
         const payload = args[0] || {};
+        
+        // Auto-detect user_email from Supabase session if not explicitly provided
+        // This prevents NOT NULL constraint violations when callers omit user_email
+        let userEmail = payload.user_email;
+        if (!userEmail) {
+          try {
+            const { createClient } = await import('@supabase/supabase-js');
+            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+            const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+            if (supabaseUrl && supabaseAnonKey) {
+              const supabase = createClient(supabaseUrl, supabaseAnonKey);
+              const { data: { user } } = await supabase.auth.getUser();
+              userEmail = user?.email || 'system@aishacrm.com';
+            } else {
+              userEmail = 'system@aishacrm.com';
+            }
+          } catch {
+            userEmail = 'system@aishacrm.com'; // Fallback for auth errors
+          }
+        }
+        
         // Map frontend fields (action_type, new_values, old_values) to backend schema (action, changes)
         const backendPayload = {
           tenant_id: payload.tenant_id,
-          user_email: payload.user_email,
+          user_email: userEmail,
           action: payload.action_type || payload.action || 'unknown',
           entity_type: payload.entity_type,
           entity_id: payload.entity_id,
