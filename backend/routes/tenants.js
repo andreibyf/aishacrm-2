@@ -4,6 +4,7 @@
  */
 
 import express from "express";
+import { randomUUID } from "crypto";
 import { createAuditLog, getUserEmailFromRequest, getClientIP } from "../lib/auditLogger.js";
 import { getSupabaseAdmin, getBucketName } from "../lib/supabaseFactory.js";
 import logger from '../lib/logger.js';
@@ -236,8 +237,7 @@ export default function createTenantRoutes(_pgPool) {
     try {
       logger.debug("[Tenants POST] Received request body:", JSON.stringify(req.body, null, 2));
       
-      let {
-        tenant_id,
+      const {
         name,
         branding_settings,
         status,
@@ -257,21 +257,16 @@ export default function createTenantRoutes(_pgPool) {
         domain,
       } = req.body;
 
-      logger.debug("[Tenants POST] Parsed tenant_id:", tenant_id, "name:", name);
+      // Generate UUID for both id and tenant_id (they should match)
+      // Note: tenant_id from request body is ignored - we always generate UUID
+      const newTenantUUID = randomUUID();
+      logger.debug("[Tenants POST] Generated tenant UUID:", newTenantUUID, "name:", name);
 
-      // Auto-generate tenant_id from name if not provided
-      if (!tenant_id && name) {
-        const { getSupabaseClient } = await import('../lib/supabase-db.js');
-        const supabase = getSupabaseClient();
-        tenant_id = await generateUniqueTenantId(supabase, name);
-        logger.debug("[Tenants POST] Auto-generated tenant_id:", tenant_id);
-      }
-
-      if (!tenant_id) {
-        logger.warn("[Tenants POST] Missing tenant_id and name in request");
+      if (!name) {
+        logger.warn("[Tenants POST] Missing name in request");
         return res.status(400).json({
           status: "error",
-          message: "Either tenant_id or name is required",
+          message: "Tenant name is required",
         });
       }
       // Build branding_settings from individual fields or use provided object
@@ -291,8 +286,10 @@ export default function createTenantRoutes(_pgPool) {
       const supabase = getSupabaseClient();
       const nowIso = new Date().toISOString();
       const insertData = {
-        tenant_id,
-        name: name || null,
+        id: newTenantUUID,
+        tenant_id: newTenantUUID,  // UUID, same as id for consistency
+        tenant_id_text: newTenantUUID,  // Legacy column, set to UUID for backwards compatibility
+        name,
         branding_settings: finalBrandingSettings,
         status: status || 'active',
         metadata: finalMetadata,
@@ -349,7 +346,7 @@ export default function createTenantRoutes(_pgPool) {
         const supabase = getSupabaseAdmin();
         const bucket = getBucketName();
         if (supabase && bucket) {
-          const keepKey = `uploads/${tenant_id}/.keep`;
+          const keepKey = `uploads/${newTenantUUID}/.keep`;
           const empty = new Uint8Array(0);
           const { error: upErr } = await supabase.storage
             .from(bucket)
@@ -360,11 +357,11 @@ export default function createTenantRoutes(_pgPool) {
           if (upErr) {
             logger.warn(
               "[Tenants] Failed to provision storage prefix for",
-              tenant_id,
+              newTenantUUID,
               upErr.message,
             );
           } else {
-            logger.debug("[Tenants] Provisioned storage prefix for", tenant_id);
+            logger.debug("[Tenants] Provisioned storage prefix for", newTenantUUID);
           }
         }
       } catch (provisionErr) {
