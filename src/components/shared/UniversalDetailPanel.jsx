@@ -91,30 +91,58 @@ export default function UniversalDetailPanel({
       const relatedType = entityType.toLowerCase();
       const tenantId = user?.tenant_id || entity.tenant_id;
       
-      // Use direct fetch like LeadProfilePage (Note.filter may not extract array correctly)
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4001';
+      // Use consistent backend URL pattern (same as loadActivities)
+      const backendUrl = import.meta.env.VITE_AISHACRM_BACKEND_URL || 
+        (typeof window !== 'undefined' && window._env_?.VITE_AISHACRM_BACKEND_URL) || 
+        'http://localhost:4001';
+      
       const notesUrl = `${backendUrl}/api/notes?tenant_id=${tenantId}&related_type=${relatedType}&related_id=${entity.id}`;
+      
+      console.log('[UniversalDetailPanel] Fetching notes from:', notesUrl);
       
       const notesRes = await fetch(notesUrl, {
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-tenant-id': tenantId // Add explicit tenant header
+        }
       });
       
-      if (notesRes.ok) {
+      console.log('[UniversalDetailPanel] Notes response status:', notesRes?.status);
+      
+      if (notesRes?.ok) {
         const notesData = await notesRes.json();
-        // Extract notes array from response: { status, data: { notes: [...] } }
-        const rawNotes = notesData.data?.notes || notesData.notes || notesData.data || notesData;
+        console.log('[UniversalDetailPanel] Notes data received:', notesData);
+        
+        // Extract notes array with multiple fallback patterns
+        const rawNotes = notesData?.data?.notes || notesData?.notes || notesData?.data || notesData;
         const notesArray = Array.isArray(rawNotes) ? rawNotes : [];
+        
         // Sort by created_at descending
         notesArray.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         setNotes(notesArray);
       } else {
-        console.error("Failed to load notes:", notesRes.status, notesRes.statusText);
+        // Log detailed error information
+        const errorText = await notesRes?.text().catch(() => 'Unable to read response');
+        console.error('[UniversalDetailPanel] Failed to load notes:', {
+          status: notesRes?.status,
+          statusText: notesRes?.statusText,
+          url: notesUrl,
+          responseBody: errorText
+        });
+        toast.error(`Failed to load notes: ${notesRes?.status || 'Network error'} - ${notesRes?.statusText || 'Unknown error'}`);
         setNotes([]);
       }
     } catch (error) {
-      console.error("Failed to load notes:", error);
-      toast.error("Failed to load notes");
+      // Comprehensive error logging
+      console.error('[UniversalDetailPanel] Exception loading notes:', {
+        error,
+        message: error?.message,
+        stack: error?.stack,
+        entityType,
+        entityId: entity?.id
+      });
+      toast.error(`Failed to load notes: ${error?.message || 'Network error'}`);
       setNotes([]);
     }
   }, [entity, entityType, user?.tenant_id]);
