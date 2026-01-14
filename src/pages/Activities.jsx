@@ -1564,16 +1564,13 @@ export default function ActivitiesPage() {
           user={user}
         />
       )}
-      {relatedEntityType === 'opportunity' && (
+      {relatedEntityType === 'opportunity' && isRelatedDetailOpen && viewingRelatedEntity && (
         <OpportunityDetailPanel
           opportunity={viewingRelatedEntity}
-          open={isRelatedDetailOpen}
-          onOpenChange={(open) => {
-            setIsRelatedDetailOpen(open);
-            if (!open) {
-              setViewingRelatedEntity(null);
-              setRelatedEntityType(null);
-            }
+          onClose={() => {
+            setIsRelatedDetailOpen(false);
+            setViewingRelatedEntity(null);
+            setRelatedEntityType(null);
           }}
           user={user}
         />
