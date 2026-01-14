@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 
 import AuthResetPage from './AuthReset.jsx';
+import AcceptInvitePage from './AcceptInvite.jsx';
 import Layout from './Layout.jsx';
 
 const PAGES = {
@@ -71,6 +72,9 @@ function PagesContent() {
             <Routes>
                 {/* Public route - password reset (no Layout wrapper) */}
                 <Route path="/auth/reset" element={<AuthResetPage />} />
+
+                {/* Public route - accept invitation (no Layout wrapper) */}
+                <Route path="/accept-invite" element={<AcceptInvitePage />} />
 
                 {/* Public routes - profile webpages (standalone, no Layout wrapper) */}
                 <Route path="/leads/:leadId" element={<PAGES.LeadProfilePage />} />
