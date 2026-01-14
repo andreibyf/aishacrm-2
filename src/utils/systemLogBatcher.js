@@ -40,7 +40,23 @@ async function flush(entries) {
       return;
     }
     
-    // On bulk failure (non-rate-limit), fallback to individual posts for ERROR level only
+    // Detect network errors (CORS, timeout, server down)
+    const isNetworkError = 
+      e.message?.includes('Failed to fetch') ||
+      e.message?.includes('Network Error') ||
+      e.message?.includes('NetworkError') ||
+      e.name === 'TypeError' && e.message?.includes('fetch');
+    
+    if (isNetworkError) {
+      // Network errors indicate infrastructure issues - drop logs to prevent cascading failures
+      if (import.meta.env.DEV) {
+        console.warn('[systemLogBatcher] Network error detected, dropping', entries.length, 'logs:', e.message);
+      }
+      // In production, silently drop to avoid flooding console
+      return;
+    }
+    
+    // On bulk failure (non-rate-limit, non-network), fallback to individual posts for ERROR level only
     const criticalEntries = entries.filter(e => (e.level || '').toUpperCase() === 'ERROR');
     if (criticalEntries.length > 0) {
       console.warn('[systemLogBatcher] Bulk flush failed, retrying', criticalEntries.length, 'ERROR logs');
