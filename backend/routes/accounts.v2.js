@@ -410,7 +410,7 @@ export default function createAccountV2Routes(_pgPool) {
    */
   router.get('/:id', cacheDetail('accounts', 300), async (req, res) => {
     try {
-      const { tenant_id } = req.query;
+      const tenant_id = req.query.tenant_id || req.tenant?.id;
       const { id } = req.params;
 
       if (!tenant_id) {
