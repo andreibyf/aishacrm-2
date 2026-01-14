@@ -1544,7 +1544,15 @@ ${toolContextSummary}`,
         .limit(100);
       if (actsErr) throw actsErr;
 
-      const totalRevenue = (accounts || []).reduce((sum, acc) => sum + (acc.annual_revenue || 0), 0);
+      // Calculate won revenue from opportunities (not account annual_revenue)
+      const wonStages = ['won', 'closed_won', 'closedwon', 'closed-won'];
+      const wonOpportunities = (opportunities || []).filter(opp => 
+        wonStages.includes(opp.stage?.toLowerCase())
+      );
+      const wonRevenue = wonOpportunities.reduce((sum, opp) => sum + (opp.amount || 0), 0);
+      
+      // Account annual_revenue is company revenue (separate from CRM deals)
+      const totalAccountRevenue = (accounts || []).reduce((sum, acc) => sum + (acc.annual_revenue || 0), 0);
       const totalForecast = (opportunities || []).reduce((sum, opp) => sum + ((opp.amount || 0) * (opp.probability || 0) / 100), 0);
 
       const snapshot = {
@@ -1559,7 +1567,9 @@ ${toolContextSummary}`,
           contacts_count: (contacts || []).length,
           opportunities_count: (opportunities || []).length,
           activities_count: (activities || []).length,
-          total_revenue: totalRevenue,
+          won_opportunities_count: wonOpportunities.length,
+          won_revenue: wonRevenue,  // Revenue from won deals in CRM
+          total_account_revenue: totalAccountRevenue,  // Company annual revenue (not CRM deals)
           total_forecast: totalForecast
         },
         metadata: {

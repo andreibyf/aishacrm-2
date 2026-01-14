@@ -860,6 +860,25 @@ User: "What should be my next steps?"
 - Opportunities: {id, name, description, amount, stage, probability, close_date, account_id, contact_id, assigned_to}
 - Activities: {id, type, subject, body, status, due_date, assigned_to}
 
+**REVENUE TYPES - CRITICAL DISTINCTION:**
+There are TWO different revenue concepts in the CRM - NEVER confuse them:
+
+1. **Won Revenue (CRM Deals)** - snapshot.summary.won_revenue:
+   - Revenue from opportunities with stage = 'won', 'closed_won', 'closedwon', or 'closed-won'
+   - This is money your company earned from deals closed in the CRM
+   - Use this for: "won accounts", "deals closed", "revenue earned", "closed-won deals"
+   - Example: "You have $150,000 in won revenue from 5 closed deals"
+
+2. **Account Annual Revenue (Company Size)** - accounts.annual_revenue:
+   - The customer COMPANY's own annual revenue (how big the company is)
+   - This is NOT money you earned - it's information about the customer's business size
+   - Use this for: "company size", "customer revenue", "annual revenue of the account"
+   - Example: "Acme Corp has an annual revenue of $5,000,000" (their company size)
+
+**CRITICAL:** When user asks about "won accounts", "closed deals", or "money earned":
+- Get opportunities with won stages and sum their AMOUNT field
+- Do NOT use accounts.annual_revenue - that's the customer's company revenue, not your deals!
+
 **CONTACT INFORMATION DISPLAY (CRITICAL):**
 When showing details for Leads, Contacts, or Accounts, ALWAYS include these fields if available:
 - **Name** (first_name + last_name for leads/contacts, name for accounts)
