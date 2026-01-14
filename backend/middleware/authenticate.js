@@ -284,4 +284,19 @@ export async function authenticateRequest(req, _res, next) {
   }
 }
 
-export default { authenticateRequest };
+/**
+ * Middleware that requires authentication.
+ * Must be used AFTER authenticateRequest in the middleware chain.
+ * Returns 401 if req.user is not populated.
+ */
+export function requireAuth(req, res, next) {
+  if (!req.user?.email) {
+    return res.status(401).json({
+      status: 'error',
+      message: 'Authentication required'
+    });
+  }
+  return next();
+}
+
+export default { authenticateRequest, requireAuth };

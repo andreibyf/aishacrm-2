@@ -230,7 +230,7 @@ import braidGraphRoutes from "./routes/braidGraph.js";
 import aiSettingsRoutes from "./routes/aiSettings.js";
 import createBundleRoutes from "./routes/bundles.js";
 import { createDeprecationMiddleware } from "./middleware/deprecation.js";
-import { authenticateRequest } from "./middleware/authenticate.js";
+import { authenticateRequest, requireAuth } from "./middleware/authenticate.js";
 
 // Apply v1 deprecation headers middleware (before routes)
 app.use(createDeprecationMiddleware());
@@ -300,7 +300,7 @@ logger.debug("Mounting /api/workflow-templates routes");
 app.use("/api/workflow-templates", createWorkflowTemplateRoutes(measuredPgPool));
 app.use("/api/notifications", createNotificationRoutes(measuredPgPool));
 app.use("/api/system-logs", createSystemLogRoutes(measuredPgPool));
-app.use("/api/audit-logs", createAuditLogRoutes(measuredPgPool));
+app.use("/api/audit-logs", authenticateRequest, requireAuth, createAuditLogRoutes(measuredPgPool));
 app.use("/api/modulesettings", createModuleSettingsRoutes(measuredPgPool));
 app.use("/api/entity-labels", createEntityLabelsRoutes(measuredPgPool));
 app.use("/api/tenantintegrations", createTenantIntegrationRoutes(measuredPgPool));

@@ -7,13 +7,20 @@ export default function createAuditLogRoutes(_pgPool) {
   const router = express.Router();
 
   // POST /api/audit-logs - Create audit log entry
+  // Requires authentication - req.user is populated by authenticateRequest middleware
   router.post('/', async (req, res) => {
     try {
       const log = req.body;
       
-      // Fallback for user_email: try req.user.email, then default to 'system@aishacrm.com'
-      // This prevents NOT NULL constraint violations when callers don't provide user_email
-      const effectiveUserEmail = log.user_email || req.user?.email || 'system@aishacrm.com';
+      // Use authenticated user's email, or explicit payload (for system operations)
+      const effectiveUserEmail = req.user?.email || log.user_email;
+      
+      if (!effectiveUserEmail) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'user_email is required (via authentication or payload)'
+        });
+      }
       
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
