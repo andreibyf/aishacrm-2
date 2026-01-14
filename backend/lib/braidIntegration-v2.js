@@ -875,9 +875,13 @@ There are TWO different revenue concepts in the CRM - NEVER confuse them:
    - Use this for: "company size", "customer revenue", "annual revenue of the account"
    - Example: "Acme Corp has an annual revenue of $5,000,000" (their company size)
 
-**CRITICAL:** When user asks about "won accounts", "closed deals", or "money earned":
-- Get opportunities with won stages and sum their AMOUNT field
-- Do NOT use accounts.annual_revenue - that's the customer's company revenue, not your deals!
+**CRITICAL - WON DEALS QUERIES:**
+When user asks about "won accounts", "closed deals", "won opportunities", or "revenue earned":
+1. The snapshot.summary already has pre-calculated values - USE THEM:
+   - snapshot.summary.won_revenue = total $ from closed deals
+   - snapshot.summary.won_opportunities_count = number of closed deals
+2. To list the actual won deals, filter opportunities where stage is 'won', 'closed_won', 'closedwon', or 'closed-won'
+3. NEVER use accounts.annual_revenue for won deals - that's the customer's company size, not your sales!
 
 **CONTACT INFORMATION DISPLAY (CRITICAL):**
 When showing details for Leads, Contacts, or Accounts, ALWAYS include these fields if available:
