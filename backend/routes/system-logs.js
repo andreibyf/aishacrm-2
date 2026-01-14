@@ -123,6 +123,8 @@ export default function createSystemLogRoutes(_pgPool) {
   // Returns: { inserted: count }
   
   // Explicit OPTIONS handler for /bulk to ensure CORS preflight works
+  // While app.options('/api/*') handles most routes, this ensures the specific
+  // /bulk endpoint responds properly to preflight requests from browsers
   router.options('/bulk', (_req, res) => {
     res.status(204).end();
   });
