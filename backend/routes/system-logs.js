@@ -134,7 +134,8 @@ export default function createSystemLogRoutes(_pgPool) {
 
   router.post('/bulk', async (req, res) => {
     try {
-      // Note: express.json() sets req.body to {} when no body is provided
+      // express.json() behavior: sets req.body to {} for empty/no body, or parsed JSON
+      // Using || {} defensive pattern to handle edge cases
       const { entries } = req.body || {};
       
       // Validate entries array

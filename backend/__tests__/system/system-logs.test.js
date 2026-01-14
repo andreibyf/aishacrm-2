@@ -121,8 +121,7 @@ describe('System Logs Routes', () => {
     assert.strictEqual(res.status, 400);
     const json = await res.json();
     assert.strictEqual(json.status, 'error');
-    // Express's express.json() sets req.body to {} when no body is sent, 
-    // so we get "entries field is required" instead of "body is required"
+    // express.json() typically sets req.body to {}, so we get "entries field is required"
     assert.ok(json.message.includes('entries'));
   });
 
