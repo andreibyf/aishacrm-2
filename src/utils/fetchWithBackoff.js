@@ -33,6 +33,14 @@ async function fetchWithBackoff(input, init) {
   const BACKEND_URL = getBackendUrl();
 
   const urlString = typeof input === 'string' ? input : (input && input.url) || '';
+  
+  // Skip Supabase URLs entirely - they handle their own credentials and CORS
+  // Supabase returns Access-Control-Allow-Origin: * which conflicts with credentials: 'include'
+  const isSupabaseUrl = urlString.includes('.supabase.co');
+  if (isSupabaseUrl) {
+    return originalFetch(input, init);
+  }
+  
   let key = 'unknown';
   try {
     const u = new URL(urlString, window.location.origin);
