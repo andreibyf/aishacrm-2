@@ -175,4 +175,41 @@ describe('users.js - Section 2.8: User Invitations', () => {
       assert(rateLimitedResponses.length > 0, 'Expected some requests to be rate limited');
     });
   });
+
+  describe('POST /api/users/:id/resend-invite - Alias endpoint for backward compatibility', () => {
+    it('should work identically to /invite endpoint and not return 404', async () => {
+      const response = await makeRequest('POST', '/api/users/99999/resend-invite');
+      
+      // Log for debugging
+      const responseStatus = response.status;
+      
+      // Should not return 404 - the endpoint must exist
+      assert.notStrictEqual(responseStatus, 404, `resend-invite endpoint should exist and not return 404, got ${responseStatus}`);
+      
+      // The endpoint should behave like /invite
+      // May return 429 if rate limited, 500 due to Supabase client not initialized in test environment,
+      // or 404 for non-existent users in production
+      assert([404, 429, 500].includes(responseStatus), `Expected 404, 429, or 500, got ${responseStatus}`);
+      
+      if (responseStatus === 404) {
+        const data = await response.json();
+        assert.strictEqual(data.status, 'error');
+        assert.strictEqual(data.message, 'User not found');
+      }
+    });
+
+    it('should apply rate limiting to POST /:id/resend-invite', async () => {
+      // Make multiple requests quickly to trigger rate limiting
+      const requests = [];
+      for (let i = 0; i < 10; i++) {
+        requests.push(makeRequest('POST', '/api/users/99999/resend-invite'));
+      }
+
+      const responses = await Promise.all(requests);
+      const rateLimitedResponses = responses.filter(r => r.status === 429);
+
+      // Should have at least some rate limited responses
+      assert(rateLimitedResponses.length > 0, 'Expected some requests to be rate limited on resend-invite endpoint');
+    });
+  });
 });

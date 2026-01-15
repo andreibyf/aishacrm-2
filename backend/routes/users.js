@@ -2461,5 +2461,169 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
     }
   });
 
+  // POST /api/users/:id/resend-invite - Alias for backward compatibility
+  // Frontend components may call /resend-invite instead of /invite
+  router.post("/:id/resend-invite", mutateLimiter, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { redirect_url } = req.body;
+
+      logger.debug(`[POST /api/users/${id}/resend-invite] Forwarding to /invite endpoint`);
+
+      // Fetch user from database using Supabase
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data: userRows, error: userErr } = await supabase
+        .from('users')
+        .select('id, email, first_name, last_name, role, tenant_id, metadata')
+        .eq('id', id)
+        .limit(1);
+      if (userErr) logger.warn('[User Resend-Invite] users select error:', userErr);
+      
+      const userFound = userRows && userRows.length > 0;
+      logger.debug(`[POST /api/users/${id}/resend-invite] Query result:`, {
+        found: userFound,
+        email: userFound ? userRows[0]?.email : undefined,
+        name: userFound ? `${userRows[0]?.first_name} ${userRows[0]?.last_name}` : undefined
+      });
+
+      if (!userFound) {
+        // Try employees table
+        const { data: employeeRows, error: empErr } = await supabase
+          .from('employees')
+          .select('id, email, first_name, last_name, role, tenant_id, metadata')
+          .eq('id', id)
+          .limit(1);
+        if (empErr) logger.warn('[User Resend-Invite] employees select error:', empErr);
+
+        if (!employeeRows || employeeRows.length === 0) {
+          return res.status(404).json({
+            status: "error",
+            message: "User not found",
+          });
+        }
+
+        const employee = employeeRows[0];
+
+        // Check if user already exists in Supabase Auth
+        const existingAuthUser = await getAuthUserByEmail(employee.email);
+        
+        if (existingAuthUser) {
+          // User already exists in Auth - send password reset instead
+          logger.debug(`[User Resend-Invite] User ${employee.email} already registered, sending password reset`);
+          
+          const { error: resetError } = await sendPasswordResetEmail(employee.email);
+          
+          if (resetError) {
+            logger.error("[User Resend-Invite] Password reset error:", resetError);
+            return res.status(500).json({
+              status: "error",
+              message: `Failed to send password reset: ${resetError.message}`,
+            });
+          }
+          
+          return res.json({
+            status: "success",
+            message: `Password reset email sent to ${employee.email}`,
+            data: { email: employee.email, type: "password_reset" },
+          });
+        }
+
+        // User doesn't exist in Auth - send invitation
+        const { data, error } = await inviteUserByEmail(
+          employee.email,
+          {
+            first_name: employee.first_name,
+            last_name: employee.last_name,
+            role: employee.role || "employee",
+            tenant_id: employee.tenant_id,
+            display_name: `${employee.first_name} ${employee.last_name || ""}`.trim(),
+          },
+          redirect_url
+        );
+
+        if (error) {
+          logger.error("[User Resend-Invite] Supabase Auth error:", error);
+          return res.status(500).json({
+            status: "error",
+            message: `Failed to send invitation: ${error.message}`,
+          });
+        }
+
+        return res.json({
+          status: "success",
+          message: `Invitation sent to ${employee.email}`,
+          data: { email: employee.email, auth_user: data },
+        });
+      }
+
+      const user = userRows[0];
+
+      // Check if user already exists in Supabase Auth
+      logger.debug(`[User Resend-Invite] Checking if ${user.email} exists in Supabase Auth...`);
+      const authResult = await getAuthUserByEmail(user.email);
+      logger.debug(`[User Resend-Invite] Auth check result:`, { 
+        user: authResult?.user ? 'found' : 'not found',
+        email: authResult?.user?.email,
+        error: authResult?.error 
+      });
+      const existingAuthUser = authResult?.user;
+      
+      if (existingAuthUser) {
+        // User already exists in Auth - send password reset instead
+        logger.debug(`[User Resend-Invite] User ${user.email} already registered, sending password reset`);
+        
+        const { error: resetError } = await sendPasswordResetEmail(user.email);
+        
+        if (resetError) {
+          logger.error("[User Resend-Invite] Password reset error:", resetError);
+          return res.status(500).json({
+            status: "error",
+            message: `Failed to send password reset: ${resetError.message}`,
+          });
+        }
+        
+        return res.json({
+          status: "success",
+          message: `Password reset email sent to ${user.email}`,
+          data: { email: user.email, type: "password_reset" },
+        });
+      }
+
+      // User doesn't exist in Auth - send invitation
+      const { data, error } = await inviteUserByEmail(
+        user.email,
+        {
+          first_name: user.first_name,
+          last_name: user.last_name,
+          role: user.role,
+          tenant_id: user.tenant_id,
+          display_name: `${user.first_name} ${user.last_name || ""}`.trim(),
+        },
+        redirect_url
+      );
+
+      if (error) {
+        logger.error("[User Resend-Invite] Supabase Auth error:", error);
+        return res.status(500).json({
+          status: "error",
+          message: `Failed to send invitation: ${error.message}`,
+        });
+      }
+
+      res.json({
+        status: "success",
+        message: `Invitation sent to ${user.email}`,
+        data: { email: user.email, auth_user: data },
+      });
+    } catch (error) {
+      logger.error("[POST /api/users/:id/resend-invite] Error:", error);
+      res.status(500).json({
+        status: "error",
+        message: error.message,
+      });
+    }
+  });
+
   return router;
 }
