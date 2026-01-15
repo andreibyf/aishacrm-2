@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -37,22 +37,30 @@ export default function ConversationalForm({
   userId,
   onComplete,
   onCancel,
-  initialAnswers = {},
+  initialAnswers,
   isSubmitting = false
 }) {
-  const [answers, setAnswers] = useState(initialAnswers);
+  const [answers, setAnswers] = useState(initialAnswers || {});
   const [activeStepIndex, setActiveStepIndex] = useState(0);
   const [stepError, setStepError] = useState(null);
   const [submissionError, setSubmissionError] = useState(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
+  
+  // Track the previous schema ID to detect when we switch to a different form type
+  const previousSchemaIdRef = useRef(schema?.id);
 
   useEffect(() => {
-    setAnswers(initialAnswers || {});
-    setActiveStepIndex(0);
-    setIsPreviewing(false);
-    setStepError(null);
-    setSubmissionError(null);
-  }, [schema, initialAnswers]);
+    // Only reset the form when the schema actually changes (different form type)
+    // Don't reset when initialAnswers gets a new reference with the same empty value
+    if (schema?.id !== previousSchemaIdRef.current) {
+      setAnswers(initialAnswers || {});
+      setActiveStepIndex(0);
+      setIsPreviewing(false);
+      setStepError(null);
+      setSubmissionError(null);
+      previousSchemaIdRef.current = schema?.id;
+    }
+  }, [schema?.id, initialAnswers]);
 
   const visibleSteps = useMemo(() => {
     if (!schema?.steps) return [];
