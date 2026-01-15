@@ -739,12 +739,13 @@ const maybeOffloadMetadata = async ({ tenantId, metadata, kind, entityType = nul
 
       const tenantName = conversationMetadata?.tenant_name || tenantRecord?.name || tenantSlug || 'CRM Tenant';
       const agentNameForPrompt = conversation?.agent_name || null;
+      const localDate = requestDescriptor?.localDate || null;
       const userContext = userName
         ? `\n\n**CURRENT USER:**\n- Name: ${userName}\n- Email: ${userEmail}\n- When creating activities or assigning tasks, use this user's name ("${userName}") unless explicitly asked to assign to someone else.`
         : '';
       const baseSystemPrompt = `${buildSystemPrompt({ tenantName, agentName: agentNameForPrompt })}
 
-${getBraidSystemPrompt()}${userContext}
+${getBraidSystemPrompt(localDate)}${userContext}
 
 **CRITICAL INSTRUCTIONS:**
 - You MUST call fetch_tenant_snapshot tool before answering ANY questions about CRM data
@@ -2163,6 +2164,7 @@ ${toolContextSummary}`,
           userApiKey: req.user?.system_openai_settings?.openai_api_key || null,
           modelOverride: req.body?.model,
           temperatureOverride: req.body?.temperature,
+          localDate: req.body?.local_date || null, // User's local date for AI date awareness
         };
 
         setImmediate(() => {
@@ -2741,7 +2743,8 @@ ${toolContextSummary}`,
       }
 
       const tenantName = tenantRecord?.name || tenantRecord?.tenant_id || 'CRM Tenant';
-      const baseSystemPrompt = `${buildSystemPrompt({ tenantName })}\n\n${getBraidSystemPrompt()}\n\n- ALWAYS call fetch_tenant_snapshot before answering tenant data questions.\n- NEVER hallucinate records; only reference tool data.\n`;
+      const localDate = req.body?.local_date || null;
+      const baseSystemPrompt = `${buildSystemPrompt({ tenantName })}\n\n${getBraidSystemPrompt(localDate)}\n\n- ALWAYS call fetch_tenant_snapshot before answering tenant data questions.\n- NEVER hallucinate records; only reference tool data.\n`;
       
       // Get current user message for context detection
       const currentUserMessage = messages.filter(m => m.role === 'user').pop()?.content || '';

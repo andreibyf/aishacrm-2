@@ -617,11 +617,15 @@ const TOOL_DESCRIPTIONS = {
 /**
  * Enhanced system prompt for Executive Assistant
  * Now a function to get fresh date each time
+ * @param {string} [clientDate] - Optional pre-formatted date string from frontend (e.g., "Wednesday, January 14, 2026")
  */
-export function getBraidSystemPrompt() {
+export function getBraidSystemPrompt(clientDate) {
+  // Use client-provided formatted date if available, otherwise fall back to server date
   const now = new Date();
-  const currentDate = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-  const currentYear = now.getFullYear();
+  const currentDate = clientDate || now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  // Extract year from the formatted date or use server year
+  const yearMatch = clientDate?.match(/(\d{4})/);
+  const currentYear = yearMatch ? parseInt(yearMatch[1], 10) : now.getFullYear();
   
   return `
 You are AI-SHA - an AI Super Hi-performing Assistant designed to be an Executive Assistant for CRM operations.
