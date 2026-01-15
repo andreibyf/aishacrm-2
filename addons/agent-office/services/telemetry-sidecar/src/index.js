@@ -2,6 +2,7 @@ import { Tail } from 'tail';
 import { Kafka } from 'kafkajs';
 import amqplib from 'amqplib';
 import fs from 'fs';
+import path from 'path';
 import http from 'http';
 
 const INPUT_PATH = process.env.TELEMETRY_INPUT_PATH || '/telemetry/telemetry.ndjson';
@@ -36,9 +37,26 @@ http.createServer((req, res) => {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-async function ensureFileExists() {
-  // Wait until the file exists (core container creates it)
-  for (let i=0;i<300;i++) {
+async function ensureFileReady() {
+  // Never crash-loop just because the core app hasn't written yet.
+  // Create the directory and an empty file if missing.
+  try {
+    fs.mkdirSync(path.dirname(INPUT_PATH), { recursive: true });
+  } catch (_) {}
+
+  try {
+    fs.accessSync(INPUT_PATH, fs.constants.F_OK);
+    return;
+  } catch (_) {
+    try {
+      fs.writeFileSync(INPUT_PATH, '', { flag: 'a' }); // touch
+      return;
+    } catch (_) {
+      // If we can't create it (rare), fall back to waiting.
+    }
+  }
+
+  for (let i = 0; i < 300; i++) {
     try {
       fs.accessSync(INPUT_PATH, fs.constants.F_OK);
       return;
@@ -46,7 +64,9 @@ async function ensureFileExists() {
       await sleep(500);
     }
   }
-  throw new Error(`Telemetry input file not found after wait: ${INPUT_PATH}`);
+  // Still don't exit; remain healthy but waiting.
+  status = 'waiting_for_file';
+  process.stderr.write(`[telemetry] warn: input file still missing: ${INPUT_PATH}\n`);
 }
 
 async function makePublisher() {
@@ -86,7 +106,7 @@ function parseLine(line) {
 }
 
 async function main() {
-  await ensureFileExists();
+  await ensureFileReady();
   const publish = await makePublisher();
 
   const tail = new Tail(INPUT_PATH, { fromBeginning: false, follow: true, useWatchFile: true });

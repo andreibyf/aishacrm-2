@@ -135,7 +135,7 @@ services:
         labels: "service"
         tag: "{{.Name}}"
     volumes:
-      - agent-office_aisha_telemetry:/var/log/aisha
+      - aisha_telemetry:/var/log/aisha
     networks:
       - aishanet
 
@@ -260,7 +260,7 @@ volumes:
     driver: local
   redis_cache_data:
     driver: local
-  agent-office_aisha_telemetry:
+  aisha_telemetry:
     external: true
 
 networks:

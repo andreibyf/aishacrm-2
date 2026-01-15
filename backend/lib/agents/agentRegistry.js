@@ -2,7 +2,7 @@
  * Agent Registry
  *
  * Stores per-role agent configuration with formal identity schema.
- * Imports canonical contract from agent-office addon.
+ * Imports canonical contract from shared/contracts.
  * 
  * Later: per-tenant DB overrides and UI editor.
  */
@@ -14,7 +14,7 @@ import {
   generateAgentId,
   parseAgentId,
   validateAgent,
-} from './contracts/agents.js';
+} from '../../../shared/contracts/agents.js';
 
 // Re-export for convenience
 export { AgentRoles, EscalationTriggers, generateAgentId, parseAgentId, validateAgent };

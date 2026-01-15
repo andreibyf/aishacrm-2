@@ -5,15 +5,21 @@
  * - GET /api/agent-office/agents - List all agent profiles
  * - GET /api/agent-office/agents/:role - Get specific agent profile
  * - POST /api/agent-office/run
- *     Returns execution_id + routed role with full agent identity.
- *     Emits telemetry NDJSON events that sidecar can publish.
+ *     Returns run_id + routed role with full agent identity.
+ *     Emits telemetry NDJSON events with full correlation IDs.
  *
  * This is scaffolding for the "office workers" visualization.
  */
 
 import express from 'express';
-import crypto from 'crypto';
-import { emitRunStarted, emitTaskAssigned, emitAgentSpawned } from '../lib/telemetry/index.js';
+import { 
+  createCorrelationContext,
+  createChildSpan,
+  emitRunStarted, 
+  emitTaskAssigned, 
+  emitAgentSpawned,
+  generateSpanId,
+} from '../lib/telemetry/index.js';
 import { routeRequest, listRoles } from '../lib/agents/agentRouter.js';
 import { getAgentProfile, getAllAgentProfiles, AgentRoles } from '../lib/agents/agentRegistry.js';
 
@@ -51,65 +57,59 @@ export function createAgentOfficeRoutes(measuredPgPool) {
     const input = req.body?.input || req.body?.message || '';
     const force_role = req.query?.force_role || req.body?.force_role || null;
 
-    const execution_id = crypto.randomUUID();
-    const primary_task_id = `task:${execution_id}:primary`;
+    // Create correlation context for this run
+    const ctx = createCorrelationContext();
+    const primary_task_id = `task:${ctx.run_id}:primary`;
 
-    // Emit run started from ops_manager (orchestrator)
+    // Get ops_manager agent (orchestrator)
     const opsAgent = await getAgentProfile({ tenant_id, role: AgentRoles.OPS_MANAGER });
     
+    // Emit run_started from ops_manager (orchestrator)
     emitRunStarted({
-      execution_id,
-      agent_id: opsAgent.id,
-      role: opsAgent.role,
+      ...ctx,
       tenant_id,
-      input_summary: input?.slice(0, 200),
-      data: { 
-        force_role: force_role || undefined,
-        agent: {
-          display_name: opsAgent.display_name,
-          model: opsAgent.model,
-        },
-      },
+      agent_id: opsAgent.id,
+      entrypoint: 'api:/api/agent-office/run',
+      input_summary: input?.slice(0, 200) || 'No input',
+      force_role: force_role || null,
     });
 
     // Route to appropriate agent
     const routed = await routeRequest({ tenant_id, input, force_role });
 
-    // Emit agent spawned event
+    // Create child span for agent spawn
+    const spawnCtx = createChildSpan(ctx);
+    
+    // Emit agent_spawned event
     emitAgentSpawned({
-      execution_id,
-      agent_id: routed.agent.id,
-      role: routed.agent.role,
+      ...spawnCtx,
       tenant_id,
-      data: {
-        model: routed.agent.model,
-        temperature: routed.agent.temperature,
-        tool_allowlist: routed.agent.tool_allowlist,
-        memory_namespace: routed.agent.memory_namespace,
-        display_name: routed.agent.display_name,
-        metadata: routed.agent.metadata,
-      },
+      agent_id: routed.agent.id,
+      agent_name: routed.agent.display_name,
+      model: routed.agent.model,
+      tools: routed.agent.tool_allowlist,
     });
 
-    // Emit task assigned to routed agent
+    // Create child span for task assignment
+    const taskCtx = createChildSpan(ctx);
+
+    // Emit task_assigned to routed agent
     emitTaskAssigned({
-      execution_id,
-      task_id: primary_task_id,
-      agent_id: routed.agent.id,
-      role: routed.agent.role,
+      ...taskCtx,
       tenant_id,
-      summary: `Routed to ${routed.agent.display_name}`,
-      data: { 
-        model: routed.agent.model,
-        escalation_rules_count: routed.agent.escalation_rules?.length || 0,
-      },
+      agent_id: opsAgent.id,
+      task_id: primary_task_id,
+      to_agent_id: routed.agent.id,
+      queue: `${routed.agent.role}:primary`,
+      reason: `Intent routing: matched ${routed.role}`,
     });
 
     // MVP: respond with routing decision and full agent identity.
     // Next: enqueue to queue and return run id for streaming updates.
     res.json({
       ok: true,
-      execution_id,
+      run_id: ctx.run_id,
+      trace_id: ctx.trace_id,
       routed_role: routed.role,
       agent: {
         id: routed.agent.id,
@@ -123,7 +123,7 @@ export function createAgentOfficeRoutes(measuredPgPool) {
         metadata: routed.agent.metadata,
       },
       next: {
-        office_viz: process.env.OFFICE_VIZ_BASE_URL ? `${process.env.OFFICE_VIZ_BASE_URL}/runs/${execution_id}` : null,
+        office_viz: process.env.OFFICE_VIZ_BASE_URL ? `${process.env.OFFICE_VIZ_BASE_URL}/runs/${ctx.run_id}` : null,
       },
     });
   });

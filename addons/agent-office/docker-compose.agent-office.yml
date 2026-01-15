@@ -90,3 +90,5 @@ volumes:
   redpanda_data:
   # Named volume that the core app should also mount at /var/log/aisha
   aisha_telemetry:
+    # Prevent Compose project prefixing (e.g., agent-office_aisha_telemetry)
+    name: aisha_telemetry

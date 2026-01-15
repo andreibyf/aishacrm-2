@@ -32,6 +32,8 @@ export default [
       'orchestra/**',
       'archive/**',
       'backend/archive/**',
+      // Addons have their own Docker context and linting
+      'addons/**',
       // Migration and utility scripts (one-off scripts, not production code)
       'backend/migrations/**',
       'backend/apply-*.js',
