@@ -126,8 +126,14 @@ export function cacheDetail(module, ttl = 300) {
 
 /**
  * Invalidate cache after mutations (POST, PUT, DELETE)
+ * Also invalidates dashboard bundle cache for CRM entity modules
  * @param {string} module - Module name
  */
+// CRM modules that affect dashboard stats
+const DASHBOARD_AFFECTING_MODULES = new Set([
+  'leads', 'contacts', 'accounts', 'opportunities', 'activities', 'bizdevsources'
+]);
+
 export function invalidateCache(module) {
   return async (req, res, next) => {
     // Store original methods
@@ -137,10 +143,17 @@ export function invalidateCache(module) {
     // Override response methods to invalidate cache on success
     const invalidate = async (data) => {
       if (res.statusCode >= 200 && res.statusCode < 300) {
-        const tenantId = req.user?.tenant_id;
+        const tenantId = req.user?.tenant_id || req.query?.tenant_id || req.body?.tenant_id;
         if (tenantId) {
+          // Invalidate module cache
           await cacheManager.invalidateTenant(tenantId, module);
           console.log(`[Cache] Invalidated: ${module} for tenant ${tenantId}`);
+          
+          // Also invalidate dashboard bundle if this is a CRM entity
+          if (DASHBOARD_AFFECTING_MODULES.has(module)) {
+            await cacheManager.invalidateDashboard(tenantId);
+            console.log(`[Cache] Invalidated: dashboard bundle for tenant ${tenantId}`);
+          }
         }
       }
       return data;

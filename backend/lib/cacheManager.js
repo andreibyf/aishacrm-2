@@ -167,6 +167,34 @@ class CacheManager {
   }
 
   /**
+   * Invalidate dashboard bundle cache for a tenant
+   * Called when CRM entities are mutated to ensure dashboard reflects changes
+   */
+  async invalidateDashboard(tenantId) {
+    if (!this.connected) return false;
+
+    try {
+      // Dashboard bundle keys use pattern: dashboard:bundle:${tenant_id}:*
+      const pattern = `dashboard:bundle:${tenantId}:*`;
+      const keys = [];
+      
+      for await (const key of this.client.scanIterator({ MATCH: pattern, COUNT: 100 })) {
+        keys.push(key);
+      }
+
+      if (keys.length > 0) {
+        await this.client.del(keys);
+        logger.debug({ tenantId, count: keys.length }, '[CacheManager] Invalidated dashboard bundle keys');
+      }
+
+      return true;
+    } catch (error) {
+      logger.error({ err: error, tenantId }, '[CacheManager] Dashboard invalidate error');
+      return false;
+    }
+  }
+
+  /**
    * Invalidate all cache for a tenant (all modules)
    */
   async invalidateAllTenant(tenantId) {
