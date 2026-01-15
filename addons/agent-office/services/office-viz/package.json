@@ -1,0 +1,11 @@
+{
+  "name": "aisha-office-viz",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/server.js",
+  "dependencies": {
+    "express": "^4.19.2",
+    "kafkajs": "^2.2.4",
+    "amqplib": "^0.10.4"
+  }
+}

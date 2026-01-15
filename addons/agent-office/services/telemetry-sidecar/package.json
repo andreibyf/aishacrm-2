@@ -1,0 +1,11 @@
+{
+  "name": "aisha-telemetry-sidecar",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.js",
+  "dependencies": {
+    "kafkajs": "^2.2.4",
+    "amqplib": "^0.10.4",
+    "tail": "^2.2.6"
+  }
+}

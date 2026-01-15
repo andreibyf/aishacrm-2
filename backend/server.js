@@ -157,6 +157,7 @@ import createDatabaseRoutes from "./routes/database.js";
 import createIntegrationRoutes from "./routes/integrations.js";
 import createTelephonyRoutes from "./routes/telephony.js";
 import createAiRoutes from "./routes/ai.js";
+import { createAgentOfficeRoutes } from './routes/agentOffice.js';
 import createMcpRoutes from "./routes/mcp.js";
 import devaiRoutes from "./routes/devai.js"; // Phase 6: Developer AI approvals
 import devaiHealthAlertsRoutes from "./routes/devaiHealthAlerts.js"; // Health monitoring alerts
@@ -244,6 +245,7 @@ app.use("/api/database", createDatabaseRoutes(measuredPgPool));
 app.use("/api/integrations", createIntegrationRoutes(measuredPgPool));
 app.use("/api/telephony", createTelephonyRoutes(measuredPgPool));
 app.use("/api/ai", authenticateRequest, createAiRoutes(measuredPgPool));
+  app.use("/api/agent-office", authenticateRequest, createAgentOfficeRoutes(measuredPgPool));
 app.use("/api/ai-settings", authenticateRequest, aiSettingsRoutes); // AI configuration settings
 app.use("/api/mcp", createMcpRoutes(measuredPgPool));
 app.use("/api/devai", devaiRoutes); // Phase 6: Developer AI approvals (superadmin only)

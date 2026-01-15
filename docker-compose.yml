@@ -115,6 +115,9 @@ services:
       - GH_TOKEN=${GH_TOKEN:-}
       - REPO_OWNER=${REPO_OWNER:-andreibyf}
       - REPO_NAME=${REPO_NAME:-aishacrm-2}
+      # Telemetry
+      - TELEMETRY_ENABLED=true
+      - TELEMETRY_LOG_PATH=/var/log/aisha/telemetry.ndjson
     dns:
       - 8.8.8.8
       - 8.8.4.4
@@ -131,6 +134,8 @@ services:
         max-file: "3"
         labels: "service"
         tag: "{{.Name}}"
+    volumes:
+      - agent-office_aisha_telemetry:/var/log/aisha
     networks:
       - aishanet
 
@@ -255,6 +260,8 @@ volumes:
     driver: local
   redis_cache_data:
     driver: local
+  agent-office_aisha_telemetry:
+    external: true
 
 networks:
   aishanet:

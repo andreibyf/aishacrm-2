@@ -1,0 +1,92 @@
+services:
+  # Dedicated event bus for agent-office telemetry (Kafka-compatible)
+  redpanda:
+    image: redpandadata/redpanda:latest
+    container_name: aisha-redpanda
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp
+      - "1"
+      - --memory
+      - "1G"
+      - --reserve-memory
+      - "0M"
+      - --node-id
+      - "0"
+      - --check=false
+      - --kafka-addr
+      - PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr
+      - PLAINTEXT://redpanda:9092
+      - --pandaproxy-addr
+      - 0.0.0.0:8082
+      - --advertise-pandaproxy-addr
+      - redpanda:8082
+    ports:
+      - "9092:9092"   # Kafka API (dev only)
+      - "8082:8082"   # PandaProxy HTTP
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    restart: unless-stopped
+
+  telemetry-sidecar:
+    build:
+      context: ./services/telemetry-sidecar
+    container_name: aisha-telemetry-sidecar
+    environment:
+      - TELEMETRY_INPUT_PATH=/telemetry/telemetry.ndjson
+      - BUS_TYPE=kafka
+      - KAFKA_BROKERS=redpanda:9092
+      - KAFKA_TOPIC=aisha.telemetry
+      - HEALTH_PORT=4101
+      # Optional: also tee to stdout for quick dev visibility
+      - PRINT_EVENTS=true
+    volumes:
+      # Mount the core app telemetry file into this container
+      - aisha_telemetry:/telemetry
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4101/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
+    restart: unless-stopped
+
+  office-viz:
+    build:
+      context: ./services/office-viz
+    container_name: aisha-office-viz
+    environment:
+      - PORT=4010
+      - BUS_TYPE=kafka
+      - KAFKA_BROKERS=redpanda:9092
+      - KAFKA_TOPIC=aisha.telemetry
+      - MAX_EVENTS_IN_MEMORY=5000
+    ports:
+      - "4010:4010"
+    depends_on:
+      telemetry-sidecar:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4010/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  redpanda_data:
+  # Named volume that the core app should also mount at /var/log/aisha
+  aisha_telemetry:

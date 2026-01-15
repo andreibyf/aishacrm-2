@@ -144,8 +144,7 @@ const createFunctionProxy = (functionName) => {
           temperature: typeof opts.temperature === 'number' ? opts.temperature : undefined,
           api_key: opts.api_key,
           conversation_id: opts.conversation_id || opts.conversationId, // Support both naming conventions
-          sessionEntities: opts.sessionEntities || opts.entityContext, // Session context for follow-up questions
-          local_date: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) // User's local date for AI date awareness
+          sessionEntities: opts.sessionEntities || opts.entityContext // Session context for follow-up questions
         };
 
         const headers = { 'Content-Type': 'application/json' };
