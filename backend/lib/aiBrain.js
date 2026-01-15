@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import OpenAI from 'openai';
 import { selectLLMConfigForTenant, resolveLLMApiKey } from './aiEngine/index.js';
 import { logLLMActivity } from './aiEngine/activityLogger.js';
-import { BRAID_SYSTEM_PROMPT, executeBraidTool, generateToolSchemas, summarizeToolResult, } from './braidIntegration-v2.js';
+import { getBraidSystemPrompt, executeBraidTool, generateToolSchemas, summarizeToolResult, } from './braidIntegration-v2.js';
 import { resolveCanonicalTenant, isUuid as isUuidHelper } from './tenantCanonicalResolver.js';
 import logger from './logger.js';
 const READ_ONLY_NAME_REGEX = /^(search_|list_|get_|fetch_|lookup_|debug_)/i;
@@ -25,7 +25,7 @@ function buildSystemPrompt(params, tenant) {
             ? 'Propose-actions mode: You may suggest create/update actions but MUST NOT execute them.'
             : 'Apply mode requested, but Phase 1 forbids autonomous execution.';
     const contextSummary = JSON.stringify(params.context ?? {}, null, 2);
-    return `${BRAID_SYSTEM_PROMPT}\n\n` +
+    return `${getBraidSystemPrompt()}\n\n` +
         `Tenant UUID: ${tenant.uuid || 'unknown'}\n` +
         `Tenant Slug: ${tenant.slug || 'unknown'}\n` +
         `User ID: ${params.userId}\n` +

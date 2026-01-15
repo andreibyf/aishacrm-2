@@ -1,5 +1,5 @@
 import express from 'express';
-import { BRAID_SYSTEM_PROMPT, generateToolSchemas } from '../lib/braidIntegration-v2.js';
+import { getBraidSystemPrompt, generateToolSchemas } from '../lib/braidIntegration-v2.js';
 import { resolveLLMApiKey } from '../lib/aiEngine/index.js';
 import { fetchEntityLabels, generateEntityLabelPrompt, updateToolSchemasWithLabels } from '../lib/entityLabelInjector.js';
 import logger from '../lib/logger.js';
@@ -9,7 +9,8 @@ const DEFAULT_REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-real
 const DEFAULT_REALTIME_VOICE = process.env.OPENAI_REALTIME_VOICE || 'marin';
 const REALTIME_MODULE_NAME = 'Realtime Voice';
 const REALTIME_SOURCE = 'AI Realtime Tokens';
-const DEFAULT_REALTIME_INSTRUCTIONS = `${BRAID_SYSTEM_PROMPT}\n\n` +
+// Note: Instructions are built fresh each request via getRealtimeInstructions()
+const BASE_REALTIME_INSTRUCTIONS =
   [
     'You are running in Realtime Voice mode for AiSHA CRM.',
     '',
@@ -193,10 +194,10 @@ export default function createAiRealtimeRoutes(pgPool) {
         });
       }
 
-      // Fetch entity labels and inject into instructions
+      // Build instructions fresh each request to get current date
       const entityLabels = await fetchEntityLabels(pgPool, tenantId);
       const labelPrompt = generateEntityLabelPrompt(entityLabels);
-      const enhancedInstructions = DEFAULT_REALTIME_INSTRUCTIONS + labelPrompt;
+      const enhancedInstructions = `${getBraidSystemPrompt()}\n\n${BASE_REALTIME_INSTRUCTIONS}${labelPrompt}`;
 
       const sessionPayload = {
         session: {
