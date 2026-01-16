@@ -21,6 +21,9 @@ COPY backend ./backend
 # Copy Braid SDK sources into image
 COPY braid-llm-kit ./braid-llm-kit
 
+# Copy shared contracts for agent identity and telemetry
+COPY shared ./shared
+
 # Install local Braid SDK into backend (provides @braid/sdk in node_modules)
 RUN cd backend && npm install --omit=dev ../braid-llm-kit
 
@@ -59,6 +62,9 @@ COPY --from=builder /app/backend .
 
 # Also include Braid SDK sources for runtime access to .braid files
 COPY --from=builder /app/braid-llm-kit /app/braid-llm-kit
+
+# Include shared contracts for agent identity and telemetry
+COPY --from=builder /app/shared /app/shared
 
 # Copy entrypoint script
 COPY backend/docker-entrypoint.sh /docker-entrypoint.sh

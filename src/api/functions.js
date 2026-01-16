@@ -943,6 +943,28 @@ const createFunctionProxy = (functionName) => {
         return { data: { success: false, message: err?.message || 'Cleanup failed', error: err?.message } };
       }
     }
+    // checkDuplicateBeforeCreate: call backend validation route
+    if (functionName === 'checkDuplicateBeforeCreate') {
+      try {
+        const BACKEND_URL = getBackendUrl();
+        const payload = args[0] || {};
+        const response = await fetch(`${BACKEND_URL}/api/validation/check-duplicate-before-create`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(payload),
+        });
+        const json = await response.json();
+        if (!response.ok) {
+          return { data: { status: 'error', error: json?.message || response.statusText } };
+        }
+        return { data: json.data || json };
+      } catch (err) {
+        console.error('[checkDuplicateBeforeCreate] Error:', err);
+        return { data: { status: 'error', error: err?.message || String(err) } };
+      }
+    }
+
     // Non-local: call backend validate-and-import directly when Base44 doesn't expose it
     if (functionName === 'validateAndImport') {
       logDev('[validateAndImport] Non-local mode handler called');
