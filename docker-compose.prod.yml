@@ -74,6 +74,83 @@ services:
   # Container name: braid-mcp-server (or aishacrm-mcp if using legacy setup)
   # Backend connects via BRAID_MCP_URL environment variable
 
+  # Event Bus (Redpanda/Kafka)
+  redpanda:
+    image: redpandadata/redpanda:latest
+    container_name: aishacrm-redpanda
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp
+      - "1"
+      - --memory
+      - "1G"
+      - --reserve-memory
+      - "0M"
+      - --node-id
+      - "0"
+      - --check=false
+      - --kafka-addr
+      - PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr
+      - PLAINTEXT://redpanda:9092
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    networks:
+      - aishanet
+
+  # Telemetry Sidecar - Ships events to Redpanda
+  telemetry-sidecar:
+    image: ghcr.io/andreibyf/aishacrm-2-telemetry-sidecar:latest
+    container_name: aishacrm-telemetry-sidecar
+    restart: unless-stopped
+    env_file:
+      - .env.from-doppler
+    environment:
+      - TELEMETRY_INPUT_PATH=/telemetry/telemetry.ndjson
+      - BUS_TYPE=kafka
+      - KAFKA_BROKERS=redpanda:9092
+      - KAFKA_TOPIC=aisha.events.v1
+      - HEALTH_PORT=4101
+    volumes:
+      - aisha_telemetry:/telemetry
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    networks:
+      - aishanet
+
+  # Office Viz - Real-time event visualization
+  office-viz:
+    image: ghcr.io/andreibyf/aishacrm-2-office-viz:latest
+    container_name: aishacrm-office-viz
+    restart: unless-stopped
+    env_file:
+      - .env.from-doppler
+    environment:
+      - PORT=4010
+      - BUS_TYPE=kafka
+      - KAFKA_BROKERS=redpanda:9092
+      - KAFKA_TOPIC=aisha.events.v1
+      - MAX_EVENTS_IN_MEMORY=5000
+      - OFFICE_VIZ_TOKEN=${OFFICE_VIZ_TOKEN}
+      - ENABLE_DEMO_ENDPOINTS=false
+    ports:
+      - "4010:4010"
+    depends_on:
+      telemetry-sidecar:
+        condition: service_started
+    networks:
+      - aishanet
+
   # Frontend
   frontend:
     image: ghcr.io/andreibyf/aishacrm-2-frontend:latest
@@ -157,6 +234,10 @@ volumes:
   redis_cache_data:
     driver: local
   n8n_data:
+    driver: local
+  redpanda_data:
+    driver: local
+  aisha_telemetry:
     driver: local
 
 networks:

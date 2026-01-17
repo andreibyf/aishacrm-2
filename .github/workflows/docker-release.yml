@@ -27,6 +27,14 @@ jobs:
             context: ./braid-mcp-node-server
             dockerfile: braid-mcp-node-server/Dockerfile
             image: ghcr.io/${{ github.repository }}-mcp
+          - service: office-viz
+            context: addons/agent-office/services/office-viz
+            dockerfile: addons/agent-office/services/office-viz/Dockerfile
+            image: ghcr.io/${{ github.repository }}-office-viz
+          - service: telemetry-sidecar
+            context: addons/agent-office/services/telemetry-sidecar
+            dockerfile: addons/agent-office/services/telemetry-sidecar/Dockerfile
+            image: ghcr.io/${{ github.repository }}-telemetry-sidecar
     
     steps:
       - name: Checkout code
@@ -203,10 +211,14 @@ jobs:
             docker pull ghcr.io/andreibyf/aishacrm-2-frontend:$VERSION_TAG
             docker pull ghcr.io/andreibyf/aishacrm-2-backend:$VERSION_TAG
             docker pull ghcr.io/andreibyf/aishacrm-2-mcp:$VERSION_TAG
+            docker pull ghcr.io/andreibyf/aishacrm-2-office-viz:$VERSION_TAG
+            docker pull ghcr.io/andreibyf/aishacrm-2-telemetry-sidecar:$VERSION_TAG
             # Tag as latest locally
             docker tag ghcr.io/andreibyf/aishacrm-2-frontend:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-frontend:latest
             docker tag ghcr.io/andreibyf/aishacrm-2-backend:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-backend:latest
             docker tag ghcr.io/andreibyf/aishacrm-2-mcp:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-mcp:latest
+            docker tag ghcr.io/andreibyf/aishacrm-2-office-viz:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-office-viz:latest
+            docker tag ghcr.io/andreibyf/aishacrm-2-telemetry-sidecar:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-telemetry-sidecar:latest
             
             # Remove VITE_APP_BUILD_VERSION from .env so container uses baked-in /app/VERSION
             # (Version is already baked into Docker image during build via Dockerfile)
@@ -227,7 +239,7 @@ jobs:
             # Restart main services with version info (force recreate to detect :latest image changes)
             # NOTE: n8n is optional - use --profile workflows to include it
             # Frontend and backend run directly on ports 4000 and 4001 (no proxy)
-            docker compose -f docker-compose.prod.yml up -d --force-recreate frontend backend
+            docker compose -f docker-compose.prod.yml up -d --force-recreate frontend backend redpanda telemetry-sidecar office-viz
             
             # Deploy MCP server (separate compose file with 3 containers)
             echo "Deploying MCP server cluster (1 server + 2 nodes)..."
