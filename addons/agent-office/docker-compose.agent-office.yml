@@ -73,7 +73,7 @@ services:
       - KAFKA_BROKERS=redpanda:9092
       - KAFKA_TOPIC=aisha.events.v1
       - MAX_EVENTS_IN_MEMORY=5000
-      - OFFICE_VIZ_TOKEN=aisha-viz-secret-token-12345
+      - OFFICE_VIZ_TOKEN=${OFFICE_VIZ_TOKEN}
       - ENABLE_DEMO_ENDPOINTS=false
     ports:
       - "4010:4010"
