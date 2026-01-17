@@ -3,6 +3,8 @@
 ## Overview
 We have successfully implemented a real-time, animated office floor visualization for the AiSHA CRM. This visualization represents agents as side-view characters in a "glass office" or "dollhouse" perspective, moving between desks, picking up tasks from an Inbox, handing them off to other agents, and delivering completed work to an Outbox.
 
+> **Note**: The user creates work; AiSHA decides ownership; agents execute.
+
 ## Key Features Implemented
 
 ### 1. Visual Design

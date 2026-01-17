@@ -272,7 +272,7 @@ app.get('/', (req, res) => {
       position: absolute;
       width: 60px; height: 100px; /* Taller for standing figure */
       transform-origin: bottom center; /* Pivot at feet */
-      transition: top 0.8s linear, left 0.8s linear; /* Smooth movement */
+      transition: top 1.5s linear, left 1.5s linear; /* Slower movement */
       display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
       z-index: 20;
     }
@@ -295,14 +295,14 @@ app.get('/', (req, res) => {
 
     /* Walking Animation */
     .agent.walking .leg-left {
-      animation: walk-leg 0.8s infinite ease-in-out;
+      animation: walk-leg 1.5s infinite ease-in-out;
     }
     .agent.walking .leg-right {
-      animation: walk-leg 0.8s infinite ease-in-out reverse;
+      animation: walk-leg 1.5s infinite ease-in-out reverse;
     }
     
     .agent.walking .arm-right {
-      animation: swing-arm 0.8s infinite ease-in-out;
+      animation: swing-arm 1.5s infinite ease-in-out;
     }
 
     @keyframes walk-leg {
@@ -393,6 +393,104 @@ app.get('/', (req, res) => {
       font-family: monospace; font-size: 0.8rem; color: #8b949e;
       height: 100px; overflow-y: auto;
     }
+
+    /* Side Panes */
+    .side-pane {
+      width: 200px;
+      height: 600px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    /* Removed absolute positioning */
+    
+    .main-layout {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+      justify-content: center;
+    }
+    
+    .pane-header {
+      padding: 10px;
+      background: #21262d;
+      border-bottom: 1px solid #30363d;
+      font-weight: bold;
+      color: #c9d1d9;
+      text-align: center;
+      font-size: 0.9rem;
+    }
+    
+    .task-list {
+      flex-grow: 1;
+      overflow-y: auto;
+      padding: 10px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    
+    .task-item {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      padding: 8px;
+      font-size: 0.8rem;
+      color: #8b949e;
+    }
+    .task-item.completed { border-left: 3px solid #3fb950; }
+    .task-item.failed { border-left: 3px solid #f85149; }
+    .task-item.queued { border-left: 3px solid #e3b341; }
+    
+    .task-id { font-weight: bold; color: #c9d1d9; margin-bottom: 4px; display: block; }
+    .task-meta { font-size: 0.7rem; }
+
+    /* Bubble Types */
+    .speech-bubble.thought {
+      border-radius: 12px;
+      border: 1px solid #d29922;
+      color: #d29922;
+    }
+    .speech-bubble.chat {
+      border-radius: 4px;
+      border: 1px solid #58a6ff;
+      color: #58a6ff;
+    }
+
+    /* Rooms */
+    .room {
+      position: absolute;
+      border: 2px solid #484f58;
+      background: rgba(22, 27, 34, 0.3);
+      border-radius: 0; /* Boxy look */
+      pointer-events: none;
+    }
+    .room-label {
+      position: absolute;
+      top: 5px; left: 5px;
+      font-size: 0.7rem; color: #8b949e;
+      font-weight: bold; text-transform: uppercase;
+      z-index: 5;
+    }
+    /* Doorways (visual gaps) */
+    .doorway {
+      position: absolute;
+      width: 50px; height: 4px;
+      background: #161b22; /* Match floor */
+      z-index: 2;
+    }
+    /* Cubicles */
+    .cubicle-area {
+      position: absolute;
+      border: 2px solid #484f58;
+      border-top: none; /* Open top access? Or just visual style */
+      background: rgba(22, 27, 34, 0.3);
+    }
+    .cubicle-divider {
+      position: absolute;
+      top: 20px; bottom: 0;
+      width: 2px; background: #484f58;
+    }
   </style>
 </head>
 <body>
@@ -406,12 +504,54 @@ app.get('/', (req, res) => {
     <button onclick="fetch('/test/handoff', {method:'POST'})" style="padding: 4px 12px; background: #238636; color: white; border: none; border-radius: 4px; cursor: pointer;">Run Demo</button>
   </div>
 
-  <div class="office-floor" id="office-floor">
-    <div class="zone inbox" style="left: 80px; top: 300px;"><div>📥</div><div>Inbox</div></div>
-    <div class="zone outbox" style="left: 920px; top: 300px;"><div>📤</div><div>Outbox</div></div>
+  <div class="main-layout">
+    <div class="side-pane">
+      <div class="pane-header">INBOX / QUEUED</div>
+      <div class="task-list" id="inbox-list"></div>
+    </div>
+
+    <div class="office-floor" id="office-floor">
+      <div class="zone inbox" style="left: 60px; top: 300px;"><div>📥</div><div>Inbox</div></div>
+      <div class="zone outbox" style="left: 940px; top: 300px;"><div>📤</div><div>Outbox</div></div>
+
+      <!-- Rooms (Top Row) -->
+      <!-- Ops: Top Left -->
+      <div class="room" style="left: 50px; top: 20px; width: 280px; height: 220px;">
+        <div class="room-label">Ops Office</div>
+        <div class="doorway" style="bottom: -3px; left: 115px;"></div>
+      </div>
+      
+      <!-- Sales: Top Center -->
+      <div class="room" style="left: 350px; top: 20px; width: 280px; height: 220px;">
+        <div class="room-label">Sales Office</div>
+        <div class="doorway" style="bottom: -3px; left: 115px;"></div>
+      </div>
+
+      <!-- Marketing: Top Right (Swapped) -->
+      <div class="room" style="left: 650px; top: 20px; width: 280px; height: 220px;">
+        <div class="room-label">Marketing Office</div>
+        <div class="doorway" style="bottom: -3px; left: 115px;"></div>
+      </div>
+
+      <!-- Project: Bottom Left (Swapped) -->
+      <div class="room" style="left: 50px; top: 360px; width: 280px; height: 220px;">
+        <div class="room-label">Project Office</div>
+        <div class="doorway" style="top: -3px; left: 115px;"></div>
+      </div>
+
+      <!-- Cubicles: Bottom Right -->
+      <div class="cubicle-area" style="left: 350px; top: 360px; width: 580px; height: 220px; border-top: none;">
+        <div class="room-label">Support Cubicles</div>
+        <!-- Vertical Divider -->
+        <div class="cubicle-divider" style="left: 290px;"></div>
+        <!-- Visual "walls" for cubicles -->
+        <div style="position:absolute; top:0; left:0; width:2px; height:50px; background:#484f58;"></div>
+        <div style="position:absolute; top:0; right:0; width:2px; height:50px; background:#484f58;"></div>
+      </div>
 
     <!-- Desks -->
-    <div class="desk-group" style="left: 250px; top: 300px;">
+    <!-- Ops (Top Left) -->
+    <div class="desk-group" style="left: 190px; top: 130px;">
       <div class="desk">
         <div class="monitor"></div>
         <div class="desk-surface"></div>
@@ -426,7 +566,8 @@ app.get('/', (req, res) => {
       <div class="desk-label">Ops Manager</div>
     </div>
 
-    <div class="desk-group" style="left: 500px; top: 150px;">
+    <!-- Sales (Top Center) -->
+    <div class="desk-group" style="left: 490px; top: 130px;">
       <div class="desk">
         <div class="monitor"></div>
         <div class="desk-surface"></div>
@@ -441,7 +582,8 @@ app.get('/', (req, res) => {
       <div class="desk-label">Sales Manager</div>
     </div>
     
-    <div class="desk-group" style="left: 500px; top: 450px;">
+    <!-- Marketing (Top Right) -->
+    <div class="desk-group" style="left: 790px; top: 130px;">
       <div class="desk">
         <div class="monitor"></div>
         <div class="desk-surface"></div>
@@ -456,7 +598,8 @@ app.get('/', (req, res) => {
       <div class="desk-label">Marketing</div>
     </div>
 
-    <div class="desk-group" style="left: 750px; top: 150px;">
+    <!-- Project (Bottom Left) -->
+    <div class="desk-group" style="left: 190px; top: 470px;">
       <div class="desk">
         <div class="monitor"></div>
         <div class="desk-surface"></div>
@@ -471,7 +614,8 @@ app.get('/', (req, res) => {
       <div class="desk-label">Project Manager</div>
     </div>
     
-    <div class="desk-group" style="left: 750px; top: 300px;">
+    <!-- Client Services (Cubicle 1) -->
+    <div class="desk-group" style="left: 495px; top: 470px;">
       <div class="desk">
         <div class="monitor"></div>
         <div class="desk-surface"></div>
@@ -486,7 +630,8 @@ app.get('/', (req, res) => {
       <div class="desk-label">Client Services</div>
     </div>
     
-    <div class="desk-group" style="left: 750px; top: 450px;">
+    <!-- Customer Service (Cubicle 2) -->
+    <div class="desk-group" style="left: 795px; top: 470px;">
       <div class="desk">
         <div class="monitor"></div>
         <div class="desk-surface"></div>
@@ -505,24 +650,43 @@ app.get('/', (req, res) => {
     <div id="agent-layer"></div>
   </div>
 
+  <div class="side-pane">
+    <div class="pane-header">OUTBOX / COMPLETED</div>
+    <div class="task-list" id="outbox-list"></div>
+  </div>
+  </div><!-- End main-layout -->
+
   <div class="log-panel" id="log">Waiting for events...</div>
 
   <script>
     // Configuration
+    // Configuration
     const DESK_POSITIONS = {
-      'ops_manager': { x: 250, y: 300 },
-      'sales_manager': { x: 500, y: 150 },
-      'marketing_manager': { x: 500, y: 450 },
-      'project_manager': { x: 750, y: 150 },
-      'client_services_expert': { x: 750, y: 300 },
-      'customer_service_manager': { x: 750, y: 450 },
+      'ops_manager': { x: 190, y: 130 },
+      'sales_manager': { x: 490, y: 130 },
+      'marketing_manager': { x: 790, y: 130 },
+      'project_manager': { x: 190, y: 470 },
+      'client_services_expert': { x: 495, y: 470 },
+      'customer_service_manager': { x: 795, y: 470 },
       // Fallbacks
-      'sales_rep': { x: 500, y: 150 }, 
-      'support_agent': { x: 750, y: 450 }
+      'sales_rep': { x: 490, y: 130 }, 
+      'support_agent': { x: 795, y: 470 }
     };
 
-    const INBOX_POS = { x: 80, y: 300 };
-    const OUTBOX_POS = { x: 920, y: 300 };
+    const INBOX_POS = { x: 60, y: 300 };
+    const OUTBOX_POS = { x: 940, y: 300 };
+    
+    // Room Definitions for Pathfinding
+    // Door is the point agents must pass through to enter/exit
+    const ROOMS = [
+      { name: 'Ops', x: 50, y: 20, w: 280, h: 220, door: { x: 190, y: 240 } },
+      { name: 'Sales', x: 350, y: 20, w: 280, h: 220, door: { x: 490, y: 240 } },
+      { name: 'Marketing', x: 650, y: 20, w: 280, h: 220, door: { x: 790, y: 240 } },
+      { name: 'Project', x: 50, y: 360, w: 280, h: 220, door: { x: 190, y: 340 } }, // Door above
+      // Split Cubicles to force aisle usage
+      { name: 'Cubicle 1', x: 350, y: 360, w: 290, h: 220, door: { x: 495, y: 340 } }, // Client Services Door
+      { name: 'Cubicle 2', x: 640, y: 360, w: 290, h: 220, door: { x: 795, y: 340 } }  // Customer Service Door
+    ];
 
     const AGENT_COLORS = {
       'ops_manager': '#58a6ff', // Blue
@@ -537,9 +701,15 @@ app.get('/', (req, res) => {
     // agents: { id: { x, y, homeX, homeY, facing, status, carrying, label, queue: [], busy: false } }
     const agents = {}; 
     let eventCount = 0;
+    
+    // Task Lists
+    let inboxTasks = []; // { id, summary, agent }
+    let outboxTasks = []; // { id, summary, status }
 
     const logEl = document.getElementById('log');
     const agentLayer = document.getElementById('agent-layer');
+    const inboxEl = document.getElementById('inbox-list');
+    const outboxEl = document.getElementById('outbox-list');
     
     function log(msg) {
       logEl.innerText = msg + '\\n' + logEl.innerText.slice(0, 1000);
@@ -618,29 +788,142 @@ app.get('/', (req, res) => {
       }
     }
 
-    function showBubble(agentId, text, duration = 2000) {
+    function showBubble(agentId, text, type = 'chat', duration = 4000) {
        const el = document.getElementById('agent-' + agentId.replace(/[^a-zA-Z0-9]/g, '_'));
        if (!el) return;
        const bubble = el.querySelector('.speech-bubble');
        if (bubble) {
          bubble.innerText = text;
-         bubble.classList.add('visible');
-         setTimeout(() => bubble.classList.remove('visible'), duration);
+         bubble.className = 'speech-bubble visible ' + type;
+
+         // Clear previous timeout if any
+         if (bubble.dataset.timeout) clearTimeout(Number(bubble.dataset.timeout));
+
+         const tid = setTimeout(() => {
+            bubble.classList.remove('visible');
+         }, duration);
+         bubble.dataset.timeout = tid;
        }
+    }
+
+    function renderPanes() {
+      try {
+        // Update stats
+        const taskCountEl = document.getElementById('task-count');
+        if (taskCountEl) {
+          taskCountEl.innerText = inboxTasks.length + outboxTasks.length;
+        }
+
+        // Debug log to UI
+        log('Render: Inbox=' + inboxTasks.length + ' Outbox=' + outboxTasks.length);
+
+        if (inboxEl) {
+          if (inboxTasks.length === 0) {
+            inboxEl.innerHTML = '<div style="padding:10px; color:#484f58; text-align:center;">No tasks</div>';
+          } else {
+            inboxEl.innerHTML = inboxTasks.map(t => \`
+              <div class="task-item queued">
+                <span class="task-id">\${(t.id||'').split(':').pop().substring(0,8)}</span>
+                <div class="task-meta">\${t.summary || 'Task'}</div>
+                <div class="task-meta">-> \${t.agent}</div>
+              </div>
+            \`).join('');
+          }
+        }
+        
+        if (outboxEl) {
+          outboxEl.innerHTML = outboxTasks.map(t => \`
+            <div class="task-item \${t.status}">
+              <span class="task-id">\${(t.id||'').split(':').pop().substring(0,8)}</span>
+              <div class="task-meta">\${t.summary || 'Task'}</div>
+              <div class="task-meta">\${t.status.toUpperCase()}</div>
+            </div>
+          \`).join('');
+        }
+      } catch (e) {
+        console.error('Error rendering panes:', e);
+        log('Render error: ' + e.message);
+      }
+    }
+
+    function ensureInInbox(e) {
+      const id = e.task_id || e.run_id;
+      if (!id) return;
+
+      // dedupe
+      if (inboxTasks.some(t => t.id === id)) return;
+
+      inboxTasks.push({
+        id,
+        summary: e.input_summary || e.summary || e.reason || 'New Task',
+        agent: e.to_agent_id || e.agent_id || e.agent_name || 'queued'
+      });
     }
 
     // ========== ACTION QUEUE SYSTEM ==========
     // Actions: 
     // ['move', x, y]
     // ['wait', ms]
-    // ['set', key, value]
+    // ['set', key, val]
     // ['trigger', fn]
+    // ['exec', fn]
+    // ['bubble', text, type, duration]
     // ['waitForState', key, val]
 
     function queueAction(agentId, action) {
       if (!agents[agentId]) return;
       agents[agentId].queue.push(action);
       processQueue(agentId);
+    }
+
+    // Pathfinding helper
+    function getRoomForPoint(x, y) {
+      return ROOMS.find(r => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h);
+    }
+
+    function queueMove(agentId, targetX, targetY) {
+      const agent = agents[agentId];
+      if (!agent) return;
+
+      let currX = agent.x;
+      let currY = agent.y;
+
+      // Scan queue for last move target to establish starting point
+      for (let i = agent.queue.length - 1; i >= 0; i--) {
+        if (agent.queue[i][0] === 'move') {
+          currX = agent.queue[i][1];
+          currY = agent.queue[i][2];
+          break;
+        }
+      }
+
+      const startRoom = getRoomForPoint(currX, currY);
+      const endRoom = getRoomForPoint(targetX, targetY);
+
+      // Helper to push orthogonal segments (X then Y)
+      const pushLeg = (destX, destY) => {
+        if (currX !== destX && currY !== destY) {
+          queueAction(agentId, ['move', destX, currY]); // Move X
+          queueAction(agentId, ['move', destX, destY]); // Move Y
+        } else if (currX !== destX || currY !== destY) {
+          queueAction(agentId, ['move', destX, destY]);
+        }
+        currX = destX;
+        currY = destY;
+      };
+
+      // 1. Exit Start Room
+      if (startRoom && startRoom !== endRoom) {
+        pushLeg(startRoom.door.x, startRoom.door.y);
+      }
+
+      // 2. Enter End Room
+      if (endRoom && startRoom !== endRoom) {
+        pushLeg(endRoom.door.x, endRoom.door.y);
+      }
+
+      // 3. Final Target
+      pushLeg(targetX, targetY);
     }
 
     async function processQueue(agentId) {
@@ -660,24 +943,45 @@ app.get('/', (req, res) => {
             agent.x = targetX;
             agent.y = targetY;
             renderAgents();
-            // Wait for transition (0.8s CSS + buffer)
-            await new Promise(r => setTimeout(r, 900));
+            // Wait for transition (1.5s CSS + buffer)
+            await new Promise(r => setTimeout(r, 1600));
             agent.status = 'idle';
             renderAgents();
+            agent.busy = false;
+            processQueue(agentId);
             break;
 
           case 'wait':
-            await new Promise(r => setTimeout(r, action[1]));
+            setTimeout(() => {
+              agent.busy = false;
+              processQueue(agentId);
+            }, action[1]);
             break;
 
           case 'set':
             agent[action[1]] = action[2];
             renderAgents();
+            agent.busy = false;
+            processQueue(agentId); // Next
             break;
             
           case 'trigger':
-             if (typeof action[1] === 'function') action[1]();
+             action[1]();
+             agent.busy = false;
+             processQueue(agentId);
              break;
+
+          case 'exec': // Synchronous trigger (same as trigger but clearer name for state updates)
+            action[1]();
+            agent.busy = false;
+            processQueue(agentId);
+            break;
+
+          case 'bubble':
+            showBubble(agentId, action[1], action[2], action[3]);
+            agent.busy = false;
+            processQueue(agentId);
+            break;
              
           case 'waitForState':
              const [__, key, val] = action;
@@ -688,14 +992,15 @@ app.get('/', (req, res) => {
                setTimeout(() => processQueue(agentId), 200);
                return; // Exit loop, will be called again by timeout
              }
+             agent.busy = false;
+             processQueue(agentId); // Next
              break;
         }
       } catch (e) {
         console.error('Queue error', e);
+        agent.busy = false;
+        processQueue(agentId); // Attempt to continue queue
       }
-
-      agent.busy = false;
-      processQueue(agentId); // Next
     }
 
     // ========== EVENT REDUCER ==========
@@ -722,63 +1027,111 @@ app.get('/', (req, res) => {
     function handleEvent(evt) {
       eventCount++;
       document.getElementById('event-count').innerText = eventCount;
-      log(\`[\${evt.type}] \${evt.agent_id||''} \${evt.task_id||''}\`);
+
+      // System-level queue events: MUST work without agent_id
+      if (evt.type === 'task_created' || evt.type === 'task_enqueued') {
+        ensureInInbox(evt);
+        renderPanes();
+        log('[' + evt.type + '] ' + (evt.task_id || evt.run_id || ''));
+        return;
+      }
+
+      // task_assigned is special: may arrive before enqueue; backfill inbox first
+      if (evt.type === 'task_assigned') {
+        if (!evt.to_agent_id || !(evt.task_id || evt.run_id)) {
+          log('[task_assigned] invalid (missing to_agent_id or task_id/run_id)');
+          return;
+        }
+        ensureInInbox(evt);
+        renderPanes();
+        // continue below (needs dispatcher animation)
+      }
 
       const agentId = evt.agent_id;
-      if (!agentId) return;
 
-      const agent = ensureAgent(agentId, evt.agent_name);
+      // Most other events require an agent_id
+      if (!agentId && evt.type !== 'task_assigned') return;
+
+      log('[' + evt.type + '] ' + (agentId || '') + ' ' + (evt.task_id || evt.run_id || ''));
+      const agent = agentId ? ensureAgent(agentId, evt.agent_name) : null;
 
       switch(evt.type) {
         case 'agent_spawned':
           // Just ensure exists (handled above)
           break;
 
+        case 'task_enqueued':
+        case 'task_created':
+          break;
+
+
+
+        case 'task_started':
+        case 'run_started':
+          // Don't remove from inbox here immediately if we want to see the fetch.
+          // But if it's a direct start (no assign), we might need to.
+          // For now, we assume task_assigned handles the fetch/remove.
+          // Just update status and show bubble.
+
+          queueAction(agentId, ['set', 'status', 'working']);
+          queueAction(agentId, ['bubble', 'Analyzing...', 'thought', 4000]);
+          break;
+
         case 'task_assigned':
-          // Logic: Ops Manager (or Owner) picks up -> Walks to Assignee -> Drops -> Walks Home
-          // We need to find who is assigning. Usually Ops Manager for 'task_assigned' if not specified?
-          // Let's assume Ops Manager is the dispatcher if not self-assigned.
-          
-          const assigneeId = evt.to_agent_id;
-          if (assigneeId && assigneeId !== agentId) {
-             // Dispatcher sequence
-             ensureAgent(assigneeId); // Ensure target exists
-             const targetPos = getAgentPos(assigneeId);
+          // Logic: Ops Manager (Dispatcher) picks up -> Walks to Assignee -> Drops -> Walks Home
+
+          const dispatcherId = 'ops_manager:dev'; // Hardcoded for now, or find agent with role 'ops'
+          const assigneeId = evt.to_agent_id || evt.agent_id;
+
+          if (assigneeId && agents[dispatcherId]) {
+             ensureAgent(dispatcherId);
+             ensureAgent(assigneeId);
+
+             const dispatcher = agents[dispatcherId];
+             const assignee = agents[assigneeId];
+             const targetPos = { x: assignee.homeX, y: assignee.homeY };
              
-             // 1. Walk to Inbox
-             queueAction(agentId, ['move', INBOX_POS.x, INBOX_POS.y]);
-             queueAction(agentId, ['wait', 500]);
+             // 1. Dispatcher walks to Inbox
+             queueMove(dispatcherId, INBOX_POS.x, INBOX_POS.y);
+             queueAction(dispatcherId, ['wait', 200]);
              
              // 2. Pick up from Inbox
-             queueAction(agentId, ['set', 'carrying', true]);
-             showBubble(agentId, 'New Task');
-             queueAction(agentId, ['wait', 500]);
-
-             // 3. Walk back to own desk (Home)
-             queueAction(agentId, ['move', agent.homeX, agent.homeY]);
-             queueAction(agentId, ['wait', 500]);
-
-             // 4. Walk to target
-             queueAction(agentId, ['move', targetPos.x, targetPos.y]);
-             queueAction(agentId, ['wait', 500]);
-             
-             // 5. Drop (Transfer)
-             queueAction(agentId, ['set', 'carrying', false]);
-             queueAction(agentId, ['trigger', () => {
-               // Instant transfer to target
-               if (agents[assigneeId]) agents[assigneeId].carrying = true;
-               if (agents[assigneeId]) agents[assigneeId].status = 'working';
-               renderAgents();
-               showBubble(assigneeId, 'On it!');
+             queueAction(dispatcherId, ['exec', () => {
+                console.log('Executing pickup for task:', evt.task_id);
+                // Remove from inbox NOW, visually
+                inboxTasks = inboxTasks.filter(t => t.id !== (evt.task_id || evt.run_id));
+                renderPanes();
              }]);
-             queueAction(agentId, ['wait', 500]);
+             queueAction(dispatcherId, ['set', 'carrying', true]);
+             queueAction(dispatcherId, ['bubble', 'Dispatching...', 'chat']);
+             queueAction(dispatcherId, ['wait', 200]);
+
+             // 3. Walk to Assignee's Desk
+             queueMove(dispatcherId, targetPos.x, targetPos.y);
+             queueAction(dispatcherId, ['wait', 200]);
+
+             // 4. Drop / Transfer
+             queueAction(dispatcherId, ['set', 'carrying', false]);
              
-             // 6. Walk Home
-             queueAction(agentId, ['move', agent.homeX, agent.homeY]);
-          } else {
-             // Self assignment
-             queueAction(agentId, ['set', 'status', 'working']);
-             queueAction(agentId, ['set', 'carrying', true]);
+             if (dispatcherId !== assigneeId) {
+               // Transfer to another agent
+               queueAction(dispatcherId, ['trigger', () => {
+                 if (agents[assigneeId]) {
+                   agents[assigneeId].carrying = true;
+                   agents[assigneeId].status = 'working';
+                   showBubble(assigneeId, 'On it!', 'chat');
+                   renderAgents();
+                 }
+               }]);
+             } else {
+               // Self-assigned (Ops Manager kept it)
+               queueAction(dispatcherId, ['set', 'status', 'working']);
+               queueAction(dispatcherId, ['bubble', 'I will handle this.', 'chat']);
+             }
+             queueAction(dispatcherId, ['wait', 200]);
+
+             // 5. Walk Home (if not already there)
+             queueMove(dispatcherId, dispatcher.homeX, dispatcher.homeY);
           }
           break;
 
@@ -791,22 +1144,22 @@ app.get('/', (req, res) => {
             // Wait until we actually have the folder!
             queueAction(agentId, ['waitForState', 'carrying', true]);
 
-            showBubble(agentId, 'Handoff: ' + (evt.reason || 'Task'));
+            queueAction(agentId, ['bubble', 'Handing off...', 'chat', 4000]);
 
             // 1. Walk to target
-            queueAction(agentId, ['move', targetPos.x, targetPos.y]);
-            queueAction(agentId, ['wait', 800]);
+            queueMove(agentId, targetPos.x, targetPos.y);
+            queueAction(agentId, ['wait', 500]);
             // 2. Transfer
             queueAction(agentId, ['set', 'carrying', false]);
             queueAction(agentId, ['trigger', () => {
                if (agents[toId]) agents[toId].carrying = true;
                if (agents[toId]) agents[toId].status = 'working';
                renderAgents();
-               showBubble(toId, 'Got it!');
+               showBubble(toId, 'Got it!', 'chat');
             }]);
-            queueAction(agentId, ['wait', 500]);
+            queueAction(agentId, ['wait', 200]);
             // 3. Walk Home
-            queueAction(agentId, ['move', agent.homeX, agent.homeY]);
+            queueMove(agentId, agent.homeX, agent.homeY);
           }
           break;
 
@@ -816,23 +1169,32 @@ app.get('/', (req, res) => {
           // Wait until we have the folder
           queueAction(agentId, ['waitForState', 'carrying', true]);
           
-          // Walk to Outbox -> Drop -> Home
-          showBubble(agentId, 'Done!');
-          queueAction(agentId, ['set', 'status', 'idle']);
-          queueAction(agentId, ['move', OUTBOX_POS.x, OUTBOX_POS.y]);
-          queueAction(agentId, ['wait', 500]);
-          queueAction(agentId, ['set', 'carrying', false]);
-          queueAction(agentId, ['move', agent.homeX, agent.homeY]);
-          break;
+          const status = evt.type === 'task_failed' ? 'failed' : 'completed';
 
-        case 'run_started':
-          queueAction(agentId, ['set', 'status', 'working']);
-          showBubble(agentId, 'Starting...');
+          // Walk to Outbox -> Drop -> Home
+          queueAction(agentId, ['bubble', status === 'failed' ? 'Blocked.' : 'Done.', 'chat', 3000]);
+          queueAction(agentId, ['set', 'status', 'idle']);
+          queueMove(agentId, OUTBOX_POS.x, OUTBOX_POS.y);
+          queueAction(agentId, ['wait', 200]);
+
+          // Drop and Update Outbox
+          queueAction(agentId, ['exec', () => {
+            outboxTasks.unshift({
+              id: evt.task_id || evt.run_id,
+              summary: evt.output_summary || 'Task Done',
+              status
+            });
+            if (outboxTasks.length > 50) outboxTasks.pop();
+            renderPanes();
+          }]);
+
+          queueAction(agentId, ['set', 'carrying', false]);
+          queueMove(agentId, agent.homeX, agent.homeY);
           break;
 
         case 'tool_call':
           queueAction(agentId, ['set', 'status', 'working']);
-          showBubble(agentId, (evt.tool_name || '...'));
+          queueAction(agentId, ['bubble', 'Using ' + (evt.tool_name || 'tool') + '...', 'chat', 4000]);
           break;
       }
     }
@@ -851,7 +1213,7 @@ app.get('/', (req, res) => {
     }, 3000);
 
     // SSE Connection
-    const es = new EventSource('/sse');
+    const es = new EventSource('/sse?replay=0');
     es.onmessage = (e) => {
       try {
         const evt = JSON.parse(e.data);
@@ -887,6 +1249,13 @@ app.post('/test/handoff', (req, res) => {
     { type: 'agent_spawned', agent_id: 'customer_service_manager:dev', agent_name: 'Customer Service', ts: now },
 
     // 2. Start Two Parallel Runs
+    { type: 'task_enqueued', task_id: runIdA, input_summary: 'Q1 Sales Campaign', agent_name: 'Ops Manager', ts: now },
+    { type: 'task_enqueued', task_id: runIdB, input_summary: 'Client Onboarding: Acme Corp', agent_name: 'Ops Manager', ts: now },
+
+    // Assign tasks to Ops Manager to trigger fetch
+    { type: 'task_assigned', task_id: runIdA, to_agent_id: 'ops_manager:dev', ts: now },
+    { type: 'task_assigned', task_id: runIdB, to_agent_id: 'ops_manager:dev', ts: now },
+
     { type: 'run_started', agent_id: 'ops_manager:dev', run_id: runIdA, input_summary: 'Q1 Sales Campaign', ts: now },
     { type: 'run_started', agent_id: 'ops_manager:dev', run_id: runIdB, input_summary: 'Client Onboarding: Acme Corp', ts: now },
 
@@ -919,7 +1288,7 @@ app.post('/test/handoff', (req, res) => {
   let delay = 0;
   for (const evt of testEvents) {
     setTimeout(() => pushEvent(evt), delay);
-    delay += 1500; // 1.5s delay between events to allow animations to start/queue
+    delay += 3000; // 3.0s delay between events to allow animations to start/queue
   }
 
   res.json({ status: 'ok', message: 'Handoff demo started', events: testEvents.length, duration_ms: delay });
@@ -933,8 +1302,11 @@ app.get('/sse', (req, res) => {
 
   sseClients.add(res);
 
-  for (const evt of events.slice(-500)) {
-    res.write(`data: ${JSON.stringify(evt)}\n\n`);
+  const replay = req.query.replay === '1';
+  if (replay) {
+    for (const evt of events.slice(-500)) {
+      res.write(`data: ${JSON.stringify(evt)}\n\n`);
+    }
   }
 
   req.on('close', () => {

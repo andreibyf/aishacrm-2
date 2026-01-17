@@ -128,8 +128,6 @@ function PagesContent() {
                             <Route path="/SystemLogs" element={<PAGES.SystemLogs />} />
                             <Route path="/Workflows" element={<PAGES.Workflows />} />
                             <Route path="/ConstructionProjects" element={<PAGES.ConstructionProjects />} />
-                            <Route path="/Workers" element={<PAGES.Workers />} />
-                            <Route path="/FunnelDemo" element={<PAGES.FunnelDemo />} />
                             <Route path="/McpAdmin" element={<PAGES.McpAdmin />} />
                         </Routes>
                     </Layout>

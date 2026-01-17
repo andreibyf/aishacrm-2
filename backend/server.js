@@ -21,6 +21,7 @@ import workflowQueue from "./services/workflowQueue.js";
 import { startCampaignWorker } from "./lib/campaignWorker.js";
 import { startAiTriggersWorker } from "./lib/aiTriggersWorker.js";
 import { startEmailWorker } from "./workers/emailWorker.js";
+import { startTaskWorkers } from "./workers/taskWorkers.js";
 import { startHealthMonitoring } from "./lib/healthMonitor.js";
 
 // Import UUID validation
@@ -223,6 +224,7 @@ import createSuggestionsRoutes from "./routes/suggestions.js";
 import createConstructionProjectsRoutes from "./routes/construction-projects.js";
 import createConstructionAssignmentsRoutes from "./routes/construction-assignments.js";
 import createWorkersRoutes from "./routes/workers.js";
+import { createTasksRoutes } from "./routes/tasks.js";
 import createDashboardFunnelRoutes from "./routes/dashboard-funnel.js";
 import braidAuditRoutes from "./routes/braidAudit.js";
 import braidChainRoutes from "./routes/braidChain.js";
@@ -337,6 +339,8 @@ logger.debug("Mounting /api/construction/assignments routes");
 app.use("/api/construction/assignments", createConstructionAssignmentsRoutes(measuredPgPool));
 logger.debug("Mounting /api/workers routes");
 app.use("/api/workers", createWorkersRoutes(measuredPgPool));
+logger.debug("Mounting /api/tasks routes");
+app.use("/api/tasks", createTasksRoutes(measuredPgPool));
 // Memory routes use Redis/Valkey; DB pool not required
 app.use("/api/memory", createMemoryRoutes());
 // Auth routes (cookie-based login/refresh/logout)
@@ -680,6 +684,7 @@ server.listen(PORT, async () => {
   if (pgPool) {
     logger.info('[EmailWorker] Starting email worker (processes queued email activities)');
     startEmailWorker(pgPool);
+    startTaskWorkers(pgPool);
   } else {
     logger.warn('[EmailWorker] Disabled (no database connection)');
   }

@@ -86,11 +86,14 @@ async function runMigration() {
         
         // Try using pg pool instead
         const { Pool } = await import('pg');
-        const DATABASE_URL = process.env.DATABASE_URL;
+        let DATABASE_URL = process.env.DATABASE_URL;
         
         if (!DATABASE_URL) {
           throw new Error('DATABASE_URL not found in environment variables');
         }
+
+        // Strip sslmode=require to allow manual SSL configuration
+        DATABASE_URL = DATABASE_URL.replace('?sslmode=require', '').replace('&sslmode=require', '');
 
         let pool;
         

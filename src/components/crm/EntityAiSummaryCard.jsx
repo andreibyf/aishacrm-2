@@ -1,0 +1,75 @@
+import React, { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Sparkles, ExternalLink, Clock } from "lucide-react";
+import AishaEntityChatModal from "@/components/ai/AishaEntityChatModal";
+import { formatDistanceToNow } from 'date-fns';
+
+export default function EntityAiSummaryCard({ 
+  entityType, 
+  entityId, 
+  entityLabel, 
+  aiSummary, 
+  lastUpdated 
+}) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const handleBackOfficeClick = () => {
+    // Open Office Viz in a new tab with query params
+    // Assuming Office Viz runs on port 4010 based on docker-compose/server.js
+    const officeVizUrl = `http://${window.location.hostname}:4010?entity_type=${entityType}&entity_id=${entityId}`;
+    window.open(officeVizUrl, '_blank');
+  };
+
+  return (
+    <>
+      <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-5 mb-6 shadow-sm">
+        <div className="flex flex-row items-center justify-between pb-2">
+          <h3 className="text-lg font-bold flex items-center gap-2 text-indigo-900">
+            <Sparkles className="w-5 h-5" />
+            AI Summary
+          </h3>
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setIsModalOpen(true)}
+              className="bg-white border-indigo-200 hover:bg-indigo-100 text-indigo-700 text-xs h-8"
+            >
+              Ask AiSHA
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleBackOfficeClick}
+              className="text-indigo-400 hover:text-indigo-600 hover:bg-indigo-100 text-xs h-8"
+              title="Open Back Office"
+            >
+              <ExternalLink className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+        <div className="space-y-4">
+          <div className="prose prose-sm max-w-none text-indigo-800 leading-relaxed">
+            {aiSummary || "No summary available yet. Ask AiSHA to generate one."}
+          </div>
+          
+          {lastUpdated && (
+            <div className="flex items-center gap-2 text-xs text-indigo-400 pt-2 border-t border-indigo-200/50">
+              <Clock className="w-3 h-3" />
+              <span>Last updated {formatDistanceToNow(new Date(lastUpdated), { addSuffix: true })}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <AishaEntityChatModal
+        open={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        entityType={entityType}
+        entityId={entityId}
+        entityLabel={entityLabel}
+      />
+    </>
+  );
+}

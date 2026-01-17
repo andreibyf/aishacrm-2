@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams, Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
+import { setAiShaContext } from "@/utils/contextBridge";
+import EntityAiSummaryCard from "@/components/crm/EntityAiSummaryCard";
 
 function getRuntimeEnv(key) {
   if (typeof window !== "undefined" && window._env_) return window._env_[key];
@@ -40,6 +42,13 @@ function StatusPill({ status }) {
  * Fetches person-profile directly from Supabase Edge Function using Authorization.
  */
 export default function LeadProfilePage() {
+  return (
+    <LeadProfilePageContent />
+  );
+}
+
+function LeadProfilePageContent() {
+  console.log("LeadProfilePageContent rendering (New Version)");
   const params = useParams();
   const [searchParams] = useSearchParams();
 
@@ -335,6 +344,18 @@ export default function LeadProfilePage() {
         // Set profile if we have any data object
         if (!aborted) {
           setProfile(data || {});
+          if (data && Object.keys(data).length > 0) {
+            // Determine title for context
+            let title = data.name || data.subject;
+            if (!title && (data.first_name || data.last_name)) {
+              title = [data.first_name, data.last_name].filter(Boolean).join(" ");
+            }
+            setAiShaContext({
+              entity_type: entityType,
+              entity_id: entityId,
+              title: title || entityType
+            });
+          }
           if (!data || Object.keys(data).length === 0) {
             console.warn('[Profile] Empty data received');
           }
@@ -349,6 +370,7 @@ export default function LeadProfilePage() {
     load();
     return () => {
       aborted = true;
+      setAiShaContext(null);
     };
   }, [entityId, tenantId]);
 
@@ -463,6 +485,8 @@ export default function LeadProfilePage() {
   return (
     <div className="flex min-h-screen bg-gray-100">
       {/* Sidebar */}
+
+      {/* Sidebar */}
       <aside className="fixed top-0 left-0 bottom-0 w-64 bg-gray-900 text-white p-6 overflow-y-auto">
         <h1 className="text-2xl font-bold mb-1">{name}</h1>
         {subtitle && <p className="text-gray-400 text-sm mb-2">{subtitle}</p>}
@@ -505,12 +529,13 @@ export default function LeadProfilePage() {
           <h2 className="text-3xl font-bold text-gray-900 mb-8">Profile</h2>
 
           {/* AI Summary */}
-          {lead.ai_summary && (
-            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-5 mb-6">
-              <h3 className="text-lg font-bold text-indigo-900 mb-2">📊 AI Summary</h3>
-              <p className="text-indigo-800 text-sm leading-relaxed">{lead.ai_summary}</p>
-            </div>
-          )}
+          <EntityAiSummaryCard
+            entityType={entityType}
+            entityId={entityId}
+            entityLabel={name}
+            aiSummary={lead.ai_summary}
+            lastUpdated={lead.updated_at}
+          />
 
           {/* Contact Information */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-6">

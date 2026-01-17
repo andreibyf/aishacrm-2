@@ -503,6 +503,14 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     wakeWordModeRef.current = isWakeWordModeEnabled;
   }, [isWakeWordModeEnabled]);
 
+  const [activeContext, setActiveContext] = useState(null);
+
+  useEffect(() => {
+    const handleContext = (e) => setActiveContext(e.detail);
+    window.addEventListener('aisha:context', handleContext);
+    return () => window.removeEventListener('aisha:context', handleContext);
+  }, []);
+
   useEffect(() => {
     if (!tenantId && activeFormId) {
       setActiveFormId(null);
@@ -1160,6 +1168,36 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
       setVoiceWarning('Voice command blocked: please revise before sending.');
       return;
     }
+
+    // Check for task intent
+    if (activeContext && draft.trim().toLowerCase() === 'generate next steps') {
+      try {
+        addRealtimeMessage({ role: 'user', content: draft });
+        addRealtimeMessage({ role: 'assistant', content: `Creating task for ${activeContext.title || activeContext.entity_type}...` });
+
+        const res = await fetch('/api/tasks/from-intent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            description: draft,
+            entity_type: activeContext.entity_type,
+            entity_id: activeContext.entity_id,
+            tenant_id: tenantId
+          })
+        });
+
+        if (!res.ok) {
+          throw new Error('Failed to create task');
+        }
+      } catch (e) {
+        console.error(e);
+        toast.error('Failed to create task');
+      }
+      setDraft('');
+      setDraftOrigin('text');
+      setVoiceWarning(null);
+      return;
+    }
     if (isRealtimeActive) {
       await sendViaRealtime(draft);
     } else {
@@ -1700,6 +1738,17 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
         </div>
 
           <div className="border-t border-slate-200 bg-slate-50/80 px-5 py-4 dark:border-slate-800/60 dark:bg-slate-950/70">
+            {activeContext && (
+              <div className="mb-3 flex items-center justify-between rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-900 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-100">
+                <div className="flex items-center gap-2">
+                  <Target className="h-4 w-4" />
+                  <span>Working on: <strong>{activeContext.title || activeContext.entity_type}</strong></span>
+                </div>
+                <button type="button" onClick={() => setActiveContext(null)} className="hover:text-indigo-700 dark:hover:text-indigo-300">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
             <form onSubmit={handleSubmit} className="space-y-3">
             {voiceWarning && (
                 <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">

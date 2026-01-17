@@ -266,6 +266,15 @@ export function emitTaskCreated({ run_id, trace_id, span_id, parent_span_id, ten
   });
 }
 
+/** Emit: task_enqueued (System level, no agent_id required) */
+export function emitTaskEnqueued({ run_id, trace_id, span_id, parent_span_id, tenant_id, task_id, input_summary, agent_name }) {
+  telemetryLog({
+    type: 'task_enqueued', // Explicit string as it might not be in EventTypes enum yet
+    run_id, trace_id, span_id, parent_span_id, tenant_id, task_id,
+    input_summary, agent_name
+  });
+}
+
 /** Emit: task_assigned */
 export function emitTaskAssigned({ run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, task_id, to_agent_id, queue, reason }) {
   telemetryLog({

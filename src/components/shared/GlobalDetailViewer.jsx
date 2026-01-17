@@ -20,6 +20,8 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { Account, Contact, Lead, Opportunity } from "@/api/entities";
+import { setAiShaContext } from "@/utils/contextBridge";
+import { useEffect } from "react";
 
 const entityIcons = {
   Contact: <User className="w-5 h-5 text-blue-400" />,
@@ -53,6 +55,20 @@ export default function GlobalDetailViewer({ recordInfo, open, onClose }) {
   const [editMode, setEditMode] = useState(false);
   const [editedRecord, setEditedRecord] = useState({});
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open && recordInfo?.record) {
+      const { record, entityType } = recordInfo;
+      const title = record.name ||
+        `${record.first_name || ""} ${record.last_name || ""}`.trim();
+
+      setAiShaContext({
+        entity_type: entityType,
+        entity_id: record.id,
+        title: title || entityType
+      });
+    }
+  }, [open, recordInfo]);
 
   if (!open || !recordInfo) return null;
 
@@ -181,6 +197,15 @@ export default function GlobalDetailViewer({ recordInfo, open, onClose }) {
                   </Button>
                 </>
               )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => window.dispatchEvent(new CustomEvent('aisha:open'))}
+              className="text-slate-400 hover:text-slate-100"
+              title="Ask AiSHA"
+            >
+              <Star className="w-5 h-5" />
+            </Button>
             <Button
               variant="ghost"
               size="icon"

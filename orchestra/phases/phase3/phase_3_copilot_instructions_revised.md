@@ -4,6 +4,7 @@ This is the **authoritative specification** Copilot must follow to implement **P
 
 ---
 # 0. ROLE & CONSTRAINTS
+> **Note**: The user creates work; AiSHA decides ownership; agents execute.
 You MUST implement Phase 3 on top of fully completed Phase 1 (AI Brain + Braid) and Phase 2 (Realtime Conversational Interface).
 
 You MUST NOT:
