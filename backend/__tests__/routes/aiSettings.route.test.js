@@ -1,6 +1,6 @@
 /**
  * Integration tests for AI Settings routes
- * Tests /api/ai-settings or /api/aiSettings endpoints
+ * Tests /api/ai-settings or /api/ai-settings endpoints
  */
 
 import { test, describe } from 'node:test';
@@ -12,8 +12,8 @@ const SHOULD_RUN = process.env.CI ? (process.env.CI_BACKEND_TESTS === 'true') : 
 
 describe('AI Settings Routes', { skip: !SHOULD_RUN }, () => {
 
-  test('GET /api/aiSettings returns AI settings', async () => {
-    const res = await fetch(`${BASE_URL}/api/aiSettings?tenant_id=${TENANT_ID}`);
+  test('GET /api/ai-settings returns AI settings', async () => {
+    const res = await fetch(`${BASE_URL}/api/ai-settings?tenant_id=${TENANT_ID}`);
     assert.ok([200, 401, 404].includes(res.status), `expected 200/401/404, got ${res.status}`);
     
     if (res.status === 200) {
@@ -22,8 +22,8 @@ describe('AI Settings Routes', { skip: !SHOULD_RUN }, () => {
     }
   });
 
-  test('PUT /api/aiSettings updates AI settings', async () => {
-    const res = await fetch(`${BASE_URL}/api/aiSettings`, {
+  test('PUT /api/ai-settings updates AI settings', async () => {
+    const res = await fetch(`${BASE_URL}/api/ai-settings`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
@@ -35,8 +35,8 @@ describe('AI Settings Routes', { skip: !SHOULD_RUN }, () => {
     assert.ok([200, 401, 422].includes(res.status), `expected update response, got ${res.status}`);
   });
 
-  test('POST /api/aiSettings with invalid temperature returns error', async () => {
-    const res = await fetch(`${BASE_URL}/api/aiSettings`, {
+  test('POST /api/ai-settings with invalid temperature returns error', async () => {
+    const res = await fetch(`${BASE_URL}/api/ai-settings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
@@ -47,8 +47,8 @@ describe('AI Settings Routes', { skip: !SHOULD_RUN }, () => {
     assert.ok([400, 401, 422].includes(res.status), `expected validation error, got ${res.status}`);
   });
 
-  test('GET /api/aiSettings/models returns available models', async () => {
-    const res = await fetch(`${BASE_URL}/api/aiSettings/models?tenant_id=${TENANT_ID}`);
+  test('GET /api/ai-settings/models returns available models', async () => {
+    const res = await fetch(`${BASE_URL}/api/ai-settings/models?tenant_id=${TENANT_ID}`);
     assert.ok([200, 401, 404].includes(res.status), `expected 200/401/404, got ${res.status}`);
     
     if (res.status === 200) {
@@ -57,13 +57,13 @@ describe('AI Settings Routes', { skip: !SHOULD_RUN }, () => {
     }
   });
 
-  test('GET /api/aiSettings/providers returns AI providers', async () => {
-    const res = await fetch(`${BASE_URL}/api/aiSettings/providers?tenant_id=${TENANT_ID}`);
+  test('GET /api/ai-settings/providers returns AI providers', async () => {
+    const res = await fetch(`${BASE_URL}/api/ai-settings/providers?tenant_id=${TENANT_ID}`);
     assert.ok([200, 401, 404].includes(res.status), `expected 200/401/404, got ${res.status}`);
   });
 
-  test('POST /api/aiSettings/test-connection tests AI connection', async () => {
-    const res = await fetch(`${BASE_URL}/api/aiSettings/test-connection`, {
+  test('POST /api/ai-settings/test-connection tests AI connection', async () => {
+    const res = await fetch(`${BASE_URL}/api/ai-settings/test-connection`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
@@ -74,8 +74,8 @@ describe('AI Settings Routes', { skip: !SHOULD_RUN }, () => {
     assert.ok([200, 400, 401, 500].includes(res.status), `expected test response, got ${res.status}`);
   });
 
-  test('DELETE /api/aiSettings resets to defaults', async () => {
-    const res = await fetch(`${BASE_URL}/api/aiSettings?tenant_id=${TENANT_ID}`, {
+  test('DELETE /api/ai-settings resets to defaults', async () => {
+    const res = await fetch(`${BASE_URL}/api/ai-settings?tenant_id=${TENANT_ID}`, {
       method: 'DELETE'
     });
     assert.ok([200, 401, 404].includes(res.status), `expected reset response, got ${res.status}`);

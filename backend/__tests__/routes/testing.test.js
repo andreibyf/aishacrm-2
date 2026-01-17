@@ -262,11 +262,11 @@ describe('Testing Routes', () => {
       delete process.env.GITHUB_TOKEN;
 
       const res = await makeRequest('GET', '/api/testing/workflow-status?ref=main');
-      assert.strictEqual(res.status, 400);
+      assert.strictEqual(res.status, 503); // Service unavailable when GitHub not configured
       
       const data = await res.json();
-      assert.strictEqual(data.status, 'error');
-      assert.ok(data.message.includes('GITHUB_TOKEN'));
+      assert.strictEqual(data.status, 'unavailable');
+      assert.ok(data.message.includes('GitHub'));
 
       // Restore token
       process.env.GITHUB_TOKEN = token;

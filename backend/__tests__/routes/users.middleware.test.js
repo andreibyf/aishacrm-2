@@ -74,7 +74,7 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     };
   }
 
-  test('should allow login requests within rate limit', async () => {
+  test('should allow login requests within rate limit', { timeout: 5000 }, async () => {
     const response = await makeRequest('POST', '/api/users/login', {
       body: { email: 'test@example.com', password: 'password123' }
     });
@@ -83,7 +83,7 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     assert.notEqual(response.status, 429, 'Should not be rate limited');
   });
 
-  test('should block login requests exceeding rate limit', async () => {
+  test('should block login requests exceeding rate limit', { timeout: 10000 }, async () => {
     // Make multiple requests rapidly to trigger rate limit
     const requests = [];
     for (let i = 0; i < 5; i++) {
@@ -107,7 +107,7 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     assert.equal(rateLimitedResponse.body.code, 'RATE_LIMITED');
   });
 
-  test('should track rate limits per IP address', async () => {
+  test('should track rate limits per IP address', { timeout: 10000 }, async () => {
     const ip1 = '10.0.0.1';
     const ip2 = '10.0.0.2';
 
@@ -142,7 +142,7 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     assert(ip2RateLimited.length > 0, 'IP2 should be rate limited');
   });
 
-  test('should allow password reset requests within rate limit', async () => {
+  test('should allow password reset requests within rate limit', { timeout: 5000 }, async () => {
     const response = await makeRequest('POST', '/api/users/reset-password', {
       body: { email: 'test@example.com' }
     });
@@ -151,7 +151,7 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     assert.notEqual(response.status, 429, 'Should not be rate limited');
   });
 
-  test('should throttle excessive password reset requests', async () => {
+  test('should throttle excessive password reset requests', { timeout: 10000 }, async () => {
     // Make multiple password reset requests for same email
     const requests = [];
     for (let i = 0; i < 3; i++) {
@@ -170,7 +170,7 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     assert(throttledResponses.length > 0, 'Should have throttled responses');
   });
 
-  test('should handle email normalization in throttling', async () => {
+  test('should handle email normalization in throttling', { timeout: 10000 }, async () => {
     // Test different email formats that should be treated as same
     const emails = ['TEST@EXAMPLE.COM', ' test@example.com ', 'Test@Example.Com'];
 
@@ -190,7 +190,7 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     assert(throttledCount > 0, 'Should throttle normalized emails');
   });
 
-  test('should allow user creation within rate limit', async () => {
+  test('should allow user creation within rate limit', { timeout: 5000 }, async () => {
     const response = await makeRequest('POST', '/api/users', {
       body: {
         email: 'newuser@example.com',
@@ -204,7 +204,7 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     assert.notEqual(response.status, 429, 'Should not be rate limited');
   });
 
-  test('should block excessive user creation requests', async () => {
+  test('should block excessive user creation requests', { timeout: 10000 }, async () => {
     // Make multiple user creation requests
     const requests = [];
     for (let i = 0; i < 5; i++) {
@@ -226,14 +226,14 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     assert(rateLimitedResponses.length > 0, 'Should have rate limited responses');
   });
 
-  test('should allow OPTIONS preflight requests', async () => {
+  test('should allow OPTIONS preflight requests', { timeout: 5000 }, async () => {
     const response = await makeRequest('OPTIONS', '/api/users/login');
 
     // OPTIONS requests should always be allowed
     assert.equal(response.status, 200, 'OPTIONS should be allowed');
   });
 
-  test('should allow requests after rate limit window expires', async () => {
+  test('should allow requests after rate limit window expires', { timeout: 15000 }, async () => {
     // Set very short window for testing
     process.env.ROUTE_RATE_WINDOW_MS = '100'; // 100ms
 
@@ -325,7 +325,7 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     };
   }
 
-  test('should allow login requests within rate limit', async () => {
+  test('should allow login requests within rate limit', { timeout: 5000 }, async () => {
     const response = await makeRequest('POST', '/api/users/login', {
       body: { email: 'test@example.com', password: 'password123' }
     });
@@ -334,7 +334,7 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     assert.notEqual(response.status, 429, 'Should not be rate limited');
   });
 
-  test('should block login requests exceeding rate limit', async () => {
+  test('should block login requests exceeding rate limit', { timeout: 10000 }, async () => {
     // Make multiple requests rapidly to trigger rate limit
     const requests = [];
     for (let i = 0; i < 5; i++) {
@@ -358,7 +358,7 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     assert.equal(rateLimitedResponse.body.code, 'RATE_LIMITED');
   });
 
-  test('should track rate limits per IP address', async () => {
+  test('should track rate limits per IP address', { timeout: 10000 }, async () => {
     const ip1 = '10.0.0.1';
     const ip2 = '10.0.0.2';
 
@@ -393,7 +393,7 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     assert(ip2RateLimited.length > 0, 'IP2 should be rate limited');
   });
 
-  test('should allow password reset requests within rate limit', async () => {
+  test('should allow password reset requests within rate limit', { timeout: 5000 }, async () => {
     const response = await makeRequest('POST', '/api/users/reset-password', {
       body: { email: 'test@example.com' }
     });
@@ -402,7 +402,7 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     assert.notEqual(response.status, 429, 'Should not be rate limited');
   });
 
-  test('should throttle excessive password reset requests', async () => {
+  test('should throttle excessive password reset requests', { timeout: 10000 }, async () => {
     // Make multiple password reset requests for same email
     const requests = [];
     for (let i = 0; i < 3; i++) {
@@ -421,7 +421,7 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     assert(throttledResponses.length > 0, 'Should have throttled responses');
   });
 
-  test('should handle email normalization in throttling', async () => {
+  test('should handle email normalization in throttling', { timeout: 10000 }, async () => {
     // Test different email formats that should be treated as same
     const emails = ['TEST@EXAMPLE.COM', ' test@example.com ', 'Test@Example.Com'];
 
@@ -441,7 +441,7 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     assert(throttledCount > 0, 'Should throttle normalized emails');
   });
 
-  test('should allow user creation within rate limit', async () => {
+  test('should allow user creation within rate limit', { timeout: 5000 }, async () => {
     const response = await makeRequest('POST', '/api/users', {
       body: {
         email: 'newuser@example.com',
@@ -455,7 +455,7 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     assert.notEqual(response.status, 429, 'Should not be rate limited');
   });
 
-  test('should block excessive user creation requests', async () => {
+  test('should block excessive user creation requests', { timeout: 10000 }, async () => {
     // Make multiple user creation requests
     const requests = [];
     for (let i = 0; i < 5; i++) {
@@ -477,14 +477,14 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     assert(rateLimitedResponses.length > 0, 'Should have rate limited responses');
   });
 
-  test('should allow OPTIONS preflight requests', async () => {
+  test('should allow OPTIONS preflight requests', { timeout: 5000 }, async () => {
     const response = await makeRequest('OPTIONS', '/api/users/login');
 
     // OPTIONS requests should always be allowed
     assert.equal(response.status, 200, 'OPTIONS should be allowed');
   });
 
-  test('should allow requests after rate limit window expires', async () => {
+  test('should allow requests after rate limit window expires', { timeout: 15000 }, async () => {
     // Set very short window for testing
     process.env.ROUTE_RATE_WINDOW_MS = '100'; // 100ms
 

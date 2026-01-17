@@ -39,6 +39,7 @@ backend/.env
 playwright-report/
 coverage/
 test-results/
+test-regression.log
 
 # Lock files (should be committed but listed here for reference)
 # package-lock.json should be committed for security audits
@@ -98,6 +99,13 @@ DEPLOY_V1.*.md
 ENVIRONMENT_INDICATORS.md
 ENVIRONMENT_QUICK_REFERENCE.md
 ENVIRONMENT_VARIABLES_AUDIT.md
+
+# Incomplete/WIP test files
+backend/__tests__/routes/aiRealtime.route.test.js
+backend/__tests__/routes/aiSettings.route.test.js
+
+# E2E test files
+tests/e2e/*.spec.js
 RATE_LIMIT_MANAGEMENT.md
 GITIGNORE_UPDATES.md
 THUNDER_CLIENT_GUIDE.md

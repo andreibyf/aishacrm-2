@@ -7,22 +7,153 @@ const PORT = Number(process.env.PORT || 4010);
 const BUS_TYPE = (process.env.BUS_TYPE || 'kafka').toLowerCase();
 const MAX_EVENTS = Number(process.env.MAX_EVENTS_IN_MEMORY || 5000);
 
+// Security / UX toggles
+// - If OFFICE_VIZ_TOKEN is set, require Authorization: Bearer <token> (or ?token=)
+// - Demo endpoints are disabled by default
+const OFFICE_VIZ_TOKEN = process.env.OFFICE_VIZ_TOKEN || '';
+const ENABLE_DEMO_ENDPOINTS = (process.env.ENABLE_DEMO_ENDPOINTS || 'false').toLowerCase() === 'true';
+
+function requireVizAuth(req, res, next) {
+  if (!OFFICE_VIZ_TOKEN) return next();
+  const header = (req.headers.authorization || '').trim();
+  const tokenFromHeader = header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : '';
+  const token = tokenFromHeader || (req.query.token ? String(req.query.token) : '');
+  if (token && token === OFFICE_VIZ_TOKEN) return next();
+  res.status(401).json({ error: 'unauthorized' });
+}
+
 const KAFKA_BROKERS = (process.env.KAFKA_BROKERS || 'redpanda:9092').split(',');
-const KAFKA_TOPIC = process.env.KAFKA_TOPIC || 'aisha.telemetry';
+// Canonical topic (contracts): aisha.events.v1
+const KAFKA_TOPIC = process.env.KAFKA_TOPIC || 'aisha.events.v1';
 
 const RABBIT_URL = process.env.RABBIT_URL || 'amqp://rabbitmq:5672';
-const RABBIT_EXCHANGE = process.env.RABBIT_EXCHANGE || 'aisha.telemetry';
+// Keep exchange name aligned with canonical topic by default
+const RABBIT_EXCHANGE = process.env.RABBIT_EXCHANGE || 'aisha.events.v1';
 const RABBIT_BINDING_KEY = process.env.RABBIT_BINDING_KEY || 'events';
 
 const events = [];
-const sseClients = new Set();
+// Map<res, { tenant_id?: string, run_id?: string }>
+const sseClients = new Map();
 
-function pushEvent(evt) {
-  events.push(evt);
-  if (events.length > MAX_EVENTS) events.splice(0, events.length - MAX_EVENTS);
-  const line = `data: ${JSON.stringify(evt)}\n\n`;
-  for (const res of sseClients) {
-    try { res.write(line); } catch (_) {}
+function passesFilter(evt, filter) {
+  if (!filter) return true;
+  if (filter.tenant_id && evt.tenant_id && filter.tenant_id !== evt.tenant_id) return false;
+  if (filter.run_id && evt.run_id && filter.run_id !== evt.run_id) return false;
+  return true;
+}
+
+/**
+ * Normalize canonical telemetry events (contracts) into the UI-friendly event
+ * types the current office-viz client understands.
+ *
+ * Canonical types include: task_created, task_assigned, task_started,
+ * task_completed, task_failed, tool_call_started, tool_call_finished, handoff,
+ * agent_registered, agent_spawned.
+ */
+function normalizeToUiEvents(rawEvt) {
+  const evt = rawEvt && typeof rawEvt === 'object' ? rawEvt : null;
+  if (!evt || !evt.type) return [];
+
+  // Already in UI format (legacy/demo)
+  const uiTypes = new Set([
+    'task_enqueued', 'task_assigned', 'run_started', 'run_completed', 'task_failed',
+    'handoff', 'tool_call', 'agent_spawned', 'agent_registered', 'task_created'
+  ]);
+  if (uiTypes.has(evt.type)) return [evt];
+
+  const common = {
+    _telemetry: evt._telemetry,
+    ts: evt.ts,
+    tenant_id: evt.tenant_id,
+    trace_id: evt.trace_id,
+    span_id: evt.span_id,
+    parent_span_id: evt.parent_span_id,
+    run_id: evt.run_id,
+    task_id: evt.task_id,
+    agent_id: evt.agent_id,
+    agent_name: evt.agent_name,
+  };
+
+  switch (evt.type) {
+    case 'task_created':
+      return [{
+        ...common,
+        type: 'task_enqueued',
+        // use title as the safe summary shown in Inbox
+        input_summary: evt.title || evt.input_summary || 'New Task',
+      }];
+
+    case 'task_assigned':
+      return [{
+        ...common,
+        type: 'task_assigned',
+        to_agent_id: evt.to_agent_id,
+        reason: evt.reason || 'Assigned',
+      }];
+
+    case 'task_started':
+      return [{
+        ...common,
+        type: 'run_started',
+        input_summary: evt.input_summary || evt.title,
+      }];
+
+    case 'tool_call_started':
+    case 'tool_call_finished':
+    case 'tool_call_failed':
+      return [{
+        ...common,
+        type: 'tool_call',
+        tool_name: evt.tool_name,
+      }];
+
+    case 'handoff':
+      return [{
+        ...common,
+        type: 'handoff',
+        from_agent_id: evt.from_agent_id,
+        to_agent_id: evt.to_agent_id,
+        reason: evt.summary || evt.reason || 'Handoff',
+      }];
+
+    case 'task_completed':
+      return [{
+        ...common,
+        type: 'run_completed',
+        output_summary: evt.summary || 'Completed',
+      }];
+
+    case 'task_failed':
+      return [{
+        ...common,
+        type: 'task_failed',
+        error: evt.error,
+        output_summary: evt.error || 'Failed',
+      }];
+
+    case 'agent_registered':
+    case 'agent_spawned':
+      return [{
+        ...common,
+        type: 'agent_spawned',
+      }];
+
+    default:
+      return [];
+  }
+}
+
+function pushEvent(rawEvt) {
+  const uiEvents = normalizeToUiEvents(rawEvt);
+  for (const evt of uiEvents) {
+    events.push(evt);
+    if (events.length > MAX_EVENTS) events.splice(0, events.length - MAX_EVENTS);
+
+    const line = `data: ${JSON.stringify(evt)}\n\n`;
+    for (const [res, filter] of sseClients.entries()) {
+      if (!passesFilter(evt, filter)) continue;
+      try { res.write(line); } catch (_) { }
+    }
   }
 }
 
@@ -63,7 +194,7 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', events: events.length, clients: sseClients.size });
 });
 
-app.get('/', (req, res) => {
+app.get('/', requireVizAuth, (req, res) => {
   res.type('html').send(`<!doctype html>
 <html>
 <head>
@@ -501,7 +632,7 @@ app.get('/', (req, res) => {
     <div class="stat-item">Tasks: <span class="stat-value" id="task-count">0</span></div>
     <div class="stat-item">Events: <span class="stat-value" id="event-count">0</span></div>
     <div style="flex-grow:1"></div>
-    <button onclick="fetch('/test/handoff', {method:'POST'})" style="padding: 4px 12px; background: #238636; color: white; border: none; border-radius: 4px; cursor: pointer;">Run Demo</button>
+    ${ENABLE_DEMO_ENDPOINTS ? `<button onclick="fetch('/test/handoff', {method:'POST'})" style="padding: 4px 12px; background: #238636; color: white; border: none; border-radius: 4px; cursor: pointer;">Run Demo</button>` : ''}
   </div>
 
   <div class="main-layout">
@@ -1213,7 +1344,15 @@ app.get('/', (req, res) => {
     }, 3000);
 
     // SSE Connection
-    const es = new EventSource('/sse?replay=0');
+    // Pass-through filters from page query params (tenant_id / run_id)
+    const qs = new URLSearchParams(window.location.search);
+    const sseQs = new URLSearchParams();
+    sseQs.set('replay', '1');
+    if (qs.get('tenant_id')) sseQs.set('tenant_id', qs.get('tenant_id'));
+    if (qs.get('run_id')) sseQs.set('run_id', qs.get('run_id'));
+    // If auth is configured, you can also pass ?token=... in the page URL; it will be forwarded implicitly
+    if (qs.get('token')) sseQs.set('token', qs.get('token'));
+    const es = new EventSource('/sse?' + sseQs.toString());
     es.onmessage = (e) => {
       try {
         const evt = JSON.parse(e.data);
@@ -1229,11 +1368,12 @@ app.get('/', (req, res) => {
 </html>`);
 });
 
-app.get('/events', (req, res) => {
+app.get('/events', requireVizAuth, (req, res) => {
   res.json({ count: events.length, events });
 });
 
-app.post('/test/handoff', (req, res) => {
+if (ENABLE_DEMO_ENDPOINTS) {
+  app.post('/test/handoff', requireVizAuth, (req, res) => {
   const runIdA = 'run-a-' + Date.now();
   const runIdB = 'run-b-' + Date.now();
   const tenantId = 'dev';
@@ -1293,18 +1433,25 @@ app.post('/test/handoff', (req, res) => {
 
   res.json({ status: 'ok', message: 'Handoff demo started', events: testEvents.length, duration_ms: delay });
 });
+}
 
-app.get('/sse', (req, res) => {
+app.get('/sse', requireVizAuth, (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders?.();
 
-  sseClients.add(res);
+  const filter = {
+    tenant_id: req.query.tenant_id ? String(req.query.tenant_id) : '',
+    run_id: req.query.run_id ? String(req.query.run_id) : '',
+  };
+  sseClients.set(res, filter);
 
+  // Replay last N events only when explicitly requested
   const replay = req.query.replay === '1';
   if (replay) {
     for (const evt of events.slice(-500)) {
+      if (!passesFilter(evt, filter)) continue;
       res.write(`data: ${JSON.stringify(evt)}\n\n`);
     }
   }
