@@ -831,6 +831,8 @@ app.get('/', requireVizAuth, (req, res) => {
     // State
     // agents: { id: { x, y, homeX, homeY, facing, status, carrying, label, queue: [], busy: false } }
     const agents = {}; 
+    const deskStacks = {}; // { agentId: [ { id, title, status, ts, priority } ] }
+    const taskDeliveryETAs = {}; // { taskId: timestamp } 
     let eventCount = 0;
     
     // Task Lists
@@ -857,6 +859,69 @@ app.get('/', requireVizAuth, (req, res) => {
     }
 
     // ========== RENDERER ==========
+    function renderStacks() {
+      for (const [agentId, stack] of Object.entries(deskStacks)) {
+        // Find stack container - try role-based ID first
+        const role = agentId.split(':')[0];
+        const stackEl = document.getElementById('stack-' + role);
+        if (!stackEl) continue;
+
+        // Render up to 6 folders
+        const visibleStack = stack.slice(0, 6);
+        stackEl.innerHTML = visibleStack.map((task, i) => {
+          const offset = i * 4; // 4px vertical stack
+          const z = i;
+          return \`<div class="folder \${task.status}" 
+                       style="bottom: \${offset}px; left: 0; z-index: \${z};"
+                       title="\${task.title}"></div>\`;
+        }).join('');
+      }
+    }
+
+    function updateStacks(evt) {
+      // 1. Task Assigned: REMOVED immediate addition. 
+      // Now handled by the Ops Manager's delivery animation in handleEvent.
+
+      // 2. Task Started (mapped to run_started): Mark active
+      if (evt.type === 'run_started' || evt.type === 'task_started') {
+        const agentId = evt.agent_id;
+        if (!agentId) return;
+        if (!deskStacks[agentId]) deskStacks[agentId] = [];
+
+        const taskId = evt.task_id || evt.run_id;
+        const taskIdx = deskStacks[agentId].findIndex(t => t.id === taskId);
+        
+        if (taskIdx !== -1) {
+          // Found: update and move to top (end of array)
+          const task = deskStacks[agentId][taskIdx];
+          task.status = 'active';
+          // Remove and push to end
+          deskStacks[agentId].splice(taskIdx, 1);
+          deskStacks[agentId].push(task);
+        } else {
+          // Not found (maybe direct start or race condition): add as active
+          // This acts as a fallback if the delivery animation hasn't finished yet
+          deskStacks[agentId].push({
+            id: taskId,
+            title: evt.input_summary || evt.title || 'Active Task',
+            status: 'active',
+            ts: evt.ts
+          });
+        }
+      }
+
+      // 3. Completed/Failed: Remove
+      if (evt.type === 'run_completed' || evt.type === 'task_completed' || evt.type === 'task_failed') {
+        const agentId = evt.agent_id;
+        if (!agentId || !deskStacks[agentId]) return;
+        
+        const taskId = evt.task_id || evt.run_id;
+        deskStacks[agentId] = deskStacks[agentId].filter(t => t.id !== taskId);
+      }
+      
+      renderStacks();
+    }
+
     function renderAgents() {
       for (const [id, agent] of Object.entries(agents)) {
         let el = document.getElementById('agent-' + id.replace(/[^a-zA-Z0-9]/g, '_'));
@@ -1151,6 +1216,7 @@ app.get('/', requireVizAuth, (req, res) => {
           busy: false
         };
         renderAgents();
+        document.getElementById('agent-count').innerText = Object.keys(agents).length;
       }
       return agents[agentId];
     }
@@ -1185,6 +1251,9 @@ app.get('/', requireVizAuth, (req, res) => {
 
       log('[' + evt.type + '] ' + (agentId || '') + ' ' + (evt.task_id || evt.run_id || ''));
       const agent = agentId ? ensureAgent(agentId, evt.agent_name) : null;
+      
+      // Update desk stacks
+      updateStacks(evt);
 
       switch(evt.type) {
         case 'agent_spawned':
@@ -1195,23 +1264,25 @@ app.get('/', requireVizAuth, (req, res) => {
         case 'task_created':
           break;
 
-
-
         case 'task_started':
         case 'run_started':
-          // Don't remove from inbox here immediately if we want to see the fetch.
-          // But if it's a direct start (no assign), we might need to.
-          // For now, we assume task_assigned handles the fetch/remove.
-          // Just update status and show bubble.
+          // SYNC: Wait for delivery if needed
+          const taskId = evt.task_id || evt.run_id;
+          const eta = taskDeliveryETAs[taskId];
+          if (eta && eta > Date.now()) {
+            const waitMs = eta - Date.now();
+            queueAction(agentId, ['wait', waitMs]);
+          }
 
           queueAction(agentId, ['set', 'status', 'working']);
+          queueAction(agentId, ['set', 'carrying', true]); // Pick up from stack
           queueAction(agentId, ['bubble', 'Analyzing...', 'thought', 4000]);
           break;
 
         case 'task_assigned':
           // Logic: Ops Manager (Dispatcher) picks up -> Walks to Assignee -> Drops -> Walks Home
 
-          const dispatcherId = 'ops_manager:dev'; // Hardcoded for now, or find agent with role 'ops'
+          const dispatcherId = 'ops_manager:dev'; 
           const assigneeId = evt.to_agent_id || evt.agent_id;
 
           if (assigneeId && agents[dispatcherId]) {
@@ -1247,10 +1318,27 @@ app.get('/', requireVizAuth, (req, res) => {
              if (dispatcherId !== assigneeId) {
                // Transfer to another agent
                queueAction(dispatcherId, ['trigger', () => {
+                 // ADD TO DESK STACK HERE (Physical Delivery)
+                 if (!deskStacks[assigneeId]) deskStacks[assigneeId] = [];
+                 // Avoid dupes
+                 const taskId = evt.task_id || evt.run_id;
+                 if (!deskStacks[assigneeId].some(t => t.id === taskId)) {
+                    deskStacks[assigneeId].push({
+                      id: taskId,
+                      title: evt.title || evt.input_summary || evt.summary || evt.task_type || 'Task',
+                      status: 'queued',
+                      ts: evt.ts,
+                      priority: evt.priority
+                    });
+                    renderStacks();
+                 }
+
                  if (agents[assigneeId]) {
-                   agents[assigneeId].carrying = true;
-                   agents[assigneeId].status = 'working';
-                   showBubble(assigneeId, 'On it!', 'chat');
+                   // Only show "Received" if agent is actually at their desk
+                   const dist = Math.hypot(agents[assigneeId].x - agents[assigneeId].homeX, agents[assigneeId].y - agents[assigneeId].homeY);
+                   if (dist < 50) {
+                     showBubble(assigneeId, 'Received.', 'chat');
+                   }
                    renderAgents();
                  }
                }]);
@@ -1263,6 +1351,15 @@ app.get('/', requireVizAuth, (req, res) => {
 
              // 5. Walk Home (if not already there)
              queueMove(dispatcherId, dispatcher.homeX, dispatcher.homeY);
+             
+             // Calculate ETA for delivery so Assignee doesn't start too early
+             const dist1 = Math.hypot(INBOX_POS.x - dispatcher.x, INBOX_POS.y - dispatcher.y);
+             const dist2 = Math.hypot(targetPos.x - INBOX_POS.x, targetPos.y - INBOX_POS.y);
+             const speed = 4; // pixels per tick
+             const fps = 60;
+             const travelTimeMs = ((dist1 + dist2) / speed / fps) * 1000;
+             const bufferMs = 1500; // Waits and transitions
+             taskDeliveryETAs[evt.task_id || evt.run_id] = Date.now() + travelTimeMs + bufferMs;
           }
           break;
 
@@ -1300,6 +1397,20 @@ app.get('/', requireVizAuth, (req, res) => {
           // Wait until we have the folder
           queueAction(agentId, ['waitForState', 'carrying', true]);
           
+          // Sanity check: If the task is still "queued" in our stack, we haven't started it yet!
+          // This prevents "teleporting" to completion if events arrive out of order or too fast.
+          queueAction(agentId, ['exec', () => {
+             const taskId = evt.task_id || evt.run_id;
+             const stack = deskStacks[agentId] || [];
+             const task = stack.find(t => t.id === taskId);
+             if (task && task.status === 'queued') {
+               // Force start it visually if we missed the start event or timing is off
+               task.status = 'active';
+               renderStacks();
+             }
+             
+           }]);
+
           const status = evt.type === 'task_failed' ? 'failed' : 'completed';
 
           // Walk to Outbox -> Drop -> Home
@@ -1310,13 +1421,21 @@ app.get('/', requireVizAuth, (req, res) => {
 
           // Drop and Update Outbox
           queueAction(agentId, ['exec', () => {
-            outboxTasks.unshift({
-              id: evt.task_id || evt.run_id,
-              summary: evt.output_summary || 'Task Done',
-              status
-            });
-            if (outboxTasks.length > 50) outboxTasks.pop();
-            renderPanes();
+            const taskId = evt.task_id || evt.run_id;
+            // dedupe
+            if (!outboxTasks.some(t => t.id === taskId)) {
+              // CRITICAL: Ensure it's removed from Inbox if it's still there
+              // This handles cases where the Ops Manager hasn't picked it up yet
+              inboxTasks = inboxTasks.filter(t => t.id !== taskId);
+              
+              outboxTasks.unshift({
+                id: taskId,
+                summary: evt.output_summary || 'Task Done',
+                status
+              });
+              if (outboxTasks.length > 50) outboxTasks.pop();
+              renderPanes();
+            }
           }]);
 
           queueAction(agentId, ['set', 'carrying', false]);
