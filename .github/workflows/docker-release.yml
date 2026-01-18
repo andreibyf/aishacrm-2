@@ -95,7 +95,6 @@ jobs:
 
           if ! ADMIN_EMAILS=$(doppler secrets get ADMIN_EMAILS --plain 2>&1); then
             echo "ERROR: Failed to fetch ADMIN_EMAILS from Doppler"
-            echo "Error: $ADMIN_EMAILS"
             exit 1
           fi
           echo "ADMIN_EMAILS=$ADMIN_EMAILS" >> $GITHUB_OUTPUT
