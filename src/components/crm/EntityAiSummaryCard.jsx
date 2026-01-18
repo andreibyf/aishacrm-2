@@ -16,11 +16,11 @@ export default function EntityAiSummaryCard({
 
   const handleBackOfficeClick = () => {
     // Open Office Viz in a new tab with query params
-    // Production: backend.aishacrm.com (via Cloudflare Tunnel)
+    // Production: backoffice.aishacrm.com (via Cloudflare Tunnel)
     // Local: localhost:4010 (direct)
     let officeVizUrl;
     if (window.location.hostname === 'app.aishacrm.com') {
-      officeVizUrl = `https://backend.aishacrm.com?entity_type=${entityType}&entity_id=${entityId}`;
+      officeVizUrl = `https://backoffice.aishacrm.com?entity_type=${entityType}&entity_id=${entityId}`;
     } else if (window.location.hostname === 'localhost') {
       officeVizUrl = `http://localhost:4010?entity_type=${entityType}&entity_id=${entityId}`;
     } else {
