@@ -14,18 +14,26 @@ const testPort = 3101;
 // Helper to make requests to the app
 async function makeRequest(method, path, body = null, headers = {}) {
   const url = `http://localhost:${testPort}${path}`;
-  const options = {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Forwarded-For': '127.0.0.1', // Simulate IP for rate limiting
-      ...headers
-    },
-  };
-  if (body) {
-    options.body = JSON.stringify(body);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout
+  
+  try {
+    const options = {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Forwarded-For': '127.0.0.1', // Simulate IP for rate limiting
+        ...headers
+      },
+      signal: controller.signal,
+    };
+    if (body) {
+      options.body = JSON.stringify(body);
+    }
+    return await fetch(url, options);
+  } finally {
+    clearTimeout(timeout);
   }
-  return fetch(url, options);
 }
 
 before(async () => {
@@ -308,15 +316,23 @@ describe('users.js - Section 2.2: User Listing & Retrieval Endpoints', () => {
     });
 
     it('should handle malformed JSON in request body', async () => {
-      const response = await fetch(`http://localhost:${testPort}/api/users/sync-from-auth`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Forwarded-For': '127.0.0.1'
-        },
-        body: '{invalid json'
-      });
-      assert(response.status >= 400);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      
+      try {
+        const response = await fetch(`http://localhost:${testPort}/api/users/sync-from-auth`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Forwarded-For': '127.0.0.1'
+          },
+          body: '{invalid json',
+          signal: controller.signal
+        });
+        assert(response.status >= 400);
+      } finally {
+        clearTimeout(timeout);
+      }
     });
 
     it('should handle missing route parameters', async () => {

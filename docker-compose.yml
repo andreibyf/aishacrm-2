@@ -117,7 +117,7 @@ services:
       - REPO_NAME=${REPO_NAME:-aishacrm-2}
       # Telemetry
       - TELEMETRY_ENABLED=true
-      - TELEMETRY_LOG_PATH=/var/log/aisha/telemetry.ndjson
+      - TELEMETRY_LOG_PATH=/telemetry/telemetry.ndjson
     dns:
       - 8.8.8.8
       - 8.8.4.4
@@ -135,7 +135,7 @@ services:
         labels: "service"
         tag: "{{.Name}}"
     volumes:
-      - aisha_telemetry:/var/log/aisha
+      - aisha_telemetry:/telemetry
     networks:
       - aishanet
 

@@ -59,12 +59,17 @@ services:
       - BRAID_MCP_URL=${BRAID_MCP_URL:-http://braid-mcp-server:8000}
       - MCP_NODE_HEALTH_URL=${MCP_NODE_HEALTH_URL:-http://braid-mcp-server:8000/health}
       - MCP_NODE_ID=${MCP_NODE_ID:-aishacrm-backend-prod}
+      # Telemetry -> shared volume for office-viz sidecar
+      - TELEMETRY_ENABLED=true
+      - TELEMETRY_LOG_PATH=/telemetry/telemetry.ndjson
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
+    volumes:
+      - aisha_telemetry:/telemetry
     networks:
       - default
       - aishanet
