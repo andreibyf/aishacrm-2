@@ -12,6 +12,7 @@ permissions:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       matrix:
         include:
@@ -35,31 +36,107 @@ jobs:
             context: addons/agent-office/services/telemetry-sidecar
             dockerfile: addons/agent-office/services/telemetry-sidecar/Dockerfile
             image: ghcr.io/${{ github.repository }}-telemetry-sidecar
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Install Doppler CLI
-        uses: dopplerhq/cli-action@v3
+        uses: dopplerhq/cli-action@014df23b1329b615816a38eb5f473bb9000700b1  # v3
+        timeout-minutes: 5
+
+      - name: Verify Doppler CLI installation
+        timeout-minutes: 2
+        run: |
+          echo "Verifying Doppler CLI installation..."
+          if ! command -v doppler &> /dev/null; then
+            echo "ERROR: Doppler CLI not found in PATH"
+            exit 1
+          fi
+          doppler --version
+          echo "Doppler CLI successfully installed"
 
       - name: Fetch secrets from Doppler
         id: doppler
+        timeout-minutes: 5
         run: |
+          # Retry logic with exponential backoff for Doppler connection
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+
+          echo "Testing Doppler connection..."
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            echo "Attempt $RETRY_COUNT of $MAX_RETRIES..."
+
+            if doppler secrets get ADMIN_EMAILS --plain > /dev/null 2>&1; then
+              echo "✓ Successfully connected to Doppler"
+              break
+            else
+              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                BACKOFF_TIME=$((RETRY_COUNT * 2))
+                echo "⚠ Connection failed. Retrying in ${BACKOFF_TIME} seconds..."
+                sleep $BACKOFF_TIME
+              else
+                echo "ERROR: Failed to connect to Doppler after $MAX_RETRIES attempts"
+                echo "Please check:"
+                echo "  - DOPPLER_TOKEN secret is valid"
+                echo "  - DOPPLER_PROJECT variable is set correctly"
+                echo "  - DOPPLER_CONFIG variable is set correctly"
+                echo "  - Doppler service is available"
+                exit 1
+              fi
+            fi
+          done
+
+          echo "Fetching secrets from Doppler..."
           # Extract only actual secrets (sensitive data) from Doppler
           # Non-sensitive variables come from GitHub vars
-          echo "ADMIN_EMAILS=$(doppler secrets get ADMIN_EMAILS --plain)" >> $GITHUB_OUTPUT
-          
+
+          ADMIN_EMAILS=$(doppler secrets get ADMIN_EMAILS --plain 2>/dev/null) || {
+            echo "ERROR: Failed to fetch ADMIN_EMAILS from Doppler"
+            exit 1
+          }
+          echo "ADMIN_EMAILS=$ADMIN_EMAILS" >> $GITHUB_OUTPUT
+
           # VPS deployment secrets for production deployment
-          echo "PROD_VPS_HOST=$(doppler secrets get PROD_VPS_HOST --plain)" >> $GITHUB_OUTPUT
-          echo "PROD_VPS_USER=$(doppler secrets get PROD_VPS_USER --plain)" >> $GITHUB_OUTPUT
-          echo "PROD_VPS_PORT=$(doppler secrets get PROD_VPS_PORT --plain)" >> $GITHUB_OUTPUT
-          echo "PROD_MCP_GITHUB_TOKEN=$(doppler secrets get PROD_MCP_GITHUB_TOKEN --plain)" >> $GITHUB_OUTPUT
-          
+          echo "Fetching VPS deployment secrets..."
+
+          PROD_VPS_HOST=$(doppler secrets get PROD_VPS_HOST --plain 2>/dev/null) || {
+            echo "ERROR: Failed to fetch PROD_VPS_HOST"
+            exit 1
+          }
+          echo "PROD_VPS_HOST=$PROD_VPS_HOST" >> $GITHUB_OUTPUT
+
+          PROD_VPS_USER=$(doppler secrets get PROD_VPS_USER --plain 2>/dev/null) || {
+            echo "ERROR: Failed to fetch PROD_VPS_USER"
+            exit 1
+          }
+          echo "PROD_VPS_USER=$PROD_VPS_USER" >> $GITHUB_OUTPUT
+
+          PROD_VPS_PORT=$(doppler secrets get PROD_VPS_PORT --plain 2>/dev/null) || {
+            echo "ERROR: Failed to fetch PROD_VPS_PORT"
+            exit 1
+          }
+          echo "PROD_VPS_PORT=$PROD_VPS_PORT" >> $GITHUB_OUTPUT
+
+          PROD_MCP_GITHUB_TOKEN=$(doppler secrets get PROD_MCP_GITHUB_TOKEN --plain 2>/dev/null) || {
+            echo "ERROR: Failed to fetch PROD_MCP_GITHUB_TOKEN"
+            exit 1
+          }
+          echo "PROD_MCP_GITHUB_TOKEN=$PROD_MCP_GITHUB_TOKEN" >> $GITHUB_OUTPUT
+
           # SSH key with heredoc to preserve newlines
+          echo "Fetching SSH key..."
           echo "PROD_VPS_SSH_KEY<<EOF" >> $GITHUB_OUTPUT
-          doppler secrets get PROD_VPS_SSH_KEY --plain >> $GITHUB_OUTPUT
+          SSH_KEY_VALUE=$(doppler secrets get PROD_VPS_SSH_KEY --plain 2>/dev/null) || {
+            echo "ERROR: Failed to fetch PROD_VPS_SSH_KEY"
+            exit 1
+          }
+          echo "$SSH_KEY_VALUE" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+
+          echo "✓ All secrets fetched successfully"
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
           DOPPLER_PROJECT: ${{ vars.DOPPLER_PROJECT }}
@@ -123,28 +200,99 @@ jobs:
   deploy-production:
     needs: build-and-push
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: startsWith(github.ref, 'refs/tags/v')
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Install Doppler CLI
-        uses: dopplerhq/cli-action@v3
+        uses: dopplerhq/cli-action@014df23b1329b615816a38eb5f473bb9000700b1  # v3
+        timeout-minutes: 5
+
+      - name: Verify Doppler CLI installation
+        timeout-minutes: 2
+        run: |
+          echo "Verifying Doppler CLI installation..."
+          if ! command -v doppler &> /dev/null; then
+            echo "ERROR: Doppler CLI not found in PATH"
+            exit 1
+          fi
+          doppler --version
+          echo "Doppler CLI successfully installed"
 
       - name: Fetch SSH credentials from Doppler
         id: doppler-deploy
+        timeout-minutes: 5
         run: |
+          # Retry logic with exponential backoff for Doppler connection
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+
+          echo "Testing Doppler connection..."
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            echo "Attempt $RETRY_COUNT of $MAX_RETRIES..."
+
+            if doppler secrets get PROD_VPS_HOST --plain > /dev/null 2>&1; then
+              echo "✓ Successfully connected to Doppler"
+              break
+            else
+              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                BACKOFF_TIME=$((RETRY_COUNT * 2))
+                echo "⚠ Connection failed. Retrying in ${BACKOFF_TIME} seconds..."
+                sleep $BACKOFF_TIME
+              else
+                echo "ERROR: Failed to connect to Doppler after $MAX_RETRIES attempts"
+                echo "Please check:"
+                echo "  - DOPPLER_TOKEN secret is valid"
+                echo "  - DOPPLER_PROJECT variable is set correctly"
+                echo "  - DOPPLER_CONFIG variable is set correctly"
+                echo "  - Doppler service is available"
+                exit 1
+              fi
+            fi
+          done
+
+          echo "Fetching VPS deployment secrets from Doppler..."
           # VPS deployment secrets for production deployment
-          echo "PROD_VPS_HOST=$(doppler secrets get PROD_VPS_HOST --plain)" >> $GITHUB_OUTPUT
-          echo "PROD_VPS_USER=$(doppler secrets get PROD_VPS_USER --plain)" >> $GITHUB_OUTPUT
-          echo "PROD_VPS_PORT=$(doppler secrets get PROD_VPS_PORT --plain)" >> $GITHUB_OUTPUT
-          echo "PROD_MCP_GITHUB_TOKEN=$(doppler secrets get PROD_MCP_GITHUB_TOKEN --plain)" >> $GITHUB_OUTPUT
-          
+
+          PROD_VPS_HOST=$(doppler secrets get PROD_VPS_HOST --plain 2>/dev/null) || {
+            echo "ERROR: Failed to fetch PROD_VPS_HOST"
+            exit 1
+          }
+          echo "PROD_VPS_HOST=$PROD_VPS_HOST" >> $GITHUB_OUTPUT
+
+          PROD_VPS_USER=$(doppler secrets get PROD_VPS_USER --plain 2>/dev/null) || {
+            echo "ERROR: Failed to fetch PROD_VPS_USER"
+            exit 1
+          }
+          echo "PROD_VPS_USER=$PROD_VPS_USER" >> $GITHUB_OUTPUT
+
+          PROD_VPS_PORT=$(doppler secrets get PROD_VPS_PORT --plain 2>/dev/null) || {
+            echo "ERROR: Failed to fetch PROD_VPS_PORT"
+            exit 1
+          }
+          echo "PROD_VPS_PORT=$PROD_VPS_PORT" >> $GITHUB_OUTPUT
+
+          PROD_MCP_GITHUB_TOKEN=$(doppler secrets get PROD_MCP_GITHUB_TOKEN --plain 2>/dev/null) || {
+            echo "ERROR: Failed to fetch PROD_MCP_GITHUB_TOKEN"
+            exit 1
+          }
+          echo "PROD_MCP_GITHUB_TOKEN=$PROD_MCP_GITHUB_TOKEN" >> $GITHUB_OUTPUT
+
           # SSH key with heredoc to preserve newlines
+          echo "Fetching SSH key..."
           echo "PROD_VPS_SSH_KEY<<EOF" >> $GITHUB_OUTPUT
-          doppler secrets get PROD_VPS_SSH_KEY --plain >> $GITHUB_OUTPUT
+          SSH_KEY_VALUE=$(doppler secrets get PROD_VPS_SSH_KEY --plain 2>/dev/null) || {
+            echo "ERROR: Failed to fetch PROD_VPS_SSH_KEY"
+            exit 1
+          }
+          echo "$SSH_KEY_VALUE" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+
+          echo "✓ All deployment secrets fetched successfully"
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
           DOPPLER_PROJECT: ${{ vars.DOPPLER_PROJECT }}
@@ -177,7 +325,7 @@ jobs:
             set -e  # Exit on any error
             cd /opt/aishacrm
             echo "Deploying version: $VERSION_TAG"
-            
+
             # === REFRESH DOPPLER SECRETS ===
             # Regenerate .env.from-doppler to pick up any new secrets added to Doppler
             echo "Refreshing secrets from Doppler..."
@@ -195,7 +343,7 @@ jobs:
             else
               echo "WARNING: Doppler CLI not available or DOPPLER_TOKEN not set, skipping secrets refresh"
             fi
-            
+
             # === FULL CLEANUP: Remove orphaned containers and broken references ===
             echo "Cleaning up orphaned containers and broken Docker state..."
             docker compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
@@ -203,10 +351,10 @@ jobs:
             # Remove any containers with broken dependencies
             docker ps -aq --filter "status=exited" | xargs -r docker rm -f 2>/dev/null || true
             docker ps -aq --filter "status=dead" | xargs -r docker rm -f 2>/dev/null || true
-            
+
             # Ensure aishanet network exists
             docker network inspect aishanet >/dev/null 2>&1 || docker network create aishanet
-            
+
             # Pull specific version tags
             docker pull ghcr.io/andreibyf/aishacrm-2-frontend:$VERSION_TAG
             docker pull ghcr.io/andreibyf/aishacrm-2-backend:$VERSION_TAG
@@ -219,11 +367,11 @@ jobs:
             docker tag ghcr.io/andreibyf/aishacrm-2-mcp:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-mcp:latest
             docker tag ghcr.io/andreibyf/aishacrm-2-office-viz:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-office-viz:latest
             docker tag ghcr.io/andreibyf/aishacrm-2-telemetry-sidecar:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-telemetry-sidecar:latest
-            
+
             # Remove VITE_APP_BUILD_VERSION from .env so container uses baked-in /app/VERSION
             # (Version is already baked into Docker image during build via Dockerfile)
             sed -i '/^VITE_APP_BUILD_VERSION=/d' .env 2>/dev/null || true
-            
+
             # Ensure n8n URL is set for iframe embedding
             if ! grep -q "^VITE_N8N_URL=" .env 2>/dev/null; then
               echo "VITE_N8N_URL=http://147.189.173.237:5679" >> .env
@@ -240,14 +388,14 @@ jobs:
             # NOTE: n8n is optional - use --profile workflows to include it
             # Frontend and backend run directly on ports 4000 and 4001 (no proxy)
             docker compose -f docker-compose.prod.yml up -d --force-recreate frontend backend redpanda telemetry-sidecar office-viz
-            
+
             # Deploy MCP server (separate compose file with 3 containers)
             echo "Deploying MCP server cluster (1 server + 2 nodes)..."
-            
+
             # Ensure MCP directory exists
             mkdir -p /opt/aishacrm/braid-mcp-node-server
             cd /opt/aishacrm/braid-mcp-node-server
-            
+
             # Create .env from example if it doesn't exist, or create minimal one
             if [ ! -f .env ]; then
               if [ -f .env.example ]; then
@@ -258,14 +406,14 @@ jobs:
                 echo "Created minimal .env"
               fi
             fi
-            
+
             # Update MCP .env with critical runtime variables
             # These must be set for MCP server to function properly
-            
+
             # Environment
             grep -q "^NODE_ENV=" .env || echo "NODE_ENV=production" >> .env
             grep -q "^PORT=" .env || echo "PORT=8000" >> .env
-            
+
             # Database (read from main .env)
             if [ -f /opt/aishacrm/.env ]; then
               SUPABASE_URL=$(grep "^SUPABASE_URL=" /opt/aishacrm/.env | cut -d'=' -f2-)
@@ -274,10 +422,10 @@ jobs:
               [ -n "$SUPABASE_KEY" ] && sed -i "s|^SUPABASE_SERVICE_ROLE_KEY=.*|SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_KEY|" .env || echo "SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_KEY" >> .env
             fi
             grep -q "^USE_SUPABASE_PROD=" .env || echo "USE_SUPABASE_PROD=true" >> .env
-            
+
             # Redis
             grep -q "^REDIS_URL=" .env || echo "REDIS_URL=redis://aishacrm-redis-memory:6379" >> .env
-            
+
             # OpenAI (read from main .env)
             if [ -f /opt/aishacrm/.env ]; then
               OPENAI_KEY=$(grep "^OPENAI_API_KEY=" /opt/aishacrm/.env | cut -d'=' -f2-)
@@ -293,13 +441,13 @@ jobs:
               fi
             fi
             grep -q "^DEFAULT_OPENAI_MODEL=" .env || echo "DEFAULT_OPENAI_MODEL=gpt-4o" >> .env
-            
+
             # CRM Backend
             grep -q "^CRM_BACKEND_URL=" .env || echo "CRM_BACKEND_URL=http://aishacrm-backend:3001" >> .env
-            
+
             # Tenant Context
             grep -q "^DEFAULT_TENANT_ID=" .env || echo "DEFAULT_TENANT_ID=a11dfb63-4b18-4eb8-872e-747af2e37c46" >> .env
-            
+
             # GitHub Token (from workflow secret)
             if [ -n "$MCP_GITHUB_TOKEN" ]; then
               if grep -q "^GITHUB_TOKEN=" .env 2>/dev/null; then
@@ -308,12 +456,12 @@ jobs:
                 echo "GITHUB_TOKEN=$MCP_GITHUB_TOKEN" >> .env
               fi
             fi
-            
+
             # Optional: Direct Supabase access
             grep -q "^USE_DIRECT_SUPABASE_ACCESS=" .env || echo "USE_DIRECT_SUPABASE_ACCESS=false" >> .env
-            
+
             echo "MCP .env configuration updated"
-            
+
             # Check if docker-compose.prod.yml exists
             if [ ! -f docker-compose.prod.yml ]; then
               echo "ERROR: docker-compose.prod.yml not found in /opt/aishacrm/braid-mcp-node-server/"
@@ -321,32 +469,32 @@ jobs:
               ls -la /opt/aishacrm/braid-mcp-node-server/
               exit 1
             fi
-            
+
             # Clean up any orphaned/conflicting MCP containers before starting
             echo "Cleaning up orphaned MCP containers..."
             docker compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
             docker rm -f braid-mcp-1 braid-mcp-2 braid-mcp-node-server 2>/dev/null || true
-            
+
             # Start MCP services using production compose (uses GHCR images)
             echo "Starting MCP containers..."
             docker compose -f docker-compose.prod.yml up -d --force-recreate
-            
+
             # Verify MCP deployment
             echo "Verifying MCP deployment..."
             sleep 5
             docker ps --filter "name=braid-mcp" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-            
+
             cd /opt/aishacrm
             echo "Deployment completed: $VERSION_TAG"
-            
+
             # Final verification - all containers
             echo "=== All AishaCRM containers ==="
             docker ps --filter "name=aishacrm" --format "table {{.Names}}\t{{.Status}}"
             docker ps --filter "name=braid-mcp" --format "table {{.Names}}\t{{.Status}}"
-            
+
             # Verify frontend version
             docker exec aishacrm-frontend cat /app/dist/env-config.js | grep VITE_APP_BUILD_VERSION || true
-      
+
       - name: Deployment summary
         run: |
           echo "### 🚀 Deployed to Production VPS" >> $GITHUB_STEP_SUMMARY
