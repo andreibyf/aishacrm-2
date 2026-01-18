@@ -16,8 +16,13 @@ export default function EntityAiSummaryCard({
 
   const handleBackOfficeClick = () => {
     // Open Office Viz in a new tab with query params
-    // Assuming Office Viz runs on port 4010 based on docker-compose/server.js
-    const officeVizUrl = `http://${window.location.hostname}:4010?entity_type=${entityType}&entity_id=${entityId}`;
+    // Office Viz runs on backend.aishacrm.com:4010 in production
+    const hostname = window.location.hostname === 'app.aishacrm.com' 
+      ? 'backend.aishacrm.com' 
+      : window.location.hostname === 'localhost' 
+        ? 'localhost' 
+        : window.location.hostname;
+    const officeVizUrl = `http://${hostname}:4010?entity_type=${entityType}&entity_id=${entityId}`;
     window.open(officeVizUrl, '_blank');
   };
 
