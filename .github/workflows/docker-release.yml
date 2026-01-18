@@ -93,42 +93,46 @@ jobs:
           # Extract only actual secrets (sensitive data) from Doppler
           # Non-sensitive variables come from GitHub vars
 
-          if ! ADMIN_EMAILS=$(doppler secrets get ADMIN_EMAILS --plain 2>&1); then
+          ADMIN_EMAILS=$(doppler secrets get ADMIN_EMAILS --plain 2>/dev/null) || {
             echo "ERROR: Failed to fetch ADMIN_EMAILS from Doppler"
             exit 1
-          fi
+          }
           echo "ADMIN_EMAILS=$ADMIN_EMAILS" >> $GITHUB_OUTPUT
 
           # VPS deployment secrets for production deployment
           echo "Fetching VPS deployment secrets..."
 
-          if ! PROD_VPS_HOST=$(doppler secrets get PROD_VPS_HOST --plain 2>&1); then
-            echo "ERROR: Failed to fetch PROD_VPS_HOST"; exit 1
-          fi
+          PROD_VPS_HOST=$(doppler secrets get PROD_VPS_HOST --plain 2>/dev/null) || {
+            echo "ERROR: Failed to fetch PROD_VPS_HOST"
+            exit 1
+          }
           echo "PROD_VPS_HOST=$PROD_VPS_HOST" >> $GITHUB_OUTPUT
 
-          if ! PROD_VPS_USER=$(doppler secrets get PROD_VPS_USER --plain 2>&1); then
-            echo "ERROR: Failed to fetch PROD_VPS_USER"; exit 1
-          fi
+          PROD_VPS_USER=$(doppler secrets get PROD_VPS_USER --plain 2>/dev/null) || {
+            echo "ERROR: Failed to fetch PROD_VPS_USER"
+            exit 1
+          }
           echo "PROD_VPS_USER=$PROD_VPS_USER" >> $GITHUB_OUTPUT
 
-          if ! PROD_VPS_PORT=$(doppler secrets get PROD_VPS_PORT --plain 2>&1); then
-            echo "ERROR: Failed to fetch PROD_VPS_PORT"; exit 1
-          fi
+          PROD_VPS_PORT=$(doppler secrets get PROD_VPS_PORT --plain 2>/dev/null) || {
+            echo "ERROR: Failed to fetch PROD_VPS_PORT"
+            exit 1
+          }
           echo "PROD_VPS_PORT=$PROD_VPS_PORT" >> $GITHUB_OUTPUT
 
-          if ! PROD_MCP_GITHUB_TOKEN=$(doppler secrets get PROD_MCP_GITHUB_TOKEN --plain 2>&1); then
-            echo "ERROR: Failed to fetch PROD_MCP_GITHUB_TOKEN"; exit 1
-          fi
+          PROD_MCP_GITHUB_TOKEN=$(doppler secrets get PROD_MCP_GITHUB_TOKEN --plain 2>/dev/null) || {
+            echo "ERROR: Failed to fetch PROD_MCP_GITHUB_TOKEN"
+            exit 1
+          }
           echo "PROD_MCP_GITHUB_TOKEN=$PROD_MCP_GITHUB_TOKEN" >> $GITHUB_OUTPUT
 
           # SSH key with heredoc to preserve newlines
           echo "Fetching SSH key..."
           echo "PROD_VPS_SSH_KEY<<EOF" >> $GITHUB_OUTPUT
-          if ! SSH_KEY_VALUE=$(doppler secrets get PROD_VPS_SSH_KEY --plain 2>&1); then
+          SSH_KEY_VALUE=$(doppler secrets get PROD_VPS_SSH_KEY --plain 2>/dev/null) || {
             echo "ERROR: Failed to fetch PROD_VPS_SSH_KEY"
             exit 1
-          fi
+          }
           echo "$SSH_KEY_VALUE" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
@@ -254,33 +258,37 @@ jobs:
           echo "Fetching VPS deployment secrets from Doppler..."
           # VPS deployment secrets for production deployment
 
-          if ! PROD_VPS_HOST=$(doppler secrets get PROD_VPS_HOST --plain 2>&1); then
-            echo "ERROR: Failed to fetch PROD_VPS_HOST"; exit 1
-          fi
+          PROD_VPS_HOST=$(doppler secrets get PROD_VPS_HOST --plain 2>/dev/null) || {
+            echo "ERROR: Failed to fetch PROD_VPS_HOST"
+            exit 1
+          }
           echo "PROD_VPS_HOST=$PROD_VPS_HOST" >> $GITHUB_OUTPUT
 
-          if ! PROD_VPS_USER=$(doppler secrets get PROD_VPS_USER --plain 2>&1); then
-            echo "ERROR: Failed to fetch PROD_VPS_USER"; exit 1
-          fi
+          PROD_VPS_USER=$(doppler secrets get PROD_VPS_USER --plain 2>/dev/null) || {
+            echo "ERROR: Failed to fetch PROD_VPS_USER"
+            exit 1
+          }
           echo "PROD_VPS_USER=$PROD_VPS_USER" >> $GITHUB_OUTPUT
 
-          if ! PROD_VPS_PORT=$(doppler secrets get PROD_VPS_PORT --plain 2>&1); then
-            echo "ERROR: Failed to fetch PROD_VPS_PORT"; exit 1
-          fi
+          PROD_VPS_PORT=$(doppler secrets get PROD_VPS_PORT --plain 2>/dev/null) || {
+            echo "ERROR: Failed to fetch PROD_VPS_PORT"
+            exit 1
+          }
           echo "PROD_VPS_PORT=$PROD_VPS_PORT" >> $GITHUB_OUTPUT
 
-          if ! PROD_MCP_GITHUB_TOKEN=$(doppler secrets get PROD_MCP_GITHUB_TOKEN --plain 2>&1); then
-            echo "ERROR: Failed to fetch PROD_MCP_GITHUB_TOKEN"; exit 1
-          fi
+          PROD_MCP_GITHUB_TOKEN=$(doppler secrets get PROD_MCP_GITHUB_TOKEN --plain 2>/dev/null) || {
+            echo "ERROR: Failed to fetch PROD_MCP_GITHUB_TOKEN"
+            exit 1
+          }
           echo "PROD_MCP_GITHUB_TOKEN=$PROD_MCP_GITHUB_TOKEN" >> $GITHUB_OUTPUT
 
           # SSH key with heredoc to preserve newlines
           echo "Fetching SSH key..."
           echo "PROD_VPS_SSH_KEY<<EOF" >> $GITHUB_OUTPUT
-          if ! SSH_KEY_VALUE=$(doppler secrets get PROD_VPS_SSH_KEY --plain 2>&1); then
+          SSH_KEY_VALUE=$(doppler secrets get PROD_VPS_SSH_KEY --plain 2>/dev/null) || {
             echo "ERROR: Failed to fetch PROD_VPS_SSH_KEY"
             exit 1
-          fi
+          }
           echo "$SSH_KEY_VALUE" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
