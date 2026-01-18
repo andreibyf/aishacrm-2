@@ -2,7 +2,65 @@
  * Back-compat shim.
  * Canonical contracts live in: shared/contracts/telemetry-events.js
  */
-export * from '../../../shared/contracts/telemetry-events.js';
+// =============================================================================
+// CANONICAL EVENT TYPES (FROZEN)
+// =============================================================================
+
+export const EventTypes = Object.freeze({
+  // === Run Lifecycle ===
+  RUN_STARTED: 'run_started',
+  RUN_FINISHED: 'run_finished',
+
+  // === Agent Lifecycle ===
+  AGENT_REGISTERED: 'agent_registered',   // Emitted on startup or config change
+  AGENT_SPAWNED: 'agent_spawned',         // New agent instance created for a run
+  AGENT_RETIRED: 'agent_retired',         // Agent instance terminated
+  AGENT_STATUS: 'agent_status',           // Status change: idle/busy/blocked
+
+  // === Task Lifecycle ===
+  TASK_CREATED: 'task_created',
+  TASK_ASSIGNED: 'task_assigned',
+  TASK_STARTED: 'task_started',
+  TASK_BLOCKED: 'task_blocked',
+  TASK_COMPLETED: 'task_completed',
+  TASK_FAILED: 'task_failed',
+
+  // === Interaction ===
+  HANDOFF: 'handoff',
+  MESSAGE_SENT: 'message_sent',
+  MESSAGE_RECEIVED: 'message_received',
+
+  // === Tooling ===
+  TOOL_CALL_STARTED: 'tool_call_started',
+  TOOL_CALL_FINISHED: 'tool_call_finished',
+  TOOL_CALL_FAILED: 'tool_call_failed',
+
+  // === Artifacts ===
+  ARTIFACT_CREATED: 'artifact_created',
+  ARTIFACT_UPDATED: 'artifact_updated',
+});
+
+// =============================================================================
+// AGENT STATUS VALUES
+// =============================================================================
+
+export const AgentStatus = Object.freeze({
+  IDLE: 'idle',
+  BUSY: 'busy',
+  BLOCKED: 'blocked',
+});
+
+// =============================================================================
+// HANDOFF TYPES
+// =============================================================================
+
+export const HandoffType = Object.freeze({
+  DELEGATE: 'delegate',       // Delegating work to another agent
+  REVIEW: 'review',           // Requesting review/approval
+  ESCALATE: 'escalate',       // Escalating to higher authority
+  COLLABORATE: 'collaborate', // Co-working on a task
+  RETURN: 'return',           // Returning completed work
+});
 
 // =============================================================================
 // DATA PAYLOAD SCHEMAS (Locked - keep stable and small)

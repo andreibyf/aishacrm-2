@@ -11,10 +11,10 @@ const PRINT_EVENTS = String(process.env.PRINT_EVENTS || '').toLowerCase() === 't
 const HEALTH_PORT = Number(process.env.HEALTH_PORT || 4101);
 
 const KAFKA_BROKERS = (process.env.KAFKA_BROKERS || 'redpanda:9092').split(',');
-const KAFKA_TOPIC = process.env.KAFKA_TOPIC || 'aisha.telemetry';
+const KAFKA_TOPIC = process.env.KAFKA_TOPIC || 'aisha.events.v1';
 
 const RABBIT_URL = process.env.RABBIT_URL || 'amqp://rabbitmq:5672';
-const RABBIT_EXCHANGE = process.env.RABBIT_EXCHANGE || 'aisha.telemetry';
+const RABBIT_EXCHANGE = process.env.RABBIT_EXCHANGE || 'aisha.events.v1';
 const RABBIT_ROUTING_KEY = process.env.RABBIT_ROUTING_KEY || 'events';
 
 let status = 'starting';  // 'starting' | 'waiting_for_file' | 'tailing' | 'error'
@@ -115,7 +115,7 @@ async function main() {
     const evt = parseLine(line);
     if (!evt) return;
     if (PRINT_EVENTS) {
-      process.stdout.write(`[telemetry] ${evt.type} exec=${evt.execution_id || '-'} role=${evt.role || '-'}\n`);
+      process.stdout.write(`[telemetry] ${evt.type} tenant=${evt.tenant_id || '-'} run=${evt.run_id || '-'} task=${evt.task_id || '-'} agent=${evt.agent_id || '-'}\n`);
     }
     try {
       await publish(evt);
