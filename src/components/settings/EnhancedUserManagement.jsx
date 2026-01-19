@@ -777,15 +777,16 @@ export default function EnhancedUserManagement() {
     // Handler for resending invite
     const handleResendInvite = async (user) => {
         try {
-            const response = await fetch(`${BACKEND_URL}/api/users/${user.id}/resend-invite`, {
+            // Use the correct /invite endpoint (backend supports both /invite and /resend-invite)
+            const response = await fetch(`${BACKEND_URL}/api/users/${user.id}/invite`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include'
             });
             const result = await response.json();
             
-            if (response.ok && result.success) {
-                toast.success(`Invitation email sent to ${user.email}`);
+            if (response.ok && (result.status === 'success' || result.success)) {
+                toast.success(result.message || `Invitation email sent to ${user.email}`);
             } else {
                 toast.error(result.message || "Failed to resend invitation");
             }
