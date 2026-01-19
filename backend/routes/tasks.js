@@ -9,6 +9,18 @@ export function createTasksRoutes(pgPool) {
   router.post('/from-intent', async (req, res) => {
     try {
       const { description, entity_type, entity_id, tenant_id } = req.body;
+      
+      // Validate required fields
+      if (!tenant_id) {
+        return res.status(400).json({ 
+          error: 'tenant_id is required for task creation',
+          hint: 'Ensure a tenant is selected before creating tasks'
+        });
+      }
+      if (!description) {
+        return res.status(400).json({ error: 'description is required' });
+      }
+      
       const taskId = randomUUID();
       const runId = randomUUID(); // Use run_id for correlation
 
