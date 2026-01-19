@@ -1172,15 +1172,6 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     // Check for task intent
     if (activeContext && draft.trim().toLowerCase() === 'generate next steps') {
       try {
-        // Validate tenant is selected before creating task
-        if (!tenantId) {
-          addRealtimeMessage({ role: 'assistant', content: '⚠️ Please select a tenant from the dropdown before creating tasks. Agent Office requires tenant context to execute tasks properly.' });
-          setDraft('');
-          setDraftOrigin('text');
-          setVoiceWarning(null);
-          return;
-        }
-        
         addRealtimeMessage({ role: 'user', content: draft });
         addRealtimeMessage({ role: 'assistant', content: `Creating task for ${activeContext.title || activeContext.entity_type}...` });
 

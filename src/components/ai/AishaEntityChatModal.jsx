@@ -41,12 +41,6 @@ export default function AishaEntityChatModal({
     e.preventDefault();
     if (!input.trim()) return;
 
-    // Validate tenant is selected
-    if (!selectedTenantId) {
-      toast.error("Please select a tenant before creating tasks. Agent Office requires tenant context.");
-      return;
-    }
-
     setIsLoading(true);
     try {
       const response = await fetch(`${getBackendUrl()}/api/tasks/from-intent`, {
