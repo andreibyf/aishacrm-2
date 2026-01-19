@@ -7,6 +7,7 @@ import { Loader2, Send, CheckCircle2, Circle, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { getBackendUrl } from "@/api/backendUrl";
 import { useTenant } from "@/components/shared/tenantContext";
+import { useUser } from "@/components/shared/useUser";
 
 export default function AishaEntityChatModal({ 
   open, 
@@ -21,6 +22,9 @@ export default function AishaEntityChatModal({
   const [taskResult, setTaskResult] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const { selectedTenantId } = useTenant();
+  const { user } = useUser();
+  // Use selectedTenantId (for superadmins) or fallback to user's tenant_id (for tenant admins)
+  const tenantId = selectedTenantId || user?.tenant_id;
   const pollIntervalRef = useRef(null);
 
   // Reset state when modal opens
@@ -50,7 +54,7 @@ export default function AishaEntityChatModal({
           description: input,
           entity_type: entityType,
           entity_id: entityId,
-          tenant_id: selectedTenantId
+          tenant_id: tenantId
         })
       });
 
