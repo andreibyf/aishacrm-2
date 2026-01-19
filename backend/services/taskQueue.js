@@ -7,11 +7,7 @@ logger.debug('[TaskQueue] Initializing task execution queue with Redis:', REDIS_
 
 export const taskQueue = new Bull('task-execution', REDIS_URL, {
   defaultJobOptions: {
-    attempts: 3,
-    backoff: {
-      type: 'exponential',
-      delay: 2000
-    },
+    attempts: 1, // Changed from 3 - no retries to prevent task repetition
     removeOnComplete: 100,
     removeOnFail: 200
   }

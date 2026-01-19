@@ -454,7 +454,10 @@ export const TOOL_REGISTRY = {
   delegate_to_workflow: { file: 'workflow-delegation.braid', function: 'triggerWorkflowByName', policy: 'WRITE_OPERATIONS' },
   get_workflow_progress: { file: 'workflow-delegation.braid', function: 'getWorkflowProgress', policy: 'READ_ONLY' },
   list_active_workflows: { file: 'workflow-delegation.braid', function: 'listActiveWorkflows', policy: 'READ_ONLY' },
-  get_workflow_notes: { file: 'workflow-delegation.braid', function: 'getWorkflowNotes', policy: 'READ_ONLY' }
+  get_workflow_notes: { file: 'workflow-delegation.braid', function: 'getWorkflowNotes', policy: 'READ_ONLY' },
+
+  // Agent-to-Agent Handoff (System Operation - handled by taskWorkers)
+  delegate_task: { file: '__system__', function: 'delegateTask', policy: 'WRITE_OPERATIONS' }
 };
 
 /**
@@ -611,7 +614,10 @@ const TOOL_DESCRIPTIONS = {
   delegate_to_workflow: 'Delegate a task to a named workflow. Use this when user wants to hand off work to an automated agent workflow. Pass workflow_name (e.g., "Sales Manager Workflow", "Customer Service Workflow"), context object with relevant data, and related_entity_type/id. The workflow will handle the task autonomously and log progress via notes.',
   get_workflow_progress: 'Check the status and progress of a workflow execution by its execution_id. Returns current status, started_at, execution_log, and current_node.',
   list_active_workflows: 'List all currently running workflow executions. Use to see what automated processes are active.',
-  get_workflow_notes: 'Get notes/progress updates created by a workflow execution. Use to report on what an agent workflow has accomplished.'
+  get_workflow_notes: 'Get notes/progress updates created by a workflow execution. Use to report on what an agent workflow has accomplished.',
+
+  // Agent-to-Agent Handoff
+  delegate_task: 'Delegate a task to another agent in the office. Use when you need help from a specialist: ops_manager (orchestration), sales_manager (deals), client_services_expert (research), project_manager (scheduling), marketing_manager (campaigns), customer_service_manager (support). REQUIRED: to_agent (role name), task_description (what needs to be done), handoff_type (delegate|review|escalate|collaborate). OPTIONAL: context (additional info). Returns task_id for tracking.'
 };
 
 /**

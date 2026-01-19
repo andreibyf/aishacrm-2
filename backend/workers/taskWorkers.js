@@ -13,16 +13,34 @@ export function startTaskWorkers(pgPool) {
 
   // Ops Dispatch Worker
   taskQueue.process('ops-dispatch', 1, async (job) => {
-    const { task_id, run_id, tenant_id, description, entity_type, entity_id } = job.data;
-    logger.info(`[OpsDispatch] Processing task ${task_id}`);
+    const { task_id, run_id, tenant_id, description, entity_type, entity_id, force_assignee, context = {} } = job.data;
+    logger.info(`[OpsDispatch] Processing task ${task_id}`, { force_assignee });
 
     try {
-      // 1. Determine Assignee
-      let assignee = 'ops_manager:dev'; // Default
-      if (description.toLowerCase().includes('sales')) assignee = 'sales_manager:dev';
-      if (description.toLowerCase().includes('marketing')) assignee = 'marketing_manager:dev';
-      if (description.toLowerCase().includes('support')) assignee = 'customer_service_manager:dev';
-      if (description.toLowerCase().includes('project')) assignee = 'project_manager:dev';
+      // 1. Determine Assignee based on task intent
+      let assignee = force_assignee || 'ops_manager:dev'; // Use forced assignee if provided (for handoffs)
+      
+      // Only do routing if not forced
+      if (!force_assignee) {
+        const desc = description.toLowerCase();
+        
+        // Priority routing - check specific capabilities first
+        if (desc.match(/\b(schedule|appointment|meeting|calendar|set up a call|book)\b/)) {
+          assignee = 'project_manager:dev'; // PM owns calendar/scheduling
+        } else if (desc.match(/\b(sales|deal|opportunity|proposal|quote|negotiat)\b/)) {
+          assignee = 'sales_manager:dev';
+        } else if (desc.match(/\b(marketing|campaign|content|newsletter|email blast)\b/)) {
+          assignee = 'marketing_manager:dev';
+        } else if (desc.match(/\b(research|find|prospect|lead|outreach|contact|enrich)\b/)) {
+          assignee = 'client_services_expert:dev'; // Client Services handles research/prospecting
+        } else if (desc.match(/\b(support|help|issue|ticket|customer service|problem)\b/)) {
+          assignee = 'customer_service_manager:dev';
+        } else if (desc.match(/\b(project|milestone|task|deadline|timeline)\b/)) {
+          assignee = 'project_manager:dev';
+        }
+      }
+
+      logger.info(`[OpsDispatch] Routing "${description}" to ${assignee}`);
 
       // 2. Update Task
       await pgPool.query(
@@ -51,7 +69,8 @@ export function startTaskWorkers(pgPool) {
         assignee,
         description,
         entity_type,
-        entity_id
+        entity_id,
+        context // Pass through context for handoff metadata
       });
 
       return { status: 'assigned', assignee };
@@ -63,7 +82,7 @@ export function startTaskWorkers(pgPool) {
 
   // Execute Worker - Actually invokes LLM with agent profile and tools
   taskQueue.process('execute-task', 1, async (job) => {
-    const { task_id, run_id, tenant_id, assignee, description, entity_type, entity_id } = job.data;
+    const { task_id, run_id, tenant_id, assignee, description, entity_type, entity_id, context = {} } = job.data;
     logger.info(`[ExecuteTask] Agent ${assignee} executing task ${task_id}`);
 
     try {
@@ -131,6 +150,30 @@ export function startTaskWorkers(pgPool) {
 
       // 6. Build system prompt with agent identity
       const systemPrompt = getBraidSystemPrompt(tenantRecord);
+      
+      // Add role-specific guidance
+      let roleGuidance = '';
+      if (agentRole === 'project_manager') {
+        roleGuidance = `
+
+**IMPORTANT:** When asked to schedule, set, or create appointments/meetings/calls:
+1. Extract the time, date, and purpose from the request
+2. If missing details, use reasonable defaults (e.g., 30 min duration, tomorrow if no date specified)
+3. ALWAYS call the create_activity tool to actually create the calendar event
+4. Do not just describe what should be done - DO IT by calling the tool`;
+      }
+      
+      // Add handoff context if this is a delegated task
+      let handoffContext = '';
+      if (context.delegated_from) {
+        handoffContext = `
+
+**HANDOFF NOTICE:**
+This task was delegated to you by ${context.delegated_from} (${context.handoff_type || 'delegate'})
+${context.parent_task_id ? `Parent task: ${context.parent_task_id}` : ''}
+${Object.keys(context).length > 3 ? `Additional context: ${JSON.stringify(context, null, 2)}` : ''}`;
+      }
+      
       const agentSystemPrompt = `${systemPrompt}
 
 **Agent Identity:**
@@ -138,13 +181,13 @@ You are ${agentProfile.display_name}, a specialized AI agent with the following 
 ${agentProfile.metadata?.capabilities?.map(c => `- ${c}`).join('\n') || ''}
 
 Your role is to: ${agentRole.replace(/_/g, ' ')}
+${roleGuidance}${handoffContext}
 
 **Current Task Context:**
 ${contextInfo}
 
 **Instructions:**
 Execute the task described above by using the appropriate tools available to you. Be thorough and professional.
-If you need to create appointments or calendar events, use the create_activity tool.
 Provide a clear summary of what you did.`;
 
       // 7. Invoke LLM with tools
@@ -211,14 +254,68 @@ Provide a clear summary of what you did.`;
 
           let toolResult;
           try {
-            // Execute the Braid tool
-            toolResult = await executeBraidTool(
-              toolName,
-              toolArgs,
-              tenantRecord,
-              null, // userEmail - agent is executor
-              null  // accessToken - using system context
-            );
+            // SPECIAL HANDLING: delegate_task (agent-to-agent handoff)
+            if (toolName === 'delegate_task') {
+              const { to_agent, task_description, handoff_type = 'delegate', context = {} } = toolArgs;
+              
+              if (!to_agent || !task_description) {
+                throw new Error('delegate_task requires to_agent and task_description');
+              }
+
+              // Create new task in ops-dispatch queue for target agent
+              const delegatedTaskId = `task:${randomUUID()}`;
+              await opsDispatchQueue.add('route-task', {
+                task_id: delegatedTaskId,
+                description: task_description,
+                context: {
+                  ...context,
+                  delegated_from: assignee,
+                  handoff_type,
+                  parent_task_id: taskId,
+                  parent_run_id: run_id
+                },
+                tenant_id: tenantRecord.uuid,
+                force_assignee: to_agent, // Force routing to specific agent
+              });
+
+              // Emit handoff telemetry
+              emitTelemetry({
+                type: 'handoff',
+                run_id,
+                trace_id: run_id,
+                span_id: randomUUID(),
+                tenant_id: tenantRecord.uuid,
+                agent_id: assignee,
+                from_agent_id: assignee,
+                to_agent_id: to_agent,
+                task_id: delegatedTaskId,
+                handoff_type,
+                payload_ref: null,
+                summary: task_description.slice(0, 100),
+                ts: Date.now()
+              });
+
+              toolResult = {
+                tag: 'Ok',
+                value: {
+                  task_id: delegatedTaskId,
+                  delegated_to: to_agent,
+                  status: 'delegated',
+                  message: `Task successfully delegated to ${to_agent}`
+                }
+              };
+
+              logger.info(`[ExecuteTask] Delegated task to ${to_agent}:`, delegatedTaskId);
+            } else {
+              // Execute the Braid tool normally
+              toolResult = await executeBraidTool(
+                toolName,
+                toolArgs,
+                tenantRecord,
+                null, // userEmail - agent is executor
+                null  // accessToken - using system context
+              );
+            }
 
             // Emit tool call finished (success)
             emitToolCallFinished({

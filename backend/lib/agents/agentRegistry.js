@@ -61,7 +61,14 @@ export function getDefaultAgentProfile(role, tenant_id = null) {
         display_name: 'AiSHA (Ops Manager)',
         model: process.env.AISHA_OPS_MODEL || base.model,
         temperature: 0.2,
-        tool_allowlist: ['create_task', 'assign_task', 'handoff', 'approve', 'summarize', 'route_request'],
+        // BRAID TOOLS ONLY - orchestration and oversight focused
+        tool_allowlist: [
+          'fetch_tenant_snapshot',  // Get overview of all CRM data
+          'create_activity',        // Create tasks for team
+          'list_activities',        // Check team calendar/tasks
+          'create_note',            // Document decisions, plans
+          'delegate_task',          // Delegate to specialists
+        ],
         memory_namespace: 'ops',
         metadata: {
           ...base.metadata,
@@ -77,7 +84,16 @@ export function getDefaultAgentProfile(role, tenant_id = null) {
         display_name: 'Sales Manager',
         model: process.env.AISHA_SALES_MODEL || 'gpt-4o',
         temperature: 0.35,
-        tool_allowlist: ['crm_query', 'draft_email', 'summarize', 'create_task', 'handoff', 'update_opportunity'],
+        // BRAID TOOLS ONLY - sales pipeline and opportunity management
+        tool_allowlist: [
+          'list_opportunities_by_stage', // Pipeline visibility
+          'update_opportunity',          // Move deals through stages
+          'mark_opportunity_won',        // Close deals
+          'get_opportunity_forecast',    // Revenue forecasting
+          'create_activity',             // Schedule sales calls
+          'create_note',                 // Log sales notes
+          'delegate_task',               // Delegate to marketing/client services
+        ],
         memory_namespace: 'sales',
         metadata: {
           ...base.metadata,
@@ -87,19 +103,26 @@ export function getDefaultAgentProfile(role, tenant_id = null) {
         },
       };
 
-    case AgentRoles.SDR:
+    case AgentRoles.CLIENT_SERVICES_EXPERT:
       return {
         ...base,
-        display_name: 'SDR',
-        model: process.env.AISHA_SDR_MODEL || base.model,
-        temperature: 0.6,
-        tool_allowlist: ['crm_query', 'enrich', 'draft_email', 'summarize', 'handoff', 'create_lead'],
-        memory_namespace: 'sdr',
+        display_name: 'Client Services Expert',
+        model: process.env.AISHA_CS_EXPERT_MODEL || base.model,
+        temperature: 0.5,
+        // BRAID TOOLS ONLY - lead/contact research and creation
+        tool_allowlist: [
+          'search_web',          // Research companies/prospects
+          'lookup_company_info', // Get company details
+          'create_lead',         // Create new leads
+          'create_contact',      // Create new contacts
+          'create_note',         // Document research findings
+        ],
+        memory_namespace: 'client_services',
         metadata: {
           ...base.metadata,
-          avatar: '📞',
-          color: '#f59e0b',
-          capabilities: ['prospecting', 'outreach', 'lead_qualification', 'research'],
+          avatar: '🤝',
+          color: '#f0883e',
+          capabilities: ['client_relations', 'research', 'data_enrichment', 'contact_discovery'],
         },
       };
 
@@ -109,7 +132,17 @@ export function getDefaultAgentProfile(role, tenant_id = null) {
         display_name: 'Project Manager',
         model: process.env.AISHA_PM_MODEL || 'gpt-4o',
         temperature: 0.25,
-        tool_allowlist: ['crm_query', 'create_task', 'update_task', 'summarize', 'handoff', 'create_activity'],
+        // BRAID TOOLS ONLY - verified against backend/lib/braidIntegration-v2.js TOOL_REGISTRY
+        tool_allowlist: [
+          'create_activity',        // Schedule meetings, tasks, calls
+          'update_activity',        // Reschedule or modify activities
+          'mark_activity_complete', // Mark tasks/meetings as done
+          'list_activities',        // Check calendar/schedule
+          'create_note',            // Document project notes, plans
+          'update_note',            // Edit existing notes
+          'get_notes_for_record',   // Read project documentation
+          'delegate_task',          // Delegate to client services/marketing
+        ],
         memory_namespace: 'pm',
         metadata: {
           ...base.metadata,
@@ -125,7 +158,13 @@ export function getDefaultAgentProfile(role, tenant_id = null) {
         display_name: 'Marketing Manager',
         model: process.env.AISHA_MKT_MODEL || 'gpt-4o',
         temperature: 0.8,
-        tool_allowlist: ['segment', 'draft_copy', 'summarize', 'handoff', 'create_campaign'],
+        // BRAID TOOLS ONLY - campaign and content management
+        tool_allowlist: [
+          'search_leads',           // Segment/target leads
+          'list_accounts',          // Segment/target accounts
+          'create_note',            // Draft campaign notes/plans
+          'create_activity',        // Schedule campaign tasks
+        ],
         memory_namespace: 'mkt',
         metadata: {
           ...base.metadata,
@@ -141,7 +180,14 @@ export function getDefaultAgentProfile(role, tenant_id = null) {
         display_name: 'Customer Service Manager',
         model: process.env.AISHA_CS_MODEL || base.model,
         temperature: 0.2,
-        tool_allowlist: ['crm_query', 'kb_search', 'draft_reply', 'summarize', 'handoff', 'create_ticket'],
+        // BRAID TOOLS ONLY - customer support and issue management
+        tool_allowlist: [
+          'search_contacts',        // Find customer info
+          'get_contact_details',    // Get customer details
+          'create_note',            // Log support interactions
+          'create_activity',        // Schedule follow-ups
+          'search_notes',           // Search support history
+        ],
         memory_namespace: 'cs',
         metadata: {
           ...base.metadata,

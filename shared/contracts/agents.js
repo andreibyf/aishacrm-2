@@ -51,7 +51,7 @@
 export const AgentRoles = Object.freeze({
   OPS_MANAGER: 'ops_manager',           // AiSHA (router/governor/orchestrator)
   SALES_MANAGER: 'sales_manager',       // Deal management, pipeline
-  SDR: 'sdr',                           // Prospecting, outreach
+  CLIENT_SERVICES_EXPERT: 'client_services_expert', // Client relations, research
   PROJECT_MANAGER: 'project_manager',   // Scheduling, milestones
   MARKETING_MANAGER: 'marketing_manager', // Campaigns, copy
   CUSTOMER_SERVICE_MANAGER: 'customer_service_manager', // Support, complaints
