@@ -935,10 +935,53 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   //   }
   // };
 
-  // Navigation order management with drag-and-drop (tenant-scoped)
+  // Navigation order management with drag-and-drop (tenant-scoped + database persistence)
   const [isDragMode, setIsDragMode] = useState(false);
-  const { orderedItems: orderedNavItems, setOrder: setNavOrder, resetOrder: resetNavOrder, hasCustomOrder: hasCustomNavOrder } = usePrimaryNavOrder(navItems, effectiveTenantId);
-  const { orderedItems: orderedSecondaryItems, setOrder: setSecondaryOrder, resetOrder: resetSecondaryOrder, hasCustomOrder: hasCustomSecondaryOrder } = useSecondaryNavOrder(secondaryNavItems, effectiveTenantId);
+  
+  // Create save callbacks for navigation order persistence to database
+  const saveNavOrderToDatabase = useCallback(async (orderArray) => {
+    if (!user) return;
+    try {
+      await User.updateMyUserData({
+        permissions: {
+          ...user.permissions,
+          navigation_order: orderArray,
+        },
+      });
+      console.log("[Layout] Navigation order saved to database:", orderArray);
+      reloadUser?.();
+    } catch (error) {
+      console.error("[Layout] Failed to save navigation order to database:", error);
+    }
+  }, [user, reloadUser]);
+
+  const saveSecondaryNavOrderToDatabase = useCallback(async (orderArray) => {
+    if (!user) return;
+    try {
+      await User.updateMyUserData({
+        permissions: {
+          ...user.permissions,
+          secondary_navigation_order: orderArray,
+        },
+      });
+      console.log("[Layout] Secondary navigation order saved to database:", orderArray);
+      reloadUser?.();
+    } catch (error) {
+      console.error("[Layout] Failed to save secondary navigation order to database:", error);
+    }
+  }, [user, reloadUser]);
+
+  // Navigation order hooks with database persistence
+  const { orderedItems: orderedNavItems, setOrder: setNavOrder, resetOrder: resetNavOrder, hasCustomOrder: hasCustomNavOrder } = usePrimaryNavOrder(
+    navItems, 
+    effectiveTenantId,
+    { user, saveToDatabase: saveNavOrderToDatabase }
+  );
+  const { orderedItems: orderedSecondaryItems, setOrder: setSecondaryOrder, resetOrder: resetSecondaryOrder, hasCustomOrder: hasCustomSecondaryOrder } = useSecondaryNavOrder(
+    secondaryNavItems, 
+    effectiveTenantId,
+    { user, saveToDatabase: saveSecondaryNavOrderToDatabase }
+  );
 
   // Debug navigation order persistence
   React.useEffect(() => {
