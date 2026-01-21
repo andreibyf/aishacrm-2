@@ -18,7 +18,7 @@ fn createNote(
     content: content,
     related_type: entity_type,
     related_id: entity_id,
-    type: note_type
+    note_type: note_type
   };
   
   let response = http.post(url, { body: body });

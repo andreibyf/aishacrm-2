@@ -22,6 +22,7 @@ import {
 } from '../lib/telemetry/index.js';
 import { routeRequest, listRoles } from '../lib/agents/agentRouter.js';
 import { getAgentProfile, getAllAgentProfiles, AgentRoles } from '../lib/agents/agentRegistry.js';
+import { taskQueue } from '../services/taskQueue.js';
 
 export function createAgentOfficeRoutes(measuredPgPool) {
   void measuredPgPool;
@@ -53,13 +54,14 @@ export function createAgentOfficeRoutes(measuredPgPool) {
   });
 
   router.post('/run', async (req, res) => {
-    const tenant_id = req.body?.tenant_id || req.query?.tenant_id || null;
-    const input = req.body?.input || req.body?.message || '';
+    // Resolve tenant_id from header, body, or query (header takes precedence for consistency with other routes)
+    const tenant_id = req.headers['x-tenant-id'] || req.body?.tenant_id || req.query?.tenant_id || null;
+    const input = req.body?.input || req.body?.message || req.body?.task || '';
     const force_role = req.query?.force_role || req.body?.force_role || null;
 
     // Create correlation context for this run
     const ctx = createCorrelationContext();
-    const primary_task_id = `task:${ctx.run_id}:primary`;
+    const primary_task_id = ctx.run_id; // Use plain UUID - no prefix
 
     // Get ops_manager agent (orchestrator)
     const opsAgent = await getAgentProfile({ tenant_id, role: AgentRoles.OPS_MANAGER });
@@ -104,8 +106,22 @@ export function createAgentOfficeRoutes(measuredPgPool) {
       reason: `Intent routing: matched ${routed.role}`,
     });
 
-    // MVP: respond with routing decision and full agent identity.
-    // Next: enqueue to queue and return run id for streaming updates.
+    // Actually enqueue the task for execution
+    await taskQueue.add('execute-task', {
+      task_id: primary_task_id,
+      run_id: ctx.run_id,
+      tenant_id,
+      assignee: `${routed.agent.role}:${process.env.NODE_ENV || 'dev'}`,
+      description: input,
+      context: {
+        source: 'agent-office',
+        routed_from: 'ops_manager',
+      }
+    });
+
+    console.log(`[AgentOffice] Task ${primary_task_id} enqueued for agent ${routed.agent.role}`);
+
+    // Respond with routing decision and full agent identity
     res.json({
       ok: true,
       run_id: ctx.run_id,

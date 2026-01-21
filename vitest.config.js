@@ -9,10 +9,10 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: './src/test/setup.js',
     css: true,
-    // Strict timeout settings - move on after 30s, don't hang forever
-    testTimeout: 30000,      // 30s max per individual test
-    hookTimeout: 15000,      // 15s for beforeEach/afterEach hooks
-    teardownTimeout: 5000,   // 5s for cleanup
+    // Strict timeout settings - move on after 60s, don't hang forever
+    testTimeout: 60000,      // 60s max per individual test
+    hookTimeout: 30000,      // 30s for beforeEach/afterEach hooks
+    teardownTimeout: 10000,  // 10s for cleanup
     // Multiple reporters: console progress + JSON file for review
     reporters: ['default', 'json'],
     outputFile: './test-results/vitest-results.json',

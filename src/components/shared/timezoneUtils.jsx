@@ -222,13 +222,18 @@ export function formatActivityDateTime(activity, offsetMinutes = null) {
         return 'Invalid time';
       }
 
-      // FIXED: due_time is stored as LOCAL time, not UTC
-      // Just display it directly without timezone conversion
-      const timeParts = activity.due_time.split(':');
-      const hours = parseInt(timeParts[0]);
-      const minutes = parseInt(timeParts[1] || '0');
-
-      const displayDate = new Date(year, month, day, hours, minutes);
+      // due_time is stored as UTC - convert to local time for display
+      // Use the offsetMinutes to convert from UTC to local
+      const effectiveOffset = offsetMinutes ?? new Date().getTimezoneOffset();
+      
+      // Normalize time to HH:mm:ss format
+      const normalizedTime = normalizeTimeString(activity.due_time);
+      
+      // Create UTC datetime string
+      const utcString = `${datePart}T${normalizedTime}.000Z`;
+      
+      // Convert UTC to local time using the offset
+      const displayDate = utcToLocal(utcString, effectiveOffset);
       
       // Check if constructed date is valid
       if (isNaN(displayDate.getTime())) {

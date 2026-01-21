@@ -1,9 +1,9 @@
 import { taskQueue } from '../services/taskQueue.js';
-import { emitTaskAssigned, emitRunStarted, emitRunFinished, emitTaskCompleted, emitToolCallStarted, emitToolCallFinished } from '../lib/telemetry/index.js';
+import { emitTaskAssigned, emitRunStarted, emitRunFinished, emitTaskCompleted, emitToolCallStarted, emitToolCallFinished, emitHandoff } from '../lib/telemetry/index.js';
 import { randomUUID } from 'crypto';
 import logger from '../lib/logger.js';
-import { generateChatCompletion, selectLLMConfigForTenant } from '../lib/aiEngine/index.js';
-import { getBraidSystemPrompt, generateToolSchemas, executeBraidTool } from '../lib/braidIntegration-v2.js';
+import { getOpenAIClient } from '../lib/aiProvider.js';
+import { getBraidSystemPrompt, generateToolSchemas, executeBraidTool, TOOL_ACCESS_TOKEN } from '../lib/braidIntegration-v2.js';
 import { getAgentProfile } from '../lib/agents/agentRegistry.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
@@ -25,8 +25,8 @@ export function startTaskWorkers(pgPool) {
         const desc = description.toLowerCase();
         
         // Priority routing - check specific capabilities first
-        if (desc.match(/\b(schedule|appointment|meeting|calendar|set up a call|book)\b/)) {
-          assignee = 'project_manager:dev'; // PM owns calendar/scheduling
+        if (desc.match(/\b(schedule|appointment|meeting|calendar|set up a call|book|reminder|remind)\b/)) {
+          assignee = 'project_manager:dev'; // PM owns calendar/scheduling/reminders
         } else if (desc.match(/\b(sales|deal|opportunity|proposal|quote|negotiat)\b/)) {
           assignee = 'sales_manager:dev';
         } else if (desc.match(/\b(marketing|campaign|content|newsletter|email blast)\b/)) {
@@ -87,14 +87,21 @@ export function startTaskWorkers(pgPool) {
 
     try {
       // 1. Resolve tenant and agent profile
-      const tenantRecord = await resolveCanonicalTenant(tenant_id);
-      if (!tenantRecord?.found) {
+      const resolvedTenant = await resolveCanonicalTenant(tenant_id);
+      if (!resolvedTenant?.found) {
         throw new Error(`Tenant ${tenant_id} not found`);
       }
 
+      // Create tenantRecord in the format expected by executeBraidTool (same as sidepanel)
+      const tenantRecord = {
+        id: resolvedTenant.uuid,           // UUID primary key
+        tenant_id: resolvedTenant.slug,    // text business identifier (for backwards compat)
+        name: resolvedTenant.slug          // use slug as name fallback
+      };
+
       // Extract role from assignee (format: "role:environment" e.g., "customer_service_manager:dev")
       const agentRole = assignee.split(':')[0];
-      const agentProfile = await getAgentProfile({ tenant_id: tenantRecord.uuid, role: agentRole });
+      const agentProfile = await getAgentProfile({ tenant_id: tenantRecord.id, role: agentRole });
       
       logger.info(`[ExecuteTask] Using agent profile: ${agentProfile.display_name} (${agentProfile.model})`);
 
@@ -103,7 +110,7 @@ export function startTaskWorkers(pgPool) {
         run_id,
         trace_id: run_id,
         span_id: randomUUID(),
-        tenant_id: tenantRecord.uuid,
+        tenant_id: tenantRecord.id,
         agent_id: assignee,
         entrypoint: 'worker',
         input_summary: description
@@ -127,7 +134,7 @@ export function startTaskWorkers(pgPool) {
               .from(tableName)
               .select('*')
               .eq('id', entity_id)
-              .eq('tenant_id', tenantRecord.uuid)
+              .eq('tenant_id', tenantRecord.id)
               .single();
             
             if (entityData) {
@@ -139,11 +146,8 @@ export function startTaskWorkers(pgPool) {
         }
       }
 
-      // 4. Get LLM config for this agent
-      const llmConfig = selectLLMConfigForTenant(tenantRecord.uuid, 'chat_tools');
-      
-      // 5. Generate tool schemas filtered to agent's allowlist
-      const allToolSchemas = generateToolSchemas();
+      // 4. Generate tool schemas filtered to agent's allowlist
+      const allToolSchemas = await generateToolSchemas();
       const allowedTools = agentProfile.tool_allowlist.includes('*') 
         ? allToolSchemas 
         : allToolSchemas.filter(tool => agentProfile.tool_allowlist.includes(tool.function.name));
@@ -201,22 +205,30 @@ Provide a clear summary of what you did.`;
       const MAX_ITERATIONS = 5;
       let finalResponse = null;
 
+      // Get OpenAI client for tool calling
+      const client = getOpenAIClient();
+      const model = agentProfile.model || 'gpt-4o-mini';
+      const temperature = agentProfile.temperature || 0.2;
+
+      logger.info(`[ExecuteTask] Calling LLM with ${allowedTools.length} tools for agent ${assignee}`);
+
       while (iterations < MAX_ITERATIONS) {
         iterations++;
         logger.debug(`[ExecuteTask] LLM iteration ${iterations}`);
 
-        const completion = await generateChatCompletion(
-          conversation,
-          allowedTools,
-          {
-            ...llmConfig,
-            model: agentProfile.model,
-            temperature: agentProfile.temperature,
-          }
-        );
+        const completion = await client.chat.completions.create({
+          model,
+          messages: conversation,
+          tools: allowedTools,
+          tool_choice: iterations === 1 ? 'auto' : 'auto', // Let model decide
+          temperature,
+        });
+
+        logger.debug(`[ExecuteTask] LLM response:`, JSON.stringify(completion)?.slice(0, 500));
 
         const choice = completion?.choices?.[0];
         if (!choice) {
+          logger.error(`[ExecuteTask] No choice in completion. Full response:`, JSON.stringify(completion)?.slice(0, 1000));
           throw new Error('No completion choice returned from LLM');
         }
 
@@ -246,7 +258,7 @@ Provide a clear summary of what you did.`;
             run_id,
             trace_id: run_id,
             span_id: randomUUID(),
-            tenant_id: tenantRecord.uuid,
+            tenant_id: tenantRecord.id,
             agent_id: assignee,
             tool_name: toolName,
             input_summary: JSON.stringify(toolArgs).slice(0, 200)
@@ -264,35 +276,34 @@ Provide a clear summary of what you did.`;
 
               // Create new task in ops-dispatch queue for target agent
               const delegatedTaskId = `task:${randomUUID()}`;
-              await opsDispatchQueue.add('route-task', {
+              const delegatedRunId = randomUUID(); // New run for delegated task
+              await taskQueue.add('ops-dispatch', {
                 task_id: delegatedTaskId,
+                run_id: delegatedRunId,
                 description: task_description,
                 context: {
                   ...context,
                   delegated_from: assignee,
                   handoff_type,
-                  parent_task_id: taskId,
+                  parent_task_id: task_id,
                   parent_run_id: run_id
                 },
-                tenant_id: tenantRecord.uuid,
-                force_assignee: to_agent, // Force routing to specific agent
+                tenant_id: tenantRecord.id,
+                force_assignee: `${to_agent}:dev`, // Force routing to specific agent (add :dev suffix)
               });
 
               // Emit handoff telemetry
-              emitTelemetry({
-                type: 'handoff',
+              emitHandoff({
                 run_id,
                 trace_id: run_id,
                 span_id: randomUUID(),
-                tenant_id: tenantRecord.uuid,
-                agent_id: assignee,
+                tenant_id: tenantRecord.id,
                 from_agent_id: assignee,
-                to_agent_id: to_agent,
+                to_agent_id: `${to_agent}:dev`,
                 task_id: delegatedTaskId,
                 handoff_type,
                 payload_ref: null,
-                summary: task_description.slice(0, 100),
-                ts: Date.now()
+                summary: task_description.slice(0, 100)
               });
 
               toolResult = {
@@ -307,29 +318,41 @@ Provide a clear summary of what you did.`;
 
               logger.info(`[ExecuteTask] Delegated task to ${to_agent}:`, delegatedTaskId);
             } else {
-              // Execute the Braid tool normally
+              // Use TOOL_ACCESS_TOKEN with agent info appended (same pattern as sidepanel)
+              const dynamicAccessToken = {
+                ...TOOL_ACCESS_TOKEN,
+                user_role: 'agent',
+                user_email: `agent:${assignee}`,
+                user_name: agentProfile.display_name
+              };
+
+              // Execute the Braid tool with system token
               toolResult = await executeBraidTool(
                 toolName,
                 toolArgs,
                 tenantRecord,
-                null, // userEmail - agent is executor
-                null  // accessToken - using system context
+                `agent:${assignee}`, // userId - agent as executor
+                dynamicAccessToken
               );
             }
 
-            // Emit tool call finished (success)
+            // Check if tool execution was successful
+            const toolSucceeded = toolResult?.tag !== 'Err';
+
+            // Emit tool call finished
             emitToolCallFinished({
               run_id,
               trace_id: run_id,
               span_id: randomUUID(),
-              tenant_id: tenantRecord.uuid,
+              tenant_id: tenantRecord.id,
               agent_id: assignee,
               tool_name: toolName,
-              status: 'success',
+              status: toolSucceeded ? 'success' : 'error',
               output_summary: JSON.stringify(toolResult).slice(0, 200)
             });
 
-            logger.info(`[ExecuteTask] Tool ${toolName} succeeded`);
+            logger.info(`[ExecuteTask] Tool ${toolName} ${toolSucceeded ? 'succeeded' : 'failed'}:`, 
+              toolSucceeded ? toolResult : toolResult.error);
           } catch (toolError) {
             logger.error(`[ExecuteTask] Tool ${toolName} failed:`, toolError);
             toolResult = { error: toolError.message };
@@ -339,7 +362,7 @@ Provide a clear summary of what you did.`;
               run_id,
               trace_id: run_id,
               span_id: randomUUID(),
-              tenant_id: tenantRecord.uuid,
+              tenant_id: tenantRecord.id,
               agent_id: assignee,
               tool_name: toolName,
               status: 'error',
@@ -367,7 +390,7 @@ Provide a clear summary of what you did.`;
         run_id,
         trace_id: run_id,
         span_id: randomUUID(),
-        tenant_id: tenantRecord.uuid,
+        tenant_id: tenantRecord.id,
         agent_id: assignee,
         status: 'success',
         output_summary: finalResponse.slice(0, 200)
@@ -377,17 +400,22 @@ Provide a clear summary of what you did.`;
         run_id,
         trace_id: run_id,
         span_id: randomUUID(),
-        tenant_id: tenantRecord.uuid,
+        tenant_id: tenantRecord.id,
         agent_id: assignee,
         task_id,
         summary: finalResponse.slice(0, 200)
       });
 
-      // 9. Update Task with result
-      await pgPool.query(
-        `UPDATE tasks SET status = 'COMPLETED', result = $1, updated_at = NOW() WHERE id = $2`,
-        [finalResponse, task_id]
-      );
+      // 9. Update Task with result (if DB record exists - some tasks come from agent-office without DB record)
+      try {
+        await pgPool.query(
+          `UPDATE tasks SET status = 'COMPLETED', result = $1, updated_at = NOW() WHERE id = $2`,
+          [finalResponse, task_id]
+        );
+      } catch (updateErr) {
+        // Task might not exist in DB (e.g., from agent-office run) - this is fine
+        logger.debug(`[ExecuteTask] No DB task to update (task came from agent-office run)`);
+      }
 
       logger.info(`[ExecuteTask] Task ${task_id} completed successfully`);
       return { status: 'completed', result: finalResponse };

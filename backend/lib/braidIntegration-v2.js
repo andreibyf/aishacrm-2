@@ -299,148 +299,107 @@ const TOOLS_DIR = path.join(__dirname, '..', '..', 'braid-llm-kit', 'examples', 
  * Tool Registry - Maps tool names to Braid files
  */
 export const TOOL_REGISTRY = {
-  // Data Snapshot
-  fetch_tenant_snapshot: { file: 'snapshot.braid', function: 'fetchSnapshot', policy: 'READ_ONLY' },
-  debug_probe: { file: 'snapshot.braid', function: 'probe', policy: 'READ_ONLY' },
-  
-  // Account Management
+  // Accounts
   create_account: { file: 'accounts.braid', function: 'createAccount', policy: 'WRITE_OPERATIONS' },
   update_account: { file: 'accounts.braid', function: 'updateAccount', policy: 'WRITE_OPERATIONS' },
   get_account_details: { file: 'accounts.braid', function: 'getAccountDetails', policy: 'READ_ONLY' },
   list_accounts: { file: 'accounts.braid', function: 'listAccounts', policy: 'READ_ONLY' },
   search_accounts: { file: 'accounts.braid', function: 'searchAccounts', policy: 'READ_ONLY' },
   search_accounts_by_status: { file: 'accounts.braid', function: 'searchAccountsByStatus', policy: 'READ_ONLY' },
-  delete_account: { file: 'accounts.braid', function: 'deleteAccount', policy: 'DELETE_OPERATIONS' },
-  
-  // Lead Management
-  create_lead: { file: 'leads.braid', function: 'createLead', policy: 'WRITE_OPERATIONS' },
-  update_lead: { file: 'leads.braid', function: 'updateLead', policy: 'WRITE_OPERATIONS' },
-  qualify_lead: { file: 'leads.braid', function: 'qualifyLead', policy: 'WRITE_OPERATIONS' },
-  convert_lead_to_account: { file: 'leads.braid', function: 'convertLeadToAccount', policy: 'WRITE_OPERATIONS' },
-  list_leads: { file: 'leads.braid', function: 'listLeads', policy: 'READ_ONLY' },
-  search_leads: { file: 'leads.braid', function: 'searchLeads', policy: 'READ_ONLY' },
-  search_leads_by_status: { file: 'leads.braid', function: 'searchLeadsByStatus', policy: 'READ_ONLY' },
-  get_lead_details: { file: 'leads.braid', function: 'getLeadDetails', policy: 'READ_ONLY' },
-  delete_lead: { file: 'leads.braid', function: 'deleteLead', policy: 'DELETE_OPERATIONS' },
-  
-  // Activity & Calendar
+  delete_account: { file: 'accounts.braid', function: 'deleteAccount', policy: 'WRITE_OPERATIONS' },
+
+  // Activities
   create_activity: { file: 'activities.braid', function: 'createActivity', policy: 'WRITE_OPERATIONS' },
   update_activity: { file: 'activities.braid', function: 'updateActivity', policy: 'WRITE_OPERATIONS' },
   mark_activity_complete: { file: 'activities.braid', function: 'markActivityComplete', policy: 'WRITE_OPERATIONS' },
   get_upcoming_activities: { file: 'activities.braid', function: 'getUpcomingActivities', policy: 'READ_ONLY' },
-  list_activities: { file: 'activities.braid', function: 'listActivities', policy: 'READ_ONLY' },
-  search_activities: { file: 'activities.braid', function: 'searchActivities', policy: 'READ_ONLY' },
-  get_activity_details: { file: 'activities.braid', function: 'getActivityDetails', policy: 'READ_ONLY' },
   schedule_meeting: { file: 'activities.braid', function: 'scheduleMeeting', policy: 'WRITE_OPERATIONS' },
-  delete_activity: { file: 'activities.braid', function: 'deleteActivity', policy: 'DELETE_OPERATIONS' },
-  
-  // Notes
-  create_note: { file: 'notes.braid', function: 'createNote', policy: 'WRITE_OPERATIONS' },
-  update_note: { file: 'notes.braid', function: 'updateNote', policy: 'WRITE_OPERATIONS' },
-  search_notes: { file: 'notes.braid', function: 'searchNotes', policy: 'READ_ONLY' },
-  get_notes_for_record: { file: 'notes.braid', function: 'getNotesForRecord', policy: 'READ_ONLY' },
-  get_note_details: { file: 'notes.braid', function: 'getNoteDetails', policy: 'READ_ONLY' },
-  delete_note: { file: 'notes.braid', function: 'deleteNote', policy: 'DELETE_OPERATIONS' },
-  
-  // Opportunities
-  create_opportunity: { file: 'opportunities.braid', function: 'createOpportunity', policy: 'WRITE_OPERATIONS' },
-  update_opportunity: { file: 'opportunities.braid', function: 'updateOpportunity', policy: 'WRITE_OPERATIONS' },
-  list_opportunities_by_stage: { file: 'opportunities.braid', function: 'listOpportunitiesByStage', policy: 'READ_ONLY' },
-  search_opportunities: { file: 'opportunities.braid', function: 'searchOpportunities', policy: 'READ_ONLY' },
-  search_opportunities_by_stage: { file: 'opportunities.braid', function: 'searchOpportunitiesByStage', policy: 'READ_ONLY' },
-  get_opportunity_details: { file: 'opportunities.braid', function: 'getOpportunityDetails', policy: 'READ_ONLY' },
-  get_opportunity_forecast: { file: 'opportunities.braid', function: 'getOpportunityForecast', policy: 'READ_ONLY' },
-  mark_opportunity_won: { file: 'opportunities.braid', function: 'markOpportunityWon', policy: 'WRITE_OPERATIONS' },
-  delete_opportunity: { file: 'opportunities.braid', function: 'deleteOpportunity', policy: 'DELETE_OPERATIONS' },
-  
-  // Contacts
-  create_contact: { file: 'contacts.braid', function: 'createContact', policy: 'WRITE_OPERATIONS' },
-  update_contact: { file: 'contacts.braid', function: 'updateContact', policy: 'WRITE_OPERATIONS' },
-  list_contacts_for_account: { file: 'contacts.braid', function: 'listContactsForAccount', policy: 'READ_ONLY' },
-  list_all_contacts: { file: 'contacts.braid', function: 'listAllContacts', policy: 'READ_ONLY' },
-  get_contact_details: { file: 'contacts.braid', function: 'getContactDetails', policy: 'READ_ONLY' },
-  get_contact_by_name: { file: 'contacts.braid', function: 'getContactByName', policy: 'READ_ONLY' },
-  search_contacts: { file: 'contacts.braid', function: 'searchContacts', policy: 'READ_ONLY' },
-  search_contacts_by_status: { file: 'contacts.braid', function: 'searchContactsByStatus', policy: 'READ_ONLY' },
-  delete_contact: { file: 'contacts.braid', function: 'deleteContact', policy: 'DELETE_OPERATIONS' },
-  
-  // Web Research
-  search_web: { file: 'web-research.braid', function: 'searchWeb', policy: 'READ_ONLY' },
-  fetch_web_page: { file: 'web-research.braid', function: 'fetchWebPage', policy: 'READ_ONLY' },
-  lookup_company_info: { file: 'web-research.braid', function: 'lookupCompanyInfo', policy: 'READ_ONLY' },
+  delete_activity: { file: 'activities.braid', function: 'deleteActivity', policy: 'WRITE_OPERATIONS' },
+  list_activities: { file: 'activities.braid', function: 'listActivities', policy: 'READ_ONLY' },
+  get_activity_details: { file: 'activities.braid', function: 'getActivityDetails', policy: 'READ_ONLY' },
+  search_activities: { file: 'activities.braid', function: 'searchActivities', policy: 'READ_ONLY' },
 
-  // Workflow Templates
-  list_workflow_templates: { file: 'workflows.braid', function: 'listWorkflowTemplates', policy: 'READ_ONLY' },
-  get_workflow_template: { file: 'workflows.braid', function: 'getWorkflowTemplate', policy: 'READ_ONLY' },
-  instantiate_workflow_template: { file: 'workflows.braid', function: 'instantiateWorkflowTemplate', policy: 'WRITE_OPERATIONS' },
-
-  // Telephony & AI Calling
-  initiate_call: { file: 'telephony.braid', function: 'initiateCall', policy: 'WRITE_OPERATIONS' },
-  call_contact: { file: 'telephony.braid', function: 'callContact', policy: 'WRITE_OPERATIONS' },
-  check_calling_provider: { file: 'telephony.braid', function: 'checkCallingProvider', policy: 'READ_ONLY' },
-  get_calling_agents: { file: 'telephony.braid', function: 'getCallingAgents', policy: 'READ_ONLY' },
-
-  // BizDev Sources (v3.0.0 workflow)
+  // Bizdev Sources
   create_bizdev_source: { file: 'bizdev-sources.braid', function: 'createBizDevSource', policy: 'WRITE_OPERATIONS' },
   update_bizdev_source: { file: 'bizdev-sources.braid', function: 'updateBizDevSource', policy: 'WRITE_OPERATIONS' },
   get_bizdev_source_details: { file: 'bizdev-sources.braid', function: 'getBizDevSourceDetails', policy: 'READ_ONLY' },
   list_bizdev_sources: { file: 'bizdev-sources.braid', function: 'listBizDevSources', policy: 'READ_ONLY' },
   search_bizdev_sources: { file: 'bizdev-sources.braid', function: 'searchBizDevSources', policy: 'READ_ONLY' },
   promote_bizdev_source_to_lead: { file: 'bizdev-sources.braid', function: 'promoteBizDevSourceToLead', policy: 'WRITE_OPERATIONS' },
-  delete_bizdev_source: { file: 'bizdev-sources.braid', function: 'deleteBizDevSource', policy: 'DELETE_OPERATIONS' },
+  delete_bizdev_source: { file: 'bizdev-sources.braid', function: 'deleteBizDevSource', policy: 'WRITE_OPERATIONS' },
   archive_bizdev_sources: { file: 'bizdev-sources.braid', function: 'archiveBizDevSources', policy: 'WRITE_OPERATIONS' },
 
-  // v3.0.0 Lifecycle Orchestration (complete workflow tools)
-  advance_to_lead: { file: 'lifecycle.braid', function: 'advanceToLead', policy: 'WRITE_OPERATIONS' },
-  advance_to_qualified: { file: 'lifecycle.braid', function: 'advanceToQualified', policy: 'WRITE_OPERATIONS' },
-  advance_to_account: { file: 'lifecycle.braid', function: 'advanceToAccount', policy: 'WRITE_OPERATIONS' },
-  advance_opportunity_stage: { file: 'lifecycle.braid', function: 'advanceOpportunityStage', policy: 'WRITE_OPERATIONS' },
-  full_lifecycle_advance: { file: 'lifecycle.braid', function: 'fullLifecycleAdvance', policy: 'WRITE_OPERATIONS' },
+  // Contacts
+  create_contact: { file: 'contacts.braid', function: 'createContact', policy: 'WRITE_OPERATIONS' },
+  update_contact: { file: 'contacts.braid', function: 'updateContact', policy: 'WRITE_OPERATIONS' },
+  list_contacts_for_account: { file: 'contacts.braid', function: 'listContactsForAccount', policy: 'READ_ONLY' },
+  search_contacts: { file: 'contacts.braid', function: 'searchContacts', policy: 'READ_ONLY' },
+  get_contact_by_name: { file: 'contacts.braid', function: 'getContactByName', policy: 'READ_ONLY' },
+  list_all_contacts: { file: 'contacts.braid', function: 'listAllContacts', policy: 'READ_ONLY' },
+  search_contacts_by_status: { file: 'contacts.braid', function: 'searchContactsByStatus', policy: 'READ_ONLY' },
+  delete_contact: { file: 'contacts.braid', function: 'deleteContact', policy: 'WRITE_OPERATIONS' },
+  get_contact_details: { file: 'contacts.braid', function: 'getContactDetails', policy: 'READ_ONLY' },
 
-  // AI Suggestions (Phase 3 Autonomous Operations)
-  list_suggestions: { file: 'suggestions.braid', function: 'listSuggestions', policy: 'READ_ONLY' },
-  get_suggestion_details: { file: 'suggestions.braid', function: 'getSuggestionDetails', policy: 'READ_ONLY' },
-  get_suggestion_stats: { file: 'suggestions.braid', function: 'getSuggestionStats', policy: 'READ_ONLY' },
-  approve_suggestion: { file: 'suggestions.braid', function: 'approveSuggestion', policy: 'WRITE_OPERATIONS' },
-  reject_suggestion: { file: 'suggestions.braid', function: 'rejectSuggestion', policy: 'WRITE_OPERATIONS' },
-  apply_suggestion: { file: 'suggestions.braid', function: 'applySuggestion', policy: 'WRITE_OPERATIONS' },
-  trigger_suggestion_generation: { file: 'suggestions.braid', function: 'triggerSuggestionGeneration', policy: 'WRITE_OPERATIONS' },
-  suggest_next_actions: { file: 'suggest-next-actions.braid', function: 'suggestNextActions', policy: 'READ_ONLY' },
-
-  // CRM Navigation (v3.0.0 - allows AI to navigate user to pages)
-  navigate_to_page: { file: 'navigation.braid', function: 'navigateTo', policy: 'READ_ONLY' },
-  get_current_page: { file: 'navigation.braid', function: 'getCurrentPage', policy: 'READ_ONLY' },
-
-  // Documents Management
+  // Documents
   list_documents: { file: 'documents.braid', function: 'listDocuments', policy: 'READ_ONLY' },
   get_document_details: { file: 'documents.braid', function: 'getDocumentDetails', policy: 'READ_ONLY' },
   create_document: { file: 'documents.braid', function: 'createDocument', policy: 'WRITE_OPERATIONS' },
   update_document: { file: 'documents.braid', function: 'updateDocument', policy: 'WRITE_OPERATIONS' },
-  delete_document: { file: 'documents.braid', function: 'deleteDocument', policy: 'DELETE_OPERATIONS' },
+  delete_document: { file: 'documents.braid', function: 'deleteDocument', policy: 'WRITE_OPERATIONS' },
   analyze_document: { file: 'documents.braid', function: 'analyzeDocument', policy: 'READ_ONLY' },
   search_documents: { file: 'documents.braid', function: 'searchDocuments', policy: 'READ_ONLY' },
 
-  // Employees Management
+  // Employees
   list_employees: { file: 'employees.braid', function: 'listEmployees', policy: 'READ_ONLY' },
   get_employee_details: { file: 'employees.braid', function: 'getEmployeeDetails', policy: 'READ_ONLY' },
   create_employee: { file: 'employees.braid', function: 'createEmployee', policy: 'WRITE_OPERATIONS' },
   update_employee: { file: 'employees.braid', function: 'updateEmployee', policy: 'WRITE_OPERATIONS' },
-  delete_employee: { file: 'employees.braid', function: 'deleteEmployee', policy: 'DELETE_OPERATIONS' },
+  delete_employee: { file: 'employees.braid', function: 'deleteEmployee', policy: 'WRITE_OPERATIONS' },
   search_employees: { file: 'employees.braid', function: 'searchEmployees', policy: 'READ_ONLY' },
   get_employee_assignments: { file: 'employees.braid', function: 'getEmployeeAssignments', policy: 'READ_ONLY' },
 
-  // Users Management (Admin operations)
-  list_users: { file: 'users.braid', function: 'listUsers', policy: 'READ_ONLY' },
-  get_user_details: { file: 'users.braid', function: 'getUserDetails', policy: 'READ_ONLY' },
-  get_current_user_profile: { file: 'users.braid', function: 'getCurrentUserProfile', policy: 'READ_ONLY' },
-  get_user_profiles: { file: 'users.braid', function: 'getUserProfiles', policy: 'READ_ONLY' },
-  create_user: { file: 'users.braid', function: 'createUser', policy: 'ADMIN_ONLY' },
-  update_user: { file: 'users.braid', function: 'updateUser', policy: 'ADMIN_ONLY' },
-  delete_user: { file: 'users.braid', function: 'deleteUser', policy: 'ADMIN_ALL' },
-  search_users: { file: 'users.braid', function: 'searchUsers', policy: 'READ_ONLY' },
-  invite_user: { file: 'users.braid', function: 'inviteUser', policy: 'ADMIN_ONLY' },
+  // Leads
+  create_lead: { file: 'leads.braid', function: 'createLead', policy: 'WRITE_OPERATIONS' },
+  delete_lead: { file: 'leads.braid', function: 'deleteLead', policy: 'WRITE_OPERATIONS' },
+  qualify_lead: { file: 'leads.braid', function: 'qualifyLead', policy: 'WRITE_OPERATIONS' },
+  update_lead: { file: 'leads.braid', function: 'updateLead', policy: 'WRITE_OPERATIONS' },
+  convert_lead_to_account: { file: 'leads.braid', function: 'convertLeadToAccount', policy: 'WRITE_OPERATIONS' },
+  list_leads: { file: 'leads.braid', function: 'listLeads', policy: 'READ_ONLY' },
+  get_lead_details: { file: 'leads.braid', function: 'getLeadDetails', policy: 'READ_ONLY' },
+  search_leads: { file: 'leads.braid', function: 'searchLeads', policy: 'READ_ONLY' },
+  search_leads_by_status: { file: 'leads.braid', function: 'searchLeadsByStatus', policy: 'READ_ONLY' },
 
-  // Reports & Analytics
+  // Lifecycle
+  advance_to_lead: { file: 'lifecycle.braid', function: 'advanceToLead', policy: 'WRITE_OPERATIONS' },
+  advance_to_qualified: { file: 'lifecycle.braid', function: 'advanceToQualified', policy: 'WRITE_OPERATIONS' },
+  advance_to_account: { file: 'lifecycle.braid', function: 'advanceToAccount', policy: 'WRITE_OPERATIONS' },
+  advance_opportunity_stage: { file: 'lifecycle.braid', function: 'advanceOpportunityStage', policy: 'WRITE_OPERATIONS' },
+  full_lifecycle_advance: { file: 'lifecycle.braid', function: 'fullLifecycleAdvance', policy: 'READ_ONLY' },
+
+  // Navigation
+  navigate_to_page: { file: 'navigation.braid', function: 'navigateTo', policy: 'READ_ONLY' },
+  get_current_page: { file: 'navigation.braid', function: 'getCurrentPage', policy: 'READ_ONLY' },
+
+  // Notes
+  create_note: { file: 'notes.braid', function: 'createNote', policy: 'WRITE_OPERATIONS' },
+  update_note: { file: 'notes.braid', function: 'updateNote', policy: 'WRITE_OPERATIONS' },
+  search_notes: { file: 'notes.braid', function: 'searchNotes', policy: 'READ_ONLY' },
+  get_notes_for_record: { file: 'notes.braid', function: 'getNotesForRecord', policy: 'READ_ONLY' },
+  get_note_details: { file: 'notes.braid', function: 'getNoteDetails', policy: 'READ_ONLY' },
+  delete_note: { file: 'notes.braid', function: 'deleteNote', policy: 'WRITE_OPERATIONS' },
+
+  // Opportunities
+  create_opportunity: { file: 'opportunities.braid', function: 'createOpportunity', policy: 'WRITE_OPERATIONS' },
+  delete_opportunity: { file: 'opportunities.braid', function: 'deleteOpportunity', policy: 'WRITE_OPERATIONS' },
+  update_opportunity: { file: 'opportunities.braid', function: 'updateOpportunity', policy: 'WRITE_OPERATIONS' },
+  list_opportunities_by_stage: { file: 'opportunities.braid', function: 'listOpportunitiesByStage', policy: 'READ_ONLY' },
+  get_opportunity_details: { file: 'opportunities.braid', function: 'getOpportunityDetails', policy: 'READ_ONLY' },
+  search_opportunities: { file: 'opportunities.braid', function: 'searchOpportunities', policy: 'READ_ONLY' },
+  search_opportunities_by_stage: { file: 'opportunities.braid', function: 'searchOpportunitiesByStage', policy: 'READ_ONLY' },
+  get_opportunity_forecast: { file: 'opportunities.braid', function: 'getOpportunityForecast', policy: 'READ_ONLY' },
+  mark_opportunity_won: { file: 'opportunities.braid', function: 'markOpportunityWon', policy: 'WRITE_OPERATIONS' },
+
+  // Reports
   get_dashboard_bundle: { file: 'reports.braid', function: 'getDashboardBundle', policy: 'READ_ONLY' },
   get_health_summary: { file: 'reports.braid', function: 'getHealthSummary', policy: 'READ_ONLY' },
   get_sales_report: { file: 'reports.braid', function: 'getSalesReport', policy: 'READ_ONLY' },
@@ -448,16 +407,57 @@ export const TOOL_REGISTRY = {
   get_activity_report: { file: 'reports.braid', function: 'getActivityReport', policy: 'READ_ONLY' },
   get_lead_conversion_report: { file: 'reports.braid', function: 'getLeadConversionReport', policy: 'READ_ONLY' },
   get_revenue_forecasts: { file: 'reports.braid', function: 'getRevenueForecasts', policy: 'READ_ONLY' },
-  clear_report_cache: { file: 'reports.braid', function: 'clearReportCache', policy: 'ADMIN_ONLY' },
+  clear_report_cache: { file: 'reports.braid', function: 'clearReportCache', policy: 'READ_ONLY' },
 
-  // Workflow Delegation (Agent Orchestration)
-  delegate_to_workflow: { file: 'workflow-delegation.braid', function: 'triggerWorkflowByName', policy: 'WRITE_OPERATIONS' },
+  // Snapshot
+  fetch_tenant_snapshot: { file: 'snapshot.braid', function: 'fetchSnapshot', policy: 'READ_ONLY' },
+  debug_probe: { file: 'snapshot.braid', function: 'probe', policy: 'READ_ONLY' },
+
+  // Suggest Next Actions
+  suggest_next_actions: { file: 'suggest-next-actions.braid', function: 'suggestNextActions', policy: 'READ_ONLY' },
+
+  // Suggestions
+  list_suggestions: { file: 'suggestions.braid', function: 'listSuggestions', policy: 'READ_ONLY' },
+  get_suggestion_details: { file: 'suggestions.braid', function: 'getSuggestionDetails', policy: 'READ_ONLY' },
+  get_suggestion_stats: { file: 'suggestions.braid', function: 'getSuggestionStats', policy: 'READ_ONLY' },
+  approve_suggestion: { file: 'suggestions.braid', function: 'approveSuggestion', policy: 'WRITE_OPERATIONS' },
+  reject_suggestion: { file: 'suggestions.braid', function: 'rejectSuggestion', policy: 'WRITE_OPERATIONS' },
+  apply_suggestion: { file: 'suggestions.braid', function: 'applySuggestion', policy: 'WRITE_OPERATIONS' },
+  trigger_suggestion_generation: { file: 'suggestions.braid', function: 'triggerSuggestionGeneration', policy: 'WRITE_OPERATIONS' },
+
+  // Telephony
+  initiate_call: { file: 'telephony.braid', function: 'initiateCall', policy: 'READ_ONLY' },
+  call_contact: { file: 'telephony.braid', function: 'callContact', policy: 'READ_ONLY' },
+  check_calling_provider: { file: 'telephony.braid', function: 'checkCallingProvider', policy: 'READ_ONLY' },
+  get_calling_agents: { file: 'telephony.braid', function: 'getCallingAgents', policy: 'READ_ONLY' },
+
+  // Users
+  list_users: { file: 'users.braid', function: 'listUsers', policy: 'READ_ONLY' },
+  get_user_details: { file: 'users.braid', function: 'getUserDetails', policy: 'READ_ONLY' },
+  get_current_user_profile: { file: 'users.braid', function: 'getCurrentUserProfile', policy: 'READ_ONLY' },
+  get_user_profiles: { file: 'users.braid', function: 'getUserProfiles', policy: 'READ_ONLY' },
+  create_user: { file: 'users.braid', function: 'createUser', policy: 'WRITE_OPERATIONS' },
+  update_user: { file: 'users.braid', function: 'updateUser', policy: 'WRITE_OPERATIONS' },
+  delete_user: { file: 'users.braid', function: 'deleteUser', policy: 'WRITE_OPERATIONS' },
+  search_users: { file: 'users.braid', function: 'searchUsers', policy: 'READ_ONLY' },
+  invite_user: { file: 'users.braid', function: 'inviteUser', policy: 'READ_ONLY' },
+
+  // Web Research
+  search_web: { file: 'web-research.braid', function: 'searchWeb', policy: 'READ_ONLY' },
+  fetch_web_page: { file: 'web-research.braid', function: 'fetchWebPage', policy: 'READ_ONLY' },
+  lookup_company_info: { file: 'web-research.braid', function: 'lookupCompanyInfo', policy: 'READ_ONLY' },
+
+  // Workflow Delegation
+  trigger_workflow_by_name: { file: 'workflow-delegation.braid', function: 'triggerWorkflowByName', policy: 'WRITE_OPERATIONS' },
   get_workflow_progress: { file: 'workflow-delegation.braid', function: 'getWorkflowProgress', policy: 'READ_ONLY' },
   list_active_workflows: { file: 'workflow-delegation.braid', function: 'listActiveWorkflows', policy: 'READ_ONLY' },
   get_workflow_notes: { file: 'workflow-delegation.braid', function: 'getWorkflowNotes', policy: 'READ_ONLY' },
 
-  // Agent-to-Agent Handoff (System Operation - handled by taskWorkers)
-  delegate_task: { file: '__system__', function: 'delegateTask', policy: 'WRITE_OPERATIONS' }
+  // Workflows
+  list_workflow_templates: { file: 'workflows.braid', function: 'listWorkflowTemplates', policy: 'READ_ONLY' },
+  get_workflow_template: { file: 'workflows.braid', function: 'getWorkflowTemplate', policy: 'READ_ONLY' },
+  instantiate_workflow_template: { file: 'workflows.braid', function: 'instantiateWorkflowTemplate', policy: 'READ_ONLY' },
+
 };
 
 /**
@@ -1391,6 +1391,17 @@ export async function generateToolSchemas(allowedTools = null) {
     if (filterSet && !filterSet.has(toolName)) {
       continue;
     }
+    
+    // Handle synthetic/virtual tools that don't have .braid files
+    if (config.file === '__system__') {
+      const syntheticSchema = getSyntheticToolSchema(toolName);
+      if (syntheticSchema) {
+        schemas.push(syntheticSchema);
+        console.log(`[Braid] Loaded synthetic schema: ${toolName}`);
+      }
+      continue;
+    }
+    
     const braidPath = path.join(TOOLS_DIR, config.file);
     try {
       console.log(`[Braid] Loading schema: ${toolName} -> ${braidPath}#${config.function}`);
@@ -1421,6 +1432,47 @@ export async function generateToolSchemas(allowedTools = null) {
   }
   console.log(`[Braid] Loaded ${schemas.length} tool schemas`);
   return schemas;
+}
+
+/**
+ * Get synthetic tool schema for virtual tools (not backed by .braid files)
+ */
+function getSyntheticToolSchema(toolName) {
+  const SYNTHETIC_SCHEMAS = {
+    delegate_task: {
+      type: 'function',
+      function: {
+        name: 'delegate_task',
+        description: TOOL_DESCRIPTIONS.delegate_task || 'Delegate a task to another agent in the office.',
+        parameters: {
+          type: 'object',
+          properties: {
+            to_agent: {
+              type: 'string',
+              enum: ['ops_manager', 'sales_manager', 'client_services_expert', 'project_manager', 'marketing_manager', 'customer_service_manager'],
+              description: 'The agent role to delegate the task to. Choose based on expertise: ops_manager (orchestration), sales_manager (deals/pipeline), client_services_expert (research/prospecting), project_manager (scheduling/calendar), marketing_manager (campaigns/content), customer_service_manager (support/issues).'
+            },
+            task_description: {
+              type: 'string',
+              description: 'Clear description of what the target agent should do. Be specific about the task, context, and expected outcome.'
+            },
+            handoff_type: {
+              type: 'string',
+              enum: ['delegate', 'review', 'escalate', 'collaborate'],
+              description: 'Type of handoff: delegate (pass ownership), review (get feedback), escalate (urgent/blocked), collaborate (work together).'
+            },
+            context: {
+              type: 'object',
+              description: 'Optional additional context to pass to the target agent (entity IDs, previous findings, etc.).'
+            }
+          },
+          required: ['to_agent', 'task_description']
+        }
+      }
+    }
+  };
+  
+  return SYNTHETIC_SCHEMAS[toolName] || null;
 }
 
 function normalizeToolFilter(allowedTools) {
@@ -2925,11 +2977,7 @@ export function listChains(userRole = 'user') {
  * - Result limits: 'limit'
  */
 const BRAID_PARAM_ORDER = {
-  // Snapshot
-  fetchSnapshot: ['tenant', 'scope', 'limit'],
-  probe: [],  // No params
-
-  // Accounts
+  // accounts.braid
   createAccount: ['tenant', 'name', 'annual_revenue', 'industry', 'website', 'email', 'phone'],
   updateAccount: ['tenant', 'account_id', 'updates'],
   getAccountDetails: ['tenant', 'account_id'],
@@ -2938,58 +2986,39 @@ const BRAID_PARAM_ORDER = {
   searchAccountsByStatus: ['tenant', 'status', 'limit'],
   deleteAccount: ['tenant', 'account_id'],
 
-  // Leads
-  createLead: ['tenant', 'first_name', 'last_name', 'email', 'company', 'phone', 'source'],
-  updateLead: ['tenant', 'lead_id', 'updates'],
-  qualifyLead: ['tenant', 'lead_id', 'notes'],
-  convertLeadToAccount: ['tenant', 'lead_id', 'options'],
-  listLeads: ['tenant', 'status', 'account_id', 'limit'],
-  searchLeads: ['tenant', 'query', 'limit'],
-  searchLeadsByStatus: ['tenant', 'status', 'limit'],
-  getLeadDetails: ['tenant', 'lead_id'],
-  deleteLead: ['tenant', 'lead_id'],
-
-  // Contacts
-  createContact: ['tenant', 'first_name', 'last_name', 'email', 'phone', 'job_title', 'account_id', 'assigned_to'],
-  updateContact: ['tenant', 'contact_id', 'updates'],
-  listContactsForAccount: ['tenant', 'account_id', 'limit'],
-  listAllContacts: ['tenant', 'limit'],
-  searchContacts: ['tenant', 'query', 'limit'],
-  searchContactsByStatus: ['tenant', 'status', 'limit'],
-  getContactDetails: ['tenant', 'contact_id'],
-  deleteContact: ['tenant', 'contact_id'],
-
-  // Opportunities
-  createOpportunity: ['tenant', 'name', 'description', 'amount', 'stage', 'probability', 'close_date', 'account_id', 'contact_id'],
-  updateOpportunity: ['tenant', 'opportunity_id', 'updates'],
-  listOpportunitiesByStage: ['tenant', 'stage', 'account_id', 'limit'],
-  searchOpportunities: ['tenant', 'query', 'limit'],
-  searchOpportunitiesByStage: ['tenant', 'stage', 'limit'],
-  getOpportunityDetails: ['tenant', 'opportunity_id'],
-  getOpportunityForecast: ['tenant', 'period'],
-  markOpportunityWon: ['tenant', 'opportunity_id', 'close_details'],
-  deleteOpportunity: ['tenant', 'opportunity_id'],
-
-  // Activities - AI uses entity_type/entity_id, Braid transforms to related_to/related_id for DB
-  createActivity: ['tenant', 'subject', 'activity_type', 'due_date', 'assigned_to', 'entity_type', 'entity_id', 'body'],
+  // activities.braid
+  createActivity: ['tenant', 'subject', 'activity_type', 'due_date', 'due_time', 'assigned_to', 'entity_type', 'entity_id', 'body'],
   updateActivity: ['tenant', 'activity_id', 'updates'],
   markActivityComplete: ['tenant', 'activity_id'],
   getUpcomingActivities: ['tenant', 'assigned_to', 'days'],
-  listActivities: ['tenant', 'status', 'entity_type', 'entity_id', 'limit'],
-  searchActivities: ['tenant', 'query', 'limit'],
-  getActivityDetails: ['tenant', 'activity_id'],
   scheduleMeeting: ['tenant', 'subject', 'attendees', 'date_time', 'duration_minutes', 'assigned_to'],
   deleteActivity: ['tenant', 'activity_id'],
+  listActivities: ['tenant', 'status', 'entity_type', 'entity_id', 'limit'],
+  getActivityDetails: ['tenant', 'activity_id'],
+  searchActivities: ['tenant', 'query', 'limit'],
 
-  // Notes - AI uses entity_type/entity_id, Braid transforms to related_type/related_id for DB
-  createNote: ['tenant', 'content', 'entity_type', 'entity_id'],
-  updateNote: ['tenant', 'note_id', 'updates'],
-  searchNotes: ['tenant', 'query', 'limit'],
-  getNotesForRecord: ['tenant', 'entity_type', 'entity_id'],
-  getNoteDetails: ['tenant', 'note_id'],
-  deleteNote: ['tenant', 'note_id'],
+  // bizdev-sources.braid
+  createBizDevSource: ['tenant', 'source_name', 'source_type', 'company_name', 'contact_name', 'email', 'phone', 'priority'],
+  updateBizDevSource: ['tenant', 'source_id', 'updates'],
+  getBizDevSourceDetails: ['tenant', 'source_id'],
+  listBizDevSources: ['tenant', 'status', 'priority', 'limit'],
+  searchBizDevSources: ['tenant', 'query', 'source_type', 'limit'],
+  promoteBizDevSourceToLead: ['tenant', 'source_id', 'options'],
+  deleteBizDevSource: ['tenant', 'source_id'],
+  archiveBizDevSources: ['tenant', 'source_ids'],
 
-  // Documents - AI uses entity_type/entity_id
+  // contacts.braid
+  createContact: ['tenant', 'first_name', 'last_name', 'email', 'phone', 'job_title', 'account_id', 'assigned_to'],
+  updateContact: ['tenant', 'contact_id', 'updates'],
+  listContactsForAccount: ['tenant', 'account_id', 'limit'],
+  searchContacts: ['tenant', 'query', 'limit'],
+  getContactByName: ['tenant', 'name'],
+  listAllContacts: ['tenant', 'limit'],
+  searchContactsByStatus: ['tenant', 'status', 'limit'],
+  deleteContact: ['tenant', 'contact_id'],
+  getContactDetails: ['tenant', 'contact_id'],
+
+  // documents.braid
   listDocuments: ['tenant', 'entity_type', 'entity_id', 'limit'],
   getDocumentDetails: ['tenant', 'document_id'],
   createDocument: ['tenant', 'name', 'description', 'entity_type', 'entity_id', 'file_url', 'file_type'],
@@ -2998,7 +3027,7 @@ const BRAID_PARAM_ORDER = {
   analyzeDocument: ['tenant', 'document_id', 'analysis_type'],
   searchDocuments: ['tenant', 'query', 'limit'],
 
-  // Employees
+  // employees.braid
   listEmployees: ['tenant', 'role', 'department', 'active_only'],
   getEmployeeDetails: ['tenant', 'employee_id'],
   createEmployee: ['tenant', 'first_name', 'last_name', 'email', 'role', 'department', 'phone'],
@@ -3007,7 +3036,79 @@ const BRAID_PARAM_ORDER = {
   searchEmployees: ['tenant', 'query', 'limit'],
   getEmployeeAssignments: ['tenant', 'employee_id'],
 
-  // Users (ADMIN_ONLY policy for most)
+  // leads.braid
+  createLead: ['tenant', 'first_name', 'last_name', 'email', 'company', 'phone', 'source'],
+  deleteLead: ['tenant', 'lead_id'],
+  qualifyLead: ['tenant', 'lead_id', 'notes'],
+  updateLead: ['tenant', 'lead_id', 'updates'],
+  convertLeadToAccount: ['tenant', 'lead_id', 'options'],
+  listLeads: ['tenant', 'status', 'account_id', 'limit'],
+  getLeadDetails: ['tenant', 'lead_id'],
+  searchLeads: ['tenant', 'query', 'limit'],
+  searchLeadsByStatus: ['tenant', 'status', 'limit'],
+
+  // lifecycle.braid
+  advanceToLead: ['tenant', 'bizdev_source_id', 'notes'],
+  advanceToQualified: ['tenant', 'lead_id', 'qualification_notes'],
+  advanceToAccount: ['tenant', 'lead_id', 'create_account', 'account_name', 'selected_account_id', 'create_opportunity', 'opportunity_name', 'opportunity_amount'],
+  advanceOpportunityStage: ['tenant', 'opportunity_id', 'new_stage', 'probability', 'notes'],
+  fullLifecycleAdvance: ['tenant', 'bizdev_source_id', 'qualification_notes', 'create_account', 'account_name', 'create_opportunity', 'opportunity_name', 'opportunity_amount'],
+
+  // navigation.braid
+  navigateTo: ['tenant', 'page', 'record_identifier'],
+  getCurrentPage: ['tenant'],
+
+  // notes.braid
+  createNote: ['tenant', 'title', 'content', 'entity_type', 'entity_id', 'note_type'],
+  updateNote: ['tenant', 'note_id', 'updates'],
+  searchNotes: ['tenant', 'query', 'limit'],
+  getNotesForRecord: ['tenant', 'entity_type', 'entity_id'],
+  getNoteDetails: ['tenant', 'note_id'],
+  deleteNote: ['tenant', 'note_id'],
+
+  // opportunities.braid
+  createOpportunity: ['tenant', 'name', 'description', 'amount', 'stage', 'probability', 'close_date', 'account_id', 'contact_id'],
+  deleteOpportunity: ['tenant', 'opportunity_id'],
+  updateOpportunity: ['tenant', 'opportunity_id', 'updates'],
+  listOpportunitiesByStage: ['tenant', 'stage', 'account_id', 'limit'],
+  getOpportunityDetails: ['tenant', 'opportunity_id'],
+  searchOpportunities: ['tenant', 'query', 'limit'],
+  searchOpportunitiesByStage: ['tenant', 'stage', 'limit'],
+  getOpportunityForecast: ['tenant', 'period'],
+  markOpportunityWon: ['tenant', 'opportunity_id', 'close_details'],
+
+  // reports.braid
+  getDashboardBundle: ['tenant', 'time_range', 'include_forecasts'],
+  getHealthSummary: ['tenant'],
+  getSalesReport: ['tenant', 'start_date', 'end_date', 'group_by'],
+  getPipelineReport: ['tenant', 'include_history'],
+  getActivityReport: ['tenant', 'start_date', 'end_date', 'employee_id'],
+  getLeadConversionReport: ['tenant', 'start_date', 'end_date'],
+  getRevenueForecasts: ['tenant', 'months_ahead'],
+  clearReportCache: ['tenant', 'report_type'],
+
+  // snapshot.braid
+  fetchSnapshot: ['tenant', 'scope', 'limit'],
+
+  // suggest-next-actions.braid
+  suggestNextActions: ['tenant', 'entity_type', 'entity_id', 'limit'],
+
+  // suggestions.braid
+  listSuggestions: ['tenant', 'status', 'limit'],
+  getSuggestionDetails: ['tenant', 'suggestion_id'],
+  getSuggestionStats: ['tenant'],
+  approveSuggestion: ['tenant', 'suggestion_id', 'reviewer_notes'],
+  rejectSuggestion: ['tenant', 'suggestion_id', 'rejection_reason'],
+  applySuggestion: ['tenant', 'suggestion_id'],
+  triggerSuggestionGeneration: ['tenant', 'trigger_id'],
+
+  // telephony.braid
+  initiateCall: ['tenant', 'provider', 'phone_number', 'contact_name', 'company', 'purpose', 'talking_points'],
+  callContact: ['tenant', 'contact_id', 'provider', 'purpose', 'talking_points'],
+  checkCallingProvider: ['tenant', 'provider'],
+  getCallingAgents: ['tenant', 'provider'],
+
+  // users.braid
   listUsers: ['tenant', 'role', 'active_only'],
   getUserDetails: ['tenant', 'user_id'],
   getCurrentUserProfile: ['tenant'],
@@ -3018,64 +3119,22 @@ const BRAID_PARAM_ORDER = {
   searchUsers: ['tenant', 'query', 'limit'],
   inviteUser: ['tenant', 'user_id', 'invitation_message'],
 
-  // Reports & Analytics
-  getDashboardBundle: ['tenant', 'time_range', 'include_forecasts'],
-  getHealthSummary: ['tenant'],
-  getSalesReport: ['tenant', 'start_date', 'end_date', 'group_by'],
-  getPipelineReport: ['tenant', 'include_history'],
-  getActivityReport: ['tenant', 'start_date', 'end_date', 'employee_id'],
-  getLeadConversionReport: ['tenant', 'start_date', 'end_date'],
-  getRevenueForecasts: ['tenant', 'months_ahead'],
-  clearReportCache: ['tenant', 'report_type'],
-
-  // Telephony & AI Calling
-  initiateCall: ['tenant', 'provider', 'phone_number', 'contact_name', 'company', 'purpose', 'talking_points'],
-  callContact: ['tenant', 'contact_id', 'provider', 'purpose', 'talking_points'],
-  checkCallingProvider: ['tenant', 'provider'],
-  getCallingAgents: ['tenant', 'provider'],
-
-  // Workflow Templates
-  listWorkflowTemplates: ['tenant', 'category'],
-  getWorkflowTemplate: ['tenant', 'template_id'],
-  instantiateWorkflowTemplate: ['tenant', 'template_id', 'workflow_name', 'parameters'],
-
-  // Web Research
+  // web-research.braid
   searchWeb: ['query', 'limit'],
   fetchWebPage: ['url'],
   lookupCompanyInfo: ['company_name'],
 
-  // BizDev Sources (v3.0.0 workflow)
-  createBizDevSource: ['tenant', 'source_name', 'source_type', 'company_name', 'contact_name', 'email', 'phone', 'priority'],
-  updateBizDevSource: ['tenant', 'source_id', 'updates'],
-  getBizDevSourceDetails: ['tenant', 'source_id'],
-  listBizDevSources: ['tenant', 'status', 'priority', 'limit'],
-  searchBizDevSources: ['tenant', 'query', 'source_type', 'limit'],
-  promoteBizDevSourceToLead: ['tenant', 'source_id', 'options'],
-  deleteBizDevSource: ['tenant', 'source_id'],
-  archiveBizDevSources: ['tenant', 'source_ids'],
+  // workflow-delegation.braid
+  triggerWorkflowByName: ['tenant', 'workflow_name', 'context', 'related_entity_type', 'related_entity_id'],
+  getWorkflowProgress: ['tenant', 'execution_id'],
+  listActiveWorkflows: ['tenant', 'limit'],
+  getWorkflowNotes: ['tenant', 'execution_id'],
 
-  // v3.0.0 Lifecycle Orchestration
-  advanceToLead: ['tenant', 'bizdev_source_id', 'notes'],
-  advanceToQualified: ['tenant', 'lead_id', 'qualification_notes'],
-  advanceToAccount: ['tenant', 'lead_id', 'create_account', 'account_name', 'selected_account_id', 'create_opportunity', 'opportunity_name', 'opportunity_amount'],
-  advanceOpportunityStage: ['tenant', 'opportunity_id', 'new_stage', 'notes'],
-  fullLifecycleAdvance: ['tenant', 'bizdev_source_id', 'qualification_notes', 'create_account', 'account_name', 'create_opportunity', 'opportunity_name', 'opportunity_amount'],
+  // workflows.braid
+  listWorkflowTemplates: ['tenant', 'category'],
+  getWorkflowTemplate: ['tenant', 'template_id'],
+  instantiateWorkflowTemplate: ['tenant', 'template_id', 'workflow_name', 'parameters'],
 
-  // AI Suggestions (Phase 3 Autonomous Operations)
-  listSuggestions: ['tenant', 'status', 'limit'],
-  getSuggestionDetails: ['tenant', 'suggestion_id'],
-  getSuggestionStats: ['tenant'],
-  approveSuggestion: ['tenant', 'suggestion_id', 'reviewer_notes'],
-  rejectSuggestion: ['tenant', 'suggestion_id', 'rejection_reason'],
-  applySuggestion: ['tenant', 'suggestion_id'],
-  triggerSuggestionGeneration: ['tenant', 'trigger_id'],
-  
-  // AI Next Actions (RAG-enabled suggestions)
-  suggestNextActions: ['tenant', 'entity_type', 'entity_id', 'limit'],
-
-  // CRM Navigation (v3.0.0)
-  navigateTo: ['tenant', 'page', 'record_identifier'],
-  getCurrentPage: ['tenant']
 };
 
 /**

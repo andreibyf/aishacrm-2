@@ -830,7 +830,34 @@ app.get('/', requireVizAuth, (req, res) => {
 
     // State
     // agents: { id: { x, y, homeX, homeY, facing, status, carrying, label, queue: [], busy: false } }
-    const agents = {}; 
+    const agents = {};
+
+    // ========== INITIALIZE ALL AGENTS ON STANDBY ==========
+    function initializeAllAgents() {
+      Object.entries(DESK_POSITIONS).forEach(([role, pos]) => {
+        const label = role.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        if (!agents[role]) {
+          agents[role] = {
+            x: pos.x,
+            y: pos.y,
+            homeX: pos.x,
+            homeY: pos.y,
+            facing: 'right',
+            status: 'idle',
+            carrying: false,
+            label: label,
+            queue: [],
+            busy: false
+          };
+        }
+      });
+      if (typeof renderAgents === 'function') renderAgents();
+      if (document.getElementById('agent-count')) {
+        document.getElementById('agent-count').innerText = Object.keys(agents).length;
+      }
+      log('All agents initialized on standby');
+    }
+ 
     const deskStacks = {}; // { agentId: [ { id, title, status, ts, priority } ] }
     const taskDeliveryETAs = {}; // { taskId: timestamp } 
     let eventCount = 0;
@@ -839,6 +866,9 @@ app.get('/', requireVizAuth, (req, res) => {
     let inboxTasks = []; // { id, summary, agent }
     let outboxTasks = []; // { id, summary, status }
 
+    const processedEventIds = new Set(); // Track processed events to prevent replay
+    const completedTaskIds = new Set(); // Track completed tasks to prevent re-adding to inbox
+    let sessionStartTime = Date.now(); // Ignore events older than this
     const logEl = document.getElementById('log');
     const agentLayer = document.getElementById('agent-layer');
     const inboxEl = document.getElementById('inbox-list');
@@ -857,6 +887,12 @@ app.get('/', requireVizAuth, (req, res) => {
       const role = agentId.split(':')[0];
       return AGENT_COLORS[role] || '#8b949e';
     }
+
+    // Extract role from agentId (e.g., "ops_manager:tenant123" -> "ops_manager")
+    function getRoleFromAgentId(agentId) {
+      return agentId.split(':')[0];
+    }
+
 
     // ========== RENDERER ==========
     function renderStacks() {
@@ -886,22 +922,23 @@ app.get('/', requireVizAuth, (req, res) => {
       if (evt.type === 'run_started' || evt.type === 'task_started') {
         const agentId = evt.agent_id;
         if (!agentId) return;
-        if (!deskStacks[agentId]) deskStacks[agentId] = [];
+        const role = getRoleFromAgentId(agentId);
 
+        if (!deskStacks[role]) deskStacks[role] = [];
         const taskId = evt.task_id || evt.run_id;
-        const taskIdx = deskStacks[agentId].findIndex(t => t.id === taskId);
+        const taskIdx = deskStacks[role].findIndex(t => t.id === taskId);
         
         if (taskIdx !== -1) {
           // Found: update and move to top (end of array)
-          const task = deskStacks[agentId][taskIdx];
+          const task = deskStacks[role][taskIdx];
           task.status = 'active';
           // Remove and push to end
-          deskStacks[agentId].splice(taskIdx, 1);
-          deskStacks[agentId].push(task);
+          deskStacks[role].splice(taskIdx, 1);
+          deskStacks[role].push(task);
         } else {
           // Not found (maybe direct start or race condition): add as active
           // This acts as a fallback if the delivery animation hasn't finished yet
-          deskStacks[agentId].push({
+          deskStacks[role].push({
             id: taskId,
             title: evt.input_summary || evt.title || 'Active Task',
             status: 'active',
@@ -913,10 +950,11 @@ app.get('/', requireVizAuth, (req, res) => {
       // 3. Completed/Failed: Remove
       if (evt.type === 'run_completed' || evt.type === 'task_completed' || evt.type === 'task_failed') {
         const agentId = evt.agent_id;
-        if (!agentId || !deskStacks[agentId]) return;
+        const role = getRoleFromAgentId(agentId);
+        if (!agentId || !deskStacks[role]) return;
         
         const taskId = evt.task_id || evt.run_id;
-        deskStacks[agentId] = deskStacks[agentId].filter(t => t.id !== taskId);
+        deskStacks[role] = deskStacks[role].filter(t => t.id !== taskId);
       }
       
       renderStacks();
@@ -1046,9 +1084,13 @@ app.get('/', requireVizAuth, (req, res) => {
       const id = e.task_id || e.run_id;
       if (!id) return;
 
-      // dedupe
-      if (inboxTasks.some(t => t.id === id)) return;
+      // Skip if already completed (in outbox or marked as done)
+      if (completedTaskIds.has(id)) return;
+      if (outboxTasks.some(t => t.id === id)) return;
 
+      // dedupe - skip if already in inbox
+
+      if (inboxTasks.some(t => t.id === id)) return;
       inboxTasks.push({
         id,
         summary: e.input_summary || e.summary || e.reason || 'New Task',
@@ -1067,8 +1109,9 @@ app.get('/', requireVizAuth, (req, res) => {
     // ['waitForState', key, val]
 
     function queueAction(agentId, action) {
-      if (!agents[agentId]) return;
-      agents[agentId].queue.push(action);
+      const role = getRoleFromAgentId(agentId);
+      if (!agents[role]) return;
+      agents[role].queue.push(action);
       processQueue(agentId);
     }
 
@@ -1078,7 +1121,8 @@ app.get('/', requireVizAuth, (req, res) => {
     }
 
     function queueMove(agentId, targetX, targetY) {
-      const agent = agents[agentId];
+      const role = getRoleFromAgentId(agentId);
+      const agent = agents[role];
       if (!agent) return;
 
       let currX = agent.x;
@@ -1123,7 +1167,8 @@ app.get('/', requireVizAuth, (req, res) => {
     }
 
     async function processQueue(agentId) {
-      const agent = agents[agentId];
+      const role = getRoleFromAgentId(agentId);
+      const agent = agents[role];
       if (agent.busy || agent.queue.length === 0) return;
 
       agent.busy = true;
@@ -1201,9 +1246,11 @@ app.get('/', requireVizAuth, (req, res) => {
 
     // ========== EVENT REDUCER ==========
     function ensureAgent(agentId, name) {
-      if (!agents[agentId]) {
+      // Use role as key to prevent duplicate agents for same role with different tenants
+      const role = getRoleFromAgentId(agentId);
+      if (!agents[role]) {
         const pos = getAgentPos(agentId);
-        agents[agentId] = {
+        agents[role] = {
           x: pos.x,
           y: pos.y,
           homeX: pos.x,
@@ -1211,18 +1258,55 @@ app.get('/', requireVizAuth, (req, res) => {
           facing: 'right',
           status: 'idle',
           carrying: false,
-          label: (name || agentId.split(':')[0]).substring(0, 15),
+          label: (name || role).split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ').substring(0, 15),
           queue: [],
           busy: false
         };
         renderAgents();
         document.getElementById('agent-count').innerText = Object.keys(agents).length;
       }
-      return agents[agentId];
+      return agents[role];
     }
 
     function handleEvent(evt) {
       eventCount++;
+
+      // Skip events from before this session started (prevents Kafka replay of old events)
+      if (evt.ts) {
+        const eventTime = new Date(evt.ts).getTime();
+        if (eventTime < sessionStartTime) {
+          log("[SKIP] Old event: " + evt.type + " from " + evt.ts);
+          return;
+        }
+      }
+
+      // ========== SYSTEM RESET ==========
+      if (evt.type === 'system_reset') {
+        log('[SYSTEM] Reset - clearing state and reinitializing agents');
+        inboxTasks = [];
+        outboxTasks = [];
+        processedEventIds.clear();
+        completedTaskIds.clear();
+        sessionStartTime = Date.now(); // Reset session time to accept new events
+        Object.keys(deskStacks).forEach(k => deskStacks[k] = []);
+        // Reset all agents to idle at their desks
+        Object.values(agents).forEach(agent => {
+          agent.queue = [];
+          agent.busy = false;
+          agent.carrying = false;
+          agent.status = 'idle';
+          agent.x = agent.homeX;
+          agent.y = agent.homeY;
+        });
+        renderAgents();
+        renderStacks();
+        renderLists();
+        eventCount = 0;
+        document.getElementById('event-count').innerText = '0';
+        return;
+      }
+
+
       document.getElementById('event-count').innerText = eventCount;
 
       // System-level queue events: MUST work without agent_id
@@ -1274,16 +1358,28 @@ app.get('/', requireVizAuth, (req, res) => {
             queueAction(agentId, ['wait', waitMs]);
           }
 
-          queueAction(agentId, ['set', 'status', 'working']);
-          queueAction(agentId, ['set', 'carrying', true]); // Pick up from stack
+          // Only set carrying=true if task is on agents desk stack (delivered by Ops Manager)
+          queueAction(agentId, ['exec', () => {
+            const role = getRoleFromAgentId(agentId);
+            const stack = deskStacks[role] || [];
+            const hasTask = stack.some(t => t.id === taskId);
+            if (hasTask) {
+              agents[role].carrying = true;
+              agents[role].status = 'working';
+            } else {
+              agents[role].status = 'working';
+            }
+            renderAgents();
+          }]);
           queueAction(agentId, ['bubble', 'Analyzing...', 'thought', 4000]);
           break;
 
         case 'task_assigned':
           // Logic: Ops Manager (Dispatcher) picks up -> Walks to Assignee -> Drops -> Walks Home
 
-          const dispatcherId = 'ops_manager:dev'; 
-          const assigneeId = evt.to_agent_id || evt.agent_id;
+          const dispatcherId = 'ops_manager'; // Role-based key 
+          const assigneeIdFull = evt.to_agent_id || evt.agent_id;
+          const assigneeId = getRoleFromAgentId(assigneeIdFull || 'ops_manager');
 
           if (assigneeId && agents[dispatcherId]) {
              ensureAgent(dispatcherId);
@@ -1364,7 +1460,8 @@ app.get('/', requireVizAuth, (req, res) => {
           break;
 
         case 'handoff':
-          const toId = evt.to_agent_id;
+          const toIdFull = evt.to_agent_id;
+          const toId = getRoleFromAgentId(toIdFull || agentId);
           if (toId) {
             ensureAgent(toId);
             const targetPos = getAgentPos(toId);
@@ -1401,7 +1498,7 @@ app.get('/', requireVizAuth, (req, res) => {
           // This prevents "teleporting" to completion if events arrive out of order or too fast.
           queueAction(agentId, ['exec', () => {
              const taskId = evt.task_id || evt.run_id;
-             const stack = deskStacks[agentId] || [];
+             const stack = deskStacks[role] || [];
              const task = stack.find(t => t.id === taskId);
              if (task && task.status === 'queued') {
                // Force start it visually if we missed the start event or timing is off
@@ -1427,6 +1524,7 @@ app.get('/', requireVizAuth, (req, res) => {
               // CRITICAL: Ensure it's removed from Inbox if it's still there
               // This handles cases where the Ops Manager hasn't picked it up yet
               inboxTasks = inboxTasks.filter(t => t.id !== taskId);
+              completedTaskIds.add(taskId); // Mark as completed to prevent replay
               
               outboxTasks.unshift({
                 id: taskId,
@@ -1449,6 +1547,9 @@ app.get('/', requireVizAuth, (req, res) => {
       }
     }
     
+    // Initialize all agents on standby
+    initializeAllAgents();
+
     // Random Idle Animations
     setInterval(() => {
       const idleAgents = Object.entries(agents).filter(([_, a]) => a.status === 'idle' && !a.busy);
@@ -1580,11 +1681,56 @@ app.get('/sse', requireVizAuth, (req, res) => {
   });
 });
 
-startConsumer().then(() => {
-  app.listen(PORT, () => {
-    console.log(`[office-viz] listening on :${PORT} bus=${BUS_TYPE}`);
-  });
-}).catch((e) => {
-  console.error('[office-viz] consumer fatal', e);
-  process.exit(1);
+
+// Clear event queue and reset state
+app.post('/clear', (req, res) => {
+  const oldCount = events.length;
+  events.length = 0; // Clear all events
+  // Notify clients to reset
+  const resetEvent = { 
+    type: 'system_reset', 
+    message: 'Event queue cleared',
+    ts: new Date().toISOString()
+  };
+  const line = `data: ${JSON.stringify(resetEvent)}\n\n`;
+  for (const sseRes of sseClients.keys()) {
+    try { sseRes.write(line); } catch (_) {}
+  }
+  res.json({ status: 'ok', cleared: oldCount, message: 'Event queue cleared' });
 });
+
+// Convenience GET version for browser testing
+app.get('/clear', (req, res) => {
+  const oldCount = events.length;
+  events.length = 0;
+  const resetEvent = { 
+    type: 'system_reset', 
+    message: 'Event queue cleared',
+    ts: new Date().toISOString()
+  };
+  const line = `data: ${JSON.stringify(resetEvent)}\n\n`;
+  for (const sseRes of sseClients.keys()) {
+    try { sseRes.write(line); } catch (_) {}
+  }
+  res.json({ status: 'ok', cleared: oldCount, message: 'Event queue cleared (GET)' });
+});
+
+// Handle any unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[office-viz] Unhandled Rejection:', reason?.message || reason);
+});
+
+// Start HTTP server first
+
+const server = app.listen(PORT, () => {
+  console.log(`[office-viz] listening on :${PORT} bus=${BUS_TYPE}`);
+});
+
+// Then try to connect to message bus (non-blocking)
+startConsumer().then(() => {
+  console.log(`[office-viz] connected to ${BUS_TYPE}`);
+}).catch((e) => {
+  console.error('[office-viz] consumer failed to connect (events will only come from /test endpoints)', e.message);
+  // Don't exit - the HTTP server is still useful for manual testing
+});
+

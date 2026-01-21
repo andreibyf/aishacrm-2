@@ -412,7 +412,9 @@ export default function createActivityV2Routes(_pgPool) {
 
   router.post('/', invalidateCache('activities'), async (req, res) => {
     try {
+      logger.debug('[Activities v2 POST] Raw body:', JSON.stringify(req.body));
       const { tenant_id, metadata, description, body, duration_minutes, duration, tags, activity_type, assigned_to, ...payload } = req.body || {};
+      logger.debug('[Activities v2 POST] Destructured payload:', JSON.stringify({ tenant_id, activity_type, payload }));
       // Accept either duration_minutes or duration (legacy) - prefer duration_minutes
       const durationValue = duration_minutes ?? duration ?? undefined;
       if (!tenant_id) {
@@ -425,19 +427,27 @@ export default function createActivityV2Routes(_pgPool) {
       // Map activity_type to type (Braid SDK uses activity_type, DB column is 'type')
       const activityType = activity_type ?? payload.type ?? null;
       
-      // Sanitize assigned_to: must be valid UUID or null (AI may pass strings like "Unassigned")
+      // Sanitize UUID fields: must be valid UUID or null (AI may pass strings like "Unassigned" or "budget_meeting")
       const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const validAssignedTo = assigned_to && UUID_REGEX.test(assigned_to) ? assigned_to : null;
       
+      // Sanitize related_id: must be valid UUID or null
+      const rawRelatedId = payload.related_id;
+      const validRelatedId = rawRelatedId && UUID_REGEX.test(rawRelatedId) ? rawRelatedId : null;
+      
       // Lookup related entity name/email if related_to and related_id are provided
-      const relatedTo = payload.related_to;
-      const relatedId = payload.related_id;
+      // Only valid entity types should be looked up
+      const VALID_ENTITY_TYPES = ['lead', 'contact', 'account', 'opportunity'];
+      const relatedTo = VALID_ENTITY_TYPES.includes(payload.related_to) ? payload.related_to : null;
+      const relatedId = validRelatedId;
       const { name: relatedName, email: relatedEmail } = await lookupRelatedEntity(supabase, relatedTo, relatedId);
       
       const insertPayload = {
         tenant_id,
         ...payload,
         assigned_to: validAssignedTo,
+        related_to: relatedTo,   // Use sanitized related_to
+        related_id: relatedId,   // Use sanitized related_id (valid UUID or null)
         ...(relatedName ? { related_name: relatedName } : {}),
         ...(relatedEmail ? { related_email: relatedEmail } : {}),
         ...(activityType ? { type: activityType } : {}),

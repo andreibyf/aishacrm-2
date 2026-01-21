@@ -47,7 +47,7 @@ import { useConfirmDialog } from "../components/shared/ConfirmDialog";
 import StatusHelper from "../components/shared/StatusHelper";
 import { createPageUrl } from "@/utils";
 import { Link } from "react-router-dom";
-import { getCurrentTimezoneOffset } from '../components/shared/timezoneUtils';
+import { getCurrentTimezoneOffset, utcToLocal } from '../components/shared/timezoneUtils';
 import { useTimezone } from '../components/shared/TimezoneContext';
 import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
@@ -875,26 +875,22 @@ export default function ActivitiesPage() {
     try {
       if (activity.due_time) {
         const datePart = activity.due_date.split('T')[0];
-        // Normalize time to HH:mm format
+        // Normalize time to HH:mm:ss format
         const parts = activity.due_time.split(':');
-        const hours = parseInt(parts[0], 10);
-        const minutes = parseInt(parts[1] || '0', 10);
+        const hours = parts[0]?.padStart(2, '0') || '00';
+        const minutes = parts[1]?.padStart(2, '0') || '00';
+        const seconds = parts[2]?.padStart(2, '0') || '00';
+        const normalizedTime = `${hours}:${minutes}:${seconds}`;
 
-        // Validate parsed values
-        if (isNaN(hours) || isNaN(minutes)) {
-          console.warn('[Activities] Invalid time parts:', activity.due_time);
-          return activity.due_date;
-        }
-
-        // due_time is stored as LOCAL time, not UTC - just display it directly
-        const [year, month, day] = datePart.split('-').map(Number);
-        if (isNaN(year) || isNaN(month) || isNaN(day)) {
-          console.warn('[Activities] Invalid date parts:', datePart);
-          return activity.due_date;
-        }
-        const localDate = new Date(year, month - 1, day, hours, minutes);
+        // Get the user's timezone offset
+        const offsetMinutes = getCurrentTimezoneOffset(selectedTimezone);
+        
+        // Create UTC datetime string and convert to local
+        const utcString = `${datePart}T${normalizedTime}.000Z`;
+        const localDate = utcToLocal(utcString, offsetMinutes);
+        
         if (isNaN(localDate.getTime())) {
-          console.warn('[Activities] Invalid Date constructed:', { year, month, day, hours, minutes });
+          console.warn('[Activities] Invalid Date from UTC conversion:', utcString);
           return activity.due_date;
         }
         return format(localDate, 'MMM d, yyyy h:mm a');
@@ -915,7 +911,7 @@ export default function ActivitiesPage() {
       console.error('Error formatting date:', error, 'Activity:', activity);
       return activity.due_date;
     }
-  }, []);
+  }, [selectedTimezone]);
 
   if (!user) {
     return (
