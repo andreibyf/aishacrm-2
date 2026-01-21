@@ -14,7 +14,8 @@ export default function AishaEntityChatModal({
   onClose, 
   entityType, 
   entityId, 
-  entityLabel 
+  entityLabel,
+  relatedData = {} // { opportunities, activities, notes }
 }) {
   const [input, setInput] = useState("");
   const [taskId, setTaskId] = useState(null);
@@ -54,7 +55,13 @@ export default function AishaEntityChatModal({
           description: input,
           entity_type: entityType,
           entity_id: entityId,
-          tenant_id: tenantId
+          tenant_id: tenantId,
+          // Include related data from the profile page (opportunities, activities, notes)
+          related_data: {
+            opportunities: relatedData.opportunities || [],
+            activities: relatedData.activities || [],
+            notes: relatedData.notes || []
+          }
         })
       });
 

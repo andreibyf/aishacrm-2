@@ -8,7 +8,7 @@ export function createTasksRoutes(pgPool) {
 
   router.post('/from-intent', async (req, res) => {
     try {
-      const { description, entity_type, entity_id, tenant_id } = req.body;
+      const { description, entity_type, entity_id, tenant_id, related_data } = req.body;
       
       // Validate required fields
       if (!tenant_id) {
@@ -42,14 +42,15 @@ export function createTasksRoutes(pgPool) {
         agent_name: 'System'
       });
 
-      // 3. Enqueue Ops Dispatch
+      // 3. Enqueue Ops Dispatch - include related_data from frontend
       await taskQueue.add('ops-dispatch', {
         task_id: taskId,
         run_id: runId,
         tenant_id,
         description,
         entity_type,
-        entity_id
+        entity_id,
+        related_data // opportunities, activities, notes from profile page
       });
 
       res.json({ ok: true, task_id: taskId, run_id: runId });

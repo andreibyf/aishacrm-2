@@ -535,6 +535,11 @@ function LeadProfilePageContent() {
             entityLabel={name}
             aiSummary={lead.ai_summary}
             lastUpdated={lead.updated_at}
+            relatedData={{
+              opportunities: lead.opportunities || [],
+              activities: lead.activities || [],
+              notes: lead.notes || []
+            }}
           />
 
           {/* Contact Information */}

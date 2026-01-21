@@ -10,7 +10,8 @@ export default function EntityAiSummaryCard({
   entityId, 
   entityLabel, 
   aiSummary, 
-  lastUpdated 
+  lastUpdated,
+  relatedData = {} // { opportunities, activities, notes }
 }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -77,6 +78,7 @@ export default function EntityAiSummaryCard({
         entityType={entityType}
         entityId={entityId}
         entityLabel={entityLabel}
+        relatedData={relatedData}
       />
     </>
   );

@@ -13,7 +13,7 @@ export function startTaskWorkers(pgPool) {
 
   // Ops Dispatch Worker
   taskQueue.process('ops-dispatch', 1, async (job) => {
-    const { task_id, run_id, tenant_id, description, entity_type, entity_id, force_assignee, context = {} } = job.data;
+    const { task_id, run_id, tenant_id, description, entity_type, entity_id, force_assignee, context = {}, related_data } = job.data;
     logger.info(`[OpsDispatch] Processing task ${task_id}`, { force_assignee });
 
     try {
@@ -25,9 +25,12 @@ export function startTaskWorkers(pgPool) {
         const desc = description.toLowerCase();
         
         // Priority routing - check specific capabilities first
-        if (desc.match(/\b(schedule|appointment|meeting|calendar|set up a call|book|reminder|remind)\b/)) {
+        // IMPORTANT: Sales/opportunity keywords take highest priority (updates, stage changes, won/lost)
+        if (desc.match(/\b(opportunity|won|lost|deal|close|proposal|quote|negotiat|pipeline)\b/)) {
+          assignee = 'sales_manager:dev'; // Sales owns opportunity lifecycle
+        } else if (desc.match(/\b(schedule|appointment|meeting|calendar|set up a call|book|reminder|remind)\b/)) {
           assignee = 'project_manager:dev'; // PM owns calendar/scheduling/reminders
-        } else if (desc.match(/\b(sales|deal|opportunity|proposal|quote|negotiat)\b/)) {
+        } else if (desc.match(/\b(sales|revenue|forecast)\b/)) {
           assignee = 'sales_manager:dev';
         } else if (desc.match(/\b(marketing|campaign|content|newsletter|email blast)\b/)) {
           assignee = 'marketing_manager:dev';
@@ -70,7 +73,8 @@ export function startTaskWorkers(pgPool) {
         description,
         entity_type,
         entity_id,
-        context // Pass through context for handoff metadata
+        context, // Pass through context for handoff metadata
+        related_data // Pass through related data from frontend (opportunities, activities, notes)
       });
 
       return { status: 'assigned', assignee };
@@ -82,7 +86,7 @@ export function startTaskWorkers(pgPool) {
 
   // Execute Worker - Actually invokes LLM with agent profile and tools
   taskQueue.process('execute-task', 1, async (job) => {
-    const { task_id, run_id, tenant_id, assignee, description, entity_type, entity_id, context = {} } = job.data;
+    const { task_id, run_id, tenant_id, assignee, description, entity_type, entity_id, context = {}, related_data } = job.data;
     logger.info(`[ExecuteTask] Agent ${assignee} executing task ${task_id}`);
 
     try {
@@ -121,28 +125,99 @@ export function startTaskWorkers(pgPool) {
       if (entity_type && entity_id) {
         contextInfo += `Entity Type: ${entity_type}\nEntity ID: ${entity_id}\n`;
         
-        // Fetch entity details to provide context
-        try {
-          const supa = getSupabaseClient();
-          const tableName = entity_type === 'contact' ? 'contacts' : 
-                           entity_type === 'account' ? 'accounts' :
-                           entity_type === 'lead' ? 'leads' :
-                           entity_type === 'opportunity' ? 'opportunities' : null;
+        // Check if frontend already provided related data (from profile page)
+        const hasRelatedData = related_data && (
+          (related_data.opportunities && related_data.opportunities.length > 0) ||
+          (related_data.activities && related_data.activities.length > 0) ||
+          (related_data.notes && related_data.notes.length > 0)
+        );
+        
+        if (hasRelatedData) {
+          // Use data provided by frontend - no need to fetch again
+          logger.info('[ExecuteTask] Using related data from frontend profile page');
           
-          if (tableName) {
-            const { data: entityData } = await supa
-              .from(tableName)
-              .select('*')
-              .eq('id', entity_id)
-              .eq('tenant_id', tenantRecord.id)
-              .single();
-            
-            if (entityData) {
-              contextInfo += `Entity Details: ${JSON.stringify(entityData, null, 2)}\n`;
+          // Add opportunities with prominent IDs for the LLM
+          if (related_data.opportunities && related_data.opportunities.length > 0) {
+            contextInfo += `\n═══════════════════════════════════════════════════════════\n`;
+            contextInfo += `📋 RELATED OPPORTUNITIES (from profile page):\n`;
+            contextInfo += `═══════════════════════════════════════════════════════════\n`;
+            for (const opp of related_data.opportunities) {
+              contextInfo += `\n  🎯 OPPORTUNITY ID: ${opp.id}\n`;
+              contextInfo += `     Name: ${opp.name || 'Unnamed'}\n`;
+              contextInfo += `     Stage: ${opp.stage || 'N/A'} | Status: ${opp.status || 'N/A'}\n`;
+              contextInfo += `     Value: $${opp.value || 0} | Probability: ${opp.probability || 0}%\n`;
+              if (opp.close_date) contextInfo += `     Close Date: ${opp.close_date}\n`;
             }
+            contextInfo += `\n⚠️ CRITICAL: When updating an opportunity, use the OPPORTUNITY ID shown above (e.g., "${related_data.opportunities[0].id}").\n`;
+            contextInfo += `   DO NOT use the contact ID "${entity_id}" - that will fail!\n`;
+            contextInfo += `═══════════════════════════════════════════════════════════\n`;
           }
-        } catch (e) {
-          logger.warn(`[ExecuteTask] Could not fetch entity details: ${e.message}`);
+          
+          if (related_data.activities && related_data.activities.length > 0) {
+            contextInfo += `\nRecent Activities (${related_data.activities.length}):\n`;
+            const recentActivities = related_data.activities.slice(0, 5);
+            contextInfo += JSON.stringify(recentActivities.map(a => ({
+              id: a.id,
+              type: a.type || a.activity_type,
+              subject: a.subject,
+              date: a.scheduled_date || a.due_date
+            })), null, 2) + '\n';
+          }
+          
+          if (related_data.notes && related_data.notes.length > 0) {
+            contextInfo += `\nRecent Notes (${related_data.notes.length}):\n`;
+            const recentNotes = related_data.notes.slice(0, 3);
+            contextInfo += JSON.stringify(recentNotes.map(n => ({
+              id: n.id,
+              content: (n.content || '').substring(0, 100)
+            })), null, 2) + '\n';
+          }
+        } else {
+          // Fallback: Fetch entity details if frontend didn't provide them
+          try {
+            const supa = getSupabaseClient();
+            const tableName = entity_type === 'contact' ? 'contacts' : 
+                             entity_type === 'account' ? 'accounts' :
+                             entity_type === 'lead' ? 'leads' :
+                             entity_type === 'opportunity' ? 'opportunities' : null;
+            
+            if (tableName) {
+              const { data: entityData } = await supa
+                .from(tableName)
+                .select('*')
+                .eq('id', entity_id)
+                .eq('tenant_id', tenantRecord.id)
+                .single();
+              
+              if (entityData) {
+                contextInfo += `Entity Details: ${JSON.stringify(entityData, null, 2)}\n`;
+                
+                // If entity is a contact, also fetch related opportunities
+                if (entity_type === 'contact') {
+                  const { data: relatedOpps } = await supa
+                    .from('opportunities')
+                    .select('id, name, stage, status, value, close_date, account_id')
+                    .eq('contact_id', entity_id)
+                    .eq('tenant_id', tenantRecord.id);
+                  
+                  if (relatedOpps && relatedOpps.length > 0) {
+                    contextInfo += `\n═══════════════════════════════════════════════════════════\n`;
+                    contextInfo += `📋 RELATED OPPORTUNITIES:\n`;
+                    for (const opp of relatedOpps) {
+                      contextInfo += `\n  🎯 OPPORTUNITY ID: ${opp.id}\n`;
+                      contextInfo += `     Name: ${opp.name || 'Unnamed'}\n`;
+                      contextInfo += `     Stage: ${opp.stage || 'N/A'} | Value: $${opp.value || 0}\n`;
+                    }
+                    contextInfo += `\n⚠️ CRITICAL: When updating an opportunity, use the OPPORTUNITY ID shown above (e.g., "${relatedOpps[0].id}").\n`;
+                    contextInfo += `   DO NOT use the contact ID "${entity_id}" - that will fail!\n`;
+                    contextInfo += `═══════════════════════════════════════════════════════════\n`;
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            logger.warn(`[ExecuteTask] Could not fetch entity details: ${e.message}`);
+          }
         }
       }
 
@@ -165,6 +240,21 @@ export function startTaskWorkers(pgPool) {
 2. If missing details, use reasonable defaults (e.g., 30 min duration, tomorrow if no date specified)
 3. ALWAYS call the create_activity tool to actually create the calendar event
 4. Do not just describe what should be done - DO IT by calling the tool`;
+      } else if (agentRole === 'sales_manager') {
+        roleGuidance = `
+
+**IMPORTANT:** For opportunity/deal requests:
+1. ⚠️ ALWAYS use the correct opportunity ID from "Related Opportunities" in the context above - do NOT use contact ID!
+2. Use update_opportunity or mark_opportunity_won with the opportunity_id from the list
+3. For multi-part requests (e.g., "mark won AND schedule a meeting"):
+   - FIRST complete your part (update the opportunity using the correct opportunity ID)
+   - THEN use delegate_task to hand off scheduling/meeting requests to project_manager
+4. When delegating, use: delegate_task(to_agent: "project_manager", task_description: "<specific task>", handoff_type: "delegate")
+
+Example for "Mark opportunity won and schedule celebration meeting":
+- Step 1: Look at Related Opportunities above to find the correct opportunity ID
+- Step 2: Call mark_opportunity_won with that opportunity_id (NOT the contact ID!)
+- Step 3: Call delegate_task to project_manager with the meeting details`;
       }
       
       // Add handoff context if this is a delegated task
