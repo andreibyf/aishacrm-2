@@ -1271,11 +1271,14 @@ app.get('/', requireVizAuth, (req, res) => {
     function handleEvent(evt) {
       eventCount++;
 
-      // Skip events from before this session started (prevents Kafka replay of old events)
+      // Skip events older than 60 seconds (prevents Kafka replay of very old events)
+      // We use a grace window instead of strict session start time to allow
+      // events that were generated shortly before the page loaded
       if (evt.ts) {
         const eventTime = new Date(evt.ts).getTime();
-        if (eventTime < sessionStartTime) {
-          log("[SKIP] Old event: " + evt.type + " from " + evt.ts);
+        const maxAge = 60 * 1000; // 60 seconds grace window
+        if (eventTime < Date.now() - maxAge) {
+          log("[SKIP] Old event (>60s): " + evt.type + " from " + evt.ts);
           return;
         }
       }
