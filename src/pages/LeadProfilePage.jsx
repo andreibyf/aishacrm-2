@@ -535,6 +535,7 @@ function LeadProfilePageContent() {
             entityLabel={name}
             aiSummary={lead.ai_summary}
             lastUpdated={lead.updated_at}
+            profile={lead}
             relatedData={{
               opportunities: lead.opportunities || [],
               activities: lead.activities || [],

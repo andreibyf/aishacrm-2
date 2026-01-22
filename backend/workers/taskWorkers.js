@@ -120,21 +120,69 @@ export function startTaskWorkers(pgPool) {
         input_summary: description
       });
 
-      // 3. Build context for LLM
+      // 3. Build context for LLM - the "folder" contains all profile data
       let contextInfo = `Task: ${description}\n`;
       if (entity_type && entity_id) {
         contextInfo += `Entity Type: ${entity_type}\nEntity ID: ${entity_id}\n`;
         
-        // Check if frontend already provided related data (from profile page)
+        // Check if frontend provided profile and related data (from profile page)
+        const hasProfileData = related_data?.profile;
         const hasRelatedData = related_data && (
           (related_data.opportunities && related_data.opportunities.length > 0) ||
           (related_data.activities && related_data.activities.length > 0) ||
           (related_data.notes && related_data.notes.length > 0)
         );
         
-        if (hasRelatedData) {
+        if (hasProfileData || hasRelatedData) {
           // Use data provided by frontend - no need to fetch again
-          logger.info('[ExecuteTask] Using related data from frontend profile page');
+          logger.info('[ExecuteTask] Using profile/related data from frontend profile page');
+          
+          // Include the FULL PROFILE DATA - this is critical for agents to know account_id, contact_id, etc.
+          if (hasProfileData) {
+            const profile = related_data.profile;
+            contextInfo += `\n═══════════════════════════════════════════════════════════\n`;
+            contextInfo += `📂 ENTITY PROFILE (use these IDs for creating related records):\n`;
+            contextInfo += `═══════════════════════════════════════════════════════════\n`;
+            
+            // Extract key identifiers the agent needs
+            // CRITICAL: When entity_type matches, the profile.id IS that entity's ID
+            if (entity_type === 'lead') {
+              contextInfo += `  LEAD_ID: ${profile.id}\n`;
+            } else if (entity_type === 'contact') {
+              contextInfo += `  CONTACT_ID: ${profile.id}\n`;
+            } else if (entity_type === 'account') {
+              contextInfo += `  ACCOUNT_ID: ${profile.id}\n`;
+            } else if (entity_type === 'opportunity') {
+              contextInfo += `  OPPORTUNITY_ID: ${profile.id}\n`;
+            } else {
+              contextInfo += `  ${entity_type.toUpperCase()}_ID: ${profile.id}\n`;
+            }
+            
+            // Also include any referenced IDs (e.g., contact has account_id)
+            if (profile.account_id && entity_type !== 'account') contextInfo += `  ACCOUNT_ID: ${profile.account_id}\n`;
+            if (profile.contact_id && entity_type !== 'contact') contextInfo += `  CONTACT_ID: ${profile.contact_id}\n`;
+            if (profile.lead_id && entity_type !== 'lead') contextInfo += `  LEAD_ID: ${profile.lead_id}\n`;
+            
+            // Include name and other context
+            const displayName = profile.name || 
+              [profile.first_name, profile.last_name].filter(Boolean).join(' ') ||
+              profile.company || 'Unnamed';
+            contextInfo += `  Name: ${displayName}\n`;
+            if (profile.company) contextInfo += `  Company: ${profile.company}\n`;
+            if (profile.email) contextInfo += `  Email: ${profile.email}\n`;
+            if (profile.phone) contextInfo += `  Phone: ${profile.phone}\n`;
+            if (profile.status) contextInfo += `  Status: ${profile.status}\n`;
+            if (profile.stage) contextInfo += `  Stage: ${profile.stage}\n`;
+            
+            // Include account name if available
+            if (profile.account_name) contextInfo += `  Account Name: ${profile.account_name}\n`;
+            if (profile.account?.name) contextInfo += `  Account Name: ${profile.account.name}\n`;
+            
+            contextInfo += `\n⚠️ Use these IDs when creating opportunities, activities, or notes:\n`;
+            contextInfo += `   - For opportunities: use lead_id (for leads) OR account_id + contact_id (for contacts/accounts)\n`;
+            contextInfo += `   - For activities/notes: use the ${entity_type}_id shown above\n`;
+            contextInfo += `═══════════════════════════════════════════════════════════\n`;
+          }
           
           // Add opportunities with prominent IDs for the LLM
           if (related_data.opportunities && related_data.opportunities.length > 0) {
@@ -190,7 +238,44 @@ export function startTaskWorkers(pgPool) {
                 .single();
               
               if (entityData) {
-                contextInfo += `Entity Details: ${JSON.stringify(entityData, null, 2)}\n`;
+                // Format as structured profile data (same as frontend provides)
+                contextInfo += `\n═══════════════════════════════════════════════════════════\n`;
+                contextInfo += `📂 ENTITY PROFILE (use these IDs for creating related records):\n`;
+                contextInfo += `═══════════════════════════════════════════════════════════\n`;
+                
+                // Extract key identifiers - entity's own ID is named by entity_type
+                if (entity_type === 'lead') {
+                  contextInfo += `  LEAD_ID: ${entityData.id}\n`;
+                } else if (entity_type === 'contact') {
+                  contextInfo += `  CONTACT_ID: ${entityData.id}\n`;
+                } else if (entity_type === 'account') {
+                  contextInfo += `  ACCOUNT_ID: ${entityData.id}\n`;
+                } else if (entity_type === 'opportunity') {
+                  contextInfo += `  OPPORTUNITY_ID: ${entityData.id}\n`;
+                } else {
+                  contextInfo += `  ${entity_type.toUpperCase()}_ID: ${entityData.id}\n`;
+                }
+                
+                // Also include any referenced IDs
+                if (entityData.account_id && entity_type !== 'account') contextInfo += `  ACCOUNT_ID: ${entityData.account_id}\n`;
+                if (entityData.contact_id && entity_type !== 'contact') contextInfo += `  CONTACT_ID: ${entityData.contact_id}\n`;
+                if (entityData.lead_id && entity_type !== 'lead') contextInfo += `  LEAD_ID: ${entityData.lead_id}\n`;
+                
+                // Include name and context
+                const displayName = entityData.name || 
+                  [entityData.first_name, entityData.last_name].filter(Boolean).join(' ') ||
+                  entityData.company || 'Unnamed';
+                contextInfo += `  Name: ${displayName}\n`;
+                if (entityData.company) contextInfo += `  Company: ${entityData.company}\n`;
+                if (entityData.email) contextInfo += `  Email: ${entityData.email}\n`;
+                if (entityData.phone) contextInfo += `  Phone: ${entityData.phone}\n`;
+                if (entityData.status) contextInfo += `  Status: ${entityData.status}\n`;
+                if (entityData.stage) contextInfo += `  Stage: ${entityData.stage}\n`;
+                
+                contextInfo += `\n⚠️ Use these IDs when creating opportunities, activities, or notes:\n`;
+                contextInfo += `   - For opportunities: use lead_id (for leads) OR account_id + contact_id (for contacts/accounts)\n`;
+                contextInfo += `   - For activities/notes: use the ${entity_type}_id shown above\n`;
+                contextInfo += `═══════════════════════════════════════════════════════════\n`;
                 
                 // If entity is a contact, also fetch related opportunities
                 if (entity_type === 'contact') {
@@ -232,29 +317,132 @@ export function startTaskWorkers(pgPool) {
       
       // Add role-specific guidance
       let roleGuidance = '';
-      if (agentRole === 'project_manager') {
+      if (agentRole === 'ops_manager') {
         roleGuidance = `
 
-**IMPORTANT:** When asked to schedule, set, or create appointments/meetings/calls:
-1. Extract the time, date, and purpose from the request
-2. If missing details, use reasonable defaults (e.g., 30 min duration, tomorrow if no date specified)
-3. ALWAYS call the create_activity tool to actually create the calendar event
-4. Do not just describe what should be done - DO IT by calling the tool`;
+**IMPORTANT - Task Delegation Rules:**
+1. When delegating to another agent, use delegate_task with:
+   - to_agent: the target role (e.g., "sales_manager", "project_manager")
+   - task_description: clear description of what needs to be done
+   - Include any relevant IDs (contact_id, account_id) in the task description
+
+2. For complex multi-step requests, break them into separate delegations:
+   - Sales-related (deals, opportunities) → delegate to sales_manager
+   - Scheduling (meetings, calls, reminders) → delegate to project_manager
+   - Research/prospecting → delegate to client_services_expert
+   - Customer issues → delegate to customer_service_manager`;
+      } else if (agentRole === 'project_manager') {
+        roleGuidance = `
+
+**IMPORTANT - Activity Management Rules:**
+
+1. For NEW activities (schedule, create, set up):
+   - Use create_activity with subject, type, scheduled_date, and any related entity IDs
+   - Valid types: 'call', 'meeting', 'task', 'email', 'follow_up'
+   - If missing details, use reasonable defaults (30 min duration, tomorrow if no date)
+   - ALWAYS call create_activity - don't just describe what should happen
+
+2. For EXISTING activities (update, reschedule, complete):
+   - Look at "Recent Activities" in the context above to find the ACTIVITY ID
+   - Use update_activity or mark_activity_complete with that activity_id
+   - ⚠️ Do NOT use contact_id or account_id as activity_id - they are different!
+
+Example for "Schedule a call with John tomorrow at 2pm":
+- Call create_activity with type: "call", subject: "Call with John", scheduled_date: tomorrow 2pm
+
+Example for "Mark the follow-up call as done":
+- Step 1: Look at Recent Activities above to find the correct ACTIVITY ID
+- Step 2: Call mark_activity_complete with that activity_id (NOT the contact ID!)`;
       } else if (agentRole === 'sales_manager') {
         roleGuidance = `
 
-**IMPORTANT:** For opportunity/deal requests:
-1. ⚠️ ALWAYS use the correct opportunity ID from "Related Opportunities" in the context above - do NOT use contact ID!
-2. Use update_opportunity or mark_opportunity_won with the opportunity_id from the list
+**IMPORTANT - Opportunity Management Rules:**
+
+1. For NEW opportunities: Use create_opportunity with the deal name, amount, stage, and:
+   - If from a LEAD: use the lead_id from the profile
+   - If from an ACCOUNT/CONTACT: use account_id and/or contact_id from the profile
+   - ⚠️ Check the ENTITY PROFILE above for the correct IDs!
+2. For EXISTING opportunities: Look at "Related Opportunities" in the context above to find the opportunity_id
+   - Use update_opportunity or mark_opportunity_won with the correct opportunity_id
+   - ⚠️ Do NOT use contact ID or lead ID as opportunity_id - they are different!
 3. For multi-part requests (e.g., "mark won AND schedule a meeting"):
-   - FIRST complete your part (update the opportunity using the correct opportunity ID)
+   - FIRST complete your part (create or update the opportunity)
    - THEN use delegate_task to hand off scheduling/meeting requests to project_manager
 4. When delegating, use: delegate_task(to_agent: "project_manager", task_description: "<specific task>", handoff_type: "delegate")
 
+Example for creating opportunity FROM A LEAD:
+- Check profile: LEAD_ID: abc-123
+- Call create_opportunity with name: "Lead Deal", amount: 50000, stage: "proposal", lead_id: "abc-123"
+
+Example for creating opportunity FROM AN ACCOUNT:
+- Check profile: ACCOUNT_ID: def-456, CONTACT_ID: ghi-789
+- Call create_opportunity with name: "Account Deal", amount: 50000, stage: "proposal", account_id: "def-456", contact_id: "ghi-789"
+
 Example for "Mark opportunity won and schedule celebration meeting":
 - Step 1: Look at Related Opportunities above to find the correct opportunity ID
-- Step 2: Call mark_opportunity_won with that opportunity_id (NOT the contact ID!)
+- Step 2: Call mark_opportunity_won with that opportunity_id (NOT the lead/contact ID!)
 - Step 3: Call delegate_task to project_manager with the meeting details`;
+      } else if (agentRole === 'client_services_expert') {
+        roleGuidance = `
+
+**IMPORTANT - Lead/Contact Creation Rules:**
+
+1. For NEW leads: Use create_lead with name, email, company, and source
+   - A lead is a potential prospect that hasn't been qualified yet
+   - After creation, the response will contain the new lead_id
+
+2. For NEW contacts: Use create_contact with name, email, phone, and optionally account_id
+   - A contact is a qualified person, often linked to an account
+   - After creation, the response will contain the new contact_id
+
+3. For research tasks: FIRST use search_web or lookup_company_info, THEN create the entity
+   - Don't create leads/contacts with placeholder data
+   - Gather real info from research tools first
+
+4. For multi-step requests (e.g., "research and create a lead"):
+   - Step 1: Call search_web or lookup_company_info
+   - Step 2: Use the research results to populate create_lead or create_contact
+   - Step 3: If scheduling follow-up is needed, delegate_task to project_manager
+
+⚠️ NEVER use placeholder IDs like "lead_id" or "contact_id" - wait for the actual ID from create response!`;
+      } else if (agentRole === 'customer_service_manager') {
+        roleGuidance = `
+
+**IMPORTANT - Customer Service Rules:**
+
+1. For customer lookups: Use search_contacts or get_contact_details with the customer's name/email
+   - The result will contain the contact_id you need for follow-up actions
+
+2. For logging interactions: Use create_note with the contact_id and content
+   - Include issue details, resolution steps, customer sentiment
+
+3. For scheduling follow-ups: Use create_activity with the contact_id
+   - Types: 'follow_up', 'call', 'email'
+   - Include clear subject describing the follow-up purpose
+
+4. For searching history: Use search_notes to find previous interactions
+
+⚠️ CRITICAL: When creating notes or activities for a customer:
+- FIRST get the contact_id from search_contacts or get_contact_details
+- THEN use that contact_id (not a placeholder) in create_note or create_activity`;
+      } else if (agentRole === 'marketing_manager') {
+        roleGuidance = `
+
+**IMPORTANT - Marketing Campaign Rules:**
+
+1. For audience segmentation: Use search_leads or list_accounts to find targets
+   - Filter by criteria relevant to your campaign
+   - The results contain IDs you can use for campaign notes
+
+2. For campaign planning: Use create_note to document campaign strategy
+   - Include goals, target audience, messaging, timeline
+
+3. For campaign tasks: Use create_activity to schedule marketing activities
+   - Types: 'task', 'email', 'meeting'
+   - Include clear subject and due dates
+
+4. For complex campaigns requiring sales follow-up:
+   - Use delegate_task to sales_manager for opportunity-related items`;
       }
       
       // Add handoff context if this is a delegated task

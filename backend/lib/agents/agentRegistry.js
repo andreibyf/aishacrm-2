@@ -86,6 +86,7 @@ export function getDefaultAgentProfile(role, tenant_id = null) {
         temperature: 0.35,
         // BRAID TOOLS ONLY - sales pipeline and opportunity management
         tool_allowlist: [
+          'create_opportunity',          // Create new deals
           'list_opportunities_by_stage', // Pipeline visibility
           'update_opportunity',          // Move deals through stages
           'mark_opportunity_won',        // Close deals

@@ -15,7 +15,8 @@ fn createOpportunity(
   probability: Number,
   close_date: String,
   account_id: String,
-  contact_id: String
+  contact_id: String,
+  lead_id: String
 ) -> Result<Opportunity, CRMError> !net {
   let url = "/api/v2/opportunities";
   let body = {
@@ -28,6 +29,7 @@ fn createOpportunity(
     close_date: close_date,
     account_id: account_id,
     contact_id: contact_id,
+    lead_id: lead_id,
     metadata: {}
   };
   

@@ -90,10 +90,16 @@ export function createBackendDeps(baseUrl, tenantId, userId = null, authToken = 
       async post(url, options = {}) {
         const body = options.body || {};
         body.tenant_id = tenantId;
-        // Inject created_by if userEmail is available and not already set
-        if (userEmail && !body.created_by) {
+        
+        // Inject created_by for tables that support it (not opportunities, bizdevsources)
+        // These tables don't have the created_by column
+        const noCreatedByTables = ['/opportunities', '/bizdevsources'];
+        const skipCreatedBy = noCreatedByTables.some(table => url.includes(table));
+        if (userEmail && !body.created_by && !skipCreatedBy) {
           body.created_by = userEmail;
         }
+        
+        console.log('[Braid HTTP] POST', `${baseUrl}${url}`, JSON.stringify(body).substring(0, 500));
         
         const response = await fetch(`${baseUrl}${url}`, {
           method: 'POST',
@@ -102,12 +108,14 @@ export function createBackendDeps(baseUrl, tenantId, userId = null, authToken = 
         });
         
         if (!response.ok) {
+          const errText = await response.text();
+          console.error('[Braid HTTP] POST error', response.status, errText.substring(0, 500));
           return {
             tag: 'Err',
             error: {
               type: 'NetworkError',
               status: response.status,
-              message: await response.text()
+              message: errText
             }
           };
         }

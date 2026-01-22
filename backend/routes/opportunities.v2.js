@@ -457,6 +457,13 @@ export default function createOpportunityV2Routes(_pgPool) {
         }
       });
 
+      // Convert empty string UUID fields to null (PostgreSQL doesn't accept empty strings for UUID columns)
+      ['account_id', 'contact_id', 'lead_id', 'assigned_to'].forEach(uuidField => {
+        if (cleanedPayload[uuidField] === '') {
+          cleanedPayload[uuidField] = null;
+        }
+      });
+
       const insertPayload = {
         tenant_id,
         ...cleanedPayload,

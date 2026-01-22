@@ -403,7 +403,7 @@ app.get('/', requireVizAuth, (req, res) => {
       position: absolute;
       width: 60px; height: 100px; /* Taller for standing figure */
       transform-origin: bottom center; /* Pivot at feet */
-      transition: top 1.5s linear, left 1.5s linear; /* Slower movement */
+      transition: top 0.6s linear, left 0.6s linear; /* Faster movement */
       display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
       z-index: 20;
     }
@@ -426,14 +426,14 @@ app.get('/', requireVizAuth, (req, res) => {
 
     /* Walking Animation */
     .agent.walking .leg-left {
-      animation: walk-leg 1.5s infinite ease-in-out;
+      animation: walk-leg 0.4s infinite ease-in-out;
     }
     .agent.walking .leg-right {
-      animation: walk-leg 1.5s infinite ease-in-out reverse;
+      animation: walk-leg 0.4s infinite ease-in-out reverse;
     }
     
     .agent.walking .arm-right {
-      animation: swing-arm 1.5s infinite ease-in-out;
+      animation: swing-arm 0.4s infinite ease-in-out;
     }
 
     @keyframes walk-leg {
@@ -792,6 +792,16 @@ app.get('/', requireVizAuth, (req, res) => {
   <script>
     // Configuration
     // Configuration
+    // Canonical agent roles (6 total)
+    const CANONICAL_ROLES = new Set([
+      'ops_manager',
+      'sales_manager', 
+      'marketing_manager',
+      'project_manager',
+      'client_services_expert',
+      'customer_service_manager'
+    ]);
+
     const DESK_POSITIONS = {
       'ops_manager': { x: 190, y: 130 },
       'sales_manager': { x: 490, y: 130 },
@@ -799,7 +809,7 @@ app.get('/', requireVizAuth, (req, res) => {
       'project_manager': { x: 190, y: 470 },
       'client_services_expert': { x: 495, y: 470 },
       'customer_service_manager': { x: 795, y: 470 },
-      // Fallbacks
+      // Fallback positions for legacy event formats (not initialized as agents)
       'sales_rep': { x: 490, y: 130 }, 
       'support_agent': { x: 795, y: 470 }
     };
@@ -834,7 +844,9 @@ app.get('/', requireVizAuth, (req, res) => {
 
     // ========== INITIALIZE ALL AGENTS ON STANDBY ==========
     function initializeAllAgents() {
+      // Only initialize canonical roles, not fallback positions
       Object.entries(DESK_POSITIONS).forEach(([role, pos]) => {
+        if (!CANONICAL_ROLES.has(role)) return; // Skip fallback positions
         const label = role.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
         if (!agents[role]) {
           agents[role] = {
@@ -1184,8 +1196,8 @@ app.get('/', requireVizAuth, (req, res) => {
             agent.x = targetX;
             agent.y = targetY;
             renderAgents();
-            // Wait for transition (1.5s CSS + buffer)
-            await new Promise(r => setTimeout(r, 1600));
+            // Wait for transition (0.6s CSS + buffer)
+            await new Promise(r => setTimeout(r, 700));
             agent.status = 'idle';
             renderAgents();
             agent.busy = false;
@@ -1353,25 +1365,14 @@ app.get('/', requireVizAuth, (req, res) => {
 
         case 'task_started':
         case 'run_started':
-          // SYNC: Wait for delivery if needed
-          const taskId = evt.task_id || evt.run_id;
-          const eta = taskDeliveryETAs[taskId];
-          if (eta && eta > Date.now()) {
-            const waitMs = eta - Date.now();
-            queueAction(agentId, ['wait', waitMs]);
-          }
+          // SYNC: Wait until Ops Manager has delivered the folder (carrying=true)
+          // This ensures the assignee doesn't start working before receiving the task
+          queueAction(agentId, ['waitForState', 'carrying', true]);
 
-          // Only set carrying=true if task is on agents desk stack (delivered by Ops Manager)
+          // Now we have the folder, set working status
           queueAction(agentId, ['exec', () => {
             const role = getRoleFromAgentId(agentId);
-            const stack = deskStacks[role] || [];
-            const hasTask = stack.some(t => t.id === taskId);
-            if (hasTask) {
-              agents[role].carrying = true;
-              agents[role].status = 'working';
-            } else {
-              agents[role].status = 'working';
-            }
+            agents[role].status = 'working';
             renderAgents();
           }]);
           queueAction(agentId, ['bubble', 'Analyzing...', 'thought', 4000]);
@@ -1433,6 +1434,8 @@ app.get('/', requireVizAuth, (req, res) => {
                  }
 
                  if (agents[assigneeId]) {
+                   // Mark assignee as carrying the folder (task delivered!)
+                   agents[assigneeId].carrying = true;
                    // Only show "Received" if agent is actually at their desk
                    const dist = Math.hypot(agents[assigneeId].x - agents[assigneeId].homeX, agents[assigneeId].y - agents[assigneeId].homeY);
                    if (dist < 50) {
@@ -1454,10 +1457,10 @@ app.get('/', requireVizAuth, (req, res) => {
              // Calculate ETA for delivery so Assignee doesn't start too early
              const dist1 = Math.hypot(INBOX_POS.x - dispatcher.x, INBOX_POS.y - dispatcher.y);
              const dist2 = Math.hypot(targetPos.x - INBOX_POS.x, targetPos.y - INBOX_POS.y);
-             const speed = 4; // pixels per tick
+             const speed = 10; // pixels per tick (faster)
              const fps = 60;
              const travelTimeMs = ((dist1 + dist2) / speed / fps) * 1000;
-             const bufferMs = 1500; // Waits and transitions
+             const bufferMs = 700; // Reduced waits and transitions
              taskDeliveryETAs[evt.task_id || evt.run_id] = Date.now() + travelTimeMs + bufferMs;
           }
           break;
@@ -1501,6 +1504,7 @@ app.get('/', requireVizAuth, (req, res) => {
           // This prevents "teleporting" to completion if events arrive out of order or too fast.
           queueAction(agentId, ['exec', () => {
              const taskId = evt.task_id || evt.run_id;
+             const role = getRoleFromAgentId(agentId);
              const stack = deskStacks[role] || [];
              const task = stack.find(t => t.id === taskId);
              if (task && task.status === 'queued') {

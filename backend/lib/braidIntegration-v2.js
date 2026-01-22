@@ -3067,7 +3067,7 @@ const BRAID_PARAM_ORDER = {
   deleteNote: ['tenant', 'note_id'],
 
   // opportunities.braid
-  createOpportunity: ['tenant', 'name', 'description', 'amount', 'stage', 'probability', 'close_date', 'account_id', 'contact_id'],
+  createOpportunity: ['tenant', 'name', 'description', 'amount', 'stage', 'probability', 'close_date', 'account_id', 'contact_id', 'lead_id'],
   deleteOpportunity: ['tenant', 'opportunity_id'],
   updateOpportunity: ['tenant', 'opportunity_id', 'updates'],
   listOpportunitiesByStage: ['tenant', 'stage', 'account_id', 'limit'],

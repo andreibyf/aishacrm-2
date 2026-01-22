@@ -15,7 +15,7 @@ export default function AishaEntityChatModal({
   entityType, 
   entityId, 
   entityLabel,
-  relatedData = {} // { opportunities, activities, notes }
+  relatedData = {} // { profile, opportunities, activities, notes }
 }) {
   const [input, setInput] = useState("");
   const [taskId, setTaskId] = useState(null);
@@ -56,8 +56,9 @@ export default function AishaEntityChatModal({
           entity_type: entityType,
           entity_id: entityId,
           tenant_id: tenantId,
-          // Include related data from the profile page (opportunities, activities, notes)
+          // Include full profile and related data from the profile page
           related_data: {
+            profile: relatedData.profile || null,
             opportunities: relatedData.opportunities || [],
             activities: relatedData.activities || [],
             notes: relatedData.notes || []

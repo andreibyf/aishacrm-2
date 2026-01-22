@@ -11,7 +11,8 @@ export default function EntityAiSummaryCard({
   entityLabel, 
   aiSummary, 
   lastUpdated,
-  relatedData = {} // { opportunities, activities, notes }
+  relatedData = {}, // { profile, opportunities, activities, notes }
+  profile = null // The full entity profile data
 }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -78,7 +79,7 @@ export default function EntityAiSummaryCard({
         entityType={entityType}
         entityId={entityId}
         entityLabel={entityLabel}
-        relatedData={relatedData}
+        relatedData={{ ...relatedData, profile }}
       />
     </>
   );
