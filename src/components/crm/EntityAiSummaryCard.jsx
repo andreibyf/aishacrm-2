@@ -49,13 +49,14 @@ export default function EntityAiSummaryCard({
               Ask AiSHA
             </Button>
             <Button 
-              variant="ghost" 
+              variant="outline" 
               size="sm" 
               onClick={handleBackOfficeClick}
-              className="text-indigo-400 hover:text-indigo-600 hover:bg-indigo-100 text-xs h-8"
+              className="bg-white border-indigo-200 hover:bg-indigo-100 text-indigo-700 text-xs h-8"
               title="Open Back Office"
             >
-              <ExternalLink className="w-4 h-4" />
+              <ExternalLink className="w-4 h-4 mr-1" />
+              Visit Office
             </Button>
           </div>
         </div>

@@ -75,8 +75,9 @@ export default function AishaEntityChatModal({
       setTaskId(data.task_id);
       setTaskStatus('PENDING');
       
-      // Start polling
-      startPolling(data.task_id);
+      // Close modal immediately after task creation
+      toast.success("Task started successfully");
+      onClose();
       
     } catch (error) {
       console.error('Task creation error:', error);
