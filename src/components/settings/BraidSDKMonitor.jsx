@@ -44,7 +44,22 @@ async function fetchWithAuth(endpoint) {
   });
   
   if (!response.ok) {
-    throw new Error(`API error: ${response.status}`);
+    // Try to parse error message from response
+    let errorMessage = `API error: ${response.status}`;
+    try {
+      const errorData = await response.json();
+      errorMessage = errorData.error || errorData.message || errorMessage;
+    } catch {
+      // Ignore JSON parse errors
+    }
+    
+    if (response.status === 401) {
+      errorMessage = 'Authentication required. Please log in again.';
+    } else if (response.status === 403) {
+      errorMessage = 'Admin access required for this feature.';
+    }
+    
+    throw new Error(errorMessage);
   }
   
   return response.json();
@@ -114,8 +129,8 @@ function ToolRow({ tool, onClick }) {
           tool.status === 'warning' ? 'bg-orange-500' : 'bg-red-500'
         }`} />
         <div>
-          <p className="font-medium text-sm">{tool.tool.replace(/_/g, ' ')}</p>
-          <p className="text-xs text-muted-foreground">{tool.total.toLocaleString()} calls</p>
+          <p className="font-medium text-sm">{(tool.tool || 'Unknown').replace(/_/g, ' ')}</p>
+          <p className="text-xs text-muted-foreground">{(tool.total || 0).toLocaleString()} calls</p>
         </div>
       </div>
       <div className="flex items-center gap-4">
@@ -140,9 +155,9 @@ function CategoryNode({ category, tools, color }) {
         <Badge variant="outline" className="ml-auto text-xs">{tools.length}</Badge>
       </div>
       <div className="space-y-1">
-        {tools.slice(0, 5).map(tool => (
-          <div key={tool.name} className="text-xs text-muted-foreground truncate">
-            {tool.name.replace(/_/g, ' ')}
+        {tools.slice(0, 5).map((tool, idx) => (
+          <div key={tool.name || idx} className="text-xs text-muted-foreground truncate">
+            {(tool.name || 'Unknown').replace(/_/g, ' ')}
           </div>
         ))}
         {tools.length > 5 && (
@@ -168,32 +183,20 @@ export default function BraidSDKMonitor() {
   
   // Fetch realtime metrics
   const fetchRealtime = useCallback(async () => {
-    try {
-      const data = await fetchWithAuth('/api/braid/metrics/realtime');
-      setRealtimeMetrics(data);
-    } catch (err) {
-      console.error('Failed to fetch realtime metrics:', err);
-    }
+    const data = await fetchWithAuth('/api/braid/metrics/realtime');
+    setRealtimeMetrics(data);
   }, []);
   
   // Fetch tool metrics
   const fetchToolMetrics = useCallback(async () => {
-    try {
-      const data = await fetchWithAuth(`/api/braid/metrics/tools?period=${period}`);
-      setToolMetrics(data);
-    } catch (err) {
-      console.error('Failed to fetch tool metrics:', err);
-    }
+    const data = await fetchWithAuth(`/api/braid/metrics/tools?period=${period}`);
+    setToolMetrics(data);
   }, [period]);
   
   // Fetch graph data
   const fetchGraph = useCallback(async () => {
-    try {
-      const data = await fetchWithAuth('/api/braid/graph/categories');
-      setGraphData(data);
-    } catch (err) {
-      console.error('Failed to fetch graph:', err);
-    }
+    const data = await fetchWithAuth('/api/braid/graph/categories');
+    setGraphData(data);
   }, []);
   
   // Fetch tool impact when selected
@@ -449,7 +452,7 @@ export default function BraidSDKMonitor() {
             <Card className="mt-4">
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">{selectedTool.tool?.replace(/_/g, ' ')}</CardTitle>
+                  <CardTitle className="text-base">{(selectedTool.tool || selectedTool.name || 'Unknown Tool').replace(/_/g, ' ')}</CardTitle>
                   <Button variant="ghost" size="sm" onClick={() => setSelectedTool(null)}>✕</Button>
                 </div>
                 <CardDescription>{selectedTool.category}</CardDescription>
@@ -487,8 +490,8 @@ export default function BraidSDKMonitor() {
                   <div>
                     <p className="text-sm text-muted-foreground mb-2">Depends On:</p>
                     <div className="flex flex-wrap gap-2">
-                      {selectedTool.dependencies.direct.map(dep => (
-                        <Badge key={dep} variant="secondary">{dep.replace(/_/g, ' ')}</Badge>
+                      {selectedTool.dependencies.direct.map((dep, idx) => (
+                        <Badge key={dep || idx} variant="secondary">{(dep || 'Unknown').replace(/_/g, ' ')}</Badge>
                       ))}
                     </div>
                   </div>

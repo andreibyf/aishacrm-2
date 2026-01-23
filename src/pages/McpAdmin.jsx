@@ -27,10 +27,14 @@ export default function McpAdmin() {
     
     try {
       const backendUrl = getBackendUrl();
+      const token = localStorage.getItem('supabase_access_token') || 
+                    sessionStorage.getItem('supabase_access_token');
+      
       const response = await fetch(`${backendUrl}/api/mcp/admin/status`, {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
       });
 
