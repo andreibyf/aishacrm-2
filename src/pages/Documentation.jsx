@@ -558,8 +558,8 @@ As admin, you can:
 - **Document Processing**: Business card scanning and receipt OCR
 - **Document Management**: Centralized file storage and organization
 - **AI Campaigns**: Automated outreach campaigns with AI-generated content
-- **Construction Projects**: Specialized module for construction staffing (industry-specific)
-- **Workers**: Worker/contractor management (industry-specific)
+- **Project Management**: Track projects, assignments, and team resources
+- **Workers**: Worker/contractor management
 - **Reports & Analytics**: Pre-built and custom reporting dashboards
 - **Workflows**: Visual workflow builder with trigger-action automation
 

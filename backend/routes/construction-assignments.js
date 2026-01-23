@@ -45,18 +45,18 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
   // ==============================================
   // GET /api/construction/assignments - List all assignments
   // ==============================================
-  router.get("/", cacheList("construction_assignments", 180), async (req, res) => {
+  router.get("/", cacheList("project_assignments", 180), async (req, res) => {
     try {
       const { tenant_id, project_id, contact_id, status, role, limit, offset } = req.query;
       const { getSupabaseClient } = await import("../lib/supabase-db.js");
       const supabase = getSupabaseClient();
 
       let q = supabase
-        .from("construction_assignments")
+        .from("project_assignments")
         .select(
           `
           *,
-          project:construction_projects!project_id(id, project_name, site_name, status),
+          project:projects!project_id(id, project_name, site_name, status),
           worker:workers!worker_id(id, first_name, last_name, email, phone, primary_skill, worker_type)
         `,
           { count: "exact" }
@@ -114,11 +114,11 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
       const supabase = getSupabaseClient();
 
       let q = supabase
-        .from("construction_assignments")
+        .from("project_assignments")
         .select(
           `
           *,
-          project:construction_projects!project_id(id, project_name, site_name, site_address, status, account_id),
+          project:projects!project_id(id, project_name, site_name, site_address, status, account_id),
           worker:contacts!contact_id(id, first_name, last_name, email, phone, worker_role)
         `
         )
@@ -148,7 +148,7 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
   // ==============================================
   // POST /api/construction/assignments - Create assignment
   // ==============================================
-  router.post("/", invalidateCache("construction_assignments"), async (req, res) => {
+  router.post("/", invalidateCache("project_assignments"), async (req, res) => {
     try {
       const {
         tenant_id,
@@ -204,7 +204,7 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
       };
 
       const { data, error } = await supabase
-        .from("construction_assignments")
+        .from("project_assignments")
         .insert([payload])
         .select("*")
         .single();
@@ -221,10 +221,10 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
         return res.status(500).json({ status: "error", message: error.message });
       }
 
-      // Also invalidate construction_projects cache since assignment counts changed
+      // Also invalidate projects cache since assignment counts changed
       try {
         const { invalidateCacheByKey } = await import("../lib/cacheMiddleware.js");
-        invalidateCacheByKey("construction_projects");
+        invalidateCacheByKey("projects");
       } catch (cacheErr) {
         logger.warn("[construction-assignments] Could not invalidate projects cache:", cacheErr.message);
       }
@@ -243,7 +243,7 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
   // ==============================================
   // PUT /api/construction/assignments/:id - Update assignment
   // ==============================================
-  router.put("/:id", invalidateCache("construction_assignments"), async (req, res) => {
+  router.put("/:id", invalidateCache("project_assignments"), async (req, res) => {
     try {
       const { id } = req.params;
       if (!isValidUUID(id)) {
@@ -285,7 +285,7 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
       }
 
       const { data, error } = await supabase
-        .from("construction_assignments")
+        .from("project_assignments")
         .update(payload)
         .eq("id", id)
         .select("*")
@@ -319,7 +319,7 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
   // ==============================================
   // DELETE /api/construction/assignments/:id - Delete assignment
   // ==============================================
-  router.delete("/:id", invalidateCache("construction_assignments"), async (req, res) => {
+  router.delete("/:id", invalidateCache("project_assignments"), async (req, res) => {
     try {
       const { id } = req.params;
       if (!isValidUUID(id)) {
@@ -330,7 +330,7 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
       const supabase = getSupabaseClient();
 
       const { data, error } = await supabase
-        .from("construction_assignments")
+        .from("project_assignments")
         .delete()
         .eq("id", id)
         .select("id, project_id")
@@ -345,10 +345,10 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
         return res.status(404).json({ status: "error", message: "Assignment not found" });
       }
 
-      // Also invalidate construction_projects cache
+      // Also invalidate projects cache
       try {
         const { invalidateCacheByKey } = await import("../lib/cacheMiddleware.js");
-        invalidateCacheByKey("construction_projects");
+        invalidateCacheByKey("projects");
       } catch (cacheErr) {
         logger.warn("[construction-assignments] Could not invalidate projects cache:", cacheErr.message);
       }
@@ -378,7 +378,7 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
       const supabase = getSupabaseClient();
 
       const { data, error, count } = await supabase
-        .from("construction_assignments")
+        .from("project_assignments")
         .select(
           `
           *,
@@ -421,11 +421,11 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
       const supabase = getSupabaseClient();
 
       const { data, error, count } = await supabase
-        .from("construction_assignments")
+        .from("project_assignments")
         .select(
           `
           *,
-          project:construction_projects!project_id(id, project_name, site_name, status, account_id,
+          project:projects!project_id(id, project_name, site_name, status, account_id,
             account:accounts!account_id(id, name)
           )
         `,

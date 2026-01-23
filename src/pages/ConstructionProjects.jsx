@@ -1,6 +1,6 @@
 /**
- * Construction Projects Page
- * Manages construction projects and worker assignments for staffing companies
+ * Project Management Page
+ * Manages projects and team assignments across the organization
  */
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -63,6 +63,8 @@ import {
   Clock,
   XCircle,
   Pause,
+  Milestone,
+  GripVertical,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -160,6 +162,17 @@ export default function ConstructionProjects() {
     rate_type: "hourly",
     status: "Active",
     notes: "",
+  });
+
+  // Milestone states
+  const [milestones, setMilestones] = useState([]);
+  const [showMilestoneDialog, setShowMilestoneDialog] = useState(false);
+  const [editingMilestone, setEditingMilestone] = useState(null);
+  const [milestoneForm, setMilestoneForm] = useState({
+    title: "",
+    description: "",
+    due_date: "",
+    status: "pending",
   });
 
   // Load data
@@ -305,6 +318,8 @@ export default function ConstructionProjects() {
       const fullProject = await ConstructionProject.get(project.id);
       setSelectedProject(fullProject);
       setShowDetailView(true);
+      // Load milestones for this project
+      loadMilestones(project.id);
     } catch (err) {
       console.error("[ConstructionProjects] View error:", err);
       toast.error("Failed to load project details");
@@ -401,28 +416,147 @@ export default function ConstructionProjects() {
     }
   };
 
+  // Milestone handlers
+  const loadMilestones = async (projectId) => {
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_BACKEND_URL || "http://localhost:4001"}/api/construction/projects/${projectId}/milestones`,
+        { credentials: "include" }
+      );
+      if (!response.ok) throw new Error("Failed to load milestones");
+      const data = await response.json();
+      setMilestones(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("[ConstructionProjects] Milestones load error:", err);
+      setMilestones([]);
+    }
+  };
+
+  const handleAddMilestone = () => {
+    setEditingMilestone(null);
+    setMilestoneForm({
+      title: "",
+      description: "",
+      due_date: "",
+      status: "pending",
+    });
+    setShowMilestoneDialog(true);
+  };
+
+  const handleEditMilestone = (milestone) => {
+    setEditingMilestone(milestone);
+    setMilestoneForm({
+      title: milestone.title || "",
+      description: milestone.description || "",
+      due_date: milestone.due_date || "",
+      status: milestone.status || "pending",
+    });
+    setShowMilestoneDialog(true);
+  };
+
+  const handleSaveMilestone = async () => {
+    if (!milestoneForm.title?.trim()) {
+      toast.error("Milestone title is required");
+      return;
+    }
+
+    try {
+      const baseUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:4001";
+      const payload = { ...milestoneForm };
+
+      if (editingMilestone) {
+        const response = await fetch(
+          `${baseUrl}/api/construction/projects/${selectedProject.id}/milestones/${editingMilestone.id}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify(payload),
+          }
+        );
+        if (!response.ok) throw new Error("Failed to update milestone");
+        toast.success("Milestone updated");
+      } else {
+        const response = await fetch(
+          `${baseUrl}/api/construction/projects/${selectedProject.id}/milestones`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify(payload),
+          }
+        );
+        if (!response.ok) throw new Error("Failed to create milestone");
+        toast.success("Milestone created");
+      }
+
+      setShowMilestoneDialog(false);
+      loadMilestones(selectedProject.id);
+    } catch (err) {
+      console.error("[ConstructionProjects] Milestone save error:", err);
+      toast.error(err.message || "Failed to save milestone");
+    }
+  };
+
+  const handleDeleteMilestone = async (milestone) => {
+    if (!confirm(`Delete milestone "${milestone.title}"?`)) return;
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_BACKEND_URL || "http://localhost:4001"}/api/construction/projects/${selectedProject.id}/milestones/${milestone.id}`,
+        { method: "DELETE", credentials: "include" }
+      );
+      if (!response.ok) throw new Error("Failed to delete milestone");
+      toast.success("Milestone deleted");
+      loadMilestones(selectedProject.id);
+    } catch (err) {
+      console.error("[ConstructionProjects] Milestone delete error:", err);
+      toast.error(err.message || "Failed to delete milestone");
+    }
+  };
+
+  const handleToggleMilestoneStatus = async (milestone) => {
+    const newStatus = milestone.status === "completed" ? "pending" : "completed";
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_BACKEND_URL || "http://localhost:4001"}/api/construction/projects/${selectedProject.id}/milestones/${milestone.id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ status: newStatus }),
+        }
+      );
+      if (!response.ok) throw new Error("Failed to update milestone");
+      loadMilestones(selectedProject.id);
+    } catch (err) {
+      console.error("[ConstructionProjects] Milestone toggle error:", err);
+      toast.error("Failed to update milestone");
+    }
+  };
+
   // Get contact name helper
   const getContactName = (contact) => {
     if (!contact) return "—";
     return `${contact.first_name || ""} ${contact.last_name || ""}`.trim() || contact.email || "—";
   };
 
-  // Common worker roles for autocomplete
+  // Common team roles for autocomplete
   const commonRoles = [
-    "Laborer",
-    "Carpenter",
-    "Electrician",
-    "Plumber",
-    "HVAC Technician",
-    "Welder",
-    "Painter",
-    "Mason",
-    "Ironworker",
-    "Equipment Operator",
-    "Foreman",
-    "Supervisor",
-    "Safety Officer",
+    "Team Member",
+    "Developer",
+    "Designer",
+    "Analyst",
+    "Consultant",
+    "Specialist",
+    "Coordinator",
+    "Lead",
+    "Manager",
+    "Director",
     "Project Manager",
+    "Supervisor",
+    "Contractor",
+    "Technician",
   ];
 
   if (loading) {
@@ -565,6 +699,88 @@ export default function ConstructionProjects() {
             </CardContent>
           </Card>
         )}
+
+        {/* Milestones */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Milestone className="h-5 w-5" />
+                Milestones
+              </CardTitle>
+              <CardDescription>
+                {milestones.length} milestone{milestones.length !== 1 ? "s" : ""} • {milestones.filter(m => m.status === "completed").length} completed
+              </CardDescription>
+            </div>
+            <Button onClick={handleAddMilestone}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Milestone
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {milestones.length > 0 ? (
+              <div className="space-y-2">
+                {milestones.map((milestone) => (
+                  <div
+                    key={milestone.id}
+                    className={`flex items-center justify-between p-3 rounded-lg border ${
+                      milestone.status === "completed" ? "bg-green-50 border-green-200" : "bg-white"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => handleToggleMilestoneStatus(milestone)}
+                        className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+                          milestone.status === "completed"
+                            ? "bg-green-500 border-green-500 text-white"
+                            : "border-gray-300 hover:border-green-400"
+                        }`}
+                      >
+                        {milestone.status === "completed" && <CheckCircle className="h-3 w-3" />}
+                      </button>
+                      <div>
+                        <p className={`font-medium ${milestone.status === "completed" ? "line-through text-muted-foreground" : ""}`}>
+                          {milestone.title}
+                        </p>
+                        {milestone.description && (
+                          <p className="text-sm text-muted-foreground">{milestone.description}</p>
+                        )}
+                        {milestone.due_date && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                            <Calendar className="h-3 w-3" />
+                            Due: {formatDate(milestone.due_date)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs px-2 py-1 rounded-full ${
+                        milestone.status === "completed" ? "bg-green-100 text-green-800" :
+                        milestone.status === "in_progress" ? "bg-blue-100 text-blue-800" :
+                        milestone.status === "cancelled" ? "bg-red-100 text-red-800" :
+                        "bg-gray-100 text-gray-800"
+                      }`}>
+                        {milestone.status === "in_progress" ? "In Progress" : milestone.status?.charAt(0).toUpperCase() + milestone.status?.slice(1)}
+                      </span>
+                      <Button variant="ghost" size="sm" onClick={() => handleEditMilestone(milestone)}>
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleDeleteMilestone(milestone)}>
+                        <Trash2 className="h-4 w-4 text-red-500" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <Milestone className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p>No milestones yet</p>
+                <p className="text-sm">Add milestones to track project progress</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Worker Assignments */}
         <Card>
@@ -832,10 +1048,10 @@ export default function ConstructionProjects() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Building2 className="h-6 w-6" />
-            Construction Projects
+            Project Management
           </h1>
           <p className="text-muted-foreground">
-            Manage construction projects and worker assignments
+            Manage projects and team assignments
           </p>
         </div>
         <div className="flex gap-2">
@@ -980,7 +1196,7 @@ export default function ConstructionProjects() {
             <div className="text-center py-12 text-muted-foreground">
               <Building2 className="h-16 w-16 mx-auto mb-4 opacity-30" />
               <p className="text-lg mb-2">No projects found</p>
-              <p className="mb-4">Create your first construction project to start tracking</p>
+              <p className="mb-4">Create your first project to start tracking</p>
               <Button onClick={handleCreateProject}>
                 <Plus className="h-4 w-4 mr-2" />
                 Create Project
@@ -998,7 +1214,7 @@ export default function ConstructionProjects() {
             <DialogDescription>
               {editingProject
                 ? "Update project details"
-                : "Create a new construction project"}
+                : "Create a new project"}
             </DialogDescription>
           </DialogHeader>
           <Tabs defaultValue="basic" className="w-full">
@@ -1012,7 +1228,7 @@ export default function ConstructionProjects() {
               <div>
                 <Label>Project Name *</Label>
                 <Input
-                  placeholder="e.g., Downtown Office Tower"
+                  placeholder="e.g., Website Redesign, Phase 2 Rollout"
                   value={projectForm.project_name}
                   onChange={(e) => setProjectForm({ ...projectForm, project_name: e.target.value })}
                 />
@@ -1060,9 +1276,9 @@ export default function ConstructionProjects() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>Site Name</Label>
+                  <Label>Location Name</Label>
                   <Input
-                    placeholder="e.g., Main Building Site"
+                    placeholder="e.g., Main Office, Site A"
                     value={projectForm.site_name}
                     onChange={(e) => setProjectForm({ ...projectForm, site_name: e.target.value })}
                   />
@@ -1088,9 +1304,9 @@ export default function ConstructionProjects() {
               </div>
 
               <div>
-                <Label>Site Address</Label>
+                <Label>Location Address</Label>
                 <Input
-                  placeholder="Full site address..."
+                  placeholder="Full address..."
                   value={projectForm.site_address}
                   onChange={(e) => setProjectForm({ ...projectForm, site_address: e.target.value })}
                 />
@@ -1121,7 +1337,7 @@ export default function ConstructionProjects() {
               </div>
 
               <div>
-                <Label>Site Supervisor</Label>
+                <Label>Supervisor</Label>
                 <Select
                   value={projectForm.supervisor_contact_id}
                   onValueChange={(v) =>
@@ -1201,6 +1417,70 @@ export default function ConstructionProjects() {
             </Button>
             <Button onClick={handleSaveProject}>
               {editingProject ? "Update" : "Create"} Project
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Milestone Dialog */}
+      <Dialog open={showMilestoneDialog} onOpenChange={setShowMilestoneDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingMilestone ? "Edit" : "Add"} Milestone</DialogTitle>
+            <DialogDescription>
+              {editingMilestone ? "Update milestone details" : "Create a new milestone for this project"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>Title *</Label>
+              <Input
+                placeholder="e.g., Design Phase Complete"
+                value={milestoneForm.title}
+                onChange={(e) => setMilestoneForm({ ...milestoneForm, title: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label>Description</Label>
+              <Textarea
+                placeholder="Details about this milestone..."
+                rows={3}
+                value={milestoneForm.description}
+                onChange={(e) => setMilestoneForm({ ...milestoneForm, description: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label>Due Date</Label>
+              <Input
+                type="date"
+                value={milestoneForm.due_date}
+                onChange={(e) => setMilestoneForm({ ...milestoneForm, due_date: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label>Status</Label>
+              <Select
+                value={milestoneForm.status}
+                onValueChange={(value) => setMilestoneForm({ ...milestoneForm, status: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowMilestoneDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveMilestone}>
+              {editingMilestone ? "Update" : "Add"} Milestone
             </Button>
           </DialogFooter>
         </DialogContent>

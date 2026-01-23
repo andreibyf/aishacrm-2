@@ -36,7 +36,7 @@ import {
   FileText,
   FolderOpen,
   GripVertical,
-  HardHat, // NEW: Added for Construction Projects
+  Kanban, // Project Management
   LayoutDashboard,
   Loader2,
   LogOut,
@@ -125,7 +125,7 @@ const navItems = [
   { href: "Opportunities", icon: TrendingUp, label: "Opportunities" }, // Changed icon to TrendingUp
   { href: "Activities", icon: CheckSquare, label: "Activities" },
   { href: "Calendar", icon: Calendar, label: "Calendar" },
-  { href: "ConstructionProjects", icon: HardHat, label: "Construction Projects" }, // Construction staffing module
+  { href: "ConstructionProjects", icon: Kanban, label: "Project Management" }, // Project management module
   { href: "Workers", icon: Users, label: "Workers" }, // Contractors/temp labor management
   { href: "BizDevSources", icon: Database, label: "BizDev Sources" }, // Business development sources
   { href: "CashFlow", icon: DollarSign, label: "Cash Flow" },
@@ -225,7 +225,7 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
     Utilities: 'Utilities',
     ClientOnboarding: 'Client Onboarding',
     Workflows: 'Workflows',
-    ConstructionProjects: 'Construction Projects',
+    ConstructionProjects: 'Project Management',
     Workers: 'Workers',
     DuplicateContacts: null,
     DuplicateAccounts: null,
