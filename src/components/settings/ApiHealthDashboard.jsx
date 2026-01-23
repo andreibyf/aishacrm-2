@@ -181,7 +181,7 @@ export default function ApiHealthDashboard() {
     const endpoints = [
       // Core CRM flows (internal readiness focus)
       { name: 'Opportunities - List (v1)', method: 'GET', url: `${BACKEND_URL}/api/opportunities?tenant_id=${testTenantId}&limit=1` },
-      { name: 'Activities - List', method: 'GET', url: `${BACKEND_URL}/api/activities?tenant_id=${testTenantId}&limit=1` },
+      { name: 'Activities - List (v2)', method: 'GET', url: `${BACKEND_URL}/api/v2/activities?tenant_id=${testTenantId}&limit=1` },
       // v2 pilot (behind FEATURE_OPPORTUNITIES_V2)
       { name: 'Opportunities - List (v2)', method: 'GET', url: `${BACKEND_URL}/api/v2/opportunities?tenant_id=${testTenantId}&limit=1`, expectError: false },
       {
