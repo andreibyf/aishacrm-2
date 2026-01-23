@@ -11,6 +11,7 @@ import {
 import { tenantScopedId } from "../middleware/tenantScopedId.js";
 import { cacheList, invalidateCache } from "../lib/cacheMiddleware.js";
 import logger from '../lib/logger.js';
+import { toNullableString, toNumeric } from '../lib/typeConversions.js';
 
 export default function createConstructionAssignmentsRoutes(_pgPool) {
   const router = express.Router();
@@ -20,17 +21,6 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
   router.use(enforceEmployeeDataScope);
 
   // Helper functions
-  const toNullableString = (value) => {
-    if (value === null || value === undefined || value === "") return null;
-    return String(value).trim();
-  };
-
-  const toNumeric = (value) => {
-    if (value === null || value === undefined || value === "") return null;
-    const parsed = parseFloat(value);
-    return isNaN(parsed) ? null : parsed;
-  };
-
   const toDate = (value) => {
     if (value === null || value === undefined || value === "") return null;
     const d = new Date(value);

@@ -4,6 +4,7 @@ import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/va
 import { isMemoryAvailable, getMemoryClient } from '../lib/memoryClient.js';
 import { cacheList } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
+import { toNullableString, toInteger } from '../lib/typeConversions.js';
 
 export default function createActivityRoutes(_pgPool) {
   const router = express.Router();
@@ -53,21 +54,6 @@ export default function createActivityRoutes(_pgPool) {
   // Apply tenant validation and employee data scope to all routes
   router.use(validateTenantAccess);
   router.use(enforceEmployeeDataScope);
-
-  const toNullableString = (value) => {
-    if (typeof value === 'string') {
-      const trimmed = value.trim();
-      return trimmed.length ? trimmed : null;
-    }
-    if (value === null) return null;
-    return value === undefined ? undefined : String(value);
-  };
-
-  const toInteger = (value) => {
-    if (value === undefined || value === null || value === '') return null;
-    const parsed = Number.parseInt(value, 10);
-    return Number.isNaN(parsed) ? null : parsed;
-  };
 
   const toJsonObject = (value) => {
     if (value === undefined) return undefined;

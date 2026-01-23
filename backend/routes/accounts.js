@@ -11,6 +11,15 @@ import {
 import { tenantScopedId, buildGetByIdSQL as _buildGetByIdSQL } from "../middleware/tenantScopedId.js";
 import { cacheList, invalidateCache } from "../lib/cacheMiddleware.js";
 import logger from '../lib/logger.js';
+import {
+  toNullableString,
+  toNumeric,
+  toInteger,
+  assignStringField,
+  assignNumericField,
+  assignIntegerField,
+} from '../lib/typeConversions.js';
+import { CACHE_TTL, PAGINATION, parseLimit, parseOffset } from '../config/constants.js';
 
 export default function createAccountRoutes(_pgPool) {
   const router = express.Router();
@@ -130,28 +139,6 @@ export default function createAccountRoutes(_pgPool) {
   router.use(validateTenantAccess);
   router.use(enforceEmployeeDataScope);
 
-  const toNullableString = (value) => {
-    if (value === undefined) return undefined;
-    if (value === null) return null;
-    if (typeof value === 'string') {
-      const trimmed = value.trim();
-      return trimmed.length ? trimmed : null;
-    }
-    return String(value);
-  };
-
-  const toNumeric = (value) => {
-    if (value === undefined || value === null || value === '') return null;
-    const parsed = Number.parseFloat(value);
-    return Number.isNaN(parsed) ? null : parsed;
-  };
-
-  const toInteger = (value) => {
-    if (value === undefined || value === null || value === '') return null;
-    const parsed = Number.parseInt(value, 10);
-    return Number.isNaN(parsed) ? null : parsed;
-  };
-
   const MIRRORED_METADATA_KEYS = [
     'name',
     'type',
@@ -184,21 +171,6 @@ export default function createAccountRoutes(_pgPool) {
     });
 
     return merged;
-  };
-
-  const assignStringField = (target, key, value) => {
-    if (value === undefined) return;
-    target[key] = toNullableString(value);
-  };
-
-  const assignNumericField = (target, key, value) => {
-    if (value === undefined) return;
-    target[key] = value === null ? null : toNumeric(value);
-  };
-
-  const assignIntegerField = (target, key, value) => {
-    if (value === undefined) return;
-    target[key] = value === null ? null : toInteger(value);
   };
 
   const normalizeAccount = (record) => {
@@ -241,11 +213,11 @@ export default function createAccountRoutes(_pgPool) {
    *             schema:
    *               $ref: '#/components/schemas/Success'
    */
-  router.get('/search', cacheList('accounts', 180), async (req, res) => {
+  router.get('/search', cacheList('accounts', CACHE_TTL.STANDARD), async (req, res) => {
     try {
       let { tenant_id, q = '' } = req.query;
-      const limit = parseInt(req.query.limit || '25', 10);
-      const offset = parseInt(req.query.offset || '0', 10);
+      const limit = parseLimit(req.query.limit, PAGINATION.SEARCH_LIMIT, PAGINATION.MAX_SEARCH_LIMIT);
+      const offset = parseOffset(req.query.offset);
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -285,11 +257,11 @@ export default function createAccountRoutes(_pgPool) {
   });
 
   // GET /api/accounts - List accounts (with caching)
-  router.get("/", cacheList('accounts', 180), async (req, res) => {
+  router.get("/", cacheList('accounts', CACHE_TTL.STANDARD), async (req, res) => {
     try {
       let { type, assigned_to } = req.query;
-      const limit = parseInt(req.query.limit || '50', 10);
-      const offset = parseInt(req.query.offset || '0', 10);
+      const limit = parseLimit(req.query.limit, PAGINATION.DEFAULT_LIMIT, PAGINATION.MAX_ENTITY_LIMIT);
+      const offset = parseOffset(req.query.offset);
 
       // Enforce tenant isolation
       const tenant_id = req.tenant?.id || req.query.tenant_id;

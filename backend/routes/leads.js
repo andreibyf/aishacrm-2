@@ -14,6 +14,12 @@ import {
   validateLeadConversion,
   determineContactType
 } from '../utils/conversionHelpers.js';
+import {
+  toNullableString,
+  toNumeric,
+  toInteger,
+  toBoolean,
+} from '../lib/typeConversions.js';
 
 export default function createLeadRoutes(_pgPool) {
   const router = express.Router();
@@ -144,36 +150,6 @@ export default function createLeadRoutes(_pgPool) {
   // Apply tenant validation and employee data scope to all routes
   router.use(validateTenantAccess);
   router.use(enforceEmployeeDataScope);
-
-  const toNullableString = (value) => {
-    if (typeof value === 'string') {
-      const trimmed = value.trim();
-      return trimmed.length ? trimmed : null;
-    }
-    return null;
-  };
-
-  const toInteger = (value) => {
-    if (value === undefined || value === null || value === '') return null;
-    const parsed = Number.parseInt(value, 10);
-    return Number.isNaN(parsed) ? null : parsed;
-  };
-
-  const toNumeric = (value) => {
-    if (value === undefined || value === null || value === '') return null;
-    const parsed = Number.parseFloat(value);
-    return Number.isNaN(parsed) ? null : parsed;
-  };
-
-  const toBoolean = (value) => {
-    if (typeof value === 'boolean') return value;
-    if (typeof value === 'string') {
-      const normalized = value.trim().toLowerCase();
-      if (['true', '1', 'yes', 'y'].includes(normalized)) return true;
-      if (['false', '0', 'no', 'n'].includes(normalized)) return false;
-    }
-    return null;
-  };
 
   const toTagArray = (value) => {
     if (!Array.isArray(value)) return null;

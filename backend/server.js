@@ -27,6 +27,9 @@ import { startHealthMonitoring } from "./lib/healthMonitor.js";
 // Import UUID validation
 import { sanitizeUuidInput } from "./lib/uuidValidator.js";
 
+// Import centralized error handler
+import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
+
 // Load environment variables
 // Try .env.local first (for local development), then fall back to .env
 dotenv.config({ path: ".env.local" });
@@ -358,23 +361,17 @@ app.use("/api/supabase-proxy", createSupabaseProxyRoutes());
 app.use("/api/ai/suggestions", createSuggestionsRoutes(measuredPgPool));
 
 // 404 handler - Ensure CORS headers so browser shows real error, not "CORS error"
-app.use((req, res) => {
+app.use((req, res, next) => {
   if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
     res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
   }
-  res.status(404).json({
-    status: "error",
-    message: "Endpoint not found",
-    path: req.path,
-  });
+  notFoundHandler(req, res, next);
 });
 
-// Error handler
-app.use((err, req, res, _next) => {
-  logger.error({ err, path: req.path, method: req.method }, "Error in request handler");
-
+// Centralized error handler - catches all errors from routes
+app.use((err, req, res, next) => {
   // Ensure CORS headers are present even in error responses
   // This prevents "CORS error" from masking the actual backend error (401, 403, 500, etc.)
   if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
@@ -382,12 +379,7 @@ app.use((err, req, res, _next) => {
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
   }
-
-  res.status(err.status || 500).json({
-    status: "error",
-    message: err.message || "Internal server error",
-    ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
-  });
+  errorHandler(err, req, res, next);
 });
 
 // Helper to log backend lifecycle events to system_logs

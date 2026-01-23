@@ -11,6 +11,10 @@ import {
 import { tenantScopedId } from "../middleware/tenantScopedId.js";
 import { cacheList, invalidateCache } from "../lib/cacheMiddleware.js";
 import logger from '../lib/logger.js';
+import { toNullableString, toNumeric } from '../lib/typeConversions.js';
+import { asyncHandler } from '../middleware/errorHandler.js';
+import { NotFoundError, DatabaseError, ValidationError } from '../lib/errors.js';
+import { CACHE_TTL, PAGINATION, parseLimit, parseOffset, isValidUUID } from '../config/constants.js';
 
 export default function createWorkersRoutes(_pgPool) {
   const router = express.Router();
@@ -18,193 +22,162 @@ export default function createWorkersRoutes(_pgPool) {
   router.use(validateTenantAccess);
   router.use(enforceEmployeeDataScope);
 
-  const toNullableString = (value) => {
-    if (value === null || value === undefined || value === "") return null;
-    return String(value).trim();
-  };
-
-  const toNumeric = (value) => {
-    if (value === null || value === undefined || value === "") return null;
-    const parsed = parseFloat(value);
-    return isNaN(parsed) ? null : parsed;
-  };
-
-  const isValidUUID = (str) => {
-    if (!str) return false;
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str);
-  };
-
   // ==============================================
   // GET /api/workers - List all workers
   // ==============================================
-  router.get("/", cacheList("workers", 180), async (req, res) => {
-    try {
-      const { tenant_id, status, worker_type, primary_skill, limit, offset } = req.query;
-      const { getSupabaseClient } = await import("../lib/supabase-db.js");
-      const supabase = getSupabaseClient();
+  router.get("/", cacheList("workers", CACHE_TTL.STANDARD), asyncHandler(async (req, res) => {
+    const { tenant_id, status, worker_type, primary_skill } = req.query;
+    const parsedLimit = parseLimit(req.query.limit, PAGINATION.DEFAULT_LIMIT, PAGINATION.MAX_ENTITY_LIMIT);
+    const parsedOffset = parseOffset(req.query.offset);
 
-      let q = supabase
-        .from("workers")
-        .select("*", { count: "exact" })
-        .order("last_name", { ascending: true })
-        .order("first_name", { ascending: true });
+    const { getSupabaseClient } = await import("../lib/supabase-db.js");
+    const supabase = getSupabaseClient();
 
-      if (tenant_id && isValidUUID(tenant_id)) {
-        q = q.eq("tenant_id", tenant_id);
-      }
-      if (status) {
-        q = q.eq("status", status);
-      }
-      if (worker_type) {
-        q = q.eq("worker_type", worker_type);
-      }
-      if (primary_skill) {
-        q = q.eq("primary_skill", primary_skill);
-      }
-      if (limit) {
-        q = q.limit(parseInt(limit, 10));
-      }
-      if (offset) {
-        q = q.range(parseInt(offset, 10), parseInt(offset, 10) + (parseInt(limit, 10) || 50) - 1);
-      }
+    let q = supabase
+      .from("workers")
+      .select("*", { count: "exact" })
+      .order("last_name", { ascending: true })
+      .order("first_name", { ascending: true });
 
-      const { data, error, count } = await q;
-
-      if (error) {
-        logger.error("[workers] GET error:", error);
-        return res.status(500).json({ status: "error", message: error.message });
-      }
-
-      res.json({
-        status: "success",
-        data: {
-          workers: data || [],
-          total: count || 0,
-        },
-      });
-    } catch (err) {
-      logger.error("[workers] GET exception:", err);
-      res.status(500).json({ status: "error", message: err.message });
+    if (tenant_id && isValidUUID(tenant_id)) {
+      q = q.eq("tenant_id", tenant_id);
     }
-  });
+    if (status) {
+      q = q.eq("status", status);
+    }
+    if (worker_type) {
+      q = q.eq("worker_type", worker_type);
+    }
+    if (primary_skill) {
+      q = q.eq("primary_skill", primary_skill);
+    }
+
+    q = q.limit(parsedLimit);
+    if (parsedOffset > 0) {
+      q = q.range(parsedOffset, parsedOffset + parsedLimit - 1);
+    }
+
+    const { data, error, count } = await q;
+
+    if (error) {
+      throw new DatabaseError('Failed to fetch workers', error);
+    }
+
+    res.json({
+      status: "success",
+      data: {
+        workers: data || [],
+        total: count || 0,
+      },
+    });
+  }));
 
   // ==============================================
   // GET /api/workers/:id - Get single worker
   // ==============================================
-  router.get("/:id", tenantScopedId(), async (req, res) => {
-    try {
-      const { getSupabaseClient } = await import("../lib/supabase-db.js");
-      const supabase = getSupabaseClient();
+  router.get("/:id", tenantScopedId(), asyncHandler(async (req, res) => {
+    const { getSupabaseClient } = await import("../lib/supabase-db.js");
+    const supabase = getSupabaseClient();
 
-      let q = supabase
-        .from("workers")
-        .select("*")
-        .eq("id", req.idScope.id);
+    let q = supabase
+      .from("workers")
+      .select("*")
+      .eq("id", req.idScope.id);
 
-      if (req.idScope.tenant_id) {
-        q = q.eq("tenant_id", req.idScope.tenant_id);
-      }
-
-      const { data, error } = await q.single();
-
-      if (error) {
-        if (error.code === "PGRST116") {
-          return res.status(404).json({ status: "error", message: "Worker not found" });
-        }
-        logger.error("[workers] GET/:id error:", error);
-        return res.status(500).json({ status: "error", message: error.message });
-      }
-
-      res.json({ status: "success", data });
-    } catch (err) {
-      logger.error("[workers] GET/:id exception:", err);
-      res.status(500).json({ status: "error", message: err.message });
+    if (req.idScope.tenant_id) {
+      q = q.eq("tenant_id", req.idScope.tenant_id);
     }
-  });
+
+    const { data, error } = await q.single();
+
+    if (error) {
+      if (error.code === "PGRST116") {
+        throw new NotFoundError('Worker', req.idScope.id);
+      }
+      throw new DatabaseError('Failed to fetch worker', error);
+    }
+
+    res.json({ status: "success", data });
+  }));
 
   // ==============================================
   // POST /api/workers - Create worker
   // ==============================================
-  router.post("/", invalidateCache("workers"), async (req, res) => {
-    try {
-      const {
-        tenant_id,
-        first_name,
-        last_name,
-        email,
-        phone,
-        worker_type,
-        status,
-        primary_skill,
-        skills,
-        certifications,
-        default_pay_rate,
-        default_rate_type,
-        available_from,
-        available_until,
-        emergency_contact_name,
-        emergency_contact_phone,
-        notes,
-        metadata,
-        created_by,
-      } = req.body;
+  router.post("/", invalidateCache("workers"), asyncHandler(async (req, res) => {
+    const {
+      tenant_id,
+      first_name,
+      last_name,
+      email,
+      phone,
+      worker_type,
+      status,
+      primary_skill,
+      skills,
+      certifications,
+      default_pay_rate,
+      default_rate_type,
+      available_from,
+      available_until,
+      emergency_contact_name,
+      emergency_contact_phone,
+      notes,
+      metadata,
+      created_by,
+    } = req.body;
 
-      if (!tenant_id || !isValidUUID(tenant_id)) {
-        return res.status(400).json({ status: "error", message: "Valid tenant_id is required" });
-      }
-      if (!first_name || !first_name.trim()) {
-        return res.status(400).json({ status: "error", message: "first_name is required" });
-      }
-      if (!last_name || !last_name.trim()) {
-        return res.status(400).json({ status: "error", message: "last_name is required" });
-      }
-
-      const { getSupabaseClient } = await import("../lib/supabase-db.js");
-      const supabase = getSupabaseClient();
-
-      const payload = {
-        tenant_id,
-        first_name: first_name.trim(),
-        last_name: last_name.trim(),
-        email: toNullableString(email),
-        phone: toNullableString(phone),
-        worker_type: worker_type || "Contractor",
-        status: status || "Active",
-        primary_skill: toNullableString(primary_skill),
-        skills: skills || [],
-        certifications: certifications || [],
-        default_pay_rate: toNumeric(default_pay_rate),
-        default_rate_type: default_rate_type || "hourly",
-        available_from: available_from || null,
-        available_until: available_until || null,
-        emergency_contact_name: toNullableString(emergency_contact_name),
-        emergency_contact_phone: toNullableString(emergency_contact_phone),
-        notes: toNullableString(notes),
-        metadata: metadata || {},
-        created_by: created_by && isValidUUID(created_by) ? created_by : null,
-      };
-
-      const { data, error } = await supabase
-        .from("workers")
-        .insert([payload])
-        .select("*")
-        .single();
-
-      if (error) {
-        logger.error("[workers] POST error:", error);
-        return res.status(500).json({ status: "error", message: error.message });
-      }
-
-      res.status(201).json({
-        status: "success",
-        message: "Worker created successfully",
-        data,
-      });
-    } catch (err) {
-      logger.error("[workers] POST exception:", err);
-      res.status(500).json({ status: "error", message: err.message });
+    // Validation using custom errors
+    if (!tenant_id || !isValidUUID(tenant_id)) {
+      throw new ValidationError('Valid tenant_id is required');
     }
-  });
+    if (!first_name || !first_name.trim()) {
+      throw new ValidationError('first_name is required');
+    }
+    if (!last_name || !last_name.trim()) {
+      throw new ValidationError('last_name is required');
+    }
+
+    const { getSupabaseClient } = await import("../lib/supabase-db.js");
+    const supabase = getSupabaseClient();
+
+    const payload = {
+      tenant_id,
+      first_name: first_name.trim(),
+      last_name: last_name.trim(),
+      email: toNullableString(email),
+      phone: toNullableString(phone),
+      worker_type: worker_type || "Contractor",
+      status: status || "Active",
+      primary_skill: toNullableString(primary_skill),
+      skills: skills || [],
+      certifications: certifications || [],
+      default_pay_rate: toNumeric(default_pay_rate),
+      default_rate_type: default_rate_type || "hourly",
+      available_from: available_from || null,
+      available_until: available_until || null,
+      emergency_contact_name: toNullableString(emergency_contact_name),
+      emergency_contact_phone: toNullableString(emergency_contact_phone),
+      notes: toNullableString(notes),
+      metadata: metadata || {},
+      created_by: created_by && isValidUUID(created_by) ? created_by : null,
+    };
+
+    const { data, error } = await supabase
+      .from("workers")
+      .insert([payload])
+      .select("*")
+      .single();
+
+    if (error) {
+      throw new DatabaseError('Failed to create worker', error);
+    }
+
+    res.status(201).json({
+      status: "success",
+      message: "Worker created successfully",
+      data,
+    });
+  }));
 
   // ==============================================
   // PUT /api/workers/:id - Update worker

@@ -7,6 +7,7 @@ import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
+import { toNullableString } from '../lib/typeConversions.js';
 
 export default function createContactRoutes(_pgPool) {
   const router = express.Router();
@@ -136,15 +137,6 @@ export default function createContactRoutes(_pgPool) {
   // Apply tenant validation and employee data scope to all routes
   router.use(validateTenantAccess);
   router.use(enforceEmployeeDataScope);
-
-  const toNullableString = (value) => {
-    if (typeof value === 'string') {
-      const trimmed = value.trim();
-      return trimmed.length ? trimmed : null;
-    }
-    if (value === null) return null;
-    return value === undefined ? undefined : String(value);
-  };
 
   const toTagArray = (value) => {
     if (!Array.isArray(value)) return null;
