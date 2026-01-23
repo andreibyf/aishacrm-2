@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "mcp",
-      "Bash(docker compose:*)"
+      "Bash(docker compose:*)",
+      "Bash(powershell -Command \"docker compose ps\")"
     ]
   }
 }

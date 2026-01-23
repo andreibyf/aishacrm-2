@@ -271,16 +271,31 @@ export default function createReportRoutes(_pgPool) {
   router.get('/dashboard-bundle', async (req, res) => {
     try {
       const { tenant_id } = req.query;
-      
+
       // Require tenant_id - no global superadmin view for strict tenant isolation
       if (!tenant_id || tenant_id === 'null' || tenant_id === '') {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
-      
+
       // Parse visible widgets to optimize data fetching
       const widgetsParam = req.query.widgets || '';
       const visibleWidgets = widgetsParam ? widgetsParam.split(',').map(w => w.trim()).filter(Boolean) : [];
       const widgetSet = new Set(visibleWidgets);
+
+      // Profiling: track individual query times when profile=true
+      const enableProfiling = req.query.profile === 'true';
+      const queryTimes = {};
+      const profileQuery = (name, promiseFn) => {
+        if (!enableProfiling) return promiseFn();
+        const start = Date.now();
+        return promiseFn().then(result => {
+          queryTimes[name] = Date.now() - start;
+          return result;
+        }).catch(err => {
+          queryTimes[name] = Date.now() - start;
+          throw err;
+        });
+      };
       
       // Use redis cache for distributed, persistent caching
       const includeTestData = (req.query.include_test_data ?? 'true') !== 'false';
@@ -499,19 +514,19 @@ export default function createReportRoutes(_pgPool) {
        */
       logger.debug(`[dashboard-bundle] Falling back to individual queries`);
       const commonOpts = { includeTestData, countMode: 'exact', confirmSmallCounts: false };
-      const totalContactsP = safeCount(null, 'contacts', tenant_id, undefined, commonOpts);
-      const totalAccountsP = safeCount(null, 'accounts', tenant_id, undefined, commonOpts);
-      const totalLeadsP = safeCount(null, 'leads', tenant_id, undefined, commonOpts);
-      const totalOpportunitiesP = safeCount(null, 'opportunities', tenant_id, undefined, commonOpts);
-      const openLeadsP = safeCount(null, 'leads', tenant_id, (q) => q.not('status', 'in', '("converted","lost")'), commonOpts);
-      const wonOpportunitiesP = safeCount(null, 'opportunities', tenant_id, (q) => q.in('stage', ['won', 'closed_won']), commonOpts);
-      const openOpportunitiesP = safeCount(null, 'opportunities', tenant_id, (q) => q.not('stage', 'in', '("won","closed_won","lost","closed_lost")'), commonOpts);
+      const totalContactsP = profileQuery('totalContacts', () => safeCount(null, 'contacts', tenant_id, undefined, commonOpts));
+      const totalAccountsP = profileQuery('totalAccounts', () => safeCount(null, 'accounts', tenant_id, undefined, commonOpts));
+      const totalLeadsP = profileQuery('totalLeads', () => safeCount(null, 'leads', tenant_id, undefined, commonOpts));
+      const totalOpportunitiesP = profileQuery('totalOpportunities', () => safeCount(null, 'opportunities', tenant_id, undefined, commonOpts));
+      const openLeadsP = profileQuery('openLeads', () => safeCount(null, 'leads', tenant_id, (q) => q.not('status', 'in', '("converted","lost")'), commonOpts));
+      const wonOpportunitiesP = profileQuery('wonOpportunities', () => safeCount(null, 'opportunities', tenant_id, (q) => q.in('stage', ['won', 'closed_won']), commonOpts));
+      const openOpportunitiesP = profileQuery('openOpportunities', () => safeCount(null, 'opportunities', tenant_id, (q) => q.not('stage', 'in', '("won","closed_won","lost","closed_lost")'), commonOpts));
 
       // New leads last 30 days (exact count for accuracy)
       const since = new Date();
       since.setDate(since.getDate() - 30);
       const sinceISO = since.toISOString();
-      const newLeadsP = (async () => {
+      const newLeadsP = profileQuery('newLeadsLast30', async () => {
         try {
           let q = supabase.from('leads').select('*', { count: 'exact', head: true });
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
@@ -523,10 +538,10 @@ export default function createReportRoutes(_pgPool) {
           const { count } = await q;
           return count ?? 0;
         } catch { return 0; }
-      })();
+      });
 
       // Activities last 30 days (exact count for accuracy)
-      const recentActivitiesCountP = (async () => {
+      const recentActivitiesCountP = profileQuery('activitiesLast30', async () => {
         try {
           let q = supabase.from('activities').select('*', { count: 'exact', head: true });
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
@@ -537,12 +552,12 @@ export default function createReportRoutes(_pgPool) {
           const { count } = await q;
           return count ?? 0;
         } catch { return 0; }
-      })();
+      });
 
       // Recent small lists (narrow columns, limited)
       // OPTIMIZATION: Skip if recentActivities widget is hidden
       const needsActivities = visibleWidgets.length === 0 || widgetSet.has('recentActivities');
-      const recentActivitiesP = needsActivities ? (async () => {
+      const recentActivitiesP = needsActivities ? profileQuery('recentActivities', async () => {
         try {
           let q = supabase.from('activities').select('id,type,subject,status,created_at,created_date,assigned_to').order('created_at', { ascending: false }).limit(10);
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
@@ -552,7 +567,7 @@ export default function createReportRoutes(_pgPool) {
           const { data } = await q;
           return Array.isArray(data) ? data : [];
         } catch { return []; }
-      })() : Promise.resolve([]);
+      }) : Promise.resolve([]);
       /**
        * Recent Leads Query (Enhanced for Widgets)
        * Limit: 100 (was 5) - Provides enough data for:
@@ -563,7 +578,7 @@ export default function createReportRoutes(_pgPool) {
        * OPTIMIZATION: Skip if neither leadSourceChart nor leadAgeReport widgets are visible
        */
       const needsLeads = visibleWidgets.length === 0 || widgetSet.has('leadSourceChart') || widgetSet.has('leadAgeReport');
-      const recentLeadsP = needsLeads ? (async () => {
+      const recentLeadsP = needsLeads ? profileQuery('recentLeads', async () => {
         try {
           let q = supabase.from('leads').select('id,first_name,last_name,company,email,phone,created_date,status,source,is_test_data').order('created_date', { ascending: false }).limit(100);
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
@@ -573,7 +588,7 @@ export default function createReportRoutes(_pgPool) {
           const { data } = await q;
           return Array.isArray(data) ? data : [];
         } catch { return []; }
-      })() : Promise.resolve([]);
+      }) : Promise.resolve([]);
       /**
        * Recent Opportunities Query (Enhanced for Widgets)
        * Limit: 50 (was 5) - Better sample for SalesPipeline and opportunity widgets
@@ -582,7 +597,7 @@ export default function createReportRoutes(_pgPool) {
        * OPTIMIZATION: Skip if salesPipeline widget is hidden
        */
       const needsOpportunities = visibleWidgets.length === 0 || widgetSet.has('salesPipeline');
-      const recentOppsP = needsOpportunities ? (async () => {
+      const recentOppsP = needsOpportunities ? profileQuery('recentOpportunities', async () => {
         try {
           let q = supabase.from('opportunities').select('id,name,amount,stage,probability,updated_at,is_test_data').order('updated_at', { ascending: false }).limit(50);
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
@@ -592,7 +607,7 @@ export default function createReportRoutes(_pgPool) {
           const { data } = await q;
           return Array.isArray(data) ? data : [];
         } catch { return []; }
-      })() : Promise.resolve([]);
+      }) : Promise.resolve([]);
       
       /**
        * Funnel Aggregates from Materialized View
@@ -602,7 +617,7 @@ export default function createReportRoutes(_pgPool) {
        * Usage: SalesPipeline widget, funnel reports, stage analytics
        * Performance: <10ms (pre-computed, indexed)
        */
-      const funnelAggregatesP = (async () => {
+      const funnelAggregatesP = profileQuery('funnelAggregates', async () => {
         try {
           let q = supabase.from('dashboard_funnel_counts').select('*');
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
@@ -612,7 +627,7 @@ export default function createReportRoutes(_pgPool) {
           if (process.env.NODE_ENV === 'development') logger.warn('[dashboard-bundle] Funnel MV unavailable:', err.message);
           return null;
         }
-      })();
+      });
 
       /**
        * Lead Source Aggregation (NEW in v3.6.18)
@@ -624,7 +639,7 @@ export default function createReportRoutes(_pgPool) {
        * OPTIMIZATION: Skip if leadSourceChart widget is hidden
        */
       const needsLeadSources = visibleWidgets.length === 0 || widgetSet.has('leadSourceChart');
-      const leadSourcesP = needsLeadSources ? (async () => {
+      const leadSourcesP = needsLeadSources ? profileQuery('leadSources', async () => {
         try {
           logger.debug('[dashboard-bundle] Fetching lead sources for tenant:', tenant_id);
           let q = supabase.from('leads').select('source');
@@ -652,10 +667,10 @@ export default function createReportRoutes(_pgPool) {
           logger.error('[dashboard-bundle] Lead sources fetch error:', err);
           return {};
         }
-      })() : Promise.resolve({});
+      }) : Promise.resolve({});
 
       // Fetch ALL opportunities for pipeline value calculation
-      const allOppsP = (async () => {
+      const allOppsP = profileQuery('allOpportunities', async () => {
         try {
           let q = supabase.from('opportunities').select('id,name,amount,stage,created_date');
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
@@ -665,7 +680,7 @@ export default function createReportRoutes(_pgPool) {
           const { data } = await q;
           return Array.isArray(data) ? data : [];
         } catch { return []; }
-      })();
+      });
 
       const [
         totalContacts,
@@ -763,7 +778,23 @@ export default function createReportRoutes(_pgPool) {
           logger.warn(`[dashboard-bundle] Redis cache write error: ${err.message}`);
         }
       }
-      res.json({ status: 'success', data: bundle, cached: false });
+
+      // Include profiling data if enabled
+      const response = { status: 'success', data: bundle, cached: false };
+      if (enableProfiling && Object.keys(queryTimes).length > 0) {
+        // Sort queries by time descending to show slowest first
+        const sortedTimes = Object.entries(queryTimes)
+          .sort(([, a], [, b]) => b - a)
+          .reduce((acc, [key, value]) => ({ ...acc, [key]: `${value}ms` }), {});
+        response.profile = {
+          queryTimes: sortedTimes,
+          totalQueries: Object.keys(queryTimes).length,
+          slowestQuery: Object.entries(queryTimes).sort(([, a], [, b]) => b - a)[0]?.[0] || null,
+          totalDbTime: Object.values(queryTimes).reduce((a, b) => a + b, 0) + 'ms',
+        };
+        logger.info('[dashboard-bundle] Profile:', response.profile);
+      }
+      res.json(response);
     } catch (error) {
       res.status(500).json({
         status: 'error',

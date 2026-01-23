@@ -73,20 +73,47 @@ function RecentActivities(props) {
   const flipAttemptedRef = useRef(false);
 
   const backgroundScheduledRef = useRef(false);
+  
+  // Race condition fix: Track mounted state to prevent state updates after unmount
+  const isMountedRef = useRef(true);
+  const backgroundTimeoutRef = useRef(null);
+  
+  // Cleanup on unmount
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (backgroundTimeoutRef.current) {
+        clearTimeout(backgroundTimeoutRef.current);
+        backgroundTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   const fetchActivities = useCallback(async (forceFull = false) => {
+    // Race condition fix: Don't update state if unmounted
+    if (!isMountedRef.current) return;
+    
     // Use prefetched data immediately without waiting for auth
     // (Dashboard already handles auth before passing prefetched data)
     if (!forceFull && Array.isArray(props?.prefetchedActivities) && props.prefetchedActivities.length > 0) {
       const pref = props.prefetchedActivities;
+      if (!isMountedRef.current) return;
       setActivities(pref.map(a => ({ ...a })));
       setLastUpdated(Date.now());
       setLoading(false);
       if (!backgroundScheduledRef.current) {
         backgroundScheduledRef.current = true;
-        setTimeout(() => {
+        // Clear any existing timeout before scheduling a new one
+        if (backgroundTimeoutRef.current) {
+          clearTimeout(backgroundTimeoutRef.current);
+        }
+        backgroundTimeoutRef.current = setTimeout(() => {
+          backgroundTimeoutRef.current = null;
           // Single background refresh to hydrate with full data
-          fetchActivities(true);
+          if (isMountedRef.current) {
+            fetchActivities(true);
+          }
         }, 300);
       }
       return;
@@ -97,12 +124,12 @@ function RecentActivities(props) {
       return;
     }
 
-    setLoading(true);
+    if (isMountedRef.current) setLoading(true);
     try {
       // Guard: Don't fetch if no tenant_id is present
       // When forceFull (background refresh), just return silently to preserve prefetched data
       if (!memoTenantFilter?.tenant_id) {
-        if (!forceFull) {
+        if (!forceFull && isMountedRef.current) {
           // Only clear activities on initial load, not background refresh
           setActivities([]);
           setLastUpdated(Date.now());
@@ -126,6 +153,9 @@ function RecentActivities(props) {
         () => Activity.filter(effectiveFilter, "-created_date", 1000)
       );
 
+      // Race condition fix: Check mounted after async operation
+      if (!isMountedRef.current) return;
+
       const now = new Date();
       const toDueDate = (a) => {
         if (!a?.due_date) return null;
@@ -144,6 +174,8 @@ function RecentActivities(props) {
         const limited = flipCandidates.slice(0, 5);
         if (limited.length > 0) {
           for (const a of limited) {
+            // Check mounted before each async operation
+            if (!isMountedRef.current) return;
             await Activity.update(a.id, { status: "overdue" });
             a.status = "overdue";
           }
@@ -151,13 +183,15 @@ function RecentActivities(props) {
         flipAttemptedRef.current = true;
       }
 
+      // Final mounted check before setting state
+      if (!isMountedRef.current) return;
       setActivities(mutableActivities);
       setLastUpdated(Date.now());
     } catch (error) {
       console.error("RecentActivities: fetch failed:", error);
-      setActivities([]);
+      if (isMountedRef.current) setActivities([]);
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) setLoading(false);
     }
   }, [memoTenantFilter, memoShowTestData, cachedRequest, props.prefetchedActivities, userLoading, authCookiesReady]);
 
@@ -214,17 +248,21 @@ function RecentActivities(props) {
       'cancelled': 'cancelled',
     };
     
-    const counts = activitiesInWindow.reduce((acc, a) => {
-      const k = a.status || "scheduled";
+    // Defensive guard: ensure activitiesInWindow is an array before reducing
+    const safeActivities = Array.isArray(activitiesInWindow) ? activitiesInWindow : [];
+    const counts = safeActivities.reduce((acc, a) => {
+      const k = a?.status || "scheduled";
       acc[k] = (acc[k] || 0) + 1;
       return acc;
     }, {});
     
+    // Defensive guard: ensure visibleActivityCards is an array
+    const safeCards = Array.isArray(visibleActivityCards) ? visibleActivityCards : [];
     // Only show statuses that are visible in preferences
-    return visibleActivityCards.map(card => {
-      const chartKey = statusKeyMap[card.statusKey] || card.statusKey;
+    return safeCards.map(card => {
+      const chartKey = statusKeyMap[card?.statusKey] || card?.statusKey || 'scheduled';
       return { 
-        status: card.label, 
+        status: card?.label || chartKey, 
         key: chartKey, 
         value: counts[chartKey] || 0 
       };
@@ -379,8 +417,8 @@ function RecentActivities(props) {
               </div>
             ) : (
               <>
-                <div className="space-y-4">
-                  {activitiesInWindow.slice(0, 10).map((activity) => {
+                <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                  {activitiesInWindow.map((activity) => {
                     const Icon = activityIcons[activity.type] || ActivityIcon;
                     const colorClass = activityColors[activity.type] || activityColors.note;
 

@@ -3,6 +3,9 @@
  * Usage: node scripts/run-sql.js <path-to-sql>
  */
 
+// Disable TLS certificate verification for self-signed certs
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
