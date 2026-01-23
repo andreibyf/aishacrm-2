@@ -134,6 +134,31 @@ export const VALID_ENTITY_TYPES = new Set([
  * @typedef {'state_proposed'|'state_applied'|'escalation_opened'|'escalation_closed'|'action_candidate'|'signal_recorded'} HistoryEventType
  */
 
+/**
+ * Action origin classification (Agent-Task Safety Contract)
+ * 
+ * All actions AiSHA performs MUST be classified with an action origin
+ * to ensure safe coexistence with Office Agents and user-instructed tasks.
+ * 
+ * @typedef {'user_directed'|'care_autonomous'} ActionOrigin
+ * 
+ * - user_directed: Initiated by explicit user instruction (e.g., Office Agent task)
+ * - care_autonomous: Initiated by AiSHA without explicit user instruction (Hands-Off Mode)
+ * 
+ * Hard rules:
+ * 1. care_autonomous actions MUST pass Hands-Off Mode gates
+ * 2. user_directed actions MUST NOT be blocked except for hard safety prohibitions
+ * 3. On uncertainty, fail safe: treat as care_autonomous and escalate
+ * 
+ * Audit requirements:
+ * - Every action must record: action_origin, reason, policy_gate_result
+ */
+
+/**
+ * Policy gate result for action execution
+ * @typedef {'allowed'|'escalated'|'blocked'} PolicyGateResult
+ */
+
 export default {
   VALID_CARE_STATES,
   VALID_ENTITY_TYPES

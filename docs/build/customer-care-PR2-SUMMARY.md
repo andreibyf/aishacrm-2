@@ -48,6 +48,10 @@ PR2 implements the **canonical C.A.R.E. state engine** as pure logic with zero r
 - `CareStateRecord` — Full state record (matches DB schema)
 - `CareTransitionProposal` — State change proposal with reason
 - `CareHistoryEvent` — History audit event
+- `ActionOrigin` — Action classification (user_directed | care_autonomous)
+- `PolicyGateResult` — Gate result (allowed | escalated | blocked)
+
+**Note:** ActionOrigin classification required for PR7 (Action Executor) per Agent-Task Safety Contract.
 
 ---
 
