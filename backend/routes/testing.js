@@ -400,7 +400,7 @@ export default function createTestingRoutes(_pgPool) {
         { method: 'GET', path: `/api/contacts?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/leads?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/opportunities?tenant_id={TENANT_ID}` },
-        { method: 'GET', path: `/api/activities?tenant_id={TENANT_ID}` },
+        // NOTE: activities has no v1 route, only v2 - tested below
         { method: 'GET', path: `/api/notes?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/clients?tenant_id={TENANT_ID}` },
         

@@ -8,6 +8,8 @@ import fetch from "node-fetch";
 import { getSupabaseClient } from "../lib/supabase-db.js";
 // Import auth middleware to require an authenticated user for admin routes.
 import { requireAuthCookie } from "../middleware/authCookie.js";
+import { authenticateRequest } from "../middleware/authenticate.js";
+import { requireSuperAdminRole } from "../middleware/validateTenant.js";
 import { resolveLLMApiKey, generateChatCompletion, selectLLMConfigForTenant } from "../lib/aiEngine/index.js";
 import { logLLMActivity } from "../lib/aiEngine/activityLogger.js";
 import { executeMcpToolViaBraid, getExecutionStrategy } from "../lib/braidMcpBridge.js";
@@ -330,8 +332,8 @@ export default function createMCPRoutes(_pgPool) {
   });
 
   // Admin: consolidated MCP status (health + memory + queue + adapters)
-  // Requires authentication (JWT cookie) and ADMIN_EMAILS authorization
-  router.get("/admin/status", requireAuthCookie, requireAdmin, async (_req, res) => {
+  // Requires authentication (Supabase JWT or cookie) and superadmin role
+  router.get("/admin/status", authenticateRequest, requireSuperAdminRole, async (_req, res) => {
     const base = getMcpBaseUrl();
     try {
       // Concurrently fetch health, memory, queue stats, and adapter list from MCP.
