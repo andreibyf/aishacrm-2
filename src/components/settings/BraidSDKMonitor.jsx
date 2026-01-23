@@ -124,21 +124,21 @@ function ToolRow({ tool, onClick }) {
     >
       <div className="flex items-center gap-3">
         <div className={`w-2 h-2 rounded-full ${
-          tool.status === 'healthy' ? 'bg-green-500' :
-          tool.status === 'degraded' ? 'bg-yellow-500' :
-          tool.status === 'warning' ? 'bg-orange-500' : 'bg-red-500'
+          (tool.healthStatus || tool.status) === 'healthy' ? 'bg-green-500' :
+          (tool.healthStatus || tool.status) === 'degraded' ? 'bg-yellow-500' :
+          (tool.healthStatus || tool.status) === 'warning' ? 'bg-orange-500' : 'bg-red-500'
         }`} />
         <div>
-          <p className="font-medium text-sm">{(tool.tool || 'Unknown').replace(/_/g, ' ')}</p>
-          <p className="text-xs text-muted-foreground">{(tool.total || 0).toLocaleString()} calls</p>
+          <p className="font-medium text-sm">{(tool.name || tool.tool || 'Unknown').replace(/_/g, ' ')}</p>
+          <p className="text-xs text-muted-foreground">{(tool.calls || tool.total || 0).toLocaleString()} calls</p>
         </div>
       </div>
       <div className="flex items-center gap-4">
         <div className="text-right">
-          <p className="text-sm">{(tool.successRate * 100).toFixed(1)}%</p>
-          <p className="text-xs text-muted-foreground">{tool.avgLatency}ms avg</p>
+          <p className="text-sm">{(tool.successRate || 0).toFixed(1)}%</p>
+          <p className="text-xs text-muted-foreground">{tool.avgLatencyMs || tool.avgLatency || 0}ms avg</p>
         </div>
-        <HealthBadge status={tool.status} score={tool.health} />
+        <HealthBadge status={tool.healthStatus || tool.status} score={tool.healthScore || tool.health} />
         <ChevronRight className="w-4 h-4 text-muted-foreground" />
       </div>
     </div>
@@ -201,6 +201,11 @@ export default function BraidSDKMonitor() {
   
   // Fetch tool impact when selected
   const fetchToolImpact = useCallback(async (toolName) => {
+    // Guard against undefined toolName
+    if (!toolName) {
+      console.warn('fetchToolImpact called with undefined toolName');
+      return;
+    }
     try {
       const data = await fetchWithAuth(`/api/braid/graph/tool/${toolName}/impact`);
       setSelectedTool({ name: toolName, ...data });
@@ -431,11 +436,11 @@ export default function BraidSDKMonitor() {
             </CardHeader>
             <CardContent>
               <div className="divide-y">
-                {tm?.tools?.slice(0, 15).map(tool => (
+                {tm?.tools?.slice(0, 15).map((tool, idx) => (
                   <ToolRow 
-                    key={tool.tool} 
+                    key={tool.name || tool.tool || idx} 
                     tool={tool} 
-                    onClick={(t) => fetchToolImpact(t.tool)} 
+                    onClick={(t) => fetchToolImpact(t.name || t.tool)} 
                   />
                 ))}
                 {(!tm?.tools || tm.tools.length === 0) && (
