@@ -2096,12 +2096,12 @@ export const TOOL_GRAPH = {
   create_account: {
     category: 'ACCOUNTS',
     dependencies: [],
-    inputs: [],
+    inputs: ['name', 'industry'],
     outputs: ['account'],
     effects: ['create'],
     description: 'Create a new account/company record'
   },
-  get_account: {
+  get_account_details: {
     category: 'ACCOUNTS',
     dependencies: [],
     inputs: ['account_id'],
@@ -2109,41 +2109,197 @@ export const TOOL_GRAPH = {
     effects: ['read'],
     description: 'Retrieve account details by ID'
   },
+  list_accounts: {
+    category: 'ACCOUNTS',
+    dependencies: [],
+    inputs: ['limit', 'offset'],
+    outputs: ['accounts[]'],
+    effects: ['read'],
+    description: 'List accounts with pagination'
+  },
   search_accounts: {
     category: 'ACCOUNTS',
     dependencies: [],
-    inputs: [],
+    inputs: ['query'],
     outputs: ['accounts[]'],
     effects: ['read'],
-    description: 'Search accounts with filters'
+    description: 'Search accounts by name or other fields'
+  },
+  search_accounts_by_status: {
+    category: 'ACCOUNTS',
+    dependencies: [],
+    inputs: ['status'],
+    outputs: ['accounts[]'],
+    effects: ['read'],
+    description: 'Search accounts filtered by status'
   },
   update_account: {
     category: 'ACCOUNTS',
-    dependencies: ['get_account'],
-    inputs: ['account_id'],
+    dependencies: ['get_account_details'],
+    inputs: ['account_id', 'updates'],
     outputs: ['account'],
     effects: ['update'],
     description: 'Update account fields'
   },
   delete_account: {
     category: 'ACCOUNTS',
-    dependencies: ['get_account'],
+    dependencies: ['get_account_details'],
     inputs: ['account_id'],
     outputs: [],
     effects: ['delete'],
     description: 'Delete an account (cascades to related records)'
   },
 
+  // ========== ACTIVITIES ==========
+  create_activity: {
+    category: 'ACTIVITIES',
+    dependencies: [],
+    inputs: ['subject', 'activity_type', 'due_date', 'entity_type', 'entity_id'],
+    outputs: ['activity'],
+    effects: ['create'],
+    description: 'Schedule an activity (call, meeting, task, email)'
+  },
+  get_activity_details: {
+    category: 'ACTIVITIES',
+    dependencies: [],
+    inputs: ['activity_id'],
+    outputs: ['activity'],
+    effects: ['read'],
+    description: 'Retrieve activity details by ID'
+  },
+  list_activities: {
+    category: 'ACTIVITIES',
+    dependencies: [],
+    inputs: ['status', 'limit'],
+    outputs: ['activities[]'],
+    effects: ['read'],
+    description: 'List activities with optional status filter'
+  },
+  search_activities: {
+    category: 'ACTIVITIES',
+    dependencies: [],
+    inputs: ['query'],
+    outputs: ['activities[]'],
+    effects: ['read'],
+    description: 'Search activities by subject or body'
+  },
+  get_upcoming_activities: {
+    category: 'ACTIVITIES',
+    dependencies: [],
+    inputs: ['assigned_to', 'days'],
+    outputs: ['activities[]'],
+    effects: ['read'],
+    description: 'Get upcoming activities for a user'
+  },
+  update_activity: {
+    category: 'ACTIVITIES',
+    dependencies: ['get_activity_details'],
+    inputs: ['activity_id', 'updates'],
+    outputs: ['activity'],
+    effects: ['update'],
+    description: 'Update activity fields'
+  },
+  mark_activity_complete: {
+    category: 'ACTIVITIES',
+    dependencies: ['get_activity_details'],
+    inputs: ['activity_id'],
+    outputs: ['activity'],
+    effects: ['update'],
+    description: 'Mark activity as completed'
+  },
+  schedule_meeting: {
+    category: 'ACTIVITIES',
+    dependencies: [],
+    inputs: ['subject', 'date', 'attendees'],
+    outputs: ['activity'],
+    effects: ['create'],
+    description: 'Schedule a new meeting with attendees'
+  },
+  delete_activity: {
+    category: 'ACTIVITIES',
+    dependencies: ['get_activity_details'],
+    inputs: ['activity_id'],
+    outputs: [],
+    effects: ['delete'],
+    description: 'Delete an activity'
+  },
+
+  // ========== BIZDEV SOURCES ==========
+  create_bizdev_source: {
+    category: 'BIZDEV',
+    dependencies: [],
+    inputs: ['source_name', 'company_name', 'contact_name'],
+    outputs: ['bizdev_source'],
+    effects: ['create'],
+    description: 'Create a new business development source'
+  },
+  get_bizdev_source_details: {
+    category: 'BIZDEV',
+    dependencies: [],
+    inputs: ['bizdev_source_id'],
+    outputs: ['bizdev_source'],
+    effects: ['read'],
+    description: 'Retrieve bizdev source details by ID'
+  },
+  list_bizdev_sources: {
+    category: 'BIZDEV',
+    dependencies: [],
+    inputs: ['status', 'priority'],
+    outputs: ['bizdev_sources[]'],
+    effects: ['read'],
+    description: 'List bizdev sources with filters'
+  },
+  search_bizdev_sources: {
+    category: 'BIZDEV',
+    dependencies: [],
+    inputs: ['query'],
+    outputs: ['bizdev_sources[]'],
+    effects: ['read'],
+    description: 'Search bizdev sources by name or company'
+  },
+  update_bizdev_source: {
+    category: 'BIZDEV',
+    dependencies: ['get_bizdev_source_details'],
+    inputs: ['bizdev_source_id', 'updates'],
+    outputs: ['bizdev_source'],
+    effects: ['update'],
+    description: 'Update bizdev source fields'
+  },
+  promote_bizdev_source_to_lead: {
+    category: 'BIZDEV',
+    dependencies: ['get_bizdev_source_details'],
+    inputs: ['bizdev_source_id', 'notes'],
+    outputs: ['lead'],
+    effects: ['create', 'update'],
+    description: 'Promote a bizdev source to a lead'
+  },
+  archive_bizdev_sources: {
+    category: 'BIZDEV',
+    dependencies: [],
+    inputs: ['bizdev_source_ids[]'],
+    outputs: [],
+    effects: ['update'],
+    description: 'Archive multiple bizdev sources'
+  },
+  delete_bizdev_source: {
+    category: 'BIZDEV',
+    dependencies: ['get_bizdev_source_details'],
+    inputs: ['bizdev_source_id'],
+    outputs: [],
+    effects: ['delete'],
+    description: 'Delete a bizdev source'
+  },
+
   // ========== CONTACTS ==========
   create_contact: {
     category: 'CONTACTS',
-    dependencies: ['get_account'],
-    inputs: ['account_id'],
+    dependencies: ['get_account_details'],
+    inputs: ['first_name', 'last_name', 'account_id'],
     outputs: ['contact'],
     effects: ['create'],
     description: 'Create a contact linked to an account'
   },
-  get_contact: {
+  get_contact_details: {
     category: 'CONTACTS',
     dependencies: [],
     inputs: ['contact_id'],
@@ -2157,7 +2313,23 @@ export const TOOL_GRAPH = {
     inputs: ['name'],
     outputs: ['contact'],
     effects: ['read'],
-    description: 'Find and retrieve a contact by their name. Returns full contact details including email, phone, job_title, address.'
+    description: 'Find and retrieve a contact by name'
+  },
+  list_contacts_for_account: {
+    category: 'CONTACTS',
+    dependencies: ['get_account_details'],
+    inputs: ['account_id'],
+    outputs: ['contacts[]'],
+    effects: ['read'],
+    description: 'List all contacts for an account'
+  },
+  list_all_contacts: {
+    category: 'CONTACTS',
+    dependencies: [],
+    inputs: ['limit', 'offset'],
+    outputs: ['contacts[]'],
+    effects: ['read'],
+    description: 'List all contacts with pagination'
   },
   search_contacts: {
     category: 'CONTACTS',
@@ -2165,35 +2337,159 @@ export const TOOL_GRAPH = {
     inputs: ['query'],
     outputs: ['contacts[]'],
     effects: ['read'],
-    description: 'Search contacts by name or other fields. Returns full contact details.'
+    description: 'Search contacts by name or email'
+  },
+  search_contacts_by_status: {
+    category: 'CONTACTS',
+    dependencies: [],
+    inputs: ['status'],
+    outputs: ['contacts[]'],
+    effects: ['read'],
+    description: 'Search contacts filtered by status'
   },
   update_contact: {
     category: 'CONTACTS',
-    dependencies: ['get_contact'],
-    inputs: ['contact_id'],
+    dependencies: ['get_contact_details'],
+    inputs: ['contact_id', 'updates'],
     outputs: ['contact'],
     effects: ['update'],
     description: 'Update contact fields'
   },
   delete_contact: {
     category: 'CONTACTS',
-    dependencies: ['get_contact'],
+    dependencies: ['get_contact_details'],
     inputs: ['contact_id'],
     outputs: [],
     effects: ['delete'],
     description: 'Delete a contact'
   },
 
+  // ========== DOCUMENTS ==========
+  create_document: {
+    category: 'DOCUMENTS',
+    dependencies: [],
+    inputs: ['name', 'entity_type', 'entity_id'],
+    outputs: ['document'],
+    effects: ['create'],
+    description: 'Create a document record attached to an entity'
+  },
+  get_document_details: {
+    category: 'DOCUMENTS',
+    dependencies: [],
+    inputs: ['document_id'],
+    outputs: ['document'],
+    effects: ['read'],
+    description: 'Retrieve document details by ID'
+  },
+  list_documents: {
+    category: 'DOCUMENTS',
+    dependencies: [],
+    inputs: ['entity_type', 'entity_id'],
+    outputs: ['documents[]'],
+    effects: ['read'],
+    description: 'List documents for an entity'
+  },
+  search_documents: {
+    category: 'DOCUMENTS',
+    dependencies: [],
+    inputs: ['query'],
+    outputs: ['documents[]'],
+    effects: ['read'],
+    description: 'Search documents by name or content'
+  },
+  update_document: {
+    category: 'DOCUMENTS',
+    dependencies: ['get_document_details'],
+    inputs: ['document_id', 'updates'],
+    outputs: ['document'],
+    effects: ['update'],
+    description: 'Update document metadata'
+  },
+  analyze_document: {
+    category: 'DOCUMENTS',
+    dependencies: ['get_document_details'],
+    inputs: ['document_id', 'analysis_type'],
+    outputs: ['analysis'],
+    effects: ['read'],
+    description: 'Run AI analysis on a document'
+  },
+  delete_document: {
+    category: 'DOCUMENTS',
+    dependencies: ['get_document_details'],
+    inputs: ['document_id'],
+    outputs: [],
+    effects: ['delete'],
+    description: 'Delete a document'
+  },
+
+  // ========== EMPLOYEES ==========
+  create_employee: {
+    category: 'EMPLOYEES',
+    dependencies: [],
+    inputs: ['name', 'email', 'role'],
+    outputs: ['employee'],
+    effects: ['create'],
+    description: 'Create a new employee record'
+  },
+  get_employee_details: {
+    category: 'EMPLOYEES',
+    dependencies: [],
+    inputs: ['employee_id'],
+    outputs: ['employee'],
+    effects: ['read'],
+    description: 'Retrieve employee details by ID'
+  },
+  list_employees: {
+    category: 'EMPLOYEES',
+    dependencies: [],
+    inputs: ['role', 'department'],
+    outputs: ['employees[]'],
+    effects: ['read'],
+    description: 'List employees with optional filters'
+  },
+  search_employees: {
+    category: 'EMPLOYEES',
+    dependencies: [],
+    inputs: ['query'],
+    outputs: ['employees[]'],
+    effects: ['read'],
+    description: 'Search employees by name or email'
+  },
+  get_employee_assignments: {
+    category: 'EMPLOYEES',
+    dependencies: ['get_employee_details'],
+    inputs: ['employee_id'],
+    outputs: ['assignments'],
+    effects: ['read'],
+    description: 'Get all records assigned to an employee'
+  },
+  update_employee: {
+    category: 'EMPLOYEES',
+    dependencies: ['get_employee_details'],
+    inputs: ['employee_id', 'updates'],
+    outputs: ['employee'],
+    effects: ['update'],
+    description: 'Update employee information'
+  },
+  delete_employee: {
+    category: 'EMPLOYEES',
+    dependencies: ['get_employee_details'],
+    inputs: ['employee_id'],
+    outputs: [],
+    effects: ['delete'],
+    description: 'Delete or deactivate an employee'
+  },
+
   // ========== LEADS ==========
   create_lead: {
     category: 'LEADS',
     dependencies: [],
-    inputs: [],
+    inputs: ['name', 'email', 'company'],
     outputs: ['lead'],
     effects: ['create'],
     description: 'Create a new lead'
   },
-  get_lead: {
+  get_lead_details: {
     category: 'LEADS',
     dependencies: [],
     inputs: ['lead_id'],
@@ -2201,25 +2497,41 @@ export const TOOL_GRAPH = {
     effects: ['read'],
     description: 'Retrieve lead details by ID'
   },
+  list_leads: {
+    category: 'LEADS',
+    dependencies: [],
+    inputs: ['status', 'limit'],
+    outputs: ['leads[]'],
+    effects: ['read'],
+    description: 'List leads with optional status filter'
+  },
   search_leads: {
     category: 'LEADS',
     dependencies: [],
-    inputs: [],
+    inputs: ['query'],
     outputs: ['leads[]'],
     effects: ['read'],
-    description: 'Search leads with filters'
+    description: 'Search leads by name or company'
+  },
+  search_leads_by_status: {
+    category: 'LEADS',
+    dependencies: [],
+    inputs: ['status'],
+    outputs: ['leads[]'],
+    effects: ['read'],
+    description: 'Search leads filtered by status'
   },
   update_lead: {
     category: 'LEADS',
-    dependencies: ['get_lead'],
-    inputs: ['lead_id'],
+    dependencies: ['get_lead_details'],
+    inputs: ['lead_id', 'updates'],
     outputs: ['lead'],
     effects: ['update'],
     description: 'Update lead fields'
   },
   qualify_lead: {
     category: 'LEADS',
-    dependencies: ['get_lead'],
+    dependencies: ['get_lead_details'],
     inputs: ['lead_id'],
     outputs: ['lead'],
     effects: ['update'],
@@ -2227,31 +2539,141 @@ export const TOOL_GRAPH = {
   },
   convert_lead_to_account: {
     category: 'LEADS',
-    dependencies: ['get_lead', 'qualify_lead'],
-    inputs: ['lead_id'],
+    dependencies: ['get_lead_details', 'qualify_lead'],
+    inputs: ['lead_id', 'create_account', 'create_opportunity'],
     outputs: ['account', 'contact', 'opportunity'],
     effects: ['create', 'update'],
     description: 'Convert qualified lead to account with optional contact and opportunity'
   },
   delete_lead: {
     category: 'LEADS',
-    dependencies: ['get_lead'],
+    dependencies: ['get_lead_details'],
     inputs: ['lead_id'],
     outputs: [],
     effects: ['delete'],
     description: 'Delete a lead'
   },
 
+  // ========== LIFECYCLE (v3.0.0) ==========
+  advance_to_lead: {
+    category: 'LIFECYCLE',
+    dependencies: ['get_bizdev_source_details'],
+    inputs: ['bizdev_source_id', 'notes'],
+    outputs: ['lead'],
+    effects: ['create', 'update'],
+    description: 'v3.0 Step 1: Promote BizDev Source to Lead'
+  },
+  advance_to_qualified: {
+    category: 'LIFECYCLE',
+    dependencies: ['get_lead_details'],
+    inputs: ['lead_id', 'qualification_notes'],
+    outputs: ['lead'],
+    effects: ['update'],
+    description: 'v3.0 Step 2: Mark Lead as qualified'
+  },
+  advance_to_account: {
+    category: 'LIFECYCLE',
+    dependencies: ['get_lead_details', 'qualify_lead'],
+    inputs: ['lead_id', 'create_account', 'create_opportunity'],
+    outputs: ['contact', 'account', 'opportunity'],
+    effects: ['create', 'update'],
+    description: 'v3.0 Step 3: Convert Lead to Contact + Account + Opportunity'
+  },
+  advance_opportunity_stage: {
+    category: 'LIFECYCLE',
+    dependencies: ['get_opportunity_details'],
+    inputs: ['opportunity_id', 'new_stage'],
+    outputs: ['opportunity'],
+    effects: ['update'],
+    description: 'v3.0 Step 4: Move opportunity through pipeline stages'
+  },
+  full_lifecycle_advance: {
+    category: 'LIFECYCLE',
+    dependencies: ['advance_to_lead', 'advance_to_qualified', 'advance_to_account'],
+    inputs: ['bizdev_source_id'],
+    outputs: ['contact', 'account', 'opportunity'],
+    effects: ['create', 'update'],
+    description: 'Execute complete BizDev→Lead→Account lifecycle'
+  },
+
+  // ========== NAVIGATION ==========
+  navigate_to_page: {
+    category: 'NAVIGATION',
+    dependencies: [],
+    inputs: ['page', 'record_identifier'],
+    outputs: ['navigation_result'],
+    effects: ['read'],
+    description: 'Navigate user to a CRM page or record'
+  },
+  get_current_page: {
+    category: 'NAVIGATION',
+    dependencies: [],
+    inputs: [],
+    outputs: ['page_info'],
+    effects: ['read'],
+    description: 'Get current page the user is viewing'
+  },
+
+  // ========== NOTES ==========
+  create_note: {
+    category: 'NOTES',
+    dependencies: [],
+    inputs: ['title', 'content', 'entity_type', 'entity_id', 'note_type'],
+    outputs: ['note'],
+    effects: ['create'],
+    description: 'Create a note attached to a CRM record'
+  },
+  get_note_details: {
+    category: 'NOTES',
+    dependencies: [],
+    inputs: ['note_id'],
+    outputs: ['note'],
+    effects: ['read'],
+    description: 'Retrieve note details by ID'
+  },
+  get_notes_for_record: {
+    category: 'NOTES',
+    dependencies: [],
+    inputs: ['entity_type', 'entity_id'],
+    outputs: ['notes[]'],
+    effects: ['read'],
+    description: 'Get all notes for a specific record'
+  },
+  search_notes: {
+    category: 'NOTES',
+    dependencies: [],
+    inputs: ['query'],
+    outputs: ['notes[]'],
+    effects: ['read'],
+    description: 'Search notes by content or title'
+  },
+  update_note: {
+    category: 'NOTES',
+    dependencies: ['get_note_details'],
+    inputs: ['note_id', 'updates'],
+    outputs: ['note'],
+    effects: ['update'],
+    description: 'Update note content'
+  },
+  delete_note: {
+    category: 'NOTES',
+    dependencies: ['get_note_details'],
+    inputs: ['note_id'],
+    outputs: [],
+    effects: ['delete'],
+    description: 'Delete a note'
+  },
+
   // ========== OPPORTUNITIES ==========
   create_opportunity: {
     category: 'OPPORTUNITIES',
-    dependencies: ['get_account'],
-    inputs: ['account_id'],
+    dependencies: ['get_account_details'],
+    inputs: ['name', 'amount', 'account_id'],
     outputs: ['opportunity'],
     effects: ['create'],
     description: 'Create an opportunity for an account'
   },
-  get_opportunity: {
+  get_opportunity_details: {
     category: 'OPPORTUNITIES',
     dependencies: [],
     inputs: ['opportunity_id'],
@@ -2259,90 +2681,88 @@ export const TOOL_GRAPH = {
     effects: ['read'],
     description: 'Retrieve opportunity details by ID'
   },
+  list_opportunities_by_stage: {
+    category: 'OPPORTUNITIES',
+    dependencies: [],
+    inputs: ['stage'],
+    outputs: ['opportunities[]'],
+    effects: ['read'],
+    description: 'List opportunities filtered by stage'
+  },
   search_opportunities: {
     category: 'OPPORTUNITIES',
     dependencies: [],
-    inputs: [],
+    inputs: ['query'],
     outputs: ['opportunities[]'],
     effects: ['read'],
-    description: 'Search opportunities with filters'
+    description: 'Search opportunities by name'
+  },
+  search_opportunities_by_stage: {
+    category: 'OPPORTUNITIES',
+    dependencies: [],
+    inputs: ['stage'],
+    outputs: ['opportunities[]'],
+    effects: ['read'],
+    description: 'Search opportunities filtered by stage'
+  },
+  get_opportunity_forecast: {
+    category: 'OPPORTUNITIES',
+    dependencies: ['search_opportunities'],
+    inputs: [],
+    outputs: ['forecast'],
+    effects: ['read'],
+    description: 'Get probability-weighted revenue forecast'
   },
   update_opportunity: {
     category: 'OPPORTUNITIES',
-    dependencies: ['get_opportunity'],
-    inputs: ['opportunity_id'],
+    dependencies: ['get_opportunity_details'],
+    inputs: ['opportunity_id', 'updates'],
     outputs: ['opportunity'],
     effects: ['update'],
     description: 'Update opportunity fields'
   },
-  advance_opportunity_stage: {
+  mark_opportunity_won: {
     category: 'OPPORTUNITIES',
-    dependencies: ['get_opportunity'],
+    dependencies: ['get_opportunity_details'],
     inputs: ['opportunity_id'],
     outputs: ['opportunity'],
     effects: ['update'],
-    description: 'Move opportunity to next pipeline stage'
+    description: 'Mark opportunity as won'
   },
   delete_opportunity: {
     category: 'OPPORTUNITIES',
-    dependencies: ['get_opportunity'],
+    dependencies: ['get_opportunity_details'],
     inputs: ['opportunity_id'],
     outputs: [],
     effects: ['delete'],
     description: 'Delete an opportunity'
   },
 
-  // ========== ACTIVITIES ==========
-  create_activity: {
-    category: 'ACTIVITIES',
-    dependencies: [],
-    inputs: ['entity_type', 'entity_id'],
-    outputs: ['activity'],
-    effects: ['create'],
-    description: 'Schedule an activity (call, meeting, task, email)'
-  },
-  get_activity: {
-    category: 'ACTIVITIES',
-    dependencies: [],
-    inputs: ['activity_id'],
-    outputs: ['activity'],
+  // ========== REPORTS ==========
+  get_dashboard_bundle: {
+    category: 'REPORTS',
+    dependencies: ['search_accounts', 'search_leads', 'search_opportunities', 'search_activities'],
+    inputs: [],
+    outputs: ['dashboard_data'],
     effects: ['read'],
-    description: 'Retrieve activity details by ID'
+    description: 'Get aggregated dashboard data bundle'
   },
-  search_activities: {
-    category: 'ACTIVITIES',
+  get_health_summary: {
+    category: 'REPORTS',
     dependencies: [],
     inputs: [],
-    outputs: ['activities[]'],
+    outputs: ['health_summary'],
     effects: ['read'],
-    description: 'Search activities with filters'
+    description: 'Get CRM health summary'
   },
-  update_activity: {
-    category: 'ACTIVITIES',
-    dependencies: ['get_activity'],
-    inputs: ['activity_id'],
-    outputs: ['activity'],
-    effects: ['update'],
-    description: 'Update activity fields'
+  get_sales_report: {
+    category: 'REPORTS',
+    dependencies: ['search_opportunities'],
+    inputs: ['date_range'],
+    outputs: ['report'],
+    effects: ['read'],
+    description: 'Generate sales performance report'
   },
-  complete_activity: {
-    category: 'ACTIVITIES',
-    dependencies: ['get_activity'],
-    inputs: ['activity_id'],
-    outputs: ['activity'],
-    effects: ['update'],
-    description: 'Mark activity as completed'
-  },
-  delete_activity: {
-    category: 'ACTIVITIES',
-    dependencies: ['get_activity'],
-    inputs: ['activity_id'],
-    outputs: [],
-    effects: ['delete'],
-    description: 'Delete an activity'
-  },
-
-  // ========== REPORTS ==========
   get_pipeline_report: {
     category: 'REPORTS',
     dependencies: ['search_opportunities'],
@@ -2367,65 +2787,299 @@ export const TOOL_GRAPH = {
     effects: ['read'],
     description: 'Generate lead conversion funnel report'
   },
-  get_dashboard_metrics: {
+  get_revenue_forecasts: {
     category: 'REPORTS',
-    dependencies: ['search_accounts', 'search_leads', 'search_opportunities', 'search_activities'],
+    dependencies: ['search_opportunities'],
     inputs: [],
-    outputs: ['metrics'],
+    outputs: ['forecasts'],
     effects: ['read'],
-    description: 'Aggregate dashboard KPIs'
+    description: 'Generate revenue forecast projections'
+  },
+  clear_report_cache: {
+    category: 'REPORTS',
+    dependencies: [],
+    inputs: [],
+    outputs: [],
+    effects: ['update'],
+    description: 'Clear cached report data'
   },
 
-  // ========== AI/INTELLIGENCE ==========
-  ai_suggest_next_action: {
-    category: 'AI',
-    dependencies: ['get_account', 'search_activities', 'search_opportunities'],
+  // ========== SNAPSHOT ==========
+  fetch_tenant_snapshot: {
+    category: 'SNAPSHOT',
+    dependencies: [],
+    inputs: [],
+    outputs: ['snapshot'],
+    effects: ['read'],
+    description: 'Get high-level CRM data summary'
+  },
+  debug_probe: {
+    category: 'SNAPSHOT',
+    dependencies: [],
+    inputs: [],
+    outputs: ['probe_result'],
+    effects: ['read'],
+    description: 'Debug probe for troubleshooting'
+  },
+
+  // ========== SUGGESTIONS (AI Autonomous) ==========
+  suggest_next_actions: {
+    category: 'SUGGESTIONS',
+    dependencies: ['get_account_details', 'search_activities', 'search_opportunities'],
     inputs: ['entity_type', 'entity_id'],
     outputs: ['suggestions[]'],
     effects: ['read'],
     description: 'AI-powered next best action recommendations'
   },
-  ai_score_lead: {
-    category: 'AI',
-    dependencies: ['get_lead', 'search_leads'],
-    inputs: ['lead_id'],
-    outputs: ['score', 'factors'],
-    effects: ['read', 'update'],
-    description: 'AI-powered lead scoring'
-  },
-  ai_summarize_account: {
-    category: 'AI',
-    dependencies: ['get_account', 'search_contacts', 'search_opportunities', 'search_activities'],
-    inputs: ['account_id'],
-    outputs: ['summary'],
-    effects: ['read'],
-    description: 'AI-generated account summary and insights'
-  },
-  web_research: {
-    category: 'AI',
+  list_suggestions: {
+    category: 'SUGGESTIONS',
     dependencies: [],
-    inputs: ['company_name', 'domain'],
-    outputs: ['research_data'],
+    inputs: ['status'],
+    outputs: ['suggestions[]'],
     effects: ['read'],
-    description: 'Research company information from web sources'
+    description: 'List AI-generated suggestions'
+  },
+  get_suggestion_details: {
+    category: 'SUGGESTIONS',
+    dependencies: [],
+    inputs: ['suggestion_id'],
+    outputs: ['suggestion'],
+    effects: ['read'],
+    description: 'Get details of an AI suggestion'
+  },
+  get_suggestion_stats: {
+    category: 'SUGGESTIONS',
+    dependencies: [],
+    inputs: [],
+    outputs: ['stats'],
+    effects: ['read'],
+    description: 'Get suggestion statistics'
+  },
+  approve_suggestion: {
+    category: 'SUGGESTIONS',
+    dependencies: ['get_suggestion_details'],
+    inputs: ['suggestion_id', 'reviewer_notes'],
+    outputs: ['suggestion'],
+    effects: ['update'],
+    description: 'Approve a pending AI suggestion'
+  },
+  reject_suggestion: {
+    category: 'SUGGESTIONS',
+    dependencies: ['get_suggestion_details'],
+    inputs: ['suggestion_id', 'reason'],
+    outputs: ['suggestion'],
+    effects: ['update'],
+    description: 'Reject an AI suggestion'
+  },
+  apply_suggestion: {
+    category: 'SUGGESTIONS',
+    dependencies: ['get_suggestion_details', 'approve_suggestion'],
+    inputs: ['suggestion_id'],
+    outputs: ['result'],
+    effects: ['create', 'update'],
+    description: 'Execute an approved AI suggestion'
+  },
+  trigger_suggestion_generation: {
+    category: 'SUGGESTIONS',
+    dependencies: [],
+    inputs: ['trigger_id'],
+    outputs: ['suggestions[]'],
+    effects: ['create'],
+    description: 'Manually trigger AI suggestion generation'
   },
 
-  // ========== SYSTEM ==========
-  get_current_user: {
-    category: 'SYSTEM',
+  // ========== TELEPHONY ==========
+  initiate_call: {
+    category: 'TELEPHONY',
+    dependencies: [],
+    inputs: ['phone_number'],
+    outputs: ['call_result'],
+    effects: ['create'],
+    description: 'Initiate an AI-powered outbound call'
+  },
+  call_contact: {
+    category: 'TELEPHONY',
+    dependencies: ['get_contact_details'],
+    inputs: ['contact_id'],
+    outputs: ['call_result'],
+    effects: ['create'],
+    description: 'Call a contact by their ID'
+  },
+  check_calling_provider: {
+    category: 'TELEPHONY',
+    dependencies: [],
+    inputs: [],
+    outputs: ['provider_status'],
+    effects: ['read'],
+    description: 'Check if calling provider is configured'
+  },
+  get_calling_agents: {
+    category: 'TELEPHONY',
+    dependencies: [],
+    inputs: [],
+    outputs: ['agents[]'],
+    effects: ['read'],
+    description: 'List available AI calling agents'
+  },
+
+  // ========== USERS ==========
+  create_user: {
+    category: 'USERS',
+    dependencies: [],
+    inputs: ['email', 'role'],
+    outputs: ['user'],
+    effects: ['create'],
+    description: 'Create a new user account'
+  },
+  get_user_details: {
+    category: 'USERS',
+    dependencies: [],
+    inputs: ['user_id'],
+    outputs: ['user'],
+    effects: ['read'],
+    description: 'Retrieve user details by ID'
+  },
+  get_current_user_profile: {
+    category: 'USERS',
     dependencies: [],
     inputs: [],
     outputs: ['user'],
     effects: ['read'],
-    description: 'Get current authenticated user info'
+    description: 'Get current authenticated user profile'
   },
-  get_tenant_config: {
-    category: 'SYSTEM',
+  get_user_profiles: {
+    category: 'USERS',
     dependencies: [],
     inputs: [],
-    outputs: ['config'],
+    outputs: ['users[]'],
     effects: ['read'],
-    description: 'Get tenant configuration and settings'
+    description: 'Get all user profiles for tenant'
+  },
+  list_users: {
+    category: 'USERS',
+    dependencies: [],
+    inputs: ['role'],
+    outputs: ['users[]'],
+    effects: ['read'],
+    description: 'List users with optional role filter'
+  },
+  search_users: {
+    category: 'USERS',
+    dependencies: [],
+    inputs: ['query'],
+    outputs: ['users[]'],
+    effects: ['read'],
+    description: 'Search users by name or email'
+  },
+  update_user: {
+    category: 'USERS',
+    dependencies: ['get_user_details'],
+    inputs: ['user_id', 'updates'],
+    outputs: ['user'],
+    effects: ['update'],
+    description: 'Update user information'
+  },
+  invite_user: {
+    category: 'USERS',
+    dependencies: [],
+    inputs: ['email'],
+    outputs: ['invitation'],
+    effects: ['create'],
+    description: 'Send invitation to a new user'
+  },
+  delete_user: {
+    category: 'USERS',
+    dependencies: ['get_user_details'],
+    inputs: ['user_id'],
+    outputs: [],
+    effects: ['delete'],
+    description: 'Delete or deactivate a user'
+  },
+
+  // ========== WEB RESEARCH ==========
+  search_web: {
+    category: 'WEB_RESEARCH',
+    dependencies: [],
+    inputs: ['query'],
+    outputs: ['search_results'],
+    effects: ['read'],
+    description: 'Search the web for information'
+  },
+  fetch_web_page: {
+    category: 'WEB_RESEARCH',
+    dependencies: [],
+    inputs: ['url'],
+    outputs: ['page_content'],
+    effects: ['read'],
+    description: 'Fetch content from a web page'
+  },
+  lookup_company_info: {
+    category: 'WEB_RESEARCH',
+    dependencies: [],
+    inputs: ['company_name', 'domain'],
+    outputs: ['company_info'],
+    effects: ['read'],
+    description: 'Look up company information from web sources'
+  },
+
+  // ========== WORKFLOW DELEGATION ==========
+  trigger_workflow_by_name: {
+    category: 'WORKFLOWS',
+    dependencies: [],
+    inputs: ['workflow_name', 'parameters'],
+    outputs: ['workflow_instance'],
+    effects: ['create'],
+    description: 'Start a workflow by its name'
+  },
+  get_workflow_progress: {
+    category: 'WORKFLOWS',
+    dependencies: [],
+    inputs: ['workflow_instance_id'],
+    outputs: ['progress'],
+    effects: ['read'],
+    description: 'Get progress of a running workflow'
+  },
+  list_active_workflows: {
+    category: 'WORKFLOWS',
+    dependencies: [],
+    inputs: [],
+    outputs: ['workflows[]'],
+    effects: ['read'],
+    description: 'List all active workflow instances'
+  },
+  get_workflow_notes: {
+    category: 'WORKFLOWS',
+    dependencies: [],
+    inputs: ['workflow_instance_id'],
+    outputs: ['notes[]'],
+    effects: ['read'],
+    description: 'Get notes from a workflow execution'
+  },
+
+  // ========== WORKFLOW TEMPLATES ==========
+  list_workflow_templates: {
+    category: 'WORKFLOWS',
+    dependencies: [],
+    inputs: [],
+    outputs: ['templates[]'],
+    effects: ['read'],
+    description: 'List available workflow templates'
+  },
+  get_workflow_template: {
+    category: 'WORKFLOWS',
+    dependencies: [],
+    inputs: ['template_id'],
+    outputs: ['template'],
+    effects: ['read'],
+    description: 'Get details of a workflow template'
+  },
+  instantiate_workflow_template: {
+    category: 'WORKFLOWS',
+    dependencies: ['get_workflow_template'],
+    inputs: ['template_id', 'parameters'],
+    outputs: ['workflow_instance'],
+    effects: ['create'],
+    description: 'Create and start a workflow from template'
   }
 };
 
