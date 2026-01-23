@@ -143,6 +143,59 @@ export default function createActivityV2Routes(_pgPool) {
     return null; // Not resolvable
   }
 
+  /**
+   * POST /mark-overdue - Mark past-due activities as overdue
+   * Updates activities with 'scheduled', 'planned', or 'in_progress' status
+   * to 'overdue' if their due_date has passed.
+   */
+  router.post('/mark-overdue', async (req, res) => {
+    try {
+      const { tenant_id } = req.body;
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+
+      const supabase = getSupabaseClient();
+
+      // Build query - optionally filter by tenant
+      let query = supabase
+        .from('activities')
+        .update({
+          status: 'overdue',
+          updated_at: new Date().toISOString()
+        })
+        .in('status', ['scheduled', 'planned', 'in_progress'])
+        .not('due_date', 'is', null)
+        .lt('due_date', today);
+
+      if (tenant_id) {
+        query = query.eq('tenant_id', tenant_id);
+      }
+
+      const { data, error } = await query.select('id, subject, due_date, status');
+
+      if (error) throw new Error(error.message);
+
+      // Invalidate activities cache for affected tenant(s)
+      if (tenant_id) {
+        invalidateCache(`activities_${tenant_id}`);
+      }
+
+      logger.info(`[Activities] Marked ${data?.length || 0} activities as overdue`, { tenant_id, today });
+
+      res.json({
+        status: 'success',
+        message: `Marked ${data?.length || 0} activities as overdue`,
+        data: {
+          updated_count: data?.length || 0,
+          today,
+          activities: (data || []).slice(0, 10)
+        }
+      });
+    } catch (error) {
+      logger.error('[Activities] Error marking overdue:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   router.get('/', cacheList('activities', 180), async (req, res) => {
     try {
       const { tenant_id, filter, sort } = req.query;

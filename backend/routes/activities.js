@@ -252,6 +252,9 @@ export default function createActivityRoutes(_pgPool) {
    *             schema:
    *               $ref: '#/components/schemas/Success'
    */
+
+  // NOTE: mark-overdue endpoint is now in activities.v2.js at POST /api/v2/activities/mark-overdue
+
   router.get('/search', async (req, res) => {
     try {
       let { tenant_id, q = '' } = req.query;

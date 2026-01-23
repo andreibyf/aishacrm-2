@@ -170,7 +170,12 @@ function RecentActivities(props) {
         : [];
 
       if (!flipAttemptedRef.current) {
-        const flipCandidates = mutableActivities.filter(a => a.status === "scheduled" && toDueDate(a) && toDueDate(a) < now);
+        // Check for both 'scheduled' and 'planned' status (AI flows use 'planned')
+        const flipCandidates = mutableActivities.filter(a => 
+          (a.status === "scheduled" || a.status === "planned") && 
+          toDueDate(a) && 
+          toDueDate(a) < now
+        );
         const limited = flipCandidates.slice(0, 5);
         if (limited.length > 0) {
           for (const a of limited) {
@@ -240,9 +245,11 @@ function RecentActivities(props) {
 
   const summaryData = React.useMemo(() => {
     // Map statusKey to handle 'in_progress' vs 'in-progress' difference
+    // Also normalize 'planned' → 'scheduled' (AI flows use 'planned', UI expects 'scheduled')
     const statusKeyMap = {
       'in_progress': 'in-progress',
       'scheduled': 'scheduled',
+      'planned': 'scheduled',  // AI flows use 'planned', treat as 'scheduled'
       'overdue': 'overdue',
       'completed': 'completed',
       'cancelled': 'cancelled',
@@ -251,7 +258,9 @@ function RecentActivities(props) {
     // Defensive guard: ensure activitiesInWindow is an array before reducing
     const safeActivities = Array.isArray(activitiesInWindow) ? activitiesInWindow : [];
     const counts = safeActivities.reduce((acc, a) => {
-      const k = a?.status || "scheduled";
+      // Normalize status: 'planned' → 'scheduled' for counting
+      const rawStatus = a?.status || "scheduled";
+      const k = statusKeyMap[rawStatus] || rawStatus;
       acc[k] = (acc[k] || 0) + 1;
       return acc;
     }, {});
@@ -282,7 +291,27 @@ function RecentActivities(props) {
       ? `Client: ${memoTenantFilter.tenant_id.slice(0, 8)}...`
       : "All clients";
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
+    // First, trigger the mark-overdue endpoint to update past-due activities
+    try {
+      const baseUrl = import.meta.env.VITE_BACKEND_URL || '';
+      const response = await fetch(`${baseUrl}/api/v2/activities/mark-overdue`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ tenant_id: memoTenantFilter?.tenant_id || null })
+      });
+      if (response.ok) {
+        const result = await response.json();
+        if (result.data?.updated_count > 0) {
+          console.log(`RecentActivities: Marked ${result.data.updated_count} activities as overdue`);
+        }
+      }
+    } catch (err) {
+      console.warn('RecentActivities: Failed to mark overdue activities:', err.message);
+    }
+    // Then fetch the updated activities list
+    flipAttemptedRef.current = false; // Reset flip attempt to allow re-check
     fetchActivities();
   };
 

@@ -88,8 +88,9 @@ export async function cleanOldActivities(pgPool, jobMetadata = {}) {
 
 /**
  * Mark activities as overdue when due_date has passed
- * Updates activities with status 'scheduled' or 'in_progress' to 'overdue'
+ * Updates activities with status 'scheduled', 'planned', or 'in_progress' to 'overdue'
  * if their due_date is before today
+ * Note: 'planned' is used by AI flows, 'scheduled' is the canonical status
  */
 export async function markActivitiesOverdue(pgPool, jobMetadata = {}) {
   const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
@@ -105,7 +106,7 @@ export async function markActivitiesOverdue(pgPool, jobMetadata = {}) {
           status: 'overdue',
           updated_at: new Date().toISOString()
         })
-        .in('status', ['scheduled', 'in_progress'])
+        .in('status', ['scheduled', 'planned', 'in_progress'])
         .not('due_date', 'is', null)
         .lt('due_date', today)
         .select('id, subject, due_date, status');
@@ -129,7 +130,7 @@ export async function markActivitiesOverdue(pgPool, jobMetadata = {}) {
         `UPDATE activities
          SET status = 'overdue',
              updated_at = NOW()
-         WHERE status IN ('scheduled', 'in_progress')
+         WHERE status IN ('scheduled', 'planned', 'in_progress')
            AND due_date IS NOT NULL
            AND due_date < $1
          RETURNING id, subject, due_date, status`,

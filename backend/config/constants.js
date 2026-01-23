@@ -236,8 +236,10 @@ export const STATUS = {
     CLOSED_LOST: 'closed_lost',
   },
   ACTIVITY: {
-    PLANNED: 'planned',
+    PLANNED: 'planned',       // Legacy/AI flows - treated as 'scheduled'
+    SCHEDULED: 'scheduled',   // Canonical status for pending activities
     IN_PROGRESS: 'in_progress',
+    OVERDUE: 'overdue',       // Set by cron when due_date passes
     COMPLETED: 'completed',
     CANCELLED: 'cancelled',
   },
