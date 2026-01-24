@@ -23,10 +23,13 @@ import logger from './logger.js';
 
 // PR6: C.A.R.E. shadow wiring (read-only analysis, no behavior change)
 import { detectEscalation } from './care/escalationDetector.js';
-import { proposeTransition } from './care/stateEngine.js';
+import { proposeTransition, applyTransition } from './care/stateEngine.js';
 import { emitCareAudit } from './care/auditEmitter.js';
 import { signalsFromTrigger, buildTriggerEscalationText } from './care/careTriggerSignalAdapter.js';
 import { CareAuditEventType, CarePolicyGateResult, CareActionOrigin } from './care/types.js';
+// PR7: State persistence and policy gate
+import { getCareState, upsertCareState, appendCareHistory } from './care/careStateStore.js';
+import { isCareStateWriteEnabled } from './care/isCareStateWriteEnabled.js';
 
 let workerInterval = null;
 let supabase = null;
@@ -164,8 +167,26 @@ async function processTriggersForTenant(tenant) {
       });
       triggerCount++;
 
-      // PR6: C.A.R.E. shadow wiring (read-only, no behavior change)
+      // PR6+PR7: C.A.R.E. analysis with state persistence (when enabled)
       try {
+        // PR7: Build entity context
+        const ctx = {
+          tenant_id: tenantUuid,
+          entity_type: 'lead',
+          entity_id: lead.id
+        };
+
+        // PR7: Read current state from DB (fallback to 'unaware')
+        let currentState = 'unaware';
+        try {
+          const stateRecord = await getCareState(ctx);
+          if (stateRecord && stateRecord.care_state) {
+            currentState = stateRecord.care_state;
+          }
+        } catch (stateReadError) {
+          logger.warn({ err: stateReadError }, '[AiTriggers] C.A.R.E. state read error');
+        }
+
         const signals = signalsFromTrigger({
           trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
           context: {
@@ -180,7 +201,10 @@ async function processTriggersForTenant(tenant) {
 
         const escalationText = buildTriggerEscalationText({
           trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
-          context,
+          context: {
+            lead_name: `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
+            days_stagnant: lead.days_stagnant,
+          },
         });
 
         const escalation = detectEscalation({ text: escalationText });
@@ -197,22 +221,49 @@ async function processTriggersForTenant(tenant) {
         }
 
         const proposal = proposeTransition({
-          current_state: 'unaware', // PR6 shadow mode placeholder
+          current_state: currentState, // PR7: real state from DB
           signals,
           action_origin: CareActionOrigin.CARE_AUTONOMOUS,
         });
 
         if (proposal.proposed_state) {
+          // Always emit state_proposed
           emitCareAudit(CareAuditEventType.STATE_PROPOSED, {
             action_origin: CareActionOrigin.CARE_AUTONOMOUS,
             policy_gate_result: CarePolicyGateResult.ALLOWED,
-            current_state: 'unaware',
+            current_state: currentState,
             proposed_state: proposal.proposed_state,
             reason: proposal.reason,
             trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
             record_type: 'lead',
             record_id: lead.id,
           });
+
+          // PR7: Conditionally apply transition if state write gate enabled
+          if (isCareStateWriteEnabled()) {
+            try {
+              await applyTransition({
+                ctx,
+                from_state: currentState,
+                to_state: proposal.proposed_state,
+                reason: proposal.reason,
+                action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+                meta: { trigger_type: TRIGGER_TYPES.LEAD_STAGNANT, signals }
+              });
+
+              emitCareAudit(CareAuditEventType.STATE_APPLIED, {
+                action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+                policy_gate_result: CarePolicyGateResult.ALLOWED,
+                reason: `State applied: ${currentState} → ${proposal.proposed_state}`,
+                trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
+                record_type: 'lead',
+                record_id: lead.id,
+                metadata: { from_state: currentState, to_state: proposal.proposed_state }
+              });
+            } catch (applyError) {
+              logger.warn({ err: applyError }, '[AiTriggers] C.A.R.E. state apply error');
+            }
+          }
         }
 
         // Emit action candidate for meaningful follow-ups (logs only)
@@ -228,8 +279,18 @@ async function processTriggersForTenant(tenant) {
             metadata: { silence_days: signals.silence_days },
           });
         }
+
+        // PR7: Always emit action_skipped
+        emitCareAudit(CareAuditEventType.ACTION_SKIPPED, {
+          action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+          policy_gate_result: CarePolicyGateResult.ALLOWED,
+          reason: 'Autonomous actions disabled (PR7: state persistence only)',
+          trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
+          record_type: 'lead',
+          record_id: lead.id,
+        });
       } catch (err) {
-        console.warn('[C.A.R.E. PR6] Trigger shadow analysis error (non-breaking):', err.message);
+        console.warn('[C.A.R.E. PR7] Trigger analysis error (non-breaking):', err.message);
       }
     }
 
@@ -250,8 +311,26 @@ async function processTriggersForTenant(tenant) {
       });
       triggerCount++;
 
-      // PR6: C.A.R.E. shadow wiring (read-only, no behavior change)
+      // PR6+PR7: C.A.R.E. analysis with state persistence (when enabled)
       try {
+        // PR7: Build entity context
+        const ctx = {
+          tenant_id: tenantUuid,
+          entity_type: 'opportunity',
+          entity_id: deal.id
+        };
+
+        // PR7: Read current state from DB (fallback to 'unaware')
+        let currentState = 'unaware';
+        try {
+          const stateRecord = await getCareState(ctx);
+          if (stateRecord && stateRecord.care_state) {
+            currentState = stateRecord.care_state;
+          }
+        } catch (stateReadError) {
+          logger.warn({ err: stateReadError }, '[AiTriggers] C.A.R.E. state read error');
+        }
+
         const signals = signalsFromTrigger({
           trigger_type: TRIGGER_TYPES.DEAL_DECAY,
           context: {
@@ -267,7 +346,12 @@ async function processTriggersForTenant(tenant) {
 
         const escalationText = buildTriggerEscalationText({
           trigger_type: TRIGGER_TYPES.DEAL_DECAY,
-          context,
+          context: {
+            deal_name: deal.name,
+            stage: deal.stage,
+            amount: deal.amount,
+            days_inactive: deal.days_inactive,
+          },
         });
 
         const escalation = detectEscalation({ text: escalationText });
@@ -284,22 +368,49 @@ async function processTriggersForTenant(tenant) {
         }
 
         const proposal = proposeTransition({
-          current_state: 'unaware',
+          current_state: currentState,
           signals,
           action_origin: CareActionOrigin.CARE_AUTONOMOUS,
         });
 
         if (proposal.proposed_state) {
+          // Always emit state_proposed
           emitCareAudit(CareAuditEventType.STATE_PROPOSED, {
             action_origin: CareActionOrigin.CARE_AUTONOMOUS,
             policy_gate_result: CarePolicyGateResult.ALLOWED,
-            current_state: 'unaware',
+            current_state: currentState,
             proposed_state: proposal.proposed_state,
             reason: proposal.reason,
             trigger_type: TRIGGER_TYPES.DEAL_DECAY,
             record_type: 'opportunity',
             record_id: deal.id,
           });
+
+          // PR7: Conditionally apply transition if state write gate enabled
+          if (isCareStateWriteEnabled()) {
+            try {
+              await applyTransition({
+                ctx,
+                from_state: currentState,
+                to_state: proposal.proposed_state,
+                reason: proposal.reason,
+                action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+                meta: { trigger_type: TRIGGER_TYPES.DEAL_DECAY, amount: deal.amount, signals }
+              });
+
+              emitCareAudit(CareAuditEventType.STATE_APPLIED, {
+                action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+                policy_gate_result: CarePolicyGateResult.ALLOWED,
+                reason: `State applied: ${currentState} → ${proposal.proposed_state}`,
+                trigger_type: TRIGGER_TYPES.DEAL_DECAY,
+                record_type: 'opportunity',
+                record_id: deal.id,
+                metadata: { from_state: currentState, to_state: proposal.proposed_state }
+              });
+            } catch (applyError) {
+              logger.warn({ err: applyError }, '[AiTriggers] C.A.R.E. state apply error');
+            }
+          }
         }
 
         if (proposal.proposed_state && deal.amount > 10000) {
@@ -314,8 +425,18 @@ async function processTriggersForTenant(tenant) {
             metadata: { amount: deal.amount, silence_days: signals.silence_days },
           });
         }
+
+        // PR7: Always emit action_skipped
+        emitCareAudit(CareAuditEventType.ACTION_SKIPPED, {
+          action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+          policy_gate_result: CarePolicyGateResult.ALLOWED,
+          reason: 'Autonomous actions disabled (PR7: state persistence only)',
+          trigger_type: TRIGGER_TYPES.DEAL_DECAY,
+          record_type: 'opportunity',
+          record_id: deal.id,
+        });
       } catch (err) {
-        console.warn('[C.A.R.E. PR6] Trigger shadow analysis error (non-breaking):', err.message);
+        console.warn('[C.A.R.E. PR7] Trigger analysis error (non-breaking):', err.message);
       }
     }
 
@@ -335,8 +456,26 @@ async function processTriggersForTenant(tenant) {
       });
       triggerCount++;
 
-      // PR6: C.A.R.E. shadow wiring (read-only, no behavior change)
+      // PR6+PR7: C.A.R.E. analysis with state persistence (when enabled)
       try {
+        // PR7: Build entity context
+        const ctx = {
+          tenant_id: tenantUuid,
+          entity_type: 'activity',
+          entity_id: activity.id
+        };
+
+        // PR7: Read current state from DB (fallback to 'unaware')
+        let currentState = 'unaware';
+        try {
+          const stateRecord = await getCareState(ctx);
+          if (stateRecord && stateRecord.care_state) {
+            currentState = stateRecord.care_state;
+          }
+        } catch (stateReadError) {
+          logger.warn({ err: stateReadError }, '[AiTriggers] C.A.R.E. state read error');
+        }
+
         const signals = signalsFromTrigger({
           trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
           context: {
@@ -351,7 +490,10 @@ async function processTriggersForTenant(tenant) {
 
         const escalationText = buildTriggerEscalationText({
           trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
-          context,
+          context: {
+            subject: activity.subject,
+            days_overdue: activity.days_overdue,
+          },
         });
 
         const escalation = detectEscalation({ text: escalationText });
@@ -368,22 +510,49 @@ async function processTriggersForTenant(tenant) {
         }
 
         const proposal = proposeTransition({
-          current_state: 'unaware',
+          current_state: currentState,
           signals,
           action_origin: CareActionOrigin.CARE_AUTONOMOUS,
         });
 
         if (proposal.proposed_state) {
+          // Always emit state_proposed
           emitCareAudit(CareAuditEventType.STATE_PROPOSED, {
             action_origin: CareActionOrigin.CARE_AUTONOMOUS,
             policy_gate_result: CarePolicyGateResult.ALLOWED,
-            current_state: 'unaware',
+            current_state: currentState,
             proposed_state: proposal.proposed_state,
             reason: proposal.reason,
             trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
             record_type: 'activity',
             record_id: activity.id,
           });
+
+          // PR7: Conditionally apply transition if state write gate enabled
+          if (isCareStateWriteEnabled()) {
+            try {
+              await applyTransition({
+                ctx,
+                from_state: currentState,
+                to_state: proposal.proposed_state,
+                reason: proposal.reason,
+                action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+                meta: { trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE, days_overdue: activity.days_overdue, signals }
+              });
+
+              emitCareAudit(CareAuditEventType.STATE_APPLIED, {
+                action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+                policy_gate_result: CarePolicyGateResult.ALLOWED,
+                reason: `State applied: ${currentState} → ${proposal.proposed_state}`,
+                trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
+                record_type: 'activity',
+                record_id: activity.id,
+                metadata: { from_state: currentState, to_state: proposal.proposed_state }
+              });
+            } catch (applyError) {
+              logger.warn({ err: applyError }, '[AiTriggers] C.A.R.E. state apply error');
+            }
+          }
         }
 
         if (proposal.proposed_state && activity.days_overdue > 2) {
@@ -398,8 +567,18 @@ async function processTriggersForTenant(tenant) {
             metadata: { days_overdue: activity.days_overdue },
           });
         }
+
+        // PR7: Always emit action_skipped
+        emitCareAudit(CareAuditEventType.ACTION_SKIPPED, {
+          action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+          policy_gate_result: CarePolicyGateResult.ALLOWED,
+          reason: 'Autonomous actions disabled (PR7: state persistence only)',
+          trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
+          record_type: 'activity',
+          record_id: activity.id,
+        });
       } catch (err) {
-        console.warn('[C.A.R.E. PR6] Trigger shadow analysis error (non-breaking):', err.message);
+        console.warn('[C.A.R.E. PR7] Trigger analysis error (non-breaking):', err.message);
       }
     }
 
@@ -421,8 +600,26 @@ async function processTriggersForTenant(tenant) {
       });
       triggerCount++;
 
-      // PR6: C.A.R.E. shadow wiring (read-only, no behavior change)
+      // PR6+PR7: C.A.R.E. analysis with state persistence (when enabled)
       try {
+        // PR7: Build entity context
+        const ctx = {
+          tenant_id: tenantUuid,
+          entity_type: 'opportunity',
+          entity_id: opp.id
+        };
+
+        // PR7: Read current state from DB (fallback to 'unaware')
+        let currentState = 'unaware';
+        try {
+          const stateRecord = await getCareState(ctx);
+          if (stateRecord && stateRecord.care_state) {
+            currentState = stateRecord.care_state;
+          }
+        } catch (stateReadError) {
+          logger.warn({ err: stateReadError }, '[AiTriggers] C.A.R.E. state read error');
+        }
+
         const signals = signalsFromTrigger({
           trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
           context: {
@@ -438,7 +635,11 @@ async function processTriggersForTenant(tenant) {
 
         const escalationText = buildTriggerEscalationText({
           trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
-          context,
+          context: {
+            deal_name: opp.name,
+            probability: opp.probability,
+            days_to_close: opp.days_to_close,
+          },
         });
 
         const escalation = detectEscalation({ text: escalationText });
@@ -455,22 +656,49 @@ async function processTriggersForTenant(tenant) {
         }
 
         const proposal = proposeTransition({
-          current_state: 'unaware',
+          current_state: currentState,
           signals,
           action_origin: CareActionOrigin.CARE_AUTONOMOUS,
         });
 
         if (proposal.proposed_state) {
+          // Always emit state_proposed
           emitCareAudit(CareAuditEventType.STATE_PROPOSED, {
             action_origin: CareActionOrigin.CARE_AUTONOMOUS,
             policy_gate_result: CarePolicyGateResult.ALLOWED,
-            current_state: 'unaware',
+            current_state: currentState,
             proposed_state: proposal.proposed_state,
             reason: proposal.reason,
             trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
             record_type: 'opportunity',
             record_id: opp.id,
           });
+
+          // PR7: Conditionally apply transition if state write gate enabled
+          if (isCareStateWriteEnabled()) {
+            try {
+              await applyTransition({
+                ctx,
+                from_state: currentState,
+                to_state: proposal.proposed_state,
+                reason: proposal.reason,
+                action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+                meta: { trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT, amount: opp.amount, signals }
+              });
+
+              emitCareAudit(CareAuditEventType.STATE_APPLIED, {
+                action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+                policy_gate_result: CarePolicyGateResult.ALLOWED,
+                reason: `State applied: ${currentState} → ${proposal.proposed_state}`,
+                trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
+                record_type: 'opportunity',
+                record_id: opp.id,
+                metadata: { from_state: currentState, to_state: proposal.proposed_state }
+              });
+            } catch (applyError) {
+              logger.warn({ err: applyError }, '[AiTriggers] C.A.R.E. state apply error');
+            }
+          }
         }
 
         if (proposal.proposed_state && opp.amount > 50000) {
@@ -485,8 +713,18 @@ async function processTriggersForTenant(tenant) {
             metadata: { amount: opp.amount, days_to_close: opp.days_to_close },
           });
         }
+
+        // PR7: Always emit action_skipped
+        emitCareAudit(CareAuditEventType.ACTION_SKIPPED, {
+          action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+          policy_gate_result: CarePolicyGateResult.ALLOWED,
+          reason: 'Autonomous actions disabled (PR7: state persistence only)',
+          trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
+          record_type: 'opportunity',
+          record_id: opp.id,
+        });
       } catch (err) {
-        console.warn('[C.A.R.E. PR6] Trigger shadow analysis error (non-breaking):', err.message);
+        console.warn('[C.A.R.E. PR7] Trigger analysis error (non-breaking):', err.message);
       }
     }
 
