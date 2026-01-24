@@ -7,10 +7,24 @@
  * - Transcript summarization via OpenAI
  * - Automatic note/activity creation
  * - Lead qualification scoring
+ * 
+ * PR5: Shadow wiring for Customer C.A.R.E. v1
+ * - Escalation detection (read-only)
+ * - State transition proposals (read-only)
+ * - Action candidate logging (shadow mode)
+ * - No DB writes to C.A.R.E. tables
+ * - No user-facing behavior changes
  */
 
 import { emitTenantWebhooks } from './webhookEmitter.js';
 import { getSupabaseClient } from './supabase-db.js';
+
+// PR5: C.A.R.E. shadow wiring imports
+import { detectEscalation } from './care/careEscalationDetector.js';
+import { proposeTransition } from './care/careStateEngine.js';
+import { emitCareAudit } from './care/careAuditEmitter.js';
+import { signalsFromCall, buildEscalationText } from './care/careCallSignalAdapter.js';
+import { CarePolicyGateResult, CareAuditEventType } from './care/careAuditTypes.js';
 
 /**
  * Create an in-app notification for call completions
@@ -247,6 +261,98 @@ export async function handleInboundCall(pgPool, payload) {
     sentiment
   });
 
+  // PR5: C.A.R.E. Shadow Wiring (read-only, no user-facing changes)
+  try {
+    // 1) Escalation detection
+    if (summary || transcript) {
+      const escalationText = buildEscalationText(summary, transcript);
+      if (escalationText) {
+        const escalationResult = detectEscalation({
+          text: escalationText,
+          sentiment,
+          channel: 'call',
+          action_origin: 'care_autonomous',
+          meta: { direction: 'inbound', duration, contact_type: contactType }
+        });
+
+        if (escalationResult.escalate) {
+          emitCareAudit({
+            tenant_id,
+            entity_type: 'conversation',
+            entity_id: activity.id,
+            event_type: CareAuditEventType.ESCALATION_DETECTED,
+            action_origin: 'care_autonomous',
+            reason: `Escalation detected: ${escalationResult.reasons.join(', ')}`,
+            policy_gate_result: CarePolicyGateResult.ESCALATED,
+            meta: {
+              confidence: escalationResult.confidence,
+              reasons: escalationResult.reasons,
+              direction: 'inbound',
+              sentiment,
+              contact_type: contactType
+            }
+          });
+        }
+      }
+    }
+
+    // 2) State transition proposal
+    const signals = signalsFromCall({
+      direction: 'inbound',
+      outcome: 'answered',
+      transcript,
+      summary,
+      sentiment,
+      analysis,
+      actionItems,
+      duration
+    });
+
+    const proposal = proposeTransition({
+      current_state: 'unaware', // PR5: placeholder (no DB read yet)
+      signals
+    });
+
+    if (proposal) {
+      emitCareAudit({
+        tenant_id,
+        entity_type: 'conversation',
+        entity_id: activity.id,
+        event_type: CareAuditEventType.STATE_PROPOSED,
+        action_origin: 'care_autonomous',
+        reason: proposal.reason,
+        policy_gate_result: CarePolicyGateResult.ALLOWED,
+        meta: {
+          from_state: 'unaware',
+          to_state: proposal.next_state,
+          direction: 'inbound',
+          signals
+        }
+      });
+    }
+
+    // 3) Action candidates (shadow mode, logs only)
+    if (actionItems && actionItems.length > 0) {
+      emitCareAudit({
+        tenant_id,
+        entity_type: 'conversation',
+        entity_id: activity.id,
+        event_type: CareAuditEventType.ACTION_CANDIDATE,
+        action_origin: 'care_autonomous',
+        reason: `Action candidate: ${actionItems[0]}`,
+        policy_gate_result: CarePolicyGateResult.ALLOWED,
+        meta: {
+          action_items: actionItems,
+          direction: 'inbound',
+          sentiment
+        }
+      });
+    }
+  } catch (careError) {
+    // Shadow wiring errors should not break call flow
+    console.warn('[CallFlow] C.A.R.E. shadow wiring error (non-critical):', careError.message);
+  }
+
   return {
     success: true,
     contact_id: contactId,
@@ -435,6 +541,102 @@ export async function handleOutboundCall(pgPool, payload) {
     summary,
     sentiment
   });
+
+  // PR5: C.A.R.E. Shadow Wiring (read-only, no user-facing changes)
+  try {
+    // Only run C.A.R.E. analysis for answered calls with meaningful content
+    if (outcome === 'answered' && (summary || transcript)) {
+      // 1) Escalation detection
+      const escalationText = buildEscalationText(summary, transcript);
+      if (escalationText) {
+        const escalationResult = detectEscalation({
+          text: escalationText,
+          sentiment,
+          channel: 'call',
+          action_origin: 'care_autonomous',
+          meta: { direction: 'outbound', outcome, duration, contact_type: contactType }
+        });
+
+        if (escalationResult.escalate) {
+          emitCareAudit({
+            tenant_id,
+            entity_type: 'conversation',
+            entity_id: activity.id,
+            event_type: CareAuditEventType.ESCALATION_DETECTED,
+            action_origin: 'care_autonomous',
+            reason: `Escalation detected: ${escalationResult.reasons.join(', ')}`,
+            policy_gate_result: CarePolicyGateResult.ESCALATED,
+            meta: {
+              confidence: escalationResult.confidence,
+              reasons: escalationResult.reasons,
+              direction: 'outbound',
+              outcome,
+              sentiment,
+              contact_type: contactType
+            }
+          });
+        }
+      }
+
+      // 2) State transition proposal
+      const signals = signalsFromCall({
+        direction: 'outbound',
+        outcome,
+        transcript,
+        summary,
+        sentiment,
+        analysis,
+        actionItems,
+        duration
+      });
+
+      const proposal = proposeTransition({
+        current_state: 'unaware', // PR5: placeholder (no DB read yet)
+        signals
+      });
+
+      if (proposal) {
+        emitCareAudit({
+          tenant_id,
+          entity_type: 'conversation',
+          entity_id: activity.id,
+          event_type: CareAuditEventType.STATE_PROPOSED,
+          action_origin: 'care_autonomous',
+          reason: proposal.reason,
+          policy_gate_result: CarePolicyGateResult.ALLOWED,
+          meta: {
+            from_state: 'unaware',
+            to_state: proposal.next_state,
+            direction: 'outbound',
+            outcome,
+            signals
+          }
+        });
+      }
+
+      // 3) Action candidates (shadow mode, logs only)
+      if (actionItems && actionItems.length > 0) {
+        emitCareAudit({
+          tenant_id,
+          entity_type: 'conversation',
+          entity_id: activity.id,
+          event_type: CareAuditEventType.ACTION_CANDIDATE,
+          action_origin: 'care_autonomous',
+          reason: `Action candidate: ${actionItems[0]}`,
+          policy_gate_result: CarePolicyGateResult.ALLOWED,
+          meta: {
+            action_items: actionItems,
+            direction: 'outbound',
+            outcome,
+            sentiment
+          }
+        });
+      }
+    }
+  } catch (careError) {
+    // Shadow wiring errors should not break call flow
+    console.warn('[CallFlow] C.A.R.E. shadow wiring error (non-critical):', careError.message);
+  }
 
   return {
     success: true,
