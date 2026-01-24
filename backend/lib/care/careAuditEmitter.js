@@ -98,14 +98,17 @@ export function emitCareAudit(event) {
   // Validate required fields
   validateAuditEvent(event);
 
-  // Add timestamp if not present
+  // Add timestamp and telemetry markers if not present
   const auditEvent = {
     ...event,
     ts: event.ts || new Date().toISOString(),
+    _telemetry: true,
+    type: 'care_audit',
   };
 
   // Emit structured JSON log with stable prefix
   // This allows easy grep/filtering: grep '\[CARE_AUDIT\]' logs.txt
+  // The _telemetry and type fields enable external telemetry-sidecar harvesting
   const logLine = JSON.stringify(auditEvent);
   logger.info(`[CARE_AUDIT] ${logLine}`);
 }
