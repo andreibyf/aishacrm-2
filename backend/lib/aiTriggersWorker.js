@@ -30,6 +30,9 @@ import { CareAuditEventType, CarePolicyGateResult, CareActionOrigin } from './ca
 // PR7: State persistence and policy gate
 import { getCareState, upsertCareState, appendCareHistory } from './care/careStateStore.js';
 import { isCareStateWriteEnabled } from './care/isCareStateWriteEnabled.js';
+// PR8: Workflow webhook trigger integration
+import { isCareWorkflowTriggersEnabled } from './care/isCareWorkflowTriggersEnabled.js';
+import { triggerCareWorkflow } from './care/careWorkflowTriggerClient.js';
 
 let workerInterval = null;
 let supabase = null;
@@ -218,6 +221,35 @@ async function processTriggersForTenant(tenant) {
             record_id: lead.id,
             metadata: { severity: escalation.severity },
           });
+
+          // PR8: Trigger workflow webhook if enabled
+          if (isCareWorkflowTriggersEnabled() && process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL) {
+            triggerCareWorkflow({
+              url: process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL,
+              secret: process.env.CARE_WORKFLOW_WEBHOOK_SECRET,
+              payload: {
+                event_id: `escalation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                type: 'care.escalation_detected',
+                ts: new Date().toISOString(),
+                tenant_id: lead.tenant_id,
+                entity_type: 'lead',
+                entity_id: lead.id,
+                action_origin: 'care_autonomous',
+                reason: escalation.reason,
+                policy_gate_result: CarePolicyGateResult.ALLOWED,
+                trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
+                meta: {
+                  severity: escalation.severity,
+                  days_stagnant: lead.days_stagnant,
+                  lead_name: `${lead.first_name || ''} ${lead.last_name || ''}`.trim()
+                }
+              },
+              timeout_ms: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_TIMEOUT_MS) || 3000,
+              retries: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_MAX_RETRIES) || 2
+            }).catch(err => {
+              console.warn('[Triggers] Workflow trigger failed (non-critical):', err.message);
+            });
+          }
         }
 
         const proposal = proposeTransition({
@@ -365,6 +397,37 @@ async function processTriggersForTenant(tenant) {
             record_id: deal.id,
             metadata: { severity: escalation.severity, amount: deal.amount },
           });
+
+          // PR8: Trigger workflow webhook if enabled
+          if (isCareWorkflowTriggersEnabled() && process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL) {
+            triggerCareWorkflow({
+              url: process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL,
+              secret: process.env.CARE_WORKFLOW_WEBHOOK_SECRET,
+              payload: {
+                event_id: `escalation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                type: 'care.escalation_detected',
+                ts: new Date().toISOString(),
+                tenant_id: deal.tenant_id,
+                entity_type: 'opportunity',
+                entity_id: deal.id,
+                action_origin: 'care_autonomous',
+                reason: escalation.reason,
+                policy_gate_result: CarePolicyGateResult.ALLOWED,
+                trigger_type: TRIGGER_TYPES.DEAL_DECAY,
+                meta: {
+                  severity: escalation.severity,
+                  amount: deal.amount,
+                  stage: deal.stage,
+                  days_inactive: deal.days_inactive,
+                  deal_name: deal.name
+                }
+              },
+              timeout_ms: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_TIMEOUT_MS) || 3000,
+              retries: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_MAX_RETRIES) || 2
+            }).catch(err => {
+              console.warn('[Triggers] Workflow trigger failed (non-critical):', err.message);
+            });
+          }
         }
 
         const proposal = proposeTransition({
@@ -507,6 +570,37 @@ async function processTriggersForTenant(tenant) {
             record_id: activity.id,
             metadata: { severity: escalation.severity, days_overdue: activity.days_overdue },
           });
+
+          // PR8: Trigger workflow webhook if enabled
+          if (isCareWorkflowTriggersEnabled() && process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL) {
+            triggerCareWorkflow({
+              url: process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL,
+              secret: process.env.CARE_WORKFLOW_WEBHOOK_SECRET,
+              payload: {
+                event_id: `escalation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                type: 'care.escalation_detected',
+                ts: new Date().toISOString(),
+                tenant_id: activity.tenant_id,
+                entity_type: 'activity',
+                entity_id: activity.id,
+                action_origin: 'care_autonomous',
+                reason: escalation.reason,
+                policy_gate_result: CarePolicyGateResult.ALLOWED,
+                trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
+                meta: {
+                  severity: escalation.severity,
+                  days_overdue: activity.days_overdue,
+                  subject: activity.subject,
+                  type: activity.type,
+                  related_to: activity.related_to
+                }
+              },
+              timeout_ms: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_TIMEOUT_MS) || 3000,
+              retries: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_MAX_RETRIES) || 2
+            }).catch(err => {
+              console.warn('[Triggers] Workflow trigger failed (non-critical):', err.message);
+            });
+          }
         }
 
         const proposal = proposeTransition({
@@ -653,6 +747,38 @@ async function processTriggersForTenant(tenant) {
             record_id: opp.id,
             metadata: { severity: escalation.severity, probability: opp.probability },
           });
+
+          // PR8: Trigger workflow webhook if enabled
+          if (isCareWorkflowTriggersEnabled() && process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL) {
+            triggerCareWorkflow({
+              url: process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL,
+              secret: process.env.CARE_WORKFLOW_WEBHOOK_SECRET,
+              payload: {
+                event_id: `escalation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                type: 'care.escalation_detected',
+                ts: new Date().toISOString(),
+                tenant_id: opp.tenant_id,
+                entity_type: 'opportunity',
+                entity_id: opp.id,
+                action_origin: 'care_autonomous',
+                reason: escalation.reason,
+                policy_gate_result: CarePolicyGateResult.ALLOWED,
+                trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
+                meta: {
+                  severity: escalation.severity,
+                  probability: opp.probability,
+                  amount: opp.amount,
+                  days_to_close: opp.days_to_close,
+                  stage: opp.stage,
+                  deal_name: opp.name
+                }
+              },
+              timeout_ms: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_TIMEOUT_MS) || 3000,
+              retries: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_MAX_RETRIES) || 2
+            }).catch(err => {
+              console.warn('[Triggers] Workflow trigger failed (non-critical):', err.message);
+            });
+          }
         }
 
         const proposal = proposeTransition({
