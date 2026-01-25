@@ -210,7 +210,7 @@ async function processTriggersForTenant(tenant) {
         const escalation = detectEscalation({ text: escalationText });
         if (escalation.is_escalation) {
           emitCareAudit(CareAuditEventType.ESCALATION_DETECTED, {
-            action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+            action_origin: 'care_autonomous',
             policy_gate_result: CarePolicyGateResult.ALLOWED,
             reason: escalation.reason,
             trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
@@ -223,13 +223,13 @@ async function processTriggersForTenant(tenant) {
         const proposal = proposeTransition({
           current_state: currentState, // PR7: real state from DB
           signals,
-          action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+          action_origin: 'care_autonomous',
         });
 
         if (proposal.proposed_state) {
           // Always emit state_proposed
           emitCareAudit(CareAuditEventType.STATE_PROPOSED, {
-            action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+            action_origin: 'care_autonomous',
             policy_gate_result: CarePolicyGateResult.ALLOWED,
             current_state: currentState,
             proposed_state: proposal.proposed_state,
@@ -247,12 +247,12 @@ async function processTriggersForTenant(tenant) {
                 from_state: currentState,
                 to_state: proposal.proposed_state,
                 reason: proposal.reason,
-                action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+                action_origin: 'care_autonomous',
                 meta: { trigger_type: TRIGGER_TYPES.LEAD_STAGNANT, signals }
               });
 
               emitCareAudit(CareAuditEventType.STATE_APPLIED, {
-                action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+                action_origin: 'care_autonomous',
                 policy_gate_result: CarePolicyGateResult.ALLOWED,
                 reason: `State applied: ${currentState} → ${proposal.proposed_state}`,
                 trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
@@ -269,7 +269,7 @@ async function processTriggersForTenant(tenant) {
         // Emit action candidate for meaningful follow-ups (logs only)
         if (proposal.proposed_state && ['awareness', 'engagement'].includes(proposal.proposed_state)) {
           emitCareAudit(CareAuditEventType.ACTION_CANDIDATE, {
-            action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+            action_origin: 'care_autonomous',
             policy_gate_result: CarePolicyGateResult.ALLOWED,
             action_type: 'follow_up',
             proposed_state: proposal.proposed_state,
@@ -282,7 +282,7 @@ async function processTriggersForTenant(tenant) {
 
         // PR7: Always emit action_skipped
         emitCareAudit(CareAuditEventType.ACTION_SKIPPED, {
-          action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+          action_origin: 'care_autonomous',
           policy_gate_result: CarePolicyGateResult.ALLOWED,
           reason: 'Autonomous actions disabled (PR7: state persistence only)',
           trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
@@ -357,7 +357,7 @@ async function processTriggersForTenant(tenant) {
         const escalation = detectEscalation({ text: escalationText });
         if (escalation.is_escalation) {
           emitCareAudit(CareAuditEventType.ESCALATION_DETECTED, {
-            action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+            action_origin: 'care_autonomous',
             policy_gate_result: CarePolicyGateResult.ALLOWED,
             reason: escalation.reason,
             trigger_type: TRIGGER_TYPES.DEAL_DECAY,
@@ -370,13 +370,13 @@ async function processTriggersForTenant(tenant) {
         const proposal = proposeTransition({
           current_state: currentState,
           signals,
-          action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+          action_origin: 'care_autonomous',
         });
 
         if (proposal.proposed_state) {
           // Always emit state_proposed
           emitCareAudit(CareAuditEventType.STATE_PROPOSED, {
-            action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+            action_origin: 'care_autonomous',
             policy_gate_result: CarePolicyGateResult.ALLOWED,
             current_state: currentState,
             proposed_state: proposal.proposed_state,
@@ -394,12 +394,12 @@ async function processTriggersForTenant(tenant) {
                 from_state: currentState,
                 to_state: proposal.proposed_state,
                 reason: proposal.reason,
-                action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+                action_origin: 'care_autonomous',
                 meta: { trigger_type: TRIGGER_TYPES.DEAL_DECAY, amount: deal.amount, signals }
               });
 
               emitCareAudit(CareAuditEventType.STATE_APPLIED, {
-                action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+                action_origin: 'care_autonomous',
                 policy_gate_result: CarePolicyGateResult.ALLOWED,
                 reason: `State applied: ${currentState} → ${proposal.proposed_state}`,
                 trigger_type: TRIGGER_TYPES.DEAL_DECAY,
@@ -415,7 +415,7 @@ async function processTriggersForTenant(tenant) {
 
         if (proposal.proposed_state && deal.amount > 10000) {
           emitCareAudit(CareAuditEventType.ACTION_CANDIDATE, {
-            action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+            action_origin: 'care_autonomous',
             policy_gate_result: CarePolicyGateResult.ALLOWED,
             action_type: 'deal_revival',
             proposed_state: proposal.proposed_state,
@@ -428,7 +428,7 @@ async function processTriggersForTenant(tenant) {
 
         // PR7: Always emit action_skipped
         emitCareAudit(CareAuditEventType.ACTION_SKIPPED, {
-          action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+          action_origin: 'care_autonomous',
           policy_gate_result: CarePolicyGateResult.ALLOWED,
           reason: 'Autonomous actions disabled (PR7: state persistence only)',
           trigger_type: TRIGGER_TYPES.DEAL_DECAY,
@@ -499,7 +499,7 @@ async function processTriggersForTenant(tenant) {
         const escalation = detectEscalation({ text: escalationText });
         if (escalation.is_escalation) {
           emitCareAudit(CareAuditEventType.ESCALATION_DETECTED, {
-            action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+            action_origin: 'care_autonomous',
             policy_gate_result: CarePolicyGateResult.ALLOWED,
             reason: escalation.reason,
             trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
@@ -512,13 +512,13 @@ async function processTriggersForTenant(tenant) {
         const proposal = proposeTransition({
           current_state: currentState,
           signals,
-          action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+          action_origin: 'care_autonomous',
         });
 
         if (proposal.proposed_state) {
           // Always emit state_proposed
           emitCareAudit(CareAuditEventType.STATE_PROPOSED, {
-            action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+            action_origin: 'care_autonomous',
             policy_gate_result: CarePolicyGateResult.ALLOWED,
             current_state: currentState,
             proposed_state: proposal.proposed_state,
@@ -536,12 +536,12 @@ async function processTriggersForTenant(tenant) {
                 from_state: currentState,
                 to_state: proposal.proposed_state,
                 reason: proposal.reason,
-                action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+                action_origin: 'care_autonomous',
                 meta: { trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE, days_overdue: activity.days_overdue, signals }
               });
 
               emitCareAudit(CareAuditEventType.STATE_APPLIED, {
-                action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+                action_origin: 'care_autonomous',
                 policy_gate_result: CarePolicyGateResult.ALLOWED,
                 reason: `State applied: ${currentState} → ${proposal.proposed_state}`,
                 trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
@@ -557,7 +557,7 @@ async function processTriggersForTenant(tenant) {
 
         if (proposal.proposed_state && activity.days_overdue > 2) {
           emitCareAudit(CareAuditEventType.ACTION_CANDIDATE, {
-            action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+            action_origin: 'care_autonomous',
             policy_gate_result: CarePolicyGateResult.ALLOWED,
             action_type: 'activity_reschedule',
             proposed_state: proposal.proposed_state,
@@ -570,7 +570,7 @@ async function processTriggersForTenant(tenant) {
 
         // PR7: Always emit action_skipped
         emitCareAudit(CareAuditEventType.ACTION_SKIPPED, {
-          action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+          action_origin: 'care_autonomous',
           policy_gate_result: CarePolicyGateResult.ALLOWED,
           reason: 'Autonomous actions disabled (PR7: state persistence only)',
           trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
@@ -645,7 +645,7 @@ async function processTriggersForTenant(tenant) {
         const escalation = detectEscalation({ text: escalationText });
         if (escalation.is_escalation) {
           emitCareAudit(CareAuditEventType.ESCALATION_DETECTED, {
-            action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+            action_origin: 'care_autonomous',
             policy_gate_result: CarePolicyGateResult.ALLOWED,
             reason: escalation.reason,
             trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
@@ -658,13 +658,13 @@ async function processTriggersForTenant(tenant) {
         const proposal = proposeTransition({
           current_state: currentState,
           signals,
-          action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+          action_origin: 'care_autonomous',
         });
 
         if (proposal.proposed_state) {
           // Always emit state_proposed
           emitCareAudit(CareAuditEventType.STATE_PROPOSED, {
-            action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+            action_origin: 'care_autonomous',
             policy_gate_result: CarePolicyGateResult.ALLOWED,
             current_state: currentState,
             proposed_state: proposal.proposed_state,
@@ -682,12 +682,12 @@ async function processTriggersForTenant(tenant) {
                 from_state: currentState,
                 to_state: proposal.proposed_state,
                 reason: proposal.reason,
-                action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+                action_origin: 'care_autonomous',
                 meta: { trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT, amount: opp.amount, signals }
               });
 
               emitCareAudit(CareAuditEventType.STATE_APPLIED, {
-                action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+                action_origin: 'care_autonomous',
                 policy_gate_result: CarePolicyGateResult.ALLOWED,
                 reason: `State applied: ${currentState} → ${proposal.proposed_state}`,
                 trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
@@ -703,7 +703,7 @@ async function processTriggersForTenant(tenant) {
 
         if (proposal.proposed_state && opp.amount > 50000) {
           emitCareAudit(CareAuditEventType.ACTION_CANDIDATE, {
-            action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+            action_origin: 'care_autonomous',
             policy_gate_result: CarePolicyGateResult.ALLOWED,
             action_type: 'deal_closing',
             proposed_state: proposal.proposed_state,
@@ -716,7 +716,7 @@ async function processTriggersForTenant(tenant) {
 
         // PR7: Always emit action_skipped
         emitCareAudit(CareAuditEventType.ACTION_SKIPPED, {
-          action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+          action_origin: 'care_autonomous',
           policy_gate_result: CarePolicyGateResult.ALLOWED,
           reason: 'Autonomous actions disabled (PR7: state persistence only)',
           trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
