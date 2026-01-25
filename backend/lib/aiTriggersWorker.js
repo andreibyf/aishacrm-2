@@ -211,7 +211,21 @@ async function processTriggersForTenant(tenant) {
         });
 
         const escalation = detectEscalation({ text: escalationText });
+        
+        // Debug logging for escalation detection
+        logger.info({
+          trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
+          lead_id: lead.id,
+          escalation_text: escalationText,
+          is_escalation: escalation.is_escalation,
+          escalation_reason: escalation.reason,
+          escalation_severity: escalation.severity,
+          feature_flag: isCareWorkflowTriggersEnabled(),
+          webhook_url_set: !!process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL
+        }, '[AiTriggers] Escalation detection result');
+        
         if (escalation.is_escalation) {
+          logger.info({ lead_id: lead.id }, '[AiTriggers] ESCALATION DETECTED');
           emitCareAudit(CareAuditEventType.ESCALATION_DETECTED, {
             action_origin: 'care_autonomous',
             policy_gate_result: CarePolicyGateResult.ALLOWED,
@@ -221,35 +235,50 @@ async function processTriggersForTenant(tenant) {
             record_id: lead.id,
             metadata: { severity: escalation.severity },
           });
+        }
 
-          // PR8: Trigger workflow webhook if enabled
-          if (isCareWorkflowTriggersEnabled() && process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL) {
-            triggerCareWorkflow({
-              url: process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL,
-              secret: process.env.CARE_WORKFLOW_WEBHOOK_SECRET,
-              payload: {
-                event_id: `escalation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                type: 'care.escalation_detected',
-                ts: new Date().toISOString(),
-                tenant_id: lead.tenant_id,
-                entity_type: 'lead',
-                entity_id: lead.id,
-                action_origin: 'care_autonomous',
-                reason: escalation.reason,
-                policy_gate_result: CarePolicyGateResult.ALLOWED,
-                trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
-                meta: {
-                  severity: escalation.severity,
-                  days_stagnant: lead.days_stagnant,
-                  lead_name: `${lead.first_name || ''} ${lead.last_name || ''}`.trim()
-                }
-              },
-              timeout_ms: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_TIMEOUT_MS) || 3000,
-              retries: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_MAX_RETRIES) || 2
-            }).catch(err => {
-              console.warn('[Triggers] Workflow trigger failed (non-critical):', err.message);
-            });
-          }
+        // PR8: Trigger workflow webhook for ALL stagnant leads (not just escalations)
+        if (isCareWorkflowTriggersEnabled() && process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL) {
+          logger.info({ 
+            lead_id: lead.id,
+            webhook_url: process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL,
+            has_escalation: escalation.is_escalation
+          }, '[AiTriggers] Triggering workflow webhook');
+          
+          triggerCareWorkflow({
+            url: process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL,
+            secret: process.env.CARE_WORKFLOW_WEBHOOK_SECRET,
+            payload: {
+              event_id: `trigger-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              type: escalation.is_escalation ? 'care.escalation_detected' : 'care.trigger_detected',
+              ts: new Date().toISOString(),
+              tenant_id: lead.tenant_id,
+              entity_type: 'lead',
+              entity_id: lead.id,
+              action_origin: 'care_autonomous',
+              trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
+              policy_gate_result: CarePolicyGateResult.ALLOWED,
+              meta: {
+                days_stagnant: lead.days_stagnant,
+                lead_name: `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
+                status: lead.status,
+                // Include escalation info only if detected
+                ...(escalation.is_escalation && {
+                  escalation_reason: escalation.reason,
+                  escalation_severity: escalation.severity,
+                })
+              }
+            },
+            timeout_ms: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_TIMEOUT_MS) || 3000,
+            retries: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_MAX_RETRIES) || 2
+          }).catch(err => {
+            logger.warn({ err, lead_id: lead.id }, '[AiTriggers] Workflow webhook failed (non-critical)');
+          });
+        } else {
+          logger.debug({
+            feature_flag: isCareWorkflowTriggersEnabled(),
+            webhook_url_set: !!process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL
+          }, '[AiTriggers] Webhook trigger skipped - feature disabled or URL not set');
         }
 
         const proposal = proposeTransition({
