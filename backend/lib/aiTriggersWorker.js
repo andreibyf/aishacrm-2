@@ -26,7 +26,7 @@ import { detectEscalation } from './care/careEscalationDetector.js';
 import { proposeTransition, applyTransition } from './care/careStateEngine.js';
 import { emitCareAudit } from './care/careAuditEmitter.js';
 import { signalsFromTrigger, buildTriggerEscalationText } from './care/careTriggerSignalAdapter.js';
-import { CareAuditEventType, CarePolicyGateResult, CareActionOrigin } from './care/careTypes.js';
+import { CareAuditEventType, CarePolicyGateResult } from './care/careAuditTypes.js';
 // PR7: State persistence and policy gate
 import { getCareState, upsertCareState, appendCareHistory } from './care/careStateStore.js';
 import { isCareStateWriteEnabled } from './care/isCareStateWriteEnabled.js';
