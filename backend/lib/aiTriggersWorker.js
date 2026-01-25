@@ -226,6 +226,19 @@ async function processTriggersForTenant(tenant) {
           action_origin: 'care_autonomous',
         });
 
+        if (!proposal) {
+          emitCareAudit(CareAuditEventType.ACTION_SKIPPED, {
+            action_origin: 'care_autonomous',
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            reason: 'no_transition_proposed',
+            trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
+            record_type: 'lead',
+            record_id: lead.id,
+            metadata: { trigger_type: TRIGGER_TYPES.LEAD_STAGNANT }
+          });
+          continue;
+        }
+
         if (proposal.proposed_state) {
           // Always emit state_proposed
           emitCareAudit(CareAuditEventType.STATE_PROPOSED, {
@@ -373,6 +386,19 @@ async function processTriggersForTenant(tenant) {
           action_origin: 'care_autonomous',
         });
 
+        if (!proposal) {
+          emitCareAudit(CareAuditEventType.ACTION_SKIPPED, {
+            action_origin: 'care_autonomous',
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            reason: 'no_transition_proposed',
+            trigger_type: TRIGGER_TYPES.DEAL_DECAY,
+            record_type: 'opportunity',
+            record_id: deal.id,
+            metadata: { trigger_type: TRIGGER_TYPES.DEAL_DECAY }
+          });
+          continue;
+        }
+
         if (proposal.proposed_state) {
           // Always emit state_proposed
           emitCareAudit(CareAuditEventType.STATE_PROPOSED, {
@@ -514,6 +540,19 @@ async function processTriggersForTenant(tenant) {
           signals,
           action_origin: 'care_autonomous',
         });
+
+        if (!proposal) {
+          emitCareAudit(CareAuditEventType.ACTION_SKIPPED, {
+            action_origin: 'care_autonomous',
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            reason: 'no_transition_proposed',
+            trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
+            record_type: 'activity',
+            record_id: activity.id,
+            metadata: { trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE }
+          });
+          continue;
+        }
 
         if (proposal.proposed_state) {
           // Always emit state_proposed
