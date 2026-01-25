@@ -115,6 +115,9 @@ services:
       - GH_TOKEN=${GH_TOKEN:-}
       - REPO_OWNER=${REPO_OWNER:-andreibyf}
       - REPO_NAME=${REPO_NAME:-aishacrm-2}
+      # Customer C.A.R.E. Configuration
+      - CARE_AUTONOMY_ENABLED=${CARE_AUTONOMY_ENABLED:-false}
+      - CARE_SHADOW_MODE=${CARE_SHADOW_MODE:-true}
       # Telemetry
       - TELEMETRY_ENABLED=true
       - TELEMETRY_LOG_PATH=/telemetry/telemetry.ndjson

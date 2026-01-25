@@ -309,11 +309,49 @@ Any implementation attempting to do so violates this contract.
 
 ---
 
-## 8. Enforcement
+## 8. Action Origin Classification (Agent-Task Safety Contract)
+
+All actions AiSHA performs MUST be classified with an **action origin**. This classification is required for safe coexistence with Office Agents and user-instructed tasks.
+
+### ActionOrigin Values
+
+* `user_directed` — initiated by an explicit user instruction (e.g., user assigns a task to an Office Agent)
+* `care_autonomous` — initiated by AiSHA without an explicit user instruction (Hands-Off Mode)
+
+### Hard Rules
+
+1. **`care_autonomous` actions MUST pass Hands-Off Mode gates:**
+   * Global kill switch + shadow mode rules
+   * C.A.R.E. state constraints
+   * Escalation triggers
+   * Prohibited action list
+
+2. **`user_directed` actions MUST NOT be blocked or degraded by Hands-Off Mode gates** except for hard safety prohibitions. If a user-directed action would violate a prohibition (e.g., binding commitment, regulated action), AiSHA MUST:
+   * Escalate
+   * Request explicit human confirmation / handling
+   * Avoid executing the prohibited behavior
+
+3. **On uncertainty, AiSHA MUST fail safe:**
+   * Treat the action as `care_autonomous`
+   * Escalate rather than act
+
+### Audit Requirements
+
+Every action must record:
+* `action_origin` (user_directed | care_autonomous)
+* `reason` (non-empty explanation)
+* `policy_gate_result` (allowed | escalated | blocked)
+
+**Purpose:** This prevents Customer C.A.R.E. autonomy from unintentionally interfering with explicit Office Agent task execution.
+
+---
+
+## 9. Enforcement
 
 All features, agents, workflows, and AI behavior MUST:
 - Reference this document
 - Pass compliance review against this spec
+- Include action origin classification for all actions
 
 This document supersedes informal guidance.
 
