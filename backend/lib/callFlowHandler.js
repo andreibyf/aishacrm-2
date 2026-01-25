@@ -28,6 +28,9 @@ import { CarePolicyGateResult, CareAuditEventType } from './care/careAuditTypes.
 // PR7: State persistence and policy gate
 import { getCareState, upsertCareState, appendCareHistory } from './care/careStateStore.js';
 import { isCareStateWriteEnabled } from './care/isCareStateWriteEnabled.js';
+// PR8: Workflow webhook trigger integration
+import { isCareWorkflowTriggersEnabled } from './care/isCareWorkflowTriggersEnabled.js';
+import { triggerCareWorkflow } from './care/careWorkflowTriggerClient.js';
 
 /**
  * Create an in-app notification for call completions
@@ -313,6 +316,37 @@ export async function handleInboundCall(pgPool, payload) {
               contact_type: contactType
             }
           });
+
+          // PR8: Trigger workflow webhook if enabled
+          if (isCareWorkflowTriggersEnabled() && process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL) {
+            triggerCareWorkflow({
+              url: process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL,
+              secret: process.env.CARE_WORKFLOW_WEBHOOK_SECRET,
+              payload: {
+                event_id: `escalation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                type: 'care.escalation_detected',
+                ts: new Date().toISOString(),
+                tenant_id,
+                entity_type: contactType || 'contact',
+                entity_id: contact_id || ctx.entity_id,
+                action_origin: 'care_autonomous',
+                reason: `Escalation detected: ${escalationResult.reasons.join(', ')}`,
+                policy_gate_result: CarePolicyGateResult.ESCALATED,
+                reasons: escalationResult.reasons,
+                confidence: escalationResult.confidence,
+                meta: {
+                  direction: 'inbound',
+                  sentiment,
+                  contact_type: contactType,
+                  duration
+                }
+              },
+              timeout_ms: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_TIMEOUT_MS) || 3000,
+              retries: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_MAX_RETRIES) || 2
+            }).catch(err => {
+              console.warn('[CallFlow] Workflow trigger failed (non-critical):', err.message);
+            });
+          }
         }
       }
     }
@@ -662,6 +696,38 @@ export async function handleOutboundCall(pgPool, payload) {
               contact_type: contactType
             }
           });
+
+          // PR8: Trigger workflow webhook if enabled
+          if (isCareWorkflowTriggersEnabled() && process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL) {
+            triggerCareWorkflow({
+              url: process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL,
+              secret: process.env.CARE_WORKFLOW_WEBHOOK_SECRET,
+              payload: {
+                event_id: `escalation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                type: 'care.escalation_detected',
+                ts: new Date().toISOString(),
+                tenant_id,
+                entity_type: contactType || 'contact',
+                entity_id: contact_id || ctx.entity_id,
+                action_origin: 'care_autonomous',
+                reason: `Escalation detected: ${escalationResult.reasons.join(', ')}`,
+                policy_gate_result: CarePolicyGateResult.ESCALATED,
+                reasons: escalationResult.reasons,
+                confidence: escalationResult.confidence,
+                meta: {
+                  direction: 'outbound',
+                  outcome,
+                  sentiment,
+                  contact_type: contactType,
+                  duration
+                }
+              },
+              timeout_ms: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_TIMEOUT_MS) || 3000,
+              retries: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_MAX_RETRIES) || 2
+            }).catch(err => {
+              console.warn('[CallFlow] Workflow trigger failed (non-critical):', err.message);
+            });
+          }
         }
       }
 
