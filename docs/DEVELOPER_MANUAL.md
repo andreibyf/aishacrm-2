@@ -87,6 +87,14 @@
 - [12.3 Bug Fixes](#123-bug-fixes)
 - [12.4 Pull Request Guidelines](#124-pull-request-guidelines)
 
+### Chapter 13: Developing for Customer C.A.R.E.
+- [13.1 C.A.R.E. Architecture for Developers](#131-care-architecture-for-developers)
+- [13.2 Adding Custom Escalation Detectors](#132-adding-custom-escalation-detectors)
+- [13.3 Extending Policy Gates](#133-extending-policy-gates)
+- [13.4 Creating Custom C.A.R.E. Triggers](#134-creating-custom-care-triggers)
+- [13.5 Testing C.A.R.E. Components](#135-testing-care-components)
+- [13.6 Debugging C.A.R.E. Operations](#136-debugging-care-operations)
+
 ### Appendices
 - [Appendix A: API Reference](#appendix-a-api-reference)
 - [Appendix B: Component Library](#appendix-b-component-library)
@@ -1603,7 +1611,248 @@ export default {
 
 ---
 
-*[Continue with Chapters 4-9...]*
+*[Continue with Chapters 4-5...]*
+
+---
+
+# Chapter 6: AI & Braid SDK Integration
+
+## 6.1 Braid SDK Overview
+
+### What is Braid?
+
+**Braid** is a custom domain-specific language (DSL) created specifically for AiSHA to enable secure AI-database interactions. It was designed to solve the fundamental challenge of giving AI assistants safe, structured access to production databases.
+
+### Why Braid Exists
+
+Traditional approaches fall short:
+- **Raw SQL is dangerous**: LLMs can hallucinate destructive queries
+- **ORM wrappers are leaky**: No tenant isolation guarantees  
+- **JSON schemas are verbose**: Tool definitions become unwieldy at scale
+
+Braid provides:
+- ✅ **Type-safe database operations** with automatic tenant isolation
+- ✅ **Compile-time validation** of tool definitions
+- ✅ **Read-only by default** with explicit write permissions
+- ✅ **Built-in audit logging** for all AI operations
+
+### Braid Tool Locations
+
+```
+braid-llm-kit/examples/assistant/
+├── accounts.braid                 # Account CRUD
+├── activities.braid               # Calendar/tasks
+├── bizdev-sources.braid           # BizDev sources
+├── contacts.braid                 # Contact CRUD
+├── leads.braid                    # Lead management
+├── lifecycle.braid                # v3.0.0 promotion/conversion
+├── navigation.braid               # CRM page navigation
+├── notes.braid                    # Note management
+├── opportunities.braid            # Sales pipeline
+├── snapshot.braid                 # Tenant data overview
+├── suggestions.braid              # AI suggestions
+├── telephony.braid                # AI calling
+├── web-research.braid             # External research
+└── workflows.braid                # Workflow automation
+```
+
+## 6.2 Braid Tool Development
+
+### Tool Definition Syntax
+
+Braid tools are defined in `.braid` files with TypeScript-like syntax:
+
+```typescript
+// Example: leads.braid
+tool searchLeads(
+  tenant_id: UUID,
+  search?: string,
+  status?: string,
+  limit?: number = 20
+): Lead[] {
+  // Braid automatically:
+  // 1. Validates tenant_id is UUID
+  // 2. Adds tenant isolation to query
+  // 3. Logs execution
+  // 4. Returns type-safe results
+  
+  SELECT id, name, email, status, value, created_at
+  FROM leads
+  WHERE tenant_id = $tenant_id
+  AND ($search IS NULL OR name ILIKE '%' || $search || '%')
+  AND ($status IS NULL OR status = $status)
+  ORDER BY created_at DESC
+  LIMIT $limit
+}
+```
+
+### Tool Registration
+
+After creating/modifying `.braid` files, sync the registry:
+
+```bash
+# Verify Braid tool registry is in sync
+npm run braid:check
+
+# Sync registry with .braid files
+npm run braid:sync
+
+# Generate fresh registry
+npm run braid:generate
+```
+
+### Dual Execution Modes
+
+**1. In-Process (Primary)**
+```javascript
+// backend/lib/braidIntegration-v2.js
+const result = await executeToolInProcess('searchLeads', {
+  tenant_id: 'uuid',
+  search: 'John',
+  status: 'qualified'
+});
+```
+
+**2. Distributed MCP**
+```bash
+# Start Braid MCP server (distributed mode)
+npm run serve:braid
+# OR manually:
+docker compose -f ./braid-mcp-node-server/docker-compose.yml up --build
+```
+
+## 6.3 AI Agent Development
+
+### System Prompt Integration
+
+Dynamic system prompts load tenant context and Braid tools:
+
+```javascript
+// backend/lib/braidIntegration-v2.js
+function getBraidSystemPrompt(tenantId) {
+  const tenantContext = getTenantContextDictionary(tenantId);
+  const entityLabels = getEntityLabelInjector(tenantId);
+  const toolDescriptions = getAllToolDescriptions();
+  
+  return `
+You are AiSHA, an AI-native CRM assistant.
+
+Tenant: ${tenantContext.name}
+Entity Labels: ${JSON.stringify(entityLabels)}
+
+Available Tools:
+${toolDescriptions.map(t => `- ${t.name}: ${t.description}`).join('\n')}
+
+Rules:
+- ALWAYS use tenant_id: "${tenantId}"
+- NO delete operations allowed
+- Respect read_only vs propose_actions modes
+`;
+}
+```
+
+### Conversation Flow
+
+```javascript
+// backend/routes/ai.js (lines 491, 1706)
+router.post('/chat', async (req, res) => {
+  const { tenant_id, user_id, message, mode } = req.body;
+  
+  // 1. Load tenant context
+  const tenantContext = getTenantContextDictionary(tenant_id);
+  const systemPrompt = getBraidSystemPrompt(tenant_id);
+  
+  // 2. Build conversation history
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...conversationHistory,
+    { role: 'user', content: message }
+  ];
+  
+  // 3. Call LLM with tools
+  const response = await generateChatCompletion(messages, braidTools, {
+    provider: 'openai',
+    model: 'gpt-4o',
+    temperature: 0.7
+  });
+  
+  // 4. Execute tool calls if present
+  for (const toolCall of response.tool_calls) {
+    const result = await executeToolInProcess(toolCall.name, toolCall.arguments);
+    // ... handle result
+  }
+});
+```
+
+## 6.4 Custom Tool Integration
+
+### Adding a New Braid Tool
+
+**Step 1: Create `.braid` file**
+
+```typescript
+// braid-llm-kit/examples/assistant/custom-reports.braid
+tool getMonthlyRevenue(
+  tenant_id: UUID,
+  year: number,
+  month: number
+): RevenueReport {
+  SELECT 
+    DATE_TRUNC('month', created_at) as month,
+    SUM(amount) as total_revenue,
+    COUNT(*) as deal_count
+  FROM opportunities
+  WHERE tenant_id = $tenant_id
+  AND status = 'won'
+  AND EXTRACT(YEAR FROM created_at) = $year
+  AND EXTRACT(MONTH FROM created_at) = $month
+  GROUP BY DATE_TRUNC('month', created_at)
+}
+```
+
+**Step 2: Sync registry**
+
+```bash
+npm run braid:sync
+```
+
+**Step 3: Test in AI chat**
+
+```
+User: "What was our revenue in January 2026?"
+
+AiSHA: [calls getMonthlyRevenue(tenant_id, 2026, 1)]
+"Your revenue in January 2026 was $45,230 from 12 deals."
+```
+
+### Tool Safety Patterns
+
+```typescript
+// ❌ UNSAFE: Allows arbitrary deletion
+tool deleteEntity(tenant_id: UUID, entity_id: UUID) {
+  DELETE FROM entities WHERE id = $entity_id
+}
+
+// ✅ SAFE: Read-only with tenant isolation
+tool getEntity(tenant_id: UUID, entity_id: UUID): Entity {
+  SELECT * FROM entities 
+  WHERE tenant_id = $tenant_id 
+  AND id = $entity_id
+}
+
+// ✅ SAFE: Update with validation
+tool updateEntityStatus(
+  tenant_id: UUID, 
+  entity_id: UUID,
+  status: string
+): Entity {
+  UPDATE entities 
+  SET status = $status, updated_at = NOW()
+  WHERE tenant_id = $tenant_id 
+  AND id = $entity_id
+  RETURNING *
+}
+```
 
 ---
 
@@ -2265,6 +2514,536 @@ window.addEventListener('error', (event) => {
 | DELETE | `/api/ai/conversations/:id` | Delete conversation |
 
 *[More endpoints - 197 total across 26 categories]*
+
+---
+
+# Chapter 13: Developing for Customer C.A.R.E.
+
+## 13.1 C.A.R.E. Architecture for Developers
+
+### Component Overview
+
+Customer C.A.R.E. is built as a modular autonomous system with clear boundaries:
+
+```
+┌─────────────────────────────────────────────────┐
+│          C.A.R.E. Architecture                  │
+├─────────────────────────────────────────────────┤
+│  Kill Switch (isCareEnabled.js)                 │
+│  ├─ Environment-based ON/OFF switch             │
+│  └─ Emergency stop for all autonomous ops       │
+├─────────────────────────────────────────────────┤
+│  Escalation Detectors                           │
+│  ├─ backend/lib/care/escalationDetector.js      │
+│  ├─ Analyzes text, sentiment, timing            │
+│  └─ Returns: {is_escalation, reason, type}      │
+├─────────────────────────────────────────────────┤
+│  Action Origin Classifier                       │
+│  ├─ backend/lib/care/actionOriginClassifier.js  │
+│  └─ Determines: human | care_autonomous         │
+├─────────────────────────────────────────────────┤
+│  Policy Gate                                    │
+│  ├─ backend/lib/care/carePolicyGate.js          │
+│  ├─ Evaluates: action_type + origin + state     │
+│  └─ Returns: ALLOWED | BLOCKED | WARN | DEFER   │
+├─────────────────────────────────────────────────┤
+│  State Engine                                   │
+│  ├─ backend/lib/care/careStateEngine.js         │
+│  ├─ Manages: cold/warm/hot/won/lost/etc.        │
+│  └─ Logs all transitions                        │
+├─────────────────────────────────────────────────┤
+│  State Persistence                              │
+│  ├─ Database: care_states table                 │
+│  └─ Tracks: current_state, previous_state       │
+├─────────────────────────────────────────────────┤
+│  Workflow Trigger Client                        │
+│  ├─ backend/lib/care/careWorkflowTriggerClient.js│
+│  ├─ HTTP POST with HMAC-SHA256 signature        │
+│  └─ Non-blocking, graceful failure              │
+├─────────────────────────────────────────────────┤
+│  Audit Logger                                   │
+│  ├─ Database: care_audit_log table              │
+│  └─ All decisions + actions logged              │
+└─────────────────────────────────────────────────┘
+```
+
+### Integration Points
+
+**1. Call Flow Handler** (`backend/lib/callFlowHandler.js`)
+- Processes inbound/outbound calls
+- Detects sentiment escalations
+- 2 integration points for C.A.R.E. triggers
+
+**2. AI Triggers Worker** (`backend/lib/aiTriggersWorker.js`)
+- Scheduled checks for stagnant data
+- 4 integration points:
+  - Lead stagnant
+  - Deal decay
+  - Activity overdue
+  - Opportunity hot
+
+## 13.2 Adding Custom Escalation Detectors
+
+### Escalation Detector Interface
+
+```javascript
+// backend/lib/care/escalationDetector.js
+export function detectEscalation({
+  text,           // Communication text to analyze
+  sentiment,      // Sentiment score (0.0-1.0, optional)
+  entity_type,    // 'lead', 'contact', 'account', 'opportunity'
+  last_contact,   // Date of last interaction
+  metadata        // Additional context (optional)
+}) {
+  return {
+    is_escalation: boolean,      // Is this an escalation?
+    reason: string,               // Human-readable explanation
+    trigger_type: string,         // Categorization slug
+    confidence: number,           // 0.0-1.0 confidence score
+    recommended_action: string    // Suggested next step (optional)
+  };
+}
+```
+
+### Example: Custom Domain-Specific Detector
+
+```javascript
+// backend/lib/care/customEscalationDetectors.js
+
+/**
+ * SaaS-specific escalation detector
+ * Detects when trial users mention specific issues
+ */
+export function detectTrialCancellationRisk({
+  text,
+  entity_type,
+  metadata = {}
+}) {
+  // Trial-specific keywords
+  const cancellationKeywords = [
+    'cancel', 'too expensive', 'not worth it',
+    'don\'t need', 'going with competitor',
+    'too complicated', 'doesn\'t work'
+  ];
+  
+  const textLower = text.toLowerCase();
+  const hasCancellationIntent = cancellationKeywords.some(
+    keyword => textLower.includes(keyword)
+  );
+  
+  // Only escalate for trial accounts
+  const isTrial = metadata.account_status === 'trial';
+  
+  if (hasCancellationIntent && isTrial) {
+    return {
+      is_escalation: true,
+      reason: `Trial user expressing cancellation intent: "${text.substring(0, 50)}..."`,
+      trigger_type: 'trial_cancellation_risk',
+      confidence: 0.85,
+      recommended_action: 'urgent_call_from_success_team'
+    };
+  }
+  
+  return {
+    is_escalation: false,
+    reason: 'No cancellation risk detected',
+    trigger_type: null,
+    confidence: 0.0
+  };
+}
+```
+
+### Integrating Custom Detector
+
+```javascript
+// backend/lib/callFlowHandler.js (or aiTriggersWorker.js)
+import { detectEscalation } from './care/escalationDetector.js';
+import { detectTrialCancellationRisk } from './care/customEscalationDetectors.js';
+
+// In your call processing logic:
+const text = callTranscript;
+const metadata = { account_status: account.status };
+
+// Run both detectors
+const standardEscalation = detectEscalation({ text, entity_type: 'account' });
+const trialRiskEscalation = detectTrialCancellationRisk({ 
+  text, 
+  entity_type: 'account',
+  metadata 
+});
+
+// Escalate if either detector triggers
+if (standardEscalation.is_escalation || trialRiskEscalation.is_escalation) {
+  const escalation = trialRiskEscalation.is_escalation 
+    ? trialRiskEscalation 
+    : standardEscalation;
+  
+  // Log and handle escalation...
+}
+```
+
+## 13.3 Extending Policy Gates
+
+### Policy Gate Interface
+
+```javascript
+// backend/lib/care/carePolicyGate.js
+export const CarePolicyGateResult = {
+  ALLOWED: 'allowed',
+  BLOCKED: 'blocked',
+  WARN: 'warn',
+  DEFER: 'defer'
+};
+
+export function evaluatePolicy({
+  action_type,      // 'send_message', 'update_state', 'create_task', etc.
+  action_origin,    // 'human' | 'care_autonomous'
+  current_state,    // C.A.R.E. state: 'cold', 'warm', 'hot', etc.
+  entity_type,      // 'lead', 'contact', 'account', 'opportunity'
+  entity_id,        // UUID of the entity
+  tenant_id,        // UUID of the tenant
+  metadata          // Additional context
+}) {
+  // Return one of: ALLOWED, BLOCKED, WARN, DEFER
+}
+```
+
+### Example: Time-Based Policy
+
+```javascript
+// backend/lib/care/customPolicyGates.js
+
+/**
+ * Only allow autonomous messaging during business hours
+ */
+export function evaluateBusinessHoursPolicy({
+  action_type,
+  action_origin,
+  tenant_id,
+  metadata = {}
+}) {
+  // Only restrict autonomous messaging
+  if (action_origin !== 'care_autonomous') {
+    return CarePolicyGateResult.ALLOWED;
+  }
+  
+  if (action_type !== 'send_message') {
+    return CarePolicyGateResult.ALLOWED;
+  }
+  
+  // Get tenant timezone (default: UTC)
+  const timezone = metadata.tenant_timezone || 'UTC';
+  const now = new Date();
+  const hour = now.getHours(); // 0-23
+  
+  // Business hours: 9 AM - 5 PM
+  if (hour >= 9 && hour < 17) {
+    return CarePolicyGateResult.ALLOWED;
+  }
+  
+  // Outside business hours: defer until tomorrow
+  return CarePolicyGateResult.DEFER;
+}
+```
+
+### Example: Value-Based Policy
+
+```javascript
+/**
+ * Require human approval for high-value deals
+ */
+export function evaluateHighValuePolicy({
+  action_type,
+  action_origin,
+  entity_type,
+  metadata = {}
+}) {
+  if (action_origin !== 'care_autonomous') {
+    return CarePolicyGateResult.ALLOWED;
+  }
+  
+  // Check if this is a high-value opportunity
+  if (entity_type === 'opportunity') {
+    const dealValue = metadata.value || 0;
+    
+    if (dealValue > 50000) {
+      // High-value deals require human approval
+      return CarePolicyGateResult.DEFER;
+    }
+  }
+  
+  return CarePolicyGateResult.ALLOWED;
+}
+```
+
+### Composing Multiple Policies
+
+```javascript
+// backend/lib/care/carePolicyGate.js
+
+export function evaluatePolicy(params) {
+  // Run all policy checks
+  const businessHours = evaluateBusinessHoursPolicy(params);
+  const highValue = evaluateHighValuePolicy(params);
+  const standard = evaluateStandardPolicy(params);
+  
+  // Most restrictive policy wins
+  const results = [businessHours, highValue, standard];
+  
+  if (results.includes(CarePolicyGateResult.BLOCKED)) {
+    return CarePolicyGateResult.BLOCKED;
+  }
+  
+  if (results.includes(CarePolicyGateResult.DEFER)) {
+    return CarePolicyGateResult.DEFER;
+  }
+  
+  if (results.includes(CarePolicyGateResult.WARN)) {
+    return CarePolicyGateResult.WARN;
+  }
+  
+  return CarePolicyGateResult.ALLOWED;
+}
+```
+
+## 13.4 Creating Custom C.A.R.E. Triggers
+
+### Trigger Worker Pattern
+
+```javascript
+// backend/lib/care/customCareWorkers.js
+
+/**
+ * Custom trigger: Detect abandoned carts
+ * Runs every hour to check for carts abandoned >24 hours
+ */
+export async function checkAbandonedCarts({ tenantId, pgPool }) {
+  const escalations = [];
+  
+  // Query abandoned carts
+  const query = `
+    SELECT cart_id, user_id, total_value, created_at
+    FROM shopping_carts
+    WHERE tenant_id = $1
+    AND status = 'abandoned'
+    AND created_at < NOW() - INTERVAL '24 hours'
+    AND created_at > NOW() - INTERVAL '48 hours'
+  `;
+  
+  const result = await pgPool.query(query, [tenantId]);
+  
+  for (const cart of result.rows) {
+    // Build escalation
+    const escalation = {
+      is_escalation: true,
+      trigger_type: 'abandoned_cart',
+      reason: `Cart abandoned for ${getHoursSince(cart.created_at)} hours`,
+      entity_type: 'lead', // or 'contact'
+      entity_id: cart.user_id,
+      meta: {
+        cart_id: cart.cart_id,
+        cart_value: cart.total_value,
+        hours_abandoned: getHoursSince(cart.created_at)
+      }
+    };
+    
+    escalations.push(escalation);
+  }
+  
+  return escalations;
+}
+
+function getHoursSince(date) {
+  return Math.floor((Date.now() - new Date(date).getTime()) / (1000 * 60 * 60));
+}
+```
+
+### Registering Custom Trigger
+
+```javascript
+// backend/lib/aiTriggersWorker.js
+
+import { checkAbandonedCarts } from './care/customCareWorkers.js';
+
+// In the main worker loop:
+async function runAllTriggers(tenantId) {
+  const escalations = [];
+  
+  // Standard triggers
+  escalations.push(...await checkLeadStagnant(tenantId));
+  escalations.push(...await checkDealDecay(tenantId));
+  escalations.push(...await checkActivityOverdue(tenantId));
+  escalations.push(...await checkOpportunityHot(tenantId));
+  
+  // Custom triggers
+  escalations.push(...await checkAbandonedCarts({ tenantId, pgPool }));
+  
+  // Process all escalations
+  for (const escalation of escalations) {
+    await handleEscalation(escalation);
+  }
+}
+```
+
+## 13.5 Testing C.A.R.E. Components
+
+### Unit Testing Escalation Detectors
+
+```javascript
+// backend/lib/care/__tests__/escalationDetector.test.js
+import { strict as assert } from 'node:assert';
+import { test } from 'node:test';
+import { detectEscalation } from '../escalationDetector.js';
+
+test('detectEscalation - negative sentiment', () => {
+  const result = detectEscalation({
+    text: 'This product is terrible and I want a refund',
+    sentiment: 0.2,
+    entity_type: 'lead'
+  });
+  
+  assert.equal(result.is_escalation, true);
+  assert.equal(result.trigger_type, 'negative_sentiment');
+  assert.ok(result.confidence > 0.7);
+});
+
+test('detectEscalation - neutral sentiment', () => {
+  const result = detectEscalation({
+    text: 'Thank you for the information',
+    sentiment: 0.7,
+    entity_type: 'lead'
+  });
+  
+  assert.equal(result.is_escalation, false);
+});
+```
+
+### Unit Testing Policy Gates
+
+```javascript
+// backend/lib/care/__tests__/carePolicyGate.test.js
+import { test } from 'node:test';
+import { strict as assert } from 'node:assert';
+import { evaluatePolicy, CarePolicyGateResult } from '../carePolicyGate.js';
+
+test('policy gate - allow human actions', () => {
+  const result = evaluatePolicy({
+    action_type: 'send_message',
+    action_origin: 'human',
+    current_state: 'cold'
+  });
+  
+  assert.equal(result, CarePolicyGateResult.ALLOWED);
+});
+
+test('policy gate - block autonomous on cold leads', () => {
+  const result = evaluatePolicy({
+    action_type: 'send_message',
+    action_origin: 'care_autonomous',
+    current_state: 'cold'
+  });
+  
+  assert.equal(result, CarePolicyGateResult.BLOCKED);
+});
+```
+
+### Integration Testing Full Flow
+
+```javascript
+// backend/__tests__/care/integration.test.js
+import { test } from 'node:test';
+import { strict as assert } from 'node:assert';
+
+test('C.A.R.E. full flow - stagnant lead escalation', async () => {
+  // 1. Create a stagnant lead (no activity for 7+ days)
+  const lead = await createTestLead({
+    status: 'qualified',
+    last_contact: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000) // 8 days ago
+  });
+  
+  // 2. Run escalation detection
+  const escalation = await detectLeadStagnant(lead);
+  assert.equal(escalation.is_escalation, true);
+  
+  // 3. Evaluate policy
+  const policyResult = evaluatePolicy({
+    action_type: 'workflow_trigger',
+    action_origin: 'care_autonomous',
+    current_state: 'warm',
+    entity_type: 'lead'
+  });
+  assert.equal(policyResult, CarePolicyGateResult.ALLOWED);
+  
+  // 4. Verify audit log entry created
+  const auditLog = await pgPool.query(
+    `SELECT * FROM care_audit_log WHERE entity_id = $1 ORDER BY created_at DESC LIMIT 1`,
+    [lead.id]
+  );
+  assert.equal(auditLog.rows[0].event_type, 'ESCALATION_DETECTED');
+});
+```
+
+## 13.6 Debugging C.A.R.E. Operations
+
+### Enable Debug Logging
+
+```javascript
+// backend/lib/care/escalationDetector.js
+const DEBUG = process.env.CARE_DEBUG === 'true';
+
+export function detectEscalation(params) {
+  if (DEBUG) {
+    console.log('[CARE_DEBUG] Escalation detection input:', params);
+  }
+  
+  const result = /* ... detection logic ... */;
+  
+  if (DEBUG) {
+    console.log('[CARE_DEBUG] Escalation detection result:', result);
+  }
+  
+  return result;
+}
+```
+
+### Audit Log Queries
+
+```sql
+-- View escalations for a specific entity
+SELECT 
+  event_type,
+  reason,
+  metadata->>'trigger_type' as trigger,
+  created_at
+FROM care_audit_log
+WHERE entity_id = 'YOUR_ENTITY_UUID'
+ORDER BY created_at DESC;
+
+-- View policy gate decisions
+SELECT 
+  metadata->>'action_type' as action,
+  metadata->>'policy_gate_result' as decision,
+  reason,
+  COUNT(*) as count
+FROM care_audit_log
+WHERE event_type IN ('ACTION_ALLOWED', 'ACTION_BLOCKED')
+AND created_at > NOW() - INTERVAL '24 hours'
+GROUP BY action, decision, reason
+ORDER BY count DESC;
+```
+
+### Kill Switch Quick Reference
+
+```bash
+# Disable C.A.R.E. (emergency stop)
+CARE_ENABLED=false
+
+# Enable C.A.R.E.
+CARE_ENABLED=true
+
+# Check current status
+docker logs aishacrm-backend --tail=20 | grep CARE_ENABLED
+```
 
 ---
 
