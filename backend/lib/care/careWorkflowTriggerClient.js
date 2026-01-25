@@ -7,8 +7,8 @@
  * Handles signing, timeouts, retries, and graceful failure.
  */
 
-const crypto = require('crypto');
-const logger = require('../logger');
+import crypto from 'crypto';
+import logger from '../logger.js';
 
 /**
  * Generate HMAC-SHA256 signature for webhook payload
@@ -106,7 +106,7 @@ async function triggerCareWorkflow({
   return { success: false, error: lastError };
 }
 
-module.exports = {
+export {
   triggerCareWorkflow,
   generateSignature // Exported for testing
 };

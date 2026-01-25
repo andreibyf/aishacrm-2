@@ -11,7 +11,7 @@
  * Check if C.A.R.E. workflow triggers are enabled
  * @returns {boolean} true if enabled, false otherwise
  */
-function isCareWorkflowTriggersEnabled() {
+export function isCareWorkflowTriggersEnabled() {
   const envValue = process.env.CARE_WORKFLOW_TRIGGERS_ENABLED;
   
   if (!envValue) {
@@ -22,4 +22,4 @@ function isCareWorkflowTriggersEnabled() {
   return normalized === 'true' || normalized === '1' || normalized === 'yes';
 }
 
-module.exports = { isCareWorkflowTriggersEnabled };
+export default isCareWorkflowTriggersEnabled;
