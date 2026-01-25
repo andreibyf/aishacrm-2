@@ -21,10 +21,13 @@ import { getSupabaseClient } from './supabase-db.js';
 
 // PR5: C.A.R.E. shadow wiring imports
 import { detectEscalation } from './care/careEscalationDetector.js';
-import { proposeTransition } from './care/careStateEngine.js';
+import { proposeTransition, applyTransition } from './care/careStateEngine.js';
 import { emitCareAudit } from './care/careAuditEmitter.js';
 import { signalsFromCall, buildEscalationText } from './care/careCallSignalAdapter.js';
 import { CarePolicyGateResult, CareAuditEventType } from './care/careAuditTypes.js';
+// PR7: State persistence and policy gate
+import { getCareState, upsertCareState, appendCareHistory } from './care/careStateStore.js';
+import { isCareStateWriteEnabled } from './care/isCareStateWriteEnabled.js';
 
 /**
  * Create an in-app notification for call completions
@@ -261,8 +264,26 @@ export async function handleInboundCall(pgPool, payload) {
     sentiment
   });
 
-  // PR5: C.A.R.E. Shadow Wiring (read-only, no user-facing changes)
+  // PR5+PR7: C.A.R.E. Analysis with State Persistence (when enabled)
   try {
+    // PR7: Determine entity context for state management
+    const ctx = {
+      tenant_id,
+      entity_type: contactType, // 'lead' or 'contact'
+      entity_id: contactId
+    };
+
+    // PR7: Read current state from DB (fallback to 'unaware' if not found)
+    let currentState = 'unaware';
+    try {
+      const stateRecord = await getCareState(ctx);
+      if (stateRecord && stateRecord.care_state) {
+        currentState = stateRecord.care_state;
+      }
+    } catch (stateReadError) {
+      console.warn('[CallFlow] C.A.R.E. state read error (non-critical):', stateReadError.message);
+    }
+
     // 1) Escalation detection
     if (summary || transcript) {
       const escalationText = buildEscalationText(summary, transcript);
@@ -309,11 +330,12 @@ export async function handleInboundCall(pgPool, payload) {
     });
 
     const proposal = proposeTransition({
-      current_state: 'unaware', // PR5: placeholder (no DB read yet)
+      current_state: currentState, // PR7: real state from DB
       signals
     });
 
     if (proposal) {
+      // Always emit state_proposed
       emitCareAudit({
         tenant_id,
         entity_type: 'conversation',
@@ -323,12 +345,44 @@ export async function handleInboundCall(pgPool, payload) {
         reason: proposal.reason,
         policy_gate_result: CarePolicyGateResult.ALLOWED,
         meta: {
-          from_state: 'unaware',
+          from_state: currentState,
           to_state: proposal.next_state,
           direction: 'inbound',
           signals
         }
       });
+
+      // PR7: Conditionally apply transition if state write gate is enabled
+      if (isCareStateWriteEnabled()) {
+        try {
+          await applyTransition({
+            ctx,
+            from_state: currentState,
+            to_state: proposal.next_state,
+            reason: proposal.reason,
+            action_origin: 'care_autonomous',
+            meta: { direction: 'inbound', signals }
+          });
+
+          // Emit state_applied audit
+          emitCareAudit({
+            tenant_id,
+            entity_type: ctx.entity_type,
+            entity_id: ctx.entity_id,
+            event_type: CareAuditEventType.STATE_APPLIED,
+            action_origin: 'care_autonomous',
+            reason: `State transition applied: ${currentState} → ${proposal.next_state}`,
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            meta: {
+              from_state: currentState,
+              to_state: proposal.next_state,
+              direction: 'inbound'
+            }
+          });
+        } catch (applyError) {
+          console.warn('[CallFlow] C.A.R.E. state apply error (non-critical):', applyError.message);
+        }
+      }
     }
 
     // 3) Action candidates (shadow mode, logs only)
@@ -348,9 +402,24 @@ export async function handleInboundCall(pgPool, payload) {
         }
       });
     }
+
+    // PR7: Always emit action_skipped (actions not executed in PR7)
+    emitCareAudit({
+      tenant_id,
+      entity_type: ctx.entity_type,
+      entity_id: ctx.entity_id,
+      event_type: CareAuditEventType.ACTION_SKIPPED,
+      action_origin: 'care_autonomous',
+      reason: 'Autonomous actions disabled (PR7: state persistence only)',
+      policy_gate_result: CarePolicyGateResult.ALLOWED,
+      meta: {
+        direction: 'inbound',
+        action_items_count: actionItems ? actionItems.length : 0
+      }
+    });
   } catch (careError) {
-    // Shadow wiring errors should not break call flow
-    console.warn('[CallFlow] C.A.R.E. shadow wiring error (non-critical):', careError.message);
+    // C.A.R.E. errors should not break call flow
+    console.warn('[CallFlow] C.A.R.E. analysis error (non-critical):', careError.message);
   }
 
   return {
@@ -542,10 +611,28 @@ export async function handleOutboundCall(pgPool, payload) {
     sentiment
   });
 
-  // PR5: C.A.R.E. Shadow Wiring (read-only, no user-facing changes)
+  // PR5+PR7: C.A.R.E. Analysis with State Persistence (when enabled)
   try {
     // Only run C.A.R.E. analysis for answered calls with meaningful content
     if (outcome === 'answered' && (summary || transcript)) {
+      // PR7: Determine entity context for state management
+      const ctx = {
+        tenant_id,
+        entity_type: contactType, // 'lead' or 'contact'
+        entity_id: contactId
+      };
+
+      // PR7: Read current state from DB (fallback to 'unaware' if not found)
+      let currentState = 'unaware';
+      try {
+        const stateRecord = await getCareState(ctx);
+        if (stateRecord && stateRecord.care_state) {
+          currentState = stateRecord.care_state;
+        }
+      } catch (stateReadError) {
+        console.warn('[CallFlow] C.A.R.E. state read error (non-critical):', stateReadError.message);
+      }
+
       // 1) Escalation detection
       const escalationText = buildEscalationText(summary, transcript);
       if (escalationText) {
@@ -591,11 +678,12 @@ export async function handleOutboundCall(pgPool, payload) {
       });
 
       const proposal = proposeTransition({
-        current_state: 'unaware', // PR5: placeholder (no DB read yet)
+        current_state: currentState, // PR7: real state from DB
         signals
       });
 
       if (proposal) {
+        // Always emit state_proposed
         emitCareAudit({
           tenant_id,
           entity_type: 'conversation',
@@ -605,13 +693,46 @@ export async function handleOutboundCall(pgPool, payload) {
           reason: proposal.reason,
           policy_gate_result: CarePolicyGateResult.ALLOWED,
           meta: {
-            from_state: 'unaware',
+            from_state: currentState,
             to_state: proposal.next_state,
             direction: 'outbound',
             outcome,
             signals
           }
         });
+
+        // PR7: Conditionally apply transition if state write gate is enabled
+        if (isCareStateWriteEnabled()) {
+          try {
+            await applyTransition({
+              ctx,
+              from_state: currentState,
+              to_state: proposal.next_state,
+              reason: proposal.reason,
+              action_origin: 'care_autonomous',
+              meta: { direction: 'outbound', outcome, signals }
+            });
+
+            // Emit state_applied audit
+            emitCareAudit({
+              tenant_id,
+              entity_type: ctx.entity_type,
+              entity_id: ctx.entity_id,
+              event_type: CareAuditEventType.STATE_APPLIED,
+              action_origin: 'care_autonomous',
+              reason: `State transition applied: ${currentState} → ${proposal.next_state}`,
+              policy_gate_result: CarePolicyGateResult.ALLOWED,
+              meta: {
+                from_state: currentState,
+                to_state: proposal.next_state,
+                direction: 'outbound',
+                outcome
+              }
+            });
+          } catch (applyError) {
+            console.warn('[CallFlow] C.A.R.E. state apply error (non-critical):', applyError.message);
+          }
+        }
       }
 
       // 3) Action candidates (shadow mode, logs only)
@@ -632,10 +753,26 @@ export async function handleOutboundCall(pgPool, payload) {
           }
         });
       }
+
+      // PR7: Always emit action_skipped (actions not executed in PR7)
+      emitCareAudit({
+        tenant_id,
+        entity_type: ctx.entity_type,
+        entity_id: ctx.entity_id,
+        event_type: CareAuditEventType.ACTION_SKIPPED,
+        action_origin: 'care_autonomous',
+        reason: 'Autonomous actions disabled (PR7: state persistence only)',
+        policy_gate_result: CarePolicyGateResult.ALLOWED,
+        meta: {
+          direction: 'outbound',
+          outcome,
+          action_items_count: actionItems ? actionItems.length : 0
+        }
+      });
     }
   } catch (careError) {
-    // Shadow wiring errors should not break call flow
-    console.warn('[CallFlow] C.A.R.E. shadow wiring error (non-critical):', careError.message);
+    // C.A.R.E. errors should not break call flow
+    console.warn('[CallFlow] C.A.R.E. analysis error (non-critical):', careError.message);
   }
 
   return {
