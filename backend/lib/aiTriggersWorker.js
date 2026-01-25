@@ -22,9 +22,9 @@ import { getSupabaseClient } from './supabase-db.js';
 import logger from './logger.js';
 
 // PR6: C.A.R.E. shadow wiring (read-only analysis, no behavior change)
-import { detectEscalation } from './care/escalationDetector.js';
-import { proposeTransition, applyTransition } from './care/stateEngine.js';
-import { emitCareAudit } from './care/auditEmitter.js';
+import { detectEscalation } from './care/careEscalationDetector.js';
+import { proposeTransition, applyTransition } from './care/careStateEngine.js';
+import { emitCareAudit } from './care/careAuditEmitter.js';
 import { signalsFromTrigger, buildTriggerEscalationText } from './care/careTriggerSignalAdapter.js';
 import { CareAuditEventType, CarePolicyGateResult, CareActionOrigin } from './care/types.js';
 // PR7: State persistence and policy gate
