@@ -85,6 +85,17 @@
 - [12.3 Incident Response](#123-incident-response)
 - [12.4 Reporting](#124-reporting)
 
+### Chapter 13: Customer C.A.R.E. v1 - Autonomous Relationship Management
+- [13.1 C.A.R.E. Overview](#131-care-overview)
+- [13.2 Kill Switch Configuration](#132-kill-switch-configuration)
+- [13.3 State Engine and Transitions](#133-state-engine-and-transitions)
+- [13.4 Escalation Detection](#134-escalation-detection)
+- [13.5 Policy Gate System](#135-policy-gate-system)
+- [13.6 Workflow Webhook Triggers](#136-workflow-webhook-triggers)
+- [13.7 Audit Logging and Monitoring](#137-audit-logging-and-monitoring)
+- [13.8 Configuration Reference](#138-configuration-reference)
+- [13.9 Troubleshooting C.A.R.E.](#139-troubleshooting-care)
+
 ### Appendices
 - [Appendix A: Environment Variables](#appendix-a-environment-variables)
 - [Appendix B: API Endpoints](#appendix-b-api-endpoints)
@@ -2483,6 +2494,1207 @@ PS C:\> docker-compose up -d --build
 # 3. Restore database if schema changed
 PS C:\> psql $env:DATABASE_URL < backup-before-upgrade.sql
 ```
+
+---
+
+# Chapter 13: Customer C.A.R.E. v1 - Autonomous Relationship Management
+
+## 13.1 C.A.R.E. Overview
+
+### What is Customer C.A.R.E.?
+
+**Customer C.A.R.E.** is AiSHA's autonomous relationship management system that maintains customer relationship momentum without requiring constant human supervision.
+
+**C.A.R.E.** stands for:
+- **Communication** – maintaining presence and responsiveness
+- **Acquisition** – moving intent toward commitment  
+- **Retention** – preventing decay before loss occurs
+- **Engagement** – sustaining relationship value between events
+
+### Key Principles
+
+1. **Behavioral Focus**: C.A.R.E. manages relationship behaviors, not just database states
+2. **Autonomous Operation**: The system detects issues and takes action without manual intervention
+3. **Safety First**: All autonomous actions are gated by policy checks and kill switches
+4. **Audit Everything**: Every decision and action is logged for transparency
+
+### Architecture Overview
+
+```mermaid
+graph TB
+    A[Call Flow Handler] --> B[Escalation Detector]
+    C[AI Triggers Worker] --> B
+    B --> D{Policy Gate}
+    D -->|ALLOWED| E[State Engine]
+    D -->|BLOCKED| F[Audit Log Only]
+    E --> G[State Persistence]
+    E --> H[Workflow Triggers]
+    H --> I[External Workflows]
+    G --> J[Audit Logs]
+    F --> J
+```
+
+### Components
+
+| Component | Purpose | Location |
+|-----------|---------|----------|
+| **Kill Switch** | Emergency stop for autonomous operations | `backend/lib/care/isCareEnabled.js` |
+| **State Engine** | Manages C.A.R.E. state transitions | `backend/lib/care/careStateEngine.js` |
+| **Escalation Detector** | Identifies when intervention is needed | `backend/lib/care/escalationDetector.js` |
+| **Policy Gate** | Controls what autonomous actions are allowed | `backend/lib/care/carePolicyGate.js` |
+| **Action Classifier** | Determines origin of actions | `backend/lib/care/actionOriginClassifier.js` |
+| **Workflow Triggers** | Invokes external workflow systems | `backend/lib/care/careWorkflowTriggerClient.js` |
+
+---
+
+## 13.2 Kill Switch Configuration
+
+### Purpose
+
+The C.A.R.E. kill switch provides an emergency stop mechanism for all autonomous operations. When disabled, the system returns to read-only mode with zero risk.
+
+### Configuration
+
+**Environment Variable**: `CARE_ENABLED`
+
+```bash
+# Enable C.A.R.E. autonomous operations
+CARE_ENABLED=true
+
+# Disable C.A.R.E. (emergency stop)
+CARE_ENABLED=false
+```
+
+**Default**: `false` (disabled for safety)
+
+### Behavior When Disabled
+
+When `CARE_ENABLED=false`:
+- ✅ Escalation detection **still runs** (monitoring continues)
+- ✅ Audit logs **still written** (visibility maintained)
+- ❌ No autonomous actions taken (safe read-only mode)
+- ❌ No state transitions
+- ❌ No workflow triggers
+
+### Checking Kill Switch Status
+
+```bash
+# Via backend logs
+docker logs aishacrm-backend | grep "CARE_ENABLED"
+
+# Via API (if exposed)
+curl http://localhost:4001/api/care/status
+```
+
+### Emergency Shutdown Procedure
+
+```bash
+# 1. Set kill switch in .env
+CARE_ENABLED=false
+
+# 2. Restart backend
+docker compose restart backend
+
+# 3. Verify in logs
+docker logs aishacrm-backend --tail=50 | grep "\[CARE_AUDIT\]"
+# Should see: action_skipped entries instead of action_candidate
+```
+
+---
+
+## 13.3 State Engine and Transitions
+
+### C.A.R.E. States
+
+The state engine manages behavioral states for customer relationships:
+
+| State | Description | Typical Duration | Exit Conditions |
+|-------|-------------|-----------------|-----------------|
+| **cold** | No recent engagement | N/A | First interaction |
+| **warm** | Recent contact made | Days-weeks | Follow-up scheduled |
+| **hot** | Active negotiation | Hours-days | Deal closes or stalls |
+| **won** | Successfully converted | Permanent | Account created |
+| **lost** | Relationship ended | Permanent | Marked unrecoverable |
+| **nurture** | Long-term engagement | Weeks-months | Engagement resumes |
+| **stale** | Momentum lost | N/A | Re-engagement attempt |
+
+### State Transitions
+
+```mermaid
+stateDiagram-v2
+    [*] --> cold
+    cold --> warm: First Contact
+    warm --> hot: Engagement
+    hot --> won: Conversion
+    hot --> lost: Rejection
+    warm --> nurture: Extended Timeline
+    warm --> stale: No Response
+    nurture --> warm: Re-engagement
+    stale --> lost: Failed Recovery
+    won --> [*]
+    lost --> [*]
+```
+
+### Database Schema
+
+States are stored in the `care_states` table:
+
+```sql
+CREATE TABLE care_states (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id),
+    entity_type TEXT NOT NULL, -- 'lead', 'contact', 'account', 'opportunity'
+    entity_id UUID NOT NULL,
+    current_state TEXT NOT NULL, -- 'cold', 'warm', 'hot', etc.
+    previous_state TEXT,
+    transitioned_at TIMESTAMPTZ DEFAULT NOW(),
+    transition_reason TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### Monitoring State Transitions
+
+```sql
+-- View recent state transitions
+SELECT 
+    entity_type,
+    entity_id,
+    previous_state,
+    current_state,
+    transition_reason,
+    transitioned_at
+FROM care_states
+WHERE tenant_id = 'YOUR_TENANT_UUID'
+ORDER BY transitioned_at DESC
+LIMIT 20;
+```
+
+---
+
+## 13.4 Escalation Detection
+
+### What is an Escalation?
+
+An **escalation** occurs when the system detects a relationship issue that requires intervention:
+- Negative sentiment in communication
+- Extended silence from prospect
+- Deal stagnation
+- Overdue follow-up activities
+
+### Escalation Sources
+
+#### 1. Call Flow Escalations
+
+Detected during inbound/outbound calls:
+
+```javascript
+// Example: Negative sentiment detection
+{
+  is_escalation: true,
+  trigger_type: 'negative_sentiment',
+  reason: 'Customer expressed frustration during call',
+  sentiment: 'negative',
+  confidence: 0.85
+}
+```
+
+**Configuration**:
+```bash
+# Sentiment threshold (0.0-1.0)
+CARE_SENTIMENT_THRESHOLD=0.5
+```
+
+#### 2. AI Trigger Escalations
+
+Detected by scheduled checks:
+
+| Trigger | Condition | Default Threshold |
+|---------|-----------|-------------------|
+| **Lead Stagnant** | No activity for N days | 7 days |
+| **Deal Decay** | High-value deal inactive | 3 days |
+| **Activity Overdue** | Task past due date | 1 day |
+| **Opportunity Hot** | High probability, no recent contact | 2 days |
+
+**Configuration**:
+```bash
+CARE_LEAD_STAGNANT_DAYS=7
+CARE_DEAL_DECAY_DAYS=3
+CARE_ACTIVITY_OVERDUE_THRESHOLD=1
+CARE_OPPORTUNITY_HOT_DAYS=2
+```
+
+### Escalation Detector Logic
+
+Location: `backend/lib/care/escalationDetector.js`
+
+```javascript
+function detectEscalation({ 
+  text,           // Communication text
+  sentiment,      // Sentiment score
+  entity_type,    // 'lead', 'contact', etc.
+  last_contact,   // Date of last interaction
+  metadata        // Additional context
+}) {
+  // Returns: { is_escalation, reason, trigger_type, confidence }
+}
+```
+
+### Viewing Escalations
+
+```sql
+-- Query escalation audit logs
+SELECT 
+    event_type,
+    entity_type,
+    entity_id,
+    reason,
+    metadata->>'trigger_type' as trigger,
+    created_at
+FROM care_audit_log
+WHERE event_type = 'ESCALATION_DETECTED'
+AND tenant_id = 'YOUR_TENANT_UUID'
+ORDER BY created_at DESC
+LIMIT 50;
+```
+
+---
+
+## 13.5 Policy Gate System
+
+### Purpose
+
+The **Policy Gate** determines whether an autonomous action is allowed to proceed based on:
+- Current C.A.R.E. state
+- Action origin (human vs autonomous)
+- Tenant-specific rules
+- System-wide safety constraints
+
+### Policy Results
+
+```javascript
+CarePolicyGateResult = {
+  ALLOWED: 'allowed',      // Action permitted
+  BLOCKED: 'blocked',      // Action denied
+  WARN: 'warn',           // Allowed with warning
+  DEFER: 'defer'          // Requires human approval
+}
+```
+
+### Default Policy Rules
+
+| Action | State | Origin | Result |
+|--------|-------|--------|--------|
+| Send message | Any | Human | ALLOWED |
+| Send message | cold/stale | Autonomous | BLOCKED |
+| Send message | warm/hot | Autonomous | ALLOWED |
+| Update state | Any | Autonomous | ALLOWED |
+| Delete entity | Any | Autonomous | BLOCKED |
+
+### Configuration
+
+**Environment Variable**: `CARE_POLICY_MODE`
+
+```bash
+# Strict mode (default): Block risky autonomous actions
+CARE_POLICY_MODE=strict
+
+# Permissive mode: Allow more autonomous actions
+CARE_POLICY_MODE=permissive
+
+# Read-only mode: Block all autonomous writes
+CARE_POLICY_MODE=readonly
+```
+
+### Custom Policy Rules
+
+Edit `backend/lib/care/carePolicyGate.js`:
+
+```javascript
+function evaluatePolicy({ 
+  action_type,     // 'send_message', 'update_state', etc.
+  action_origin,   // 'human' | 'care_autonomous'
+  current_state,   // C.A.R.E. state
+  entity_type,     // 'lead', 'contact', etc.
+  tenant_id        // For tenant-specific rules
+}) {
+  // Custom logic here
+  return CarePolicyGateResult.ALLOWED;
+}
+```
+
+### Monitoring Policy Decisions
+
+```sql
+-- View blocked autonomous actions
+SELECT 
+    metadata->>'action_origin' as origin,
+    metadata->>'policy_gate_result' as decision,
+    reason,
+    COUNT(*) as count
+FROM care_audit_log
+WHERE event_type IN ('ACTION_ALLOWED', 'ACTION_BLOCKED')
+AND created_at > NOW() - INTERVAL '24 hours'
+GROUP BY origin, decision, reason
+ORDER BY count DESC;
+```
+
+---
+
+## 13.6 Workflow Webhook Triggers
+
+### Purpose
+
+When C.A.R.E. detects an escalation, it can trigger external workflow systems (Pabbly, Thoughtly, CallFluent, n8n) to handle the response.
+
+### Architecture
+
+```mermaid
+sequenceDiagram
+    participant CD as C.A.R.E. Detector
+    participant PG as Policy Gate
+    participant WT as Workflow Trigger
+    participant WH as Webhook Endpoint
+    participant WS as Workflow System
+    
+    CD->>PG: Escalation Detected
+    PG->>PG: Check Policy
+    PG-->>WT: ALLOWED
+    WT->>WT: Generate HMAC Signature
+    WT->>WH: POST /webhook (signed)
+    WH->>WS: Route to appropriate system
+    WS-->>Customer: Take action
+```
+
+### Configuration
+
+**Environment Variables**:
+
+```bash
+# Enable workflow triggers (default: false)
+CARE_WORKFLOW_TRIGGERS_ENABLED=true
+
+# Webhook endpoint URL
+CARE_WORKFLOW_ESCALATION_WEBHOOK_URL=https://your-workflow-server.com/webhook
+
+# HMAC-SHA256 secret for request signing
+CARE_WORKFLOW_WEBHOOK_SECRET=<generate-with-crypto>
+
+# HTTP timeout in milliseconds (default: 3000)
+CARE_WORKFLOW_WEBHOOK_TIMEOUT_MS=3000
+
+# Max retry attempts (default: 2)
+CARE_WORKFLOW_WEBHOOK_MAX_RETRIES=2
+```
+
+### Generating Webhook Secret
+
+```bash
+# Generate secure HMAC secret
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+### Webhook Payload Contract
+
+```json
+{
+  "event_id": "escalation-1234567890-abc123",
+  "type": "care.escalation_detected",
+  "ts": "2026-01-24T10:30:00.000Z",
+  "tenant_id": "a11dfb63-4b18-4eb8-872e-747af2e37c46",
+  "entity_type": "lead",
+  "entity_id": "uuid-here",
+  "action_origin": "care_autonomous",
+  "reason": "Lead stagnant for 7+ days",
+  "policy_gate_result": "allowed",
+  "trigger_type": "lead_stagnant",
+  "meta": {
+    "days_stagnant": 7,
+    "last_contact": "2026-01-17T10:30:00.000Z"
+  }
+}
+```
+
+### Security: HMAC Signature Verification
+
+Webhooks include `X-AISHA-SIGNATURE` header for verification:
+
+```javascript
+// Verify signature (Node.js example)
+const crypto = require('crypto');
+
+function verifyWebhook(payload, signature, secret) {
+  const expectedSig = crypto
+    .createHmac('sha256', secret)
+    .update(JSON.stringify(payload))
+    .digest('hex');
+  
+  return crypto.timingSafeEqual(
+    Buffer.from(signature),
+    Buffer.from(expectedSig)
+  );
+}
+```
+
+### Workflow System Integration Examples
+
+#### n8n Webhook Node
+
+```json
+{
+  "nodes": [
+    {
+      "type": "n8n-nodes-base.webhook",
+      "name": "C.A.R.E. Webhook",
+      "parameters": {
+        "path": "care-escalation",
+        "responseMode": "lastNode",
+        "authentication": "headerAuth"
+      }
+    }
+  ]
+}
+```
+
+#### Pabbly Connect
+
+1. Create new workflow
+2. Add "Webhook" trigger
+3. Use webhook URL in `CARE_WORKFLOW_ESCALATION_WEBHOOK_URL`
+4. Add signature verification step
+5. Route to Thoughtly/CallFluent based on `trigger_type`
+
+### Monitoring Workflow Triggers
+
+```sql
+-- View recent workflow trigger attempts
+SELECT 
+    metadata->>'event_id' as event_id,
+    metadata->>'trigger_type' as trigger,
+    metadata->>'http_status' as status,
+    metadata->>'attempt' as attempt,
+    created_at
+FROM care_audit_log
+WHERE metadata->>'action_type' = 'workflow_trigger'
+ORDER BY created_at DESC
+LIMIT 100;
+```
+
+### Troubleshooting Webhook Failures
+
+```bash
+# Check backend logs for webhook errors
+docker logs aishacrm-backend | grep "Workflow trigger failed"
+
+# Common issues:
+# 1. CARE_WORKFLOW_TRIGGERS_ENABLED=false (disabled)
+# 2. Invalid URL in CARE_WORKFLOW_ESCALATION_WEBHOOK_URL
+# 3. Network timeout (increase CARE_WORKFLOW_WEBHOOK_TIMEOUT_MS)
+# 4. Signature mismatch (verify CARE_WORKFLOW_WEBHOOK_SECRET matches receiver)
+```
+
+---
+
+## 13.7 Audit Logging and Monitoring
+
+### Audit Log Table
+
+All C.A.R.E. decisions and actions are logged to `care_audit_log`:
+
+```sql
+CREATE TABLE care_audit_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id),
+    event_type TEXT NOT NULL, -- 'ESCALATION_DETECTED', 'ACTION_ALLOWED', etc.
+    entity_type TEXT NOT NULL,
+    entity_id UUID NOT NULL,
+    action_origin TEXT, -- 'human' | 'care_autonomous'
+    reason TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### Event Types
+
+| Event Type | Description | When Logged |
+|------------|-------------|-------------|
+| `ESCALATION_DETECTED` | Issue identified | Every escalation |
+| `ACTION_ALLOWED` | Policy gate approved | When action proceeds |
+| `ACTION_BLOCKED` | Policy gate denied | When action blocked |
+| `STATE_TRANSITION` | C.A.R.E. state changed | Every state change |
+| `WORKFLOW_TRIGGERED` | External webhook invoked | Every webhook attempt |
+
+### Monitoring Queries
+
+```sql
+-- Escalation rate over time
+SELECT 
+    DATE(created_at) as date,
+    COUNT(*) as escalations
+FROM care_audit_log
+WHERE event_type = 'ESCALATION_DETECTED'
+AND tenant_id = 'YOUR_TENANT_UUID'
+AND created_at > NOW() - INTERVAL '30 days'
+GROUP BY DATE(created_at)
+ORDER BY date DESC;
+
+-- Action approval rate
+SELECT 
+    event_type,
+    COUNT(*) as count,
+    ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) as percentage
+FROM care_audit_log
+WHERE event_type IN ('ACTION_ALLOWED', 'ACTION_BLOCKED')
+AND tenant_id = 'YOUR_TENANT_UUID'
+AND created_at > NOW() - INTERVAL '7 days'
+GROUP BY event_type;
+
+-- Most common escalation reasons
+SELECT 
+    reason,
+    metadata->>'trigger_type' as trigger,
+    COUNT(*) as count
+FROM care_audit_log
+WHERE event_type = 'ESCALATION_DETECTED'
+AND tenant_id = 'YOUR_TENANT_UUID'
+AND created_at > NOW() - INTERVAL '7 days'
+GROUP BY reason, trigger
+ORDER BY count DESC
+LIMIT 10;
+```
+
+### Log Retention
+
+Default: 90 days
+
+```sql
+-- Clean up old audit logs (run monthly)
+DELETE FROM care_audit_log
+WHERE created_at < NOW() - INTERVAL '90 days';
+```
+
+---
+
+## 13.8 Configuration Reference
+
+### Complete Environment Variables
+
+```bash
+# ============================================================================
+# Customer C.A.R.E. v1 Configuration
+# ============================================================================
+
+# Master kill switch (default: false for safety)
+CARE_ENABLED=false
+
+# Policy mode: strict | permissive | readonly (default: strict)
+CARE_POLICY_MODE=strict
+
+# Escalation detection thresholds
+CARE_SENTIMENT_THRESHOLD=0.5          # 0.0-1.0 (lower = more sensitive)
+CARE_LEAD_STAGNANT_DAYS=7             # Days before lead considered stagnant
+CARE_DEAL_DECAY_DAYS=3                # Days before deal considered decaying
+CARE_ACTIVITY_OVERDUE_THRESHOLD=1     # Days before task considered overdue
+CARE_OPPORTUNITY_HOT_DAYS=2           # Days for hot opportunity check
+
+# Workflow webhook triggers (default: disabled)
+CARE_WORKFLOW_TRIGGERS_ENABLED=false
+CARE_WORKFLOW_ESCALATION_WEBHOOK_URL=https://your-workflow.com/webhook
+CARE_WORKFLOW_WEBHOOK_SECRET=<generate-with-crypto>
+CARE_WORKFLOW_WEBHOOK_TIMEOUT_MS=3000
+CARE_WORKFLOW_WEBHOOK_MAX_RETRIES=2
+
+# Audit log retention (days)
+CARE_AUDIT_LOG_RETENTION_DAYS=90
+```
+
+### Recommended Production Settings
+
+```bash
+# Enable with strict safety
+CARE_ENABLED=true
+CARE_POLICY_MODE=strict
+CARE_WORKFLOW_TRIGGERS_ENABLED=true
+
+# Conservative thresholds
+CARE_SENTIMENT_THRESHOLD=0.4
+CARE_LEAD_STAGNANT_DAYS=10
+CARE_DEAL_DECAY_DAYS=5
+```
+
+### Testing/Staging Settings
+
+```bash
+# Enable with verbose logging
+CARE_ENABLED=true
+CARE_POLICY_MODE=permissive
+CARE_WORKFLOW_TRIGGERS_ENABLED=false  # Use test webhook URL
+CARE_LEAD_STAGNANT_DAYS=1             # Faster escalations for testing
+```
+
+---
+
+## 13.9 Troubleshooting C.A.R.E.
+
+### Issue: C.A.R.E. Not Taking Actions
+
+**Symptoms**: Escalations detected but no autonomous actions
+
+**Diagnosis**:
+```bash
+# 1. Check kill switch
+docker exec aishacrm-backend printenv | grep CARE_ENABLED
+# Should be: CARE_ENABLED=true
+
+# 2. Check audit logs for blocked actions
+docker exec aishacrm-backend psql $DATABASE_URL -c \
+  "SELECT event_type, reason, COUNT(*) 
+   FROM care_audit_log 
+   WHERE created_at > NOW() - INTERVAL '1 hour' 
+   GROUP BY event_type, reason;"
+```
+
+**Solutions**:
+- Verify `CARE_ENABLED=true` in `.env`
+- Check policy mode isn't set to `readonly`
+- Review policy gate rules for overly strict blocking
+
+### Issue: Workflow Webhooks Failing
+
+**Symptoms**: `Workflow trigger failed` in logs
+
+**Diagnosis**:
+```bash
+# Check configuration
+docker exec aishacrm-backend printenv | grep CARE_WORKFLOW
+
+# Check backend logs
+docker logs aishacrm-backend --tail=100 | grep "workflow"
+```
+
+**Solutions**:
+- Verify `CARE_WORKFLOW_TRIGGERS_ENABLED=true`
+- Test webhook URL manually: `curl -X POST https://your-webhook-url`
+- Check network connectivity from container
+- Verify HMAC secret matches between AiSHA and receiver
+- Increase timeout if network is slow: `CARE_WORKFLOW_WEBHOOK_TIMEOUT_MS=5000`
+
+### Issue: Too Many Escalations
+
+**Symptoms**: Escalations triggered constantly
+
+**Diagnosis**:
+```sql
+-- Check escalation rate
+SELECT 
+    DATE(created_at) as date,
+    COUNT(*) as escalations
+FROM care_audit_log
+WHERE event_type = 'ESCALATION_DETECTED'
+GROUP BY DATE(created_at)
+ORDER BY date DESC
+LIMIT 7;
+```
+
+**Solutions**:
+- Increase thresholds: `CARE_LEAD_STAGNANT_DAYS=14`
+- Raise sentiment threshold: `CARE_SENTIMENT_THRESHOLD=0.6`
+- Review escalation logic in `escalationDetector.js`
+
+### Issue: State Not Updating
+
+**Symptoms**: C.A.R.E. states remain unchanged
+
+**Diagnosis**:
+```sql
+-- Check state transition history
+SELECT entity_type, current_state, COUNT(*) 
+FROM care_states 
+WHERE updated_at > NOW() - INTERVAL '24 hours'
+GROUP BY entity_type, current_state;
+```
+
+**Solutions**:
+- Verify state engine is invoked (check audit logs for `STATE_TRANSITION`)
+- Check database permissions for `care_states` table
+- Review state transition logic in `careStateEngine.js`
+
+### Emergency Procedures
+
+#### Full System Stop
+
+```bash
+# 1. Disable C.A.R.E.
+CARE_ENABLED=false
+
+# 2. Restart backend
+docker compose restart backend
+
+# 3. Verify shutdown
+docker logs aishacrm-backend --tail=20 | grep CARE_ENABLED
+```
+
+#### Audit Log Analysis
+
+```sql
+-- Last 100 C.A.R.E. events
+SELECT 
+    TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') as time,
+    event_type,
+    entity_type,
+    reason,
+    metadata->>'action_origin' as origin,
+    metadata->>'policy_gate_result' as decision
+FROM care_audit_log
+ORDER BY created_at DESC
+LIMIT 100;
+```
+
+---
+
+## 13.10 C.A.R.E. Workflow Integration Examples
+
+### Overview
+
+C.A.R.E. escalations can trigger AiSHA workflows in two ways:
+
+1. **External Workflows** (Pabbly, n8n, Zapier) - Recommended for production
+2. **Internal AiSHA Workflows** - For routing, enrichment, and internal automation
+
+Both approaches honor the behavioral contract: **backend never messages customers directly**.
+
+---
+
+### Pattern 1: External Workflow System (Production)
+
+#### Architecture
+
+```mermaid
+sequenceDiagram
+    participant CARE as C.A.R.E. Detector
+    participant EXT as External Workflow
+    participant MSG as Messaging System
+    participant CUST as Customer
+    
+    CARE->>EXT: POST /webhook (escalation)
+    EXT->>EXT: Route by trigger_type
+    EXT->>MSG: Trigger Thoughtly/CallFluent
+    MSG->>CUST: Phone call / SMS / Email
+    CUST-->>MSG: Response
+    MSG-->>EXT: Update
+    EXT-->>CARE: Optional status callback
+```
+
+#### Setup (Pabbly Connect Example)
+
+**Step 1: Create Pabbly Workflow**
+
+1. Go to Pabbly Connect dashboard
+2. Create New Workflow: "AiSHA C.A.R.E. Handler"
+3. Add Webhook trigger
+4. Copy webhook URL (e.g., `https://connect.pabbly.com/workflow/sendwebhookdata/ABC123`)
+
+**Step 2: Configure AiSHA**
+
+```bash
+# .env
+CARE_WORKFLOW_TRIGGERS_ENABLED=true
+CARE_WORKFLOW_ESCALATION_WEBHOOK_URL=https://connect.pabbly.com/workflow/sendwebhookdata/ABC123
+CARE_WORKFLOW_WEBHOOK_SECRET=<generate-32-byte-hex>
+```
+
+**Step 3: Add Pabbly Routing Logic**
+
+In Pabbly, add Router step:
+
+- **Route 1**: `trigger_type` = "lead_stagnant" → Send to Thoughtly (AI call)
+- **Route 2**: `trigger_type` = "negative_sentiment" → Send to CallFluent (urgent call)
+- **Route 3**: `trigger_type` = "deal_decay" → Send email via SendGrid
+- **Route 4**: `trigger_type` = "activity_overdue" → Create Slack notification
+
+**Step 4: Verify Signature (Security)**
+
+Add Pabbly action before routing:
+
+```javascript
+// Webhook Data Parser
+const crypto = require('crypto');
+const receivedSig = request.headers['x-aisha-signature'];
+const secret = 'YOUR_WEBHOOK_SECRET';
+const expectedSig = crypto
+  .createHmac('sha256', secret)
+  .update(JSON.stringify(request.body))
+  .digest('hex');
+
+if (receivedSig !== expectedSig) {
+  throw new Error('Invalid signature');
+}
+```
+
+---
+
+### Pattern 2: Internal AiSHA Workflow (Routing Layer)
+
+Use AiSHA's workflow system as a **routing and enrichment layer** before calling external services.
+
+#### Why Internal Workflows?
+
+- **Enrich escalation data** before sending to external system
+- **Apply tenant-specific routing rules**
+- **Log additional audit trail**
+- **Transform payload format** for different external systems
+- **Add conditional logic** (e.g., only escalate high-value leads)
+
+#### Example: Lead Stagnant Handler
+
+**Visual Workflow:**
+
+```
+┌─────────────────────┐
+│  webhook_trigger    │  (receives C.A.R.E. payload)
+│  Type: Entry        │
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│  condition          │  trigger_type === "lead_stagnant"
+│  Type: Logic        │
+└──────┬──────────────┘
+       │ TRUE
+       ▼
+┌─────────────────────┐
+│  get_lead           │  Fetch lead details from DB
+│  Type: CRUD         │  Input: {{payload.entity_id}}
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│  condition          │  lead.value > 10000
+│  Type: Logic        │
+└──────┬──────────────┘
+       │ TRUE
+       ▼
+┌─────────────────────┐
+│  http_request       │  POST to Thoughtly (AI call)
+│  Type: Action       │  URL: https://thoughtly.com/api/call
+└─────────────────────┘
+       │ FALSE
+       ▼
+┌─────────────────────┐
+│  http_request       │  POST to SendGrid (email)
+│  Type: Action       │  URL: https://api.sendgrid.com/v3/mail/send
+└─────────────────────┘
+```
+
+#### Step-by-Step Setup
+
+**Step 1: Create Workflow in AiSHA**
+
+1. Navigate to **Workflows** in AiSHA
+2. Click **Create Workflow**
+3. Name: "C.A.R.E. Lead Stagnant Handler"
+4. Description: "Routes stagnant leads to Thoughtly or email based on value"
+
+**Step 2: Build Workflow Nodes**
+
+**Node 1: Webhook Trigger** (auto-created)
+```json
+{
+  "id": "trigger-1",
+  "type": "webhook_trigger",
+  "config": {}
+}
+```
+- This node receives the C.A.R.E. payload
+- Available variables: `{{payload.entity_id}}`, `{{payload.trigger_type}}`, `{{payload.meta.days_stagnant}}`
+
+**Node 2: Condition - Check Trigger Type**
+```json
+{
+  "id": "condition-1",
+  "type": "condition",
+  "config": {
+    "field": "{{payload.trigger_type}}",
+    "operator": "equals",
+    "value": "lead_stagnant"
+  }
+}
+```
+- Ensures workflow only processes lead stagnant escalations
+- Prevents execution for other escalation types
+
+**Node 3: Get Lead (CRUD)**
+```json
+{
+  "id": "get-lead-1",
+  "type": "get_lead",
+  "config": {
+    "lead_id": "{{payload.entity_id}}"
+  }
+}
+```
+- Fetches full lead details from database
+- Populates `{{lead}}` variable with: name, email, phone, value, etc.
+
+**Node 4: Condition - Check Lead Value**
+```json
+{
+  "id": "condition-2",
+  "type": "condition",
+  "config": {
+    "field": "{{lead.value}}",
+    "operator": "greater_than",
+    "value": "10000"
+  }
+}
+```
+- Routes high-value leads (>$10k) to AI calling system
+- Routes low-value leads to email nurture
+
+**Node 5a: HTTP Request - Thoughtly AI Call** (TRUE branch)
+```json
+{
+  "id": "http-thoughtly-1",
+  "type": "http_request",
+  "config": {
+    "method": "POST",
+    "url": "https://api.thoughtly.com/v1/calls",
+    "headers": [
+      { "key": "Authorization", "value": "Bearer {{env.THOUGHTLY_API_KEY}}" },
+      { "key": "Content-Type", "value": "application/json" }
+    ],
+    "body_type": "raw",
+    "body": "{\"to\": \"{{lead.phone}}\", \"from\": \"+1234567890\", \"script\": \"Hi {{lead.first_name}}, this is AiSHA. I noticed you haven't heard from us in {{payload.meta.days_stagnant}} days. Just checking in on your interest in our solution.\"}"
+  }
+}
+```
+- Triggers Thoughtly AI phone call
+- Uses lead phone number and personalized script
+- Script includes escalation context (days stagnant)
+
+**Node 5b: HTTP Request - SendGrid Email** (FALSE branch)
+```json
+{
+  "id": "http-sendgrid-1",
+  "type": "http_request",
+  "config": {
+    "method": "POST",
+    "url": "https://api.sendgrid.com/v3/mail/send",
+    "headers": [
+      { "key": "Authorization", "value": "Bearer {{env.SENDGRID_API_KEY}}" },
+      { "key": "Content-Type", "value": "application/json" }
+    ],
+    "body_type": "raw",
+    "body": "{\"personalizations\": [{\"to\": [{\"email\": \"{{lead.email}}\"}]}], \"from\": {\"email\": \"hello@yourcompany.com\"}, \"subject\": \"Still interested?\", \"content\": [{\"type\": \"text/plain\", \"value\": \"Hi {{lead.first_name}},\\n\\nIt's been {{payload.meta.days_stagnant}} days since we last connected. Just wanted to see if you're still interested in learning more about our solution.\\n\\nBest,\\nThe Team\"}]}"
+  }
+}
+```
+- Sends nurture email via SendGrid
+- Uses lead email and personalized message
+- Includes escalation context
+
+**Step 3: Configure C.A.R.E. to Use Internal Workflow**
+
+Once workflow is saved, you'll get a workflow ID (e.g., `wf_abc123`).
+
+```bash
+# .env
+CARE_WORKFLOW_TRIGGERS_ENABLED=true
+CARE_WORKFLOW_ESCALATION_WEBHOOK_URL=http://localhost:4001/api/workflows/wf_abc123/execute
+CARE_WORKFLOW_WEBHOOK_SECRET=internal-workflow-secret-123
+```
+
+**Note**: For internal workflows, signature verification is optional but recommended for consistency.
+
+**Step 4: Test the Integration**
+
+```bash
+# Simulate a lead stagnant escalation (from backend shell)
+curl -X POST http://localhost:4001/api/workflows/wf_abc123/execute \
+  -H "Content-Type: application/json" \
+  -H "X-AISHA-SIGNATURE: <generate-hmac>" \
+  -d '{
+    "event_id": "test-123",
+    "type": "care.escalation_detected",
+    "tenant_id": "your-tenant-uuid",
+    "entity_type": "lead",
+    "entity_id": "your-lead-uuid",
+    "trigger_type": "lead_stagnant",
+    "meta": { "days_stagnant": 7 }
+  }'
+```
+
+**Expected flow:**
+1. Workflow receives payload at webhook_trigger
+2. Condition checks `trigger_type === "lead_stagnant"` → TRUE
+3. get_lead fetches lead from database
+4. Condition checks `lead.value > 10000`
+   - If TRUE → Thoughtly call initiated
+   - If FALSE → SendGrid email sent
+5. Execution log stored in `workflow_execution` table
+
+---
+
+### Advanced Example: Multi-Tenant Routing
+
+Route escalations to different external systems based on tenant configuration.
+
+**Workflow Design:**
+
+```
+webhook_trigger
+   ↓
+get_tenant (fetch tenant settings)
+   ↓
+condition (tenant.metadata.messaging_provider)
+   ├─ "thoughtly" → http_request (Thoughtly API)
+   ├─ "callfluent" → http_request (CallFluent API)
+   └─ "email" → http_request (SendGrid API)
+```
+
+**Implementation:**
+
+**Node: Get Tenant**
+```json
+{
+  "type": "get_tenant",
+  "config": {
+    "tenant_id": "{{payload.tenant_id}}"
+  }
+}
+```
+
+**Node: Condition by Provider**
+```json
+{
+  "type": "condition",
+  "config": {
+    "field": "{{tenant.metadata.messaging_provider}}",
+    "operator": "equals",
+    "value": "thoughtly"
+  }
+}
+```
+
+**Tenant Configuration** (in tenant metadata):
+```json
+{
+  "messaging_provider": "thoughtly",
+  "thoughtly_api_key": "sk-abc123",
+  "thoughtly_phone_number": "+1234567890"
+}
+```
+
+---
+
+### Monitoring Internal Workflows
+
+```sql
+-- View recent C.A.R.E. workflow executions
+SELECT 
+    we.id,
+    we.workflow_id,
+    w.name as workflow_name,
+    we.status,
+    we.trigger_payload->>'trigger_type' as care_trigger,
+    we.trigger_payload->>'entity_type' as entity_type,
+    we.started_at,
+    we.completed_at
+FROM workflow_execution we
+JOIN workflow w ON w.id = we.workflow_id
+WHERE we.trigger_payload->>'type' = 'care.escalation_detected'
+ORDER BY we.started_at DESC
+LIMIT 50;
+
+-- Execution success rate for C.A.R.E. workflows
+SELECT 
+    status,
+    COUNT(*) as count,
+    ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) as percentage
+FROM workflow_execution
+WHERE trigger_payload->>'type' = 'care.escalation_detected'
+AND started_at > NOW() - INTERVAL '7 days'
+GROUP BY status;
+```
+
+---
+
+### Best Practices
+
+#### 1. **Use Internal Workflows for Routing, External for Messaging**
+
+✅ **Good**: Internal workflow enriches data and routes to Pabbly → Thoughtly  
+❌ **Bad**: Internal workflow tries to send SMS directly (violates contract)
+
+#### 2. **Always Include Signature Verification**
+
+Even for internal workflows, verify HMAC signature to prevent spoofing.
+
+#### 3. **Add Logging Nodes**
+
+```json
+{
+  "type": "log_message",
+  "config": {
+    "message": "C.A.R.E. escalation routed to Thoughtly for {{lead.email}}"
+  }
+}
+```
+
+#### 4. **Handle Errors Gracefully**
+
+Add error handling nodes:
+```
+http_request (Thoughtly)
+   ├─ SUCCESS → log_success
+   └─ ERROR → http_request (fallback to email)
+```
+
+#### 5. **Monitor Execution Metrics**
+
+Set up alerts for:
+- Workflow execution failures (>10% error rate)
+- Slow execution times (>5 seconds)
+- Missing trigger payloads (malformed C.A.R.E. events)
+
+---
+
+### Troubleshooting Internal Workflows
+
+#### Issue: Workflow Not Executing
+
+**Check:**
+```sql
+-- Verify workflow exists and is active
+SELECT id, name, status FROM workflow WHERE id = 'wf_abc123';
+-- status should be 'active'
+```
+
+**Solution:**
+```bash
+# Activate workflow via API
+curl -X PATCH http://localhost:4001/api/workflows/wf_abc123 \
+  -H "Content-Type: application/json" \
+  -d '{"is_active": true}'
+```
+
+#### Issue: Variables Not Resolving
+
+**Symptoms**: `{{payload.entity_id}}` appears as literal string in output
+
+**Cause**: Variable context not populated correctly
+
+**Fix**: Check trigger payload in execution log:
+```sql
+SELECT trigger_payload, execution_log 
+FROM workflow_execution 
+WHERE id = 'exec_xyz789';
+```
+
+Ensure `trigger_payload` contains the C.A.R.E. escalation data.
 
 ---
 
