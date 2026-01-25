@@ -21,6 +21,13 @@ import { runTask as runAiBrainTask } from './aiBrain.js';
 import { getSupabaseClient } from './supabase-db.js';
 import logger from './logger.js';
 
+// PR6: C.A.R.E. shadow wiring (read-only analysis, no behavior change)
+import { detectEscalation } from './care/escalationDetector.js';
+import { proposeTransition } from './care/stateEngine.js';
+import { emitCareAudit } from './care/auditEmitter.js';
+import { signalsFromTrigger, buildTriggerEscalationText } from './care/careTriggerSignalAdapter.js';
+import { CareAuditEventType, CarePolicyGateResult, CareActionOrigin } from './care/types.js';
+
 let workerInterval = null;
 let supabase = null;
 
@@ -156,6 +163,74 @@ async function processTriggersForTenant(tenant) {
         },
       });
       triggerCount++;
+
+      // PR6: C.A.R.E. shadow wiring (read-only, no behavior change)
+      try {
+        const signals = signalsFromTrigger({
+          trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
+          context: {
+            lead_name: `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
+            days_stagnant: lead.days_stagnant,
+            status: lead.status,
+            last_activity: lead.last_activity_at,
+          },
+          record_type: 'lead',
+          record_id: lead.id,
+        });
+
+        const escalationText = buildTriggerEscalationText({
+          trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
+          context,
+        });
+
+        const escalation = detectEscalation({ text: escalationText });
+        if (escalation.is_escalation) {
+          emitCareAudit(CareAuditEventType.ESCALATION_DETECTED, {
+            action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            reason: escalation.reason,
+            trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
+            record_type: 'lead',
+            record_id: lead.id,
+            metadata: { severity: escalation.severity },
+          });
+        }
+
+        const proposal = proposeTransition({
+          current_state: 'unaware', // PR6 shadow mode placeholder
+          signals,
+          action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+        });
+
+        if (proposal.proposed_state) {
+          emitCareAudit(CareAuditEventType.STATE_PROPOSED, {
+            action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            current_state: 'unaware',
+            proposed_state: proposal.proposed_state,
+            reason: proposal.reason,
+            trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
+            record_type: 'lead',
+            record_id: lead.id,
+          });
+        }
+
+        // Emit action candidate for meaningful follow-ups (logs only)
+        if (proposal.proposed_state && ['awareness', 'engagement'].includes(proposal.proposed_state)) {
+          emitCareAudit(CareAuditEventType.ACTION_CANDIDATE, {
+            action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            action_type: 'follow_up',
+            proposed_state: proposal.proposed_state,
+            trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
+            record_type: 'lead',
+            record_id: lead.id,
+            metadata: { silence_days: signals.silence_days },
+          });
+        }
+      } catch (err) {
+        console.warn('[C.A.R.E. PR6] Trigger shadow analysis error (non-breaking):', err.message);
+      }
     }
 
     // 2. Detect deal decay (opportunities with no activity)
@@ -174,6 +249,74 @@ async function processTriggersForTenant(tenant) {
         },
       });
       triggerCount++;
+
+      // PR6: C.A.R.E. shadow wiring (read-only, no behavior change)
+      try {
+        const signals = signalsFromTrigger({
+          trigger_type: TRIGGER_TYPES.DEAL_DECAY,
+          context: {
+            deal_name: deal.name,
+            stage: deal.stage,
+            amount: deal.amount,
+            days_inactive: deal.days_inactive,
+            close_date: deal.close_date,
+          },
+          record_type: 'opportunity',
+          record_id: deal.id,
+        });
+
+        const escalationText = buildTriggerEscalationText({
+          trigger_type: TRIGGER_TYPES.DEAL_DECAY,
+          context,
+        });
+
+        const escalation = detectEscalation({ text: escalationText });
+        if (escalation.is_escalation) {
+          emitCareAudit(CareAuditEventType.ESCALATION_DETECTED, {
+            action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            reason: escalation.reason,
+            trigger_type: TRIGGER_TYPES.DEAL_DECAY,
+            record_type: 'opportunity',
+            record_id: deal.id,
+            metadata: { severity: escalation.severity, amount: deal.amount },
+          });
+        }
+
+        const proposal = proposeTransition({
+          current_state: 'unaware',
+          signals,
+          action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+        });
+
+        if (proposal.proposed_state) {
+          emitCareAudit(CareAuditEventType.STATE_PROPOSED, {
+            action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            current_state: 'unaware',
+            proposed_state: proposal.proposed_state,
+            reason: proposal.reason,
+            trigger_type: TRIGGER_TYPES.DEAL_DECAY,
+            record_type: 'opportunity',
+            record_id: deal.id,
+          });
+        }
+
+        if (proposal.proposed_state && deal.amount > 10000) {
+          emitCareAudit(CareAuditEventType.ACTION_CANDIDATE, {
+            action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            action_type: 'deal_revival',
+            proposed_state: proposal.proposed_state,
+            trigger_type: TRIGGER_TYPES.DEAL_DECAY,
+            record_type: 'opportunity',
+            record_id: deal.id,
+            metadata: { amount: deal.amount, silence_days: signals.silence_days },
+          });
+        }
+      } catch (err) {
+        console.warn('[C.A.R.E. PR6] Trigger shadow analysis error (non-breaking):', err.message);
+      }
     }
 
     // 3. Detect overdue activities
@@ -191,6 +334,73 @@ async function processTriggersForTenant(tenant) {
         },
       });
       triggerCount++;
+
+      // PR6: C.A.R.E. shadow wiring (read-only, no behavior change)
+      try {
+        const signals = signalsFromTrigger({
+          trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
+          context: {
+            subject: activity.subject,
+            type: activity.type,
+            days_overdue: activity.days_overdue,
+            related_to: activity.related_to,
+          },
+          record_type: 'activity',
+          record_id: activity.id,
+        });
+
+        const escalationText = buildTriggerEscalationText({
+          trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
+          context,
+        });
+
+        const escalation = detectEscalation({ text: escalationText });
+        if (escalation.is_escalation) {
+          emitCareAudit(CareAuditEventType.ESCALATION_DETECTED, {
+            action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            reason: escalation.reason,
+            trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
+            record_type: 'activity',
+            record_id: activity.id,
+            metadata: { severity: escalation.severity, days_overdue: activity.days_overdue },
+          });
+        }
+
+        const proposal = proposeTransition({
+          current_state: 'unaware',
+          signals,
+          action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+        });
+
+        if (proposal.proposed_state) {
+          emitCareAudit(CareAuditEventType.STATE_PROPOSED, {
+            action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            current_state: 'unaware',
+            proposed_state: proposal.proposed_state,
+            reason: proposal.reason,
+            trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
+            record_type: 'activity',
+            record_id: activity.id,
+          });
+        }
+
+        if (proposal.proposed_state && activity.days_overdue > 2) {
+          emitCareAudit(CareAuditEventType.ACTION_CANDIDATE, {
+            action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            action_type: 'activity_reschedule',
+            proposed_state: proposal.proposed_state,
+            trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
+            record_type: 'activity',
+            record_id: activity.id,
+            metadata: { days_overdue: activity.days_overdue },
+          });
+        }
+      } catch (err) {
+        console.warn('[C.A.R.E. PR6] Trigger shadow analysis error (non-breaking):', err.message);
+      }
     }
 
     // 4. Detect hot opportunities (high probability, close soon)
@@ -210,6 +420,74 @@ async function processTriggersForTenant(tenant) {
         priority: 'high',
       });
       triggerCount++;
+
+      // PR6: C.A.R.E. shadow wiring (read-only, no behavior change)
+      try {
+        const signals = signalsFromTrigger({
+          trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
+          context: {
+            deal_name: opp.name,
+            amount: opp.amount,
+            probability: opp.probability,
+            days_to_close: opp.days_to_close,
+            stage: opp.stage,
+          },
+          record_type: 'opportunity',
+          record_id: opp.id,
+        });
+
+        const escalationText = buildTriggerEscalationText({
+          trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
+          context,
+        });
+
+        const escalation = detectEscalation({ text: escalationText });
+        if (escalation.is_escalation) {
+          emitCareAudit(CareAuditEventType.ESCALATION_DETECTED, {
+            action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            reason: escalation.reason,
+            trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
+            record_type: 'opportunity',
+            record_id: opp.id,
+            metadata: { severity: escalation.severity, probability: opp.probability },
+          });
+        }
+
+        const proposal = proposeTransition({
+          current_state: 'unaware',
+          signals,
+          action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+        });
+
+        if (proposal.proposed_state) {
+          emitCareAudit(CareAuditEventType.STATE_PROPOSED, {
+            action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            current_state: 'unaware',
+            proposed_state: proposal.proposed_state,
+            reason: proposal.reason,
+            trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
+            record_type: 'opportunity',
+            record_id: opp.id,
+          });
+        }
+
+        if (proposal.proposed_state && opp.amount > 50000) {
+          emitCareAudit(CareAuditEventType.ACTION_CANDIDATE, {
+            action_origin: CareActionOrigin.CARE_AUTONOMOUS,
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            action_type: 'deal_closing',
+            proposed_state: proposal.proposed_state,
+            trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
+            record_type: 'opportunity',
+            record_id: opp.id,
+            metadata: { amount: opp.amount, days_to_close: opp.days_to_close },
+          });
+        }
+      } catch (err) {
+        console.warn('[C.A.R.E. PR6] Trigger shadow analysis error (non-breaking):', err.message);
+      }
     }
 
     if (triggerCount > 0) {
