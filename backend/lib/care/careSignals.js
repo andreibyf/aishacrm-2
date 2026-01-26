@@ -25,10 +25,10 @@
  */
 export const SIGNAL_THRESHOLDS = {
   /** Days of silence before marking at_risk */
-  AT_RISK_SILENCE_DAYS: 14,
+  AT_RISK_SILENCE_DAYS: parseInt(process.env.CARE_LEAD_STAGNANT_DAYS) || 14,
   
   /** Days of silence before marking dormant */
-  DORMANT_SILENCE_DAYS: 30,
+  DORMANT_SILENCE_DAYS: parseInt(process.env.CARE_DEAL_DECAY_DAYS) * 2 || 30,
   
   /** Minimum bidirectional exchanges to consider engaged */
   MIN_BIDIRECTIONAL_EXCHANGES: 1

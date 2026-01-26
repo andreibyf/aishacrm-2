@@ -39,8 +39,10 @@ let supabase = null;
 
 // Trigger configuration defaults
 const DEFAULT_INTERVAL_MS = 60000; // 1 minute
-const LEAD_STAGNANT_DAYS = 7;
-const DEAL_DECAY_DAYS = 14;
+const LEAD_STAGNANT_DAYS = parseInt(process.env.CARE_LEAD_STAGNANT_DAYS) || 7;
+const DEAL_DECAY_DAYS = parseInt(process.env.CARE_DEAL_DECAY_DAYS) || 14;
+const ACTIVITY_OVERDUE_HOURS = parseInt(process.env.CARE_ACTIVITY_OVERDUE_HOURS) || 24;
+const ESCALATION_THRESHOLD = parseFloat(process.env.CARE_ESCALATION_THRESHOLD) || 0.5;
 const SUGGESTION_EXPIRY_DAYS = 7;
 
 /**

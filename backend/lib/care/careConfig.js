@@ -65,6 +65,20 @@ export function getCareShadowModeEnabled() {
 }
 
 /**
+ * Get CARE trigger sensitivity configuration
+ * 
+ * @returns {Object} Trigger configuration
+ */
+export function getCareTriggerConfig() {
+  return {
+    lead_stagnant_days: parseInt(process.env.CARE_LEAD_STAGNANT_DAYS) || 7,
+    deal_decay_days: parseInt(process.env.CARE_DEAL_DECAY_DAYS) || 14,
+    activity_overdue_hours: parseInt(process.env.CARE_ACTIVITY_OVERDUE_HOURS) || 24,
+    escalation_threshold: parseFloat(process.env.CARE_ESCALATION_THRESHOLD) || 0.5,
+  };
+}
+
+/**
  * Get all C.A.R.E. configuration as a snapshot
  * 
  * @returns {Object} Current configuration
@@ -73,6 +87,7 @@ export function getCareConfig() {
   return {
     autonomy_enabled: getCareAutonomyEnabled(),
     shadow_mode: getCareShadowModeEnabled(),
+    triggers: getCareTriggerConfig(),
     timestamp: new Date().toISOString(),
   };
 }
@@ -80,5 +95,6 @@ export function getCareConfig() {
 export default {
   getCareAutonomyEnabled,
   getCareShadowModeEnabled,
+  getCareTriggerConfig,
   getCareConfig,
 };
