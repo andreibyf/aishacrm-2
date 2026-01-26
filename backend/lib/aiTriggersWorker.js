@@ -226,14 +226,18 @@ async function processTriggersForTenant(tenant) {
         
         if (escalation.is_escalation) {
           logger.info({ lead_id: lead.id }, '[AiTriggers] ESCALATION DETECTED');
-          emitCareAudit(CareAuditEventType.ESCALATION_DETECTED, {
+          emitCareAudit({
+            tenant_id: tenantUuid,
+            entity_type: 'lead',
+            entity_id: lead.id,
+            event_type: CareAuditEventType.ESCALATION_DETECTED,
             action_origin: 'care_autonomous',
-            policy_gate_result: CarePolicyGateResult.ALLOWED,
             reason: escalation.reason,
-            trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
-            record_type: 'lead',
-            record_id: lead.id,
-            metadata: { severity: escalation.severity },
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            meta: {
+              severity: escalation.severity,
+              trigger_type: TRIGGER_TYPES.LEAD_STAGNANT
+            }
           });
         }
 
@@ -252,12 +256,17 @@ async function processTriggersForTenant(tenant) {
               event_id: `trigger-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
               type: escalation.is_escalation ? 'care.escalation_detected' : 'care.trigger_detected',
               ts: new Date().toISOString(),
-              tenant_id: lead.tenant_id,
+              tenant_id: tenantUuid,
               entity_type: 'lead',
               entity_id: lead.id,
               action_origin: 'care_autonomous',
               trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
-              policy_gate_result: CarePolicyGateResult.ALLOWED,
+              policy_gate_result: 'allowed',
+              reason: `Lead stagnant ${lead.days_stagnant} days (status=${lead.status})`,
+              care_state: currentState,
+              escalation_status: escalation.is_escalation ? escalation.severity : null,
+              deep_link: `/app/leads/${lead.id}`,
+              intent: 'triage_trigger',
               meta: {
                 days_stagnant: lead.days_stagnant,
                 lead_name: `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
@@ -288,29 +297,34 @@ async function processTriggersForTenant(tenant) {
         });
 
         if (!proposal) {
-          emitCareAudit(CareAuditEventType.ACTION_SKIPPED, {
+          emitCareAudit({
+            tenant_id: tenantUuid,
+            entity_type: 'lead',
+            entity_id: lead.id,
+            event_type: CareAuditEventType.ACTION_SKIPPED,
             action_origin: 'care_autonomous',
-            policy_gate_result: CarePolicyGateResult.ALLOWED,
             reason: 'no_transition_proposed',
-            trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
-            record_type: 'lead',
-            record_id: lead.id,
-            metadata: { trigger_type: TRIGGER_TYPES.LEAD_STAGNANT }
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            meta: { trigger_type: TRIGGER_TYPES.LEAD_STAGNANT }
           });
           continue;
         }
 
         if (proposal.proposed_state) {
           // Always emit state_proposed
-          emitCareAudit(CareAuditEventType.STATE_PROPOSED, {
+          emitCareAudit({
+            tenant_id: tenantUuid,
+            entity_type: 'lead',
+            entity_id: lead.id,
+            event_type: CareAuditEventType.STATE_PROPOSED,
             action_origin: 'care_autonomous',
-            policy_gate_result: CarePolicyGateResult.ALLOWED,
-            current_state: currentState,
-            proposed_state: proposal.proposed_state,
             reason: proposal.reason,
-            trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
-            record_type: 'lead',
-            record_id: lead.id,
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            meta: {
+              current_state: currentState,
+              proposed_state: proposal.proposed_state,
+              trigger_type: TRIGGER_TYPES.LEAD_STAGNANT
+            }
           });
 
           // PR7: Conditionally apply transition if state write gate enabled
@@ -325,14 +339,19 @@ async function processTriggersForTenant(tenant) {
                 meta: { trigger_type: TRIGGER_TYPES.LEAD_STAGNANT, signals }
               });
 
-              emitCareAudit(CareAuditEventType.STATE_APPLIED, {
+              emitCareAudit({
+                tenant_id: tenantUuid,
+                entity_type: 'lead',
+                entity_id: lead.id,
+                event_type: CareAuditEventType.STATE_APPLIED,
                 action_origin: 'care_autonomous',
-                policy_gate_result: CarePolicyGateResult.ALLOWED,
                 reason: `State applied: ${currentState} → ${proposal.proposed_state}`,
-                trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
-                record_type: 'lead',
-                record_id: lead.id,
-                metadata: { from_state: currentState, to_state: proposal.proposed_state }
+                policy_gate_result: CarePolicyGateResult.ALLOWED,
+                meta: {
+                  from_state: currentState,
+                  to_state: proposal.proposed_state,
+                  trigger_type: TRIGGER_TYPES.LEAD_STAGNANT
+                }
               });
             } catch (applyError) {
               logger.warn({ err: applyError }, '[AiTriggers] C.A.R.E. state apply error');
@@ -342,26 +361,33 @@ async function processTriggersForTenant(tenant) {
 
         // Emit action candidate for meaningful follow-ups (logs only)
         if (proposal.proposed_state && ['awareness', 'engagement'].includes(proposal.proposed_state)) {
-          emitCareAudit(CareAuditEventType.ACTION_CANDIDATE, {
+          emitCareAudit({
+            tenant_id: tenantUuid,
+            entity_type: 'lead',
+            entity_id: lead.id,
+            event_type: CareAuditEventType.ACTION_CANDIDATE,
             action_origin: 'care_autonomous',
+            reason: 'follow_up action candidate identified',
             policy_gate_result: CarePolicyGateResult.ALLOWED,
-            action_type: 'follow_up',
-            proposed_state: proposal.proposed_state,
-            trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
-            record_type: 'lead',
-            record_id: lead.id,
-            metadata: { silence_days: signals.silence_days },
+            meta: {
+              action_type: 'follow_up',
+              proposed_state: proposal.proposed_state,
+              trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
+              silence_days: signals.silence_days
+            }
           });
         }
 
         // PR7: Always emit action_skipped
-        emitCareAudit(CareAuditEventType.ACTION_SKIPPED, {
+        emitCareAudit({
+          tenant_id: tenantUuid,
+          entity_type: 'lead',
+          entity_id: lead.id,
+          event_type: CareAuditEventType.ACTION_SKIPPED,
           action_origin: 'care_autonomous',
-          policy_gate_result: CarePolicyGateResult.ALLOWED,
           reason: 'Autonomous actions disabled (PR7: state persistence only)',
-          trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
-          record_type: 'lead',
-          record_id: lead.id,
+          policy_gate_result: CarePolicyGateResult.ALLOWED,
+          meta: { trigger_type: TRIGGER_TYPES.LEAD_STAGNANT }
         });
       } catch (err) {
         console.warn('[C.A.R.E. PR7] Trigger analysis error (non-breaking):', err.message);
@@ -430,14 +456,19 @@ async function processTriggersForTenant(tenant) {
 
         const escalation = detectEscalation({ text: escalationText });
         if (escalation.is_escalation) {
-          emitCareAudit(CareAuditEventType.ESCALATION_DETECTED, {
+          emitCareAudit({
+            tenant_id: tenantUuid,
+            entity_type: 'opportunity',
+            entity_id: deal.id,
+            event_type: CareAuditEventType.ESCALATION_DETECTED,
             action_origin: 'care_autonomous',
-            policy_gate_result: CarePolicyGateResult.ALLOWED,
             reason: escalation.reason,
-            trigger_type: TRIGGER_TYPES.DEAL_DECAY,
-            record_type: 'opportunity',
-            record_id: deal.id,
-            metadata: { severity: escalation.severity, amount: deal.amount },
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            meta: {
+              severity: escalation.severity,
+              amount: deal.amount,
+              trigger_type: TRIGGER_TYPES.DEAL_DECAY
+            }
           });
 
           // PR8: Trigger workflow webhook if enabled
@@ -449,13 +480,17 @@ async function processTriggersForTenant(tenant) {
                 event_id: `escalation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                 type: 'care.escalation_detected',
                 ts: new Date().toISOString(),
-                tenant_id: deal.tenant_id,
+                tenant_id: tenantUuid,
                 entity_type: 'opportunity',
                 entity_id: deal.id,
                 action_origin: 'care_autonomous',
-                reason: escalation.reason,
-                policy_gate_result: CarePolicyGateResult.ALLOWED,
                 trigger_type: TRIGGER_TYPES.DEAL_DECAY,
+                policy_gate_result: 'allowed',
+                reason: escalation.reason,
+                care_state: currentState,
+                escalation_status: escalation.severity,
+                deep_link: `/app/opportunities/${deal.id}`,
+                intent: 'triage_trigger',
                 meta: {
                   severity: escalation.severity,
                   amount: deal.amount,
@@ -479,29 +514,34 @@ async function processTriggersForTenant(tenant) {
         });
 
         if (!proposal) {
-          emitCareAudit(CareAuditEventType.ACTION_SKIPPED, {
+          emitCareAudit({
+            tenant_id: tenantUuid,
+            entity_type: 'opportunity',
+            entity_id: deal.id,
+            event_type: CareAuditEventType.ACTION_SKIPPED,
             action_origin: 'care_autonomous',
-            policy_gate_result: CarePolicyGateResult.ALLOWED,
             reason: 'no_transition_proposed',
-            trigger_type: TRIGGER_TYPES.DEAL_DECAY,
-            record_type: 'opportunity',
-            record_id: deal.id,
-            metadata: { trigger_type: TRIGGER_TYPES.DEAL_DECAY }
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            meta: { trigger_type: TRIGGER_TYPES.DEAL_DECAY }
           });
           continue;
         }
 
         if (proposal.proposed_state) {
           // Always emit state_proposed
-          emitCareAudit(CareAuditEventType.STATE_PROPOSED, {
+          emitCareAudit({
+            tenant_id: tenantUuid,
+            entity_type: 'opportunity',
+            entity_id: deal.id,
+            event_type: CareAuditEventType.STATE_PROPOSED,
             action_origin: 'care_autonomous',
-            policy_gate_result: CarePolicyGateResult.ALLOWED,
-            current_state: currentState,
-            proposed_state: proposal.proposed_state,
             reason: proposal.reason,
-            trigger_type: TRIGGER_TYPES.DEAL_DECAY,
-            record_type: 'opportunity',
-            record_id: deal.id,
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            meta: {
+              current_state: currentState,
+              proposed_state: proposal.proposed_state,
+              trigger_type: TRIGGER_TYPES.DEAL_DECAY
+            }
           });
 
           // PR7: Conditionally apply transition if state write gate enabled
@@ -516,14 +556,19 @@ async function processTriggersForTenant(tenant) {
                 meta: { trigger_type: TRIGGER_TYPES.DEAL_DECAY, amount: deal.amount, signals }
               });
 
-              emitCareAudit(CareAuditEventType.STATE_APPLIED, {
+              emitCareAudit({
+                tenant_id: tenantUuid,
+                entity_type: 'opportunity',
+                entity_id: deal.id,
+                event_type: CareAuditEventType.STATE_APPLIED,
                 action_origin: 'care_autonomous',
-                policy_gate_result: CarePolicyGateResult.ALLOWED,
                 reason: `State applied: ${currentState} → ${proposal.proposed_state}`,
-                trigger_type: TRIGGER_TYPES.DEAL_DECAY,
-                record_type: 'opportunity',
-                record_id: deal.id,
-                metadata: { from_state: currentState, to_state: proposal.proposed_state }
+                policy_gate_result: CarePolicyGateResult.ALLOWED,
+                meta: {
+                  from_state: currentState,
+                  to_state: proposal.proposed_state,
+                  trigger_type: TRIGGER_TYPES.DEAL_DECAY
+                }
               });
             } catch (applyError) {
               logger.warn({ err: applyError }, '[AiTriggers] C.A.R.E. state apply error');
@@ -532,26 +577,34 @@ async function processTriggersForTenant(tenant) {
         }
 
         if (proposal.proposed_state && deal.amount > 10000) {
-          emitCareAudit(CareAuditEventType.ACTION_CANDIDATE, {
+          emitCareAudit({
+            tenant_id: tenantUuid,
+            entity_type: 'opportunity',
+            entity_id: deal.id,
+            event_type: CareAuditEventType.ACTION_CANDIDATE,
             action_origin: 'care_autonomous',
+            reason: 'deal revival action candidate identified',
             policy_gate_result: CarePolicyGateResult.ALLOWED,
-            action_type: 'deal_revival',
-            proposed_state: proposal.proposed_state,
-            trigger_type: TRIGGER_TYPES.DEAL_DECAY,
-            record_type: 'opportunity',
-            record_id: deal.id,
-            metadata: { amount: deal.amount, silence_days: signals.silence_days },
+            meta: {
+              action_type: 'deal_revival',
+              proposed_state: proposal.proposed_state,
+              trigger_type: TRIGGER_TYPES.DEAL_DECAY,
+              amount: deal.amount,
+              silence_days: signals.silence_days
+            }
           });
         }
 
         // PR7: Always emit action_skipped
-        emitCareAudit(CareAuditEventType.ACTION_SKIPPED, {
+        emitCareAudit({
+          tenant_id: tenantUuid,
+          entity_type: 'opportunity',
+          entity_id: deal.id,
+          event_type: CareAuditEventType.ACTION_SKIPPED,
           action_origin: 'care_autonomous',
-          policy_gate_result: CarePolicyGateResult.ALLOWED,
           reason: 'Autonomous actions disabled (PR7: state persistence only)',
-          trigger_type: TRIGGER_TYPES.DEAL_DECAY,
-          record_type: 'opportunity',
-          record_id: deal.id,
+          policy_gate_result: CarePolicyGateResult.ALLOWED,
+          meta: { trigger_type: TRIGGER_TYPES.DEAL_DECAY }
         });
       } catch (err) {
         console.warn('[C.A.R.E. PR7] Trigger analysis error (non-breaking):', err.message);
@@ -616,14 +669,19 @@ async function processTriggersForTenant(tenant) {
 
         const escalation = detectEscalation({ text: escalationText });
         if (escalation.is_escalation) {
-          emitCareAudit(CareAuditEventType.ESCALATION_DETECTED, {
+          emitCareAudit({
+            tenant_id: tenantUuid,
+            entity_type: 'activity',
+            entity_id: activity.id,
+            event_type: CareAuditEventType.ESCALATION_DETECTED,
             action_origin: 'care_autonomous',
-            policy_gate_result: CarePolicyGateResult.ALLOWED,
             reason: escalation.reason,
-            trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
-            record_type: 'activity',
-            record_id: activity.id,
-            metadata: { severity: escalation.severity, days_overdue: activity.days_overdue },
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            meta: {
+              severity: escalation.severity,
+              days_overdue: activity.days_overdue,
+              trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE
+            }
           });
 
           // PR8: Trigger workflow webhook if enabled
@@ -635,13 +693,17 @@ async function processTriggersForTenant(tenant) {
                 event_id: `escalation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                 type: 'care.escalation_detected',
                 ts: new Date().toISOString(),
-                tenant_id: activity.tenant_id,
+                tenant_id: tenantUuid,
                 entity_type: 'activity',
                 entity_id: activity.id,
                 action_origin: 'care_autonomous',
-                reason: escalation.reason,
-                policy_gate_result: CarePolicyGateResult.ALLOWED,
                 trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
+                policy_gate_result: 'allowed',
+                reason: escalation.reason,
+                care_state: currentState,
+                escalation_status: escalation.severity,
+                deep_link: `/app/activities/${activity.id}`,
+                intent: 'triage_trigger',
                 meta: {
                   severity: escalation.severity,
                   days_overdue: activity.days_overdue,
@@ -665,29 +727,34 @@ async function processTriggersForTenant(tenant) {
         });
 
         if (!proposal) {
-          emitCareAudit(CareAuditEventType.ACTION_SKIPPED, {
+          emitCareAudit({
+            tenant_id: tenantUuid,
+            entity_type: 'activity',
+            entity_id: activity.id,
+            event_type: CareAuditEventType.ACTION_SKIPPED,
             action_origin: 'care_autonomous',
-            policy_gate_result: CarePolicyGateResult.ALLOWED,
             reason: 'no_transition_proposed',
-            trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
-            record_type: 'activity',
-            record_id: activity.id,
-            metadata: { trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE }
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            meta: { trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE }
           });
           continue;
         }
 
         if (proposal.proposed_state) {
           // Always emit state_proposed
-          emitCareAudit(CareAuditEventType.STATE_PROPOSED, {
+          emitCareAudit({
+            tenant_id: tenantUuid,
+            entity_type: 'activity',
+            entity_id: activity.id,
+            event_type: CareAuditEventType.STATE_PROPOSED,
             action_origin: 'care_autonomous',
-            policy_gate_result: CarePolicyGateResult.ALLOWED,
-            current_state: currentState,
-            proposed_state: proposal.proposed_state,
             reason: proposal.reason,
-            trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
-            record_type: 'activity',
-            record_id: activity.id,
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            meta: {
+              current_state: currentState,
+              proposed_state: proposal.proposed_state,
+              trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE
+            }
           });
 
           // PR7: Conditionally apply transition if state write gate enabled
@@ -702,14 +769,19 @@ async function processTriggersForTenant(tenant) {
                 meta: { trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE, days_overdue: activity.days_overdue, signals }
               });
 
-              emitCareAudit(CareAuditEventType.STATE_APPLIED, {
+              emitCareAudit({
+                tenant_id: tenantUuid,
+                entity_type: 'activity',
+                entity_id: activity.id,
+                event_type: CareAuditEventType.STATE_APPLIED,
                 action_origin: 'care_autonomous',
-                policy_gate_result: CarePolicyGateResult.ALLOWED,
                 reason: `State applied: ${currentState} → ${proposal.proposed_state}`,
-                trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
-                record_type: 'activity',
-                record_id: activity.id,
-                metadata: { from_state: currentState, to_state: proposal.proposed_state }
+                policy_gate_result: CarePolicyGateResult.ALLOWED,
+                meta: {
+                  from_state: currentState,
+                  to_state: proposal.proposed_state,
+                  trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE
+                }
               });
             } catch (applyError) {
               logger.warn({ err: applyError }, '[AiTriggers] C.A.R.E. state apply error');
@@ -718,26 +790,33 @@ async function processTriggersForTenant(tenant) {
         }
 
         if (proposal.proposed_state && activity.days_overdue > 2) {
-          emitCareAudit(CareAuditEventType.ACTION_CANDIDATE, {
+          emitCareAudit({
+            tenant_id: tenantUuid,
+            entity_type: 'activity',
+            entity_id: activity.id,
+            event_type: CareAuditEventType.ACTION_CANDIDATE,
             action_origin: 'care_autonomous',
+            reason: 'activity reschedule action candidate identified',
             policy_gate_result: CarePolicyGateResult.ALLOWED,
-            action_type: 'activity_reschedule',
-            proposed_state: proposal.proposed_state,
-            trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
-            record_type: 'activity',
-            record_id: activity.id,
-            metadata: { days_overdue: activity.days_overdue },
+            meta: {
+              action_type: 'activity_reschedule',
+              proposed_state: proposal.proposed_state,
+              trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
+              days_overdue: activity.days_overdue
+            }
           });
         }
 
         // PR7: Always emit action_skipped
-        emitCareAudit(CareAuditEventType.ACTION_SKIPPED, {
+        emitCareAudit({
+          tenant_id: tenantUuid,
+          entity_type: 'activity',
+          entity_id: activity.id,
+          event_type: CareAuditEventType.ACTION_SKIPPED,
           action_origin: 'care_autonomous',
-          policy_gate_result: CarePolicyGateResult.ALLOWED,
           reason: 'Autonomous actions disabled (PR7: state persistence only)',
-          trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
-          record_type: 'activity',
-          record_id: activity.id,
+          policy_gate_result: CarePolicyGateResult.ALLOWED,
+          meta: { trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE }
         });
       } catch (err) {
         console.warn('[C.A.R.E. PR7] Trigger analysis error (non-breaking):', err.message);
@@ -806,14 +885,19 @@ async function processTriggersForTenant(tenant) {
 
         const escalation = detectEscalation({ text: escalationText });
         if (escalation.is_escalation) {
-          emitCareAudit(CareAuditEventType.ESCALATION_DETECTED, {
+          emitCareAudit({
+            tenant_id: tenantUuid,
+            entity_type: 'opportunity',
+            entity_id: opp.id,
+            event_type: CareAuditEventType.ESCALATION_DETECTED,
             action_origin: 'care_autonomous',
-            policy_gate_result: CarePolicyGateResult.ALLOWED,
             reason: escalation.reason,
-            trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
-            record_type: 'opportunity',
-            record_id: opp.id,
-            metadata: { severity: escalation.severity, probability: opp.probability },
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            meta: {
+              severity: escalation.severity,
+              probability: opp.probability,
+              trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT
+            }
           });
 
           // PR8: Trigger workflow webhook if enabled
@@ -825,13 +909,17 @@ async function processTriggersForTenant(tenant) {
                 event_id: `escalation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                 type: 'care.escalation_detected',
                 ts: new Date().toISOString(),
-                tenant_id: opp.tenant_id,
+                tenant_id: tenantUuid,
                 entity_type: 'opportunity',
                 entity_id: opp.id,
                 action_origin: 'care_autonomous',
-                reason: escalation.reason,
-                policy_gate_result: CarePolicyGateResult.ALLOWED,
                 trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
+                policy_gate_result: 'allowed',
+                reason: escalation.reason,
+                care_state: currentState,
+                escalation_status: escalation.severity,
+                deep_link: `/app/opportunities/${opp.id}`,
+                intent: 'triage_trigger',
                 meta: {
                   severity: escalation.severity,
                   probability: opp.probability,
@@ -857,15 +945,19 @@ async function processTriggersForTenant(tenant) {
 
         if (proposal.proposed_state) {
           // Always emit state_proposed
-          emitCareAudit(CareAuditEventType.STATE_PROPOSED, {
+          emitCareAudit({
+            tenant_id: tenantUuid,
+            entity_type: 'opportunity',
+            entity_id: opp.id,
+            event_type: CareAuditEventType.STATE_PROPOSED,
             action_origin: 'care_autonomous',
-            policy_gate_result: CarePolicyGateResult.ALLOWED,
-            current_state: currentState,
-            proposed_state: proposal.proposed_state,
             reason: proposal.reason,
-            trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
-            record_type: 'opportunity',
-            record_id: opp.id,
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            meta: {
+              current_state: currentState,
+              proposed_state: proposal.proposed_state,
+              trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT
+            }
           });
 
           // PR7: Conditionally apply transition if state write gate enabled
@@ -880,14 +972,19 @@ async function processTriggersForTenant(tenant) {
                 meta: { trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT, amount: opp.amount, signals }
               });
 
-              emitCareAudit(CareAuditEventType.STATE_APPLIED, {
+              emitCareAudit({
+                tenant_id: tenantUuid,
+                entity_type: 'opportunity',
+                entity_id: opp.id,
+                event_type: CareAuditEventType.STATE_APPLIED,
                 action_origin: 'care_autonomous',
-                policy_gate_result: CarePolicyGateResult.ALLOWED,
                 reason: `State applied: ${currentState} → ${proposal.proposed_state}`,
-                trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
-                record_type: 'opportunity',
-                record_id: opp.id,
-                metadata: { from_state: currentState, to_state: proposal.proposed_state }
+                policy_gate_result: CarePolicyGateResult.ALLOWED,
+                meta: {
+                  from_state: currentState,
+                  to_state: proposal.proposed_state,
+                  trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT
+                }
               });
             } catch (applyError) {
               logger.warn({ err: applyError }, '[AiTriggers] C.A.R.E. state apply error');
@@ -896,26 +993,34 @@ async function processTriggersForTenant(tenant) {
         }
 
         if (proposal.proposed_state && opp.amount > 50000) {
-          emitCareAudit(CareAuditEventType.ACTION_CANDIDATE, {
+          emitCareAudit({
+            tenant_id: tenantUuid,
+            entity_type: 'opportunity',
+            entity_id: opp.id,
+            event_type: CareAuditEventType.ACTION_CANDIDATE,
             action_origin: 'care_autonomous',
+            reason: 'deal closing action candidate identified',
             policy_gate_result: CarePolicyGateResult.ALLOWED,
-            action_type: 'deal_closing',
-            proposed_state: proposal.proposed_state,
-            trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
-            record_type: 'opportunity',
-            record_id: opp.id,
-            metadata: { amount: opp.amount, days_to_close: opp.days_to_close },
+            meta: {
+              action_type: 'deal_closing',
+              proposed_state: proposal.proposed_state,
+              trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
+              amount: opp.amount,
+              days_to_close: opp.days_to_close
+            }
           });
         }
 
         // PR7: Always emit action_skipped
-        emitCareAudit(CareAuditEventType.ACTION_SKIPPED, {
+        emitCareAudit({
+          tenant_id: tenantUuid,
+          entity_type: 'opportunity',
+          entity_id: opp.id,
+          event_type: CareAuditEventType.ACTION_SKIPPED,
           action_origin: 'care_autonomous',
-          policy_gate_result: CarePolicyGateResult.ALLOWED,
           reason: 'Autonomous actions disabled (PR7: state persistence only)',
-          trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
-          record_type: 'opportunity',
-          record_id: opp.id,
+          policy_gate_result: CarePolicyGateResult.ALLOWED,
+          meta: { trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT }
         });
       } catch (err) {
         console.warn('[C.A.R.E. PR7] Trigger analysis error (non-breaking):', err.message);

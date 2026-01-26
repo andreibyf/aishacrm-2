@@ -4,7 +4,10 @@ import { CronJob } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Clock, Loader2 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Clock, Loader2, Zap, ChevronDown, ChevronRight, Play, RefreshCw, BarChart3, AlertCircle, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 
 // Available functions that can be scheduled (not currently used, reserved for future UI)
@@ -61,6 +64,8 @@ const _SCHEDULABLE_FUNCTIONS = [
 ];
 
 const SCHEDULE_PRESETS = {
+  'every_15_seconds': { expression: 'N/A', description: 'Every 15 seconds' },
+  'every_30_seconds': { expression: 'N/A', description: 'Every 30 seconds' },
   'every_minute': { expression: '* * * * *', description: 'Every minute' },
   'every_5_minutes': { expression: '*/5 * * * *', description: 'Every 5 minutes' },
   'every_15_minutes': { expression: '*/15 * * * *', description: 'Every 15 minutes' },
@@ -76,6 +81,10 @@ const SCHEDULE_PRESETS = {
 export default function CronJobManager({ user }) {
   const [cronJobs, setCronJobs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [expandedJobs, setExpandedJobs] = useState(new Set());
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [lastRefresh, setLastRefresh] = useState(new Date());
+  const [autoRefresh, setAutoRefresh] = useState(true);
 
   const loadCronJobs = useCallback(async () => {
     try {
@@ -95,6 +104,7 @@ export default function CronJobManager({ user }) {
           })() : Promise.resolve([])
       ]);
       setCronJobs(jobs);
+      setLastRefresh(new Date());
     } catch (error) {
       console.error('Error loading cron jobs:', error);
       toast.error('Failed to load scheduled tasks.');
@@ -106,6 +116,74 @@ export default function CronJobManager({ user }) {
   useEffect(() => {
     loadCronJobs();
   }, [loadCronJobs]);
+
+  // Update current time every second for real-time countdowns
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Auto-refresh data every 30 seconds
+  useEffect(() => {
+    if (!autoRefresh) return;
+
+    const interval = setInterval(() => {
+      loadCronJobs();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [loadCronJobs, autoRefresh]);
+
+  // Calculate time until next run
+  const getTimeUntilNextRun = (nextRun) => {
+    if (!nextRun) return 'Not scheduled';
+    const next = new Date(nextRun);
+    const diff = next.getTime() - currentTime.getTime();
+    if (diff <= 0) return 'Overdue';
+    
+    const minutes = Math.floor(diff / 60000);
+    const seconds = Math.floor((diff % 60000) / 1000);
+    
+    if (minutes > 60) {
+      const hours = Math.floor(minutes / 60);
+      const remainingMinutes = minutes % 60;
+      return `${hours}h ${remainingMinutes}m`;
+    }
+    if (minutes > 0) {
+      return `${minutes}m ${seconds}s`;
+    }
+    return `${seconds}s`;
+  };
+
+  // Get execution health status
+  const getExecutionHealth = (job) => {
+    const count = job.metadata?.execution_count || 0;
+    const lastRun = job.last_run;
+    const isActive = job.is_active;
+    
+    if (!isActive) return { status: 'paused', color: 'slate' };
+    if (count === 0) return { status: 'pending', color: 'yellow' };
+    if (lastRun) {
+      const lastRunTime = new Date(lastRun);
+      const hoursSinceLastRun = (currentTime - lastRunTime) / (1000 * 60 * 60);
+      if (hoursSinceLastRun > 24) return { status: 'stale', color: 'red' };
+      if (hoursSinceLastRun > 2) return { status: 'delayed', color: 'orange' };
+    }
+    return { status: 'healthy', color: 'green' };
+  };
+
+  // Toggle job details expansion
+  const toggleJobExpansion = (jobId) => {
+    const newExpanded = new Set(expandedJobs);
+    if (newExpanded.has(jobId)) {
+      newExpanded.delete(jobId);
+    } else {
+      newExpanded.add(jobId);
+    }
+    setExpandedJobs(newExpanded);
+  };
 
   // UNUSED: Future features for creating/editing cron jobs
   // const calculateNextExecution = (scheduleExpression) => { ... }
@@ -125,17 +203,42 @@ export default function CronJobManager({ user }) {
   //   }
   // };
 
-  // UNUSED: handleToggleActive function - not connected to UI
-  // const handleToggleActive = async (jobId, isActive) => {
-  //   try {
-  //     await CronJob.update(jobId, { is_active: isActive });
-  //     toast.success(`Task status updated to ${isActive ? 'Active' : 'Paused'}.`);
-  //     loadCronJobs();
-  //   } catch (error) {
-  //     console.error('Error toggling job status:', error);
-  //     toast.error('Failed to toggle task status.');
-  //   }
-  // };
+  const handleToggleActive = async (jobId, isActive) => {
+    try {
+      await CronJob.update(jobId, { is_active: isActive });
+      toast.success(`Task status updated to ${isActive ? 'Active' : 'Paused'}.`);
+      loadCronJobs();
+    } catch (error) {
+      console.error('Error toggling job status:', error);
+      toast.error('Failed to toggle task status.');
+    }
+  };
+
+  // Handle running job immediately
+  const handleRunNow = async (jobId, jobName) => {
+    try {
+      toast.loading(`Running ${jobName} now...`, { id: `run-${jobId}` });
+      const result = await CronJob.runNow(jobId);
+      
+      if (result.status === 'success') {
+        toast.success(`${jobName} executed successfully`, { 
+          id: `run-${jobId}`,
+          description: `Duration: ${result.data?.duration_ms || 0}ms`
+        });
+      } else {
+        throw new Error(result.message || 'Execution failed');
+      }
+      
+      // Reload to get updated execution stats
+      loadCronJobs();
+    } catch (error) {
+      console.error('Error running job:', error);
+      toast.error(`Failed to run ${jobName}`, { 
+        id: `run-${jobId}`,
+        description: error.message 
+      });
+    }
+  };
 
   // UNUSED: handleDelete function - not connected to UI
   // const handleDelete = async (jobId) => {
@@ -205,13 +308,41 @@ export default function CronJobManager({ user }) {
 
       <Card className="bg-slate-800 border-slate-700">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-slate-100">
-            <Clock className="w-5 h-5 text-yellow-400" />
-            Scheduled Cron Jobs
-          </CardTitle>
-          <CardDescription className="text-slate-400">
-            View and manage automated tasks
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-slate-100">
+                <Clock className="w-5 h-5 text-yellow-400" />
+                Scheduled Cron Jobs
+              </CardTitle>
+              <CardDescription className="text-slate-400">
+                View and manage automated tasks
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-3 text-sm">
+              <div className="flex items-center gap-2 text-slate-500">
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                <span>Last refresh: {lastRefresh.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={autoRefresh}
+                  onCheckedChange={setAutoRefresh}
+                  className="data-[state=checked]:bg-blue-600"
+                />
+                <span className="text-slate-400">Auto-refresh (30s)</span>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="text-slate-300 border-slate-600 hover:bg-slate-700"
+                onClick={loadCronJobs}
+                disabled={loading}
+              >
+                <RefreshCw className={`w-3 h-3 mr-1 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -224,23 +355,166 @@ export default function CronJobManager({ user }) {
             </div>
           ) : (
             <div className="space-y-3">
-              {cronJobs.map((job) => (
-                <div key={job.id} className="p-4 bg-slate-900 rounded-lg border border-slate-700">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <p className="font-medium text-slate-200">{job.name}</p>
-                      <p className="text-xs text-slate-400 mt-1">{job.description}</p>
-                      <div className="flex items-center gap-4 mt-2 text-xs text-slate-500">
-                        <span>Schedule: {SCHEDULE_PRESETS[job.schedule_expression]?.description || job.schedule_expression}</span>
-                        <span>Executions: {job.execution_count}</span>
+              {cronJobs.map((job) => {
+                const isSystemWorker = job.metadata?.type === 'system_worker';
+                const executionCount = job.metadata?.execution_count || 0;
+                const health = getExecutionHealth(job);
+                const isExpanded = expandedJobs.has(job.id);
+                const timeUntilNext = getTimeUntilNextRun(job.next_run);
+                
+                return (
+                  <Collapsible key={job.id} open={isExpanded} onOpenChange={() => toggleJobExpansion(job.id)}>
+                    <div className="p-4 bg-slate-900 rounded-lg border border-slate-700 hover:border-slate-600 transition-colors">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            {isSystemWorker && <Zap className="w-4 h-4 text-yellow-400 flex-shrink-0" />}
+                            <p className="font-medium text-slate-200 truncate">{job.name}</p>
+                            {/* Health indicator */}
+                            <div className="flex items-center gap-1">
+                              {health.status === 'healthy' && <CheckCircle className="w-3 h-3 text-green-400" />}
+                              {health.status === 'stale' && <AlertCircle className="w-3 h-3 text-red-400" />}
+                              {health.status === 'delayed' && <AlertCircle className="w-3 h-3 text-orange-400" />}
+                              {health.status === 'pending' && <Clock className="w-3 h-3 text-yellow-400" />}
+                              {health.status === 'paused' && <div className="w-3 h-3 bg-slate-500 rounded-full" />}
+                            </div>
+                          </div>
+                          <p className="text-xs text-slate-400 mt-1 line-clamp-2">
+                            {job.metadata?.description || job.description || 'No description'}
+                          </p>
+                          
+                          {/* Enhanced execution stats */}
+                          <div className="flex flex-wrap items-center gap-4 mt-3 text-xs">
+                            <div className="flex items-center gap-1 text-slate-400">
+                              <Clock className="w-3 h-3" />
+                              <span>{SCHEDULE_PRESETS[job.schedule]?.description || job.schedule}</span>
+                            </div>
+                            
+                            {job.is_active && (
+                              <div className="flex items-center gap-1 text-blue-400">
+                                <RefreshCw className="w-3 h-3" />
+                                <span>Next: {timeUntilNext}</span>
+                              </div>
+                            )}
+                            
+                            <div className="flex items-center gap-1 text-slate-500">
+                              <BarChart3 className="w-3 h-3" />
+                              <span>{executionCount} runs</span>
+                            </div>
+                            
+                            {job.last_run && (
+                              <div className="text-slate-500">
+                                Last: {new Date(job.last_run).toLocaleString('en-US', { 
+                                  month: 'short', 
+                                  day: 'numeric', 
+                                  hour: '2-digit', 
+                                  minute: '2-digit' 
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Status and controls */}
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          <Badge 
+                            variant={job.is_active ? 'default' : 'secondary'} 
+                            className={`${
+                              job.is_active 
+                                ? health.color === 'green' ? 'bg-green-600' 
+                                  : health.color === 'yellow' ? 'bg-yellow-600' 
+                                  : health.color === 'orange' ? 'bg-orange-600' 
+                                  : health.color === 'red' ? 'bg-red-600' 
+                                  : 'bg-blue-600'
+                                : 'bg-slate-600'
+                            }`}
+                          >
+                            {job.is_active ? (
+                              health.status === 'healthy' ? 'Active' :
+                              health.status === 'delayed' ? 'Delayed' :
+                              health.status === 'stale' ? 'Stale' :
+                              health.status === 'pending' ? 'Pending' : 'Active'
+                            ) : 'Paused'}
+                          </Badge>
+                          
+                          <CollapsibleTrigger asChild>
+                            <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-200">
+                              {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                            </Button>
+                          </CollapsibleTrigger>
+                          
+                          <Switch
+                            checked={job.is_active}
+                            onCheckedChange={(checked) => handleToggleActive(job.id, checked)}
+                            className="data-[state=checked]:bg-green-600"
+                          />
+                        </div>
                       </div>
+                      
+                      {/* Expanded details */}
+                      <CollapsibleContent className="pt-4 border-t border-slate-700 mt-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+                          <div className="space-y-2">
+                            <h4 className="font-medium text-slate-300">Schedule Details</h4>
+                            <div className="space-y-1 text-xs text-slate-400">
+                              <div>Expression: <code className="bg-slate-800 px-1 py-0.5 rounded text-slate-300">{job.schedule}</code></div>
+                              <div>Function: <code className="bg-slate-800 px-1 py-0.5 rounded text-slate-300">{job.function_name}</code></div>
+                              {job.next_run && (
+                                <div>Next Run: {new Date(job.next_run).toLocaleString()}</div>
+                              )}
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <h4 className="font-medium text-slate-300">Execution Stats</h4>
+                            <div className="space-y-1 text-xs text-slate-400">
+                              <div>Total Runs: {executionCount}</div>
+                              <div>Status: <span className={`text-${health.color}-400`}>{health.status}</span></div>
+                              {job.last_run && (
+                                <div>Last Success: {new Date(job.last_run).toLocaleString()}</div>
+                              )}
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <h4 className="font-medium text-slate-300">Metadata</h4>
+                            <div className="space-y-1 text-xs text-slate-400">
+                              <div>Created: {new Date(job.created_at).toLocaleDateString()}</div>
+                              <div>Updated: {new Date(job.updated_at).toLocaleDateString()}</div>
+                              {job.metadata?.version && (
+                                <div>Version: {job.metadata.version}</div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Quick actions */}
+                        <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-700">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="text-slate-300 border-slate-600 hover:bg-slate-700"
+                            disabled={!job.is_active}
+                            onClick={() => handleRunNow(job.id, job.name)}
+                          >
+                            <Play className="w-3 h-3 mr-1" />
+                            Run Now
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="text-slate-400"
+                            onClick={() => loadCronJobs()}
+                          >
+                            <RefreshCw className="w-3 h-3 mr-1" />
+                            Refresh
+                          </Button>
+                        </div>
+                      </CollapsibleContent>
                     </div>
-                    <Badge variant={job.is_active ? 'default' : 'secondary'} className={job.is_active ? 'bg-green-600' : 'bg-slate-600'}>
-                      {job.is_active ? 'Active' : 'Inactive'}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
+                  </Collapsible>
+                );
+              })}
             </div>
           )}
         </CardContent>

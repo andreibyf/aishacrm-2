@@ -63,7 +63,9 @@ export const VALID_CARE_STATES = new Set([
 export const VALID_ENTITY_TYPES = new Set([
   'lead',
   'contact',
-  'account'
+  'account',
+  'opportunity',
+  'activity'
 ]);
 
 /**

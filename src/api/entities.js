@@ -1194,6 +1194,25 @@ export const CashFlow = createEntity("CashFlow");
 
 export const CronJob = createEntity("CronJob");
 
+// Add run now functionality to CronJob
+CronJob.runNow = async (id) => {
+  const baseUrl = getBackendUrl();
+  const response = await fetch(`${baseUrl}/api/cron/jobs/${id}/run`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to run job' }));
+    throw new Error(error.message || 'Failed to run job');
+  }
+
+  return response.json();
+};
+
 export const PerformanceLog = createEntity("PerformanceLog");
 
 export const EmailTemplate = createEntity("EmailTemplate");

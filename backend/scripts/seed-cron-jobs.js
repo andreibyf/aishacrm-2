@@ -16,6 +16,30 @@ const pool = new Pool({
 
 const defaultJobs = [
   {
+    name: 'AI Triggers Worker (C.A.R.E.)',
+    schedule: 'every_15_seconds',
+    function_name: 'aiTriggersWorker',
+    is_active: true,
+    metadata: {
+      description: 'Detects stagnant leads, escalations, and triggers C.A.R.E. workflow webhooks',
+      type: 'system_worker',
+      interval_ms: 15000,
+      env_var: 'AI_TRIGGERS_WORKER_ENABLED'
+    }
+  },
+  {
+    name: 'Campaign Worker',
+    schedule: 'every_30_seconds',
+    function_name: 'campaignWorker',
+    is_active: false,
+    metadata: {
+      description: 'Processes scheduled AI campaign operations',
+      type: 'system_worker',
+      interval_ms: 30000,
+      env_var: 'CAMPAIGN_WORKER_ENABLED'
+    }
+  },
+  {
     name: 'Mark Users Offline',
     schedule: 'every_5_minutes',
     function_name: 'markUsersOffline',  // Match the executor function name
@@ -85,7 +109,11 @@ async function seedCronJobs() {
       const now = new Date();
       let next_run = null;
       
-      if (job.schedule === 'every_5_minutes') {
+      if (job.schedule === 'every_15_seconds') {
+        next_run = new Date(now.getTime() + 15 * 1000);
+      } else if (job.schedule === 'every_30_seconds') {
+        next_run = new Date(now.getTime() + 30 * 1000);
+      } else if (job.schedule === 'every_5_minutes') {
         next_run = new Date(now.getTime() + 5 * 60 * 1000);
       } else if (job.schedule === 'hourly') {
         next_run = new Date(now);
