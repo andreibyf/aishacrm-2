@@ -1523,6 +1523,83 @@ export default function createWorkflowRoutes(pgPool) {
       const { id } = req.params;
       const payload = req.body?.payload ?? req.body ?? {};
       
+      // === CARE TRIGGER TENANT VALIDATION ===
+      // Fetch workflow to check if it has a care_trigger node with tenant restriction
+      const workflowResult = await pgPool.query(
+        'SELECT id, nodes FROM workflow WHERE id = $1',
+        [id]
+      );
+      
+      if (workflowResult.rows.length === 0) {
+        logger.warn(`[Webhook] Workflow ${id} not found`);
+        return res.status(404).json({ status: 'error', message: 'Workflow not found' });
+      }
+      
+      const workflowNodes = workflowResult.rows[0].nodes || [];
+      const careTriggerNode = workflowNodes.find(n => n.type === 'care_trigger');
+      
+      // If workflow has a care_trigger node, enforce tenant isolation
+      if (careTriggerNode) {
+        const nodeConfig = careTriggerNode.config || {};
+        const configuredTenantId = nodeConfig.tenant_id;
+        const payloadTenantId = payload.tenant_id;
+        
+        // Check if CARE processing is disabled
+        if (nodeConfig.is_enabled === false) {
+          logger.info(`[Webhook] CARE workflow ${id} is disabled - logging event only`);
+          return res.status(200).json({ 
+            status: 'skipped', 
+            message: 'CARE processing is disabled for this workflow',
+            logged: true
+          });
+        }
+        
+        // Require tenant_id in care_trigger config
+        if (!configuredTenantId) {
+          logger.warn(`[Webhook] CARE workflow ${id} has no tenant_id configured - rejecting all events`);
+          return res.status(403).json({ 
+            status: 'error', 
+            message: 'CARE workflow not configured: missing tenant_id in CARE Start node',
+            hint: 'Configure the tenant_id in the CARE Start node to accept events'
+          });
+        }
+        
+        // Require tenant_id in payload
+        if (!payloadTenantId) {
+          logger.warn(`[Webhook] CARE event missing tenant_id in payload for workflow ${id}`);
+          return res.status(400).json({ 
+            status: 'error', 
+            message: 'CARE event payload missing required tenant_id field'
+          });
+        }
+        
+        // Validate tenant_id matches
+        if (configuredTenantId !== payloadTenantId) {
+          logger.warn(`[Webhook] CARE tenant mismatch for workflow ${id}: expected ${configuredTenantId}, got ${payloadTenantId}`);
+          return res.status(403).json({ 
+            status: 'error', 
+            message: 'Tenant mismatch: this CARE workflow is configured for a different tenant',
+            expected_tenant: configuredTenantId.substring(0, 8) + '...',  // Partial for security
+            received_tenant: payloadTenantId.substring(0, 8) + '...'
+          });
+        }
+        
+        logger.info(`[Webhook] CARE tenant validated: ${payloadTenantId} matches workflow ${id}`, {
+          shadow_mode: nodeConfig.shadow_mode ?? true,
+          state_write_enabled: nodeConfig.state_write_enabled ?? false,
+          webhook_timeout_ms: nodeConfig.webhook_timeout_ms || 3000
+        });
+        
+        // Pass CARE config to the workflow execution context
+        payload._care_config = {
+          shadow_mode: nodeConfig.shadow_mode ?? true,
+          state_write_enabled: nodeConfig.state_write_enabled ?? false,
+          webhook_timeout_ms: nodeConfig.webhook_timeout_ms || 3000,
+          webhook_max_retries: nodeConfig.webhook_max_retries ?? 2
+        };
+      }
+      // === END CARE TRIGGER TENANT VALIDATION ===
+      
       // Compute idempotency key for deduplication
       // Hash the payload for deterministic jobId
       const payloadHash = crypto.createHash('sha256')

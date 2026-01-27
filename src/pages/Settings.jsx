@@ -187,7 +187,6 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
       items.push(
         { id: 'users', label: 'User Management', description: 'Invite and manage team members', icon: Users, category: 'team', roles: ['admin'] },
         { id: 'tenant-integrations', label: 'Client Integrations', description: 'Configure Gmail SMTP, webhooks, and other integrations', icon: Puzzle, category: 'integrations', roles: ['admin'] },
-        { id: 'care-settings', label: 'CARE Workflows', description: 'Configure AI-driven customer care triggers', icon: Zap, category: 'integrations', roles: ['admin'] },
         { id: 'entity-labels', label: 'Entity Labels', description: 'Customize terminology for your organization', icon: Tags, category: 'system', roles: ['admin'] },
         { id: 'status-cards', label: 'Status Cards', description: 'Customize status card visibility', icon: LayoutGrid, category: 'system', roles: ['admin'] },
       );
@@ -216,7 +215,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
         { id: 'tenant-integrations', label: 'Tenant Integrations', description: 'Per-tenant integration settings', icon: Puzzle, category: 'integrations', roles: ['superadmin'] },
         { id: 'api-docs', label: 'API Documentation', description: 'API reference and examples', icon: BookOpen, category: 'integrations', roles: ['superadmin'] },
         { id: 'external-tools', label: 'External Tools', description: 'Links to third-party dashboards', icon: ExternalLink, category: 'integrations', roles: ['superadmin'] },
-        { id: 'care-settings', label: 'CARE Workflows', description: 'Configure AI-driven customer care triggers', icon: Zap, category: 'integrations', roles: ['superadmin', 'admin'] },
+        { id: 'care-settings', label: 'CARE Workflows', description: 'Configure AI-driven customer care triggers', icon: Zap, category: 'integrations', roles: ['superadmin'] },
 
         // System
         { id: 'modules', label: 'Module Settings', description: 'Enable or disable CRM modules', icon: LayoutGrid, category: 'system', roles: ['superadmin'] },
@@ -496,19 +495,19 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                 </Card>
               )}
 
-              {activeTab === 'care-settings' && isAdmin && (
+              {activeTab === 'care-settings' && isSuperadmin && (
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <Zap className="w-5 h-5 text-yellow-400" />
-                      CARE Workflow Configuration
+                      CARE Workflow Overview
                     </CardTitle>
                     <CardDescription>
-                      Configure Customer AI Response Engine workflows and behavior
+                      View CARE workflows and their tenant configurations
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <CareSettings tenantId={selectedTenantId} />
+                    <CareSettings />
                   </CardContent>
                 </Card>
               )}

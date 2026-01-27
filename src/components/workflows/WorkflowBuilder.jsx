@@ -899,6 +899,116 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               </p>
             </div>
 
+            {/* Tenant ID Configuration - REQUIRED for tenant isolation */}
+            <div>
+              <Label className="text-slate-300 text-sm">Tenant ID (Required)</Label>
+              <p className="text-xs text-slate-500 mt-1 mb-2">
+                This workflow will only accept CARE events from this specific tenant. 
+                Payloads with mismatched tenant_id will be rejected.
+              </p>
+              <Input
+                value={node.config?.tenant_id || ''}
+                onChange={(e) => updateNodeConfig(node.id, { ...node.config, tenant_id: e.target.value })}
+                placeholder="a11dfb63-4b18-4eb8-872e-747af2e37c46"
+                className="bg-slate-900 border-slate-700 text-slate-200 font-mono text-sm"
+              />
+              {!node.config?.tenant_id && (
+                <p className="text-xs text-amber-400 mt-1">
+                  ⚠️ No tenant_id configured - workflow will reject all CARE events
+                </p>
+              )}
+            </div>
+
+            {/* CARE Feature Toggles */}
+            <div className="border border-slate-700 rounded-lg p-4 space-y-4">
+              <Label className="text-slate-200 font-medium">CARE Settings</Label>
+              
+              {/* Enable/Disable Toggle */}
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-slate-300 text-sm">Enable CARE Processing</Label>
+                  <p className="text-xs text-slate-500">When disabled, events are logged but not processed</p>
+                </div>
+                <Switch
+                  checked={node.config?.is_enabled ?? true}
+                  onCheckedChange={(checked) => updateNodeConfig(node.id, { ...node.config, is_enabled: checked })}
+                />
+              </div>
+
+              {/* Shadow Mode Toggle */}
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-slate-300 text-sm">Shadow Mode</Label>
+                    <span className="text-xs bg-green-600/20 text-green-400 px-1.5 py-0.5 rounded">Recommended</span>
+                  </div>
+                  <p className="text-xs text-slate-500">Log actions without executing them (safe for testing)</p>
+                </div>
+                <Switch
+                  checked={node.config?.shadow_mode ?? true}
+                  onCheckedChange={(checked) => updateNodeConfig(node.id, { ...node.config, shadow_mode: checked })}
+                />
+              </div>
+
+              {!(node.config?.shadow_mode ?? true) && (node.config?.is_enabled ?? true) && (
+                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+                  <p className="text-xs text-red-300">
+                    <strong>⚠️ Live Mode:</strong> CARE will execute real actions. Ensure workflow is tested.
+                  </p>
+                </div>
+              )}
+
+              {/* State Persistence Toggle */}
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-slate-300 text-sm">Persist State to Database</Label>
+                  <p className="text-xs text-slate-500">Write CARE state/history to customer_care_state tables</p>
+                </div>
+                <Switch
+                  checked={node.config?.state_write_enabled ?? false}
+                  onCheckedChange={(checked) => updateNodeConfig(node.id, { ...node.config, state_write_enabled: checked })}
+                />
+              </div>
+
+              {/* Timeout & Retries */}
+              <div className="grid grid-cols-2 gap-4 pt-2">
+                <div>
+                  <Label className="text-slate-300 text-sm">Webhook Timeout</Label>
+                  <Select
+                    value={String(node.config?.webhook_timeout_ms || 3000)}
+                    onValueChange={(v) => updateNodeConfig(node.id, { ...node.config, webhook_timeout_ms: parseInt(v, 10) })}
+                  >
+                    <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-200 mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1000">1 second</SelectItem>
+                      <SelectItem value="3000">3 seconds</SelectItem>
+                      <SelectItem value="5000">5 seconds</SelectItem>
+                      <SelectItem value="10000">10 seconds</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-slate-300 text-sm">Max Retries</Label>
+                  <Select
+                    value={String(node.config?.webhook_max_retries ?? 2)}
+                    onValueChange={(v) => updateNodeConfig(node.id, { ...node.config, webhook_max_retries: parseInt(v, 10) })}
+                  >
+                    <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-200 mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">No retries</SelectItem>
+                      <SelectItem value="1">1 retry</SelectItem>
+                      <SelectItem value="2">2 retries</SelectItem>
+                      <SelectItem value="3">3 retries</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
             {/* Webhook URL Display */}
             <div>
               <Label className="text-slate-300 text-sm">Webhook URL</Label>

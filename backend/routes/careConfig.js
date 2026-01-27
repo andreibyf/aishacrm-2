@@ -8,7 +8,7 @@
 
 import { Router } from 'express';
 import { getSupabaseClient } from '../lib/supabase-db.js';
-import { requireAdminRole, validateTenantAccess } from '../middleware/validateTenant.js';
+import { requireSuperAdminRole, validateTenantAccess } from '../middleware/validateTenant.js';
 import { invalidateCareConfigCache } from '../lib/care/careTenantConfig.js';
 import logger from '../lib/logger.js';
 
@@ -100,7 +100,7 @@ router.get('/', validateTenantAccess, async (req, res) => {
  * PUT /api/care-config
  * Update CARE workflow configuration for current tenant
  */
-router.put('/', validateTenantAccess, requireAdminRole, async (req, res) => {
+router.put('/', validateTenantAccess, requireSuperAdminRole, async (req, res) => {
   try {
     const tenantId = req.tenant?.id || req.body.tenant_id;
     
@@ -246,7 +246,7 @@ router.get('/workflows', validateTenantAccess, async (req, res) => {
  * DELETE /api/care-config
  * Remove CARE workflow configuration for current tenant (reset to defaults)
  */
-router.delete('/', validateTenantAccess, requireAdminRole, async (req, res) => {
+router.delete('/', validateTenantAccess, requireSuperAdminRole, async (req, res) => {
   try {
     const tenantId = req.tenant?.id || req.query.tenant_id;
     
