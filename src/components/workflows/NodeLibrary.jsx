@@ -1,6 +1,15 @@
-import { Search, Edit, Mail, Plus, GitBranch, UserPlus, Globe, Building2, Briefcase, Activity, Brain, Sparkles, Phone, Clock, MessageSquare, UserCheck, CheckCircle, Send } from 'lucide-react'
+import { Search, Edit, Mail, Plus, GitBranch, UserPlus, Globe, Building2, Briefcase, Activity, Brain, Sparkles, Phone, Clock, MessageSquare, UserCheck, CheckCircle, Send, Shield } from 'lucide-react'
 
 const nodeTypes = [
+  // Trigger Nodes (Start Points)
+  {
+    type: 'care_trigger',
+    label: 'CARE Start',
+    icon: Shield,
+    description: 'Start workflow from CARE system events (entity_id based)',
+    color: 'red'
+  },
+  // Entity Nodes  
   {
     type: 'find_lead',
     label: 'Find Lead',

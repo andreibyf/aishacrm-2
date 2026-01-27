@@ -71,6 +71,8 @@ export function signalsFromTrigger({ trigger_type, context = {}, record_type, re
 
     case TRIGGER_TYPES.ACTIVITY_OVERDUE:
       // Overdue activity = execution risk, potential dissatisfaction
+      // Map days_overdue to silence_days to trigger state transitions
+      signals.silence_days = context.days_overdue || 1;
       signals.meta.overdue = true;
       signals.meta.days_overdue = context.days_overdue || 1;
       signals.meta.activity_type = context.type;

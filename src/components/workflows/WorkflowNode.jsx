@@ -1,9 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Webhook, Search, Edit, Trash2, UserPlus, GitBranch, Globe, Mail, GripVertical, StickyNote, Sparkles, FileText, Phone, MessageSquare, Send, Clock } from 'lucide-react';
+import { Webhook, Search, Edit, Trash2, UserPlus, GitBranch, Globe, Mail, GripVertical, StickyNote, Sparkles, FileText, Phone, MessageSquare, Send, Clock, Shield } from 'lucide-react';
 
 const nodeIcons = {
   webhook_trigger: Webhook,
+  care_trigger: Shield,
   find_lead: Search,
   create_lead: UserPlus,
   update_lead: Edit,
@@ -25,6 +26,7 @@ const nodeIcons = {
 
 const nodeColors = {
   webhook_trigger: 'bg-purple-600',
+  care_trigger: 'bg-red-600',
   find_lead: 'bg-blue-600',
   create_lead: 'bg-green-600',
   update_lead: 'bg-emerald-600',
@@ -51,6 +53,7 @@ export default function WorkflowNode({ node, isSelected, isConnecting, onClick, 
   const getNodeTitle = () => {
     switch (node.type) {
       case 'webhook_trigger': return 'Webhook Trigger';
+      case 'care_trigger': return 'CARE Start';
       case 'find_lead': return 'Find Lead';
       case 'create_lead': return 'Create Lead';
       case 'update_lead': return 'Update Lead';
@@ -75,6 +78,7 @@ export default function WorkflowNode({ node, isSelected, isConnecting, onClick, 
   const getNodeDescription = () => {
     switch (node.type) {
       case 'webhook_trigger': return 'Receives webhook data';
+      case 'care_trigger': return 'CARE automation trigger with entity resolution';
       case 'find_lead': return 'Search for an existing lead';
       case 'create_lead': return 'Create a new lead record';
       case 'update_lead': return 'Update lead fields';
@@ -247,19 +251,17 @@ export default function WorkflowNode({ node, isSelected, isConnecting, onClick, 
               <CardTitle className="text-base">{getNodeTitle()}</CardTitle>
             </div>
             <div className="flex gap-1">
-              {node.type !== 'webhook_trigger' && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 text-white hover:bg-red-600"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete();
-                  }}
-                >
-                  <Trash2 className="w-3 h-3" />
-                </Button>
-              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-white hover:bg-red-600"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+              >
+                <Trash2 className="w-3 h-3" />
+              </Button>
             </div>
           </div>
         </CardHeader>

@@ -29,10 +29,12 @@ import { signalsFromTrigger, buildTriggerEscalationText } from './care/careTrigg
 import { CareAuditEventType, CarePolicyGateResult } from './care/careAuditTypes.js';
 // PR7: State persistence and policy gate
 import { getCareState, upsertCareState, appendCareHistory } from './care/careStateStore.js';
-import { isCareStateWriteEnabled } from './care/isCareStateWriteEnabled.js';
+import { isCareAutonomyEnabled } from './care/isCareAutonomyEnabled.js';
 // PR8: Workflow webhook trigger integration
 import { isCareWorkflowTriggersEnabled } from './care/isCareWorkflowTriggersEnabled.js';
 import { triggerCareWorkflow } from './care/careWorkflowTriggerClient.js';
+// Per-tenant CARE config (Phase 3: replaces hardcoded env vars)
+import { getCareConfigForTenant, isCareEnabledForTenant } from './care/careTenantConfig.js';
 
 let workerInterval = null;
 let supabase = null;
@@ -149,6 +151,53 @@ async function processAllTriggers() {
 }
 
 /**
+ * Trigger CARE workflow using per-tenant configuration
+ * Falls back to environment variable config if no tenant-specific config exists
+ * 
+ * @param {string} tenantId - Tenant UUID
+ * @param {object} payload - Workflow trigger payload
+ */
+async function triggerCareWorkflowForTenant(tenantId, payload) {
+  try {
+    // Get tenant-specific config (with env fallback)
+    const config = await getCareConfigForTenant(tenantId);
+    
+    // Check if CARE is enabled for this tenant
+    if (!config?.is_enabled) {
+      logger.debug({ tenant_id: tenantId }, '[AiTriggers] CARE not enabled for tenant');
+      return;
+    }
+    
+    // Check if webhook URL is configured
+    if (!config?.webhook_url) {
+      logger.debug({ 
+        tenant_id: tenantId, 
+        config_source: config?._source 
+      }, '[AiTriggers] No webhook URL configured for tenant');
+      return;
+    }
+    
+    logger.info({
+      tenant_id: tenantId,
+      webhook_url: config.webhook_url,
+      config_source: config._source,
+      shadow_mode: config.shadow_mode
+    }, '[AiTriggers] Triggering CARE workflow for tenant');
+    
+    await triggerCareWorkflow({
+      url: config.webhook_url,
+      secret: config.webhook_secret,
+      payload,
+      timeout_ms: config.webhook_timeout_ms,
+      retries: config.webhook_max_retries
+    });
+    
+  } catch (err) {
+    logger.warn({ err, tenant_id: tenantId }, '[AiTriggers] CARE workflow trigger failed');
+  }
+}
+
+/**
  * Process all triggers for a specific tenant
  */
 async function processTriggersForTenant(tenant) {
@@ -222,8 +271,7 @@ async function processTriggersForTenant(tenant) {
           is_escalation: escalation.is_escalation,
           escalation_reason: escalation.reason,
           escalation_severity: escalation.severity,
-          feature_flag: isCareWorkflowTriggersEnabled(),
-          webhook_url_set: !!process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL
+          tenant_id: tenantUuid
         }, '[AiTriggers] Escalation detection result');
         
         if (escalation.is_escalation) {
@@ -243,59 +291,117 @@ async function processTriggersForTenant(tenant) {
           });
         }
 
-        // PR8: Trigger workflow webhook for ALL stagnant leads (not just escalations)
-        if (isCareWorkflowTriggersEnabled() && process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL) {
-          logger.info({ 
-            lead_id: lead.id,
-            webhook_url: process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL,
-            has_escalation: escalation.is_escalation
-          }, '[AiTriggers] Triggering workflow webhook');
-          
-          triggerCareWorkflow({
-            url: process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL,
-            secret: process.env.CARE_WORKFLOW_WEBHOOK_SECRET,
-            payload: {
-              event_id: `trigger-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              type: escalation.is_escalation ? 'care.escalation_detected' : 'care.trigger_detected',
-              ts: new Date().toISOString(),
-              tenant_id: tenantUuid,
-              entity_type: 'lead',
-              entity_id: lead.id,
-              action_origin: 'care_autonomous',
-              trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
-              policy_gate_result: 'allowed',
-              reason: `Lead stagnant ${lead.days_stagnant} days (status=${lead.status})`,
-              care_state: currentState,
-              escalation_status: escalation.is_escalation ? escalation.severity : null,
-              deep_link: `/app/leads/${lead.id}`,
-              intent: 'triage_trigger',
-              meta: {
-                days_stagnant: lead.days_stagnant,
-                lead_name: `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
-                status: lead.status,
-                // Include escalation info only if detected
-                ...(escalation.is_escalation && {
-                  escalation_reason: escalation.reason,
-                  escalation_severity: escalation.severity,
-                })
-              }
-            },
-            timeout_ms: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_TIMEOUT_MS) || 3000,
-            retries: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_MAX_RETRIES) || 2
-          }).catch(err => {
-            logger.warn({ err, lead_id: lead.id }, '[AiTriggers] Workflow webhook failed (non-critical)');
-          });
-        } else {
-          logger.debug({
-            feature_flag: isCareWorkflowTriggersEnabled(),
-            webhook_url_set: !!process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL
-          }, '[AiTriggers] Webhook trigger skipped - feature disabled or URL not set');
-        }
-
+        // PR7: Calculate proposal BEFORE triggering workflow
         const proposal = proposeTransition({
-          current_state: currentState, // PR7: real state from DB
+          current_state: currentState,
           signals,
           action_origin: 'care_autonomous',
+        });
+
+        // Determine effective state for workflow payload
+        // If autonomy enabled and proposal exists, use proposed state (will be written to DB)
+        // Otherwise use current state from DB
+        let effectiveState = currentState;
+        
+        if (proposal && proposal.to_state) {
+          // Always emit state_proposed
+          emitCareAudit({
+            tenant_id: tenantUuid,
+            entity_type: 'lead',
+            entity_id: lead.id,
+            event_type: CareAuditEventType.STATE_PROPOSED,
+            action_origin: 'care_autonomous',
+            reason: proposal.reason,
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            meta: {
+              current_state: currentState,
+              proposed_state: proposal.to_state,
+              trigger_type: TRIGGER_TYPES.LEAD_STAGNANT
+            }
+          });
+
+          // PR7: Conditionally apply transition if autonomy is enabled (not shadow mode)
+          if (isCareAutonomyEnabled()) {
+            try {
+              // Persist state to customer_care_state table BEFORE workflow trigger
+              await upsertCareState(ctx, {
+                care_state: proposal.to_state,
+                last_signal_at: new Date().toISOString(),
+                escalation_status: escalation.is_escalation ? escalation.severity : null
+              });
+              
+              // Append to history for audit trail
+              await appendCareHistory(ctx, {
+                from_state: currentState,
+                to_state: proposal.to_state,
+                event_type: 'state_transition',
+                reason: proposal.reason,
+                actor_type: 'system',
+                meta: { 
+                  trigger_type: TRIGGER_TYPES.LEAD_STAGNANT, 
+                  signals,
+                  action_origin: 'care_autonomous'
+                }
+              });
+
+              // Update effective state to reflect the write
+              effectiveState = proposal.to_state;
+
+              emitCareAudit({
+                tenant_id: tenantUuid,
+                entity_type: 'lead',
+                entity_id: lead.id,
+                event_type: CareAuditEventType.STATE_APPLIED,
+                action_origin: 'care_autonomous',
+                reason: `State applied: ${currentState} → ${proposal.to_state}`,
+                policy_gate_result: CarePolicyGateResult.ALLOWED,
+                meta: {
+                  from_state: currentState,
+                  to_state: proposal.to_state,
+                  trigger_type: TRIGGER_TYPES.LEAD_STAGNANT
+                }
+              });
+            } catch (applyError) {
+              logger.warn({ err: applyError }, '[AiTriggers] C.A.R.E. state apply error');
+              // On error, keep effectiveState as currentState
+            }
+          }
+        }
+
+        // PR8: Trigger workflow webhook for ALL stagnant leads (not just escalations)
+        // NOW: Uses effectiveState which reflects actual persisted state
+        // Canonical payload shape: entity_* = relationship, signal_entity_* = what triggered
+        await triggerCareWorkflowForTenant(tenantUuid, {
+          event_id: `trigger-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          type: escalation.is_escalation ? 'care.escalation_detected' : 'care.trigger_detected',
+          ts: new Date().toISOString(),
+          tenant_id: tenantUuid,
+          // Relationship anchor
+          entity_type: 'lead',
+          entity_id: lead.id,
+          // Signal source (lead is self-triggered)
+          signal_entity_type: 'lead',
+          signal_entity_id: lead.id,
+          action_origin: 'care_autonomous',
+          trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
+          policy_gate_result: 'allowed',
+          reason: `Lead stagnant ${lead.days_stagnant} days (status=${lead.status})`,
+          care_state: effectiveState,
+          previous_state: currentState !== effectiveState ? currentState : undefined,
+          escalation_status: escalation.is_escalation ? escalation.severity : null,
+          deep_link: `/app/leads/${lead.id}`,
+          intent: 'triage_trigger',
+          meta: {
+            days_stagnant: lead.days_stagnant,
+            lead_name: `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
+            status: lead.status,
+            state_transition: currentState !== effectiveState ? `${currentState} → ${effectiveState}` : null,
+            // Include escalation info only if detected
+            ...(escalation.is_escalation && {
+              escalation_reason: escalation.reason,
+              escalation_severity: escalation.severity,
+            })
+          }
         });
 
         if (!proposal) {
@@ -309,60 +415,10 @@ async function processTriggersForTenant(tenant) {
             policy_gate_result: CarePolicyGateResult.ALLOWED,
             meta: { trigger_type: TRIGGER_TYPES.LEAD_STAGNANT }
           });
-          continue;
-        }
-
-        if (proposal.proposed_state) {
-          // Always emit state_proposed
-          emitCareAudit({
-            tenant_id: tenantUuid,
-            entity_type: 'lead',
-            entity_id: lead.id,
-            event_type: CareAuditEventType.STATE_PROPOSED,
-            action_origin: 'care_autonomous',
-            reason: proposal.reason,
-            policy_gate_result: CarePolicyGateResult.ALLOWED,
-            meta: {
-              current_state: currentState,
-              proposed_state: proposal.proposed_state,
-              trigger_type: TRIGGER_TYPES.LEAD_STAGNANT
-            }
-          });
-
-          // PR7: Conditionally apply transition if state write gate enabled
-          if (isCareStateWriteEnabled()) {
-            try {
-              await applyTransition({
-                ctx,
-                from_state: currentState,
-                to_state: proposal.proposed_state,
-                reason: proposal.reason,
-                action_origin: 'care_autonomous',
-                meta: { trigger_type: TRIGGER_TYPES.LEAD_STAGNANT, signals }
-              });
-
-              emitCareAudit({
-                tenant_id: tenantUuid,
-                entity_type: 'lead',
-                entity_id: lead.id,
-                event_type: CareAuditEventType.STATE_APPLIED,
-                action_origin: 'care_autonomous',
-                reason: `State applied: ${currentState} → ${proposal.proposed_state}`,
-                policy_gate_result: CarePolicyGateResult.ALLOWED,
-                meta: {
-                  from_state: currentState,
-                  to_state: proposal.proposed_state,
-                  trigger_type: TRIGGER_TYPES.LEAD_STAGNANT
-                }
-              });
-            } catch (applyError) {
-              logger.warn({ err: applyError }, '[AiTriggers] C.A.R.E. state apply error');
-            }
-          }
         }
 
         // Emit action candidate for meaningful follow-ups (logs only)
-        if (proposal.proposed_state && ['awareness', 'engagement'].includes(proposal.proposed_state)) {
+        if (proposal && proposal.to_state && ['awareness', 'engagement'].includes(proposal.to_state)) {
           emitCareAudit({
             tenant_id: tenantUuid,
             entity_type: 'lead',
@@ -373,7 +429,7 @@ async function processTriggersForTenant(tenant) {
             policy_gate_result: CarePolicyGateResult.ALLOWED,
             meta: {
               action_type: 'follow_up',
-              proposed_state: proposal.proposed_state,
+              proposed_state: proposal.to_state,
               trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
               silence_days: signals.silence_days
             }
@@ -457,6 +513,82 @@ async function processTriggersForTenant(tenant) {
         });
 
         const escalation = detectEscalation({ text: escalationText });
+        
+        // PR7: Calculate proposal BEFORE triggering workflow
+        const proposal = proposeTransition({
+          current_state: currentState,
+          signals,
+          action_origin: 'care_autonomous',
+        });
+
+        // Determine effective state for workflow payload
+        let effectiveState = currentState;
+        
+        if (proposal && proposal.to_state) {
+          // Always emit state_proposed
+          emitCareAudit({
+            tenant_id: tenantUuid,
+            entity_type: 'opportunity',
+            entity_id: deal.id,
+            event_type: CareAuditEventType.STATE_PROPOSED,
+            action_origin: 'care_autonomous',
+            reason: proposal.reason,
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            meta: {
+              current_state: currentState,
+              proposed_state: proposal.to_state,
+              trigger_type: TRIGGER_TYPES.DEAL_DECAY
+            }
+          });
+
+          // PR7: Conditionally apply transition if autonomy is enabled (not shadow mode)
+          if (isCareAutonomyEnabled()) {
+            try {
+              // Persist state to customer_care_state table BEFORE workflow trigger
+              await upsertCareState(ctx, {
+                care_state: proposal.to_state,
+                last_signal_at: new Date().toISOString(),
+                escalation_status: escalation.is_escalation ? escalation.severity : null
+              });
+              
+              // Append to history for audit trail
+              await appendCareHistory(ctx, {
+                from_state: currentState,
+                to_state: proposal.to_state,
+                event_type: 'state_transition',
+                reason: proposal.reason,
+                actor_type: 'system',
+                meta: { 
+                  trigger_type: TRIGGER_TYPES.DEAL_DECAY, 
+                  amount: deal.amount, 
+                  signals,
+                  action_origin: 'care_autonomous'
+                }
+              });
+
+              // Update effective state to reflect the write
+              effectiveState = proposal.to_state;
+
+              emitCareAudit({
+                tenant_id: tenantUuid,
+                entity_type: 'opportunity',
+                entity_id: deal.id,
+                event_type: CareAuditEventType.STATE_APPLIED,
+                action_origin: 'care_autonomous',
+                reason: `State applied: ${currentState} → ${proposal.to_state}`,
+                policy_gate_result: CarePolicyGateResult.ALLOWED,
+                meta: {
+                  from_state: currentState,
+                  to_state: proposal.to_state,
+                  trigger_type: TRIGGER_TYPES.DEAL_DECAY
+                }
+              });
+            } catch (applyError) {
+              logger.warn({ err: applyError }, '[AiTriggers] C.A.R.E. state apply error');
+            }
+          }
+        }
+
         if (escalation.is_escalation) {
           emitCareAudit({
             tenant_id: tenantUuid,
@@ -473,47 +605,38 @@ async function processTriggersForTenant(tenant) {
             }
           });
 
-          // PR8: Trigger workflow webhook if enabled
-          if (isCareWorkflowTriggersEnabled() && process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL) {
-            triggerCareWorkflow({
-              url: process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL,
-              secret: process.env.CARE_WORKFLOW_WEBHOOK_SECRET,
-              payload: {
-                event_id: `escalation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                type: 'care.escalation_detected',
-                ts: new Date().toISOString(),
-                tenant_id: tenantUuid,
-                entity_type: 'opportunity',
-                entity_id: deal.id,
-                action_origin: 'care_autonomous',
-                trigger_type: TRIGGER_TYPES.DEAL_DECAY,
-                policy_gate_result: 'allowed',
-                reason: escalation.reason,
-                care_state: currentState,
-                escalation_status: escalation.severity,
-                deep_link: `/app/opportunities/${deal.id}`,
-                intent: 'triage_trigger',
-                meta: {
-                  severity: escalation.severity,
-                  amount: deal.amount,
-                  stage: deal.stage,
-                  days_inactive: deal.days_inactive,
-                  deal_name: deal.name
-                }
-              },
-              timeout_ms: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_TIMEOUT_MS) || 3000,
-              retries: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_MAX_RETRIES) || 2
-            }).catch(err => {
-              console.warn('[Triggers] Workflow trigger failed (non-critical):', err.message);
-            });
-          }
+          // PR8: Trigger workflow webhook with updated state
+          // Canonical payload shape: entity_* = relationship, signal_entity_* = what triggered
+          await triggerCareWorkflowForTenant(tenantUuid, {
+            event_id: `escalation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            type: 'care.escalation_detected',
+            ts: new Date().toISOString(),
+            tenant_id: tenantUuid,
+            // Relationship anchor
+            entity_type: 'opportunity',
+            entity_id: deal.id,
+            // Signal source (opportunity is self-triggered)
+            signal_entity_type: 'opportunity',
+            signal_entity_id: deal.id,
+            action_origin: 'care_autonomous',
+            trigger_type: TRIGGER_TYPES.DEAL_DECAY,
+            policy_gate_result: 'allowed',
+            reason: escalation.reason,
+            care_state: effectiveState,
+            previous_state: currentState !== effectiveState ? currentState : undefined,
+            escalation_status: escalation.severity,
+            deep_link: `/app/opportunities/${deal.id}`,
+            intent: 'triage_trigger',
+            meta: {
+              severity: escalation.severity,
+              amount: deal.amount,
+              stage: deal.stage,
+              days_inactive: deal.days_inactive,
+              deal_name: deal.name,
+              state_transition: currentState !== effectiveState ? `${currentState} → ${effectiveState}` : null
+            }
+          });
         }
-
-        const proposal = proposeTransition({
-          current_state: currentState,
-          signals,
-          action_origin: 'care_autonomous',
-        });
 
         if (!proposal) {
           emitCareAudit({
@@ -526,59 +649,9 @@ async function processTriggersForTenant(tenant) {
             policy_gate_result: CarePolicyGateResult.ALLOWED,
             meta: { trigger_type: TRIGGER_TYPES.DEAL_DECAY }
           });
-          continue;
         }
 
-        if (proposal.proposed_state) {
-          // Always emit state_proposed
-          emitCareAudit({
-            tenant_id: tenantUuid,
-            entity_type: 'opportunity',
-            entity_id: deal.id,
-            event_type: CareAuditEventType.STATE_PROPOSED,
-            action_origin: 'care_autonomous',
-            reason: proposal.reason,
-            policy_gate_result: CarePolicyGateResult.ALLOWED,
-            meta: {
-              current_state: currentState,
-              proposed_state: proposal.proposed_state,
-              trigger_type: TRIGGER_TYPES.DEAL_DECAY
-            }
-          });
-
-          // PR7: Conditionally apply transition if state write gate enabled
-          if (isCareStateWriteEnabled()) {
-            try {
-              await applyTransition({
-                ctx,
-                from_state: currentState,
-                to_state: proposal.proposed_state,
-                reason: proposal.reason,
-                action_origin: 'care_autonomous',
-                meta: { trigger_type: TRIGGER_TYPES.DEAL_DECAY, amount: deal.amount, signals }
-              });
-
-              emitCareAudit({
-                tenant_id: tenantUuid,
-                entity_type: 'opportunity',
-                entity_id: deal.id,
-                event_type: CareAuditEventType.STATE_APPLIED,
-                action_origin: 'care_autonomous',
-                reason: `State applied: ${currentState} → ${proposal.proposed_state}`,
-                policy_gate_result: CarePolicyGateResult.ALLOWED,
-                meta: {
-                  from_state: currentState,
-                  to_state: proposal.proposed_state,
-                  trigger_type: TRIGGER_TYPES.DEAL_DECAY
-                }
-              });
-            } catch (applyError) {
-              logger.warn({ err: applyError }, '[AiTriggers] C.A.R.E. state apply error');
-            }
-          }
-        }
-
-        if (proposal.proposed_state && deal.amount > 10000) {
+        if (proposal && proposal.to_state && deal.amount > 10000) {
           emitCareAudit({
             tenant_id: tenantUuid,
             entity_type: 'opportunity',
@@ -589,7 +662,7 @@ async function processTriggersForTenant(tenant) {
             policy_gate_result: CarePolicyGateResult.ALLOWED,
             meta: {
               action_type: 'deal_revival',
-              proposed_state: proposal.proposed_state,
+              proposed_state: proposal.to_state,
               trigger_type: TRIGGER_TYPES.DEAL_DECAY,
               amount: deal.amount,
               silence_days: signals.silence_days
@@ -625,17 +698,37 @@ async function processTriggersForTenant(tenant) {
           type: activity.type,
           days_overdue: activity.days_overdue,
           related_to: activity.related_to,
+          related_id: activity.related_id,
         },
       });
       triggerCount++;
 
       // PR6+PR7: C.A.R.E. analysis with state persistence (when enabled)
       try {
-        // PR7: Build entity context
+        // CRITICAL: Normalize to relationship entity for CARE state
+        // Activities are signals, not relationship entities. CARE state should be 
+        // keyed on the related contact/account/lead, with activity as source metadata.
+        const validRelationshipTypes = ['lead', 'contact', 'account'];
+        const normalizedEntityType = validRelationshipTypes.includes(activity.related_to) 
+          ? activity.related_to 
+          : null;
+        const normalizedEntityId = activity.related_id || null;
+        
+        // If we can't normalize to a relationship entity, log and skip CARE processing
+        if (!normalizedEntityType || !normalizedEntityId) {
+          logger.debug({
+            activity_id: activity.id,
+            related_to: activity.related_to,
+            related_id: activity.related_id
+          }, '[AiTriggers] Cannot normalize activity to relationship entity - skipping CARE');
+          continue;
+        }
+
+        // PR7: Build entity context using NORMALIZED relationship entity
         const ctx = {
           tenant_id: tenantUuid,
-          entity_type: 'activity',
-          entity_id: activity.id
+          entity_type: normalizedEntityType,
+          entity_id: normalizedEntityId
         };
 
         // PR7: Read current state from DB (fallback to 'unaware')
@@ -657,8 +750,8 @@ async function processTriggersForTenant(tenant) {
             days_overdue: activity.days_overdue,
             related_to: activity.related_to,
           },
-          record_type: 'activity',
-          record_id: activity.id,
+          record_type: normalizedEntityType,
+          record_id: normalizedEntityId,
         });
 
         const escalationText = buildTriggerEscalationText({
@@ -670,119 +763,80 @@ async function processTriggersForTenant(tenant) {
         });
 
         const escalation = detectEscalation({ text: escalationText });
-        if (escalation.is_escalation) {
-          emitCareAudit({
-            tenant_id: tenantUuid,
-            entity_type: 'activity',
-            entity_id: activity.id,
-            event_type: CareAuditEventType.ESCALATION_DETECTED,
-            action_origin: 'care_autonomous',
-            reason: escalation.reason,
-            policy_gate_result: CarePolicyGateResult.ALLOWED,
-            meta: {
-              severity: escalation.severity,
-              days_overdue: activity.days_overdue,
-              trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE
-            }
-          });
-
-          // PR8: Trigger workflow webhook if enabled
-          if (isCareWorkflowTriggersEnabled() && process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL) {
-            triggerCareWorkflow({
-              url: process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL,
-              secret: process.env.CARE_WORKFLOW_WEBHOOK_SECRET,
-              payload: {
-                event_id: `escalation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                type: 'care.escalation_detected',
-                ts: new Date().toISOString(),
-                tenant_id: tenantUuid,
-                entity_type: 'activity',
-                entity_id: activity.id,
-                action_origin: 'care_autonomous',
-                trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
-                policy_gate_result: 'allowed',
-                reason: escalation.reason,
-                care_state: currentState,
-                escalation_status: escalation.severity,
-                deep_link: `/app/activities/${activity.id}`,
-                intent: 'triage_trigger',
-                meta: {
-                  severity: escalation.severity,
-                  days_overdue: activity.days_overdue,
-                  subject: activity.subject,
-                  type: activity.type,
-                  related_to: activity.related_to
-                }
-              },
-              timeout_ms: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_TIMEOUT_MS) || 3000,
-              retries: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_MAX_RETRIES) || 2
-            }).catch(err => {
-              console.warn('[Triggers] Workflow trigger failed (non-critical):', err.message);
-            });
-          }
-        }
-
+        
+        // PR7: Calculate proposal BEFORE triggering workflow
         const proposal = proposeTransition({
           current_state: currentState,
           signals,
           action_origin: 'care_autonomous',
         });
 
-        if (!proposal) {
+        // Determine effective state for workflow payload
+        let effectiveState = currentState;
+        
+        if (proposal && proposal.to_state) {
+          // Always emit state_proposed - use normalized entity
           emitCareAudit({
             tenant_id: tenantUuid,
-            entity_type: 'activity',
-            entity_id: activity.id,
-            event_type: CareAuditEventType.ACTION_SKIPPED,
-            action_origin: 'care_autonomous',
-            reason: 'no_transition_proposed',
-            policy_gate_result: CarePolicyGateResult.ALLOWED,
-            meta: { trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE }
-          });
-          continue;
-        }
-
-        if (proposal.proposed_state) {
-          // Always emit state_proposed
-          emitCareAudit({
-            tenant_id: tenantUuid,
-            entity_type: 'activity',
-            entity_id: activity.id,
+            entity_type: normalizedEntityType,
+            entity_id: normalizedEntityId,
             event_type: CareAuditEventType.STATE_PROPOSED,
             action_origin: 'care_autonomous',
             reason: proposal.reason,
             policy_gate_result: CarePolicyGateResult.ALLOWED,
             meta: {
               current_state: currentState,
-              proposed_state: proposal.proposed_state,
-              trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE
+              proposed_state: proposal.to_state,
+              trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
+              signal_entity_type: 'activity',
+              signal_entity_id: activity.id
             }
           });
 
-          // PR7: Conditionally apply transition if state write gate enabled
-          if (isCareStateWriteEnabled()) {
+          // PR7: Conditionally apply transition if autonomy is enabled (not shadow mode)
+          if (isCareAutonomyEnabled()) {
             try {
-              await applyTransition({
-                ctx,
-                from_state: currentState,
-                to_state: proposal.proposed_state,
-                reason: proposal.reason,
-                action_origin: 'care_autonomous',
-                meta: { trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE, days_overdue: activity.days_overdue, signals }
+              // Persist state to customer_care_state table BEFORE workflow trigger
+              await upsertCareState(ctx, {
+                care_state: proposal.to_state,
+                last_signal_at: new Date().toISOString(),
+                escalation_status: escalation.is_escalation ? escalation.severity : null
               });
+              
+              // Append to history for audit trail
+              await appendCareHistory(ctx, {
+                from_state: currentState,
+                to_state: proposal.to_state,
+                event_type: 'state_transition',
+                reason: proposal.reason,
+                actor_type: 'system',
+                meta: { 
+                  trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE, 
+                  days_overdue: activity.days_overdue, 
+                  signals,
+                  signal_entity_type: 'activity',
+                  signal_entity_id: activity.id,
+                  action_origin: 'care_autonomous'
+                }
+              });
+
+              // Update effective state to reflect the write
+              effectiveState = proposal.to_state;
 
               emitCareAudit({
                 tenant_id: tenantUuid,
-                entity_type: 'activity',
-                entity_id: activity.id,
+                entity_type: normalizedEntityType,
+                entity_id: normalizedEntityId,
                 event_type: CareAuditEventType.STATE_APPLIED,
                 action_origin: 'care_autonomous',
-                reason: `State applied: ${currentState} → ${proposal.proposed_state}`,
+                reason: `State applied: ${currentState} → ${proposal.to_state}`,
                 policy_gate_result: CarePolicyGateResult.ALLOWED,
                 meta: {
                   from_state: currentState,
-                  to_state: proposal.proposed_state,
-                  trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE
+                  to_state: proposal.to_state,
+                  trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
+                  signal_entity_type: 'activity',
+                  signal_entity_id: activity.id
                 }
               });
             } catch (applyError) {
@@ -791,34 +845,109 @@ async function processTriggersForTenant(tenant) {
           }
         }
 
-        if (proposal.proposed_state && activity.days_overdue > 2) {
+        if (escalation.is_escalation) {
           emitCareAudit({
             tenant_id: tenantUuid,
-            entity_type: 'activity',
-            entity_id: activity.id,
+            entity_type: normalizedEntityType,
+            entity_id: normalizedEntityId,
+            event_type: CareAuditEventType.ESCALATION_DETECTED,
+            action_origin: 'care_autonomous',
+            reason: escalation.reason,
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            meta: {
+              severity: escalation.severity,
+              days_overdue: activity.days_overdue,
+              trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
+              signal_entity_type: 'activity',
+              signal_entity_id: activity.id
+            }
+          });
+        }
+
+        // PR8: Trigger workflow webhook for ALL activity_overdue (not just escalations)
+        // NOW: Uses effectiveState which reflects actual persisted state
+        // Canonical payload shape: entity_* = relationship, signal_entity_* = what triggered
+        await triggerCareWorkflowForTenant(tenantUuid, {
+          event_id: `trigger-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          type: escalation.is_escalation ? 'care.escalation_detected' : 'care.trigger_detected',
+          ts: new Date().toISOString(),
+          tenant_id: tenantUuid,
+          // Relationship anchor (contact/account that CARE state is keyed on)
+          entity_type: normalizedEntityType,
+          entity_id: normalizedEntityId,
+          // Signal source (activity that triggered this event)
+          signal_entity_type: 'activity',
+          signal_entity_id: activity.id,
+          action_origin: 'care_autonomous',
+          trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
+          policy_gate_result: 'allowed',
+          reason: escalation.is_escalation ? escalation.reason : `Activity overdue by ${activity.days_overdue} days`,
+          care_state: effectiveState,
+          previous_state: currentState !== effectiveState ? currentState : undefined,
+          escalation_status: escalation.is_escalation ? escalation.severity : null,
+          deep_link: `/app/${normalizedEntityType}s/${normalizedEntityId}`,
+          intent: 'triage_trigger',
+          meta: {
+            // Descriptive details only (source_entity_* deprecated, use top-level signal_entity_*)
+            severity: escalation.is_escalation ? escalation.severity : null,
+            days_overdue: activity.days_overdue,
+            subject: activity.subject,
+            type: activity.type,
+            state_transition: currentState !== effectiveState ? `${currentState} → ${effectiveState}` : null
+          }
+        });
+
+        if (!proposal) {
+          emitCareAudit({
+            tenant_id: tenantUuid,
+            entity_type: normalizedEntityType,
+            entity_id: normalizedEntityId,
+            event_type: CareAuditEventType.ACTION_SKIPPED,
+            action_origin: 'care_autonomous',
+            reason: 'no_transition_proposed',
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            meta: { 
+              trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
+              signal_entity_type: 'activity',
+              signal_entity_id: activity.id
+            }
+          });
+        }
+
+        if (proposal && proposal.to_state && activity.days_overdue > 2) {
+          emitCareAudit({
+            tenant_id: tenantUuid,
+            entity_type: normalizedEntityType,
+            entity_id: normalizedEntityId,
             event_type: CareAuditEventType.ACTION_CANDIDATE,
             action_origin: 'care_autonomous',
             reason: 'activity reschedule action candidate identified',
             policy_gate_result: CarePolicyGateResult.ALLOWED,
             meta: {
               action_type: 'activity_reschedule',
-              proposed_state: proposal.proposed_state,
+              proposed_state: proposal.to_state,
               trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
-              days_overdue: activity.days_overdue
+              days_overdue: activity.days_overdue,
+              signal_entity_type: 'activity',
+              signal_entity_id: activity.id
             }
           });
         }
 
-        // PR7: Always emit action_skipped
+        // PR7: Always emit action_skipped - use normalized entity
         emitCareAudit({
           tenant_id: tenantUuid,
-          entity_type: 'activity',
-          entity_id: activity.id,
+          entity_type: normalizedEntityType,
+          entity_id: normalizedEntityId,
           event_type: CareAuditEventType.ACTION_SKIPPED,
           action_origin: 'care_autonomous',
           reason: 'Autonomous actions disabled (PR7: state persistence only)',
           policy_gate_result: CarePolicyGateResult.ALLOWED,
-          meta: { trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE }
+          meta: { 
+            trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
+            signal_entity_type: 'activity',
+            signal_entity_id: activity.id
+          }
         });
       } catch (err) {
         console.warn('[C.A.R.E. PR7] Trigger analysis error (non-breaking):', err.message);
@@ -886,6 +1015,82 @@ async function processTriggersForTenant(tenant) {
         });
 
         const escalation = detectEscalation({ text: escalationText });
+        
+        // PR7: Calculate proposal BEFORE triggering workflow
+        const proposal = proposeTransition({
+          current_state: currentState,
+          signals,
+          action_origin: 'care_autonomous',
+        });
+
+        // Determine effective state for workflow payload
+        let effectiveState = currentState;
+
+        if (proposal && proposal.to_state) {
+          // Always emit state_proposed
+          emitCareAudit({
+            tenant_id: tenantUuid,
+            entity_type: 'opportunity',
+            entity_id: opp.id,
+            event_type: CareAuditEventType.STATE_PROPOSED,
+            action_origin: 'care_autonomous',
+            reason: proposal.reason,
+            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            meta: {
+              current_state: currentState,
+              proposed_state: proposal.to_state,
+              trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT
+            }
+          });
+
+          // PR7: Conditionally apply transition if autonomy is enabled (not shadow mode)
+          if (isCareAutonomyEnabled()) {
+            try {
+              // Persist state to customer_care_state table BEFORE workflow trigger
+              await upsertCareState(ctx, {
+                care_state: proposal.to_state,
+                last_signal_at: new Date().toISOString(),
+                escalation_status: escalation.is_escalation ? escalation.severity : null
+              });
+              
+              // Append to history for audit trail
+              await appendCareHistory(ctx, {
+                from_state: currentState,
+                to_state: proposal.to_state,
+                event_type: 'state_transition',
+                reason: proposal.reason,
+                actor_type: 'system',
+                meta: { 
+                  trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT, 
+                  amount: opp.amount, 
+                  signals,
+                  action_origin: 'care_autonomous'
+                }
+              });
+
+              // Update effective state to reflect the write
+              effectiveState = proposal.to_state;
+
+              emitCareAudit({
+                tenant_id: tenantUuid,
+                entity_type: 'opportunity',
+                entity_id: opp.id,
+                event_type: CareAuditEventType.STATE_APPLIED,
+                action_origin: 'care_autonomous',
+                reason: `State applied: ${currentState} → ${proposal.to_state}`,
+                policy_gate_result: CarePolicyGateResult.ALLOWED,
+                meta: {
+                  from_state: currentState,
+                  to_state: proposal.to_state,
+                  trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT
+                }
+              });
+            } catch (applyError) {
+              logger.warn({ err: applyError }, '[AiTriggers] C.A.R.E. state apply error');
+            }
+          }
+        }
+
         if (escalation.is_escalation) {
           emitCareAudit({
             tenant_id: tenantUuid,
@@ -902,99 +1107,41 @@ async function processTriggersForTenant(tenant) {
             }
           });
 
-          // PR8: Trigger workflow webhook if enabled
-          if (isCareWorkflowTriggersEnabled() && process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL) {
-            triggerCareWorkflow({
-              url: process.env.CARE_WORKFLOW_ESCALATION_WEBHOOK_URL,
-              secret: process.env.CARE_WORKFLOW_WEBHOOK_SECRET,
-              payload: {
-                event_id: `escalation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                type: 'care.escalation_detected',
-                ts: new Date().toISOString(),
-                tenant_id: tenantUuid,
-                entity_type: 'opportunity',
-                entity_id: opp.id,
-                action_origin: 'care_autonomous',
-                trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
-                policy_gate_result: 'allowed',
-                reason: escalation.reason,
-                care_state: currentState,
-                escalation_status: escalation.severity,
-                deep_link: `/app/opportunities/${opp.id}`,
-                intent: 'triage_trigger',
-                meta: {
-                  severity: escalation.severity,
-                  probability: opp.probability,
-                  amount: opp.amount,
-                  days_to_close: opp.days_to_close,
-                  stage: opp.stage,
-                  deal_name: opp.name
-                }
-              },
-              timeout_ms: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_TIMEOUT_MS) || 3000,
-              retries: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_MAX_RETRIES) || 2
-            }).catch(err => {
-              console.warn('[Triggers] Workflow trigger failed (non-critical):', err.message);
-            });
-          }
-        }
-
-        const proposal = proposeTransition({
-          current_state: currentState,
-          signals,
-          action_origin: 'care_autonomous',
-        });
-
-        if (proposal.proposed_state) {
-          // Always emit state_proposed
-          emitCareAudit({
+          // PR8: Trigger workflow webhook with updated state
+          // Canonical payload shape: entity_* = relationship, signal_entity_* = what triggered
+          await triggerCareWorkflowForTenant(tenantUuid, {
+            event_id: `escalation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            type: 'care.escalation_detected',
+            ts: new Date().toISOString(),
             tenant_id: tenantUuid,
+            // Relationship anchor
             entity_type: 'opportunity',
             entity_id: opp.id,
-            event_type: CareAuditEventType.STATE_PROPOSED,
+            // Signal source (opportunity is self-triggered)
+            signal_entity_type: 'opportunity',
+            signal_entity_id: opp.id,
             action_origin: 'care_autonomous',
-            reason: proposal.reason,
-            policy_gate_result: CarePolicyGateResult.ALLOWED,
+            trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
+            policy_gate_result: 'allowed',
+            reason: escalation.reason,
+            care_state: effectiveState,
+            previous_state: currentState !== effectiveState ? currentState : undefined,
+            escalation_status: escalation.severity,
+            deep_link: `/app/opportunities/${opp.id}`,
+            intent: 'triage_trigger',
             meta: {
-              current_state: currentState,
-              proposed_state: proposal.proposed_state,
-              trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT
+              severity: escalation.severity,
+              probability: opp.probability,
+              amount: opp.amount,
+              days_to_close: opp.days_to_close,
+              stage: opp.stage,
+              deal_name: opp.name,
+              state_transition: currentState !== effectiveState ? `${currentState} → ${effectiveState}` : null
             }
           });
-
-          // PR7: Conditionally apply transition if state write gate enabled
-          if (isCareStateWriteEnabled()) {
-            try {
-              await applyTransition({
-                ctx,
-                from_state: currentState,
-                to_state: proposal.proposed_state,
-                reason: proposal.reason,
-                action_origin: 'care_autonomous',
-                meta: { trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT, amount: opp.amount, signals }
-              });
-
-              emitCareAudit({
-                tenant_id: tenantUuid,
-                entity_type: 'opportunity',
-                entity_id: opp.id,
-                event_type: CareAuditEventType.STATE_APPLIED,
-                action_origin: 'care_autonomous',
-                reason: `State applied: ${currentState} → ${proposal.proposed_state}`,
-                policy_gate_result: CarePolicyGateResult.ALLOWED,
-                meta: {
-                  from_state: currentState,
-                  to_state: proposal.proposed_state,
-                  trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT
-                }
-              });
-            } catch (applyError) {
-              logger.warn({ err: applyError }, '[AiTriggers] C.A.R.E. state apply error');
-            }
-          }
         }
 
-        if (proposal.proposed_state && opp.amount > 50000) {
+        if (proposal && proposal.to_state && opp.amount > 50000) {
           emitCareAudit({
             tenant_id: tenantUuid,
             entity_type: 'opportunity',
@@ -1005,7 +1152,7 @@ async function processTriggersForTenant(tenant) {
             policy_gate_result: CarePolicyGateResult.ALLOWED,
             meta: {
               action_type: 'deal_closing',
-              proposed_state: proposal.proposed_state,
+              proposed_state: proposal.to_state,
               trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
               amount: opp.amount,
               days_to_close: opp.days_to_close
@@ -1159,9 +1306,10 @@ async function detectOverdueActivities(tenantUuid) {
     // Step 1: Get activities with overdue due_date (direct column, not metadata)
     // Filter incomplete activities in JS since status column may not exist
     // Exclude test data records
+    // Include related_id to normalize to relationship entity for CARE
     const { data: activities, error } = await supabase
       .from('activities')
-      .select('id, subject, type, due_date, metadata, related_to, is_test_data')
+      .select('id, subject, type, due_date, metadata, related_to, related_id, is_test_data')
       .eq('tenant_id', tenantUuid)
       .lt('due_date', today)
       .or('is_test_data.is.null,is_test_data.eq.false')
@@ -1195,12 +1343,14 @@ async function detectOverdueActivities(tenantUuid) {
     const existingIds = new Set((existingSuggestions || []).map(s => s.record_id));
 
     // Step 4: Filter and calculate days_overdue
+    // Include related_id for normalizing to relationship entity
     return overdueCandidates
       .filter(act => !existingIds.has(act.id))
       .map(activity => ({
         ...activity,
         days_overdue: Math.floor((Date.now() - new Date(activity.due_date).getTime()) / (1000 * 60 * 60 * 24)),
-        related_to: activity.related_to || activity.metadata?.related_to || null
+        related_to: activity.related_to || activity.metadata?.related_to || null,
+        related_id: activity.related_id || activity.metadata?.related_id || null
       }))
       .slice(0, 50);
   } catch (err) {

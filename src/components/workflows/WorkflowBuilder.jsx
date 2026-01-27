@@ -7,11 +7,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Workflow } from '@/api/entities';
 import { useUser } from '@/components/shared/useUser.js';
 import { BACKEND_URL } from '@/api/entities';
-import { Webhook, Search, Save, Plus, X, Copy, Check, RefreshCw, Sparkles } from 'lucide-react';
+import { Webhook, Search, Save, Plus, X, Copy, Check, RefreshCw, Sparkles, Clock, Play } from 'lucide-react';
 import WorkflowCanvas from './WorkflowCanvas';
 import NodeLibrary from './NodeLibrary';
 import WorkflowTemplatesBrowser from './WorkflowTemplatesBrowser';
-import { toast } from 'sonner';
+import { useToast } from '@/components/ui/use-toast';
 import { WorkflowExecution } from '@/api/entities';
 import { Switch } from '@/components/ui/switch';
 
@@ -21,6 +21,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
   const [nodes, setNodes] = useState(workflow?.nodes || []);
   const [connections, setConnections] = useState(workflow?.connections || []);
   const { user } = useUser();
+  const { toast } = useToast();
   const [saving, setSaving] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [testPayload, setTestPayload] = useState(null);
@@ -30,9 +31,11 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
 
   // Added new states for execution history viewer
   const [waitingForWebhook, setWaitingForWebhook] = useState(false);
+  const [waitingForCare, setWaitingForCare] = useState(false);
   const [recentExecutions, setRecentExecutions] = useState([]);
   const [showExecutions, setShowExecutions] = useState(false);
   const [loadingExecutions, setLoadingExecutions] = useState(false);
+  const [loadingCareHistory, setLoadingCareHistory] = useState(false);
   const [executionLimit, setExecutionLimit] = useState(10);
   const [executionOffset, setExecutionOffset] = useState(0);
   
@@ -153,8 +156,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
   };
 
   const handleCopyWebhookUrl = () => {
-    const localWebhook = `${BACKEND_URL}/api/workflows/execute?workflow_id=${workflow?.id || 'PENDING'}`;
-    const webhookUrl = workflow?.webhook_url || localWebhook;
+    const webhookUrl = workflow?.id ? `/api/workflows/${workflow.id}/webhook` : '/api/workflows/PENDING/webhook';
     navigator.clipboard.writeText(webhookUrl);
     setCopied(true);
     toast.success('Webhook URL copied to clipboard');
@@ -251,6 +253,109 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
     }
   };
 
+  // CARE wait function
+  const handleWaitForCare = async () => {
+    if (!workflow?.id) {
+      toast({ title: "Save workflow first", description: "Please save the workflow to wait for CARE events.", variant: "destructive" });
+      return;
+    }
+
+    setWaitingForCare(true);
+    setShowPayload(false);
+    setShowExecutions(false);
+
+    try {
+      toast({ title: "Listening for CARE events", description: "Waiting for new CARE event (max 30 seconds)..." });
+      
+      // Get the current latest execution timestamp for this workflow
+      const currentExecutions = await WorkflowExecution.filter(
+        { workflow_id: workflow.id },
+        '-created_at',
+        1
+      );
+      const lastTimestamp = currentExecutions[0]?.created_at || new Date(0).toISOString();
+
+      // Poll for new executions
+      let attempts = 0;
+      const maxAttempts = 15; // 30 seconds (15 attempts * 2 seconds)
+      
+      const checkForNewCare = async () => {
+        attempts++;
+        
+        const latestExecutions = await WorkflowExecution.filter(
+          { workflow_id: workflow.id },
+          '-created_at',
+          1
+        );
+
+        if (latestExecutions && latestExecutions.length > 0) {
+          const latest = latestExecutions[0];
+          
+          // Check if this is a new execution
+          if (latest.created_at > lastTimestamp && latest.trigger_data) {
+            setTestPayload(latest.trigger_data);
+            setShowPayload(true);
+            setWaitingForCare(false);
+            toast({ title: "CARE event received!", description: "Event data loaded successfully." });
+            return true;
+          }
+        }
+
+        if (attempts >= maxAttempts) {
+          setWaitingForCare(false);
+          toast({ title: "No CARE event detected", description: "Try triggering a CARE event or use the sample payload.", variant: "destructive" });
+          return true;
+        }
+
+        // Continue polling
+        setTimeout(checkForNewCare, 2000);
+        return false;
+      };
+
+      // Start polling
+      checkForNewCare();
+
+    } catch (error) {
+      console.error('Error waiting for CARE event:', error);
+      toast({ title: "Error waiting for CARE", description: "Failed to listen for CARE events.", variant: "destructive" });
+      setWaitingForCare(false);
+    }
+  };
+
+  // CARE history function
+  const loadCareHistory = async () => {
+    if (!workflow?.id) {
+      toast({ title: "Save workflow first", description: "Please save the workflow to view history.", variant: "destructive" });
+      return;
+    }
+
+    setLoadingCareHistory(true);
+    setShowPayload(false); // Hide current payload when loading history
+    try {
+      const executions = await WorkflowExecution.list({
+        workflow_id: workflow.id,
+        action_origin: 'care_autonomous',
+        limit: executionLimit,
+        offset: executionOffset,
+        order: '-created_at'
+      });
+      
+      setRecentExecutions(executions || []);
+      setShowExecutions(true);
+      
+      if (executions && executions.length > 0) {
+        toast({ title: "CARE history loaded", description: `Found ${executions.length} recent CARE executions.` });
+      } else {
+        toast({ title: "No CARE history", description: "No recent CARE executions found for this workflow." });
+      }
+    } catch (error) {
+      console.error('Error loading CARE history:', error);
+      toast({ title: "Failed to load CARE history", description: "Error retrieving execution history.", variant: "destructive" });
+    } finally {
+      setLoadingCareHistory(false);
+    }
+  };
+
   // New function: loadRecentExecutions (from outline)
   const loadRecentExecutions = async () => {
     if (!workflow?.id) {
@@ -261,7 +366,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
     setLoadingExecutions(true);
     setShowPayload(false); // Hide current payload when loading history
     try {
-      const executions = await WorkflowExecution.filter({
+      const executions = await WorkflowExecution.list({
         workflow_id: workflow.id,
         limit: executionLimit,
         offset: executionOffset,
@@ -329,12 +434,12 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               </p>
             </div>
 
-            {workflow?.webhook_url && (
+            {workflow?.id && (
               <div>
                 <Label className="text-slate-200">Webhook URL</Label>
                 <div className="flex gap-2 mt-1">
                   <Input
-                    value={workflow.webhook_url}
+                    value={`/api/workflows/${workflow.id}/webhook`}
                     readOnly
                     className="bg-slate-800 border-slate-700 text-slate-300 text-xs"
                   />
@@ -780,6 +885,314 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 <Plus className="w-4 h-4 mr-2" />
                 Add Mapping
               </Button>
+            </div>
+          </div>
+        );
+
+      case 'care_trigger':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-200">CARE Start Node</Label>
+              <p className="text-sm text-slate-400 mt-1">
+                Receives data from CARE system events and resolves email from entity_id
+              </p>
+            </div>
+
+            {/* Webhook URL Display */}
+            <div>
+              <Label className="text-slate-300 text-sm">Webhook URL</Label>
+              <div className="flex items-center gap-2 mt-1">
+                <div className="bg-slate-900 border border-slate-700 rounded px-3 py-2 flex-1">
+                  <span className="text-slate-400 text-sm font-mono">
+                    /api/workflows/{workflow?.id || 'WORKFLOW_ID'}/webhook
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    if (workflow?.id) {
+                      navigator.clipboard.writeText(`/api/workflows/${workflow.id}/webhook`);
+                      toast({ title: "Copied to clipboard" });
+                    } else {
+                      toast({ title: "Save workflow first", description: "Please save the workflow to get the webhook URL.", variant: "destructive" });
+                    }
+                  }}
+                  className="p-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded"
+                  title="Copy URL"
+                >
+                  <Copy className="w-4 h-4 text-slate-300" />
+                </button>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="grid grid-cols-1 gap-2">
+              <button 
+                onClick={handleWaitForCare}
+                disabled={waitingForCare || !workflow?.id}
+                className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:cursor-not-allowed text-white py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+              >
+                {waitingForCare ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Listening for CARE Event...
+                  </>
+                ) : (
+                  <>
+                    <Clock className="w-4 h-4" />
+                    Wait for Real CARE Event
+                  </>
+                )}
+              </button>
+              
+              <button 
+                onClick={loadCareHistory}
+                disabled={loadingCareHistory || !workflow?.id}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:cursor-not-allowed text-white py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+              >
+                {loadingCareHistory ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Loading History...
+                  </>
+                ) : (
+                  <>
+                    <Search className="w-4 h-4" />
+                    View CARE Event History
+                  </>
+                )}
+              </button>
+              
+              <button
+                onClick={() => {
+                  if (!workflow?.id) {
+                    toast({ title: "Save workflow first", description: "Please save the workflow before testing.", variant: "destructive" });
+                    return;
+                  }
+                  
+                  const samplePayload = {
+                    entity_id: "6fe96ad8-84d8-49f3-9dcc-74c41fa8b24c",
+                    entity_type: "activity",
+                    tenant_id: "a11dfb63-4b18-4eb8-872e-747af2e37c46",
+                    trigger_type: "activity_overdue",
+                    reason: "Activity is overdue by 2 days",
+                    escalation_detected: true,
+                    meta: {
+                      activity_subject: "Follow-up call with prospect",
+                      due_date: "2026-01-24T15:00:00Z",
+                      assigned_to: "john.doe@company.com"
+                    }
+                  };
+                  
+                  // Trigger the workflow with sample payload
+                  fetch(`/api/workflows/${workflow.id}/webhook`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'User-Agent': 'AiSHA-CARE/1.0'
+                    },
+                    body: JSON.stringify(samplePayload)
+                  }).then(response => {
+                    if (response.ok) {
+                      toast({ title: "Sample CARE event sent!", description: "Check workflow execution logs for results." });
+                    } else {
+                      toast({ title: "Failed to send sample", description: "Check workflow configuration.", variant: "destructive" });
+                    }
+                  }).catch(error => {
+                    toast({ title: "Network error", description: error.message, variant: "destructive" });
+                  });
+                }}
+                className="w-full bg-slate-700 hover:bg-slate-600 text-white py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+              >
+                <Play className="w-4 h-4" />
+                Use Sample CARE Payload
+              </button>
+            </div>
+
+            <div className="bg-amber-900/20 border border-amber-700 rounded-lg p-3">
+              <div className="flex items-start space-x-2">
+                <div className="w-2 h-2 bg-amber-500 rounded-full mt-1.5 flex-shrink-0"></div>
+                <div>
+                  <p className="text-amber-200 text-sm font-medium">Internal CARE Events Only</p>
+                  <p className="text-amber-300 text-xs mt-1">
+                    This node automatically resolves email addresses from entity_id for internal CARE triggers.
+                    Supports: activities, leads, contacts, accounts, opportunities.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Sample Payload Display */}
+            <div className="space-y-3">
+              <div>
+                <Label className="text-slate-300 text-sm">Complete Sample Payload</Label>
+                <div className="bg-slate-900 border border-slate-700 rounded-lg p-3 mt-2">
+                  <pre className="text-xs text-slate-300 whitespace-pre-wrap overflow-x-auto">{JSON.stringify({
+                    entity_id: "6fe96ad8-84d8-49f3-9dcc-74c41fa8b24c",
+                    entity_type: "activity",
+                    tenant_id: "a11dfb63-4b18-4eb8-872e-747af2e37c46",
+                    trigger_type: "activity_overdue",
+                    reason: "Activity is overdue by 2 days",
+                    escalation_detected: true,
+                    meta: {
+                      activity_subject: "Follow-up call with prospect",
+                      due_date: "2026-01-24T15:00:00Z",
+                      assigned_to: "john.doe@company.com"
+                    }
+                  }, null, 2)}</pre>
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-slate-300 text-sm">Entity Types & Email Resolution</Label>
+                <div className="bg-slate-800 border border-slate-700 rounded-lg p-3 mt-2">
+                  <div className="grid grid-cols-1 gap-2 text-xs text-slate-400">
+                    <div className="flex justify-between">
+                      <span className="text-blue-300 font-mono">activity</span>
+                      <span>→ related_email or related entity lookup</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-green-300 font-mono">lead</span>
+                      <span>→ direct email field</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-purple-300 font-mono">contact</span>
+                      <span>→ direct email field</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-orange-300 font-mono">account</span>
+                      <span>→ primary contact email</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-pink-300 font-mono">opportunity</span>
+                      <span>→ contact email via contact_id</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-slate-300 text-sm">Common Trigger Types</Label>
+                <div className="bg-slate-800 border border-slate-700 rounded-lg p-3 mt-2">
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="text-red-300">activity_overdue</div>
+                    <div className="text-yellow-300">lead_stagnant</div>
+                    <div className="text-blue-300">opportunity_risk</div>
+                    <div className="text-green-300">contact_engagement</div>
+                    <div className="text-purple-300">account_health</div>
+                    <div className="text-orange-300">custom_trigger</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Recent CARE Executions List */}
+              {showExecutions && (
+                <div className="border border-slate-700 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-3 gap-3">
+                    <Label className="text-slate-200">Recent CARE Executions</Label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-500">Rows per page</span>
+                      <Select
+                        value={String(executionLimit)}
+                        onValueChange={(v) => {
+                          const next = parseInt(v, 10);
+                          setExecutionLimit(next);
+                          setExecutionOffset(0);
+                          setTimeout(loadRecentExecutions, 0);
+                        }}
+                      >
+                        <SelectTrigger className="h-8 w-18 bg-slate-800 border-slate-700 text-slate-200">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-slate-800 border-slate-700">
+                          <SelectItem value="5">5</SelectItem>
+                          <SelectItem value="10">10</SelectItem>
+                          <SelectItem value="25">25</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowExecutions(false)}
+                        className="text-slate-400 hover:text-slate-200"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                    {recentExecutions.length === 0 ? (
+                      <p className="text-sm text-slate-500 text-center py-4">
+                        No CARE executions yet. CARE will trigger automatically when conditions are met.
+                      </p>
+                    ) : (
+                      recentExecutions.map((execution) => (
+                        <div
+                          key={execution.id}
+                          className="bg-slate-800 border border-slate-700 rounded p-3 hover:bg-slate-750 cursor-pointer transition-colors duration-200"
+                          onClick={() => handleUseExecutionPayload(execution)}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className={`text-xs px-2 py-1 rounded ${
+                              execution.status === 'completed' ? 'bg-green-900/30 text-green-400' :
+                              execution.status === 'failed' ? 'bg-red-900/30 text-red-400' :
+                              'bg-blue-900/30 text-blue-400'
+                            }`}>
+                              {execution.status}
+                            </span>
+                            <span className="text-xs text-slate-500">
+                              {new Date(execution.created_at).toLocaleString()}
+                            </span>
+                          </div>
+                          
+                          {execution.trigger_data && (
+                            <div className="bg-slate-950 rounded p-2 mt-2">
+                              <div className="text-xs mb-1">
+                                <span className="text-orange-400">Entity:</span> {execution.trigger_data.entity_type} | 
+                                <span className="text-blue-400"> Trigger:</span> {execution.trigger_data.trigger_type} |
+                                <span className="text-purple-400"> Reason:</span> {execution.trigger_data.reason}
+                              </div>
+                              <pre className="text-xs text-slate-400 overflow-x-auto whitespace-pre-wrap break-all">
+                                {JSON.stringify(execution.trigger_data, null, 2).substring(0, 300)}
+                                {JSON.stringify(execution.trigger_data, null, 2).length > 300 && '...'}
+                              </pre>
+                            </div>
+                          )}
+                          
+                          <p className="text-xs text-slate-500 mt-2">
+                            Click to use this CARE trigger data as a test payload
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  
+                  <div className="flex justify-between items-center mt-3 pt-2 border-t border-slate-700">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handlePrevExecutionsPage}
+                      disabled={executionOffset === 0}
+                      className="text-slate-400 hover:text-slate-200"
+                    >
+                      ← Previous
+                    </Button>
+                    <span className="text-xs text-slate-500">
+                      Showing {executionOffset + 1} to {executionOffset + Math.min(executionLimit, recentExecutions.length)}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleNextExecutionsPage}
+                      disabled={recentExecutions.length < executionLimit}
+                      className="text-slate-400 hover:text-slate-200"
+                    >
+                      Next →
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         );

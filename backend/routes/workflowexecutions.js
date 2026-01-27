@@ -7,7 +7,7 @@ export default function createWorkflowExecutionRoutes(pgPool) {
   // GET /api/workflowexecutions - List executions with optional filters
   router.get('/', async (req, res) => {
     try {
-      const { tenant_id, workflow_id, limit = 50, offset = 0, order = '-created_at' } = req.query;
+      const { tenant_id, workflow_id, action_origin, limit = 50, offset = 0, order = '-created_at' } = req.query;
 
       if (!pgPool) {
         return res.status(503).json({ status: 'error', message: 'Database not configured' });
@@ -18,6 +18,7 @@ export default function createWorkflowExecutionRoutes(pgPool) {
 
       if (tenant_id) { params.push(tenant_id); where += ` AND tenant_id = $${params.length}`; }
       if (workflow_id) { params.push(workflow_id); where += ` AND workflow_id = $${params.length}`; }
+      if (action_origin) { params.push(action_origin); where += ` AND trigger_data->>'action_origin' = $${params.length}`; }
 
       const orderClause = String(order).startsWith('-') ? `${String(order).slice(1)} DESC` : `${order} ASC`;
 

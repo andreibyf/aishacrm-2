@@ -183,6 +183,123 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
             log.output = { payload: context.payload };
             break;
           }
+
+          case 'care_trigger': {
+            // CARE Start Node - resolve email from entity_id
+            const { entity_id, entity_type, tenant_id } = context.payload || {};
+            
+            if (!entity_id || !entity_type || !tenant_id) {
+              log.status = 'error';
+              log.error = 'CARE trigger requires entity_id, entity_type, and tenant_id';
+              break;
+            }
+
+            try {
+              // Resolve email based on entity type
+              let email = null;
+              
+              switch (entity_type) {
+                case 'activity': {
+                  // Get activity -> related contact/lead -> email
+                  const activityResponse = await supabase
+                    .from('activities')
+                    .select('related_id, related_to, related_email')
+                    .eq('id', entity_id)
+                    .eq('tenant_id', tenant_id)
+                    .single();
+                    
+                  if (activityResponse.data?.related_email) {
+                    email = activityResponse.data.related_email;
+                  } else if (activityResponse.data?.related_id && activityResponse.data?.related_to) {
+                    // Fallback: lookup related entity
+                    const tableName = activityResponse.data.related_to === 'lead' ? 'leads' : 
+                                    activityResponse.data.related_to === 'contact' ? 'contacts' :
+                                    activityResponse.data.related_to === 'account' ? 'accounts' : null;
+                    if (tableName) {
+                      const relatedResponse = await supabase
+                        .from(tableName)
+                        .select('email')
+                        .eq('id', activityResponse.data.related_id)
+                        .eq('tenant_id', tenant_id)
+                        .single();
+                      email = relatedResponse.data?.email;
+                    }
+                  }
+                  break;
+                }
+                case 'lead': {
+                  const leadResponse = await supabase
+                    .from('leads')
+                    .select('email')
+                    .eq('id', entity_id)
+                    .eq('tenant_id', tenant_id)
+                    .single();
+                  email = leadResponse.data?.email;
+                  break;
+                }
+                case 'contact': {
+                  const contactResponse = await supabase
+                    .from('contacts')
+                    .select('email')
+                    .eq('id', entity_id)
+                    .eq('tenant_id', tenant_id)
+                    .single();
+                  email = contactResponse.data?.email;
+                  break;
+                }
+                case 'account': {
+                  // Get primary contact email for account
+                  const accountResponse = await supabase
+                    .from('contacts')
+                    .select('email')
+                    .eq('account_id', entity_id)
+                    .eq('tenant_id', tenant_id)
+                    .eq('is_primary', true)
+                    .single();
+                  email = accountResponse.data?.email;
+                  break;
+                }
+                case 'opportunity': {
+                  const oppResponse = await supabase
+                    .from('opportunities')
+                    .select('contact_id')
+                    .eq('id', entity_id)
+                    .eq('tenant_id', tenant_id)
+                    .single();
+                  if (oppResponse.data?.contact_id) {
+                    const contactResponse = await supabase
+                      .from('contacts')
+                      .select('email')
+                      .eq('id', oppResponse.data.contact_id)
+                      .eq('tenant_id', tenant_id)
+                      .single();
+                    email = contactResponse.data?.email;
+                  }
+                  break;
+                }
+              }
+              
+              // Update context with resolved email
+              context.email = email;
+              context.entity_data = {
+                entity_id,
+                entity_type,
+                resolved_email: email
+              };
+              
+              log.output = { 
+                payload: context.payload,
+                resolved_email: email,
+                entity_type,
+                entity_id
+              };
+              
+            } catch (error) {
+              log.status = 'error';
+              log.error = `Failed to resolve entity data: ${error.message}`;
+            }
+            break;
+          }
           
           case 'http_request': {
             const method = (cfg.method || 'POST').toUpperCase();
@@ -1255,7 +1372,7 @@ Respond with ONLY a JSON object in this exact format:
     }
 
     // Find starting node
-    const triggerNodes = (workflow.nodes || []).filter(n => n.type === 'webhook_trigger' || n.type === 'schedule_trigger' || n.type === 'manual_trigger');
+    const triggerNodes = (workflow.nodes || []).filter(n => n.type === 'webhook_trigger' || n.type === 'schedule_trigger' || n.type === 'manual_trigger' || n.type === 'care_trigger');
     const startNode = triggerNodes[0] || (workflow.nodes || [])[0];
 
     if (!startNode) {

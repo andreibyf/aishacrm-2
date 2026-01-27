@@ -39,7 +39,9 @@ workflowQueue.process('execute-workflow', 1, async (job) => {
     
     logger.info(`[WorkflowQueue] 📦 Result received for job ${job.id}:`, {
       status: result?.status,
-      hasData: !!result?.data
+      hasData: !!result?.data,
+      resultKeys: Object.keys(result || {}),
+      fullResult: result
     });
     
     if (result.status === 'error') {
@@ -47,7 +49,8 @@ workflowQueue.process('execute-workflow', 1, async (job) => {
         workflow_id,
         job_id: job.id,
         message: result.data?.message,
-        full_result: JSON.stringify(result)
+        error_data: result.data,
+        full_result: JSON.stringify(result, null, 2)
       });
       throw new Error(result.data?.message || 'Workflow execution failed');
     }

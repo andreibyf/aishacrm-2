@@ -229,6 +229,7 @@ import createConstructionAssignmentsRoutes from "./routes/construction-assignmen
 import createWorkersRoutes from "./routes/workers.js";
 import { createTasksRoutes } from "./routes/tasks.js";
 import createDashboardFunnelRoutes from "./routes/dashboard-funnel.js";
+import createCareConfigRoutes from "./routes/careConfig.js";
 import braidAuditRoutes from "./routes/braidAudit.js";
 import braidChainRoutes from "./routes/braidChain.js";
 import braidMetricsRoutes from "./routes/braidMetrics.js";
@@ -323,6 +324,9 @@ app.use("/api/security", createSecurityRoutes(measuredPgPool));
 // Dashboard funnel counts (materialized view for fast dashboard loading)
 logger.debug("Mounting /api/dashboard/funnel-counts routes");
 app.use("/api/dashboard", createDashboardFunnelRoutes(measuredPgPool));
+// CARE Workflow Config routes (per-tenant CARE settings)
+logger.debug("Mounting /api/care-config routes");
+app.use("/api/care-config", authenticateRequest, createCareConfigRoutes(measuredPgPool));
 // Braid SDK Audit Log routes
 logger.debug("Mounting /api/braid/audit routes");
 app.use("/api/braid/audit", braidAuditRoutes);

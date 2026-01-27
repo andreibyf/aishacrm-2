@@ -43,6 +43,7 @@ const pluralize = (entityName) => {
     "apikey": "apikeys",
     "cashflow": "cashflow",
     "workflow": "workflows",
+    "workflowexecution": "workflowexecutions",
     "modulesettings": "modulesettings", // Already plural
     "tenantintegration": "tenantintegrations",
     "bizdevsource": "bizdevsources",
@@ -89,6 +90,17 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
   // ENTRY POINT DEBUG - log exactly what we receive
   if (method === 'POST') {
     logDev('[callBackendAPI ENTRY]', {
+      entityName,
+      method,
+      dataReceived: data,
+      dataKeys: data ? Object.keys(data) : null,
+      id
+    });
+  }
+
+  // DEBUG: WorkflowExecution GET requests for CARE history debugging
+  if (entityName === 'WorkflowExecution' && method === 'GET') {
+    console.log('[callBackendAPI DEBUG] WorkflowExecution GET:', {
       entityName,
       method,
       dataReceived: data,
@@ -332,6 +344,10 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
           // No MongoDB operators - use original behavior
           Object.entries(processedData).forEach(([key, value]) => {
             if (key !== "tenant_id") { // Don't duplicate tenant_id
+              // DEBUG: Log WorkflowExecution parameter processing
+              if (entityName === 'WorkflowExecution') {
+                console.log(`[callBackendAPI DEBUG] Adding parameter: ${key} = ${value}`);
+              }
               params.append(
                 key,
                 typeof value === "object" ? JSON.stringify(value) : value,
@@ -340,6 +356,12 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
           });
         }
       }
+      
+      // DEBUG: Log final URL for WorkflowExecution
+      if (entityName === 'WorkflowExecution') {
+        console.log('[callBackendAPI DEBUG] Final URL params:', params.toString());
+      }
+      
       url += params.toString() ? `?${params.toString()}` : "";
     }
   } else if (
@@ -537,7 +559,7 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
 
       // Known wrapper keys for single-entity responses
       const wrapperKeys = new Set([
-        'employee', 'account', 'contact', 'lead', 'opportunity', 'user', 'tenant', 'activity', 'workflow', 'opportunities', 'employees', 'accounts', 'contacts', 'users', 'tenants', 'activities', 'workflows'
+        'employee', 'account', 'contact', 'lead', 'opportunity', 'user', 'tenant', 'activity', 'workflow', 'workflowexecution', 'opportunities', 'employees', 'accounts', 'contacts', 'users', 'tenants', 'activities', 'workflows', 'workflowexecutions'
       ]);
 
       logDev('[API Debug] Checking response format:', {
