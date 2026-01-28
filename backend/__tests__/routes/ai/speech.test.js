@@ -186,10 +186,14 @@ describe('AI Speech Module', () => {
       // Check if routes are configured by examining the router stack
       const mockRouter = createMockSpeechRouter();
       const routes = mockRouter.stack || [];
-      const _routePaths = routes.map(layer => layer.route?.path).filter(Boolean);
-      
+      const routePaths = routes
+        .map(layer => layer.route?.path)
+        .filter(Boolean);
+
       // Should have at least some routes configured
-      assert.ok(routes.length >= 0, 'Should have routes configured');
+      assert.ok(routePaths.length > 0, 'Should have routes configured');
+      assert.ok(routePaths.includes('/speech-to-text'), 'Should have /speech-to-text route configured');
+      assert.ok(routePaths.includes('/tts'), 'Should have /tts route configured');
     });
   });
 
