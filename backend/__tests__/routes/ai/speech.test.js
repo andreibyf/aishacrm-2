@@ -186,7 +186,7 @@ describe('AI Speech Module', () => {
       // Check if routes are configured by examining the router stack
       const mockRouter = createMockSpeechRouter();
       const routes = mockRouter.stack || [];
-      const routePaths = routes.map(layer => layer.route?.path).filter(Boolean);
+      const _routePaths = routes.map(layer => layer.route?.path).filter(Boolean);
       
       // Should have at least some routes configured
       assert.ok(routes.length >= 0, 'Should have routes configured');
@@ -195,7 +195,7 @@ describe('AI Speech Module', () => {
 
   describe('Error Handling', () => {
     test('should handle invalid JSON gracefully', async () => {
-      const response = await request(app)
+      const _response = await request(app)
         .post('/api/ai/speech-to-text')
         .set('Content-Type', 'application/json')
         .send('{"broken": json}')

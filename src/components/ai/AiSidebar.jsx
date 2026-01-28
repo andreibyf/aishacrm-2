@@ -1211,7 +1211,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     setTimeout(() => {
       draftInputRef.current?.focus();
     }, 10);
-  }, [draft, draftOrigin, isRealtimeActive, isSending, sendMessage, sendViaRealtime]);
+  }, [draft, draftOrigin, isRealtimeActive, isSending, sendMessage, sendViaRealtime, activeContext, addRealtimeMessage, tenantId]);
   const speakMessage = useCallback(async (msg) => {
     const text = (msg?.content || '').slice(0, 4000);
     if (!text) return;
