@@ -21,7 +21,7 @@ export function initSupabaseAuth() {
     }
     logger.info('✓ Supabase Auth initialized');
     return supabaseAdmin;
-  } catch (error) {
+  } catch (_error) {
     logger.warn('⚠ Supabase Auth not configured - set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
     return null;
   }

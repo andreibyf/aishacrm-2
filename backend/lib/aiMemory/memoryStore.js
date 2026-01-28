@@ -6,7 +6,7 @@
 
 import crypto from 'crypto';
 import { getSupabaseClient } from '../supabase-db.js';
-import { redactSensitive, sanitizeForMemory } from './redaction.js';
+import { sanitizeForMemory } from './redaction.js';
 import { chunkText } from './chunker.js';
 import { embedText } from './embedder.js';
 

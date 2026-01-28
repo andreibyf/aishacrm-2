@@ -172,13 +172,13 @@ describe('AI Index Router Module', () => {
 
   describe('Error Handling', () => {
     test('should return 404 for unmounted routes', async () => {
-      const response = await request(app)
+      const _response = await request(app)
         .get('/api/ai/nonexistent-endpoint')
         .expect(404);
     });
 
     test('should handle invalid JSON gracefully', async () => {
-      const response = await request(app)
+      const _response = await request(app)
         .post('/api/ai/chat')
         .set('Content-Type', 'application/json')
         .send('{"message": "test", invalid}')

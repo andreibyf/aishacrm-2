@@ -26,7 +26,7 @@ import { emitCareAudit } from './care/careAuditEmitter.js';
 import { signalsFromCall, buildEscalationText } from './care/careCallSignalAdapter.js';
 import { CarePolicyGateResult, CareAuditEventType } from './care/careAuditTypes.js';
 // PR7: State persistence and policy gate
-import { getCareState, upsertCareState, appendCareHistory } from './care/careStateStore.js';
+import { getCareState } from './care/careStateStore.js';
 import { isCareStateWriteEnabled } from './care/isCareStateWriteEnabled.js';
 // PR8: Workflow webhook trigger integration
 import { isCareWorkflowTriggersEnabled } from './care/isCareWorkflowTriggersEnabled.js';

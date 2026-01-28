@@ -23,7 +23,7 @@ import logger from './logger.js';
 
 // PR6: C.A.R.E. shadow wiring (read-only analysis, no behavior change)
 import { detectEscalation } from './care/careEscalationDetector.js';
-import { proposeTransition, applyTransition } from './care/careStateEngine.js';
+import { proposeTransition } from './care/careStateEngine.js';
 import { emitCareAudit } from './care/careAuditEmitter.js';
 import { signalsFromTrigger, buildTriggerEscalationText } from './care/careTriggerSignalAdapter.js';
 import { CareAuditEventType, CarePolicyGateResult } from './care/careAuditTypes.js';
@@ -31,10 +31,9 @@ import { CareAuditEventType, CarePolicyGateResult } from './care/careAuditTypes.
 import { getCareState, upsertCareState, appendCareHistory } from './care/careStateStore.js';
 import { isCareAutonomyEnabled } from './care/isCareAutonomyEnabled.js';
 // PR8: Workflow webhook trigger integration
-import { isCareWorkflowTriggersEnabled } from './care/isCareWorkflowTriggersEnabled.js';
 import { triggerCareWorkflow } from './care/careWorkflowTriggerClient.js';
 // Per-tenant CARE config (Phase 3: replaces hardcoded env vars)
-import { getCareConfigForTenant, isCareEnabledForTenant } from './care/careTenantConfig.js';
+import { getCareConfigForTenant } from './care/careTenantConfig.js';
 
 let workerInterval = null;
 let supabase = null;
@@ -43,8 +42,6 @@ let supabase = null;
 const DEFAULT_INTERVAL_MS = 60000; // 1 minute
 const LEAD_STAGNANT_DAYS = parseInt(process.env.CARE_LEAD_STAGNANT_DAYS) || 7;
 const DEAL_DECAY_DAYS = parseInt(process.env.CARE_DEAL_DECAY_DAYS) || 14;
-const ACTIVITY_OVERDUE_HOURS = parseInt(process.env.CARE_ACTIVITY_OVERDUE_HOURS) || 24;
-const ESCALATION_THRESHOLD = parseFloat(process.env.CARE_ESCALATION_THRESHOLD) || 0.5;
 const SUGGESTION_EXPIRY_DAYS = 7;
 
 /**

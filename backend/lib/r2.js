@@ -112,7 +112,7 @@ export async function checkR2Access() {
   try {
     await client.send(new HeadBucketCommand({ Bucket: bucket }));
     return { ok: true, method: "HeadBucket" };
-  } catch (e) {
+  } catch (_e) {
     // Some R2 configurations can reject HeadBucket; try list as a more permissive call
     try {
       await client.send(new ListObjectsV2Command({ Bucket: bucket, MaxKeys: 1 }));

@@ -77,7 +77,7 @@ before(async () => {
       }
       return { user: null, error: null };
     },
-    inviteUserByEmail: async (email, metadata, redirectUrl) => {
+    inviteUserByEmail: async (email, metadata, _redirectUrl) => {
       if (email === 'invite-error@test.com') {
         return { data: null, error: new Error('Invitation failed') };
       }

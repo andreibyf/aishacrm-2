@@ -92,7 +92,6 @@ import GlobalDetailViewer from "../components/shared/GlobalDetailViewer";
 import { getTenantBrandingFast } from "@/api/entities";
 import { getDashboardBundleFast } from "@/api/dashboard";
 import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
-import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 import EmployeeScopeFilter from "../components/shared/EmployeeScopeFilter";
 import { EmployeeScopeProvider } from "../components/shared/EmployeeScopeContext";
 import FooterBrand from "../components/shared/FooterBrand";
