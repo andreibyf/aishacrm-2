@@ -9,7 +9,6 @@
 
 import { getSupabaseClient } from './supabase-db.js';
 import fs from 'fs/promises';
-import path from 'path';
 
 // Health check interval (15 minutes in production, 5 minutes in dev)
 const CHECK_INTERVAL_MS = process.env.HEALTH_CHECK_INTERVAL_MS || (process.env.NODE_ENV === 'production' ? 15 * 60 * 1000 : 5 * 60 * 1000);

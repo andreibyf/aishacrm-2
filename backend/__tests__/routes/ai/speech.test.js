@@ -85,7 +85,7 @@ describe('AI Speech Module', () => {
     });
 
     test('should handle malformed JSON', async () => {
-      const response = await request(app)
+      const _response = await request(app)
         .post('/api/ai/speech-to-text')
         .set('Content-Type', 'application/json')
         .send('{"invalid": json}')
