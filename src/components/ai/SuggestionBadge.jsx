@@ -21,7 +21,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { getBackendUrl } from "@/api/backendUrl";
 import { supabase } from "@/lib/supabase";
@@ -74,31 +73,31 @@ function CompactSuggestionItem({ suggestion, onApprove, onReject, isProcessing }
 
   return (
     <div className="flex items-start gap-2 p-2 hover:bg-muted rounded-md transition-colors overflow-hidden">
-      <span className="text-lg flex-shrink-0">{icon}</span>
+      <span className="text-base flex-shrink-0">{icon}</span>
       <div className="flex-1 min-w-0 overflow-hidden">
-        <p className="text-sm font-medium truncate" title={name}>{name}</p>
-        <p className="text-xs text-muted-foreground line-clamp-2" title={reasoning}>
-          {daysInfo ? `${daysInfo} - ` : ''}{reasoning.length > 60 ? `${reasoning.slice(0, 60)}...` : reasoning}
+        <p className="text-sm font-medium truncate leading-tight" title={name}>{name}</p>
+        <p className="text-xs text-muted-foreground line-clamp-1 leading-tight" title={reasoning}>
+          {daysInfo ? `${daysInfo} - ` : ''}{reasoning.length > 50 ? `${reasoning.slice(0, 50)}...` : reasoning}
         </p>
       </div>
       <div className="flex items-center gap-1 flex-shrink-0">
         <Button 
           size="icon" 
           variant="ghost" 
-          className="h-6 w-6 text-green-600 hover:text-green-700 hover:bg-green-100"
+          className="h-5 w-5 text-green-600 hover:text-green-700 hover:bg-green-100"
           onClick={(e) => { e.stopPropagation(); onApprove(suggestion.id); }}
           disabled={isProcessing}
         >
-          <CheckCircle className="h-4 w-4" />
+          <CheckCircle className="h-3 w-3" />
         </Button>
         <Button 
           size="icon" 
           variant="ghost"
-          className="h-6 w-6 text-red-600 hover:text-red-700 hover:bg-red-100"
+          className="h-5 w-5 text-red-600 hover:text-red-700 hover:bg-red-100"
           onClick={(e) => { e.stopPropagation(); onReject(suggestion.id); }}
           disabled={isProcessing}
         >
-          <XCircle className="h-4 w-4" />
+          <XCircle className="h-3 w-3" />
         </Button>
       </div>
     </div>
@@ -113,6 +112,7 @@ export default function SuggestionBadge({ tenantId, onViewAll }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [canScroll, setCanScroll] = useState(false);
 
   const backendUrl = getBackendUrl();
 
@@ -261,6 +261,14 @@ export default function SuggestionBadge({ tenantId, onViewAll }) {
     }
   }, [isOpen, fetchSuggestions]);
 
+  // Check if content can scroll when suggestions change
+  useEffect(() => {
+    // Rough calculation: each compact item is about 60px height
+    // Container padding is 8px (p-2), plus 4px gap between items (space-y-1)
+    // With 380px max height, we can fit about 6 items comfortably
+    setCanScroll(suggestions.length > 5);
+  }, [suggestions.length]);
+
   const pendingCount = suggestions.length;
 
   return (
@@ -293,7 +301,10 @@ export default function SuggestionBadge({ tenantId, onViewAll }) {
           {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
         </div>
         
-        <ScrollArea className="max-h-[300px]">
+        <div 
+          className="max-h-[380px] overflow-y-scroll border-t"
+          style={{ scrollbarWidth: 'auto' }}
+        >
           {suggestions.length === 0 ? (
             <div className="p-4 text-center text-sm text-muted-foreground">
               No pending suggestions
@@ -311,7 +322,7 @@ export default function SuggestionBadge({ tenantId, onViewAll }) {
               ))}
             </div>
           )}
-        </ScrollArea>
+        </div>
         
         {suggestions.length > 0 && (
           <div className="p-2 border-t flex items-center gap-2">
