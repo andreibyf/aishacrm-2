@@ -372,7 +372,7 @@ function LeadProfilePageContent() {
       aborted = true;
       setAiShaContext(null);
     };
-  }, [entityId, tenantId]);
+  }, [entityId, tenantId, entityType]);
 
   if (loading) {
     return (

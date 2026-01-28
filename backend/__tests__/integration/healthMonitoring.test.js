@@ -19,7 +19,7 @@ describe('Health Monitoring System', () => {
 
   test('should create health alerts table and views', async () => {
     // Check if table exists
-    const { data: tables, error: tableError } = await supa
+    const { error: tableError } = await supa
       .from('devai_health_alerts')
       .select('id')
       .limit(1);
