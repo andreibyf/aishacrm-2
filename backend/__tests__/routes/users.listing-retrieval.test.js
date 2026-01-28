@@ -105,9 +105,9 @@ after(async () => {
   }
 });
 
-describe('users.js - Section 2.2: User Listing & Retrieval Endpoints', () => {
+describe('users.js - Section 2.2: User Listing & Retrieval Endpoints', { timeout: 5000, skip: process.env.SKIP_SLOW_TESTS === 'true' }, () => {
 
-  describe('GET /api/users/ - List users endpoint', () => {
+  describe('GET /api/users/ - List users endpoint', { timeout: 5000 }, () => {
     it('should return empty array when no users exist', async () => {
       const response = await makeRequest('GET', '/api/users/');
       assert.strictEqual(response.status, 500); // Supabase not initialized, expect error
@@ -150,7 +150,7 @@ describe('users.js - Section 2.2: User Listing & Retrieval Endpoints', () => {
     });
   });
 
-  describe('GET /api/users/profiles - User profiles endpoint', () => {
+  describe('GET /api/users/profiles - User profiles endpoint', { timeout: 5000 }, () => {
     it('should return user profiles with default pagination', async () => {
       const response = await makeRequest('GET', '/api/users/profiles');
       assert(response.status >= 400); // Should fail due to no Supabase
@@ -182,7 +182,7 @@ describe('users.js - Section 2.2: User Listing & Retrieval Endpoints', () => {
     });
   });
 
-  describe('GET /api/users/:id - Single user retrieval', () => {
+  describe('GET /api/users/:id - Single user retrieval', { timeout: 5000 }, () => {
     it('should return 404 for non-existent user', async () => {
       const response = await makeRequest('GET', '/api/users/non-existent-id');
       assert(response.status >= 400); // Should fail due to no Supabase
@@ -213,7 +213,7 @@ describe('users.js - Section 2.2: User Listing & Retrieval Endpoints', () => {
     });
   });
 
-  describe('POST /api/users/sync-from-auth - Auth synchronization', () => {
+  describe('POST /api/users/sync-from-auth - Auth synchronization', { timeout: 5000 }, () => {
     it('should require email parameter', async () => {
       const response = await makeRequest('POST', '/api/users/sync-from-auth', {});
       assert.strictEqual(response.status, 400);
@@ -276,7 +276,7 @@ describe('users.js - Section 2.2: User Listing & Retrieval Endpoints', () => {
     });
   });
 
-  describe('Query parameter validation', () => {
+  describe('Query parameter validation', { timeout: 5000 }, () => {
     it('should handle malformed limit parameter', async () => {
       const response = await makeRequest('GET', '/api/users/?limit=invalid');
       assert(response.status >= 400);
@@ -306,7 +306,7 @@ describe('users.js - Section 2.2: User Listing & Retrieval Endpoints', () => {
     });
   });
 
-  describe('Error handling', () => {
+  describe('Error handling', { timeout: 5000 }, () => {
     it('should handle database connection errors gracefully', async () => {
       const response = await makeRequest('GET', '/api/users/');
       assert(response.status >= 400);
