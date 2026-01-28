@@ -13,7 +13,7 @@
  * 8. Environment Configuration - Default values
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert';
 
 describe('AI Memory System (RAG) - Phase 7', () => {
@@ -273,7 +273,7 @@ describe('AI Memory System (RAG) - Phase 7', () => {
       };
       
       // Simulated query that respects tenant isolation
-      const queryWithIsolation = (tenantId, query) => {
+      const queryWithIsolation = (tenantId, _query) => {
         return mockMemoryStore[tenantId] || [];
       };
       

@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Sparkles, ExternalLink, Clock } from "lucide-react";
 import AishaEntityChatModal from "@/components/ai/AishaEntityChatModal";

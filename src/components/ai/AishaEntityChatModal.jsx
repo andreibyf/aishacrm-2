@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Send, CheckCircle2, Circle, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { getBackendUrl } from "@/api/backendUrl";

@@ -14,13 +14,13 @@ const SHOULD_RUN = process.env.CI ? (process.env.CI_BACKEND_TESTS === 'true') : 
 
 describe('Entity Context Integration Tests', { skip: !SHOULD_RUN }, () => {
   
-  let tenantId;
-  let conversationId;
+  let _tenantId;
+  let _conversationId;
   
   before(async () => {
     // Use a known tenant ID from test environment
-    tenantId = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
-    conversationId = 'test-conv-' + Date.now();
+    _tenantId = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+    _conversationId = 'test-conv-' + Date.now();
   });
   
   describe('End-to-End Entity Context Flow', () => {
@@ -308,7 +308,7 @@ describe('Entity Context Integration Tests', { skip: !SHOULD_RUN }, () => {
                   }
                 }
               }
-            } catch (err) {
+            } catch (_err) {
               // Ignore
             }
           }

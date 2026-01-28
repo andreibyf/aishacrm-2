@@ -6,7 +6,7 @@
 import express from 'express';
 import logger from '../../lib/logger.js';
 import { routeChat } from '../../flows/index.js';
-import { resolveLLMApiKey, getTenantIdFromRequest } from '../../lib/aiEngine/index.js';
+import { getTenantIdFromRequest } from '../../lib/aiEngine/index.js';
 
 export default function createChatRoutes(pgPool) {
   const router = express.Router();

@@ -84,7 +84,7 @@ function createMockConversationsRouter() {
   
   // Mock DELETE conversation
   router.delete('/conversations/:id', (req, res) => {
-    const { id } = req.params;
+    const { id: _id } = req.params;
     const { tenant_id } = req.query;
     
     if (!tenant_id) {

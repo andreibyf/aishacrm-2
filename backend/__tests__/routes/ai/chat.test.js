@@ -181,7 +181,7 @@ describe('AI Chat Module', () => {
 
   describe('Security and Validation', () => {
     test('should handle malformed JSON', async () => {
-      const response = await request(app)
+      const _response = await request(app)
         .post('/api/ai/chat')
         .set('Content-Type', 'application/json')
         .send('{"messages": [{"role": "user", malformed}]}')
