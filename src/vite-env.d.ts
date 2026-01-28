@@ -10,3 +10,11 @@ declare module '@/api/functions' {
 interface Window {
   __DISABLE_GLOBAL_FETCH_STUB?: boolean;
 }
+// Global Window augmentation for test utilities
+declare global {
+  interface Window {
+    __DISABLE_GLOBAL_FETCH_STUB?: boolean;
+  }
+}
+
+export {};
