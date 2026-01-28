@@ -22,8 +22,8 @@ const basePrompt = {
 };
 
 describe('commandRouter', () => {
-  beforeAll(() => { (window as Window & { __DISABLE_GLOBAL_FETCH_STUB?: boolean }).__DISABLE_GLOBAL_FETCH_STUB = true; });
-  afterAll(() => { delete (window as Window & { __DISABLE_GLOBAL_FETCH_STUB?: boolean }).__DISABLE_GLOBAL_FETCH_STUB; });
+  beforeAll(() => { window.__DISABLE_GLOBAL_FETCH_STUB = true; });
+  afterAll(() => { delete window.__DISABLE_GLOBAL_FETCH_STUB; });
   it('routes list intent to chat when local actions disabled', async () => {
     // Local actions are disabled (localIntentSet is empty) to force Braid tool usage for all data queries
     const callChatApi = vi.fn().mockResolvedValue({ status: 200, data: { status: 'success', response: 'Here are your leads' } });

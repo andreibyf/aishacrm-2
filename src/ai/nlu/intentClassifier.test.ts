@@ -2,8 +2,8 @@ import { beforeAll, afterAll, describe, expect, it } from 'vitest';
 import { classifyIntent } from './intentClassifier';
 
 describe('intentClassifier', () => {
-  beforeAll(() => { (window as Window & { __DISABLE_GLOBAL_FETCH_STUB?: boolean }).__DISABLE_GLOBAL_FETCH_STUB = true; });
-  afterAll(() => { delete (window as Window & { __DISABLE_GLOBAL_FETCH_STUB?: boolean }).__DISABLE_GLOBAL_FETCH_STUB; });
+  beforeAll(() => { window.__DISABLE_GLOBAL_FETCH_STUB = true; });
+  afterAll(() => { delete window.__DISABLE_GLOBAL_FETCH_STUB; });
   it('detects list intent for leads with timeframe', () => {
     const result = classifyIntent('Show me all leads due today');
     expect(result.intent).toBe('list_records');
