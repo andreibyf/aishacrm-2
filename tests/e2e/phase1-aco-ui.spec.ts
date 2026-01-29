@@ -9,7 +9,7 @@ test.describe('@phase1 ACO UI', () => {
 
     const lead = await createLead(request, { first_name: 'ACO', last_name: `Lead-${ts}`, email, company, job_title: 'Mgr' });
     const leadId = lead?.data?.lead?.id || lead?.data?.id || lead?.id;
-    const conv = await convertLead(request, leadId, { account_name: company, opportunity_name: `UI Deal ${ts}`, opportunity_amount: 75000 });
+    const _conv = await convertLead(request, leadId, { account_name: company, opportunity_name: `UI Deal ${ts}`, opportunity_amount: 75000 });
     const oppName = `UI Deal ${ts}`;
 
     // Accounts UI

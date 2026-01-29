@@ -328,7 +328,7 @@ function test() { return "code"; }
 
   describe('Security and Input Validation', () => {
     test('should handle malformed JSON', async () => {
-      const response = await request(app)
+      const _response = await request(app)
         .post('/api/ai/summarize')
         .set('Content-Type', 'application/json')
         .send('{"text": "test", malformed}')

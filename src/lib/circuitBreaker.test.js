@@ -2,7 +2,7 @@
  * Tests for Circuit Breaker Utility
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   createCircuitBreaker,
   createCircuitBreakerWithFallback,
@@ -181,7 +181,7 @@ describe('Circuit Breaker Utility', () => {
       for (let i = 0; i < 5; i++) {
         try {
           await failingBreaker.fire();
-        } catch (e) {
+        } catch {
           // Expected to fail
         }
       }
@@ -284,7 +284,7 @@ describe('Circuit Breaker Utility', () => {
       // First call should try retries
       try {
         await breaker.fire();
-      } catch (e) {
+      } catch {
         // Expected
       }
       

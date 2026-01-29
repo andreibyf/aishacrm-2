@@ -28,7 +28,7 @@ function getExactTime(timestamp) {
   return new Date(timestamp).toLocaleString();
 }
 
-export default function DashboardHeader({ user, showTestData, onTestDataToggle, onCustomizeClick, onRefresh, isRefreshing, isCached, cachedAt }) {
+export default function DashboardHeader({ user, showTestData, onTestDataToggle, onCustomizeClick, onRefresh, isRefreshing, isCached: _isCached, cachedAt }) {
   const [briefingLoading, setBriefingLoading] = React.useState(false);
   // Feature flag: hide Daily Voice Briefing button
   const SHOW_DAILY_BRIEFING = false;

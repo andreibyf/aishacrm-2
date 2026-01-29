@@ -291,9 +291,9 @@ router.put('/:id', async (req, res) => {
 
     // CRITICAL: Filter by tenant_id FIRST, then id (tenant isolation)
     params.push(tenant_id);
-    const tenantParamIndex = paramIndex++;
+    const _tenantParamIndex = paramIndex++;
     params.push(id);
-    const idParamIndex = paramIndex++;
+    const _idParamIndex = paramIndex++;
 
     // Build update object from params
     const updateData = {};

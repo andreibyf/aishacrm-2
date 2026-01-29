@@ -57,7 +57,7 @@ function toSnakeCase(str) {
 /**
  * Infer tool description from function name
  */
-function inferDescription(fnName, params) {
+function inferDescription(fnName, _params) {
   const action = fnName.match(/^(create|update|delete|list|search|get|fetch|mark|qualify|convert|advance|schedule|approve|reject|apply|trigger)/)?.[1];
   const entity = fnName.replace(/^(create|update|delete|list|search|get|fetch|mark|qualify|convert|advance|schedule|approve|reject|apply|trigger)/, '');
   
@@ -91,7 +91,7 @@ function inferDescription(fnName, params) {
 /**
  * Infer policy from function effects and name
  */
-function inferPolicy(fnName, effects) {
+function inferPolicy(fnName, _effects) {
   // Write operations
   const writePatterns = ['create', 'update', 'delete', 'mark', 'convert', 'qualify', 'advance', 'schedule', 'approve', 'reject', 'apply', 'trigger'];
   const isWrite = writePatterns.some(p => fnName.toLowerCase().startsWith(p));

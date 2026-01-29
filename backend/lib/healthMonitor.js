@@ -498,7 +498,7 @@ async function createHealthAlert(issue) {
       return;
     }
 
-    const { data, error } = await supa
+    const { data: _data, error } = await supa
       .from('devai_health_alerts')
       .insert({
         severity: issue.severity,
@@ -529,7 +529,7 @@ async function createHealthAlert(issue) {
  */
 async function isRunningInDocker() {
   try {
-    const content = await fs.readFile('/.dockerenv', 'utf-8');
+    const _content = await fs.readFile('/.dockerenv', 'utf-8');
     return true;
   } catch {
     try {

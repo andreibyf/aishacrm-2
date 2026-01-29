@@ -265,7 +265,7 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
 
       // Should see throttling behavior
       const okResponses = responses.filter(r => r.status !== 429);
-      const limitedResponses = responses.filter(r => r.status === 429);
+      const _limitedResponses = responses.filter(r => r.status === 429);
 
       assert(okResponses.length > 0, 'Some requests should succeed');
       // Note: Email throttling might not trigger immediately due to timing

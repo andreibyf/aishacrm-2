@@ -848,7 +848,7 @@ export default function DashboardPage() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
                 {visibleWidgets.length > 0
                   ? (
-                    visibleWidgets.map((widget, index) => {
+                    visibleWidgets.map((widget, _index) => {
                       // Prefetch lists from dashboard bundle where applicable to avoid redundant queries
                       const prefetchProps = {};
                       if (widget.id === "recentActivities" && Array.isArray(bundleLists?.recentActivities)) {

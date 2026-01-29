@@ -396,7 +396,7 @@ export default function ContactsPage() {
         if (scopedFilter.filter) {
           try {
             filterObj = JSON.parse(scopedFilter.filter);
-          } catch (_e) { /* ignore */ }
+          } catch { /* ignore */ }
         }
 
         // Merge $or conditions

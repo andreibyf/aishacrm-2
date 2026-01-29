@@ -225,7 +225,7 @@ describe('AI Tools Module', () => {
     });
 
     test('should handle malformed JSON in brain-test requests', async () => {
-      const response = await request(app)
+      const _response = await request(app)
         .post('/api/ai/brain-test')
         .set('Content-Type', 'application/json')
         .set('X-Internal-AI-Key', 'test-key')

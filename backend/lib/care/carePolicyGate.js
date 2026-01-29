@@ -104,7 +104,7 @@ const AUTONOMOUS_PROHIBITIONS = [
  * @returns {boolean} return.escalate - True if requires human review
  * @returns {Array<string>} return.reasons - List of reasons for decision
  */
-export function evaluateCarePolicy({ action_origin, proposed_action_type, text = '', meta = {} }) {
+export function evaluateCarePolicy({ action_origin, proposed_action_type, text = '', meta: _meta = {} }) {
   const reasons = [];
   let result = CarePolicyGateResult.ALLOWED;
 

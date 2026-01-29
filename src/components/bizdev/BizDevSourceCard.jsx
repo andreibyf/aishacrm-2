@@ -72,7 +72,7 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
   }, [source.lead_ids]);
   // Determine if we're in B2C mode (person-first display)
   const isB2C = businessModel === 'b2c';
-  const isHybrid = businessModel === 'hybrid';
+  const _isHybrid = businessModel === 'hybrid';
   
   const handleSaveNotes = async () => {
     try {
@@ -171,7 +171,7 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
   // Get contact info
   const phone = source.phone_number || source.contact_phone;
   const email = source.email || source.contact_email;
-  const contactPerson = source.contact_person;
+  const _contactPerson = source.contact_person;
   
   // Get address
   const addressShort = [source.city, source.state_province].filter(Boolean).join(', ');

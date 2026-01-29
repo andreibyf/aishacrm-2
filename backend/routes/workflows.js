@@ -116,7 +116,7 @@ export default function createWorkflowRoutes(pgPool) {
    */
 
   // Exported executor used by queue processor and test endpoint
-  async function executeWorkflowById(workflow_id, triggerPayload) {
+  async function _executeWorkflowById(workflow_id, triggerPayload) {
     const startTime = Date.now();
     const executionLog = [];
     let executionId = null;

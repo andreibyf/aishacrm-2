@@ -165,7 +165,7 @@ export async function markActivitiesOverdue(pgPool, jobMetadata = {}) {
  * Warm dashboard bundle cache for all tenants (runs at night)
  * Pre-populates redis-cache with dashboard bundles so first requests are instant
  */
-export async function warmDashboardBundleCache(_pgPool, jobMetadata = {}) {
+export async function warmDashboardBundleCache(_pgPool, _jobMetadata = {}) {
   const cacheManager = global.cacheManager;
   
   if (!cacheManager || !cacheManager.client) {

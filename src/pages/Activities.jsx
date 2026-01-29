@@ -45,7 +45,7 @@ import { format } from "date-fns";
 import SimpleModal from "../components/shared/SimpleModal";
 import { useConfirmDialog } from "../components/shared/ConfirmDialog";
 import StatusHelper from "../components/shared/StatusHelper";
-import { Link } from "react-router-dom";
+import { Link as _Link } from "react-router-dom";
 import { getCurrentTimezoneOffset, utcToLocal } from '../components/shared/timezoneUtils';
 import { useTimezone } from '../components/shared/TimezoneContext';
 import { useEntityLabel } from "@/components/shared/entityLabelsHooks";

@@ -1,18 +1,18 @@
 import {
   BraidAction,
   BraidActionResult,
-  BraidRequestEnvelope,
-  BraidResponseEnvelope,
-  BraidActor,
+  BraidRequestEnvelope as _BraidRequestEnvelope,
+  BraidResponseEnvelope as _BraidResponseEnvelope,
+  BraidActor as _BraidActor,
 } from "./types";
 import logger from '../lib/logger';
 
 export { 
   BraidAction,
   BraidActionResult,
-  BraidRequestEnvelope,
-  BraidResponseEnvelope,
-  BraidActor,
+  _BraidRequestEnvelope as BraidRequestEnvelope,
+  _BraidResponseEnvelope as BraidResponseEnvelope,
+  _BraidActor as BraidActor,
 } from "./types";
 
 export interface BraidAdapterContext {

@@ -65,7 +65,7 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel, moduleSet
     // State for dynamically loaded module settings for the target user's tenant
     // null = not yet loaded, [] = loaded but empty
     const [userModuleSettings, setUserModuleSettings] = useState(null);
-    const [moduleSettingsLoading, setModuleSettingsLoading] = useState(false);
+    const [_moduleSettingsLoading, setModuleSettingsLoading] = useState(false);
 
     // Load module settings for the target user's tenant (not the current admin's tenant)
     useEffect(() => {

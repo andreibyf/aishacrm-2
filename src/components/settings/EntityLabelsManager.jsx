@@ -51,7 +51,7 @@ export default function EntityLabelsManager({ isTenantAdmin = false }) {
   const [customized, setCustomized] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [tenantsLoading, setTenantsLoading] = useState(true);
+  const [_tenantsLoading, setTenantsLoading] = useState(true);
 
   // For tenant admins, always use their tenant from context
   const selectedTenantId = globalTenantId;

@@ -34,9 +34,9 @@ import {
   PRICING_CONTRACT_PHRASES,
   COMPLIANCE_SENSITIVE_PHRASES,
   HIGH_RISK_AMBIGUOUS_PHRASES,
-  NEGATIVE_SENTIMENT_WORDS,
+  _NEGATIVE_SENTIMENT_WORDS,
   containsAnyPhrase,
-  normalizeText,
+  _normalizeText,
 } from './careEscalationLexicon.js';
 
 /**

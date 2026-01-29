@@ -72,7 +72,7 @@ export function buildContactProvenanceMetadata(lead) {
  * @param {string} leadStatus - Current lead status
  * @returns {Object} Conversion action instructions
  */
-export function determineConversionAction(leadStatus) {
+export function determineConversionAction(_leadStatus) {
   return {
     mark_as_converted: true,
     new_status: 'converted',

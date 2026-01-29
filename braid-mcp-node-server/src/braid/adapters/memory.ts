@@ -47,7 +47,7 @@ function kindIs(k: string, variants: string[]): boolean {
 export const MemoryAdapter: BraidAdapter = {
   system: 'memory',
 
-  async handleAction(action: BraidAction, ctx: BraidAdapterContext): Promise<BraidActionResult> {
+  async handleAction(action: BraidAction, _ctx: BraidAdapterContext): Promise<BraidActionResult> {
     const { kind } = action.resource;
 
     // Create session

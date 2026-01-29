@@ -19,14 +19,14 @@
  * Run with: npx playwright test tests/e2e/sales-cycle-e2e.spec.ts
  */
 
-import { test, expect, APIRequestContext } from '@playwright/test';
+import { test, expect, APIRequestContext as _APIRequestContext } from '@playwright/test';
 import {
   BACKEND_URL,
   E2E_TENANT_ID,
   createBizDevSource,
   promoteBizDevSource,
   getBizDevSource,
-  getLead,
+  getLead as _getLead,
   convertLead,
   getContact,
   getAccount,

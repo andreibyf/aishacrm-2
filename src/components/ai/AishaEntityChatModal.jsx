@@ -85,7 +85,7 @@ export default function AishaEntityChatModal({
     }
   };
 
-  const startPolling = (id) => {
+  const _startPolling = (id) => {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     
     pollIntervalRef.current = setInterval(async () => {

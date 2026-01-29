@@ -6,7 +6,7 @@
 
 import express from 'express';
 import { getSupabaseClient } from '../lib/supabase-db.js';
-import { getActiveAlerts, getHealthStats, resolveAlert, triggerHealthCheck } from '../lib/healthMonitor.js';
+import { getActiveAlerts as _getActiveAlerts, getHealthStats, resolveAlert, triggerHealthCheck } from '../lib/healthMonitor.js';
 import { isSuperadmin } from '../lib/developerAI.js';
 
 const router = express.Router();

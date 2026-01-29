@@ -25,7 +25,7 @@ export default function createConversationsRoutes(_pgPool) {
     }
   };
 
-  const broadcastMessage = (conversationId, message) => {
+  const _broadcastMessage = (conversationId, message) => {
     if (!conversationClients.has(conversationId)) {
       return;
     }

@@ -373,7 +373,7 @@ export function clearBundleCache(type = 'all') {
     pendingRequests.clear();
   } else {
     // Clear only matching cache keys
-    for (const [key, value] of recentResults.entries()) {
+    for (const [key, _value] of recentResults.entries()) {
       try {
         const parsed = JSON.parse(key);
         if (parsed.type === type) {

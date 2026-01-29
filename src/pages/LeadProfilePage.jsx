@@ -471,7 +471,7 @@ function LeadProfilePageContent() {
   };
 
   // Navigate to list page with filter
-  const navigateToFiltered = (entityListType) => {
+  const _navigateToFiltered = (entityListType) => {
     // Build URL with filter for related records
     const filterParam = encodeURIComponent(JSON.stringify({ related_id: entityId }));
     window.location.href = `/${entityListType}?filter=${filterParam}`;

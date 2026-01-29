@@ -228,7 +228,7 @@ test.describe('Complete User Workflow - Lead to Closed Deal', () => {
     try {
       await header.waitFor({ state: 'visible', timeout: 30000 });
       console.log('   ✅ App loaded and authenticated');
-    } catch (e) {
+    } catch {
       console.log('   ⚠️ Header not visible immediately, proceeding...');
     }
     
@@ -237,7 +237,7 @@ test.describe('Complete User Workflow - Lead to Closed Deal', () => {
     try {
       await mainNav.waitFor({ state: 'visible', timeout: 10000 });
       console.log('   ✅ Main navigation visible');
-    } catch (e) {
+    } catch {
       console.log('   ⚠️ Navigation not visible yet');
     }
     
@@ -256,7 +256,7 @@ test.describe('Complete User Workflow - Lead to Closed Deal', () => {
           console.log(`   ✅ Using tenant UUID: ${tenantId}`);
         }
       }
-    } catch (e) {
+    } catch {
       console.log(`   ⚠️ Could not fetch user context, using fallback: ${tenantId}`);
     }
     
@@ -590,7 +590,7 @@ test.describe('Complete User Workflow - Lead to Closed Deal', () => {
     await page.waitForTimeout(2000); // Wait for stage update to propagate
     
     // Create proposal email activity
-    const proposalResponse = await createActivityViaAPI(request, tenantId, {
+    const _proposalResponse = await createActivityViaAPI(request, tenantId, {
       type: 'email',
       subject: testData.activity.proposalEmail,
       status: 'completed',
@@ -643,7 +643,7 @@ test.describe('Complete User Workflow - Lead to Closed Deal', () => {
     await page.waitForTimeout(1000); // Wait for note to be saved
     
     // Create follow-up call
-    const followUpResponse = await createActivityViaAPI(request, tenantId, {
+    const _followUpResponse = await createActivityViaAPI(request, tenantId, {
       type: 'call',
       subject: testData.activity.followUpCall,
       status: 'completed',

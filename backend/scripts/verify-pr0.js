@@ -8,7 +8,7 @@
  */
 
 import { isCareAutonomyEnabled, getCareAutonomyStatus } from '../lib/care/isCareAutonomyEnabled.js';
-import { getCareConfig } from '../lib/care/careConfig.js';
+import { getCareConfig as _getCareConfig } from '../lib/care/careConfig.js';
 
 console.log('🔍 PR0 Verification: Customer C.A.R.E. Kill Switch + Shadow Mode\n');
 

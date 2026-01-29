@@ -358,7 +358,7 @@ function getBusinessModelNotes(businessModel) {
 /**
  * Build AI-ready context summary
  */
-function buildAIContextSummary(tenantConfig, terminology, statusCards) {
+function buildAIContextSummary(tenantConfig, terminology, _statusCards) {
   const customTerms = Object.entries(terminology)
     .filter(([_, t]) => t.isCustomized)
     .map(([key, t]) => `${t.plural} (${key})`);

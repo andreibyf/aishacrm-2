@@ -11,7 +11,7 @@ const router = express.Router();
  */
 router.post('/summarize-person-profile', async (req, res) => {
   try {
-    const { person_id, person_type, profile_data, tenant_id } = req.body;
+    const { person_id, person_type, profile_data, tenant_id: _tenant_id } = req.body;
     const supabase = getSupabaseClient();
 
     if (!person_id || !person_type || !profile_data) {
@@ -43,7 +43,7 @@ router.post('/summarize-person-profile', async (req, res) => {
     const context = buildProfileContext(profile_data, person_type);
 
     // Call AI to generate summary
-    const prompt = `You are a CRM analyst. Generate a concise executive summary (2-3 sentences) for this ${person_type} profile based on the following information:
+    const _prompt = `You are a CRM analyst. Generate a concise executive summary (2-3 sentences) for this ${person_type} profile based on the following information:
 
 ${context}
 

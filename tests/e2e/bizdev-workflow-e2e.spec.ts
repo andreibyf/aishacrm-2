@@ -198,7 +198,7 @@ test.describe('BizDev → Lead → Contact Workflow (B2B)', () => {
     
     const promoteResult = await promoteBizDevSourceViaAPI(request, sourceId, 'B2B');
     const leadId = promoteResult?.data?.lead?.id;
-    const accountIdFromPromotion = promoteResult?.data?.account_id;
+    const _accountIdFromPromotion = promoteResult?.data?.account_id;
     const leadType = promoteResult?.data?.lead_type;
     
     expect(leadId).toBeTruthy();
@@ -285,7 +285,7 @@ test.describe('BizDev → Lead → Contact Workflow (B2B)', () => {
       if (finalLeadRecord) {
         expect(finalLeadRecord.status).toBe('converted');
       }
-    } catch (_err) {
+    } catch {
       // Lead was deleted - this is expected
       console.log('[Stage 4] ✓ Lead was deleted after conversion (expected)');
     }
@@ -557,7 +557,7 @@ test.describe('Error Handling & Edge Cases', () => {
       await promoteBizDevSourceViaAPI(request, sourceId, 'B2B');
       // If it didn't throw, check the response
       console.log('⚠️ Second promotion did not throw - checking behavior');
-    } catch (_err) {
+    } catch {
       // Expected - already promoted
       console.log('✓ Second promotion correctly rejected');
     }
@@ -598,7 +598,7 @@ test.describe('Error Handling & Edge Cases', () => {
       } else {
         console.log('✓ BizDev source creation without email rejected');
       }
-    } catch (_err) {
+    } catch {
       console.log('✓ BizDev source creation without email rejected');
     }
   });

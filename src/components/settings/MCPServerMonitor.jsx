@@ -619,7 +619,7 @@ export default function MCPServerMonitor() {
         } else if (result.skipped) {
           addLog("info", `GitHub issue creation skipped: ${result.reason}`);
         }
-      } catch (_error) {
+      } catch {
         // Silently log error - don't spam console or toast
         addLog("info", `Note: GitHub issue creation unavailable`);
       }

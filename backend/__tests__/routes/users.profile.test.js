@@ -91,7 +91,7 @@ before(async () => {
       // Mock metadata update
       return { error: null };
     },
-    confirmUserEmail: async (userId) => {
+    confirmUserEmail: async (_userId) => {
       // Mock email confirmation
       return { error: null };
     },

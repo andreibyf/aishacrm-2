@@ -5,7 +5,7 @@
 
 import express from 'express';
 import logger from '../../lib/logger.js';
-import { executeBraidTool, generateToolSchemas } from '../../lib/braidIntegration-v2.js';
+import { executeBraidTool, _generateToolSchemas } from '../../lib/braidIntegration-v2.js';
 import { resolveCanonicalTenant } from '../../lib/tenantCanonicalResolver.js';
 import { getTenantIdFromRequest } from '../../lib/aiEngine/index.js';
 import { getSupabaseClient } from '../../lib/supabase-db.js';

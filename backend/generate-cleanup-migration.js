@@ -18,7 +18,7 @@ const tablesToCleanup = [];
 let match;
 
 while ((match = tableRegex.exec(content)) !== null) {
-  const [fullMatch, tableName, columnsPart] = match;
+  const [_fullMatch, tableName, columnsPart] = match;
   
   const columns = [];
   if (columnsPart.includes('"tenant_id_text"')) columns.push('tenant_id_text');

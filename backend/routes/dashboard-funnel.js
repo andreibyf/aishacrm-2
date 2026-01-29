@@ -56,7 +56,7 @@ router.get('/funnel-counts', cacheList('funnel_counts', 120), validateTenantAcce
     }
 
     // Return appropriate counts based on test data flag
-    const suffix = includeTestData ? '_total' : '_real';
+    const _suffix = includeTestData ? '_total' : '_real';
     
     // Return funnel with both suffixed fields for frontend compatibility
     const funnelCounts = {
