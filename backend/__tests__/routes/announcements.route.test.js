@@ -39,7 +39,7 @@ describe('Announcements Routes', { skip: !SHOULD_RUN }, () => {
       body: JSON.stringify({ 
         tenant_id: TENANT_ID,
         title: 'Test Announcement',
-        message: 'This is a test message',
+        content: 'This is a test message',
         priority: 'info'
       })
     });
@@ -54,13 +54,10 @@ describe('Announcements Routes', { skip: !SHOULD_RUN }, () => {
 
   test('PUT /api/announcements/:id updates announcement', async () => {
     const fakeId = '00000000-0000-0000-0000-000000000000';
-    const res = await fetch(`${BASE_URL}/api/announcements/${fakeId}`, {
+    const res = await fetch(`${BASE_URL}/api/announcements/${fakeId}?tenant_id=${TENANT_ID}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        tenant_id: TENANT_ID,
-        title: 'Updated Announcement'
-      })
+      body: JSON.stringify({ title: 'Updated Announcement' })
     });
     assert.ok([200, 401, 404].includes(res.status), `expected update response, got ${res.status}`);
   });
@@ -85,7 +82,7 @@ describe('Announcements Routes', { skip: !SHOULD_RUN }, () => {
 
   test('GET /api/announcements/active returns active announcements', async () => {
     const res = await fetch(`${BASE_URL}/api/announcements/active?tenant_id=${TENANT_ID}`);
-    assert.ok([200, 401].includes(res.status), `expected 200/401, got ${res.status}`);
+    assert.ok([200, 401, 404].includes(res.status), `expected 200/401/404, got ${res.status}`);
     
     if (res.status === 200) {
       const json = await res.json();

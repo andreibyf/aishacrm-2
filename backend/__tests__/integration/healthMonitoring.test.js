@@ -74,7 +74,7 @@ describe('Health Monitoring System', () => {
     // Create first alert
     const alert1 = {
       severity: 'low',
-      category: 'test_duplicate',
+      category: 'api',
       title: 'Duplicate Test Alert',
       summary: 'First alert',
       auto_detected: false,
@@ -91,7 +91,7 @@ describe('Health Monitoring System', () => {
     // Check for duplicate
     const { data: isDuplicate } = await supa
       .rpc('devai_check_duplicate_alert', {
-        p_category: 'test_duplicate',
+        p_category: 'api',
         p_title: 'Duplicate Test Alert',
         p_time_window_minutes: 60,
       });
@@ -168,7 +168,7 @@ describe('Health Monitoring System', () => {
 describe('Log Pattern Analysis', () => {
   test('should detect error spikes in logs', async () => {
     // This would be tested by generating fake logs, but for now we test the function exists
-    const { readLogs } = await import('../lib/developerAI.js');
+    const { readLogs } = await import('../../lib/developerAI.js');
     
     // Mock log content with recurring errors
     const mockLogs = `

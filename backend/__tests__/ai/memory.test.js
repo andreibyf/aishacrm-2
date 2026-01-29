@@ -222,7 +222,7 @@ describe('AI Memory System (RAG) - Phase 7', () => {
       
       // Verify defaults
       assert.strictEqual(config.topK, 8, 'Default topK should be 8');
-      assert.strictEqual(config.maxChunkChars, 3500, 'Default maxChunkChars should be 3500');
+      assert.strictEqual(config.maxChunkChars, 2000, 'Default maxChunkChars should be 2000');
       assert.strictEqual(config.minSimilarity, 0.7, 'Default minSimilarity should be 0.7');
       assert.strictEqual(config.embeddingProvider, 'openai', 'Default provider should be openai');
       assert.strictEqual(config.embeddingModel, 'text-embedding-3-small', 'Default model should be text-embedding-3-small');

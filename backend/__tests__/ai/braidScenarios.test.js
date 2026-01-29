@@ -15,8 +15,14 @@ import { initSupabaseForTests, hasSupabaseCredentials } from '../setup.js';
 const TENANT_ID = process.env.TEST_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
 const TEST_USER_ID = process.env.TEST_USER_ID || '00000000-0000-0000-0000-000000000001';
 const SHOULD_RUN = process.env.CI ? (process.env.CI_BACKEND_TESTS === 'true') : true;
+const TEST_TIMEOUT_MS = Number(process.env.TEST_TIMEOUT_MS || 30000);
 
-describe('Braid SDK Scenario Tests', { skip: !SHOULD_RUN }, () => {
+// Ensure JWT secret exists for internal service token generation
+if (!process.env.JWT_SECRET) {
+  process.env.JWT_SECRET = 'test-jwt-secret';
+}
+
+describe('Braid SDK Scenario Tests', { skip: !SHOULD_RUN, timeout: TEST_TIMEOUT_MS }, () => {
   let braidModule;
   let supabase;
   let tenantRecord;

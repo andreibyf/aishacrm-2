@@ -22,62 +22,56 @@ describe('AI Settings Routes', { skip: !SHOULD_RUN }, () => {
     }
   });
 
-  test('PUT /api/ai-settings updates AI settings', async () => {
-    const res = await fetch(`${BASE_URL}/api/ai-settings`, {
+  test('PUT /api/ai-settings/:id updates AI settings', async () => {
+    const listRes = await fetch(`${BASE_URL}/api/ai-settings?tenant_id=${TENANT_ID}`);
+    if (listRes.status !== 200) {
+      assert.ok([401, 404].includes(listRes.status), `expected 401/404, got ${listRes.status}`);
+      return;
+    }
+
+    const listJson = await listRes.json();
+    const setting = listJson?.data?.[0];
+    if (!setting?.id) return;
+
+    let value = setting.setting_value?.value ?? setting.setting_value;
+    if (setting.setting_value?.type === 'number') {
+      value = setting.setting_value?.min ?? 0;
+    } else if (setting.setting_value?.type === 'boolean') {
+      value = true;
+    } else if (value === undefined) {
+      value = 'test';
+    }
+
+    const res = await fetch(`${BASE_URL}/api/ai-settings/${setting.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        tenant_id: TENANT_ID,
-        model: 'gpt-4o',
-        temperature: 0.7
-      })
+      body: JSON.stringify({ value })
     });
-    assert.ok([200, 401, 422].includes(res.status), `expected update response, got ${res.status}`);
+    assert.ok([200, 400, 401, 404].includes(res.status), `expected update response, got ${res.status}`);
   });
 
-  test('POST /api/ai-settings with invalid temperature returns error', async () => {
-    const res = await fetch(`${BASE_URL}/api/ai-settings`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        tenant_id: TENANT_ID,
-        temperature: 2.5  // Invalid: > 2.0
-      })
-    });
-    assert.ok([400, 401, 422].includes(res.status), `expected validation error, got ${res.status}`);
-  });
-
-  test('GET /api/ai-settings/models returns available models', async () => {
-    const res = await fetch(`${BASE_URL}/api/ai-settings/models?tenant_id=${TENANT_ID}`);
+  test('GET /api/ai-settings/categories returns categories', async () => {
+    const res = await fetch(`${BASE_URL}/api/ai-settings/categories`);
     assert.ok([200, 401, 404].includes(res.status), `expected 200/401/404, got ${res.status}`);
-    
     if (res.status === 200) {
       const json = await res.json();
-      assert.ok(Array.isArray(json) || json.models, 'expected models list');
+      assert.ok(json?.categories, 'expected categories payload');
     }
   });
 
-  test('GET /api/ai-settings/providers returns AI providers', async () => {
-    const res = await fetch(`${BASE_URL}/api/ai-settings/providers?tenant_id=${TENANT_ID}`);
-    assert.ok([200, 401, 404].includes(res.status), `expected 200/401/404, got ${res.status}`);
-  });
-
-  test('POST /api/ai-settings/test-connection tests AI connection', async () => {
-    const res = await fetch(`${BASE_URL}/api/ai-settings/test-connection`, {
+  test('POST /api/ai-settings/reset resets to defaults', async () => {
+    const res = await fetch(`${BASE_URL}/api/ai-settings/reset`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        tenant_id: TENANT_ID,
-        provider: 'openai'
-      })
+      body: JSON.stringify({ agent_role: 'aisha' })
     });
-    assert.ok([200, 400, 401, 500].includes(res.status), `expected test response, got ${res.status}`);
+    assert.ok([200, 401, 404, 500].includes(res.status), `expected reset response, got ${res.status}`);
   });
 
-  test('DELETE /api/ai-settings resets to defaults', async () => {
-    const res = await fetch(`${BASE_URL}/api/ai-settings?tenant_id=${TENANT_ID}`, {
-      method: 'DELETE'
+  test('POST /api/ai-settings/clear-cache clears cache', async () => {
+    const res = await fetch(`${BASE_URL}/api/ai-settings/clear-cache`, {
+      method: 'POST'
     });
-    assert.ok([200, 401, 404].includes(res.status), `expected reset response, got ${res.status}`);
+    assert.ok([200, 401, 404].includes(res.status), `expected clear-cache response, got ${res.status}`);
   });
 });

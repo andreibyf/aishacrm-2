@@ -11,10 +11,11 @@ import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
-const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+const TENANT_ID = process.env.TEST_TENANT_ID || 'b62b764d-4f27-4e20-a8ad-8eb9b2e1055c';
 
 // Skip if not running backend tests or backend not available
 const SHOULD_RUN = process.env.CI ? (process.env.CI_BACKEND_TESTS === 'true') : true;
+const TEST_TIMEOUT_MS = Number(process.env.TEST_TIMEOUT_MS || 30000);
 
 /**
  * Expected fields for each entity based on frontend form usage
@@ -107,7 +108,7 @@ const ENTITY_FIELD_CONTRACTS = {
   },
 
   activities: {
-    endpoint: '/api/activities',
+    endpoint: '/api/v2/activities',
     required: ['tenant_id', 'type', 'subject'],
     fields: [
       'id', 'tenant_id', 'type', 'subject', 'description', 'status',
@@ -251,7 +252,10 @@ function addOptionalFields(payload, fields) {
 async function apiRequest(method, path, body = null) {
   const options = {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-tenant-id': TENANT_ID
+    },
   };
   
   if (body) {
@@ -304,7 +308,7 @@ describe('Field Parity Tests', { skip: !SHOULD_RUN }, () => {
   // Test each entity type
   for (const [entity, config] of Object.entries(ENTITY_FIELD_CONTRACTS)) {
     
-    test(`${entity}: All form fields accepted by API (no column errors)`, async () => {
+    test(`${entity}: All form fields accepted by API (no column errors)`, { timeout: TEST_TIMEOUT_MS }, async () => {
       const { endpoint, required, fields } = config;
       
       // Create base payload with required fields
@@ -354,7 +358,7 @@ describe('Field Parity Tests', { skip: !SHOULD_RUN }, () => {
       );
     });
 
-    test(`${entity}: Can query all expected fields`, async () => {
+    test(`${entity}: Can query all expected fields`, { timeout: TEST_TIMEOUT_MS }, async () => {
       const { endpoint } = config;
       
       // Fetch list to verify columns are selectable
@@ -374,7 +378,7 @@ describe('Field Parity Tests', { skip: !SHOULD_RUN }, () => {
       );
     });
 
-    test(`${entity}: Update accepts all form fields`, async () => {
+    test(`${entity}: Update accepts all form fields`, { timeout: TEST_TIMEOUT_MS }, async () => {
       const { endpoint, required, fields } = config;
       
       // First create a minimal entity

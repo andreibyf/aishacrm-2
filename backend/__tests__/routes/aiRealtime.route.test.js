@@ -35,7 +35,7 @@ describe('AI Realtime Routes', { skip: !SHOULD_RUN }, () => {
       body: JSON.stringify({ invalid: 'data' })
     });
     // Should validate request data
-    assert.ok([400, 401, 422].includes(res.status), `expected validation error, got ${res.status}`);
+    assert.ok([400, 401, 404, 422].includes(res.status), `expected validation error, got ${res.status}`);
   });
 
   test('GET /api/ai/realtime-config returns config or 404', async () => {

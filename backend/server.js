@@ -160,7 +160,7 @@ app.get("/api/status", (req, res) => {
 import createDatabaseRoutes from "./routes/database.js";
 import createIntegrationRoutes from "./routes/integrations.js";
 import createTelephonyRoutes from "./routes/telephony.js";
-import createAiRoutes from "./routes/ai/index.js";
+import createAiRoutes from "./routes/ai.js";
 import { createAgentOfficeRoutes } from './routes/agentOffice.js';
 import createMcpRoutes from "./routes/mcp.js";
 import devaiRoutes from "./routes/devai.js"; // Phase 6: Developer AI approvals

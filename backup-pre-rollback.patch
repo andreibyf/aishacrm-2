@@ -1,0 +1,261 @@
+diff --git a/backend/lib/braid/execution.js b/backend/lib/braid/execution.js
+index 1d428a5..6cfdb2e 100644
+--- a/backend/lib/braid/execution.js
++++ b/backend/lib/braid/execution.js
+@@ -3,14 +3,14 @@
+  * Core tool execution engine with caching, security, and monitoring
+  */
+ 
+-import { executeBraid } from '../../braid-llm-kit/tools/braid-adapter.js';
++import { executeBraid } from '../../../braid-llm-kit/tools/braid-adapter.js';
+ import jwt from 'jsonwebtoken';
+ import { CRM_POLICIES } from './policies.js';
+ import { TOOL_REGISTRY } from './registry.js';
+ import { TOOL_CACHE_TTL, generateBraidCacheKey } from './registry.js';
+ import { trackRealtimeMetrics, logAuditEntry, extractEntityType } from './metrics.js';
+-import { createBackendDeps, filterSensitiveFields, normalizeToolArgs, objectToPositionalArgs } from './utils.js';
+-import { cacheManager } from '../cacheManager.js';
++import { createBackendDeps, filterSensitiveFields, normalizeToolArgs } from './utils.js';
++import cacheManager from '../cacheManager.js';
+ import path from 'path';
+ import { fileURLToPath } from 'url';
+ 
+@@ -33,7 +33,7 @@ export const TOOL_ACCESS_TOKEN = Object.freeze({
+  * @param {Object} accessToken - The access token to validate
+  * @returns {boolean} - True if valid, false otherwise
+  */
+-function validateToolAccessToken(accessToken) {
++export function validateToolAccessToken(accessToken) {
+   if (!accessToken || typeof accessToken !== 'object') {
+     return false;
+   }
+@@ -200,14 +200,11 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
+   // Normalize arguments into a single object for Braid
+   const normalizedArgs = normalizeToolArgs(toolName, args, tenantRecord);
+ 
+-  // Convert object args to positional array based on function signature
+-  const positionalArgs = objectToPositionalArgs(toolName, normalizedArgs);
+-
+   console.log(`[Braid Tool] Executing ${toolName}`, {
+     braidPath,
+     function: config.function,
+     tenantUuid,
+-    argsPreview: JSON.stringify(positionalArgs).substring(0, 200)
++    argsPreview: JSON.stringify(normalizedArgs).substring(0, 200)
+   });
+ 
+   // Check Redis cache for READ_ONLY tools
+@@ -247,7 +244,7 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
+       config.function,
+       policy,
+       deps,
+-      positionalArgs,
++      normalizedArgs,
+       { cache: false, timeout: 30000 } // Disable in-memory cache, use Redis instead
+     );
+     
+diff --git a/backend/lib/braid/index.js b/backend/lib/braid/index.js
+index 6ed7842..1f30528 100644
+--- a/backend/lib/braid/index.js
++++ b/backend/lib/braid/index.js
+@@ -19,24 +19,24 @@
+ // Core functionality exports
+ export {
+   executeBraidTool,
+-  validateToolAccessToken,
+-  getBraidSystemPrompt,
+-  loadBraidTools,
+-  executeToolWithFallback,
+-  getCachedToolResult,
+-  setCachedToolResult,
+-  clearToolCache
++  validateToolAccessToken
+ } from './execution.js';
+ 
++export {
++  getBraidSystemPrompt,
++  BRAID_SYSTEM_PROMPT,
++  generateToolSchemas,
++  _generateToolSchemas
++} from './registry.js';
++
+ // Tool registry and descriptions
+ export {
+-  getToolRegistry,
+-  getToolDescriptions,
+-  getToolByName,
+-  listAllTools,
+-  getToolsByCategory,
+   TOOL_REGISTRY,
+-  TOOL_DESCRIPTIONS
++  TOOL_DESCRIPTIONS,
++  generateBraidCacheKey,
++  TOOL_CACHE_TTL,
++  summarizeToolResult,
++  TOOLS_DIR_PATH
+ } from './registry.js';
+ 
+ // Metrics and monitoring
+@@ -44,20 +44,14 @@ export {
+   trackRealtimeMetrics,
+   getRealtimeMetrics,
+   logAuditEntry,
+-  extractEntityType,
+-  getMetricsForTimeRange,
+-  getToolUsageStats,
+-  getErrorStats,
+-  clearMetrics
++  extractEntityType
+ } from './metrics.js';
+ 
+ // Tool chains and workflows
+ export {
+   executeToolChain,
+-  getToolChains,
++  listToolChains,
+   validateChain,
+-  rollbackChain,
+-  getChainStatus,
+   TOOL_CHAINS
+ } from './chains.js';
+ 
+@@ -67,9 +61,7 @@ export {
+   getToolGraph,
+   detectCircularDependencies,
+   getToolImpactAnalysis,
+-  getToolsByDependency,
+-  getDependencyPath,
+-  validateDependencies,
++  getToolsByCategory,
+   TOOL_CATEGORIES,
+   TOOL_GRAPH
+ } from './analysis.js';
+@@ -104,18 +96,7 @@ export {
+ } from './utils.js';
+ 
+ // Advanced chain execution and management
+-export {
+-  executeAdvancedChain,
+-  buildChainFromTemplate,
+-  validateChainTemplate,
+-  getChainExecutionHistory,
+-  pauseChainExecution,
+-  resumeChainExecution,
+-  cancelChainExecution,
+-  scheduleChainExecution,
+-  getChainMetrics,
+-  optimizeChainPerformance
+-} from './chains.js';
++// NOTE: Advanced chain APIs are not implemented in chains.js; do not re-export.
+ 
+ /**
+  * Main execution function - primary entry point for tool execution
+@@ -138,8 +119,8 @@ export async function executeTool(toolName, args = {}, context = {}) {
+  * @returns {Object|null} Complete tool information or null if not found
+  */
+ export function getToolInfo(toolName) {
+-  const toolFile = getToolByName(toolName);
+-  if (!toolFile) return null;
++  const toolConfig = TOOL_REGISTRY[toolName];
++  if (!toolConfig) return null;
+ 
+   const description = TOOL_DESCRIPTIONS[toolName];
+   const dependencies = getToolDependencies(toolName);
+@@ -147,11 +128,11 @@ export function getToolInfo(toolName) {
+ 
+   return {
+     name: toolName,
+-    file: toolFile,
++    file: toolConfig.file,
+     description,
+     dependencies,
+     category,
+-    registry: TOOL_REGISTRY[toolFile] || []
++    registry: TOOL_REGISTRY[toolName]
+   };
+ }
+ 
+@@ -271,7 +252,7 @@ export async function initializeBraidSystem(initOptions = {}) {
+ 
+   try {
+     // Load and validate tool registry
+-    const tools = await loadBraidTools();
++    const tools = Object.keys(TOOL_REGISTRY);
+     console.log(`Loaded ${tools.length} Braid tools`);
+ 
+     // Validate tool dependencies if requested
+diff --git a/backend/lib/braid/registry.js b/backend/lib/braid/registry.js
+index 6893115..f42ea8e 100644
+--- a/backend/lib/braid/registry.js
++++ b/backend/lib/braid/registry.js
+@@ -6,6 +6,7 @@
+ import path from 'path';
+ import { fileURLToPath } from 'url';
+ import crypto from 'crypto';
++import { loadToolSchema } from './utils.js';
+ 
+ const __dirname = path.dirname(fileURLToPath(import.meta.url));
+ const TOOLS_DIR = path.join(__dirname, '..', '..', '..', 'braid-llm-kit', 'examples', 'assistant');
+@@ -458,6 +459,46 @@ When users ask "how many", "count", "total number of" ANY entity (leads, account
+ // This ensures existing code that imports BRAID_SYSTEM_PROMPT still works
+ export const BRAID_SYSTEM_PROMPT = getBraidSystemPrompt();
+ 
++/**
++ * Generate OpenAI tool schemas from all registered Braid tools
++ * @param {string[]|null} allowedToolNames - Optional allowlist of tool names
++ * @returns {Promise<Array>} Array of tool schemas
++ */
++export async function generateToolSchemas(allowedToolNames = null) {
++  const schemas = [];
++  const allowlist = Array.isArray(allowedToolNames) && allowedToolNames.length > 0
++    ? new Set(allowedToolNames)
++    : null;
++
++  for (const [toolName, config] of Object.entries(TOOL_REGISTRY)) {
++    if (allowlist && !allowlist.has(toolName)) {
++      continue;
++    }
++
++    const braidPath = path.join(TOOLS_DIR, config.file);
++
++    try {
++      const schema = await loadToolSchema(braidPath, config.function);
++      if (!schema || !schema.function) {
++        continue;
++      }
++
++      schema.function.name = toolName;
++      schemas.push(schema);
++    } catch (error) {
++      console.warn(
++        `[Braid] Failed to load schema for ${toolName} at ${braidPath}:`,
++        error?.message || error
++      );
++    }
++  }
++
++  return schemas;
++}
++
++// Backward-compat alias used by older routes
++export const _generateToolSchemas = generateToolSchemas;
++
+ /**
+  * Post-tool summarization layer
+  */
+diff --git a/backend/lib/care/careEscalationDetector.js b/backend/lib/care/careEscalationDetector.js
+index 4b41b09..9bff7de 100644
+--- a/backend/lib/care/careEscalationDetector.js
++++ b/backend/lib/care/careEscalationDetector.js
+@@ -34,9 +34,9 @@ import {
+   PRICING_CONTRACT_PHRASES,
+   COMPLIANCE_SENSITIVE_PHRASES,
+   HIGH_RISK_AMBIGUOUS_PHRASES,
+-  _NEGATIVE_SENTIMENT_WORDS,
++  NEGATIVE_SENTIMENT_WORDS,
+   containsAnyPhrase,
+-  _normalizeText,
++  normalizeText,
+ } from './careEscalationLexicon.js';
+ 
+ /**

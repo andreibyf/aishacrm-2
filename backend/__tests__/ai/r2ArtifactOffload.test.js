@@ -62,7 +62,6 @@ describe('R2 Artifact Offload Tests', { skip: !SHOULD_RUN }, () => {
           .insert({
             tenant_id: TENANT_ID,
             user_id: TEST_USER_ID,
-            title: 'R2 Artifact Test Conversation',
             created_date: new Date().toISOString(),
             updated_date: new Date().toISOString(),
           })
@@ -173,9 +172,9 @@ describe('R2 Artifact Offload Tests', { skip: !SHOULD_RUN }, () => {
       const retrieved = await r2Module.getObject({ key });
 
       assert.ok(retrieved, 'Should retrieve object');
-      assert.ok(Buffer.isBuffer(retrieved), 'Should return Buffer');
+      assert.ok(Buffer.isBuffer(retrieved.body), 'Should return Buffer body');
 
-      const parsed = JSON.parse(retrieved.toString('utf-8'));
+      const parsed = JSON.parse(retrieved.body.toString('utf-8'));
       assert.deepStrictEqual(parsed, testPayload, 'Retrieved data should match uploaded data');
     });
   });

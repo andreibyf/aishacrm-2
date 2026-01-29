@@ -33,6 +33,17 @@ import logger from '../lib/logger.js';
  */
 export async function routeChat({ conversationId, tenantId, userText }) {
   try {
+    // TEMP BYPASS: Disable goal routing for deployment - it's causing timeouts
+    // TODO: Debug and re-enable goal flow routing after v4.2.1
+    logger.debug('[ChatRouter] Goal routing temporarily disabled - falling through to normal chat');
+    return {
+      type: 'normal_chat',
+      handled: false,
+      message: null,
+      goal: null,
+    };
+    
+    /* COMMENTED OUT - Unreachable due to bypass above
     // Step 1: Determine routing mode
     const guardResult = await routerGuard({ conversationId, userText });
     
@@ -84,8 +95,13 @@ export async function routeChat({ conversationId, tenantId, userText }) {
         };
       }
     }
+    */
   } catch (error) {
-    logger.error('[ChatRouter] Error routing message:', error.message);
+    logger.error('[ChatRouter] Error routing message:', {
+      error: error.message,
+      stack: error.stack,
+      type: error.constructor.name
+    });
     
     // On error, fall through to normal chat
     return {

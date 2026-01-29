@@ -2,22 +2,35 @@
 # Run backend tests file-by-file with per-file timeout
 # This prevents hanging tests from blocking the entire suite
 
-TIMEOUT_SECONDS=60
+TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-60}
 RESULTS_DIR="./test-results"
 FAILED_FILE="$RESULTS_DIR/failed-tests.txt"
 SKIPPED_FILE="$RESULTS_DIR/skipped-tests.txt"
 PASSED_FILE="$RESULTS_DIR/passed-tests.txt"
 FAILURE_DETAILS="$RESULTS_DIR/failure-details.txt"
 
-# Set backend URL for Docker (external port is 4001)
-export BACKEND_URL="${BACKEND_URL:-http://localhost:4001}"
+# Set backend URL (inside container use 3001, outside use 4001)
+if [ -z "$BACKEND_URL" ]; then
+    if [ -f "/.dockerenv" ]; then
+        export BACKEND_URL="http://localhost:3001"
+    else
+        export BACKEND_URL="http://localhost:4001"
+    fi
+fi
 
 # Signal to backend that we're in test mode (relaxed rate limits)
 export NODE_ENV=test
 export E2E_TEST_MODE=true
+export TEST_TIMEOUT_MS="${TEST_TIMEOUT_MS:-30000}"
 
 # Create results directory
 mkdir -p "$RESULTS_DIR"
+
+# Ensure dev dependencies are available for tests (supertest/vitest)
+if ! node -e "require('supertest'); require('vitest')" >/dev/null 2>&1; then
+    echo "Installing dev dependencies for tests..."
+    npm install --include=dev --no-audit --fund=false
+fi
 
 # Clear previous results
 > "$FAILED_FILE"

@@ -1,0 +1,264 @@
+=== __tests__/ai/braidScenarios.test.js ===
+
+ RUN  v4.0.13 C:/Users/andre/Documents/GitHub/ai-sha-crm-copy-c872be53
+
+ueries)
+# ✓ Supabase DB client initialized
+# [Braid Scenarios] Supabase client initialized
+# [Braid Scenarios] Found tenant: 6cb4c008-4847-426a-9a2e-918ad70e7b69
+# [Braid Scenarios] Using TOOL_ACCESS_TOKEN for test execution
+# Subtest: Braid SDK Scenario Tests
+    # Subtest: Retrieval Scenarios
+        # Subtest: search_accounts retrieves accounts for tenant
+        not ok 1 - search_accounts retrieves accounts for tenant
+          ---
+          duration_ms: 1.3245
+          type: 'test'
+          location: 'C:\\Users\\andre\\Documents\\GitHub\\ai-sha-crm-copy-c872be53\\backend\\__tests__\\ai\\braidScenarios.test.js:88:5'
+          failureType: 'testCodeFailure'
+          error: 'secretOrPrivateKey must have a value'
+          code: 'ERR_TEST_FAILURE'
+          stack: |-
+            module.exports [as sign] (C:\Users\andre\Documents\GitHub\ai-sha-crm-copy-c872be53\backend\node_modules\jsonwebtoken\sign.js:111:20)
+            Module.executeBraidTool (file:///C:/Users/andre/Documents/GitHub/ai-sha-crm-copy-c872be53/backend/lib/braidIntegration-v2.js:1150:29)
+            process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+            async TestContext.<anonymous> (file:///C:/Users/andre/Documents/GitHub/ai-sha-crm-copy-c872be53/backend/__tests__/ai/braidScenarios.test.js:94:22)
+            async Test.run (node:internal/test_runner/test:1054:7)
+            async Promise.all (index 0)
+            async Suite.run (node:internal/test_runner/test:1442:7)
+            async Promise.all (index 0)
+            async Suite.run (node:internal/test_runner/test:1442:7)
+            async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+          ...
+        # Subtest: search_contacts retrieves contacts for tenant
+        not ok 2 - search_contacts retrieves contacts for tenant
+          ---
+          duration_ms: 0.1883
+          type: 'test'
+          location: 'C:\\Users\\andre\\Documents\\GitHub\\ai-sha-crm-copy-c872be53\\backend\\__tests__\\ai\\braidScenarios.test.js:117:5'
+          failureType: 'testCodeFailure'
+          error: 'secretOrPrivateKey must have a value'
+          code: 'ERR_TEST_FAILURE'
+          stack: |-
+            module.exports [as sign] (C:\Users\andre\Documents\GitHub\ai-sha-crm-copy-c872be53\backend\node_modules\jsonwebtoken\sign.js:111:20)
+            Module.executeBraidTool (file:///C:/Users/andre/Documents/GitHub/ai-sha-crm-copy-c872be53/backend/lib/braidIntegration-v2.js:1150:29)
+            process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+            async TestContext.<anonymous> (file:///C:/Users/andre/Documents/GitHub/ai-sha-crm-copy-c872be53/backend/__tests__/ai/braidScenarios.test.js:122:22)
+            async Test.run (node:internal/test_runner/test:1054:7)
+            async Suite.processPendingSubtests (node:internal/test_runner/test:744:7)
+          ...
+        # Subtest: search_leads retrieves leads for tenant
+        not ok 3 - search_leads retrieves leads for tenant
+          ---
+          duration_ms: 0.154
+          type: 'test'
+          location: 'C:\\Users\\andre\\Documents\\GitHub\\ai-sha-crm-copy-c872be53\\backend\\__tests__\\ai\\braidScenarios.test.js:138:5'
+          failureType: 'testCodeFailure'
+          error: 'secretOrPrivateKey must have a value'
+          code: 'ERR_TEST_FAILURE'
+          stack: |-
+            module.exports [as sign] (C:\Users\andre\Documents\GitHub\ai-sha-crm-copy-c872be53\backend\node_modules\jsonwebtoken\sign.js:111:20)
+            Module.executeBraidTool (file:///C:/Users/andre/Documents/GitHub/ai-sha-crm-copy-c872be53/backend/lib/braidIntegration-v2.js:1150:29)
+            process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+            async TestContext.<anonymous> (file:///C:/Users/andre/Documents/GitHub/ai-sha-crm-copy-c872be53/backend/__tests__/ai/braidScenarios.test.js:143:22)
+            async Test.run (node:internal/test_runner/test:1054:7)
+            async Suite.processPendingSubtests (node:internal/test_runner/test:744:7)
+          ...
+        # Subtest: search_opportunities retrieves opportunities for tenant
+        not ok 4 - search_opportunities retrieves opportunities for tenant
+          ---
+          duration_ms: 0.1606
+          type: 'test'
+          location: 'C:\\Users\\andre\\Documents\\GitHub\\ai-sha-crm-copy-c872be53\\backend\\__tests__\\ai\\braidScenarios.test.js:159:5'
+          failureType: 'testCodeFailure'
+          error: 'secretOrPrivateKey must have a value'
+          code: 'ERR_TEST_FAILURE'
+          stack: |-
+            module.exports [as sign] (C:\Users\andre\Documents\GitHub\ai-sha-crm-copy-c872be53\backend\node_modules\jsonwebtoken\sign.js:111:20)
+            Module.executeBraidTool (file:///C:/Users/andre/Documents/GitHub/ai-sha-crm-copy-c872be53/backend/lib/braidIntegration-v2.js:1150:29)
+            process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+            async TestContext.<anonymous> (file:///C:/Users/andre/Documents/GitHub/ai-sha-crm-copy-c872be53/backend/__tests__/ai/braidScenarios.test.js:164:22)
+            async Test.run (node:internal/test_runner/test:1054:7)
+            async Suite.processPendingSubtests (node:internal/test_runner/test:744:7)
+          ...
+        # Subtest: get_dashboard_metrics retrieves dashboard data
+        ok 5 - get_dashboard_metrics retrieves dashboard data
+          ---
+          duration_ms: 0.1956
+          type: 'test'
+          ...
+        1..5
+    not ok 1 - Retrieval Scenarios
+      ---
+      duration_ms: 2.6867
+      type: 'suite'
+      location: 'C:\\Users\\andre\\Documents\\GitHub\\ai-sha-crm-copy-c872be53\\backend\\__tests__\\ai\\braidScenarios.test.js:86:3'
+      failureType: 'subtestsFailed'
+      error: '4 subtests failed'
+      code: 'ERR_TEST_FAILURE'
+      stack: |-
+        async Promise.all (index 0)
+      ...
+    # Subtest: CRUD Scenarios
+        # Subtest: create_lead creates a new lead
+        not ok 1 - create_lead creates a new lead
+          ---
+          duration_ms: 0.4157
+          type: 'test'
+          location: 'C:\\Users\\andre\\Documents\\GitHub\\ai-sha-crm-copy-c872be53\\backend\\__tests__\\ai\\braidScenarios.test.js:208:5'
+          failureType: 'testCodeFailure'
+          error: 'secretOrPrivateKey must have a value'
+          code: 'ERR_TEST_FAILURE'
+          stack: |-
+            module.exports [as sign] (C:\Users\andre\Documents\GitHub\ai-sha-crm-copy-c872be53\backend\node_modules\jsonwebtoken\sign.js:111:20)
+            Module.executeBraidTool (file:///C:/Users/andre/Documents/GitHub/ai-sha-crm-copy-c872be53/backend/lib/braidIntegration-v2.js:1150:29)
+            process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+            async TestContext.<anonymous> (file:///C:/Users/andre/Documents/GitHub/ai-sha-crm-copy-c872be53/backend/__tests__/ai/braidScenarios.test.js:221:22)
+            async Test.run (node:internal/test_runner/test:1054:7)
+            async Promise.all (index 0)
+            async Suite.run (node:internal/test_runner/test:1442:7)
+            async Suite.processPendingSubtests (node:internal/test_runner/test:744:7)
+          ...
+# [Braid Security] Tool execution DENIED - invalid or missing access token {
+#   toolName: 'search_accounts',
+#   hasToken: false,
+#   tokenVerified: undefined,
+#   tokenSource: undefined,
+#   tenantId: '6cb4c008-4847-426a-9a2e-918ad70e7b69',
+#   userId: '00000000-0000-0000-0000-000000000001'
+# }
+# [Braid Security] Tool execution DENIED - invalid or missing access token {
+#   toolName: 'search_accounts',
+#   hasToken: true,
+#   tokenVerified: false,
+#   tokenSource: 'fake',
+#   tenantId: '6cb4c008-4847-426a-9a2e-918ad70e7b69',
+#   userId: '00000000-0000-0000-0000-000000000001'
+# }
+        # Subtest: get_lead_details retrieves a specific lead
+        not ok 2 - get_lead_details retrieves a specific lead
+          ---
+          duration_ms: 63.0077
+          type: 'test'
+          location: 'C:\\Users\\andre\\Documents\\GitHub\\ai-sha-crm-copy-c872be53\\backend\\__tests__\\ai\\braidScenarios.test.js:240:5'
+          failureType: 'testCodeFailure'
+          error: 'secretOrPrivateKey must have a value'
+          code: 'ERR_TEST_FAILURE'
+          stack: |-
+            module.exports [as sign] (C:\Users\andre\Documents\GitHub\ai-sha-crm-copy-c872be53\backend\node_modules\jsonwebtoken\sign.js:111:20)
+            Module.executeBraidTool (file:///C:/Users/andre/Documents/GitHub/ai-sha-crm-copy-c872be53/backend/lib/braidIntegration-v2.js:1150:29)
+            process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+            async TestContext.<anonymous> (file:///C:/Users/andre/Documents/GitHub/ai-sha-crm-copy-c872be53/backend/__tests__/ai/braidScenarios.test.js:263:22)
+            async Test.run (node:internal/test_runner/test:1054:7)
+            async Suite.processPendingSubtests (node:internal/test_runner/test:744:7)
+          ...
+        # Subtest: update_lead modifies an existing lead
+        ok 3 - update_lead modifies an existing lead
+          ---
+          duration_ms: 0.6195
+          type: 'test'
+          ...
+        1..3
+    not ok 2 - CRUD Scenarios
+      ---
+      duration_ms: 64.6337
+      type: 'suite'
+      location: 'C:\\Users\\andre\\Documents\\GitHub\\ai-sha-crm-copy-c872be53\\backend\\__tests__\\ai\\braidScenarios.test.js:205:3'
+      failureType: 'subtestsFailed'
+      error: '2 subtests failed'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: Security Scenarios
+        # Subtest: executeBraidTool rejects calls without access token
+        ok 1 - executeBraidTool rejects calls without access token
+          ---
+          duration_ms: 1.0101
+          type: 'test'
+          ...
+        # Subtest: executeBraidTool rejects invalid access token
+        ok 2 - executeBraidTool rejects invalid access token
+          ---
+          duration_ms: 0.4392
+          type: 'test'
+          ...
+        # Subtest: executeBraidTool rejects unknown tool names
+        ok 3 - executeBraidTool rejects unknown tool names
+          ---
+          duration_ms: 0.2589
+          type: 'test'
+          ...
+        1..3
+    ok 3 - Security Scenarios
+      ---
+      duration_ms: 1.9925
+      type: 'suite'
+      ...
+    # Subtest: Tool Registry Validation
+        # Subtest: TOOL_REGISTRY contains expected CRM tools
+        ok 1 - TOOL_REGISTRY contains expected CRM tools
+          ---
+          duration_ms: 0.8218
+          type: 'test'
+          ...
+        # Subtest: Each registered tool has required metadata
+        ok 2 - Each registered tool has required metadata
+          ---
+          duration_ms: 0.312
+          type: 'test'
+          ...
+        1..2
+    ok 4 - Tool Registry Validation
+      ---
+      duration_ms: 1.3266
+      type: 'suite'
+      ...
+    # Subtest: Audit Logging
+        # Subtest: Tool execution creates audit log entries
+        not ok 1 - Tool execution creates audit log entries
+          ---
+          duration_ms: 1.9719
+          type: 'test'
+          location: 'C:\\Users\\andre\\Documents\\GitHub\\ai-sha-crm-copy-c872be53\\backend\\__tests__\\ai\\braidScenarios.test.js:450:5'
+          failureType: 'testCodeFailure'
+          error: 'secretOrPrivateKey must have a value'
+          code: 'ERR_TEST_FAILURE'
+          stack: |-
+            module.exports [as sign] (C:\Users\andre\Documents\GitHub\ai-sha-crm-copy-c872be53\backend\node_modules\jsonwebtoken\sign.js:111:20)
+            Module.executeBraidTool (file:///C:/Users/andre/Documents/GitHub/ai-sha-crm-copy-c872be53/backend/lib/braidIntegration-v2.js:1150:29)
+            process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+            async TestContext.<anonymous> (file:///C:/Users/andre/Documents/GitHub/ai-sha-crm-copy-c872be53/backend/__tests__/ai/braidScenarios.test.js:458:7)
+            async Test.run (node:internal/test_runner/test:1054:7)
+            async Promise.all (index 0)
+            async Suite.run (node:internal/test_runner/test:1442:7)
+            async Suite.processPendingSubtests (node:internal/test_runner/test:744:7)
+          ...
+        1..1
+    not ok 5 - Audit Logging
+      ---
+      duration_ms: 2.0963
+      type: 'suite'
+      location: 'C:\\Users\\andre\\Documents\\GitHub\\ai-sha-crm-copy-c872be53\\backend\\__tests__\\ai\\braidScenarios.test.js:448:3'
+      failureType: 'subtestsFailed'
+      error: '1 subtest failed'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    1..5
+not ok 1 - Braid SDK Scenario Tests
+  ---
+  duration_ms: 730.3227
+  type: 'suite'
+  location: 'C:\\Users\\andre\\Documents\\GitHub\\ai-sha-crm-copy-c872be53\\backend\\__tests__\\ai\\braidScenarios.test.js:19:1'
+  failureType: 'subtestsFailed'
+  error: '3 subtests failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+1..1
+# tests 14
+# suites 6
+# pass 7
+# fail 7
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1123.4072
+

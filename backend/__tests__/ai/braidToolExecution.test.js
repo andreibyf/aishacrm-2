@@ -323,7 +323,7 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
       const graph = braidModule.TOOL_GRAPH;
       assert.ok(graph.search_accounts, 'Should have search_accounts tool');
       assert.ok(graph.create_lead, 'Should have create_lead tool');
-      assert.ok(graph.get_opportunity, 'Should have get_opportunity tool');
+      assert.ok(graph.get_opportunity_details, 'Should have get_opportunity_details tool');
       
       // Verify tool structure
       const tool = graph.search_accounts;

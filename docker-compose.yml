@@ -107,9 +107,7 @@ services:
       - MCP_NODE_ID=aishacrm-backend
       - DEFAULT_TENANT_ID=a11dfb63-4b18-4eb8-872e-747af2e37c46
       - CRM_BACKEND_URL=http://backend:3001
-      - LLM_PROVIDER=anthropic
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # LLM_PROVIDER and API keys loaded from Doppler in entrypoint
       # GitHub Issues integration
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - GH_TOKEN=${GH_TOKEN:-}

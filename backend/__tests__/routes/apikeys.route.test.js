@@ -39,8 +39,8 @@ describe('API Keys Routes', { skip: !SHOULD_RUN }, () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         tenant_id: TENANT_ID,
-        name: 'Test API Key',
-        permissions: ['read']
+        key_name: 'Test API Key',
+        key_value: 'test-key-value'
       })
     });
     // May require auth, should validate and create or return error
@@ -60,12 +60,12 @@ describe('API Keys Routes', { skip: !SHOULD_RUN }, () => {
 
   test('PUT /api/apikeys/:id updates API key', async () => {
     const fakeId = '00000000-0000-0000-0000-000000000000';
-    const res = await fetch(`${BASE_URL}/api/apikeys/${fakeId}`, {
+    const res = await fetch(`${BASE_URL}/api/apikeys/${fakeId}?tenant_id=${TENANT_ID}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         tenant_id: TENANT_ID,
-        name: 'Updated Key Name'
+        key_name: 'Updated Key Name'
       })
     });
     assert.ok([200, 401, 404].includes(res.status), `expected update response, got ${res.status}`);
@@ -79,37 +79,5 @@ describe('API Keys Routes', { skip: !SHOULD_RUN }, () => {
     assert.ok([200, 401, 404].includes(res.status), `expected delete response, got ${res.status}`);
   });
 
-  test('POST /api/apikeys/:id/rotate rotates API key', async () => {
-    const fakeId = '00000000-0000-0000-0000-000000000000';
-    const res = await fetch(`${BASE_URL}/api/apikeys/${fakeId}/rotate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tenant_id: TENANT_ID })
-    });
-    assert.ok([200, 201, 401, 404].includes(res.status), `expected rotation response, got ${res.status}`);
-  });
-
-  test('GET /api/apikeys/:id/usage returns usage stats', async () => {
-    const fakeId = '00000000-0000-0000-0000-000000000000';
-    const res = await fetch(`${BASE_URL}/api/apikeys/${fakeId}/usage?tenant_id=${TENANT_ID}`);
-    assert.ok([200, 401, 404].includes(res.status), `expected 200/401/404, got ${res.status}`);
-    
-    if (res.status === 200) {
-      const json = await res.json();
-      assert.ok(json, 'expected usage data');
-    }
-  });
-
-  test('POST /api/apikeys/validate validates API key', async () => {
-    const res = await fetch(`${BASE_URL}/api/apikeys/validate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        tenant_id: TENANT_ID,
-        key: 'fake-api-key'
-      })
-    });
-    // Should validate key format and existence
-    assert.ok([200, 400, 401, 403].includes(res.status), `expected validation response, got ${res.status}`);
-  });
+  // Note: rotate/usage/validate endpoints are not available in this version
 });

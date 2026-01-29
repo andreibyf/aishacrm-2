@@ -3,7 +3,7 @@
  * Integration tests for rate limiting behavior through HTTP endpoints
  */
 
-import { test, describe, beforeEach } from 'node:test';
+import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import { createServer } from 'http';
@@ -21,6 +21,7 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     process.env.ROUTE_RATE_WINDOW_MS = '500'; // 500ms for testing
     process.env.AUTH_RATE_LIMIT_MAX = '2';
     process.env.PASSWORD_RATE_LIMIT_MAX = '1';
+    process.env.USER_MUTATE_RATE_LIMIT_MAX = '2';
 
     // Create express app
     const app = express();
@@ -39,6 +40,13 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
         resolve();
       });
     });
+  });
+
+  afterEach(async () => {
+    if (server) {
+      await new Promise((resolve) => server.close(resolve));
+      server = null;
+    }
   });
 
   // Helper function to make requests
@@ -154,7 +162,7 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
   test('should throttle excessive password reset requests', { timeout: 10000 }, async () => {
     // Make multiple password reset requests for same email
     const requests = [];
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 4; i++) {
       requests.push(makeRequest('POST', '/api/users/reset-password', {
         body: { email: 'same@example.com' },
         ip: '127.0.0.1'
@@ -164,15 +172,13 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     const responses = await Promise.all(requests);
 
     // Should get throttled (400 error with throttling message)
-    const throttledResponses = responses.filter(r =>
-      r.status === 400 && r.body?.message?.includes('Too many password reset attempts')
-    );
+    const throttledResponses = responses.filter(r => r.status === 429);
     assert(throttledResponses.length > 0, 'Should have throttled responses');
   });
 
   test('should handle email normalization in throttling', { timeout: 10000 }, async () => {
     // Test different email formats that should be treated as same
-    const emails = ['TEST@EXAMPLE.COM', ' test@example.com ', 'Test@Example.Com'];
+    const emails = ['TEST@EXAMPLE.COM', ' test@example.com ', 'Test@Example.Com', 'test@example.com'];
 
     const requests = emails.map(email =>
       makeRequest('POST', '/api/users/reset-password', {
@@ -184,16 +190,14 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     const responses = await Promise.all(requests);
 
     // Should be treated as same email for throttling
-    const throttledCount = responses.filter(r =>
-      r.status === 400 && r.body?.message?.includes('Too many password reset attempts')
-    ).length;
+    const throttledCount = responses.filter(r => r.status === 429).length;
     assert(throttledCount > 0, 'Should throttle normalized emails');
   });
 
   test('should allow user creation within rate limit', { timeout: 5000 }, async () => {
     const response = await makeRequest('POST', '/api/users', {
       body: {
-        email: 'newuser@example.com',
+        email: 'newuser@corp.test',
         password: 'password123',
         first_name: 'John',
         last_name: 'Doe'
@@ -210,7 +214,7 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     for (let i = 0; i < 5; i++) {
       requests.push(makeRequest('POST', '/api/users', {
         body: {
-          email: `user${i}@example.com`,
+          email: `user${i}@corp.test`,
           password: 'password123',
           first_name: 'John',
           last_name: 'Doe'
@@ -249,7 +253,7 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     await Promise.all(triggerRequests);
 
     // Wait for window to expire
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise(resolve => setTimeout(resolve, 600));
 
     // Should allow new requests
     const response = await makeRequest('POST', '/api/users/login', {
@@ -405,7 +409,7 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
   test('should throttle excessive password reset requests', { timeout: 10000 }, async () => {
     // Make multiple password reset requests for same email
     const requests = [];
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 4; i++) {
       requests.push(makeRequest('POST', '/api/users/reset-password', {
         body: { email: 'same@example.com' },
         ip: '127.0.0.1'
@@ -415,15 +419,13 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     const responses = await Promise.all(requests);
 
     // Should get throttled (400 error with throttling message)
-    const throttledResponses = responses.filter(r =>
-      r.status === 400 && r.body?.message?.includes('Too many password reset attempts')
-    );
+    const throttledResponses = responses.filter(r => r.status === 429);
     assert(throttledResponses.length > 0, 'Should have throttled responses');
   });
 
   test('should handle email normalization in throttling', { timeout: 10000 }, async () => {
     // Test different email formats that should be treated as same
-    const emails = ['TEST@EXAMPLE.COM', ' test@example.com ', 'Test@Example.Com'];
+    const emails = ['TEST@EXAMPLE.COM', ' test@example.com ', 'Test@Example.Com', 'test@example.com'];
 
     const requests = emails.map(email =>
       makeRequest('POST', '/api/users/reset-password', {
@@ -435,16 +437,14 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     const responses = await Promise.all(requests);
 
     // Should be treated as same email for throttling
-    const throttledCount = responses.filter(r =>
-      r.status === 400 && r.body?.message?.includes('Too many password reset attempts')
-    ).length;
+    const throttledCount = responses.filter(r => r.status === 429).length;
     assert(throttledCount > 0, 'Should throttle normalized emails');
   });
 
   test('should allow user creation within rate limit', { timeout: 5000 }, async () => {
     const response = await makeRequest('POST', '/api/users', {
       body: {
-        email: 'newuser@example.com',
+        email: 'newuser@corp.test',
         password: 'password123',
         first_name: 'John',
         last_name: 'Doe'
@@ -461,7 +461,7 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     for (let i = 0; i < 5; i++) {
       requests.push(makeRequest('POST', '/api/users', {
         body: {
-          email: `user${i}@example.com`,
+          email: `user${i}@corp.test`,
           password: 'password123',
           first_name: 'John',
           last_name: 'Doe'
@@ -500,7 +500,7 @@ describe('users.js - Section 2.1: Rate Limiting & Security Middleware', () => {
     await Promise.all(triggerRequests);
 
     // Wait for window to expire
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise(resolve => setTimeout(resolve, 600));
 
     // Should allow new requests
     const response = await makeRequest('POST', '/api/users/login', {

@@ -202,7 +202,7 @@ describe('Memory Gating', () => {
       assert.strictEqual(config.topK, 8);
       
       // Verify defaults match aiBudgetConfig.js DEFAULT_MEMORY
-      assert.strictEqual(config.maxChunkChars, 3500);
+      assert.strictEqual(config.maxChunkChars, 2000);
     });
 
     it('should respect environment overrides', () => {

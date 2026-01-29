@@ -12,7 +12,7 @@
  * - Backend running on localhost:4001 (or configured API_URL)
  */
 
-const API_URL = process.env.API_URL || 'http://localhost:4001';
+const API_URL = process.env.BACKEND_URL || process.env.API_URL || 'http://localhost:3001';
 const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 
 async function runTests() {

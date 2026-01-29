@@ -60,6 +60,7 @@
   },
   "devDependencies": {
     "c8": "^9.0.0",
-    "supertest": "^7.2.2"
+    "supertest": "^7.2.2",
+    "vitest": "^1.6.0"
   }
 }
