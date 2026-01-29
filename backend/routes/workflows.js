@@ -17,6 +17,75 @@ const redisCache = new Redis(process.env.REDIS_CACHE_URL || 'redis://redis-cache
 // Re-export the service function for backwards compatibility
 export { executeWorkflowByIdService as executeWorkflowById };
 
+/**
+ * Helper: Sync CARE workflow configuration
+ * When a workflow has a CARE Start trigger, create/update care_workflow_config entry
+ */
+async function syncCareWorkflowConfig(pgPool, workflow, nodes) {
+  if (!nodes || !Array.isArray(nodes)) return;
+
+  // Find CARE trigger node
+  const careTrigger = nodes.find(node => node.type === 'care_trigger');
+  if (!careTrigger) {
+    // No CARE trigger - delete any existing config
+    await pgPool.query(
+      'DELETE FROM care_workflow_config WHERE workflow_id = $1',
+      [workflow.id]
+    );
+    return;
+  }
+
+  const careConfig = careTrigger.config || {};
+  const tenantId = careConfig.tenant_id || workflow.tenant_id;
+
+  // Upsert care_workflow_config entry
+  const upsertQuery = `
+    INSERT INTO care_workflow_config (
+      tenant_id,
+      workflow_id,
+      name,
+      description,
+      is_enabled,
+      shadow_mode,
+      state_write_enabled,
+      webhook_timeout_ms,
+      webhook_max_retries
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    ON CONFLICT (tenant_id)
+    DO UPDATE SET
+      workflow_id = EXCLUDED.workflow_id,
+      name = EXCLUDED.name,
+      description = EXCLUDED.description,
+      is_enabled = EXCLUDED.is_enabled,
+      shadow_mode = EXCLUDED.shadow_mode,
+      state_write_enabled = EXCLUDED.state_write_enabled,
+      webhook_timeout_ms = EXCLUDED.webhook_timeout_ms,
+      webhook_max_retries = EXCLUDED.webhook_max_retries,
+      updated_at = NOW()
+    RETURNING *
+  `;
+
+  const values = [
+    tenantId,
+    workflow.id,
+    workflow.name,
+    workflow.description || 'CARE workflow',
+    careConfig.is_enabled !== false, // Default true unless explicitly false
+    careConfig.shadow_mode !== false, // Default true (safe mode)
+    careConfig.state_write_enabled === true, // Default false
+    careConfig.webhook_timeout_ms || 3000,
+    careConfig.webhook_max_retries || 2
+  ];
+
+  try {
+    const result = await pgPool.query(upsertQuery, values);
+    logger.info(`[CARE Config] Synced care_workflow_config for workflow ${workflow.id}:`, result.rows[0]);
+  } catch (error) {
+    logger.error(`[CARE Config] Failed to sync care_workflow_config:`, error);
+    throw error;
+  }
+}
+
 // Helper: lift workflow fields from metadata and align shape with frontend expectations
 function normalizeWorkflow(row) {
   if (!row) return row;
@@ -1160,6 +1229,9 @@ export default function createWorkflowRoutes(pgPool) {
         workflow.webhook_url = webhookUrl;
       }
 
+      // Sync CARE workflow configuration if this workflow has a CARE trigger
+      await syncCareWorkflowConfig(pgPool, workflow, nodes);
+
       res.status(201).json({
         status: 'success',
         data: workflow
@@ -1311,6 +1383,9 @@ export default function createWorkflowRoutes(pgPool) {
 
       const result = await pgPool.query(query, values);
       const workflow = normalizeWorkflow(result.rows[0]);
+
+      // Sync CARE workflow configuration if this workflow has a CARE trigger
+      await syncCareWorkflowConfig(pgPool, workflow, updatedNodes);
 
       console.log('[Workflows PUT] Returning workflow nodes:', workflow.nodes?.length, 'connections:', workflow.connections?.length);
       console.log('[Workflows PUT] Returning connections:', JSON.stringify(workflow.connections));
@@ -1522,6 +1597,20 @@ export default function createWorkflowRoutes(pgPool) {
     try {
       const { id } = req.params;
       const payload = req.body?.payload ?? req.body ?? {};
+      
+      // === BLOCKLIST FOR DELETED/PROBLEMATIC WORKFLOWS ===
+      const BLOCKED_WORKFLOW_IDS = [
+        'ad38e6cf-1454-48ac-a80d-0cfc79c5aa94' // C.A.R.E. Workflow Test (old deleted ID) - keep blocked permanently
+      ];
+      
+      if (BLOCKED_WORKFLOW_IDS.includes(id)) {
+        logger.warn(`[Webhook] Blocked webhook call to deleted/old workflow ${id}`);
+        return res.status(410).json({ 
+          status: 'error', 
+          message: 'Workflow has been deleted or replaced',
+          hint: 'Remove this webhook URL from external systems (n8n, cron, etc.)'
+        });
+      }
       
       // === CARE TRIGGER TENANT VALIDATION ===
       // Fetch workflow to check if it has a care_trigger node with tenant restriction

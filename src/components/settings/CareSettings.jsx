@@ -41,15 +41,23 @@ export default function CareSettings() {
       const data = await response.json();
       
       if (data.status === 'success' || Array.isArray(data.data)) {
-        const workflows = data.data || data || [];
+        const workflows = data.data?.workflows || data.data || data || [];
+        
+        // Ensure workflows is an array
+        if (!Array.isArray(workflows)) {
+          console.warn('[CareSettings] Expected workflows array, got:', typeof workflows);
+          setCareWorkflows([]);
+          return;
+        }
         
         // Filter to workflows with care_trigger nodes
         const careWorkflowsList = workflows.filter(wf => {
-          const nodes = wf.nodes || [];
+          const nodes = Array.isArray(wf.nodes) ? wf.nodes : [];
           return nodes.some(n => n.type === 'care_trigger');
         }).map(wf => {
           // Extract care_trigger node config
-          const careTriggerNode = (wf.nodes || []).find(n => n.type === 'care_trigger');
+          const nodes = Array.isArray(wf.nodes) ? wf.nodes : [];
+          const careTriggerNode = nodes.find(n => n.type === 'care_trigger');
           return {
             ...wf,
             careTriggerConfig: careTriggerNode?.config || {},
@@ -98,6 +106,7 @@ export default function CareSettings() {
   // Get tenant name by ID
   const getTenantName = (tenantId) => {
     if (!tenantId) return null;
+    if (!Array.isArray(tenants)) return tenantId.substring(0, 8) + '...';
     const tenant = tenants.find(t => t.id === tenantId);
     return tenant?.name || tenant?.tenant_id || tenantId.substring(0, 8) + '...';
   };
