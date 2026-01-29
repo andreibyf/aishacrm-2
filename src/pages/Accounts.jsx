@@ -58,7 +58,7 @@ import {
 import StatusHelper from "../components/shared/StatusHelper";
 import { ComponentHelp } from "../components/shared/ComponentHelp";
 import { formatIndustry } from "@/utils/industryUtils";
-import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
+import { useEntityLabel } from "@/components/shared/entityLabelsHooks";
 import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
 import { useAiShaEvents } from "@/hooks/useAiShaEvents";
 

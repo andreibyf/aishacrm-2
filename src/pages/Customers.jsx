@@ -49,7 +49,7 @@ import { ComponentHelp } from "../components/shared/ComponentHelp";
 import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
 import { useLoadingToast } from "@/hooks/useLoadingToast";
 import { formatIndustry } from "@/utils/industryUtils";
-import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
+import { useEntityLabel } from "@/components/shared/entityLabelsHooks";
 
 // Helper to add delay between API calls
 const _delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

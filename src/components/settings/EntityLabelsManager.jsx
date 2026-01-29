@@ -9,7 +9,7 @@ import { Loader2, Save, RotateCcw, Tags, Building2, Users, Target, TrendingUp, C
 import { toast } from 'sonner';
 import { Tenant, BACKEND_URL } from '@/api/entities';
 import { useTenant } from '@/components/shared/tenantContext';
-import { useEntityLabels } from '@/components/shared/EntityLabelsContext';
+import { useEntityLabels } from '@/components/shared/entityLabelsHooks';
 
 // Default labels - must match backend
 const DEFAULT_LABELS = {

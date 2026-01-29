@@ -48,7 +48,7 @@ import StatusHelper from "../components/shared/StatusHelper";
 import { Link } from "react-router-dom";
 import { getCurrentTimezoneOffset, utcToLocal } from '../components/shared/timezoneUtils';
 import { useTimezone } from '../components/shared/TimezoneContext';
-import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
+import { useEntityLabel } from "@/components/shared/entityLabelsHooks";
 import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
 import { useAiShaEvents } from "@/hooks/useAiShaEvents";
 

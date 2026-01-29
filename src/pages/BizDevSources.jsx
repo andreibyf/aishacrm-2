@@ -39,7 +39,7 @@ import ArchiveIndexViewer from "../components/bizdev/ArchiveIndexViewer";
 import BulkDeleteDialog from "../components/bizdev/BulkDeleteDialog";
 import StatusHelper from "../components/shared/StatusHelper";
 import { useUser } from "../components/shared/useUser.js";
-import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
+import { useEntityLabel } from "@/components/shared/entityLabelsHooks";
 
 export default function BizDevSourcesPage() {
   const { plural: bizdevLabel, singular: bizdevSourceLabel } = useEntityLabel('bizdev_sources');

@@ -194,15 +194,3 @@ export default function AiShaActionHandler() {
   // This component doesn't render anything
   return null;
 }
-
-/**
- * Get the current page context from anywhere (non-hook)
- */
-export function getAiShaPageContext() {
-  return window.__aishaPageContext || {
-    path: window.location?.pathname || '/',
-    entityType: 'general',
-    isDetailView: false,
-    isListView: false,
-  };
-}

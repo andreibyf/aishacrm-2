@@ -11,7 +11,7 @@ import { Lead } from "@/api/entities";
 import { useApiManager } from "../shared/ApiManager";
 import { useUser } from "@/components/shared/useUser";
 import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
-import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
+import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
 import { useEmployeeScope } from "@/components/shared/EmployeeScopeContext";
 
 const AGE_BUCKETS = [

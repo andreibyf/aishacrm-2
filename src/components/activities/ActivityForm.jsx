@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Activity } from '@/api/entities';
 import { Contact, Account, Lead, Opportunity } from '@/api/entities';
 import { useUser } from '@/components/shared/useUser.js';
-import { useEntityLabel } from '@/components/shared/EntityLabelsContext';
+import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
 import { Note } from "@/api/entities"; // NEW: Import Note entity
 import { useTimezone } from '../shared/TimezoneContext';
 import { localToUtc, utcToLocal, getCurrentTimezoneOffset } from '../shared/timezoneUtils';

@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { Worker } from "@/api/entities";
 import { useTenant } from "@/components/shared/tenantContext";
 import { useUser } from "@/components/shared/useUser";
-import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
+import { useEntityLabel } from "@/components/shared/entityLabelsHooks";
 import { useLoadingToast } from "@/hooks/useLoadingToast";
 import {
   Card,

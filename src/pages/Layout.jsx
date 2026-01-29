@@ -21,7 +21,8 @@ import {
 } from "@dnd-kit/sortable";
 import { SortableNavItem } from "@/components/shared/SortableNavItem";
 import { usePrimaryNavOrder, useSecondaryNavOrder } from "@/hooks/useNavOrder";
-import { EntityLabelsProvider, useEntityLabels } from "@/components/shared/EntityLabelsContext";
+import { EntityLabelsProvider } from "@/components/shared/EntityLabelsContext";
+import { useEntityLabels } from "@/components/shared/entityLabelsHooks";
 import {
   BarChart3,
   BookOpen, // NEW: Added for Documentation

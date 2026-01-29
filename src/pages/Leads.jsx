@@ -63,7 +63,7 @@ import { Globe } from "lucide-react";
 // Switch to internal profile page; stop using mintLeadLink
 import StatusHelper from "../components/shared/StatusHelper";
 import { loadUsersSafely } from "../components/shared/userLoader";
-import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
+import { useEntityLabel } from "@/components/shared/entityLabelsHooks";
 import { useConfirmDialog } from "../components/shared/ConfirmDialog";
 import { useAiShaEvents } from "@/hooks/useAiShaEvents";
 import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
