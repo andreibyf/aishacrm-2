@@ -2014,38 +2014,58 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       }
 
       try {
-        // Clear chat-related local storage (api keys, fallback flags, cached conv ids, etc.)
+        // CRITICAL: Clear ALL tenant-specific data on logout to prevent cross-tenant data leakage
+        
+        // Clear explicit tenant keys
+        localStorage.removeItem("selected_tenant_id");
+        localStorage.removeItem("tenant_id");
+        localStorage.removeItem("effective_user_tenant_id");
+        
+        // Clear chat/AI-related keys
         localStorage.removeItem("ai_sdk_api_key");
         localStorage.removeItem("force_chat_fallback");
 
         // FIX: Prevent auto-login as mock user after explicit logout
-        // This ensures that isLocalDevMode() returns false on the next load,
-        // preventing UserContext from automatically signing in the mock user.
         localStorage.setItem('DISABLE_MOCK_USER', 'true');
 
-        // Remove any chat/agent-related keys by prefix
+        // Clear ALL localStorage keys except navigation preferences and system flags
         // PRESERVE: Navigation order preferences across logout (aisha_crm_nav_order_*)
+        // PRESERVE: DISABLE_MOCK_USER flag (set above)
         const toRemove = [];
         for (let i = 0; i < localStorage.length; i++) {
           const k = localStorage.key(i);
           if (!k) continue;
-          // Skip navigation order keys - preserve user preferences
+          
+          // PRESERVE navigation order preferences across sessions
           if (k.startsWith("aisha_crm_nav_order") || k.startsWith("aisha_crm_secondary_nav_order")) {
             continue;
           }
+          
+          // PRESERVE system flags
+          if (k === "DISABLE_MOCK_USER") {
+            continue;
+          }
+          
+          // REMOVE everything else (tenant data, dashboard cache, chat, auth tokens, etc.)
           if (
             k.startsWith("chat_") ||
             k.startsWith("agent_") ||
             k.startsWith("ai_chat_") ||
             k.startsWith("agent_conversation") ||
-            k.startsWith("conversation_")
+            k.startsWith("conversation_") ||
+            k.startsWith("dashboard:") ||
+            k.startsWith("sb-") || // Supabase auth tokens
+            k.includes("tenant") || // Any tenant-related keys
+            k.startsWith("aisha_crm_") // Other app-specific keys (except nav order)
           ) {
             toRemove.push(k);
           }
         }
         toRemove.forEach((k) => localStorage.removeItem(k));
+        
+        console.log(`[Logout] Cleared ${toRemove.length} localStorage keys for session cleanup`);
       } catch (e) {
-        console.warn("Chat data cleanup failed on logout:", e);
+        console.warn("Session data cleanup failed on logout:", e);
       }
 
       try {
