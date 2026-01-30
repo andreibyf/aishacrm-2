@@ -188,6 +188,7 @@ jobs:
             ADMIN_EMAILS=${{ steps.doppler.outputs.ADMIN_EMAILS }}
             PUPPETEER_SKIP_DOWNLOAD=1
             USE_SYSTEM_CHROMIUM=false
+            CACHE_BUST=${{ github.sha }}
 
       - name: Image summary
         run: |
