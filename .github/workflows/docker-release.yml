@@ -18,23 +18,23 @@ jobs:
         include:
           - service: frontend
             context: .
-            dockerfile: Dockerfile
+            dockerfile: ./Dockerfile
             image: ghcr.io/${{ github.repository }}-frontend
           - service: backend
             context: .
-            dockerfile: backend/Dockerfile
+            dockerfile: ./backend/Dockerfile
             image: ghcr.io/${{ github.repository }}-backend
           - service: mcp
             context: ./braid-mcp-node-server
-            dockerfile: Dockerfile
+            dockerfile: ./braid-mcp-node-server/Dockerfile
             image: ghcr.io/${{ github.repository }}-mcp
           - service: office-viz
             context: addons/agent-office/services/office-viz
-            dockerfile: Dockerfile
+            dockerfile: addons/agent-office/services/office-viz/Dockerfile
             image: ghcr.io/${{ github.repository }}-office-viz
           - service: telemetry-sidecar
             context: addons/agent-office/services/telemetry-sidecar
-            dockerfile: Dockerfile
+            dockerfile: addons/agent-office/services/telemetry-sidecar/Dockerfile
             image: ghcr.io/${{ github.repository }}-telemetry-sidecar
 
     steps:
