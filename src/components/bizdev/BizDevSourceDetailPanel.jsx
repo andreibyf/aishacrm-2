@@ -58,7 +58,7 @@ export default function BizDevSourceDetailPanel({
 
   // Determine if we're in B2C mode (person-first display)
   const isB2C = businessModel === 'b2c';
-  const isHybrid = businessModel === 'hybrid';
+  const _isHybrid = businessModel === 'hybrid';
 
   // Update currentSource when bizDevSource prop changes
   useEffect(() => {
@@ -98,7 +98,7 @@ export default function BizDevSourceDetailPanel({
           } else {
             try {
               parsedLeadIds = JSON.parse(currentSource.lead_ids);
-            } catch (_e) {
+            } catch {
               // Fallback: treat as comma‑separated string
               parsedLeadIds = String(currentSource.lead_ids)
                 .split(',')

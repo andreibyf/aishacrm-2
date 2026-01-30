@@ -1271,7 +1271,7 @@ Respond with ONLY a JSON object in this exact format:
                 context_snapshot: waitState.context_snapshot,
                 created_at: new Date().toISOString()
               }, { onConflict: 'workflow_id,execution_id,node_id' });
-            } catch (e) {
+            } catch (_e) {
               logger.debug('[Workflow] wait_for_webhook state (table may not exist):', waitState);
             }
 

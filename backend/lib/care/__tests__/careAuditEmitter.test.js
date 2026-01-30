@@ -13,10 +13,10 @@ import { CarePolicyGateResult, CareAuditEventType } from '../careAuditTypes.js';
 
 // Mock logger to capture output
 let loggedMessages = [];
-const originalLogger = await import('../../logger.js');
+const _originalLogger = await import('../../logger.js');
 
 // Override logger.info for testing
-const mockLogger = {
+const _mockLogger = {
   info: (msg) => {
     loggedMessages.push(msg);
   },

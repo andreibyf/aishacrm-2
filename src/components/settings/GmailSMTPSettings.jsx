@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { TenantIntegration } from "@/api/entities";
-import { Loader2, Save, CheckCircle, AlertTriangle, Mail, Info, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { Loader2, Save, CheckCircle, Mail, Info, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { getTenantFilter } from "../shared/tenantUtils";
@@ -217,7 +217,7 @@ export default function GmailSMTPSettings() {
             <ol className="list-decimal ml-4 mt-2 space-y-1">
               <li>Go to <a href="https://myaccount.google.com/security" target="_blank" rel="noopener noreferrer" className="underline">Google Account Security</a></li>
               <li>Enable 2-Step Verification (required)</li>
-              <li>Generate an App Password for "Mail"</li>
+              <li>Generate an App Password for &quot;Mail&quot;</li>
               <li>Use the 16-character password below (not your regular password)</li>
             </ol>
           </AlertDescription>

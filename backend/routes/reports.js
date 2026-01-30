@@ -150,11 +150,11 @@ export default function createReportRoutes(_pgPool) {
         logger.debug('[Reports] Deleted redis cache entries:', { tenant_id, deletedCount });
       } else {
         // Clear all dashboard bundle cache (global pattern)
-        let deletedCount = 0;
+        let _deletedCount = 0;
         try {
           const keys = await cacheManager.client.keys('dashboard:bundle:*');
           if (keys && keys.length > 0) {
-            deletedCount = await cacheManager.client.del(keys);
+            _deletedCount = await cacheManager.client.del(keys);
           }
         } catch (err) {
           logger.warn('[Reports] Error clearing all redis keys:', err);
@@ -1137,7 +1137,7 @@ export default function createReportRoutes(_pgPool) {
   router.post('/export-insights-pdf', async (req, res) => {
     let browser;
     try {
-      const { tenant_id, tenant_name, industry, business_model, geographic_focus, insights } = req.body;
+      const { tenant_id: _tenant_id, tenant_name, industry, business_model: _business_model, geographic_focus, insights } = req.body;
 
       if (!insights) {
         return res.status(400).json({ status: 'error', message: 'No insights data provided. Please generate insights first.' });

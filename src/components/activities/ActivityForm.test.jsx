@@ -78,7 +78,7 @@ import { Activity, Contact, Account, Lead, Opportunity, Note } from '@/api/entit
 import { localToUtc } from '../shared/timezoneUtils';
 import { toast } from 'sonner';
 import { useUser } from '@/components/shared/useUser.js';
-import { useEntityLabel } from '@/components/shared/EntityLabelsContext';
+import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
 import { useTimezone } from '../shared/TimezoneContext';
 import { getCurrentTimezoneOffset } from '../shared/timezoneUtils';
 import { useStatusCardPreferences } from '@/hooks/useStatusCardPreferences';

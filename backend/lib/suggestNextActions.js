@@ -288,7 +288,7 @@ function generateRuleBasedSuggestions(entityData, entityType) {
 /**
  * Prioritize and deduplicate suggestions
  */
-function prioritizeSuggestions(suggestions, entityData) {
+function prioritizeSuggestions(suggestions, _entityData) {
   // Deduplicate by action text (case-insensitive)
   const seen = new Map();
   const unique = [];

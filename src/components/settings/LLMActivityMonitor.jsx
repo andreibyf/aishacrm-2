@@ -80,7 +80,7 @@ export default function LLMActivityMonitor() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [refreshInterval, setRefreshInterval] = useState(3000);
+  const [refreshInterval, _setRefreshInterval] = useState(3000);
   const [filters, setFilters] = useState({
     provider: "",
     capability: "",

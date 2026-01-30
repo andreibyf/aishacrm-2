@@ -8,7 +8,7 @@ import {
 import { Users } from "lucide-react";
 import { useEmployeeScope } from "./EmployeeScopeContext";
 
-export default function EmployeeScopeFilter({ user, selectedTenantId }) {
+export default function EmployeeScopeFilter({ user, selectedTenantId: _selectedTenantId }) {
   const { 
     selectedEmployeeId, 
     setSelectedEmployeeId, 

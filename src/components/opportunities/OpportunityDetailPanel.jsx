@@ -42,7 +42,7 @@ export default function OpportunityDetailPanel({
   opportunity,
   accounts,
   contacts,
-  users,
+  users: _users,
   employees,
   leads,
   onClose,

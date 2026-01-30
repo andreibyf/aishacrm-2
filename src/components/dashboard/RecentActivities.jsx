@@ -15,7 +15,7 @@ import { useEmployeeScope } from "../shared/EmployeeScopeContext";
 import { useUser } from "@/components/shared/useUser";
 import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
 import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
-import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
+import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
 
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";

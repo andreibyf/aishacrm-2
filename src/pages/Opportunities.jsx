@@ -68,7 +68,7 @@ import StatusHelper from "../components/shared/StatusHelper";
 import { loadUsersSafely } from "../components/shared/userLoader";
 import { useConfirmDialog } from "../components/shared/ConfirmDialog";
 import { useUser } from "@/components/shared/useUser.js";
-import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
+import { useEntityLabel } from "@/components/shared/entityLabelsHooks";
 import { useAiShaEvents } from "@/hooks/useAiShaEvents";
 
 const stageColors = {

@@ -223,7 +223,7 @@ export function AiSidebarProvider({ children }) {
   }, []);
 
   // Resolve a mention to an entity from session context
-  const resolveEntityFromContext = useCallback((mention) => {
+  const _resolveEntityFromContext = useCallback((mention) => {
     if (!mention) return null;
     const normalized = mention.toLowerCase().trim();
     return sessionContextRef.current[normalized] || null;

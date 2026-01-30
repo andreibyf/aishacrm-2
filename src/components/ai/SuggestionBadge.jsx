@@ -112,7 +112,7 @@ export default function SuggestionBadge({ tenantId, onViewAll }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
-  const [canScroll, setCanScroll] = useState(false);
+  const [_canScroll, setCanScroll] = useState(false);
 
   const backendUrl = getBackendUrl();
 

@@ -423,7 +423,7 @@ describe('users.js - Section 2.4: User Creation & Registration', () => {
     it('should allow registration after creation', async () => {
       // This tests that the endpoints work together
       // First create via POST /users
-      const createResponse = await makeRequest('POST', '/api/users', {
+      const _createResponse = await makeRequest('POST', '/api/users', {
         email: 'integration@test.com',
         first_name: 'Integration',
         last_name: 'Test',

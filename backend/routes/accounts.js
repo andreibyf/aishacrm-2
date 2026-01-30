@@ -12,9 +12,6 @@ import { tenantScopedId, buildGetByIdSQL as _buildGetByIdSQL } from "../middlewa
 import { cacheList, invalidateCache } from "../lib/cacheMiddleware.js";
 import logger from '../lib/logger.js';
 import {
-  toNullableString,
-  toNumeric,
-  toInteger,
   assignStringField,
   assignNumericField,
   assignIntegerField,

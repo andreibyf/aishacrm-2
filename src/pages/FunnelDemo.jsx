@@ -1,6 +1,6 @@
 import React from 'react';
 import FunnelChart3D from '@/components/dashboard/FunnelChart3D';
-import { useEntityLabel } from '@/components/shared/EntityLabelsContext';
+import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
 
 export default function FunnelDemo() {
   // Get customized entity labels

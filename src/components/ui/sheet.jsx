@@ -6,7 +6,7 @@ import { X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
-const Sheet = React.forwardRef(({ modal = true, ...props }, ref) => (
+const Sheet = React.forwardRef(({ modal = true, ...props }, _ref) => (
   <SheetPrimitive.Root modal={modal} {...props} />
 ));
 Sheet.displayName = "Sheet"

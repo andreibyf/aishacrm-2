@@ -7,7 +7,7 @@ import express from "express";
 import fetch from "node-fetch";
 import { getSupabaseClient } from "../lib/supabase-db.js";
 // Import auth middleware to require an authenticated user for admin routes.
-import { requireAuthCookie } from "../middleware/authCookie.js";
+import { _requireAuthCookie } from "../middleware/authCookie.js";
 import { authenticateRequest } from "../middleware/authenticate.js";
 import { requireSuperAdminRole } from "../middleware/validateTenant.js";
 import { resolveLLMApiKey, generateChatCompletion, selectLLMConfigForTenant } from "../lib/aiEngine/index.js";
@@ -17,7 +17,7 @@ import logger from '../lib/logger.js';
 
 // Admin helper: restrict access to users with emails defined in ADMIN_EMAILS env variable.
 // Requires req.user to be set by requireAuthCookie middleware
-function requireAdmin(req, res, next) {
+function _requireAdmin(req, res, next) {
   // Check if user is authenticated (requireAuthCookie should set req.user)
   if (!req.user || !req.user.email) {
     return res.status(401).json({
@@ -228,7 +228,7 @@ export default function createMCPRoutes(_pgPool) {
   // GET /api/mcp/servers - List available MCP servers
   router.get("/servers", async (req, res) => {
     try {
-      const supa = getSupa();
+      const _supa = getSupa();
       const servers = [];
 
       // GitHub MCP server presence is inferred via env token. This is a lightweight proxy/health integration.

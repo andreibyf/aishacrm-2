@@ -65,7 +65,7 @@ import { useConfirmDialog } from "../components/shared/ConfirmDialog";
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 import { useUser } from "@/components/shared/useUser.js";
-import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
+import { useEntityLabel } from "@/components/shared/entityLabelsHooks";
 import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
 import { useAiShaEvents } from "@/hooks/useAiShaEvents";
 
@@ -396,7 +396,7 @@ export default function ContactsPage() {
         if (scopedFilter.filter) {
           try {
             filterObj = JSON.parse(scopedFilter.filter);
-          } catch (_e) { /* ignore */ }
+          } catch { /* ignore */ }
         }
 
         // Merge $or conditions

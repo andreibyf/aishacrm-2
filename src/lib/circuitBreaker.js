@@ -255,7 +255,7 @@ export function createCircuitBreakerWithFallback(primaryFn, fallbackFn, name, op
   if (fallbackFn) {
     breaker.fallback(fallbackFn);
     
-    breaker.on('fallback', (result) => {
+    breaker.on('fallback', (_result) => {
       if (import.meta.env.DEV) {
         console.log(`🔄 Using fallback for ${name}`);
       }

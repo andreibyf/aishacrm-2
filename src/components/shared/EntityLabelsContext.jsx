@@ -1,41 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { BACKEND_URL } from '@/api/entities';
-
-// Default entity labels - matches backend
-const DEFAULT_LABELS = {
-  leads: { plural: 'Leads', singular: 'Lead' },
-  contacts: { plural: 'Contacts', singular: 'Contact' },
-  accounts: { plural: 'Accounts', singular: 'Account' },
-  opportunities: { plural: 'Opportunities', singular: 'Opportunity' },
-  activities: { plural: 'Activities', singular: 'Activity' },
-  bizdev_sources: { plural: 'Sources', singular: 'Source' },
-  workers: { plural: 'Workers', singular: 'Worker' },
-};
-
-// Entity key to href mapping (for navigation)
-const ENTITY_KEY_TO_HREF = {
-  leads: 'Leads',
-  contacts: 'Contacts',
-  accounts: 'Accounts',
-  opportunities: 'Opportunities',
-  activities: 'Activities',
-  bizdev_sources: 'BizDevSources',
-  workers: 'Workers',
-};
-
-// Reverse mapping: href to entity key
-const HREF_TO_ENTITY_KEY = Object.fromEntries(
-  Object.entries(ENTITY_KEY_TO_HREF).map(([key, href]) => [href, key])
-);
-
-const EntityLabelsContext = createContext({
-  labels: DEFAULT_LABELS,
-  getLabel: () => '',
-  getLabelSingular: () => '',
-  getNavLabel: () => '',
-  loading: false,
-  refresh: () => {},
-});
+import { DEFAULT_LABELS, HREF_TO_ENTITY_KEY } from './entityLabelsUtils';
+import { EntityLabelsContext } from './entityLabelsContextDefinition';
 
 export function EntityLabelsProvider({ children, tenantId }) {
   console.log('[EntityLabelsContext] Provider rendered with tenantId:', tenantId);
@@ -153,28 +119,4 @@ export function EntityLabelsProvider({ children, tenantId }) {
   );
 }
 
-/**
- * Hook to access entity labels
- */
-export function useEntityLabels() {
-  const context = useContext(EntityLabelsContext);
-  if (!context) {
-    throw new Error('useEntityLabels must be used within EntityLabelsProvider');
-  }
-  return context;
-}
 
-/**
- * Hook to get a specific entity's label (convenience)
- * @param {string} entityKey - e.g., 'leads'
- * @returns {{ plural: string, singular: string }}
- */
-export function useEntityLabel(entityKey) {
-  const { getLabel, getLabelSingular } = useEntityLabels();
-  return {
-    plural: getLabel(entityKey),
-    singular: getLabelSingular(entityKey),
-  };
-}
-
-export { DEFAULT_LABELS, ENTITY_KEY_TO_HREF, HREF_TO_ENTITY_KEY };

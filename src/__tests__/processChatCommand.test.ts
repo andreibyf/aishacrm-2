@@ -50,13 +50,13 @@ beforeEach(() => {
 
 describe("processChatCommand - Scheduling Flow", () => {
   it("creates a pending schedule action and asks for confirmation", async () => {
-    (extractDateTimeAndLead as any).mockReturnValue({
+    vi.mocked(extractDateTimeAndLead).mockReturnValue({
       leadName: "Jennifer Martinez",
       datetime: parsedDate,
     });
 
-    (db.leads.findFirst as any).mockResolvedValue(lead);
-    (checkCalendarConflict as any).mockResolvedValue(false);
+    vi.mocked(db.leads.findFirst).mockResolvedValue(lead);
+    vi.mocked(checkCalendarConflict).mockResolvedValue(false);
 
     const result = await processChatCommand({
       userText: baseScheduleInput,
@@ -70,13 +70,13 @@ describe("processChatCommand - Scheduling Flow", () => {
   });
 
   it("executes schedule when user confirms with yes", async () => {
-    (extractDateTimeAndLead as any).mockReturnValue({
+    vi.mocked(extractDateTimeAndLead).mockReturnValue({
       leadName: "Jennifer Martinez",
       datetime: parsedDate,
     });
 
-    (db.leads.findFirst as any).mockResolvedValue(lead);
-    (checkCalendarConflict as any).mockResolvedValue(false);
+    vi.mocked(db.leads.findFirst).mockResolvedValue(lead);
+    vi.mocked(checkCalendarConflict).mockResolvedValue(false);
 
     // First call - create pending action
     await processChatCommand({
@@ -104,13 +104,13 @@ describe("processChatCommand - Scheduling Flow", () => {
   });
 
   it("handles conflict and offers reschedule", async () => {
-    (extractDateTimeAndLead as any).mockReturnValue({
+    vi.mocked(extractDateTimeAndLead).mockReturnValue({
       leadName: "Jennifer Martinez",
       datetime: parsedDate,
     });
 
-    (db.leads.findFirst as any).mockResolvedValue(lead);
-    (checkCalendarConflict as any).mockResolvedValue(true);
+    vi.mocked(db.leads.findFirst).mockResolvedValue(lead);
+    vi.mocked(checkCalendarConflict).mockResolvedValue(true);
 
     const result = await processChatCommand({
       userText: baseScheduleInput,
@@ -126,14 +126,14 @@ describe("processChatCommand - Scheduling Flow", () => {
   it("handles reschedule request", async () => {
     const newSlot = "2025-03-10T15:30:00.000Z";
 
-    (extractDateTimeAndLead as any).mockReturnValue({
+    vi.mocked(extractDateTimeAndLead).mockReturnValue({
       leadName: "Jennifer Martinez",
       datetime: parsedDate,
     });
 
-    (db.leads.findFirst as any).mockResolvedValue(lead);
-    (checkCalendarConflict as any).mockResolvedValue(true);
-    (findNextAvailableSlot as any).mockResolvedValue(newSlot);
+    vi.mocked(db.leads.findFirst).mockResolvedValue(lead);
+    vi.mocked(checkCalendarConflict).mockResolvedValue(true);
+    vi.mocked(findNextAvailableSlot).mockResolvedValue(newSlot);
 
     // Create conflict state
     await processChatCommand({
@@ -155,13 +155,13 @@ describe("processChatCommand - Scheduling Flow", () => {
   });
 
   it("handles cancel request", async () => {
-    (extractDateTimeAndLead as any).mockReturnValue({
+    vi.mocked(extractDateTimeAndLead).mockReturnValue({
       leadName: "Jennifer Martinez",
       datetime: parsedDate,
     });
 
-    (db.leads.findFirst as any).mockResolvedValue(lead);
-    (checkCalendarConflict as any).mockResolvedValue(false);
+    vi.mocked(db.leads.findFirst).mockResolvedValue(lead);
+    vi.mocked(checkCalendarConflict).mockResolvedValue(false);
 
     // Create pending action
     await processChatCommand({
@@ -183,12 +183,12 @@ describe("processChatCommand - Scheduling Flow", () => {
   });
 
   it("returns error when lead not found", async () => {
-    (extractDateTimeAndLead as any).mockReturnValue({
+    vi.mocked(extractDateTimeAndLead).mockReturnValue({
       leadName: "Unknown Person",
       datetime: parsedDate,
     });
 
-    (db.leads.findFirst as any).mockResolvedValue(null);
+    vi.mocked(db.leads.findFirst).mockResolvedValue(null);
 
     const result = await processChatCommand({
       userText: "Schedule a call with Unknown Person tomorrow",

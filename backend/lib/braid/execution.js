@@ -3,7 +3,7 @@
  * Core tool execution engine with caching, security, and monitoring
  */
 
-import { executeBraid } from '@braidbend/braid';
+import { executeBraid } from '../../braid-llm-kit/tools/braid-adapter.js';
 import jwt from 'jsonwebtoken';
 import { CRM_POLICIES } from './policies.js';
 import { TOOL_REGISTRY } from './registry.js';

@@ -29,7 +29,7 @@ const STORAGE_KEY = 'aisha_suggestion_history';
 const MAX_SUGGESTIONS = 6;
 const HISTORY_WEIGHT = 0.85;
 const CONTEXT_WEIGHT = 0.7;
-const PLAYBOOK_WEIGHT = 0.55;
+const _PLAYBOOK_WEIGHT = 0.55;
 
 const PLAYBOOK_SUGGESTIONS: Record<string, Array<{ label: string; command: string }>> = {
   leads: [

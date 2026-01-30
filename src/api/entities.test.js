@@ -68,7 +68,7 @@ describe('entities.js', () => {
     
     try {
       await Activity.filter(searchFilter);
-    } catch (err) {
+    } catch {
       // Expected to fail due to mocking, but we can still check the URL
     }
     
@@ -114,7 +114,7 @@ describe('entities.js', () => {
     
     try {
       await Activity.filter(simpleFilter);
-    } catch (err) {
+    } catch {
       // Expected to fail due to mocking
     }
     
@@ -146,7 +146,7 @@ describe('entities.js', () => {
     
     try {
       await Activity.filter(mixedFilter);
-    } catch (err) {
+    } catch {
       // Expected to fail due to mocking
     }
     
@@ -174,7 +174,7 @@ describe('entities.js', () => {
     
     try {
       await Account.get(testId);
-    } catch (err) {
+    } catch {
       // Expected to fail due to mocking
     }
     

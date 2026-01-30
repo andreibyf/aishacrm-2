@@ -19,7 +19,7 @@ describe('Health Monitoring System', () => {
 
   test('should create health alerts table and views', async () => {
     // Check if table exists
-    const { data: tables, error: tableError } = await supa
+    const { error: tableError } = await supa
       .from('devai_health_alerts')
       .select('id')
       .limit(1);
@@ -141,7 +141,7 @@ describe('Health Monitoring System', () => {
     let errorThrown = false;
     try {
       await triggerHealthCheck();
-    } catch (err) {
+    } catch (_err) {
       errorThrown = true;
     }
     assert.equal(errorThrown, false, 'Manual health check trigger should not throw');
@@ -171,7 +171,7 @@ describe('Log Pattern Analysis', () => {
     const { readLogs } = await import('../../lib/developerAI.js');
     
     // Mock log content with recurring errors
-    const mockLogs = `
+    const _mockLogs = `
 [2026-01-07 10:00:00] Error: Database connection failed
 [2026-01-07 10:00:05] Error: Database connection failed
 [2026-01-07 10:00:10] Error: Database connection failed

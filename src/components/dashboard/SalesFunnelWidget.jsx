@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import FunnelChart3D from './FunnelChart3D';
-import { useEntityLabel } from '@/components/shared/EntityLabelsContext';
+import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
 import { useUser } from '@/components/shared/useUser';
 import { useAuthCookiesReady } from '@/components/shared/useAuthCookiesReady';
 import { Loader2 } from 'lucide-react';

@@ -97,7 +97,6 @@ const TestDataManager = lazy(() => import("../components/settings/TestDataManage
 // Monitoring & Health - lazy loaded
 const InternalPerformanceDashboard = lazy(() => import("../components/settings/InternalPerformanceDashboard"));
 const SyncHealthMonitor = lazy(() => import("../components/settings/SyncHealthMonitor"));
-const MCPServerMonitor = lazy(() => import("../components/settings/MCPServerMonitor"));
 const SecurityMonitor = lazy(() => import("../components/settings/SecurityMonitor"));
 const PerformanceMonitor = lazy(() => import('../components/settings/PerformanceMonitor'));
 const SystemHealthDashboard = lazy(() => import("../components/settings/SystemHealthDashboard"));

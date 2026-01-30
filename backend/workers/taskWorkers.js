@@ -690,7 +690,7 @@ Provide a clear summary of what you did.`;
           `UPDATE tasks SET status = 'COMPLETED', result = $1, updated_at = NOW() WHERE id = $2`,
           [finalResponse, task_id]
         );
-      } catch (updateErr) {
+      } catch (_updateErr) {
         // Task might not exist in DB (e.g., from agent-office run) - this is fine
         logger.debug(`[ExecuteTask] No DB task to update (task came from agent-office run)`);
       }

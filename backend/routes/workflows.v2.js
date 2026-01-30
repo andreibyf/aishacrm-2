@@ -11,7 +11,7 @@
 
 import express from 'express';
 import { getSupabaseClient } from '../lib/supabase-db.js';
-import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
+import { cacheList, cacheDetail, _invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 
 const ENABLE_AI_ENRICHMENT = process.env.AI_ENRICHMENT_ENABLED !== 'false';

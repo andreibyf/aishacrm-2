@@ -21,7 +21,8 @@ import {
 } from "@dnd-kit/sortable";
 import { SortableNavItem } from "@/components/shared/SortableNavItem";
 import { usePrimaryNavOrder, useSecondaryNavOrder } from "@/hooks/useNavOrder";
-import { EntityLabelsProvider, useEntityLabels } from "@/components/shared/EntityLabelsContext";
+import { EntityLabelsProvider } from "@/components/shared/EntityLabelsContext";
+import { useEntityLabels } from "@/components/shared/entityLabelsHooks";
 import {
   BarChart3,
   BookOpen, // NEW: Added for Documentation
@@ -92,7 +93,6 @@ import GlobalDetailViewer from "../components/shared/GlobalDetailViewer";
 import { getTenantBrandingFast } from "@/api/entities";
 import { getDashboardBundleFast } from "@/api/dashboard";
 import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
-import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 import EmployeeScopeFilter from "../components/shared/EmployeeScopeFilter";
 import { EmployeeScopeProvider } from "../components/shared/EmployeeScopeContext";
 import FooterBrand from "../components/shared/FooterBrand";

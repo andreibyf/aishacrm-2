@@ -39,7 +39,7 @@ const localIntentSet = new Set<IntentClassification['intent']>([]); // Disabled 
 const brainIntentSet = new Set<IntentClassification['intent']>([]); // Was: ['summaries', 'forecast']
 
 // Default brain caller - currently disabled but kept for future internal tooling
-const defaultBrainCaller = async (payload: BrainRequestPayload) => {
+const defaultBrainCaller = async (_payload: BrainRequestPayload) => {
   // brain-test endpoint requires X-Internal-AI-Key header (server-side only)
   // For user-facing requests, use callChatApi instead which routes to /api/ai/chat
   console.warn('[commandRouter] brain-test endpoint requires internal API key - use chat endpoint instead');

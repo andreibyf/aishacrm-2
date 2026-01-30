@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { FRONTEND_URL, initE2EUi, navigate } from './helpers';
+import { FRONTEND_URL as _FRONTEND_URL, initE2EUi, navigate } from './helpers';
 
 const REALTIME_TOKEN_PATH = '**/api/ai/realtime-token';
 const REALTIME_CALL_URL = 'https://api.openai.com/v1/realtime/calls';

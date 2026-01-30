@@ -18,7 +18,7 @@ export class DenormalizationHelper {
   /**
    * Enrich contact data with denormalized fields
    */
-  static async enrichContact(contactData, tenantId) {
+  static async enrichContact(contactData, _tenantId) {
     const enriched = { ...contactData };
     
     // Enrich account information
@@ -68,7 +68,7 @@ export class DenormalizationHelper {
   /**
    * Enrich lead data with denormalized fields
    */
-  static async enrichLead(leadData, tenantId) {
+  static async enrichLead(leadData, _tenantId) {
     const enriched = { ...leadData };
     
     // Enrich account information
@@ -130,7 +130,7 @@ export class DenormalizationHelper {
   /**
    * Enrich opportunity data with denormalized fields
    */
-  static async enrichOpportunity(oppData, tenantId) {
+  static async enrichOpportunity(oppData, _tenantId) {
     const enriched = { ...oppData };
     
     // Enrich account information
@@ -187,7 +187,7 @@ export class DenormalizationHelper {
   /**
    * Enrich activity data with denormalized fields
    */
-  static async enrichActivity(activityData, tenantId) {
+  static async enrichActivity(activityData, _tenantId) {
     const enriched = { ...activityData };
     
     // Enrich assigned employee information

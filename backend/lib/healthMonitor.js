@@ -9,7 +9,6 @@
 
 import { getSupabaseClient } from './supabase-db.js';
 import fs from 'fs/promises';
-import path from 'path';
 
 // Health check interval (15 minutes in production, 5 minutes in dev)
 const CHECK_INTERVAL_MS = process.env.HEALTH_CHECK_INTERVAL_MS || (process.env.NODE_ENV === 'production' ? 15 * 60 * 1000 : 5 * 60 * 1000);
@@ -499,7 +498,7 @@ async function createHealthAlert(issue) {
       return;
     }
 
-    const { data, error } = await supa
+    const { data: _data, error } = await supa
       .from('devai_health_alerts')
       .insert({
         severity: issue.severity,
@@ -530,7 +529,7 @@ async function createHealthAlert(issue) {
  */
 async function isRunningInDocker() {
   try {
-    const content = await fs.readFile('/.dockerenv', 'utf-8');
+    const _content = await fs.readFile('/.dockerenv', 'utf-8');
     return true;
   } catch {
     try {

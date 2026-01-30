@@ -5,7 +5,6 @@
 
 import express from 'express';
 import logger from '../lib/logger.js';
-import crypto from 'crypto';
 
 export default function createTestingRoutes(_pgPool) {
   const router = express.Router();

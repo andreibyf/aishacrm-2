@@ -8,7 +8,7 @@ import { Opportunity } from "@/api/entities";
 import { useUser } from "@/components/shared/useUser";
 import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
 import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
-import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
+import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
 import { Link } from "react-router-dom"; // Added import
 import { createPageUrl } from "@/utils"; // Added import
 import { Button } from "@/components/ui/button"; // Added import for Button component

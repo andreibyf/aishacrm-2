@@ -102,13 +102,13 @@ for (const [tableName, indexes] of Object.entries(indexesByTable).sort()) {
   
   for (const idx of indexes) {
     // Generate new index name (replace _tenant with _tenant_uuid, etc.)
-    const newIndexName = idx.name
+    const _newIndexName = idx.name
       .replace('_tenant', '_tenant_uuid')
       .replace('tenant_id_text', 'tenant_id')
       .replace('tenant_id_legacy', 'tenant_id');
     
     // Replace column references
-    const newColumns = idx.columns
+    const _newColumns = idx.columns
       .replace(/["']?tenant_id_text["']?/g, '"tenant_id"')
       .replace(/["']?tenant_id_legacy["']?/g, '"tenant_id"');
     

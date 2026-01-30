@@ -10,7 +10,7 @@ import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { getSupabaseClient } from './supabase-db.js';
-import { classifyCommand, classifyFileOperation } from './commandSafety.js';
+import { classifyCommand, _classifyFileOperation } from './commandSafety.js';
 import { redactSecretsFromObject, sanitizeCommand } from './devaiSecurity.js';
 
 const execAsync = promisify(exec);
@@ -1063,7 +1063,7 @@ const BLOCKED_COMMANDS = [
 ];
 
 // Check if command is safe to auto-approve
-function isCommandSafe(command) {
+function _isCommandSafe(command) {
   const normalized = command.trim().toLowerCase();
   
   // Check blocked commands first
@@ -1325,7 +1325,7 @@ async function testAisha(args) {
 
   try {
     // Import the AI processing functions dynamically to avoid circular dependencies
-    const { processMessage, getTenantSnapshot } = await import('./braidIntegration-v2.js');
+    const { processMessage: _processMessage, getTenantSnapshot: _getTenantSnapshot } = await import('./braidIntegration-v2.js');
     const { getSupabaseClient } = await import('./supabase-db.js');
     const supa = getSupabaseClient();
 

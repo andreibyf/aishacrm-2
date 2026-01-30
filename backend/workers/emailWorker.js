@@ -98,7 +98,7 @@ function createTransporter(config) {
 
 // SYSADMIN SMTP transporter (NEVER use for tenant workflows)
 let sysadminTransporter = null;
-function getSysadminTransporter() {
+function _getSysadminTransporter() {
   if (!process.env.SMTP_HOST) {
     logger.warn('[EmailWorker] Sysadmin SMTP_HOST is not configured');
     sysadminTransporter = null;
@@ -117,7 +117,7 @@ function getSysadminTransporter() {
   return sysadminTransporter;
 }
 
-const FROM_DEFAULT_SYSADMIN = process.env.SMTP_FROM || 'no-reply@localhost';
+const _FROM_DEFAULT_SYSADMIN = process.env.SMTP_FROM || 'no-reply@localhost';
 const POLL_INTERVAL_MS = parseInt(process.env.EMAIL_WORKER_POLL_MS || '5000');
 const BATCH_LIMIT = parseInt(process.env.EMAIL_WORKER_BATCH_LIMIT || '10');
 

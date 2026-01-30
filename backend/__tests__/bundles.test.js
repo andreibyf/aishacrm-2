@@ -6,7 +6,7 @@
  * Run: npm test backend/__tests__/bundles.test.js
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, before } from 'node:test';
 import assert from 'node:assert';
 
 // Test configuration

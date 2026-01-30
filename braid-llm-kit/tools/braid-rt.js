@@ -392,7 +392,7 @@ export async function getAuditStats(supabase, tenantId, period = 'day') {
     month: "now() - INTERVAL '30 days'"
   };
   
-  const interval = periodMap[period] || periodMap.day;
+  const _interval = periodMap[period] || periodMap.day;
   
   try {
     // Build query conditionally - if tenantId is null, fetch all tenants (superadmin view)

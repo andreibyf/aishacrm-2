@@ -73,9 +73,9 @@ const STATUS_KEYWORDS: Record<NonNullable<IntentFilters['status']>, string[]> = 
 
 const stripPunctuation = (value: string) => value.replace(/[!?.,]/g, ' ').replace(/\s+/g, ' ').trim();
 
-const collectMatches = (normalized: string, keywordMap: Record<string, string[] | undefined>) => {
+const _collectMatches = (normalized: string, keywordMap: Record<string, string[] | undefined>) => {
   const matches: string[] = [];
-  Object.entries(keywordMap).forEach(([label, keywords]) => {
+  Object.entries(keywordMap).forEach(([_label, keywords]) => {
     if (!keywords) return;
     keywords.forEach((keyword) => {
       if (normalized.includes(keyword)) {

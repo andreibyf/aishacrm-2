@@ -15,7 +15,6 @@ const LOG_LEVELS = {
 // These are kept for backward compatibility but the batcher handles buffering
 let logBuffer = [];
 let flushTimeout = null;
-const FLUSH_INTERVAL = 5000; // Flush every 5 seconds (handled by batcher)
 const MAX_BUFFER_SIZE = 50;
 
 async function flushLogs() {
