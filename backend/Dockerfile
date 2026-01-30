@@ -46,11 +46,10 @@ COPY --from=build /app ./
 ARG CACHE_BUST=default
 RUN echo "Cache bust value: ${CACHE_BUST}" > /tmp/cache-bust.txt
 
-# Copy braid-llm-kit to /app for direct access
+# Copy braid-llm-kit to /app for route imports (../../braid-llm-kit from /app/routes/)
 COPY braid-llm-kit ./braid-llm-kit
 
-# Copy braid-llm-kit to root level to support '../../../braid-llm-kit' imports from /app/routes
-# The import '../../../braid-llm-kit' from /app/routes/ resolves to /braid-llm-kit
+# Copy braid-llm-kit to root level for lib/braid imports (../../../braid-llm-kit from /app/lib/braid/)
 COPY braid-llm-kit /braid-llm-kit
 
 # Verify braid-llm-kit was copied correctly in both locations
