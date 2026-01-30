@@ -177,8 +177,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
           build-args: |
             VITE_APP_BUILD_VERSION=${{ github.ref_name }}
             VITE_CURRENT_BRANCH=${{ github.ref_name }}
