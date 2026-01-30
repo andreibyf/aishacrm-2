@@ -46,12 +46,15 @@ COPY --from=build /app ./
 ARG CACHE_BUST=default
 RUN echo "Cache bust value: ${CACHE_BUST}" > /tmp/cache-bust.txt
 
-# Copy braid-llm-kit directory from repository root
-# This step will be re-executed whenever CACHE_BUST changes
+# Copy braid-llm-kit to /app for route imports (../../braid-llm-kit from /app/routes/)
 COPY braid-llm-kit ./braid-llm-kit
 
-# Verify braid-llm-kit was copied correctly
-RUN ls -la ./braid-llm-kit/sdk/index.js || { echo "ERROR: braid-llm-kit/sdk/index.js not found!"; exit 1; }
+# Copy braid-llm-kit to root level for lib/braid imports (../../../braid-llm-kit from /app/lib/braid/)
+COPY braid-llm-kit /braid-llm-kit
+
+# Verify braid-llm-kit was copied correctly in both locations
+RUN ls -la ./braid-llm-kit/sdk/index.js || { echo "ERROR: /app/braid-llm-kit/sdk/index.js not found!"; exit 1; }
+RUN ls -la /braid-llm-kit/sdk/index.js || { echo "ERROR: /braid-llm-kit/sdk/index.js not found!"; exit 1; }
 
 # Copy entrypoint script and make it executable
 COPY backend/docker-entrypoint.sh ./entrypoint.sh

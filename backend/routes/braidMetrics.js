@@ -12,7 +12,7 @@
 import express from 'express';
 import { requireAuthCookie } from '../middleware/authCookie.js';
 import { getRealtimeMetrics } from '../lib/braidIntegration-v2.js';
-import { getToolMetrics, getMetricsTimeSeries, getErrorAnalysis, getAuditStats } from '../../../braid-llm-kit/sdk/index.js';
+import { getToolMetrics, getMetricsTimeSeries, getErrorAnalysis, getAuditStats } from '../../braid-llm-kit/sdk/index.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import logger from '../lib/logger.js';
 

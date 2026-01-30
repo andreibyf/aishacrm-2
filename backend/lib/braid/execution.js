@@ -9,8 +9,9 @@ import { CRM_POLICIES } from './policies.js';
 import { TOOL_REGISTRY } from './registry.js';
 import { TOOL_CACHE_TTL, generateBraidCacheKey } from './registry.js';
 import { trackRealtimeMetrics, logAuditEntry, extractEntityType } from './metrics.js';
-import { createBackendDeps, filterSensitiveFields, normalizeToolArgs, objectToPositionalArgs } from './utils.js';
-import { cacheManager } from '../cacheManager.js';
+import { createBackendDeps, filterSensitiveFields, normalizeToolArgs } from './utils.js';
+import { objectToPositionalArgs } from './analysis.js';
+import cacheManager from '../cacheManager.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -33,7 +34,7 @@ export const TOOL_ACCESS_TOKEN = Object.freeze({
  * @param {Object} accessToken - The access token to validate
  * @returns {boolean} - True if valid, false otherwise
  */
-function validateToolAccessToken(accessToken) {
+export function validateToolAccessToken(accessToken) {
   if (!accessToken || typeof accessToken !== 'object') {
     return false;
   }
