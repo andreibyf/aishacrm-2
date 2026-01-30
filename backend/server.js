@@ -281,7 +281,7 @@ app.use("/api/metrics", createMetricsRoutes(resilientPerfDb));
 app.use("/api/utils", createUtilsRoutes(measuredPgPool));
 app.use("/api/bizdevsources", createBizDevSourceRoutes(measuredPgPool));
 app.use("/api/clients", createClientRoutes(measuredPgPool));
-app.use("/api/workflows", createWorkflowRoutes(measuredPgPool));
+app.use("/api/workflows", authenticateRequest, createWorkflowRoutes(measuredPgPool));
 app.use("/api/workflowexecutions", createWorkflowExecutionRoutes(measuredPgPool));
 // V1 activities route RETIRED - use /api/v2/activities (tenant-isolated, secure DELETE)
 // app.use("/api/activities", createActivityRoutes(measuredPgPool));
