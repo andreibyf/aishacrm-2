@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Workflow } from "@/api/entities";
 import { useUser } from "../components/shared/useUser.js";
+import { useTenant } from "../components/shared/tenantContext";
 import WorkflowBuilder from "../components/workflows/WorkflowBuilder";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -28,18 +29,25 @@ import { toast } from "sonner";
 export default function WorkflowsPage() {
   const [workflows, setWorkflows] = useState([]);
   const { loading: userLoading } = useUser();
+  const { selectedTenantId } = useTenant();
   const [loading, setLoading] = useState(true);
   const [showBuilder, setShowBuilder] = useState(false);
   const [editingWorkflow, setEditingWorkflow] = useState(null);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [selectedTenantId]);
 
   const loadData = async () => {
     try {
       // Fetch workflows for current tenant context
-      const workflowsData = await Workflow.list();
+      // If superadmin has selected a specific tenant, filter by it
+      const params = {};
+      if (selectedTenantId) {
+        params.tenant_id = selectedTenantId;
+      }
+      
+      const workflowsData = await Workflow.list(params);
       setWorkflows(workflowsData || []);
     } catch (error) {
       if (import.meta.env.DEV) {
