@@ -1116,15 +1116,17 @@ export default function createWorkflowRoutes(pgPool) {
         return res.status(503).json({ status: 'error', message: 'Database not configured' });
       }
 
-      let query = 'SELECT * FROM workflow WHERE 1=1';
-      const params = [];
-      let paramCount = 1;
-
-      if (tenant_id) {
-        query += ` AND tenant_id = $${paramCount}`;
-        params.push(tenant_id);
-        paramCount++;
+      // CRITICAL: Tenant isolation - require tenant_id for all workflow queries
+      if (!tenant_id) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'tenant_id is required for workflow queries'
+        });
       }
+
+      let query = 'SELECT * FROM workflow WHERE tenant_id = $1';
+      const params = [tenant_id];
+      let paramCount = 2;
 
       if (is_active !== undefined) {
         query += ` AND is_active = $${paramCount}`;
