@@ -202,8 +202,14 @@ async function processTriggersForTenant(tenant) {
   let triggerCount = 0;
 
   try {
-    // 1. Detect stagnant leads
-    const stagnantLeads = await detectStagnantLeads(tenantUuid);
+    // 1. Detect stagnant leads (with error isolation)
+    let stagnantLeads = [];
+    try {
+      stagnantLeads = await detectStagnantLeads(tenantUuid);
+    } catch (detectErr) {
+      logger.warn({ err: detectErr, tenantSlug }, '[AiTriggersWorker] detectStagnantLeads failed, skipping');
+    }
+    
     for (const lead of stagnantLeads) {
       await createSuggestionIfNew(tenantUuid, {
         triggerId: TRIGGER_TYPES.LEAD_STAGNANT,
@@ -449,8 +455,14 @@ async function processTriggersForTenant(tenant) {
       }
     }
 
-    // 2. Detect deal decay (opportunities with no activity)
-    const decayingDeals = await detectDealDecay(tenantUuid);
+    // 2. Detect deal decay (opportunities with no activity) - with error isolation
+    let decayingDeals = [];
+    try {
+      decayingDeals = await detectDealDecay(tenantUuid);
+    } catch (detectErr) {
+      logger.warn({ err: detectErr, tenantSlug }, '[AiTriggersWorker] detectDealDecay failed, skipping');
+    }
+    
     for (const deal of decayingDeals) {
       await createSuggestionIfNew(tenantUuid, {
         triggerId: TRIGGER_TYPES.DEAL_DECAY,
@@ -683,8 +695,14 @@ async function processTriggersForTenant(tenant) {
       }
     }
 
-    // 3. Detect overdue activities
-    const overdueActivities = await detectOverdueActivities(tenantUuid);
+    // 3. Detect overdue activities - with error isolation
+    let overdueActivities = [];
+    try {
+      overdueActivities = await detectOverdueActivities(tenantUuid);
+    } catch (detectErr) {
+      logger.warn({ err: detectErr, tenantSlug }, '[AiTriggersWorker] detectOverdueActivities failed, skipping');
+    }
+    
     for (const activity of overdueActivities) {
       await createSuggestionIfNew(tenantUuid, {
         triggerId: TRIGGER_TYPES.ACTIVITY_OVERDUE,
@@ -951,8 +969,14 @@ async function processTriggersForTenant(tenant) {
       }
     }
 
-    // 4. Detect hot opportunities (high probability, close soon)
-    const hotOpportunities = await detectHotOpportunities(tenantUuid);
+    // 4. Detect hot opportunities (high probability, close soon) - with error isolation
+    let hotOpportunities = [];
+    try {
+      hotOpportunities = await detectHotOpportunities(tenantUuid);
+    } catch (detectErr) {
+      logger.warn({ err: detectErr, tenantSlug }, '[AiTriggersWorker] detectHotOpportunities failed, skipping');
+    }
+    
     for (const opp of hotOpportunities) {
       await createSuggestionIfNew(tenantUuid, {
         triggerId: TRIGGER_TYPES.OPPORTUNITY_HOT,
