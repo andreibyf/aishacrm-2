@@ -4,7 +4,7 @@
  */
 
 import express from 'express';
-import { queryAuditLogs, getAuditStats } from '../../../braid-llm-kit/sdk/index.js';
+import { queryAuditLogs, getAuditStats } from '../../braid-llm-kit/sdk/index.js';
 import logger from '../lib/logger.js';
 
 const router = express.Router();
