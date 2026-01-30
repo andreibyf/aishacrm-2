@@ -1220,7 +1220,7 @@ async function detectStagnantLeads(tenantUuid) {
     // Step 1: Get candidate leads (simple query)
     // Exclude test data records
     const { data: leads, error } = await supabase
-      .from('leads')
+      .from('lead')
       .select('id, first_name, last_name, status, updated_at, created_at, is_test_data')
       .eq('tenant_id', tenantUuid)
       .not('status', 'in', '(converted,closed,disqualified)')
@@ -1274,7 +1274,7 @@ async function detectDealDecay(tenantUuid) {
     // Step 1: Get candidate opportunities (simple query)
     // Exclude test data records
     const { data: opportunities, error } = await supabase
-      .from('opportunities')
+      .from('opportunity')
       .select('id, name, stage, amount, close_date, updated_at, created_at, is_test_data')
       .eq('tenant_id', tenantUuid)
       .not('stage', 'in', '(closed_won,closed_lost)')
@@ -1329,7 +1329,7 @@ async function detectOverdueActivities(tenantUuid) {
     // Exclude test data records
     // Include related_id to normalize to relationship entity for CARE
     const { data: activities, error } = await supabase
-      .from('activities')
+      .from('activity')
       .select('id, subject, type, due_date, metadata, related_to, related_id, is_test_data')
       .eq('tenant_id', tenantUuid)
       .lt('due_date', today)
@@ -1394,7 +1394,7 @@ async function detectHotOpportunities(tenantUuid) {
     // Step 1: Get candidate opportunities (simple query)
     // Exclude test data records
     const { data: opportunities, error } = await supabase
-      .from('opportunities')
+      .from('opportunity')
       .select('id, name, stage, amount, probability, close_date, is_test_data')
       .eq('tenant_id', tenantUuid)
       .not('stage', 'in', '(closed_won,closed_lost)')
@@ -1790,13 +1790,13 @@ export async function getPendingSuggestions(_pool, tenantUuid, limit = 50) {
     let recordName = null;
     try {
       if (s.record_type === 'lead') {
-        const { data } = await supa.from('leads').select('first_name, last_name').eq('id', s.record_id).single();
+        const { data } = await supa.from('lead').select('first_name, last_name').eq('id', s.record_id).single();
         recordName = data ? `${data.first_name || ''} ${data.last_name || ''}`.trim() : null;
       } else if (s.record_type === 'opportunity') {
-        const { data } = await supa.from('opportunities').select('name').eq('id', s.record_id).single();
+        const { data } = await supa.from('opportunity').select('name').eq('id', s.record_id).single();
         recordName = data?.name || null;
       } else if (s.record_type === 'activity') {
-        const { data } = await supa.from('activities').select('subject').eq('id', s.record_id).single();
+        const { data } = await supa.from('activity').select('subject').eq('id', s.record_id).single();
         recordName = data?.subject || null;
       }
     } catch {
