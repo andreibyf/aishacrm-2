@@ -238,6 +238,7 @@ import aiSettingsRoutes from "./routes/aiSettings.js";
 import createBundleRoutes from "./routes/bundles.js";
 import { createDeprecationMiddleware } from "./middleware/deprecation.js";
 import { authenticateRequest, requireAuth } from "./middleware/authenticate.js";
+import { validateTenantAccess } from "./middleware/validateTenant.js";
 
 // Apply v1 deprecation headers middleware (before routes)
 app.use(createDeprecationMiddleware());
@@ -281,7 +282,7 @@ app.use("/api/metrics", createMetricsRoutes(resilientPerfDb));
 app.use("/api/utils", createUtilsRoutes(measuredPgPool));
 app.use("/api/bizdevsources", createBizDevSourceRoutes(measuredPgPool));
 app.use("/api/clients", createClientRoutes(measuredPgPool));
-app.use("/api/workflows", authenticateRequest, createWorkflowRoutes(measuredPgPool));
+app.use("/api/workflows", authenticateRequest, validateTenantAccess, createWorkflowRoutes(measuredPgPool));
 app.use("/api/workflowexecutions", createWorkflowExecutionRoutes(measuredPgPool));
 // V1 activities route RETIRED - use /api/v2/activities (tenant-isolated, secure DELETE)
 // app.use("/api/activities", createActivityRoutes(measuredPgPool));
