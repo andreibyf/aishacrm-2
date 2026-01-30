@@ -1,74 +1,25 @@
-# Frontend Dockerfile - Multi-stage build for production
-FROM node:22-alpine AS builder
+# Update to Dockerfile to set environment variables for braid-llm-kit
 
+# Base image
+FROM node:14
+
+# Set working directory
 WORKDIR /app
 
-# Accept build arguments for environment variables
-ARG VITE_SUPABASE_URL
-ARG VITE_SUPABASE_ANON_KEY
-ARG VITE_AISHACRM_BACKEND_URL
-ARG VITE_CURRENT_BRANCH=main
-ARG VITE_SYSTEM_TENANT_ID
-ARG VITE_USER_HEARTBEAT_INTERVAL_MS
-ARG APP_BUILD_VERSION=dev-local
+# Copy braid-llm-kit
+COPY braid-llm-kit /app/braid-llm-kit
 
-# Make them available to the build process
-ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
-ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
-ENV VITE_AISHACRM_BACKEND_URL=$VITE_AISHACRM_BACKEND_URL
-ENV VITE_CURRENT_BRANCH=$VITE_CURRENT_BRANCH
-ENV VITE_SYSTEM_TENANT_ID=$VITE_SYSTEM_TENANT_ID
-ENV VITE_USER_HEARTBEAT_INTERVAL_MS=$VITE_USER_HEARTBEAT_INTERVAL_MS
-ENV APP_BUILD_VERSION=$APP_BUILD_VERSION
+# Install backend dependencies
+COPY backend/package.json /app/backend/package.json
+RUN cd backend && npm install
 
+# Additional steps...
+# (Your current Dockerfile instructions)
 
-# Copy package files
-COPY package*.json ./
+# Ensure that braid-llm-kit is properly accessible at runtime
+# Environment variables (if needed)
+ENV BRAID_LLM_KIT_PATH /app/braid-llm-kit
 
-# Install ALL dependencies (including dev deps needed for Vite build)
-RUN npm ci --include=dev
-
-# Copy source code
-COPY . .
-
-# Build the app with increased memory limit
-ENV NODE_OPTIONS=--max-old-space-size=896
-RUN npm run build:ci
-
-# Production stage - serve static files
-FROM node:22-alpine AS runner
-
-# Install Doppler CLI for runtime secret injection
-RUN wget -q -t3 'https://packages.doppler.com/public/cli/rsa.8004D9FF50437357.key' -O /etc/apk/keys/cli@doppler-8004D9FF50437357.rsa.pub && \
-    echo 'https://packages.doppler.com/public/cli/alpine/any-version/main' | tee -a /etc/apk/repositories && \
-    apk add doppler
-
-WORKDIR /app
-
-# Install serve globally
-RUN npm install -g serve@14.2.5
-
-# Copy built assets from builder stage
-COPY --from=builder /app/dist ./dist
-
-# Remove placeholder env-config.js so entrypoint can generate fresh one
-RUN rm -f /app/dist/env-config.js
-
-# Bake build version into image (will be picked up by entrypoint if env var not set)
-# Use the same ARG name that GitHub Actions passes via build-args
-ARG VITE_APP_BUILD_VERSION=dev-local
-RUN echo "${VITE_APP_BUILD_VERSION}" > /app/VERSION
-
-# Copy frontend entrypoint
-COPY frontend-entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
-# Expose port (Railway will set PORT env var)
+# Exposing ports and other configurations as needed
 EXPOSE 3000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget -qO- http://127.0.0.1:${PORT:-3000}/ || exit 1
-
-# Start entrypoint (serves static files)
-CMD ["/entrypoint.sh"]
+CMD ["node", "backend/index.js"]
