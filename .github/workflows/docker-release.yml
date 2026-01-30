@@ -30,11 +30,11 @@ jobs:
             image: ghcr.io/${{ github.repository }}-mcp
           - service: office-viz
             context: addons/agent-office/services/office-viz
-            dockerfile: addons/agent-office/services/office-viz/Dockerfile
+            dockerfile: Dockerfile
             image: ghcr.io/${{ github.repository }}-office-viz
           - service: telemetry-sidecar
             context: addons/agent-office/services/telemetry-sidecar
-            dockerfile: addons/agent-office/services/telemetry-sidecar/Dockerfile
+            dockerfile: Dockerfile
             image: ghcr.io/${{ github.repository }}-telemetry-sidecar
 
     steps:
