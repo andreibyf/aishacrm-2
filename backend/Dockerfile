@@ -50,6 +50,9 @@ RUN echo "Cache bust value: ${CACHE_BUST}" > /tmp/cache-bust.txt
 # This step will be re-executed whenever CACHE_BUST changes
 COPY braid-llm-kit ./braid-llm-kit
 
+# Verify braid-llm-kit was copied correctly
+RUN ls -la ./braid-llm-kit/sdk/index.js || { echo "ERROR: braid-llm-kit/sdk/index.js not found!"; exit 1; }
+
 # Copy entrypoint script and make it executable
 COPY backend/docker-entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
@@ -68,7 +71,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -qO- http://localhost:3001/health || exit 1
 
 # Use entrypoint for Doppler integration
-ENTRYPOINT ["./entrypoint.sh"]
+# Use sh to execute entrypoint to avoid permission issues after symlink changes
+ENTRYPOINT ["sh", "./entrypoint.sh"]
 
 # Default command to start the server
 CMD ["node", "server.js"]
