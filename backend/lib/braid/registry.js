@@ -6,6 +6,7 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
+import { loadToolSchema } from './utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TOOLS_DIR = path.join(__dirname, '..', '..', '..', 'braid-llm-kit', 'examples', 'assistant');
@@ -392,6 +393,46 @@ export const TOOL_DESCRIPTIONS = {
   list_active_workflows: 'List all currently running workflow executions. Use to see what automated processes are active.',
   get_workflow_notes: 'Get notes/progress updates created by a workflow execution. Use to report on what an agent workflow has accomplished.',
 };
+
+/**
+ * Generate OpenAI tool schemas from the Braid registry
+ * @param {string[]} [allowedToolNames] - Optional allowlist of tool names
+ * @returns {Promise<Object[]>}
+ */
+export async function generateToolSchemas(allowedToolNames = null) {
+  const toolNames = Array.isArray(allowedToolNames) && allowedToolNames.length > 0
+    ? allowedToolNames
+    : Object.keys(TOOL_REGISTRY);
+
+  const schemas = [];
+
+  for (const toolName of toolNames) {
+    const config = TOOL_REGISTRY[toolName];
+    if (!config) {
+      continue;
+    }
+
+    const braidPath = path.join(TOOLS_DIR, config.file);
+
+    try {
+      const schema = await loadToolSchema(braidPath, config.function);
+      const description = TOOL_DESCRIPTIONS[toolName];
+
+      schemas.push({
+        ...schema,
+        function: {
+          ...schema.function,
+          name: toolName,
+          description: description || schema.function?.description
+        }
+      });
+    } catch (error) {
+      console.warn(`[Braid] Failed to generate schema for ${toolName}:`, error.message);
+    }
+  }
+
+  return schemas;
+}
 
 /**
  * Enhanced system prompt for Executive Assistant

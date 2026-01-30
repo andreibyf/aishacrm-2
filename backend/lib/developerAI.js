@@ -10,7 +10,7 @@ import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { getSupabaseClient } from './supabase-db.js';
-import { classifyCommand, _classifyFileOperation } from './commandSafety.js';
+import { classifyCommand } from './commandSafety.js';
 import { redactSecretsFromObject, sanitizeCommand } from './devaiSecurity.js';
 
 const execAsync = promisify(exec);

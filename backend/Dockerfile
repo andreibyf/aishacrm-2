@@ -40,6 +40,9 @@ RUN npm ci --omit=dev
 # Copy backend application files from build stage
 COPY --from=build /app ./
 
+# Copy shared contracts (repo root) for runtime imports
+COPY shared /shared
+
 # Cache-busting mechanism for braid-llm-kit
 # This ARG will be set to the git commit SHA during GitHub Actions build
 # Changing this value will invalidate Docker cache from this point forward
@@ -55,6 +58,9 @@ COPY braid-llm-kit /braid-llm-kit
 # Verify braid-llm-kit was copied correctly in both locations
 RUN ls -la ./braid-llm-kit/sdk/index.js || { echo "ERROR: /app/braid-llm-kit/sdk/index.js not found!"; exit 1; }
 RUN ls -la /braid-llm-kit/sdk/index.js || { echo "ERROR: /braid-llm-kit/sdk/index.js not found!"; exit 1; }
+
+# Verify shared contracts exist for agent registry imports
+RUN ls -la /shared/contracts/agents.js || { echo "ERROR: /shared/contracts/agents.js not found!"; exit 1; }
 
 # Copy entrypoint script and make it executable
 COPY backend/docker-entrypoint.sh ./entrypoint.sh

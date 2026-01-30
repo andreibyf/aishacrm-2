@@ -11,7 +11,7 @@
 import express from 'express';
 import { validateTenantAccess, requireAdminOrManagerRole } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
-import { cacheList, cacheDetail, _invalidateCache } from '../lib/cacheMiddleware.js';
+import { cacheList, cacheDetail } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 
 export default function createDocumentV2Routes(_pgPool) {

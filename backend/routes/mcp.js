@@ -7,7 +7,7 @@ import express from "express";
 import fetch from "node-fetch";
 import { getSupabaseClient } from "../lib/supabase-db.js";
 // Import auth middleware to require an authenticated user for admin routes.
-import { _requireAuthCookie } from "../middleware/authCookie.js";
+import { requireAuthCookie } from "../middleware/authCookie.js";
 import { authenticateRequest } from "../middleware/authenticate.js";
 import { requireSuperAdminRole } from "../middleware/validateTenant.js";
 import { resolveLLMApiKey, generateChatCompletion, selectLLMConfigForTenant } from "../lib/aiEngine/index.js";

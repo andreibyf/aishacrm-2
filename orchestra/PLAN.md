@@ -46,6 +46,32 @@ Every fix must be covered by at least one test (unit or integration) where pract
 
 ## Active Tasks
 
+### BUG-DEP-IMPORT-001 – Prevent missing import paths in backend image
+
+**Area:** Docker build + CI import validation
+
+**Goal:**
+Ensure backend containers fail fast if any runtime import points to a file path that isn’t packaged into the Docker image.
+
+**Scope:**
+
+- Backend Dockerfile packaging for shared contracts.
+- CI import scan to detect repo-root imports not included in the image.
+
+**Steps:**
+
+1. Docker packaging:
+  - Copy `shared/` into backend image.
+  - Add a build-time verification for `shared/contracts/agents.js`.
+2. CI guard:
+  - Add a static scan step that fails if backend runtime code imports repo-root paths not in the allowlist.
+
+**Acceptance:**
+
+- Backend image contains `shared/contracts/agents.js`.
+- CI fails if a new runtime import targets a non-packaged repo-root path.
+- No runtime `ERR_MODULE_NOT_FOUND` on startup due to missing repo-root imports.
+
 ### BUG-BE-FIELDS-001 – Core CRUD Field Parity (Diagnosis + Fix)
 
 **Area:** Backend CRUD routes/services + frontend models

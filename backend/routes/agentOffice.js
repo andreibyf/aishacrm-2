@@ -18,7 +18,6 @@ import {
   emitRunStarted, 
   emitTaskAssigned, 
   emitAgentSpawned,
-  _generateSpanId,
 } from '../lib/telemetry/index.js';
 import { routeRequest, listRoles } from '../lib/agents/agentRouter.js';
 import { getAgentProfile, getAllAgentProfiles, AgentRoles } from '../lib/agents/agentRegistry.js';

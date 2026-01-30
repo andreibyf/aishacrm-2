@@ -4,7 +4,7 @@
  */
 
 import express from 'express';
-import { executeChain, listChains, validateChain, TOOL_CHAINS, TOOL_ACCESS_TOKEN } from '../lib/braidIntegration-v2.js';
+import { executeToolChain, listToolChains, validateChain, TOOL_CHAINS, TOOL_ACCESS_TOKEN } from '../lib/braidIntegration-v2.js';
 import logger from '../lib/logger.js';
 
 const router = express.Router();
@@ -16,7 +16,7 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   try {
     const userRole = req.user?.role || 'user';
-    const chains = listChains(userRole);
+    const chains = listToolChains(userRole);
     
     res.json({
       success: true,
@@ -143,7 +143,7 @@ router.post('/:chainName/execute', async (req, res) => {
       dryRun: options.dryRun || false
     });
 
-    const result = await executeChain(
+    const result = await executeToolChain(
       chainName,
       input,
       req.tenant,
@@ -204,7 +204,7 @@ router.post('/:chainName/dry-run', async (req, res) => {
       tenant_id: req.tenant.id
     };
 
-    const result = await executeChain(
+    const result = await executeToolChain(
       chainName,
       input,
       req.tenant,

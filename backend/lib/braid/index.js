@@ -16,62 +16,61 @@
  *   import { getToolRegistry } from './braidIntegration-v2.js';
  */
 
+import { executeBraidTool } from './execution.js';
+import { TOOL_REGISTRY, TOOL_DESCRIPTIONS } from './registry.js';
+import { TOOL_CATEGORIES, getToolDependencies } from './analysis.js';
+import { executeToolChain, TOOL_CHAINS } from './chains.js';
+import { CRM_POLICIES } from './policies.js';
+import { trackRealtimeMetrics, getRealtimeMetrics } from './metrics.js';
+import { createBackendDeps, withTimeout } from './utils.js';
+
 // Core functionality exports
 export {
   executeBraidTool,
   validateToolAccessToken,
-  getBraidSystemPrompt,
-  loadBraidTools,
-  executeToolWithFallback,
-  getCachedToolResult,
-  setCachedToolResult,
-  clearToolCache
+  TOOL_ACCESS_TOKEN
 } from './execution.js';
 
 // Tool registry and descriptions
 export {
-  getToolRegistry,
-  getToolDescriptions,
-  getToolByName,
-  listAllTools,
-  getToolsByCategory,
+  getBraidSystemPrompt,
+  generateToolSchemas,
   TOOL_REGISTRY,
-  TOOL_DESCRIPTIONS
+  TOOL_DESCRIPTIONS,
+  TOOL_CACHE_TTL,
+  generateBraidCacheKey,
+  BRAID_SYSTEM_PROMPT,
+  summarizeToolResult,
+  TOOLS_DIR_PATH
 } from './registry.js';
 
 // Metrics and monitoring
 export {
   trackRealtimeMetrics,
   getRealtimeMetrics,
-  logAuditEntry,
   extractEntityType,
-  getMetricsForTimeRange,
-  getToolUsageStats,
-  getErrorStats,
-  clearMetrics
+  logAuditEntry
 } from './metrics.js';
 
 // Tool chains and workflows
 export {
   executeToolChain,
-  getToolChains,
   validateChain,
-  rollbackChain,
-  getChainStatus,
+  listToolChains,
   TOOL_CHAINS
 } from './chains.js';
 
 // Tool dependency analysis
 export {
   getToolDependencies,
+  getToolDependents,
   getToolGraph,
   detectCircularDependencies,
   getToolImpactAnalysis,
-  getToolsByDependency,
-  getDependencyPath,
-  validateDependencies,
+  getToolsByCategory,
   TOOL_CATEGORIES,
-  TOOL_GRAPH
+  TOOL_GRAPH,
+  objectToPositionalArgs
 } from './analysis.js';
 
 // Security policies and access control
@@ -93,29 +92,56 @@ export {
 export {
   createBackendDeps,
   filterSensitiveFields,
+  loadToolSchema,
   normalizeToolArgs,
   validateToolArgs,
-  isValidUUID,
-  retry,
-  withTimeout,
+  normalizeToolFilter,
+  generateRequestId,
   loadSchemaForEntity,
   getFieldsForEntity,
-  mapV1ToV2Fields
+  mapV1ToV2Fields,
+  isValidUUID,
+  isValidUuid,
+  sanitizeForLog,
+  deepClone,
+  mergeObjects,
+  parseISODate,
+  formatDateForAPI,
+  retryWithBackoff,
+  retry,
+  withTimeout
 } from './utils.js';
 
-// Advanced chain execution and management
-export {
-  executeAdvancedChain,
-  buildChainFromTemplate,
-  validateChainTemplate,
-  getChainExecutionHistory,
-  pauseChainExecution,
-  resumeChainExecution,
-  cancelChainExecution,
-  scheduleChainExecution,
-  getChainMetrics,
-  optimizeChainPerformance
-} from './chains.js';
+/**
+ * Get the full tool registry (back-compat helper)
+ */
+export function getToolRegistry() {
+  return TOOL_REGISTRY;
+}
+
+/**
+ * Get the full tool descriptions map (back-compat helper)
+ */
+export function getToolDescriptions() {
+  return TOOL_DESCRIPTIONS;
+}
+
+/**
+ * Get tool config by name (back-compat helper)
+ * @param {string} toolName
+ * @returns {Object|null}
+ */
+export function getToolByName(toolName) {
+  return TOOL_REGISTRY[toolName] || null;
+}
+
+/**
+ * List all available tool names (back-compat helper)
+ * @returns {string[]}
+ */
+export function listAllTools() {
+  return Object.keys(TOOL_REGISTRY);
+}
 
 /**
  * Main execution function - primary entry point for tool execution
@@ -138,8 +164,8 @@ export async function executeTool(toolName, args = {}, context = {}) {
  * @returns {Object|null} Complete tool information or null if not found
  */
 export function getToolInfo(toolName) {
-  const toolFile = getToolByName(toolName);
-  if (!toolFile) return null;
+  const toolConfig = TOOL_REGISTRY[toolName];
+  if (!toolConfig) return null;
 
   const description = TOOL_DESCRIPTIONS[toolName];
   const dependencies = getToolDependencies(toolName);
@@ -147,11 +173,11 @@ export function getToolInfo(toolName) {
 
   return {
     name: toolName,
-    file: toolFile,
+    file: toolConfig.file,
     description,
     dependencies,
     category,
-    registry: TOOL_REGISTRY[toolFile] || []
+    registry: toolConfig
   };
 }
 
@@ -271,7 +297,7 @@ export async function initializeBraidSystem(initOptions = {}) {
 
   try {
     // Load and validate tool registry
-    const tools = await loadBraidTools();
+    const tools = Object.keys(TOOL_REGISTRY);
     console.log(`Loaded ${tools.length} Braid tools`);
 
     // Validate tool dependencies if requested
