@@ -26,7 +26,7 @@ jobs:
             image: ghcr.io/${{ github.repository }}-backend
           - service: mcp
             context: ./braid-mcp-node-server
-            dockerfile: braid-mcp-node-server/Dockerfile
+            dockerfile: Dockerfile
             image: ghcr.io/${{ github.repository }}-mcp
           - service: office-viz
             context: addons/agent-office/services/office-viz
