@@ -26,7 +26,7 @@ import { toast } from '@/components/ui/use-toast';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4001';
 
-export default function CareSettings() {
+export default function CareSettings({ selectedTenantId, isSuperadmin }) {
   const [careWorkflows, setCareWorkflows] = useState([]);
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,8 +34,16 @@ export default function CareSettings() {
   // Fetch all workflows and filter to those with care_trigger nodes
   const fetchCareWorkflows = useCallback(async () => {
     try {
-      // Fetch all workflows (superadmin can see all)
-      const response = await fetch(`${BACKEND_URL}/api/workflows?limit=100`, {
+      // Build URL with tenant filter (non-superadmins must use their tenant)
+      const params = new URLSearchParams({ limit: '100' });
+      if (!isSuperadmin && selectedTenantId) {
+        params.append('tenant_id', selectedTenantId);
+      } else if (isSuperadmin && selectedTenantId) {
+        // Superadmin can filter by selected tenant or see all
+        params.append('tenant_id', selectedTenantId);
+      }
+      
+      const response = await fetch(`${BACKEND_URL}/api/workflows?${params}`, {
         credentials: 'include',
       });
       const data = await response.json();
@@ -75,7 +83,7 @@ export default function CareSettings() {
         variant: 'destructive',
       });
     }
-  }, []);
+  }, [selectedTenantId, isSuperadmin]);
 
   // Fetch tenants for name lookup
   const fetchTenants = useCallback(async () => {
@@ -93,7 +101,7 @@ export default function CareSettings() {
     }
   }, []);
 
-  // Load data on mount
+  // Load data on mount and when tenant changes
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
@@ -101,7 +109,7 @@ export default function CareSettings() {
       setLoading(false);
     };
     loadData();
-  }, [fetchCareWorkflows, fetchTenants]);
+  }, [fetchCareWorkflows, fetchTenants, selectedTenantId]);
 
   // Get tenant name by ID
   const getTenantName = (tenantId) => {

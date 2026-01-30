@@ -506,7 +506,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <CareSettings />
+                    <CareSettings selectedTenantId={selectedTenantId} isSuperadmin={isSuperadmin} />
                   </CardContent>
                 </Card>
               )}
