@@ -23,6 +23,7 @@ import { startAiTriggersWorker } from "./lib/aiTriggersWorker.js";
 import { startEmailWorker } from "./workers/emailWorker.js";
 import { startTaskWorkers } from "./workers/taskWorkers.js";
 import { startHealthMonitoring } from "./lib/healthMonitor.js";
+import { registerTaskProcessor } from "./services/taskQueueProcessor.js";
 
 // Import UUID validation
 import { sanitizeUuidInput } from "./lib/uuidValidator.js";
@@ -692,6 +693,14 @@ server.listen(PORT, async () => {
     startHealthMonitoring();
   } else {
     logger.debug('[HealthMonitor] Disabled (set HEALTH_MONITORING_ENABLED=true to enable)');
+  }
+
+  // Register agent office task queue processor
+  if (pgPool) {
+    logger.info('[TaskQueueProcessor] Registering agent office task processor');
+    registerTaskProcessor();
+  } else {
+    logger.debug('[TaskQueueProcessor] Disabled (no database connection)');
   }
 
   // Keep-alive interval to prevent process from exiting
