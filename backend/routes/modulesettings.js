@@ -1,7 +1,7 @@
 import express from 'express';
 import { requireAdminRole } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
-import { cacheList } from '../lib/cacheMiddleware.js';
+import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 
 export default function createModuleSettingsRoutes(_pool) {
@@ -197,6 +197,9 @@ router.post('/', async (req, res) => {
 
     if (error) throw error;
     
+    // Invalidate cache for this tenant's module settings
+    await invalidateCache(tenant_id, 'modulesettings');
+    
     res.status(201).json({ status: 'success', data });
   } catch (error) {
     logger.error('Error creating module setting:', error);
@@ -321,6 +324,9 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ status: 'error', message: 'Module setting not found' });
     }
 
+    // Invalidate cache for this tenant's module settings
+    await invalidateCache(tenant_id, 'modulesettings');
+
     res.json({ status: 'success', data });
   } catch (error) {
     logger.error('Error updating module setting:', error);
@@ -384,6 +390,9 @@ router.put('/:id', async (req, res) => {
         logger.error('[ModuleSettings DELETE] Mismatched tenant_id', { expected: tenant_id, got: data.tenant_id });
         return res.status(404).json({ status: 'error', message: 'Module setting not found' });
       }
+
+      // Invalidate cache for this tenant's module settings
+      await invalidateCache(tenant_id, 'modulesettings');
 
       res.json({ status: 'success', data });
     } catch (error) {
