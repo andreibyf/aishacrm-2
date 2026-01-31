@@ -23,10 +23,12 @@ import {
   Building2,
 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
+import { useTenant } from '@/components/shared/tenantContext';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4001';
 
-export default function CareSettings({ selectedTenantId, isSuperadmin }) {
+export default function CareSettings({ isSuperadmin }) {
+  const { selectedTenantId } = useTenant();
   const [careWorkflows, setCareWorkflows] = useState([]);
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,12 +36,10 @@ export default function CareSettings({ selectedTenantId, isSuperadmin }) {
   // Fetch all workflows and filter to those with care_trigger nodes
   const fetchCareWorkflows = useCallback(async () => {
     try {
-      // Build URL with tenant filter (non-superadmins must use their tenant)
+      // Build URL with tenant filter
       const params = new URLSearchParams({ limit: '100' });
-      if (!isSuperadmin && selectedTenantId) {
-        params.append('tenant_id', selectedTenantId);
-      } else if (isSuperadmin && selectedTenantId) {
-        // Superadmin can filter by selected tenant or see all
+      // When a tenant is selected, always filter by it (even for superadmin)
+      if (selectedTenantId) {
         params.append('tenant_id', selectedTenantId);
       }
       
