@@ -8,7 +8,6 @@
 import logger from '../lib/logger.js';
 import { taskQueue } from './taskQueue.js';
 import { getAgentProfile } from '../lib/agents/agentRegistry.js';
-import { invokeBraidTool } from '../lib/braidIntegration-v2.js';
 import { 
   emitTaskStarted, 
   emitTaskCompleted, 
