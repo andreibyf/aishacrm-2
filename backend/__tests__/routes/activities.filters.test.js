@@ -7,7 +7,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 
-const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
+const BASE_URL = process.env.BACKEND_URL || 'http://localhost:4001';
 const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 const SHOULD_RUN = process.env.CI ? (process.env.CI_BACKEND_TESTS === 'true') : true;
 
@@ -24,7 +24,11 @@ const createdIds = [];
 async function createActivity(payload) {
   const res = await fetch(`${BASE_URL}/api/v2/activities`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-tenant-id': TENANT_ID,
+    },
+    credentials: 'include',
     body: JSON.stringify({
       tenant_id: TENANT_ID,
       type: 'task',
@@ -199,6 +203,30 @@ after(async () => {
   }
   // Basic assertion: both pages should have data
   assert.ok(page1.length > 0, 'First page should have activities');
+});
+
+(SHOULD_RUN ? test : test.skip)('AI timezone inputs retain local components and capture original ISO', async () => {
+  const aiDueDate = '2025-11-20T14:45:00-05:00';
+  const res = await createActivity({
+    subject: `${TEST_SUBJECT_PREFIX} Timezone Case`,
+    due_date: aiDueDate,
+    due_time: '14:45'
+  });
+
+  assert.equal(res.status, 201, `Expected 201 from activity create, got ${res.status}`);
+
+  const activityId = extractActivityId(res.json);
+  if (activityId) {
+    createdIds.push(activityId);
+  }
+
+  const activity = res.json?.data?.activity;
+  assert.ok(activity, 'Response should include created activity data');
+  assert.equal(activity.due_date, '2025-11-20');
+  // DB stores time as HH:MM:SS format (with seconds), even if sent as HH:MM
+  assert.equal(activity.due_time, '14:45:00', 'due_time should be stored in HH:MM:SS format');
+  assert.equal(activity.metadata?.original_due_datetime, aiDueDate);
+  assert.equal(activity.metadata?.original_timezone_offset, '-05:00');
 });
 
 // Test: Get single activity by ID

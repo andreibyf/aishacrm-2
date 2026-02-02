@@ -10,6 +10,8 @@ const supabaseAdmin = getSupabaseClient();
 
 /**
  * Create backend dependencies for Braid tool execution
+ * Includes HTTP methods required by Braid tools for API calls
+ * 
  * @param {string} backendUrl - Backend base URL
  * @param {string} tenantUuid - Tenant UUID
  * @param {string} userId - User ID
@@ -18,6 +20,14 @@ const supabaseAdmin = getSupabaseClient();
  * @returns {Object} Dependencies object for Braid
  */
 export function createBackendDeps(backendUrl, tenantUuid, userId, internalToken, createdBy) {
+  // Build auth headers - include Authorization if token provided
+  const buildAuthHeaders = () => ({
+    'Content-Type': 'application/json',
+    'x-tenant-id': tenantUuid,
+    ...(userId ? { 'x-user-id': userId } : {}),
+    ...(internalToken ? { 'Authorization': `Bearer ${internalToken}` } : {})
+  });
+
   return {
     supabase: supabaseAdmin,
     backendUrl,
@@ -27,7 +37,134 @@ export function createBackendDeps(backendUrl, tenantUuid, userId, internalToken,
     createdBy,
     // Additional context
     requestId: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    
+    // HTTP methods required by Braid tools
+    http: {
+      async get(url, options = {}) {
+        const params = new URLSearchParams(options.params || {});
+        params.set('tenant_id', tenantUuid);
+        
+        const fullUrl = `${backendUrl}${url}?${params}`;
+        console.log('[Braid HTTP GET]', fullUrl);
+        const response = await fetch(fullUrl, {
+          method: 'GET',
+          headers: buildAuthHeaders()
+        });
+        
+        if (!response.ok) {
+          console.error('[Braid HTTP GET] Error:', response.status, await response.clone().text().then(t => t.substring(0, 200)));
+          return {
+            tag: 'Err',
+            error: {
+              type: 'NetworkError',
+              status: response.status,
+              message: await response.text()
+            }
+          };
+        }
+        
+        const data = await response.json();
+        console.log('[Braid HTTP GET] Response data keys:', Object.keys(data));
+        return { tag: 'Ok', value: data };
+      },
+      
+      async post(url, options = {}) {
+        const body = options.body || {};
+        body.tenant_id = tenantUuid;
+        
+        // Inject created_by for tables that support it (not opportunities, bizdevsources)
+        const noCreatedByTables = ['/opportunities', '/bizdevsources'];
+        const skipCreatedBy = noCreatedByTables.some(table => url.includes(table));
+        if (createdBy && !body.created_by && !skipCreatedBy) {
+          body.created_by = createdBy;
+        }
+        
+        console.log('[Braid HTTP] POST', `${backendUrl}${url}`, JSON.stringify(body).substring(0, 500));
+        
+        const response = await fetch(`${backendUrl}${url}`, {
+          method: 'POST',
+          headers: buildAuthHeaders(),
+          body: JSON.stringify(body)
+        });
+        
+        if (!response.ok) {
+          const errText = await response.text();
+          console.error('[Braid HTTP] POST error', response.status, errText.substring(0, 500));
+          return {
+            tag: 'Err',
+            error: {
+              type: 'NetworkError',
+              status: response.status,
+              message: errText
+            }
+          };
+        }
+        
+        const data = await response.json();
+        return { tag: 'Ok', value: data };
+      },
+      
+      async put(url, options = {}) {
+        const body = options.body || {};
+        body.tenant_id = tenantUuid;
+
+        const params = new URLSearchParams(options.params || {});
+        const fullUrl = params.toString() ? `${backendUrl}${url}?${params}` : `${backendUrl}${url}`;
+
+        console.log('[Braid HTTP] PUT', fullUrl, JSON.stringify(body).substring(0, 200));
+
+        const response = await fetch(fullUrl, {
+          method: 'PUT',
+          headers: buildAuthHeaders(),
+          body: JSON.stringify(body)
+        });
+        
+        if (!response.ok) {
+          const errText = await response.text();
+          console.error('[Braid HTTP] PUT error', response.status, errText.substring(0, 200));
+          return {
+            tag: 'Err',
+            error: {
+              type: 'NetworkError',
+              status: response.status,
+              message: errText
+            }
+          };
+        }
+        
+        const data = await response.json();
+        return { tag: 'Ok', value: data };
+      },
+      
+      async delete(url, options = {}) {
+        const params = new URLSearchParams(options.params || {});
+        const fullUrl = params.toString() ? `${backendUrl}${url}?${params}` : `${backendUrl}${url}`;
+        
+        console.log('[Braid HTTP] DELETE', fullUrl);
+        
+        const response = await fetch(fullUrl, {
+          method: 'DELETE',
+          headers: buildAuthHeaders()
+        });
+        
+        if (!response.ok) {
+          const errText = await response.text();
+          console.error('[Braid HTTP] DELETE error', response.status, errText.substring(0, 200));
+          return {
+            tag: 'Err',
+            error: {
+              type: 'NetworkError',
+              status: response.status,
+              message: errText
+            }
+          };
+        }
+        
+        const data = await response.json();
+        return { tag: 'Ok', value: data };
+      }
+    }
   };
 }
 

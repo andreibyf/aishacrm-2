@@ -1,3 +1,7 @@
+// TESTED AND WORKING - DO NOT MODIFY WITHOUT EXPRESS APPROVAL
+// This file has been thoroughly tested and is core to AI chat functionality
+// Last verified: 2026-01-31
+
 /**
  * AI Routes
  * Chat, sentiment, summarization, embeddings, conversations
@@ -744,7 +748,7 @@ const maybeOffloadMetadata = async ({ tenantId, metadata, kind, entityType = nul
         : '';
       const baseSystemPrompt = `${buildSystemPrompt({ tenantName, agentName: agentNameForPrompt })}
 
-${getBraidSystemPrompt()}${userContext}
+${getBraidSystemPrompt('America/New_York')}${userContext}
 
 **CRITICAL INSTRUCTIONS:**
 - You MUST call fetch_tenant_snapshot tool before answering ANY questions about CRM data
@@ -2388,7 +2392,7 @@ ${toolContextSummary}`,
     try {
       logger.debug('[DEBUG /api/ai/chat] req.body:', JSON.stringify(req.body, null, 2));
 
-      const { messages = [], model = DEFAULT_CHAT_MODEL, temperature = 0.7, sessionEntities = null, conversation_id: conversationId } = req.body || {};
+      const { messages = [], model = DEFAULT_CHAT_MODEL, temperature = 0.7, sessionEntities = null, conversation_id: conversationId, timezone = 'America/New_York' } = req.body || {};
 
       // Extract user identity for created_by fields
       const userFirstName = req.headers['x-user-first-name'] || req.user?.first_name || '';
@@ -2741,7 +2745,7 @@ ${toolContextSummary}`,
       }
 
       const tenantName = tenantRecord?.name || tenantRecord?.tenant_id || 'CRM Tenant';
-      const baseSystemPrompt = `${buildSystemPrompt({ tenantName })}\n\n${getBraidSystemPrompt()}\n\n- ALWAYS call fetch_tenant_snapshot before answering tenant data questions.\n- NEVER hallucinate records; only reference tool data.\n`;
+      const baseSystemPrompt = `${buildSystemPrompt({ tenantName })}\n\n${getBraidSystemPrompt(timezone)}\n\n- ALWAYS call fetch_tenant_snapshot before answering tenant data questions.\n- NEVER hallucinate records; only reference tool data.\n`;
       
       // Get current user message for context detection
       const currentUserMessage = messages.filter(m => m.role === 'user').pop()?.content || '';

@@ -145,6 +145,15 @@ export default function createActivityRoutes(_pgPool) {
     let datePart = dateValue || null;
     let timePart = timeValue || null;
     if (datePart && /T/.test(datePart)) {
+      // Check if it has a timezone offset (+ or - after the time, or Z for UTC)
+      const hasTimezone = /T\d{2}:\d{2}(:\d{2})?([-+]\d{2}:\d{2}|Z)/.test(datePart);
+      if (hasTimezone) {
+        // Keep the full ISO datetime - PostgreSQL TIMESTAMPTZ handles it correctly
+        // Don't extract time separately; the full timestamp is preserved
+        timePart = null; // Clear due_time since full datetime is in due_date
+        return { datePart, timePart };
+      }
+      // No timezone - legacy behavior: extract date and time parts
       const d = new Date(datePart);
       if (!Number.isNaN(d.getTime())) {
         const yyyy = d.getFullYear();

@@ -29,7 +29,7 @@ fn createActivity(
     related_to: entity_type,
     related_id: entity_id,
     body: body,
-    status: "planned",
+    status: "scheduled",
     metadata: {}
   };
   
@@ -84,7 +84,7 @@ fn getUpcomingActivities(
   let params = {
     tenant_id: tenant,
     assigned_to: assigned_to,
-    status: "planned",
+    status: "scheduled",
     limit: 50
   };
   
@@ -114,7 +114,7 @@ fn scheduleMeeting(
     due_date: date_time,
     assigned_to: assigned_to,
     body: "Attendees: meeting",
-    status: "planned",
+    status: "scheduled",
     metadata: {}
   };
   

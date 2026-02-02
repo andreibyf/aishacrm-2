@@ -1,6 +1,16 @@
 /**
  * Braid Policies Module
  * Security policies and access control definitions for tool execution
+ * 
+ * CRITICAL: Each policy MUST include `allow_effects` for Braid capability enforcement.
+ * Braid tools declare effects (e.g., !net, !clock) and the runtime checks these against
+ * the policy's allow_effects array before execution.
+ * 
+ * Effects:
+ *   - 'net': Network/HTTP operations (API calls)
+ *   - 'clock': Time operations (timestamps, scheduling)
+ *   - 'fs': Filesystem operations (rarely used)
+ *   - '*': All effects (admin/system only)
  */
 
 /**
@@ -12,6 +22,7 @@ export const CRM_POLICIES = {
     name: 'Read Only',
     description: 'Can read data but cannot create, update, or delete',
     tool_class: 'read_operations',
+    allow_effects: ['net', 'clock'],  // Required for Braid capability enforcement
     allows: ['GET', 'LIST', 'SEARCH', 'VIEW'],
     denies: ['POST', 'PUT', 'PATCH', 'DELETE'],
     required_roles: [], // All roles allowed
@@ -28,9 +39,10 @@ export const CRM_POLICIES = {
     name: 'Write Operations',
     description: 'Can create, read, and update data but cannot delete',
     tool_class: 'write_operations',
+    allow_effects: ['net', 'clock'],  // Required for Braid capability enforcement
     allows: ['GET', 'LIST', 'SEARCH', 'VIEW', 'POST', 'PUT', 'PATCH'],
     denies: ['DELETE'],
-    required_roles: ['user', 'manager', 'admin', 'superadmin'],
+    required_roles: ['user', 'manager', 'admin', 'superadmin', 'agent'],
     rate_limit: {
       requests_per_minute: 50
     },
@@ -45,6 +57,7 @@ export const CRM_POLICIES = {
     name: 'Delete Operations',
     description: 'Full CRUD access including delete operations',
     tool_class: 'delete_operations',
+    allow_effects: ['net', 'clock'],  // Required for Braid capability enforcement
     allows: ['GET', 'LIST', 'SEARCH', 'VIEW', 'POST', 'PUT', 'PATCH', 'DELETE'],
     denies: [],
     required_roles: ['manager', 'admin', 'superadmin'],
@@ -64,6 +77,7 @@ export const CRM_POLICIES = {
     name: 'Admin Only',
     description: 'Administrative operations requiring elevated privileges',
     tool_class: 'admin_operations',
+    allow_effects: ['net', 'clock'],  // Required for Braid capability enforcement
     allows: ['GET', 'LIST', 'SEARCH', 'VIEW', 'POST', 'PUT', 'PATCH', 'DELETE', 'ADMIN'],
     denies: [],
     required_roles: ['admin', 'superadmin'],
@@ -83,6 +97,7 @@ export const CRM_POLICIES = {
     name: 'System Internal',
     description: 'Internal system operations not exposed to users',
     tool_class: 'system_operations',
+    allow_effects: ['*'],  // System operations can use all effects
     allows: ['SYSTEM'],
     denies: ['USER_FACING'],
     required_roles: ['system'],
@@ -100,9 +115,10 @@ export const CRM_POLICIES = {
     name: 'AI Suggestions',
     description: 'AI-powered suggestion operations with approval workflow',
     tool_class: 'ai_operations',
+    allow_effects: ['net', 'clock'],  // Required for Braid capability enforcement
     allows: ['GET', 'LIST', 'SEARCH', 'VIEW', 'POST', 'PUT', 'PATCH'],
     denies: ['DELETE'],
-    required_roles: ['user', 'manager', 'admin', 'superadmin'],
+    required_roles: ['user', 'manager', 'admin', 'superadmin', 'agent'],
     rate_limit: {
       requests_per_minute: 40
     },
@@ -118,9 +134,10 @@ export const CRM_POLICIES = {
     name: 'External API Access',
     description: 'Tools that make external API calls (web research, telephony)',
     tool_class: 'external_operations',
+    allow_effects: ['net', 'clock'],  // Required for Braid capability enforcement
     allows: ['GET', 'POST'],
     denies: [],
-    required_roles: ['user', 'manager', 'admin', 'superadmin'],
+    required_roles: ['user', 'manager', 'admin', 'superadmin', 'agent'],
     rate_limit: {
       requests_per_minute: 10 // Lower limit for external APIs
     },
@@ -138,6 +155,7 @@ export const CRM_POLICIES = {
  */
 export const ROLE_HIERARCHY = {
   user: 1,
+  agent: 1,  // Agents have user-level permissions for CRM operations
   manager: 2,
   admin: 3,
   superadmin: 4,

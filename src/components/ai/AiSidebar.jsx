@@ -1,3 +1,7 @@
+// TESTED AND WORKING - DO NOT MODIFY WITHOUT EXPRESS APPROVAL
+// This file has been thoroughly tested and is core to AI sidebar functionality
+// Last verified: 2026-01-31
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { AlertCircle, Building2, CheckSquare, ChevronRight, Loader2, Send, Sparkles, Target, TrendingUp, Users, X, Mic, Volume2, Trash2, ClipboardList, BarChart3, ListTodo, Ear, Briefcase, Code, ThumbsUp, ThumbsDown } from 'lucide-react';

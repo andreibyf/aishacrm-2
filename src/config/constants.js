@@ -164,8 +164,9 @@ export const STATUS = {
     CLOSED_LOST: 'closed_lost',
   },
   ACTIVITY: {
-    PLANNED: 'planned',
+    SCHEDULED: 'scheduled',
     IN_PROGRESS: 'in_progress',
+    OVERDUE: 'overdue',
     COMPLETED: 'completed',
     CANCELLED: 'cancelled',
   },

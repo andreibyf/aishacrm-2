@@ -146,6 +146,7 @@ function normalizeToUiEvents(rawEvt) {
 function pushEvent(rawEvt) {
   const uiEvents = normalizeToUiEvents(rawEvt);
   for (const evt of uiEvents) {
+    console.log('[office-viz] event:', evt.type, 'task=' + (evt.task_id || '-'), 'agent=' + (evt.agent_id || '-'));
     events.push(evt);
     if (events.length > MAX_EVENTS) events.splice(0, events.length - MAX_EVENTS);
 
@@ -179,15 +180,20 @@ async function startConsumer() {
   const kafka = new Kafka({ clientId: 'aisha-office-viz', brokers: KAFKA_BROKERS });
   const consumer = kafka.consumer({ groupId: 'aisha-office-viz' });
   await consumer.connect();
+  console.log('[office-viz] subscribing to topic:', KAFKA_TOPIC);
   await consumer.subscribe({ topic: KAFKA_TOPIC, fromBeginning: false });
   await consumer.run({
-    eachMessage: async ({ message }) => {
+    eachMessage: async ({ topic, partition, message }) => {
       try {
+        console.log('[office-viz] raw message received from kafka, offset:', message.offset);
         const evt = JSON.parse(message.value.toString('utf-8'));
         pushEvent(evt);
-      } catch (_) {}
+      } catch (err) {
+        console.error('[office-viz] error processing kafka message:', err.message);
+      }
     }
   });
+  console.log('[office-viz] kafka consumer running');
 }
 
 app.get('/health', (req, res) => {
@@ -555,7 +561,8 @@ app.get('/', requireVizAuth, (req, res) => {
     }
     
     .task-list {
-      flex-grow: 1;
+      flex: 1 1 0;
+      min-height: 0;
       overflow-y: auto;
       padding: 10px;
       display: flex; flex-direction: column; gap: 8px;
@@ -568,13 +575,21 @@ app.get('/', requireVizAuth, (req, res) => {
       padding: 8px;
       font-size: 0.8rem;
       color: #8b949e;
+      flex-shrink: 0;
+    }
+    .task-item .task-desc {
+      max-height: 80px;
+      overflow-y: auto;
+      word-wrap: break-word;
     }
     .task-item.completed { border-left: 3px solid #3fb950; }
     .task-item.failed { border-left: 3px solid #f85149; }
     .task-item.queued { border-left: 3px solid #e3b341; }
     
-    .task-id { font-weight: bold; color: #c9d1d9; margin-bottom: 4px; display: block; }
-    .task-meta { font-size: 0.7rem; }
+    .task-id { font-weight: bold; color: #c9d1d9; margin-bottom: 4px; display: block; font-family: monospace; }
+    .task-summary { color: #c9d1d9; margin-bottom: 6px; display: block; line-height: 1.4; }
+    .task-meta { font-size: 0.7rem; color: #8b949e; margin-bottom: 2px; }
+    .task-meta strong { color: #58a6ff; }
 
     /* Bubble Types */
     .speech-bubble.thought {
@@ -926,6 +941,16 @@ app.get('/', requireVizAuth, (req, res) => {
       }
     }
 
+    function renderOutbox() {
+      if (!outboxEl) return;
+      outboxEl.innerHTML = outboxTasks.map(task => \`
+        <div class="task-item \${task.status}">
+          <span class="task-id">\${task.id.slice(0, 8)}</span>
+          <span class="task-summary">\${task.summary}</span>
+        </div>
+      \`).join('');
+    }
+
     function updateStacks(evt) {
       // 1. Task Assigned: REMOVED immediate addition. 
       // Now handled by the Ops Manager's delivery animation in handleEvent.
@@ -959,13 +984,15 @@ app.get('/', requireVizAuth, (req, res) => {
         }
       }
 
-      // 3. Completed/Failed: Remove
+      // 3. Completed/Failed: Just update desk stacks, animation handled in main switch
       if (evt.type === 'run_completed' || evt.type === 'task_completed' || evt.type === 'task_failed') {
         const agentId = evt.agent_id;
         const role = getRoleFromAgentId(agentId);
         if (!agentId || !deskStacks[role]) return;
         
         const taskId = evt.task_id || evt.run_id;
+        
+        // Remove from desk immediately - animation handled in main event handler
         deskStacks[role] = deskStacks[role].filter(t => t.id !== taskId);
       }
       
@@ -1067,24 +1094,34 @@ app.get('/', requireVizAuth, (req, res) => {
           if (inboxTasks.length === 0) {
             inboxEl.innerHTML = '<div style="padding:10px; color:#484f58; text-align:center;">No tasks</div>';
           } else {
-            inboxEl.innerHTML = inboxTasks.map(t => \`
-              <div class="task-item queued">
-                <span class="task-id">\${(t.id||'').split(':').pop().substring(0,8)}</span>
-                <div class="task-meta">\${t.summary || 'Task'}</div>
-                <div class="task-meta">-> \${t.agent}</div>
-              </div>
-            \`).join('');
+            inboxEl.innerHTML = inboxTasks.map(t => {
+              const taskId = (t.id||'').split(':').pop();
+              const shortId = taskId.substring(0, 8);
+              const agentLabel = (t.agent || 'queued').split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+              const timestamp = t.ts ? new Date(t.ts).toLocaleTimeString() : '';
+              let timeHtml = '';
+              if (timestamp) {
+                timeHtml = '<div class="task-meta"><strong>Created:</strong> ' + timestamp + '</div>';
+              }
+              
+              return '<div class="task-item queued"><span class="task-id">' + shortId + '</span><div class="task-desc">' + (t.summary || 'Task') + '</div><div class="task-meta"><strong>Assigned to:</strong> ' + agentLabel + '</div>' + timeHtml + '</div>';
+            }).join('');
           }
         }
         
         if (outboxEl) {
-          outboxEl.innerHTML = outboxTasks.map(t => \`
-            <div class="task-item \${t.status}">
-              <span class="task-id">\${(t.id||'').split(':').pop().substring(0,8)}</span>
-              <div class="task-meta">\${t.summary || 'Task'}</div>
-              <div class="task-meta">\${t.status.toUpperCase()}</div>
-            </div>
-          \`).join('');
+          outboxEl.innerHTML = outboxTasks.map(t => {
+            const taskId = (t.id||'').split(':').pop();
+            const shortId = taskId.substring(0, 8);
+            const timestamp = t.ts ? new Date(t.ts).toLocaleTimeString() : '';
+            const statusLabel = t.status.replace('_', ' ').toUpperCase();
+            let timeHtml = '';
+            if (timestamp) {
+              timeHtml = '<div class="task-meta"><strong>Completed:</strong> ' + timestamp + '</div>';
+            }
+            
+            return '<div class="task-item ' + t.status + '"><span class="task-id">' + shortId + '</span><div class="task-desc">' + (t.summary || 'Task') + '</div><div class="task-meta"><strong>Status:</strong> ' + statusLabel + '</div>' + timeHtml + '</div>';
+          }).join('');
         }
       } catch (e) {
         console.error('Error rendering panes:', e);
@@ -1105,8 +1142,9 @@ app.get('/', requireVizAuth, (req, res) => {
       if (inboxTasks.some(t => t.id === id)) return;
       inboxTasks.push({
         id,
-        summary: e.input_summary || e.summary || e.reason || 'New Task',
-        agent: e.to_agent_id || e.agent_id || e.agent_name || 'queued'
+        summary: e.input_summary || e.summary || e.reason || e.title || 'New Task',
+        agent: e.to_agent_id || e.agent_id || e.agent_name || 'queued',
+        ts: e.ts
       });
     }
 
@@ -1393,7 +1431,7 @@ app.get('/', requireVizAuth, (req, res) => {
              const assignee = agents[assigneeId];
              const targetPos = { x: assignee.homeX, y: assignee.homeY };
              
-             // 1. Dispatcher walks to Inbox
+             // 1. Dispatcher walks to Inbox (using right-angle pathfinding)
              queueMove(dispatcherId, INBOX_POS.x, INBOX_POS.y);
              queueAction(dispatcherId, ['wait', 200]);
              
@@ -1408,7 +1446,7 @@ app.get('/', requireVizAuth, (req, res) => {
              queueAction(dispatcherId, ['bubble', 'Dispatching...', 'chat']);
              queueAction(dispatcherId, ['wait', 200]);
 
-             // 3. Walk to Assignee's Desk
+             // 3. Walk to Assignee's Desk (using right-angle pathfinding)
              queueMove(dispatcherId, targetPos.x, targetPos.y);
              queueAction(dispatcherId, ['wait', 200]);
 
@@ -1451,7 +1489,7 @@ app.get('/', requireVizAuth, (req, res) => {
              }
              queueAction(dispatcherId, ['wait', 200]);
 
-             // 5. Walk Home (if not already there)
+             // 5. Walk Home (using right-angle pathfinding)
              queueMove(dispatcherId, dispatcher.homeX, dispatcher.homeY);
              
              // Calculate ETA for delivery so Assignee doesn't start too early
@@ -1477,7 +1515,7 @@ app.get('/', requireVizAuth, (req, res) => {
 
             queueAction(agentId, ['bubble', 'Handing off...', 'chat', 4000]);
 
-            // 1. Walk to target
+            // 1. Walk to target (using right-angle pathfinding)
             queueMove(agentId, targetPos.x, targetPos.y);
             queueAction(agentId, ['wait', 500]);
             // 2. Transfer
@@ -1489,7 +1527,7 @@ app.get('/', requireVizAuth, (req, res) => {
                showBubble(toId, 'Got it!', 'chat');
             }]);
             queueAction(agentId, ['wait', 200]);
-            // 3. Walk Home
+            // 3. Walk Home (using right-angle pathfinding)
             queueMove(agentId, agent.homeX, agent.homeY);
           }
           break;
@@ -1517,11 +1555,11 @@ app.get('/', requireVizAuth, (req, res) => {
 
           const status = evt.type === 'task_failed' ? 'failed' : 'completed';
 
-          // Walk to Outbox -> Drop -> Home
+          // Walk to Outbox -> Drop -> Home (using right-angle pathfinding)
           queueAction(agentId, ['bubble', status === 'failed' ? 'Blocked.' : 'Done.', 'chat', 3000]);
           queueAction(agentId, ['set', 'status', 'idle']);
           queueMove(agentId, OUTBOX_POS.x, OUTBOX_POS.y);
-          queueAction(agentId, ['wait', 200]);
+          queueAction(agentId, ['wait', 500]);
 
           // Drop and Update Outbox
           queueAction(agentId, ['exec', () => {
@@ -1535,8 +1573,9 @@ app.get('/', requireVizAuth, (req, res) => {
               
               outboxTasks.unshift({
                 id: taskId,
-                summary: evt.output_summary || 'Task Done',
-                status
+                summary: evt.output_summary || evt.summary || 'Task Done',
+                status,
+                ts: evt.ts
               });
               if (outboxTasks.length > 50) outboxTasks.pop();
               renderPanes();

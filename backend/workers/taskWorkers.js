@@ -112,6 +112,7 @@ export function startTaskWorkers(pgPool) {
       // 2. Emit run_started
       emitRunStarted({
         run_id,
+        task_id,
         trace_id: run_id,
         span_id: randomUUID(),
         tenant_id: tenantRecord.id,
@@ -313,7 +314,9 @@ export function startTaskWorkers(pgPool) {
         : allToolSchemas.filter(tool => agentProfile.tool_allowlist.includes(tool.function.name));
 
       // 6. Build system prompt with agent identity
-      const systemPrompt = getBraidSystemPrompt(tenantRecord);
+      // Extract timezone from context if provided, otherwise use default
+      const timezone = context?.timezone || 'America/New_York';
+      const systemPrompt = getBraidSystemPrompt(timezone);
       
       // Add role-specific guidance
       let roleGuidance = '';
@@ -666,6 +669,7 @@ Provide a clear summary of what you did.`;
       // 8. Emit run_completed / task_completed
       emitRunFinished({
         run_id,
+        task_id,
         trace_id: run_id,
         span_id: randomUUID(),
         tenant_id: tenantRecord.id,
@@ -704,6 +708,7 @@ Provide a clear summary of what you did.`;
       // Emit error telemetry
       emitRunFinished({
         run_id,
+        task_id,
         trace_id: run_id,
         span_id: randomUUID(),
         tenant_id,

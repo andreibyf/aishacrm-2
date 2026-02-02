@@ -200,7 +200,7 @@ export default function AgentChat({
       
       console.log('[AgentChat] Loading context with STRICT tenant filter:', filter);
       
-      const [recentActivities, openOpps, hotLeads, keyAccounts] = await Promise.all([
+      const [recentActivitiesResult, openOpps, hotLeads, keyAccounts] = await Promise.all([
         Activity.filter({ ...filter, status: { $in: ["completed", "in-progress", "scheduled"] } }, "-created_date", 5).catch((e) => {
           console.error('[AgentChat] Failed to fetch activities for tenant:', tenantId, e);
           return [];
@@ -218,6 +218,11 @@ export default function AgentChat({
           return [];
         }),
       ]);
+      
+      // Handle both array and { activities: [...] } response formats for Activity.filter
+      const recentActivities = Array.isArray(recentActivitiesResult) 
+        ? recentActivitiesResult 
+        : (recentActivitiesResult?.activities || []);
 
       console.log('[AgentChat] Context loaded:', {
         tenant: tenantId,

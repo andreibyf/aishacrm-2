@@ -159,6 +159,13 @@ function RecentActivities(props) {
       const now = new Date();
       const toDueDate = (a) => {
         if (!a?.due_date) return null;
+        // FIXED: If due_date contains a full ISO datetime with timezone offset,
+        // parse it directly - the Date constructor handles the offset correctly
+        if (a.due_date.includes('T') && (a.due_date.includes('+') || a.due_date.includes('-', 10))) {
+          const dt = new Date(a.due_date);
+          return isNaN(dt.getTime()) ? null : dt;
+        }
+        // Legacy: separate due_date and due_time fields
         const datePart = String(a.due_date).split("T")[0];
         const hhmm = a.due_time && /^\d{2}:\d{2}$/.test(a.due_time) ? a.due_time : "23:59";
         const dt = new Date(`${datePart}T${hhmm}:00.000Z`);

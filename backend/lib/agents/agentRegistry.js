@@ -86,14 +86,89 @@ export function getDefaultAgentProfile(role, tenant_id = null) {
         temperature: 0.35,
         // BRAID TOOLS ONLY - sales pipeline and opportunity management
         tool_allowlist: [
-          'create_opportunity',          // Create new deals
-          'list_opportunities_by_stage', // Pipeline visibility
-          'update_opportunity',          // Move deals through stages
-          'mark_opportunity_won',        // Close deals
-          'get_opportunity_forecast',    // Revenue forecasting
-          'create_activity',             // Schedule sales calls
-          'create_note',                 // Log sales notes
-          'delegate_task',               // Delegate to marketing/client services
+          // Opportunities
+          'create_opportunity',
+          'update_opportunity',
+          'get_opportunity_details',
+          'search_opportunities',
+          'search_opportunities_by_stage',
+          'list_opportunities_by_stage',
+          'advance_opportunity_stage',
+          'mark_opportunity_won',
+          'get_opportunity_forecast',
+
+          // Accounts
+          'create_account',
+          'update_account',
+          'get_account_details',
+          'search_accounts',
+          'search_accounts_by_status',
+          'list_accounts',
+
+          // Leads
+          'get_lead_details',
+          'search_leads',
+          'search_leads_by_status',
+          'list_leads',
+          'qualify_lead',
+          'convert_lead_to_account',
+
+          // Contacts
+          'get_contact_details',
+          'get_contact_by_name',
+          'search_contacts',
+          'list_contacts_for_account',
+          'list_all_contacts',
+
+          // Activities
+          'create_activity',
+          'update_activity',
+          'get_activity_details',
+          'search_activities',
+          'list_activities',
+          'mark_activity_complete',
+          'schedule_meeting',
+          'get_upcoming_activities',
+
+          // Reports
+          'get_pipeline_report',
+          'get_sales_report',
+          'get_revenue_forecasts',
+          'get_lead_conversion_report',
+          'get_dashboard_bundle',
+
+          // Notes
+          'create_note',
+          'update_note',
+          'get_note_details',
+          'get_notes_for_record',
+          'search_notes',
+
+          // Suggestions
+          'get_suggestion_details',
+          'get_suggestion_stats',
+          'apply_suggestion',
+          'approve_suggestion',
+          'reject_suggestion',
+          'suggest_next_actions',
+
+          // Lifecycle
+          'advance_to_lead',
+          'advance_to_qualified',
+          'advance_to_account',
+          'full_lifecycle_advance',
+
+          // Navigation
+          'navigate_to_page',
+          'get_current_page',
+
+          // System
+          'fetch_tenant_snapshot',
+          'get_health_summary',
+          'debug_probe',
+
+          // Delegation
+          'delegate_task',
         ],
         memory_namespace: 'sales',
         metadata: {
@@ -112,11 +187,75 @@ export function getDefaultAgentProfile(role, tenant_id = null) {
         temperature: 0.5,
         // BRAID TOOLS ONLY - lead/contact research and creation
         tool_allowlist: [
-          'search_web',          // Research companies/prospects
-          'lookup_company_info', // Get company details
-          'create_lead',         // Create new leads
-          'create_contact',      // Create new contacts
-          'create_note',         // Document research findings
+          // Contacts
+          'create_contact',
+          'update_contact',
+          'get_contact_details',
+          'get_contact_by_name',
+          'search_contacts',
+          'search_contacts_by_status',
+          'list_contacts_for_account',
+          'list_all_contacts',
+
+          // Accounts
+          'get_account_details',
+          'search_accounts',
+          'list_accounts',
+
+          // BizDev Sources
+          'create_bizdev_source',
+          'update_bizdev_source',
+          'get_bizdev_source_details',
+          'search_bizdev_sources',
+          'list_bizdev_sources',
+          'archive_bizdev_sources',
+          'promote_bizdev_source_to_lead',
+
+          // Research
+          'search_web',
+          'fetch_web_page',
+          'lookup_company_info',
+
+          // Activities
+          'create_activity',
+          'update_activity',
+          'get_activity_details',
+          'search_activities',
+          'list_activities',
+          'mark_activity_complete',
+          'get_upcoming_activities',
+
+          // Notes
+          'create_note',
+          'update_note',
+          'get_note_details',
+          'get_notes_for_record',
+          'search_notes',
+
+          // Documents
+          'create_document',
+          'get_document_details',
+          'search_documents',
+          'list_documents',
+          'analyze_document',
+
+          // Telephony
+          'call_contact',
+          'initiate_call',
+          'check_calling_provider',
+          'get_calling_agents',
+
+          // Suggestions
+          'suggest_next_actions',
+          'get_suggestion_details',
+
+          // Navigation
+          'navigate_to_page',
+          'get_current_page',
+
+          // System
+          'fetch_tenant_snapshot',
+          'debug_probe',
         ],
         memory_namespace: 'client_services',
         metadata: {
@@ -135,14 +274,63 @@ export function getDefaultAgentProfile(role, tenant_id = null) {
         temperature: 0.25,
         // BRAID TOOLS ONLY - verified against backend/lib/braidIntegration-v2.js TOOL_REGISTRY
         tool_allowlist: [
-          'create_activity',        // Schedule meetings, tasks, calls
-          'update_activity',        // Reschedule or modify activities
-          'mark_activity_complete', // Mark tasks/meetings as done
-          'list_activities',        // Check calendar/schedule
-          'create_note',            // Document project notes, plans
-          'update_note',            // Edit existing notes
-          'get_notes_for_record',   // Read project documentation
-          'delegate_task',          // Delegate to client services/marketing
+          // Activities
+          'create_activity',
+          'update_activity',
+          'get_activity_details',
+          'search_activities',
+          'list_activities',
+          'mark_activity_complete',
+          'schedule_meeting',
+          'get_upcoming_activities',
+
+          // Workflows
+          'get_workflow_template',
+          'list_workflow_templates',
+          'instantiate_workflow_template',
+          'trigger_workflow_by_name',
+          'list_active_workflows',
+          'get_workflow_progress',
+          'get_workflow_notes',
+
+          // Notes
+          'create_note',
+          'update_note',
+          'get_note_details',
+          'get_notes_for_record',
+          'search_notes',
+
+          // Accounts
+          'get_account_details',
+          'search_accounts',
+          'list_accounts',
+
+          // Contacts
+          'get_contact_details',
+          'get_contact_by_name',
+          'search_contacts',
+          'list_contacts_for_account',
+
+          // Opportunities
+          'get_opportunity_details',
+          'search_opportunities',
+          'list_opportunities_by_stage',
+
+          // Reports
+          'get_activity_report',
+          'get_dashboard_bundle',
+
+          // Navigation
+          'navigate_to_page',
+          'get_current_page',
+
+          // System
+          'fetch_tenant_snapshot',
+          'get_health_summary',
+          'debug_probe',
+
+          // Delegation
+          'delegate_task',
         ],
         memory_namespace: 'pm',
         metadata: {
@@ -161,10 +349,71 @@ export function getDefaultAgentProfile(role, tenant_id = null) {
         temperature: 0.8,
         // BRAID TOOLS ONLY - campaign and content management
         tool_allowlist: [
-          'search_leads',           // Segment/target leads
-          'list_accounts',          // Segment/target accounts
-          'create_note',            // Draft campaign notes/plans
-          'create_activity',        // Schedule campaign tasks
+          // Leads
+          'create_lead',
+          'update_lead',
+          'get_lead_details',
+          'search_leads',
+          'search_leads_by_status',
+          'list_leads',
+
+          // BizDev Sources
+          'create_bizdev_source',
+          'update_bizdev_source',
+          'get_bizdev_source_details',
+          'search_bizdev_sources',
+          'list_bizdev_sources',
+          'promote_bizdev_source_to_lead',
+
+          // Contacts
+          'create_contact',
+          'update_contact',
+          'get_contact_details',
+          'search_contacts',
+          'list_all_contacts',
+
+          // Activities
+          'create_activity',
+          'update_activity',
+          'get_activity_details',
+          'search_activities',
+          'list_activities',
+          'mark_activity_complete',
+
+          // Research
+          'search_web',
+          'fetch_web_page',
+          'lookup_company_info',
+
+          // Notes
+          'create_note',
+          'update_note',
+          'get_note_details',
+          'get_notes_for_record',
+          'search_notes',
+
+          // Documents
+          'create_document',
+          'get_document_details',
+          'search_documents',
+          'list_documents',
+
+          // Reports
+          'get_lead_conversion_report',
+          'get_dashboard_bundle',
+
+          // Suggestions
+          'trigger_suggestion_generation',
+          'list_suggestions',
+          'get_suggestion_details',
+
+          // Navigation
+          'navigate_to_page',
+          'get_current_page',
+
+          // System
+          'fetch_tenant_snapshot',
+          'debug_probe',
         ],
         memory_namespace: 'mkt',
         metadata: {
@@ -183,11 +432,56 @@ export function getDefaultAgentProfile(role, tenant_id = null) {
         temperature: 0.2,
         // BRAID TOOLS ONLY - customer support and issue management
         tool_allowlist: [
-          'search_contacts',        // Find customer info
-          'get_contact_details',    // Get customer details
-          'create_note',            // Log support interactions
-          'create_activity',        // Schedule follow-ups
-          'search_notes',           // Search support history
+          // Contacts
+          'get_contact_details',
+          'get_contact_by_name',
+          'search_contacts',
+          'update_contact',
+          'list_contacts_for_account',
+
+          // Accounts
+          'get_account_details',
+          'search_accounts',
+          'list_accounts',
+          'update_account',
+
+          // Activities
+          'create_activity',
+          'update_activity',
+          'get_activity_details',
+          'search_activities',
+          'list_activities',
+          'mark_activity_complete',
+          'get_upcoming_activities',
+
+          // Notes
+          'create_note',
+          'update_note',
+          'get_note_details',
+          'get_notes_for_record',
+          'search_notes',
+
+          // Documents
+          'get_document_details',
+          'search_documents',
+          'list_documents',
+
+          // Telephony
+          'call_contact',
+          'initiate_call',
+          'check_calling_provider',
+
+          // Suggestions
+          'suggest_next_actions',
+          'get_suggestion_details',
+
+          // Navigation
+          'navigate_to_page',
+          'get_current_page',
+
+          // System
+          'fetch_tenant_snapshot',
+          'debug_probe',
         ],
         memory_namespace: 'cs',
         metadata: {

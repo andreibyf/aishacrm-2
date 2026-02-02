@@ -36,6 +36,8 @@ services:
       retries: 6
       start_period: 30s
     restart: unless-stopped
+    networks:
+      - aishanet
 
   telemetry-sidecar:
     build:
@@ -63,6 +65,8 @@ services:
       retries: 6
       start_period: 60s
     restart: unless-stopped
+    networks:
+      - aishanet
 
   office-viz:
     build:
@@ -89,6 +93,8 @@ services:
       retries: 6
       start_period: 30s
     restart: unless-stopped
+    networks:
+      - aishanet
 
 volumes:
   redpanda_data:
@@ -96,3 +102,8 @@ volumes:
   aisha_telemetry:
     # Prevent Compose project prefixing (e.g., agent-office_aisha_telemetry)
     name: aisha_telemetry
+
+networks:
+  aishanet:
+    external: true
+    name: aishanet

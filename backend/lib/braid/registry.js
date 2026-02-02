@@ -263,11 +263,11 @@ export const TOOL_DESCRIPTIONS = {
   get_lead_details: 'Get the full details of a specific Lead by its UUID. Only use when you already have the lead_id from a previous search or list.',
 
   // Activities
-  create_activity: 'Create a new Activity (task, meeting, call, email). REQUIRED: subject (title), activity_type, due_date (ISO format), entity_type, entity_id. OPTIONAL: assigned_to, body (leave empty unless user specifies notes). DATE RULES: 1) Use due_date for when - NEVER in subject or body. 2) NEVER past dates. 3) "today" = 5:00 PM today. 4) "tomorrow" = 9:00 AM tomorrow. 5) Default = tomorrow 9:00 AM. 6) ISO format: "2026-01-10T09:00:00".',
-  update_activity: 'Update/reschedule an existing Activity by its ID. Pass activity_id and updates object with new due_date (ISO format). Put dates in due_date field only. NEVER set dates in the past.',
+  create_activity: 'Create a new Activity (task, meeting, call, email). REQUIRED: subject (title), activity_type, due_date (ISO format WITH user timezone offset from system prompt), entity_type, entity_id. OPTIONAL: assigned_to, body. DATE RULES: 1) Use due_date for when - NEVER in subject or body. 2) NEVER past dates. 3) "today" = 5:00 PM today. 4) "tomorrow" = 9:00 AM tomorrow. 5) Default = tomorrow 9:00 AM. 6) ALWAYS use the timezone offset from system prompt, IGNORE any timezone user mentions.',
+  update_activity: 'Update/reschedule an existing Activity by its ID. Pass activity_id and updates object with new due_date (ISO format with user timezone offset from system prompt). Put dates in due_date field only. NEVER set dates in the past. ALWAYS use the timezone offset from system prompt.',
   mark_activity_complete: 'Mark an Activity as completed by its ID. Use the ID from previous list/search results.',
   get_upcoming_activities: 'Get upcoming activities for a user. The assigned_to parameter must be a user UUID (not email). Use search_users first to find the user UUID if needed. Use list_activities for general calendar queries.',
-  schedule_meeting: 'Schedule a new meeting with attendees. Creates a meeting-type activity with date, time, duration, and attendee list.',
+  schedule_meeting: 'Schedule a new meeting with attendees. Creates a meeting-type activity with date, time, duration, and attendee list. ALWAYS use the timezone offset from system prompt in date_time.',
   list_activities: 'List all Activities in the CRM. Use this for calendar/schedule queries. Pass status="planned" for upcoming/pending, status="overdue" for overdue, status="completed" for past, or status="all" for everything. IMPORTANT: Results include activity IDs - remember these for follow-up actions like update or complete.',
   search_activities: 'Search for Activities by subject, body, or type. ALWAYS use this first when user asks about an activity by name or keyword. Results include IDs for follow-up actions.',
   get_activity_details: 'Get the full details of a specific Activity by its UUID. Only use when you already have the activity_id from a previous list or search.',
@@ -435,25 +435,79 @@ export async function generateToolSchemas(allowedToolNames = null) {
 }
 
 /**
- * Enhanced system prompt for Executive Assistant
- * Now a function to get fresh date each time
+ * Calculate timezone offset string (e.g., "-05:00") from IANA timezone name
+ * @param {string} timezone - IANA timezone name (e.g., "America/New_York")
+ * @returns {string} Offset string like "-05:00" or "+00:00"
  */
-export function getBraidSystemPrompt() {
+function getTimezoneOffset(timezone) {
+  try {
+    const now = new Date();
+    // Get the offset in minutes using Intl.DateTimeFormat
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      timeZoneName: 'longOffset'
+    });
+    const parts = formatter.formatToParts(now);
+    const offsetPart = parts.find(p => p.type === 'timeZoneName');
+    // offsetPart.value is like "GMT-05:00" or "GMT+05:30"
+    if (offsetPart?.value) {
+      const match = offsetPart.value.match(/GMT([+-]\d{2}:\d{2})/);
+      if (match) return match[1];
+    }
+    // Fallback: calculate manually
+    const utc = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
+    const local = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
+    const diffMinutes = (local - utc) / 60000;
+    const sign = diffMinutes >= 0 ? '+' : '-';
+    const absMinutes = Math.abs(diffMinutes);
+    const hours = String(Math.floor(absMinutes / 60)).padStart(2, '0');
+    const mins = String(absMinutes % 60).padStart(2, '0');
+    return `${sign}${hours}:${mins}`;
+  } catch {
+    return '-05:00'; // Default to EST on error
+  }
+}
+
+/**
+ * Enhanced system prompt for Executive Assistant
+ * Now a function to get fresh date each time and accepts user timezone
+ * @param {string} timezone - IANA timezone name (default: America/New_York)
+ */
+export function getBraidSystemPrompt(timezone = 'America/New_York') {
   const now = new Date();
-  const currentDate = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-  const currentYear = now.getFullYear();
+  // FIXED: Calculate current date/time in USER'S timezone, not server timezone
+  const currentDate = now.toLocaleDateString('en-US', { 
+    weekday: 'long', 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric',
+    timeZone: timezone  // Use user's timezone!
+  });
+  const currentTime = now.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: timezone  // Use user's timezone!
+  });
+  const currentYear = now.toLocaleDateString('en-US', { year: 'numeric', timeZone: timezone });
+  const timezoneOffset = getTimezoneOffset(timezone);
   
   return `
 You are AI-SHA - an AI Super Hi-performing Assistant designed to be an Executive Assistant for CRM operations.
 
-**!!! CRITICAL: DATE AND TIME AWARENESS !!!**
+**!!! CRITICAL: DATE, TIME, AND TIMEZONE AWARENESS !!!**
 - The current date is: ${currentDate}
+- The current time is: ${currentTime} (${timezone})
 - The current year is: ${currentYear}
+- The user's timezone is: ${timezone} (offset: ${timezoneOffset})
 - NEVER create activities, tasks, or meetings with due dates in the past
 - When user says "today", use today's date with a future time (e.g., 5:00 PM if morning)
 - When user says "tomorrow", use tomorrow's date
 - If no date specified, default to tomorrow at 9:00 AM
-- Use ISO 8601 format for dates: YYYY-MM-DDTHH:MM:SS
+- **ALWAYS use the user's timezone offset (${timezoneOffset}) in all date/time values**
+- Use ISO 8601 format WITH timezone: YYYY-MM-DDTHH:MM:SS${timezoneOffset}
+- Example: For 3:00 PM, use "2026-02-05T15:00:00${timezoneOffset}" NOT "2026-02-05T15:00:00"
+- IGNORE any timezone the user mentions - ALWAYS use their configured timezone (${timezone})
 
 **STOP! BEFORE ANSWERING "HOW MANY" QUESTIONS - READ THIS!**
 

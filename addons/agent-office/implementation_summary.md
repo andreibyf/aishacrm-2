@@ -1,9 +1,19 @@
 # Agent Office Visualization - Implementation Summary
 
 ## Overview
-We have successfully implemented a real-time, animated office floor visualization for the AiSHA CRM. This visualization represents agents as side-view characters in a "glass office" or "dollhouse" perspective, moving between desks, picking up tasks from an Inbox, handing them off to other agents, and delivering completed work to an Outbox.
+We have successfully implemented a real-time, animated office floor visualization for the AiSHA CRM. This is an **observability tool** that shows agent work in progress — it is NOT the primary user interface.
 
-> **Note**: The user creates work; AiSHA decides ownership; agents execute.
+### User Workflow
+1. **User creates work**: Click "Ask AiSHA" button on entity profiles (Contact, Account, Lead, Opportunity)
+2. **User types task**: "Generate follow-up email", "Analyze Q1 pipeline", "Schedule kickoff meeting"
+3. **AiSHA (Ops Manager) decides ownership**: Routes task to appropriate specialist agent
+4. **Agents execute**: Sales Manager, Project Manager, Marketing Manager, etc. use their allowed Braid tools
+5. **Office shows activity**: Watch agents pick up tasks, execute tools, hand off work, complete tasks
+
+> **Note**: The user creates work via "Ask AiSHA"; AiSHA decides ownership; specialist agents execute; office-viz visualizes.
+
+### Visualization Design
+This visualization represents agents as side-view characters in a "glass office" or "dollhouse" perspective, moving between desks, picking up tasks from an Inbox, handing them off to other agents, and delivering completed work to an Outbox.
 
 ## Key Features Implemented
 

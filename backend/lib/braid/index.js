@@ -93,7 +93,7 @@ export {
   createBackendDeps,
   filterSensitiveFields,
   loadToolSchema,
-  normalizeToolArgs,
+  // NOTE: normalizeToolArgs exported from analysis.js below (full version with 3 args)
   validateToolArgs,
   normalizeToolFilter,
   generateRequestId,
@@ -111,6 +111,9 @@ export {
   retry,
   withTimeout
 } from './utils.js';
+
+// Export the FULL normalizeToolArgs from analysis.js (not the stub in utils.js)
+export { normalizeToolArgs } from './analysis.js';
 
 /**
  * Get the full tool registry (back-compat helper)

@@ -627,12 +627,13 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
 const createEntity = (entityName) => {
   return {
     // Add filter method as alias for list with better parameter handling
-    filter: async (filterObj, sortField, _limit) => {
-      // Merge sort field into filter object if provided
-      const queryObj = sortField 
-        ? { ...filterObj, sort: sortField }
-        : filterObj;
-      console.log(`[Entity.filter] ${entityName} CALLING with sort:`, sortField, 'queryObj:', queryObj);
+    filter: async (filterObj, sortField, limit, offset) => {
+      // Merge sort field and pagination into filter object if provided
+      const queryObj = { ...filterObj };
+      if (sortField) queryObj.sort = sortField;
+      if (limit !== undefined) queryObj.limit = limit;
+      if (offset !== undefined) queryObj.offset = offset;
+      console.log(`[Entity.filter] ${entityName} CALLING with sort:`, sortField, 'limit:', limit, 'queryObj:', queryObj);
       const result = await callBackendAPI(entityName, "GET", queryObj);
       console.log(`[Entity.filter] ${entityName}:`, { type: typeof result, isArray: Array.isArray(result), length: result?.length });
       return result;

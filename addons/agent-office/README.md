@@ -1,7 +1,19 @@
 # Agent Office Add-on (Option 2: Sidecar + Event Bus + Viz)
 
 ## What this is
-An add-on that visualizes AiSHA "office roles" by subscribing to telemetry events. The core app only writes NDJSON telemetry logs (best-effort). A sidecar publishes events to an event bus (Redpanda/Kafka by default), and the `office-viz` service provides an SSE stream and a minimal UI.
+An **observability tool** that visualizes AiSHA agent work in real-time. When users click "Ask AiSHA" buttons on entity profiles (Contacts, Accounts, Leads, Opportunities), the Ops Manager routes tasks to specialist agents (Sales Manager, Project Manager, etc.) who execute them behind the scenes using Braid tools. The office visualization shows these agents as animated characters picking up tasks, working on them, and completing them.
+
+**This is NOT the primary user interface** — it's a developer/admin tool for watching agent activity.
+
+### How it works
+1. User clicks "Ask AiSHA" on a Contact/Account/Lead profile
+2. User types a task (e.g., "Draft follow-up email", "Analyze pipeline")
+3. Ops Manager routes to appropriate agent (Sales Manager, Project Manager, etc.)
+4. Agent executes using allowed tools from their toolkit
+5. Office visualization at `http://localhost:4010` shows the agent workflow in real-time
+
+### Technical Implementation
+The core app only writes NDJSON telemetry logs (best-effort). A sidecar publishes events to an event bus (Redpanda/Kafka by default), and the `office-viz` service provides an SSE stream and animated UI.
 
 ## Enable core telemetry
 Set in your core backend container:

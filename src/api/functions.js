@@ -144,7 +144,8 @@ const createFunctionProxy = (functionName) => {
           temperature: typeof opts.temperature === 'number' ? opts.temperature : undefined,
           api_key: opts.api_key,
           conversation_id: opts.conversation_id || opts.conversationId, // Support both naming conventions
-          sessionEntities: opts.sessionEntities || opts.entityContext // Session context for follow-up questions
+          sessionEntities: opts.sessionEntities || opts.entityContext, // Session context for follow-up questions
+          timezone: opts.timezone || 'America/New_York' // User's timezone for activity scheduling
         };
 
         const headers = { 'Content-Type': 'application/json' };

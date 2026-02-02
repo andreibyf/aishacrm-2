@@ -404,7 +404,9 @@ export class ReferentialIntegrityManager {
    */
   static async findOrphanedActivities(tenantId) {
     try {
-      const activities = await Activity.filter({ tenant_id: tenantId }, '-created_date', 500);
+      const activitiesResult = await Activity.filter({ tenant_id: tenantId }, '-created_date', 500);
+      // Handle both array and { activities: [...] } response formats
+      const activities = Array.isArray(activitiesResult) ? activitiesResult : (activitiesResult?.activities || []);
       const orphans = [];
       
       for (const activity of activities) {
@@ -599,11 +601,13 @@ export class ReferentialIntegrityManager {
     
     try {
       // Delete or archive related activities
-      const activities = await Activity.filter({ 
+      const activitiesResult = await Activity.filter({ 
         tenant_id: tenantId, 
         related_to: 'contact', 
         related_id: contactId 
       });
+      // Handle both array and { activities: [...] } response formats
+      const activities = Array.isArray(activitiesResult) ? activitiesResult : (activitiesResult?.activities || []);
       for (const activity of activities) {
         // Soft delete: set related_id to null instead of hard delete
         await Activity.update(activity.id, { related_id: null, related_to: null });

@@ -383,12 +383,17 @@ export function AiSidebarProvider({ children }) {
       } else {
         // Include session context for entity resolution in follow-up questions
         const sessionContext = buildSessionContextSummary();
+        // Get user's timezone from settings (localStorage)
+        const userTimezone = typeof localStorage !== 'undefined' 
+          ? localStorage.getItem('selected_timezone') || 'America/New_York'
+          : 'America/New_York';
         result = await processChatCommand({
           text,
           history: chatHistory,
           context,
           sessionEntities: sessionContext,
-          conversation_id: conversationIdRef.current // Pass conversation ID for backend context tracking
+          conversation_id: conversationIdRef.current, // Pass conversation ID for backend context tracking
+          timezone: userTimezone // Pass user's timezone for activity scheduling
         });
       }
 

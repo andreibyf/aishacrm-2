@@ -64,6 +64,96 @@ async function lookupRelatedEntity(supabase, relatedTo, relatedId) {
   }
 }
 
+const ISO_WITH_OFFSET_REGEX = /T\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[-+]\d{2}:?\d{2})$/i;
+const TIME_WITH_OFFSET_REGEX = /^\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[-+]\d{2}:?\d{2})$/i;
+
+function normalizeOffsetNotation(value) {
+  return value.replace(/([-+]\d{2})(\d{2})$/, '$1:$2');
+}
+
+function normalizeDueDateTimeFields(rawDueDate, rawDueTime) {
+  let dueDate = typeof rawDueDate === 'string' ? rawDueDate.trim() : rawDueDate ?? null;
+  let dueTime = typeof rawDueTime === 'string' ? rawDueTime.trim() : rawDueTime ?? null;
+  let originalIso = null;
+
+  if (!dueDate) {
+    return { due_date: null, due_time: null, originalIso };
+  }
+
+  let isoCandidate = null;
+
+  if (typeof dueDate === 'string' && ISO_WITH_OFFSET_REGEX.test(dueDate)) {
+    // Input like "2025-11-20T14:45:00-05:00" — extract local time BEFORE parsing as ISO
+    // BUT PREFER rawDueTime if it's already provided and clean (HH:MM format)
+    if (!dueTime) {
+      const localTimeMatch = dueDate.match(/T(\d{2}):(\d{2})/);
+      if (localTimeMatch) {
+        dueTime = `${localTimeMatch[1]}:${localTimeMatch[2]}`;
+      }
+    }
+    const dateMatch = dueDate.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (dateMatch) {
+      dueDate = dateMatch[1];
+    }
+    isoCandidate = normalizeOffsetNotation(dueDate.replace(/\s+/g, ''));
+  } else if (typeof dueDate === 'string' && dueDate.includes('T')) {
+    const [datePart, timePart] = dueDate.split('T');
+    dueDate = datePart || null;
+    if (timePart) {
+      const timeMatch = timePart.match(/^(\d{2}:\d{2})/);
+      if (timeMatch) {
+        dueTime = timeMatch[1];
+      }
+    }
+    return { due_date: dueDate, due_time: dueTime || null, originalIso };
+  }
+
+  if (!isoCandidate && typeof dueTime === 'string' && dueTime) {
+    const collapsed = normalizeOffsetNotation(dueTime.replace(/\s+/g, ''));
+    if (TIME_WITH_OFFSET_REGEX.test(collapsed)) {
+      let timePortion = collapsed;
+      if (!/^\d{2}:\d{2}:\d{2}/.test(timePortion)) {
+        timePortion = timePortion.replace(/^(\d{2}:\d{2})/, '$1:00');
+      }
+      if (/([-+]\d{2})(\d{2})$/.test(timePortion)) {
+        timePortion = timePortion.replace(/([-+]\d{2})(\d{2})$/, '$1:$2');
+      }
+      if (timePortion.endsWith('Z') && !/:\d{2}Z$/i.test(timePortion)) {
+        timePortion = timePortion.replace(/Z$/i, ':00Z');
+      }
+      isoCandidate = `${dueDate}T${timePortion}`;
+    }
+  }
+
+  if (isoCandidate) {
+    originalIso = isoCandidate;
+    const isoMatch = isoCandidate.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
+    if (isoMatch) {
+      return { due_date: isoMatch[1], due_time: isoMatch[2], originalIso };
+    }
+
+    const parsed = new Date(isoCandidate);
+    if (!Number.isNaN(parsed.getTime())) {
+      const isoUtc = parsed.toISOString();
+      const [isoDatePart, isoTimePart] = isoUtc.split('T');
+      const timeMatch = isoTimePart.match(/^(\d{2}):(\d{2})/);
+      if (timeMatch) {
+        return { due_date: isoDatePart, due_time: `${timeMatch[1]}:${timeMatch[2]}`, originalIso };
+      }
+    }
+    logger.warn('[Activities V2] Unable to parse datetime payload', { rawDueDate, rawDueTime });
+  }
+
+  if (typeof dueTime === 'string' && dueTime) {
+    const match = dueTime.match(/^(\d{2}):(\d{2})/);
+    if (match) {
+      dueTime = `${match[1]}:${match[2]}`;
+    }
+  }
+
+  return { due_date: dueDate || null, due_time: dueTime || null, originalIso };
+}
+
 export default function createActivityV2Routes(_pgPool) {
   const router = express.Router();
 
@@ -466,8 +556,8 @@ export default function createActivityV2Routes(_pgPool) {
   router.post('/', invalidateCache('activities'), async (req, res) => {
     try {
       logger.debug('[Activities v2 POST] Raw body:', JSON.stringify(req.body));
-      const { tenant_id, metadata, description, body, duration_minutes, duration, tags, activity_type, assigned_to, ...payload } = req.body || {};
-      logger.debug('[Activities v2 POST] Destructured payload:', JSON.stringify({ tenant_id, activity_type, payload }));
+      const { tenant_id, metadata, description, body, duration_minutes, duration, tags, activity_type, assigned_to, status, ...payload } = req.body || {};
+      logger.debug('[Activities v2 POST] Destructured payload:', JSON.stringify({ tenant_id, activity_type, status, payload }));
       // Accept either duration_minutes or duration (legacy) - prefer duration_minutes
       const durationValue = duration_minutes ?? duration ?? undefined;
       if (!tenant_id) {
@@ -476,9 +566,34 @@ export default function createActivityV2Routes(_pgPool) {
 
       const supabase = getSupabaseClient();
 
+      const normalizedDateTime = normalizeDueDateTimeFields(payload.due_date, payload.due_time);
+      payload.due_date = normalizedDateTime.due_date;
+      payload.due_time = normalizedDateTime.due_time;
+      delete payload.timezone;
+      delete payload.timezone_offset;
+      delete payload.timezoneOffset;
+      delete payload.timezone_offset_minutes;
+      delete payload.original_due_datetime;
+      delete payload.original_timezone_offset;
+      const originalDueDateTime = normalizedDateTime.originalIso;
+
       const bodyText = description ?? body ?? null;
       // Map activity_type to type (Braid SDK uses activity_type, DB column is 'type')
-      const activityType = activity_type ?? payload.type ?? null;
+      // Default to 'task' if not provided - type is a required NOT NULL column
+      const activityType = activity_type ?? payload.type ?? 'task';
+      
+      // Normalize status: 'planned' → 'scheduled' (AI may use 'planned')
+      // Default to 'scheduled' if activity has a due_date
+      let normalizedStatus = status ?? payload.status;
+      if (normalizedStatus === 'planned' || normalizedStatus === 'pending') {
+        normalizedStatus = 'scheduled';
+      }
+      // If no status provided but has due_date, default to 'scheduled'
+      if (!normalizedStatus && (payload.due_date || payload.due_time)) {
+        normalizedStatus = 'scheduled';
+      }
+      // Final fallback to 'scheduled'
+      normalizedStatus = normalizedStatus || 'scheduled';
       
       // Sanitize UUID fields: must be valid UUID or null (AI may pass strings like "Unassigned" or "budget_meeting")
       const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -495,21 +610,45 @@ export default function createActivityV2Routes(_pgPool) {
       const relatedId = validRelatedId;
       const { name: relatedName, email: relatedEmail } = await lookupRelatedEntity(supabase, relatedTo, relatedId);
       
+      let metadataPayload;
+      if (metadata && typeof metadata === 'object') {
+        metadataPayload = { ...metadata };
+        if (bodyText != null) {
+          metadataPayload.description = bodyText;
+        }
+      } else if (bodyText != null) {
+        metadataPayload = { description: bodyText };
+      }
+
+      if (originalDueDateTime) {
+        metadataPayload = metadataPayload || {};
+        metadataPayload.original_due_datetime = originalDueDateTime;
+        const offsetMatch = originalDueDateTime.match(/([-+]\d{2}:?\d{2}|Z)$/);
+        if (offsetMatch && offsetMatch[1] !== 'Z') {
+          metadataPayload.original_timezone_offset = normalizeOffsetNotation(offsetMatch[1].replace(':', ''));
+        } else if (offsetMatch) {
+          metadataPayload.original_timezone_offset = 'Z';
+        }
+      }
+
+      if (metadataPayload && Object.keys(metadataPayload).length === 0) {
+        metadataPayload = undefined;
+      }
+
       const insertPayload = {
         tenant_id,
         ...payload,
+        status: normalizedStatus,  // Use normalized status (planned → scheduled)
         assigned_to: validAssignedTo,
         related_to: relatedTo,   // Use sanitized related_to
         related_id: relatedId,   // Use sanitized related_id (valid UUID or null)
         ...(relatedName ? { related_name: relatedName } : {}),
         ...(relatedEmail ? { related_email: relatedEmail } : {}),
-        ...(activityType ? { type: activityType } : {}),
+        type: activityType,      // Always set type - required NOT NULL column
         ...(durationValue !== undefined ? { duration_minutes: durationValue } : {}),
         ...(Array.isArray(tags) ? { tags } : {}),
         body: bodyText,
-        metadata: metadata && typeof metadata === 'object'
-          ? { ...metadata, description: bodyText ?? metadata.description }
-          : (bodyText != null ? { description: bodyText } : undefined),
+        ...(metadataPayload !== undefined ? { metadata: metadataPayload } : {}),
       };
 
       const { data, error } = await supabase
@@ -693,21 +832,29 @@ export default function createActivityV2Routes(_pgPool) {
         ...(Array.isArray(tags) ? { tags } : {}),
         ...(metadata && typeof metadata === 'object' ? { metadata } : {}),
       };
+      delete updatePayload.timezone;
+      delete updatePayload.timezone_offset;
+      delete updatePayload.timezoneOffset;
+      delete updatePayload.timezone_offset_minutes;
+      delete updatePayload.original_due_datetime;
+      delete updatePayload.original_timezone_offset;
+      let originalDueDateTime;
+      const hasDueDateField = Object.prototype.hasOwnProperty.call(payload, 'due_date');
+      const hasDueTimeField = Object.prototype.hasOwnProperty.call(payload, 'due_time');
 
-      // Smart handling: Extract time from due_date if it contains a time component
-      // AI often passes due_date as "2025-12-20T15:00:00" instead of separate due_date + due_time
-      if (updatePayload.due_date && updatePayload.due_date.includes('T')) {
-        const [datePart, timePart] = updatePayload.due_date.split('T');
-        updatePayload.due_date = datePart;
-
-        // Extract time (HH:mm:ss or HH:mm) from the datetime
-        const timeMatch = timePart.match(/^(\d{2}:\d{2}(:\d{2})?)/);
-        if (timeMatch) {
-          const extractedTime = timeMatch[1];
-          // Normalize to HH:mm:ss format
-          updatePayload.due_time = extractedTime.length === 5 ? `${extractedTime}:00` : extractedTime;
-          logger.debug('[Activities V2] Extracted time from due_date:', { due_date: datePart, due_time: updatePayload.due_time });
+      if (hasDueDateField || hasDueTimeField) {
+        const normalizedUpdate = normalizeDueDateTimeFields(payload.due_date, payload.due_time);
+        if (hasDueDateField) {
+          updatePayload.due_date = normalizedUpdate.due_date;
+          if (!hasDueTimeField && normalizedUpdate.due_time !== null) {
+            updatePayload.due_time = normalizedUpdate.due_time;
+          }
         }
+        if (hasDueTimeField) {
+          updatePayload.due_time = normalizedUpdate.due_time;
+        }
+
+        originalDueDateTime = normalizedUpdate.originalIso;
       }
 
       const { data: current, error: fetchErr } = await supabase
@@ -729,6 +876,19 @@ export default function createActivityV2Routes(_pgPool) {
       };
       if (bodyText !== undefined) {
         mergedMeta.description = bodyText ?? null;
+      }
+      const touchedDueFields = hasDueDateField || hasDueTimeField;
+      if (originalDueDateTime) {
+        mergedMeta.original_due_datetime = originalDueDateTime;
+        const offsetMatch = originalDueDateTime.match(/([-+]\d{2}:?\d{2}|Z)$/);
+        if (offsetMatch && offsetMatch[1] !== 'Z') {
+          mergedMeta.original_timezone_offset = normalizeOffsetNotation(offsetMatch[1].replace(':', ''));
+        } else if (offsetMatch) {
+          mergedMeta.original_timezone_offset = 'Z';
+        }
+      } else if (touchedDueFields) {
+        delete mergedMeta.original_due_datetime;
+        delete mergedMeta.original_timezone_offset;
       }
       updatePayload.metadata = mergedMeta;
 

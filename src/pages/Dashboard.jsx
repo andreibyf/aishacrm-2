@@ -485,6 +485,11 @@ export default function DashboardPage() {
         const toArray = (val, label) => {
           if (Array.isArray(val)) return val;
           if (val == null) return [];
+          // Handle enriched response objects like { activities: [...], counts: {...}, total: N }
+          const entityKey = label.toLowerCase();
+          if (val && typeof val === 'object' && Array.isArray(val[entityKey])) {
+            return val[entityKey];
+          }
           console.warn(`[Dashboard] Normalizing non-array ${label} value`, val);
           return [];
         };

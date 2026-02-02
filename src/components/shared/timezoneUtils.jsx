@@ -197,15 +197,30 @@ export function formatActivityDateTime(activity, offsetMinutes = null) {
     return 'Not set';
   }
 
-  // FIXED: Handle full ISO strings by taking only the date part
-  const datePart = activity.due_date.split('T')[0];
-
-  // Validate date format
-  if (!isValidDateString(datePart)) {
-    return 'Invalid date';
-  }
-
   try {
+    // FIXED: If due_date contains a full ISO datetime (with T), parse it directly
+    // This preserves the timezone offset that was sent by the AI
+    if (activity.due_date.includes('T')) {
+      // due_date is a full ISO datetime string like "2026-02-03T12:00:00-05:00"
+      // Parse it directly - the Date constructor handles timezone offsets correctly
+      const parsedDate = new Date(activity.due_date);
+      
+      if (isNaN(parsedDate.getTime())) {
+        return 'Invalid date/time';
+      }
+      
+      // Format in the user's timezone using Intl
+      return format(parsedDate, 'PPP p'); // e.g., "February 3rd, 2026 12:00 PM"
+    }
+    
+    // Legacy handling: due_date is date-only (YYYY-MM-DD) with separate due_time
+    const datePart = activity.due_date;
+
+    // Validate date format
+    if (!isValidDateString(datePart)) {
+      return 'Invalid date';
+    }
+
     const dateParts = datePart.split('-');
     const year = parseInt(dateParts[0]);
     const month = parseInt(dateParts[1]) - 1; // JS months are 0-indexed

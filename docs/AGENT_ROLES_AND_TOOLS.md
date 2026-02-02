@@ -7,6 +7,25 @@ This document defines which Braid tools each agent role can invoke. Tools not in
 
 ---
 
+## How Users Interact with Agents
+
+**Users do NOT interact with the office visualization directly.** Instead:
+
+1. **Click "Ask AiSHA"** — Button appears on entity profile pages (Contact, Account, Lead, Opportunity)
+2. **Type your task** — "Generate follow-up email", "Analyze sales pipeline", "Draft proposal"
+3. **AiSHA routes** — Ops Manager analyzes intent and assigns to specialist agent:
+   - Sales tasks → Sales Manager
+   - Research/outreach → Client Services Expert  
+   - Scheduling/workflows → Project Manager
+   - Campaigns/content → Marketing Manager
+   - Support issues → Customer Service Manager
+4. **Agent executes** — Uses allowed tools from their toolkit (see allowlists below)
+5. **View progress** — Optional: Visit http://localhost:4010 to watch animated agents work
+
+**Office visualization is observability, not the primary UI.**
+
+---
+
 ## Agent Role Overview
 
 | Role | Display Name | Primary Domain | Escalates To |

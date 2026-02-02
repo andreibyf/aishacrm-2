@@ -200,19 +200,19 @@ export function buildTelemetryEvent(fields) {
 // --- Run Lifecycle ---
 
 /** Emit: run_started */
-export function emitRunStarted({ run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, entrypoint, input_summary, force_role }) {
+export function emitRunStarted({ run_id, task_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, entrypoint, input_summary, force_role }) {
   telemetryLog({
     type: EventTypes.RUN_STARTED,
-    run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id,
+    run_id, task_id, trace_id, span_id, parent_span_id, tenant_id, agent_id,
     entrypoint, input_summary, force_role,
   });
 }
 
 /** Emit: run_finished */
-export function emitRunFinished({ run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, status, duration_ms, output_summary, error }) {
+export function emitRunFinished({ run_id, task_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, status, duration_ms, output_summary, error }) {
   telemetryLog({
     type: EventTypes.RUN_FINISHED,
-    run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id,
+    run_id, task_id, trace_id, span_id, parent_span_id, tenant_id, agent_id,
     status, duration_ms, output_summary, error,
   });
 }

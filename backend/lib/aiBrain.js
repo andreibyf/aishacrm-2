@@ -1,3 +1,7 @@
+// TESTED AND WORKING - DO NOT MODIFY WITHOUT EXPRESS APPROVAL
+// This file has been thoroughly tested and is core to AI Brain functionality
+// Last verified: 2026-01-31
+
 import { randomUUID } from 'node:crypto';
 import OpenAI from 'openai';
 import { selectLLMConfigForTenant, resolveLLMApiKey } from './aiEngine/index.js';

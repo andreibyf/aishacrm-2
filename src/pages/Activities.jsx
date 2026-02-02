@@ -9,6 +9,7 @@ import { User } from "@/api/entities";
 import { useUser } from "@/components/shared/useUser.js";
 import { Employee } from "@/api/entities";
 import { useApiManager } from "../components/shared/ApiManager";
+import { useProgress } from "../components/shared/ProgressOverlay";
 import ActivityCard from "../components/activities/ActivityCard";
 import ActivityForm from "../components/activities/ActivityForm";
 import ActivityDetailPanel from "../components/activities/ActivityDetailPanel";
@@ -136,6 +137,7 @@ export default function ActivitiesPage() {
   const [totalItems, setTotalItems] = useState(0);
 
   const { cachedRequest, clearCache, clearCacheByKey } = useApiManager();
+  const { startProgress, updateProgress, completeProgress } = useProgress();
   const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
   const { isCardVisible, getCardLabel } = useStatusCardPreferences();
   
@@ -527,6 +529,8 @@ export default function ActivitiesPage() {
       if (!window.confirm(`Delete ALL ${totalItems} activity/activities? This cannot be undone!`)) return;
 
       try {
+        startProgress({ message: 'Fetching activities to delete...' });
+        
         let currentFilter = buildFilter();
         
         // Use simple 'q' parameter for text search (WAF-safe)
@@ -537,14 +541,23 @@ export default function ActivitiesPage() {
           };
         }
 
-        const allActivities = await Activity.filter(currentFilter, 'id', 10000);
+        const activitiesResult = await Activity.filter(currentFilter, 'id', 10000);
+        // Handle both array (legacy) and object { activities: [] } response formats
+        const allActivities = Array.isArray(activitiesResult) ? activitiesResult : (activitiesResult?.activities || []);
         const deleteCount = allActivities.length;
 
+        updateProgress({ message: `Deleting ${deleteCount} activities...`, total: deleteCount, current: 0 });
+
         const BATCH_SIZE = 50;
+        let deletedCount = 0;
         for (let i = 0; i < allActivities.length; i += BATCH_SIZE) {
           const batch = allActivities.slice(i, i + BATCH_SIZE);
           await Promise.all(batch.map(a => Activity.delete(a.id)));
+          deletedCount += batch.length;
+          updateProgress({ current: deletedCount, message: `Deleted ${deletedCount} of ${deleteCount} activities...` });
         }
+
+        completeProgress();
 
         // Optimistically remove from UI immediately
         const deletedIds = new Set(allActivities.map(a => a.id));
@@ -563,6 +576,7 @@ export default function ActivitiesPage() {
         
         toast.success(`${deleteCount} activity/activities deleted`);
       } catch (error) {
+        completeProgress();
         console.error("Failed to delete activities:", error);
         toast.error("Failed to delete activities");
       }
@@ -575,7 +589,21 @@ export default function ActivitiesPage() {
       if (!window.confirm(`Delete ${selectedActivities.size} activity/activities?`)) return;
 
       try {
-        await Promise.all([...selectedActivities].map(id => Activity.delete(id)));
+        const selectedCount = selectedActivities.size;
+        startProgress({ message: `Deleting ${selectedCount} activities...`, total: selectedCount, current: 0 });
+        
+        const selectedArray = [...selectedActivities];
+        const BATCH_SIZE = 50;
+        let deletedCount = 0;
+        
+        for (let i = 0; i < selectedArray.length; i += BATCH_SIZE) {
+          const batch = selectedArray.slice(i, i + BATCH_SIZE);
+          await Promise.all(batch.map(id => Activity.delete(id)));
+          deletedCount += batch.length;
+          updateProgress({ current: deletedCount, message: `Deleted ${deletedCount} of ${selectedCount} activities...` });
+        }
+        
+        completeProgress();
         
         // Optimistically remove from UI immediately
         const deletedIds = new Set(selectedActivities);
@@ -593,6 +621,7 @@ export default function ActivitiesPage() {
         
         toast.success(`${selectedActivities.size} activity/activities deleted`);
       } catch (error) {
+        completeProgress();
         console.error("Failed to delete activities:", error);
         toast.error("Failed to delete activities");
       }
@@ -604,6 +633,8 @@ export default function ActivitiesPage() {
       if (!window.confirm(`Update status for ALL ${totalItems} activity/activities to ${newStatus}?`)) return;
 
       try {
+        startProgress({ message: 'Fetching activities to update...' });
+        
         let currentFilter = buildFilter();
         
         // Use simple 'q' parameter for text search (WAF-safe)
@@ -614,15 +645,23 @@ export default function ActivitiesPage() {
           };
         }
 
-        const allActivities = await Activity.filter(currentFilter, 'id', 10000);
+        const statusResult = await Activity.filter(currentFilter, 'id', 10000);
+        // Handle both array (legacy) and object { activities: [] } response formats
+        const allActivities = Array.isArray(statusResult) ? statusResult : (statusResult?.activities || []);
         const updateCount = allActivities.length;
 
+        updateProgress({ message: `Updating ${updateCount} activities...`, total: updateCount, current: 0 });
+
         const BATCH_SIZE = 50;
+        let updatedCount = 0;
         for (let i = 0; i < allActivities.length; i += BATCH_SIZE) {
           const batch = allActivities.slice(i, i + BATCH_SIZE);
           await Promise.all(batch.map(a => Activity.update(a.id, { status: newStatus })));
+          updatedCount += batch.length;
+          updateProgress({ current: updatedCount, message: `Updated ${updatedCount} of ${updateCount} activities...` });
         }
 
+        completeProgress();
         setSelectedActivities(new Set());
         setSelectAllMode(false);
         clearCache('');
@@ -630,6 +669,7 @@ export default function ActivitiesPage() {
         await loadActivities(currentPage, pageSize);
         toast.success(`Updated ${updateCount} activity/activities to ${newStatus}`);
       } catch (error) {
+        completeProgress();
         console.error("Failed to update activities:", error);
         toast.error("Failed to update activities");
       }
@@ -640,17 +680,28 @@ export default function ActivitiesPage() {
       }
 
       try {
-        const promises = [...selectedActivities].map(id => 
-          Activity.update(id, { status: newStatus })
-        );
+        const selectedCount = selectedActivities.size;
+        startProgress({ message: `Updating ${selectedCount} activities...`, total: selectedCount, current: 0 });
         
-        await Promise.all(promises);
+        const selectedArray = [...selectedActivities];
+        const BATCH_SIZE = 50;
+        let updatedCount = 0;
+        
+        for (let i = 0; i < selectedArray.length; i += BATCH_SIZE) {
+          const batch = selectedArray.slice(i, i + BATCH_SIZE);
+          await Promise.all(batch.map(id => Activity.update(id, { status: newStatus })));
+          updatedCount += batch.length;
+          updateProgress({ current: updatedCount, message: `Updated ${updatedCount} of ${selectedCount} activities...` });
+        }
+        
+        completeProgress();
         setSelectedActivities(new Set());
         clearCache('');
         clearCacheByKey("Activity");
         await loadActivities(currentPage, pageSize);
-        toast.success(`Updated ${promises.length} activity/activities to ${newStatus}`);
+        toast.success(`Updated ${selectedCount} activity/activities to ${newStatus}`);
       } catch (error) {
+        completeProgress();
         console.error("Failed to update activities:", error);
         toast.error("Failed to update activities");
       }
@@ -662,6 +713,8 @@ export default function ActivitiesPage() {
       if (!window.confirm(`Assign ALL ${totalItems} activity/activities?`)) return;
 
       try {
+        startProgress({ message: 'Fetching activities to assign...' });
+        
         let currentFilter = buildFilter();
         
         // Use simple 'q' parameter for text search (WAF-safe)
@@ -672,15 +725,23 @@ export default function ActivitiesPage() {
           };
         }
 
-        const allActivities = await Activity.filter(currentFilter, 'id', 10000);
+        const assignResult = await Activity.filter(currentFilter, 'id', 10000);
+        // Handle both array (legacy) and object { activities: [] } response formats
+        const allActivities = Array.isArray(assignResult) ? assignResult : (assignResult?.activities || []);
         const updateCount = allActivities.length;
 
+        updateProgress({ message: `Assigning ${updateCount} activities...`, total: updateCount, current: 0 });
+
         const BATCH_SIZE = 50;
+        let assignedCount = 0;
         for (let i = 0; i < allActivities.length; i += BATCH_SIZE) {
           const batch = allActivities.slice(i, i + BATCH_SIZE);
           await Promise.all(batch.map(a => Activity.update(a.id, { assigned_to: assignedTo || null })));
+          assignedCount += batch.length;
+          updateProgress({ current: assignedCount, message: `Assigned ${assignedCount} of ${updateCount} activities...` });
         }
 
+        completeProgress();
         setSelectedActivities(new Set());
         setSelectAllMode(false);
         clearCache('');
@@ -688,6 +749,7 @@ export default function ActivitiesPage() {
         await loadActivities(currentPage, pageSize);
         toast.success(`Assigned ${updateCount} activity/activities`);
       } catch (error) {
+        completeProgress();
         console.error("Failed to assign activities:", error);
         toast.error("Failed to assign activities");
       }
@@ -698,17 +760,28 @@ export default function ActivitiesPage() {
       }
 
       try {
-        const promises = [...selectedActivities].map(id => 
-          Activity.update(id, { assigned_to: assignedTo || null })
-        );
+        const selectedCount = selectedActivities.size;
+        startProgress({ message: `Assigning ${selectedCount} activities...`, total: selectedCount, current: 0 });
         
-        await Promise.all(promises);
+        const selectedArray = [...selectedActivities];
+        const BATCH_SIZE = 50;
+        let assignedCount = 0;
+        
+        for (let i = 0; i < selectedArray.length; i += BATCH_SIZE) {
+          const batch = selectedArray.slice(i, i + BATCH_SIZE);
+          await Promise.all(batch.map(id => Activity.update(id, { assigned_to: assignedTo || null })));
+          assignedCount += batch.length;
+          updateProgress({ current: assignedCount, message: `Assigned ${assignedCount} of ${selectedCount} activities...` });
+        }
+        
+        completeProgress();
         setSelectedActivities(new Set());
         clearCache('');
         clearCacheByKey("Activity");
         await loadActivities(currentPage, pageSize);
-        toast.success(`Assigned ${promises.length} activity/activities`);
+        toast.success(`Assigned ${selectedCount} activity/activities`);
       } catch (error) {
+        completeProgress();
         console.error("Failed to assign activities:", error);
         toast.error("Failed to assign activities");
       }
@@ -797,9 +870,11 @@ export default function ActivitiesPage() {
         setEditingActivity(activity);
         setIsFormOpen(true);
       } else {
-        Activity.filter({ id }).then(result => {
-          if (result && result.length > 0) {
-            setEditingActivity(result[0]);
+        Activity.filter({ id }).then(filterResult => {
+          // Handle both array (legacy) and object { activities: [] } response formats
+          const activityList = Array.isArray(filterResult) ? filterResult : (filterResult?.activities || []);
+          if (activityList.length > 0) {
+            setEditingActivity(activityList[0]);
             setIsFormOpen(true);
           }
         });
@@ -872,6 +947,17 @@ export default function ActivitiesPage() {
     if (!activity.due_date) return '—';
     
     try {
+      // FIXED: If due_date contains a full ISO datetime (with T and timezone offset),
+      // parse it directly - the Date constructor handles timezone offsets correctly
+      if (activity.due_date.includes('T') && (activity.due_date.includes('+') || activity.due_date.includes('-', 10))) {
+        // Full ISO datetime like "2026-02-10T09:00:00-05:00"
+        const parsedDate = new Date(activity.due_date);
+        if (!isNaN(parsedDate.getTime())) {
+          return format(parsedDate, 'MMM d, yyyy, h:mm a');
+        }
+      }
+      
+      // Legacy handling: due_time is a separate field
       if (activity.due_time) {
         const datePart = activity.due_date.split('T')[0];
         // Normalize time to HH:mm:ss format
@@ -892,8 +978,9 @@ export default function ActivitiesPage() {
           console.warn('[Activities] Invalid Date from UTC conversion:', utcString);
           return activity.due_date;
         }
-        return format(localDate, 'MMM d, yyyy h:mm a');
+        return format(localDate, 'MMM d, yyyy, h:mm a');
       } else {
+        // Date-only format (no time)
         const parts = activity.due_date.split('-').map(Number);
         if (parts.length < 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) {
           console.warn('[Activities] Invalid date format:', activity.due_date);

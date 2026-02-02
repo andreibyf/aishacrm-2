@@ -78,6 +78,7 @@ import { Employee } from "@/api/entities";
 import { supabase } from "@/lib/supabase";
 import NotificationPanel from "../components/notifications/NotificationPanel";
 import { TenantProvider, useTenant } from "../components/shared/tenantContext";
+import { ProgressProvider } from "../components/shared/ProgressOverlay";
 import { isValidId } from "../components/shared/tenantUtils";
 import { ApiProvider, useApiManager } from "../components/shared/ApiManager";
 import { TimezoneProvider } from "../components/shared/TimezoneContext";
@@ -3889,9 +3890,10 @@ export default function LayoutWrapper({ children, currentPageName }) {
 
   return (
     <ErrorLogProvider>
-      <QueryClientProvider client={queryClient}>
-        <ApiOptimizerProvider>
-          <TenantProvider>
+      <ProgressProvider>
+        <QueryClientProvider client={queryClient}>
+          <ApiOptimizerProvider>
+            <TenantProvider>
             <EntityLabelsWrapper>
               <ApiProvider>
                 <TimezoneProvider>
@@ -3907,9 +3909,10 @@ export default function LayoutWrapper({ children, currentPageName }) {
                 </TimezoneProvider>
               </ApiProvider>
             </EntityLabelsWrapper>
-          </TenantProvider>
-        </ApiOptimizerProvider>
-      </QueryClientProvider>
+            </TenantProvider>
+          </ApiOptimizerProvider>
+        </QueryClientProvider>
+      </ProgressProvider>
     </ErrorLogProvider>
   );
 }
