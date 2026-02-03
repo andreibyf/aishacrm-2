@@ -82,7 +82,10 @@ export const IO = (policy, deps) => {
       write: withTenantIsolation(withTimeout(deps.fs?.write || (() => { throw new Error('fs.write not provided'); })), policy)
     },
     http: {
-      get: withTenantIsolation(withTimeout(deps.http?.get || (() => { throw new Error('http.get not provided'); })), policy),
+      get: withTenantIsolation(withTimeout(async (...args) => {
+        console.log('[Braid RT] http.get called with args:', JSON.stringify(args));
+        return (deps.http?.get || (() => { throw new Error('http.get not provided'); }))(...args);
+      }), policy),
       post: withTenantIsolation(withTimeout(deps.http?.post || (() => { throw new Error('http.post not provided'); })), policy),
       put: withTenantIsolation(withTimeout(deps.http?.put || (() => { throw new Error('http.put not provided'); })), policy),
       delete: withTenantIsolation(withTimeout(deps.http?.delete || (() => { throw new Error('http.delete not provided'); })), policy)

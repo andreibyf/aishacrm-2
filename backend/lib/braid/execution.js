@@ -256,7 +256,10 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
       resultTag: result?.tag,
       hasError: !!result?.error,
       errorType: result?.error?.type,
-      errorMsg: result?.error?.message?.substring?.(0, 200)
+      errorMsg: result?.error?.message?.substring?.(0, 200),
+      // For search/list operations, log result count for debugging
+      resultCount: Array.isArray(result?.value) ? result.value.length : (result?.value?.length !== undefined ? result.value.length : 'N/A'),
+      resultPreview: Array.isArray(result?.value) ? result.value.slice(0, 2).map(r => r?.first_name || r?.name || r?.id) : 'N/A'
     });
 
     // Cache successful READ_ONLY results in Redis

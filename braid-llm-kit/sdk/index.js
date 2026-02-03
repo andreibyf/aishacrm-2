@@ -60,6 +60,7 @@ export function createBackendDeps(baseUrl, tenantId, userId = null, authToken = 
   return {
     http: {
       async get(url, options = {}) {
+        console.log('[Braid HTTP GET] options.params:', JSON.stringify(options.params));
         const params = new URLSearchParams(options.params || {});
         params.set('tenant_id', tenantId);
         

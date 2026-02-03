@@ -5,7 +5,7 @@ set -e
 if [ -n "$DOPPLER_TOKEN" ]; then
   echo "Fetching frontend secrets from Doppler..."
   # Export Doppler secrets as environment variables
-  eval "$(doppler secrets download --no-file --format env-no-names --token \"$DOPPLER_TOKEN\" --project \"${DOPPLER_PROJECT:-aishacrm}\" --config \"${DOPPLER_CONFIG:-dev}\")"
+  eval "$(doppler secrets download --no-file --format env --token \"$DOPPLER_TOKEN\" --project \"${DOPPLER_PROJECT:-aishacrm}\" --config \"${DOPPLER_CONFIG:-dev}\")"
   echo "Doppler secrets loaded successfully"
 else
   echo "WARNING: DOPPLER_TOKEN not set, using environment variables directly"

@@ -8,7 +8,7 @@ import { getAgentProfile } from '../lib/agents/agentRegistry.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
 
-export function startTaskWorkers(pgPool) {
+export function startTaskWorkers() {
   logger.info('[TaskWorkers] Starting Ops Dispatch and Execute workers');
 
   // Ops Dispatch Worker
@@ -46,10 +46,15 @@ export function startTaskWorkers(pgPool) {
       logger.info(`[OpsDispatch] Routing "${description}" to ${assignee}`);
 
       // 2. Update Task
-      await pgPool.query(
-        `UPDATE tasks SET status = 'ASSIGNED', assigned_to = $1, updated_at = NOW() WHERE id = $2`,
-        [assignee, task_id]
-      );
+      const supabase = getSupabaseClient();
+      const { error: updateError } = await supabase
+        .from('tasks')
+        .update({ status: 'ASSIGNED', assigned_to: assignee, updated_at: new Date().toISOString() })
+        .eq('id', task_id);
+      
+      if (updateError) {
+        throw new Error(`Failed to update task: ${updateError.message}`);
+      }
 
       // 3. Emit task_assigned
       emitTaskAssigned({
@@ -690,10 +695,11 @@ Provide a clear summary of what you did.`;
 
       // 9. Update Task with result (if DB record exists - some tasks come from agent-office without DB record)
       try {
-        await pgPool.query(
-          `UPDATE tasks SET status = 'COMPLETED', result = $1, updated_at = NOW() WHERE id = $2`,
-          [finalResponse, task_id]
-        );
+        const supabase = getSupabaseClient();
+        await supabase
+          .from('tasks')
+          .update({ status: 'COMPLETED', result: finalResponse, updated_at: new Date().toISOString() })
+          .eq('id', task_id);
       } catch (_updateErr) {
         // Task might not exist in DB (e.g., from agent-office run) - this is fine
         logger.debug(`[ExecuteTask] No DB task to update (task came from agent-office run)`);
@@ -719,10 +725,11 @@ Provide a clear summary of what you did.`;
 
       // Update task status to failed
       try {
-        await pgPool.query(
-          `UPDATE tasks SET status = 'FAILED', result = $1, updated_at = NOW() WHERE id = $2`,
-          [err.message, task_id]
-        );
+        const supabase = getSupabaseClient();
+        await supabase
+          .from('tasks')
+          .update({ status: 'FAILED', result: err.message, updated_at: new Date().toISOString() })
+          .eq('id', task_id);
       } catch (updateErr) {
         logger.error(`[ExecuteTask] Failed to update task status:`, updateErr);
       }

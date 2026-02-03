@@ -88,9 +88,10 @@ services:
     env_file:
       - .env.local
     environment:
-      # DOPPLER_TOKEN loaded from .env.docker
+      # DOPPLER_TOKEN from .env (not committed to git)
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
       - DOPPLER_PROJECT=aishacrm
-      - DOPPLER_CONFIG=dev
+      - DOPPLER_CONFIG=dev_personal
       - NODE_ENV=development
       - NODE_OPTIONS=${NODE_OPTIONS:---dns-result-order=ipv4first}
       # PORT=3001 set by Doppler (container internal port)
@@ -107,6 +108,9 @@ services:
       - MCP_NODE_ID=aishacrm-backend
       - DEFAULT_TENANT_ID=a11dfb63-4b18-4eb8-872e-747af2e37c46
       - CRM_BACKEND_URL=http://backend:3001
+      # Supabase credentials (fallback if Doppler fails - from .env)
+      - SUPABASE_URL=${SUPABASE_URL:-https://efzqxjpfewkrgpdootte.supabase.co}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
       # LLM_PROVIDER and API keys loaded from Doppler in entrypoint
       # GitHub Issues integration
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
@@ -168,8 +172,13 @@ services:
     environment:
       - DOPPLER_TOKEN=${DOPPLER_TOKEN}
       - DOPPLER_PROJECT=aishacrm
-      - DOPPLER_CONFIG=dev
+      - DOPPLER_CONFIG=dev_personal
       - PORT=${FRONTEND_PORT:-3000}
+      # Supabase credentials (fallback if Doppler fails)
+      - VITE_SUPABASE_URL=https://efzqxjpfewkrgpdootte.supabase.co
+      - VITE_SUPABASE_ANON_KEY=sb_publishable_6AFc_XdEzOF0SAE6ivUL2A_fpdZZdBq
+      - VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_6AFc_XdEzOF0SAE6ivUL2A_fpdZZdBq
+      - VITE_AISHACRM_BACKEND_URL=http://localhost:4001
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
       interval: 30s

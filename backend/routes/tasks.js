@@ -2,12 +2,14 @@ import express from 'express';
 import { taskQueue } from '../services/taskQueue.js';
 import { emitTaskEnqueued } from '../lib/telemetry/index.js';
 import { randomUUID } from 'crypto';
+import { getSupabaseAdmin } from '../lib/supabaseFactory.js';
 
-export function createTasksRoutes(pgPool) {
+export function createTasksRoutes() {
   const router = express.Router();
 
   router.post('/from-intent', async (req, res) => {
     try {
+      const supabase = getSupabaseAdmin();
       const { description, entity_type, entity_id, tenant_id, related_data } = req.body;
       
       // Validate required fields
@@ -25,11 +27,21 @@ export function createTasksRoutes(pgPool) {
       const runId = randomUUID(); // Use run_id for correlation
 
       // 1. Persist task
-      // Note: Using pgPool which might be the Supabase wrapper
-      await pgPool.query(
-        `INSERT INTO tasks (id, tenant_id, description, status, entity_type, entity_id) VALUES ($1, $2, $3, $4, $5, $6)`,
-        [taskId, tenant_id, description, 'PENDING', entity_type, entity_id]
-      );
+      const { error: insertError } = await supabase
+        .from('tasks')
+        .insert({
+          id: taskId,
+          tenant_id,
+          description,
+          status: 'PENDING',
+          entity_type,
+          entity_id
+        });
+
+      if (insertError) {
+        console.error('Failed to insert task:', insertError);
+        return res.status(500).json({ error: 'Failed to create task' });
+      }
 
       // 2. Emit task_enqueued
       emitTaskEnqueued({
@@ -62,17 +74,20 @@ export function createTasksRoutes(pgPool) {
 
   router.get('/:id', async (req, res) => {
     try {
+      const supabase = getSupabaseAdmin();
       const { id } = req.params;
-      const result = await pgPool.query(
-        `SELECT * FROM tasks WHERE id = $1`,
-        [id]
-      );
       
-      if (result.rows.length === 0) {
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('id', id)
+        .single();
+      
+      if (error || !data) {
         return res.status(404).json({ error: 'Task not found' });
       }
 
-      res.json(result.rows[0]);
+      res.json(data);
     } catch (err) {
       console.error('Error fetching task:', err);
       res.status(500).json({ error: err.message });

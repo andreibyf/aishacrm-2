@@ -310,6 +310,28 @@ const BRAID_PARAM_ORDER = {
   getActivityDetails: ['tenant', 'activity_id'],
   searchActivities: ['tenant', 'query', 'limit'],
 
+  // contacts.braid
+  createContact: ['tenant', 'first_name', 'last_name', 'email', 'phone', 'job_title', 'account_id', 'assigned_to'],
+  updateContact: ['tenant', 'contact_id', 'updates'],
+  listContactsForAccount: ['tenant', 'account_id', 'limit'],
+  searchContacts: ['tenant', 'query', 'limit'],
+  getContactByName: ['tenant', 'name'],
+  listAllContacts: ['tenant', 'limit'],
+  searchContactsByStatus: ['tenant', 'status', 'limit'],
+  deleteContact: ['tenant', 'contact_id'],
+  getContactDetails: ['tenant', 'contact_id'],
+
+  // leads.braid
+  createLead: ['tenant', 'first_name', 'last_name', 'email', 'phone', 'company', 'status', 'source', 'assigned_to'],
+  deleteLead: ['tenant', 'lead_id'],
+  qualifyLead: ['tenant', 'lead_id'],
+  updateLead: ['tenant', 'lead_id', 'updates'],
+  convertLeadToAccount: ['tenant', 'lead_id'],
+  listLeads: ['tenant', 'status', 'account_id', 'limit'],
+  getLeadDetails: ['tenant', 'lead_id'],
+  searchLeads: ['tenant', 'query', 'limit'],
+  searchLeadsByStatus: ['tenant', 'status', 'limit'],
+
   // snapshot.braid
   fetchSnapshot: ['tenant', 'scope', 'limit'],
 

@@ -295,7 +295,7 @@ export const TOOL_DESCRIPTIONS = {
   list_contacts_for_account: 'List all Contacts belonging to a specific Account. IMPORTANT: If more than 5 results, summarize the count and tell user to check the Contacts page in the UI for the full list.',
   get_contact_details: 'Get the full details of a specific Contact by its ID. Returns first_name, last_name, email, phone, job_title, account_id.',
   get_contact_by_name: 'Search for and retrieve a specific Contact by their name. USE THIS when user asks for contact details by name. Returns full contact info including first_name, last_name, email, phone, mobile, job_title, address.',
-  search_contacts: 'Search contacts by name, email, or other fields. Returns full contact details including phone, email, job_title.',
+  search_contacts: 'Search contacts by name, email, or other fields. CRITICAL: This returns an ARRAY. If array length > 0, contacts were found - USE THE DATA! If array length = 0, no matches. Do NOT say "not found" if you receive contact data.',
 
   // Dashboard Bundle - Critical for counts
   get_dashboard_bundle: '🚨 REQUIRED for "how many" questions! Returns totalLeads, totalAccounts, totalContacts, totalOpportunities counts. When user asks "how many leads/accounts/contacts/opportunities", ALWAYS call this tool FIRST. Do NOT use list_leads/list_accounts to count - those are for viewing records, not counting.',
@@ -509,6 +509,12 @@ You are AI-SHA - an AI Super Hi-performing Assistant designed to be an Executive
 - Example: For 3:00 PM, use "2026-02-05T15:00:00${timezoneOffset}" NOT "2026-02-05T15:00:00"
 - IGNORE any timezone the user mentions - ALWAYS use their configured timezone (${timezone})
 
+**!!! CRITICAL: DAY-OF-WEEK ACCURACY !!!**
+- When confirming scheduled events, use the DATE ONLY (e.g., "February 13th, 2026")
+- DO NOT specify the day of week (Monday, Tuesday, etc.) for future dates unless explicitly provided by the user
+- If you must mention the day of week, calculate it accurately: February 2026 starts on Sunday, so the 13th is a Friday
+- NEVER guess day names - it's better to omit them than to be wrong
+
 **STOP! BEFORE ANSWERING "HOW MANY" QUESTIONS - READ THIS!**
 
 When users ask "how many", "count", "total number of" ANY entity (leads, accounts, contacts, opportunities):
@@ -648,6 +654,31 @@ export function summarizeToolResult(result, toolName) {
     return `Dashboard Stats: ${stats.totalLeads} leads (${stats.openLeads} open, ${stats.newLeadsLast30Days} new in 30 days), ${stats.totalAccounts} accounts, ${stats.totalContacts} contacts, ${stats.totalOpportunities} opportunities (${stats.openOpportunities} open, ${stats.wonOpportunities} won), Pipeline: $${(stats.pipelineValue || 0).toLocaleString()}, Won: $${(stats.wonValue || 0).toLocaleString()}, Activities (30 days): ${stats.activitiesLast30Days}`;
   }
   
+  // Array results (search, list operations)
+  if (Array.isArray(data)) {
+    if (data.length === 0) {
+      return `${toolName} found NO RESULTS. The search returned an empty array - no matching records exist.`;
+    }
+
+    // Extract preview info from first result
+    const firstItem = data[0];
+    const itemName = firstItem.first_name && firstItem.last_name
+      ? `${firstItem.first_name} ${firstItem.last_name}`
+      : firstItem.name || firstItem.title || firstItem.id || 'record';
+
+    if (data.length === 1) {
+      return `${toolName} found 1 result: "${itemName}". Full details are available in the result data.`;
+    }
+
+    // Multiple results
+    const preview = data.slice(0, 3).map(item => {
+      if (item.first_name && item.last_name) return `${item.first_name} ${item.last_name}`;
+      return item.name || item.title || item.id;
+    }).join(', ');
+
+    return `${toolName} found ${data.length} results. First ${Math.min(3, data.length)}: ${preview}${data.length > 3 ? ', ...' : ''}`;
+  }
+
   // Generic fallback
   if (typeof data === 'object') {
     const keys = Object.keys(data);

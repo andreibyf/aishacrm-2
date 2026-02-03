@@ -92,7 +92,9 @@ fn searchContacts(
   let response = http.get(url, { params: params });
   
   // Returns FULL contact details including: first_name, last_name, email, phone, mobile, job_title, etc.
-  // Note: Empty array is a VALID result (no matches found), not an error
+  // IMPORTANT: This tool ALWAYS returns an array. Check array length to determine if contacts were found.
+  // - If array.length > 0: Contacts found! Use the data to answer the user's question.
+  // - If array.length === 0: No contacts match the search query.
   return match response {
     Ok{value} => Ok(value.data.contacts),
     Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_contacts", query: query }),

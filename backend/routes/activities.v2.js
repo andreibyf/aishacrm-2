@@ -83,8 +83,9 @@ function normalizeDueDateTimeFields(rawDueDate, rawDueTime) {
   let isoCandidate = null;
 
   if (typeof dueDate === 'string' && ISO_WITH_OFFSET_REGEX.test(dueDate)) {
-    // Input like "2025-11-20T14:45:00-05:00" — extract local time BEFORE parsing as ISO
-    // BUT PREFER rawDueTime if it's already provided and clean (HH:MM format)
+    // Input like "2025-11-20T14:45:00-05:00" — save full ISO for conversion, extract parts for fallback
+    const fullIsoString = normalizeOffsetNotation(dueDate.replace(/\s+/g, ''));
+    
     if (!dueTime) {
       const localTimeMatch = dueDate.match(/T(\d{2}):(\d{2})/);
       if (localTimeMatch) {
@@ -95,17 +96,10 @@ function normalizeDueDateTimeFields(rawDueDate, rawDueTime) {
     if (dateMatch) {
       dueDate = dateMatch[1];
     }
-    isoCandidate = normalizeOffsetNotation(dueDate.replace(/\s+/g, ''));
+    isoCandidate = fullIsoString; // Use the full ISO string for UTC conversion
   } else if (typeof dueDate === 'string' && dueDate.includes('T')) {
-    const [datePart, timePart] = dueDate.split('T');
-    dueDate = datePart || null;
-    if (timePart) {
-      const timeMatch = timePart.match(/^(\d{2}:\d{2})/);
-      if (timeMatch) {
-        dueTime = timeMatch[1];
-      }
-    }
-    return { due_date: dueDate, due_time: dueTime || null, originalIso };
+    // ISO datetime in dueDate - set as candidate for UTC conversion below
+    isoCandidate = dueDate;
   }
 
   if (!isoCandidate && typeof dueTime === 'string' && dueTime) {
@@ -127,17 +121,14 @@ function normalizeDueDateTimeFields(rawDueDate, rawDueTime) {
 
   if (isoCandidate) {
     originalIso = isoCandidate;
-    const isoMatch = isoCandidate.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
-    if (isoMatch) {
-      return { due_date: isoMatch[1], due_time: isoMatch[2], originalIso };
-    }
-
+    // Always convert timezone-aware ISO string to UTC for consistent storage
     const parsed = new Date(isoCandidate);
     if (!Number.isNaN(parsed.getTime())) {
       const isoUtc = parsed.toISOString();
       const [isoDatePart, isoTimePart] = isoUtc.split('T');
       const timeMatch = isoTimePart.match(/^(\d{2}):(\d{2})/);
       if (timeMatch) {
+        // Truncate seconds - return HH:MM only
         return { due_date: isoDatePart, due_time: `${timeMatch[1]}:${timeMatch[2]}`, originalIso };
       }
     }
@@ -147,6 +138,7 @@ function normalizeDueDateTimeFields(rawDueDate, rawDueTime) {
   if (typeof dueTime === 'string' && dueTime) {
     const match = dueTime.match(/^(\d{2}):(\d{2})/);
     if (match) {
+      // Truncate seconds if present
       dueTime = `${match[1]}:${match[2]}`;
     }
   }

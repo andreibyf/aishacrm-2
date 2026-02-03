@@ -348,7 +348,7 @@ app.use("/api/construction/assignments", createConstructionAssignmentsRoutes(mea
 logger.debug("Mounting /api/workers routes");
 app.use("/api/workers", createWorkersRoutes(measuredPgPool));
 logger.debug("Mounting /api/tasks routes");
-app.use("/api/tasks", createTasksRoutes(measuredPgPool));
+app.use("/api/tasks", createTasksRoutes());
 // Memory routes use Redis/Valkey; DB pool not required
 app.use("/api/memory", createMemoryRoutes());
 // Auth routes (cookie-based login/refresh/logout)
@@ -678,13 +678,12 @@ server.listen(PORT, async () => {
   }
 
   // Start email worker (always enabled if database is available)
+  logger.info('[EmailWorker] Starting email worker (processes queued email activities)');
   if (pgPool) {
-    logger.info('[EmailWorker] Starting email worker (processes queued email activities)');
     startEmailWorker(pgPool);
-    startTaskWorkers(pgPool);
-  } else {
-    logger.warn('[EmailWorker] Disabled (no database connection)');
   }
+  // Task workers use Supabase client, not pgPool
+  startTaskWorkers();
 
   // Start health monitoring system for Developer AI
   if (process.env.HEALTH_MONITORING_ENABLED !== 'false') {
