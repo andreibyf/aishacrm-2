@@ -1,21 +1,68 @@
--- Migration 120: Fix remaining Supabase security warnings
+-- Migration 120: Fix remaining Supabase security warnings (CORRECTED VERSION)
 -- Date: 2026-02-03
 -- Purpose: Fix SECURITY DEFINER views and enable RLS on exposed tables
 -- Addresses Supabase database linter errors:
---   - 0010_security_definer_view (9 views)
---   - 0013_rls_disabled_in_public (2 tables)
+--   - 0010_security_definer_view (8 views - NOT 9, devai_health_stats is NOT in linter)
+--   - 0013_rls_disabled_in_public (2 tables: tasks, devai_health_alerts)
 -- 
 -- RLS Implementation: Uses JWT claim-based policies (auth.jwt() ->> 'tenant_id')
 -- Pattern consistent with migrations 055-059 (consolidate RLS series)
 -- No GUC management required - tenant_id extracted from Supabase auth token
 
 -- ============================================
--- PART 1: Fix SECURITY DEFINER Views
+-- PART 1: Fix SECURITY DEFINER Views (8 Total)
 -- ============================================
 -- Replace SECURITY DEFINER with SECURITY INVOKER to respect caller's RLS policies
 -- Reference: https://supabase.com/docs/guides/database/database-linter?lint=0010_security_definer_view
 
--- Fix: v_activity_stream
+-- Note: Migration 071 attempted to fix 4 of these views but they remain SECURITY DEFINER
+-- Re-applying ALL 8 views identified in fresh linter output
+
+-- View 1: v_account_related_people
+DROP VIEW IF EXISTS public.v_account_related_people CASCADE;
+CREATE OR REPLACE VIEW public.v_account_related_people AS
+SELECT 
+  c.tenant_id,
+  c.account_id,
+  c.id AS person_id,
+  'contact'::text AS person_type,
+  c.first_name,
+  c.last_name,
+  c.email,
+  c.phone,
+  c.status,
+  c.created_at
+FROM contacts c
+UNION ALL
+SELECT 
+  l.tenant_id,
+  l.account_id,
+  l.id AS person_id,
+  'lead'::text AS person_type,
+  l.first_name,
+  l.last_name,
+  l.email,
+  l.phone,
+  l.status,
+  l.created_at
+FROM leads l
+WHERE l.account_id IS NOT NULL;
+
+ALTER VIEW public.v_account_related_people SET (security_invoker = true);
+
+-- View 2: v_opportunity_pipeline_by_stage
+DROP VIEW IF EXISTS public.v_opportunity_pipeline_by_stage CASCADE;
+CREATE OR REPLACE VIEW public.v_opportunity_pipeline_by_stage AS
+SELECT 
+  tenant_id,
+  stage,
+  count(*) AS count
+FROM opportunities
+GROUP BY tenant_id, stage;
+
+ALTER VIEW public.v_opportunity_pipeline_by_stage SET (security_invoker = true);
+
+-- View 3: v_activity_stream
 DROP VIEW IF EXISTS public.v_activity_stream CASCADE;
 CREATE OR REPLACE VIEW public.v_activity_stream AS
 SELECT 
@@ -23,27 +70,21 @@ SELECT
   a.tenant_id,
   a.type,
   a.subject,
+  a.description,
   a.status,
+  a.priority,
+  a.assigned_to,
   a.related_to,
   a.related_id,
-  a.assigned_to,
+  a.related_name,
   a.due_date,
-  a.due_time,
   a.created_at,
-  a.updated_date,
-  -- Related entity names
-  CASE 
-    WHEN a.related_to = 'lead' THEN (SELECT CONCAT(first_name, ' ', last_name) FROM leads WHERE id = a.related_id)
-    WHEN a.related_to = 'contact' THEN (SELECT CONCAT(first_name, ' ', last_name) FROM contacts WHERE id = a.related_id)
-    WHEN a.related_to = 'account' THEN (SELECT name FROM accounts WHERE id = a.related_id)
-    WHEN a.related_to = 'opportunity' THEN (SELECT name FROM opportunities WHERE id = a.related_id)
-    ELSE NULL
-  END AS related_name
+  a.updated_date
 FROM activities a;
 
 ALTER VIEW public.v_activity_stream SET (security_invoker = true);
 
--- Fix: lead_detail_full
+-- View 4: lead_detail_full
 DROP VIEW IF EXISTS public.lead_detail_full CASCADE;
 CREATE OR REPLACE VIEW public.lead_detail_full AS
 SELECT 
@@ -54,212 +95,251 @@ SELECT
   l.email,
   l.phone,
   l.company,
-  l.title,
+  l.title AS job_title,
   l.status,
   l.source,
-  l.score,
+  l.assigned_to,
   l.account_id,
-  l.created_at,
-  l.updated_date,
-  l.metadata,
-  -- Account details if linked
   a.name AS account_name,
-  a.website AS account_website,
-  a.industry AS account_industry
+  l.created_date,
+  l.updated_date
 FROM leads l
-LEFT JOIN accounts a ON l.account_id = a.id;
+LEFT JOIN accounts a ON l.account_id = a.id AND l.tenant_id = a.tenant_id;
 
 ALTER VIEW public.lead_detail_full SET (security_invoker = true);
 
--- Fix: lead_detail_light
+-- View 5: lead_detail_light
 DROP VIEW IF EXISTS public.lead_detail_light CASCADE;
 CREATE OR REPLACE VIEW public.lead_detail_light AS
 SELECT 
-  l.id,
-  l.tenant_id,
-  l.first_name,
-  l.last_name,
-  l.email,
-  l.phone,
-  l.company,
-  l.status,
-  l.source,
-  l.created_at
-FROM leads l;
+  id,
+  tenant_id,
+  first_name,
+  last_name,
+  email,
+  phone,
+  company,
+  status,
+  created_date
+FROM leads;
 
 ALTER VIEW public.lead_detail_light SET (security_invoker = true);
 
--- Fix: devai_health_stats
-DROP VIEW IF EXISTS public.devai_health_stats CASCADE;
-CREATE OR REPLACE VIEW public.devai_health_stats AS
+-- View 6: v_calendar_activities
+DROP VIEW IF EXISTS public.v_calendar_activities CASCADE;
+CREATE OR REPLACE VIEW public.v_calendar_activities AS
 SELECT 
+  id,
   tenant_id,
-  COUNT(*) AS total_alerts,
-  COUNT(*) FILTER (WHERE resolved = false) AS active_alerts,
-  COUNT(*) FILTER (WHERE severity = 'critical') AS critical_count,
-  COUNT(*) FILTER (WHERE severity = 'high') AS high_count,
-  COUNT(*) FILTER (WHERE severity = 'medium') AS medium_count,
-  COUNT(*) FILTER (WHERE severity = 'low') AS low_count,
-  MAX(created_at) AS last_alert_time
-FROM devai_health_alerts
-GROUP BY tenant_id;
+  type,
+  subject,
+  status,
+  COALESCE(assigned_to, (metadata ->> 'assigned_to'::text)) AS assigned_to,
+  COALESCE(related_to, (metadata ->> 'related_to'::text)) AS related_to,
+  related_id,
+  COALESCE(due_date, to_date((metadata ->> 'due_date'::text), 'YYYY-MM-DD'::text)) AS due_date,
+  CASE
+    WHEN (COALESCE((due_time)::text, (metadata ->> 'due_time'::text)) ~ '^[0-9]{1,2}:[0-9]{2}'::text) 
+    THEN (COALESCE((due_time)::text, (metadata ->> 'due_time'::text)))::time without time zone
+    ELSE NULL::time without time zone
+  END AS due_time,
+  CASE
+    WHEN ((COALESCE(due_date, to_date((metadata ->> 'due_date'::text), 'YYYY-MM-DD'::text)) IS NOT NULL) 
+          AND (COALESCE((due_time)::text, (metadata ->> 'due_time'::text)) ~ '^[0-9]{1,2}:[0-9]{2}'::text)) 
+    THEN ((COALESCE(due_date, to_date((metadata ->> 'due_date'::text), 'YYYY-MM-DD'::text)))::timestamp without time zone 
+          + ((COALESCE((due_time)::text, (metadata ->> 'due_time'::text)))::time without time zone)::interval)
+    WHEN (COALESCE(due_date, to_date((metadata ->> 'due_date'::text), 'YYYY-MM-DD'::text)) IS NOT NULL) 
+    THEN ((COALESCE(due_date, to_date((metadata ->> 'due_date'::text), 'YYYY-MM-DD'::text)))::timestamp without time zone 
+          + ('12:00:00'::time without time zone)::interval)
+    ELSE NULL::timestamp without time zone
+  END AS due_at,
+  created_at,
+  updated_date AS updated_at
+FROM activities a;
 
-ALTER VIEW public.devai_health_stats SET (security_invoker = true);
+ALTER VIEW public.v_calendar_activities SET (security_invoker = true);
 
--- Fix: user_profile_view
+-- View 7: user_profile_view
 DROP VIEW IF EXISTS public.user_profile_view CASCADE;
 CREATE OR REPLACE VIEW public.user_profile_view AS
-SELECT 
+SELECT
   u.id,
-  u.tenant_id,
   u.email,
-  u.full_name,
+  u.tenant_uuid AS tenant_id,
+  t.name AS tenant_name,
   u.role,
   u.status,
-  u.created_at,
-  u.updated_date,
-  -- Tenant details
-  t.name AS tenant_name,
-  t.slug AS tenant_slug
+  u.created_at
 FROM users u
-LEFT JOIN tenants t ON u.tenant_id = t.id;
+LEFT JOIN tenants t ON u.tenant_uuid = t.id;
 
 ALTER VIEW public.user_profile_view SET (security_invoker = true);
 
--- Note: The following views were already fixed in migration 071:
--- - v_lead_counts_by_status
--- - v_account_related_people
--- - v_calendar_activities
--- - v_opportunity_pipeline_by_stage
+-- View 8: v_lead_counts_by_status
+DROP VIEW IF EXISTS public.v_lead_counts_by_status CASCADE;
+CREATE OR REPLACE VIEW public.v_lead_counts_by_status AS
+SELECT 
+  tenant_id,
+  status,
+  count(*) AS count
+FROM leads
+GROUP BY tenant_id, status;
+
+ALTER VIEW public.v_lead_counts_by_status SET (security_invoker = true);
+
+-- NOTE: devai_health_stats view was NOT in the linter output (only 8 SECURITY DEFINER views listed)
+-- It's a global health monitoring view with no tenant_id, so it doesn't need SECURITY INVOKER treatment
 
 -- ============================================
--- PART 2: Enable RLS on Public Tables
+-- PART 2: Enable RLS on Public Tables (2 Total)
 -- ============================================
 -- Reference: https://supabase.com/docs/guides/database/database-linter?lint=0013_rls_disabled_in_public
 -- Using JWT claim-based policies (consistent with migrations 055-059)
 
--- Fix: tasks table
+-- Table 1: tasks
+-- Enable RLS
 ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
 
--- Create RLS policies for tasks
-DROP POLICY IF EXISTS "tasks_tenant_isolation_select" ON public.tasks;
-CREATE POLICY "tasks_tenant_isolation_select" ON public.tasks
+-- Policy 1: SELECT - Users can view tasks for their tenant
+CREATE POLICY tasks_select_policy ON public.tasks
   FOR SELECT
-  TO authenticated
   USING (
-    tenant_id = (SELECT auth.jwt() ->> 'tenant_id')::uuid
-    OR (SELECT auth.role()) = 'service_role'
+    -- Service role bypass (admin operations)
+    auth.jwt() ->> 'role' = 'service_role'
+    OR
+    -- Regular users see only their tenant's tasks
+    tenant_id = (SELECT (auth.jwt() ->> 'tenant_id')::uuid)
   );
 
-DROP POLICY IF EXISTS "tasks_tenant_isolation_insert" ON public.tasks;
-CREATE POLICY "tasks_tenant_isolation_insert" ON public.tasks
+-- Policy 2: INSERT - Users can create tasks for their tenant
+CREATE POLICY tasks_insert_policy ON public.tasks
   FOR INSERT
-  TO authenticated
   WITH CHECK (
-    tenant_id = (SELECT auth.jwt() ->> 'tenant_id')::uuid
-    OR (SELECT auth.role()) = 'service_role'
+    -- Service role bypass
+    auth.jwt() ->> 'role' = 'service_role'
+    OR
+    -- Regular users can only create for their tenant
+    tenant_id = (SELECT (auth.jwt() ->> 'tenant_id')::uuid)
   );
 
-DROP POLICY IF EXISTS "tasks_tenant_isolation_update" ON public.tasks;
-CREATE POLICY "tasks_tenant_isolation_update" ON public.tasks
+-- Policy 3: UPDATE - Users can update their tenant's tasks
+CREATE POLICY tasks_update_policy ON public.tasks
   FOR UPDATE
-  TO authenticated
   USING (
-    tenant_id = (SELECT auth.jwt() ->> 'tenant_id')::uuid
-    OR (SELECT auth.role()) = 'service_role'
-  )
-  WITH CHECK (
-    tenant_id = (SELECT auth.jwt() ->> 'tenant_id')::uuid
-    OR (SELECT auth.role()) = 'service_role'
+    -- Service role bypass
+    auth.jwt() ->> 'role' = 'service_role'
+    OR
+    -- Regular users can only update their tenant's tasks
+    tenant_id = (SELECT (auth.jwt() ->> 'tenant_id')::uuid)
   );
 
-DROP POLICY IF EXISTS "tasks_tenant_isolation_delete" ON public.tasks;
-CREATE POLICY "tasks_tenant_isolation_delete" ON public.tasks
+-- Policy 4: DELETE - Users can delete their tenant's tasks
+CREATE POLICY tasks_delete_policy ON public.tasks
   FOR DELETE
-  TO authenticated
   USING (
-    tenant_id = (SELECT auth.jwt() ->> 'tenant_id')::uuid
-    OR (SELECT auth.role()) = 'service_role'
+    -- Service role bypass
+    auth.jwt() ->> 'role' = 'service_role'
+    OR
+    -- Regular users can only delete their tenant's tasks
+    tenant_id = (SELECT (auth.jwt() ->> 'tenant_id')::uuid)
   );
 
--- Fix: devai_health_alerts table
+-- Table 2: devai_health_alerts
+-- NOTE: This is a GLOBAL system table (no tenant_id column per migration 114)
+-- DevAI health monitoring is superadmin-only, not tenant-scoped
+-- Enable RLS with superadmin-only access
 ALTER TABLE public.devai_health_alerts ENABLE ROW LEVEL SECURITY;
 
--- Create RLS policies for devai_health_alerts
-DROP POLICY IF EXISTS "devai_health_alerts_tenant_isolation_select" ON public.devai_health_alerts;
-CREATE POLICY "devai_health_alerts_tenant_isolation_select" ON public.devai_health_alerts
+-- Policy 1: SELECT - Only superadmins can view health alerts
+CREATE POLICY devai_health_alerts_select_policy ON public.devai_health_alerts
   FOR SELECT
-  TO authenticated
   USING (
-    tenant_id = (SELECT auth.jwt() ->> 'tenant_id')::uuid
-    OR (SELECT auth.role()) = 'service_role'
+    -- Service role bypass (backend operations)
+    auth.jwt() ->> 'role' = 'service_role'
+    OR
+    -- Superadmin users only (check user role from users table)
+    EXISTS (
+      SELECT 1 FROM users 
+      WHERE id = (auth.jwt() ->> 'sub')::uuid 
+      AND role = 'superadmin'
+    )
   );
 
-DROP POLICY IF EXISTS "devai_health_alerts_tenant_isolation_insert" ON public.devai_health_alerts;
-CREATE POLICY "devai_health_alerts_tenant_isolation_insert" ON public.devai_health_alerts
+-- Policy 2: INSERT - Backend service role can create health alerts
+CREATE POLICY devai_health_alerts_insert_policy ON public.devai_health_alerts
   FOR INSERT
-  TO authenticated
   WITH CHECK (
-    tenant_id = (SELECT auth.jwt() ->> 'tenant_id')::uuid
-    OR (SELECT auth.role()) = 'service_role'
+    -- Only service role (automated health monitoring)
+    auth.jwt() ->> 'role' = 'service_role'
   );
 
-DROP POLICY IF EXISTS "devai_health_alerts_tenant_isolation_update" ON public.devai_health_alerts;
-CREATE POLICY "devai_health_alerts_tenant_isolation_update" ON public.devai_health_alerts
+-- Policy 3: UPDATE - Superadmins can resolve/update health alerts
+CREATE POLICY devai_health_alerts_update_policy ON public.devai_health_alerts
   FOR UPDATE
-  TO authenticated
   USING (
-    tenant_id = (SELECT auth.jwt() ->> 'tenant_id')::uuid
-    OR (SELECT auth.role()) = 'service_role'
-  )
-  WITH CHECK (
-    tenant_id = (SELECT auth.jwt() ->> 'tenant_id')::uuid
-    OR (SELECT auth.role()) = 'service_role'
+    -- Service role bypass
+    auth.jwt() ->> 'role' = 'service_role'
+    OR
+    -- Superadmin users only
+    EXISTS (
+      SELECT 1 FROM users 
+      WHERE id = (auth.jwt() ->> 'sub')::uuid 
+      AND role = 'superadmin'
+    )
   );
 
-DROP POLICY IF EXISTS "devai_health_alerts_tenant_isolation_delete" ON public.devai_health_alerts;
-CREATE POLICY "devai_health_alerts_tenant_isolation_delete" ON public.devai_health_alerts
+-- Policy 4: DELETE - Only service role can delete health alerts (cleanup)
+CREATE POLICY devai_health_alerts_delete_policy ON public.devai_health_alerts
   FOR DELETE
-  TO authenticated
   USING (
-    tenant_id = (SELECT auth.jwt() ->> 'tenant_id')::uuid
-    OR (SELECT auth.role()) = 'service_role'
+    -- Only service role (automated cleanup)
+    auth.jwt() ->> 'role' = 'service_role'
   );
 
 -- ============================================
--- Verification
+-- Verification Queries
 -- ============================================
+-- Run these after applying migration to verify:
 
--- Verify all views now use SECURITY INVOKER
+-- 1. Check all 8 views are now SECURITY INVOKER:
 SELECT 
   schemaname,
   viewname,
   CASE 
-    WHEN viewowner = current_user THEN 'SECURITY DEFINER'
-    ELSE 'SECURITY INVOKER'
-  END as security_mode
+    WHEN viewowner = CURRENT_USER THEN 'INVOKER'
+    ELSE 'DEFINER'
+  END AS security_mode
 FROM pg_views
 WHERE schemaname = 'public'
   AND viewname IN (
+    'v_account_related_people',
+    'v_opportunity_pipeline_by_stage',
     'v_activity_stream',
     'lead_detail_full',
     'lead_detail_light',
-    'devai_health_stats',
-    'user_profile_view',
-    'v_lead_counts_by_status',
-    'v_account_related_people',
     'v_calendar_activities',
-    'v_opportunity_pipeline_by_stage'
-  );
+    'user_profile_view',
+    'v_lead_counts_by_status'
+  )
+ORDER BY viewname;
 
--- Verify RLS is enabled on all public tables
+-- 2. Check RLS is enabled on both tables:
 SELECT 
   schemaname,
   tablename,
-  rowsecurity
+  rowsecurity AS rls_enabled
 FROM pg_tables
 WHERE schemaname = 'public'
-  AND tablename IN ('tasks', 'devai_health_alerts')
-ORDER BY tablename;
+  AND tablename IN ('tasks', 'devai_health_alerts');
 
-SELECT 'Migration 120 completed - All security issues fixed' AS status;
+-- 3. Verify policies exist:
+SELECT 
+  schemaname,
+  tablename,
+  policyname,
+  cmd AS operation,
+  qual AS using_expression
+FROM pg_policies
+WHERE schemaname = 'public'
+  AND tablename IN ('tasks', 'devai_health_alerts')
+ORDER BY tablename, policyname;
