@@ -1,5 +1,6 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { getAuthHeaders } from '../helpers/auth.js';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
@@ -14,7 +15,10 @@ const createdIds = [];
 async function createWorkflow(payload) {
   const res = await fetch(`${BASE_URL}/api/workflows`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify({ 
       tenant_id: TENANT_ID,
       // Mark as test data for easy identification
@@ -30,7 +34,10 @@ async function createWorkflow(payload) {
 }
 
 async function deleteWorkflow(id) {
-  const res = await fetch(`${BASE_URL}/api/workflows/${id}?tenant_id=${TENANT_ID}`, { method: 'DELETE' });
+  const res = await fetch(`${BASE_URL}/api/workflows/${id}?tenant_id=${TENANT_ID}`, { 
+    method: 'DELETE',
+    headers: getAuthHeaders()
+  });
   return res.status;
 }
 
@@ -62,7 +69,9 @@ describe('Workflow Routes', { skip: !SHOULD_RUN }, () => {
   });
 
   test('GET /api/workflows returns 200 with tenant_id', async () => {
-    const res = await fetch(`${BASE_URL}/api/workflows?tenant_id=${TENANT_ID}`);
+    const res = await fetch(`${BASE_URL}/api/workflows?tenant_id=${TENANT_ID}`, {
+      headers: getAuthHeaders()
+    });
     assert.equal(res.status, 200, 'expected 200 from workflows list');
     const json = await res.json();
     assert.equal(json.status, 'success');
@@ -91,7 +100,10 @@ describe('Workflow Routes', { skip: !SHOULD_RUN }, () => {
   test('POST /api/workflows requires name', async () => {
     const res = await fetch(`${BASE_URL}/api/workflows`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify({ tenant_id: TENANT_ID, trigger_type: 'manual' })
     });
     assert.ok([400, 422].includes(res.status), `expected 400 or 422, got ${res.status}`);
@@ -103,7 +115,9 @@ describe('Workflow Routes', { skip: !SHOULD_RUN }, () => {
       return;
     }
     const id = createdIds[0];
-    const res = await fetch(`${BASE_URL}/api/workflows/${id}?tenant_id=${TENANT_ID}`);
+    const res = await fetch(`${BASE_URL}/api/workflows/${id}?tenant_id=${TENANT_ID}`, {
+      headers: getAuthHeaders()
+    });
     // May return 404 if workflow was cleaned up or not found
     assert.ok([200, 404].includes(res.status), `expected 200 or 404, got ${res.status}`);
     if (res.status === 200) {
@@ -117,7 +131,10 @@ describe('Workflow Routes', { skip: !SHOULD_RUN }, () => {
     const id = createdIds[0];
     const res = await fetch(`${BASE_URL}/api/workflows/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify({ 
         tenant_id: TENANT_ID,
         status: 'active'
@@ -134,7 +151,10 @@ describe('Workflow Routes', { skip: !SHOULD_RUN }, () => {
     const id = createdIds[0];
     const res = await fetch(`${BASE_URL}/api/workflows/${id}/execute`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify({ tenant_id: TENANT_ID })
     });
     // May succeed, fail validation, or 404 if workflow not found
@@ -142,7 +162,9 @@ describe('Workflow Routes', { skip: !SHOULD_RUN }, () => {
   });
 
   test('GET /api/workflow-executions returns execution history', async () => {
-    const res = await fetch(`${BASE_URL}/api/workflowexecutions?tenant_id=${TENANT_ID}`);
+    const res = await fetch(`${BASE_URL}/api/workflowexecutions?tenant_id=${TENANT_ID}`, {
+      headers: getAuthHeaders()
+    });
     assert.ok([200, 404].includes(res.status), `expected 200 or 404, got ${res.status}`);
     if (res.status === 200) {
       const json = await res.json();
@@ -151,7 +173,9 @@ describe('Workflow Routes', { skip: !SHOULD_RUN }, () => {
   });
 
   test('GET /api/workflow-templates returns available templates', async () => {
-    const res = await fetch(`${BASE_URL}/api/workflow-templates?tenant_id=${TENANT_ID}`);
+    const res = await fetch(`${BASE_URL}/api/workflow-templates?tenant_id=${TENANT_ID}`, {
+      headers: getAuthHeaders()
+    });
     assert.ok([200, 404].includes(res.status), `expected 200 or 404, got ${res.status}`);
   });
 
