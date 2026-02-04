@@ -11,7 +11,14 @@ function getRuntimeEnv(key) {
 
 function formatDate(dt) {
   if (!dt) return "—";
-  const d = new Date(dt);
+  // If string contains both date and time (e.g., "2026-02-04 19:00:00"), treat as UTC
+  let dateStr = dt;
+  if (typeof dt === 'string' && dt.includes(' ') && !dt.includes('T')) {
+    // Convert "YYYY-MM-DD HH:MM:SS" to UTC ISO string "YYYY-MM-DDTHH:MM:SS.000Z"
+    const [datePart, timePart] = dt.split(' ');
+    dateStr = `${datePart}T${timePart}.000Z`;
+  }
+  const d = new Date(dateStr);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
@@ -665,7 +672,14 @@ function LeadProfilePageContent() {
                     <p className="text-sm text-gray-700 mb-2">{activity.body}</p>
                     <div className="text-xs text-gray-600 space-y-1">
                       <p>Type: <span className="font-medium">{activity.type}</span> | Priority: <span className="font-medium">{activity.priority || "Normal"}</span></p>
-                      {activity.due_date && <p>Due: <span className="font-medium">{formatDate(activity.due_date)}</span></p>}
+                      {activity.due_date && (
+                        <p>Due: <span className="font-medium">
+                          {activity.due_time 
+                            ? formatDate(`${activity.due_date} ${activity.due_time}`)
+                            : formatDate(activity.due_date)
+                          }
+                        </span></p>
+                      )}
                       {activity.assigned_to_name && <p>Assigned to: <span className="font-medium">{activity.assigned_to_name}</span></p>}
                     </div>
                   </div>

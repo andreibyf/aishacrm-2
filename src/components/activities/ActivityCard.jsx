@@ -6,6 +6,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Calendar, Clock, MoreHorizontal, Edit, Trash2, Eye, CheckCircle, Phone, Mail, Users, FileText } from "lucide-react";
 import { format, isPast, isToday } from "date-fns";
+import { formatActivityDateTime, getCurrentTimezoneOffset } from '../shared/timezoneUtils';
+import { useTimezone } from '../shared/TimezoneContext';
 
 // Matching the stat card colors - semi-transparent backgrounds
 const statusColors = {
@@ -42,8 +44,10 @@ export default function ActivityCard({
   isSelected,
   onSelect
 }) {
+  const { selectedTimezone } = useTimezone();
+  const offsetMinutes = getCurrentTimezoneOffset(selectedTimezone);
   const TypeIcon = typeIcons[activity.type] || Calendar;
-  
+
   const isDue = activity.due_date && isPast(new Date(activity.due_date)) && activity.status !== 'completed';
   const isTodayActivity = activity.due_date && isToday(new Date(activity.due_date));
 
@@ -130,16 +134,7 @@ export default function ActivityCard({
           <div className="flex items-center gap-2 text-sm text-slate-400">
             <Calendar className="w-4 h-4 flex-shrink-0" />
             <span className={isDue ? 'text-red-400 font-semibold' : isTodayActivity ? 'text-yellow-400 font-semibold' : ''}>
-              {(() => {
-                try {
-                  const d = new Date(activity.due_date);
-                  if (isNaN(d.getTime())) return activity.due_date;
-                  return format(d, 'MMM d, yyyy');
-                } catch {
-                  return activity.due_date;
-                }
-              })()}
-              {activity.due_time && ` at ${activity.due_time}`}
+              {formatActivityDateTime(activity, offsetMinutes)}
             </span>
           </div>
         )}

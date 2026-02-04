@@ -139,7 +139,7 @@ export default function AishaEntityChatModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span className="text-xl">✨</span>
-            Ask AiSHA about {entityLabel}
+            Assign AiSHA a Task
           </DialogTitle>
         </DialogHeader>
 
