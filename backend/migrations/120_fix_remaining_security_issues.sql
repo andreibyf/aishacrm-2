@@ -70,7 +70,6 @@ SELECT
   a.tenant_id,
   a.type,
   a.subject,
-  a.description,
   a.status,
   a.priority,
   a.assigned_to,
@@ -95,14 +94,13 @@ SELECT
   l.email,
   l.phone,
   l.company,
-  l.title AS job_title,
   l.status,
   l.source,
   l.assigned_to,
   l.account_id,
   a.name AS account_name,
   l.created_date,
-  l.updated_date
+  l.updated_at
 FROM leads l
 LEFT JOIN accounts a ON l.account_id = a.id AND l.tenant_id = a.tenant_id;
 
@@ -134,23 +132,16 @@ SELECT
   type,
   subject,
   status,
-  COALESCE(assigned_to, (metadata ->> 'assigned_to'::text)) AS assigned_to,
-  COALESCE(related_to, (metadata ->> 'related_to'::text)) AS related_to,
+  assigned_to,
+  related_to,
   related_id,
-  COALESCE(due_date, to_date((metadata ->> 'due_date'::text), 'YYYY-MM-DD'::text)) AS due_date,
+  due_date,
+  due_time,
   CASE
-    WHEN (COALESCE((due_time)::text, (metadata ->> 'due_time'::text)) ~ '^[0-9]{1,2}:[0-9]{2}'::text) 
-    THEN (COALESCE((due_time)::text, (metadata ->> 'due_time'::text)))::time without time zone
-    ELSE NULL::time without time zone
-  END AS due_time,
-  CASE
-    WHEN ((COALESCE(due_date, to_date((metadata ->> 'due_date'::text), 'YYYY-MM-DD'::text)) IS NOT NULL) 
-          AND (COALESCE((due_time)::text, (metadata ->> 'due_time'::text)) ~ '^[0-9]{1,2}:[0-9]{2}'::text)) 
-    THEN ((COALESCE(due_date, to_date((metadata ->> 'due_date'::text), 'YYYY-MM-DD'::text)))::timestamp without time zone 
-          + ((COALESCE((due_time)::text, (metadata ->> 'due_time'::text)))::time without time zone)::interval)
-    WHEN (COALESCE(due_date, to_date((metadata ->> 'due_date'::text), 'YYYY-MM-DD'::text)) IS NOT NULL) 
-    THEN ((COALESCE(due_date, to_date((metadata ->> 'due_date'::text), 'YYYY-MM-DD'::text)))::timestamp without time zone 
-          + ('12:00:00'::time without time zone)::interval)
+    WHEN (due_date IS NOT NULL AND due_time IS NOT NULL) 
+    THEN (due_date::timestamp without time zone + due_time::interval)
+    WHEN (due_date IS NOT NULL) 
+    THEN (due_date::timestamp without time zone + '12:00:00'::time without time zone::interval)
     ELSE NULL::timestamp without time zone
   END AS due_at,
   created_at,
@@ -171,7 +162,7 @@ SELECT
   u.status,
   u.created_at
 FROM users u
-LEFT JOIN tenants t ON u.tenant_uuid = t.id;
+LEFT JOIN tenant t ON u.tenant_uuid = t.id;
 
 ALTER VIEW public.user_profile_view SET (security_invoker = true);
 
@@ -199,6 +190,12 @@ ALTER VIEW public.v_lead_counts_by_status SET (security_invoker = true);
 -- Table 1: tasks
 -- Enable RLS
 ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS tasks_select_policy ON public.tasks;
+DROP POLICY IF EXISTS tasks_insert_policy ON public.tasks;
+DROP POLICY IF EXISTS tasks_update_policy ON public.tasks;
+DROP POLICY IF EXISTS tasks_delete_policy ON public.tasks;
 
 -- Policy 1: SELECT - Users can view tasks for their tenant
 CREATE POLICY tasks_select_policy ON public.tasks
@@ -249,6 +246,12 @@ CREATE POLICY tasks_delete_policy ON public.tasks
 -- DevAI health monitoring is superadmin-only, not tenant-scoped
 -- Enable RLS with superadmin-only access
 ALTER TABLE public.devai_health_alerts ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS devai_health_alerts_select_policy ON public.devai_health_alerts;
+DROP POLICY IF EXISTS devai_health_alerts_insert_policy ON public.devai_health_alerts;
+DROP POLICY IF EXISTS devai_health_alerts_update_policy ON public.devai_health_alerts;
+DROP POLICY IF EXISTS devai_health_alerts_delete_policy ON public.devai_health_alerts;
 
 -- Policy 1: SELECT - Only superadmins can view health alerts
 CREATE POLICY devai_health_alerts_select_policy ON public.devai_health_alerts
