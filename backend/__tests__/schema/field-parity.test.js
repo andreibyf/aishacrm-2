@@ -9,6 +9,7 @@
 
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { getAuthHeaders } from '../helpers/auth.js';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 const TENANT_ID = process.env.TEST_TENANT_ID || 'b62b764d-4f27-4e20-a8ad-8eb9b2e1055c';
@@ -253,7 +254,7 @@ async function apiRequest(method, path, body = null) {
   const options = {
     method,
     headers: {
-      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
       'x-tenant-id': TENANT_ID
     },
   };

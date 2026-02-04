@@ -10,6 +10,7 @@
 import { describe, test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { initSupabaseForTests, hasSupabaseCredentials } from '../setup.js';
+import { authGet, authPost, authPut, authDelete } from '../helpers/auth.js';
 
 // Inside Docker: CRM_BACKEND_URL=http://backend:3001 or use localhost:3001
 // Outside Docker: BACKEND_URL=http://localhost:3001 (matches internal port for consistency)
@@ -32,7 +33,7 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
   describe('Braid Graph API', () => {
     
     test('GET /api/braid/graph returns tool dependency graph', async () => {
-      const res = await fetch(`${BASE_URL}/api/braid/graph`);
+      const res = await authGet(`${BASE_URL}/api/braid/graph`);
       const json = await res.json();
       
       assert.equal(res.status, 200, `Expected 200, got ${res.status}`);
@@ -49,7 +50,7 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
     });
 
     test('GET /api/braid/graph/categories returns tool categories', async () => {
-      const res = await fetch(`${BASE_URL}/api/braid/graph/categories`);
+      const res = await authGet(`${BASE_URL}/api/braid/graph/categories`);
       const json = await res.json();
       
       assert.equal(res.status, 200);
@@ -64,7 +65,7 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
     });
 
     test('GET /api/braid/graph/tool/:name returns tool details', async () => {
-      const res = await fetch(`${BASE_URL}/api/braid/graph/tool/search_accounts`);
+      const res = await authGet(`${BASE_URL}/api/braid/graph/tool/search_accounts`);
       const json = await res.json();
       
       assert.equal(res.status, 200);
@@ -76,7 +77,7 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
     });
 
     test('GET /api/braid/graph/tool/:name/impact returns impact analysis', async () => {
-      const res = await fetch(`${BASE_URL}/api/braid/graph/tool/create_account/impact`);
+      const res = await authGet(`${BASE_URL}/api/braid/graph/tool/create_account/impact`);
       const json = await res.json();
       
       assert.equal(res.status, 200);
@@ -88,7 +89,7 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
     });
 
     test('GET /api/braid/graph/validate checks for circular dependencies', async () => {
-      const res = await fetch(`${BASE_URL}/api/braid/graph/validate`);
+      const res = await authGet(`${BASE_URL}/api/braid/graph/validate`);
       const json = await res.json();
       
       assert.equal(res.status, 200);
@@ -98,7 +99,7 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
     });
 
     test('GET /api/braid/graph/effects/:effect returns tools by effect', async () => {
-      const res = await fetch(`${BASE_URL}/api/braid/graph/effects/read`);
+      const res = await authGet(`${BASE_URL}/api/braid/graph/effects/read`);
       const json = await res.json();
       
       assert.equal(res.status, 200);
@@ -120,7 +121,7 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
   describe('Retrieval Functions', () => {
     
     test('GET /api/v2/accounts returns accounts list', async () => {
-      const res = await fetch(`${BASE_URL}/api/v2/accounts?tenant_id=${TENANT_ID}`);
+      const res = await authGet(`${BASE_URL}/api/v2/accounts?tenant_id=${TENANT_ID}`);
       const json = await res.json();
       
       assert.equal(res.status, 200);
@@ -132,7 +133,7 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
     });
 
     test('GET /api/v2/contacts returns contacts list', async () => {
-      const res = await fetch(`${BASE_URL}/api/v2/contacts?tenant_id=${TENANT_ID}`);
+      const res = await authGet(`${BASE_URL}/api/v2/contacts?tenant_id=${TENANT_ID}`);
       const json = await res.json();
       
       assert.equal(res.status, 200);
@@ -140,7 +141,7 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
     });
 
     test('GET /api/v2/leads returns leads list', async () => {
-      const res = await fetch(`${BASE_URL}/api/v2/leads?tenant_id=${TENANT_ID}`);
+      const res = await authGet(`${BASE_URL}/api/v2/leads?tenant_id=${TENANT_ID}`);
       const json = await res.json();
       
       assert.equal(res.status, 200);
@@ -148,7 +149,7 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
     });
 
     test('GET /api/v2/opportunities returns opportunities list', async () => {
-      const res = await fetch(`${BASE_URL}/api/v2/opportunities?tenant_id=${TENANT_ID}`);
+      const res = await authGet(`${BASE_URL}/api/v2/opportunities?tenant_id=${TENANT_ID}`);
       const json = await res.json();
       
       assert.equal(res.status, 200);
@@ -156,7 +157,7 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
     });
 
     test('GET /api/v2/activities returns activities list', async () => {
-      const res = await fetch(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}`);
+      const res = await authGet(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}`);
       const json = await res.json();
       
       assert.equal(res.status, 200);
@@ -164,7 +165,7 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
     });
 
     test('Search endpoints support query parameters', async () => {
-      const res = await fetch(`${BASE_URL}/api/v2/accounts?tenant_id=${TENANT_ID}&limit=5`);
+      const res = await authGet(`${BASE_URL}/api/v2/accounts?tenant_id=${TENANT_ID}&limit=5`);
       const json = await res.json();
       
       assert.equal(res.status, 200);
@@ -181,13 +182,13 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
   describe('Navigation Functions', () => {
     
     test('AI routes are accessible', async () => {
-      const res = await fetch(`${BASE_URL}/api/ai/suggestions?tenant_id=${TENANT_ID}`);
+      const res = await authGet(`${BASE_URL}/api/ai/suggestions?tenant_id=${TENANT_ID}`);
       
       assert.equal(res.status, 200, 'AI suggestions endpoint should be accessible');
     });
 
     test('Braid graph endpoint is accessible', async () => {
-      const res = await fetch(`${BASE_URL}/api/braid/graph`);
+      const res = await authGet(`${BASE_URL}/api/braid/graph`);
       
       assert.equal(res.status, 200, 'Braid graph endpoint should be accessible');
     });
@@ -210,11 +211,7 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
         company: 'Test Company'
       };
       
-      const res = await fetch(`${BASE_URL}/api/leads`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(leadData)
-      });
+      const res = await authPost(`${BASE_URL}/api/leads`, leadData);
       const json = await res.json();
       
       // Accept 200, 201 (success), 400 (validation), 401/403 (auth required)
@@ -235,11 +232,7 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
         status: 'contacted'
       };
       
-      const res = await fetch(`${BASE_URL}/api/leads/${testLeadId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updateData)
-      });
+      const res = await authPut(`${BASE_URL}/api/leads/${testLeadId}`, updateData);
       
       assert.ok([200, 400, 401, 403, 404].includes(res.status), `Expected valid response, got ${res.status}`);
     });
@@ -249,9 +242,7 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
         return;
       }
       
-      const res = await fetch(`${BASE_URL}/api/leads/${testLeadId}?tenant_id=${TENANT_ID}`, {
-        method: 'DELETE'
-      });
+      const res = await authDelete(`${BASE_URL}/api/leads/${testLeadId}?tenant_id=${TENANT_ID}`);
       
       assert.ok([200, 204, 400, 401, 403, 404].includes(res.status), `Expected valid response, got ${res.status}`);
     });
@@ -264,7 +255,7 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
   describe('Braid Metrics API', () => {
     
     test('GET /api/braid/metrics/tools returns tool metrics', async () => {
-      const res = await fetch(`${BASE_URL}/api/braid/metrics/tools?tenant_id=${TENANT_ID}`);
+      const res = await authGet(`${BASE_URL}/api/braid/metrics/tools?tenant_id=${TENANT_ID}`);
       
       // May require auth
       if (res.status === 200) {
@@ -276,7 +267,7 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
     });
 
     test('GET /api/braid/metrics/timeseries returns time series data', async () => {
-      const res = await fetch(`${BASE_URL}/api/braid/metrics/timeseries?tenant_id=${TENANT_ID}&period=1h`);
+      const res = await authGet(`${BASE_URL}/api/braid/metrics/timeseries?tenant_id=${TENANT_ID}&period=1h`);
       
       if (res.status === 200) {
         const json = await res.json();
