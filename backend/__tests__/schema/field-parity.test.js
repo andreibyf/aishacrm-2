@@ -221,6 +221,10 @@ function addOptionalFields(payload, fields) {
     owner_id: null,
     user_id: null,
     
+    // Polymorphic relationship fields (for activities)
+    related_id: null,
+    related_to: null,
+    
     // Date fields
     due_date: new Date().toISOString(),
     expected_close_date: new Date().toISOString(),
