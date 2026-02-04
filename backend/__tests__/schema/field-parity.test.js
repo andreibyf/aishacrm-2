@@ -114,8 +114,8 @@ const ENTITY_FIELD_CONTRACTS = {
     fields: [
       'id', 'tenant_id', 'type', 'subject', 'description', 'status',
       'due_date', 'completed_date', 'priority',
-      // Related entities
-      'account_id', 'contact_id', 'lead_id', 'opportunity_id',
+      // Polymorphic relationship (can relate to lead, contact, account, or opportunity)
+      'related_id', 'related_to',
       // Assignment
       'assigned_to', 'owner_id',
       // Test data flag
