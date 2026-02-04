@@ -1261,6 +1261,150 @@ CREATE TRIGGER audit_users_changes
   EXECUTE FUNCTION log_user_changes();
 ```
 
+#### Person Profile Synchronization Triggers (CRITICAL)
+
+**Last Updated**: February 4, 2026  
+**Migrations**: 121 (initial), 126-127 (fixes)
+
+The `person_profile` table aggregates data from `contacts`, `leads`, and `activities` for unified person views. Critical lessons learned about trigger implementation:
+
+**Correct Functions (as of Migration 126-127)**:
+
+```sql
+-- Contact → Person Profile Sync
+CREATE OR REPLACE FUNCTION public.person_profile_upsert_from_contact()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public, pg_catalog
+AS $function$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    DELETE FROM public.person_profile WHERE person_id = OLD.id;
+    RETURN OLD;
+  END IF;
+
+  INSERT INTO public.person_profile AS pp (
+    person_id, person_type, tenant_id, first_name, last_name, email, phone, 
+    job_title, status, account_id, account_name, updated_at
+  ) VALUES (
+    NEW.id, 'contact', NEW.tenant_id, NEW.first_name, NEW.last_name, NEW.email,
+    -- CRITICAL: Cast BOTH arguments for polymorphic function resolution
+    COALESCE(NULLIF(NEW.mobile::text, ''::text), NEW.phone), 
+    NEW.job_title, NEW.status, NEW.account_id, NEW.account_name, now()
+  )
+  ON CONFLICT (person_id) DO UPDATE SET
+    person_type = EXCLUDED.person_type,
+    tenant_id = EXCLUDED.tenant_id,
+    first_name = EXCLUDED.first_name,
+    last_name = EXCLUDED.last_name,
+    email = EXCLUDED.email,
+    phone = EXCLUDED.phone,
+    job_title = EXCLUDED.job_title,
+    status = EXCLUDED.status,
+    account_id = EXCLUDED.account_id,
+    account_name = EXCLUDED.account_name,
+    updated_at = now();
+
+  RETURN NEW;
+END;
+$function$;
+
+-- Activity → Person Profile Refresh
+CREATE OR REPLACE FUNCTION public.person_profile_after_activity()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public, pg_catalog
+AS $function$
+DECLARE 
+  v_person_id uuid; 
+  v_person_type text;
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    v_person_id := OLD.related_id;
+  ELSE
+    v_person_id := NEW.related_id;
+  END IF;
+
+  IF v_person_id IS NULL THEN
+    -- CRITICAL: Cannot coalesce RECORD types - use explicit return
+    IF TG_OP = 'DELETE' THEN
+      RETURN OLD;
+    ELSE
+      RETURN NEW;
+    END IF;
+  END IF;
+
+  -- Check if person exists in contacts or leads
+  IF EXISTS (SELECT 1 FROM public.contacts c WHERE c.id = v_person_id) THEN
+    v_person_type := 'contact';
+  ELSIF EXISTS (SELECT 1 FROM public.leads l WHERE l.id = v_person_id) THEN
+    v_person_type := 'lead';
+  ELSE
+    IF TG_OP = 'DELETE' THEN
+      RETURN OLD;
+    ELSE
+      RETURN NEW;
+    END IF;
+  END IF;
+
+  PERFORM public.recompute_last_activity_at(v_person_id);
+  
+  -- CRITICAL: Cannot coalesce RECORD types - use explicit return
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  ELSE
+    RETURN NEW;
+  END IF;
+END;
+$function$;
+```
+
+**Triggers**:
+
+```sql
+-- Contact trigger
+CREATE TRIGGER trg_person_profile_contacts
+  AFTER INSERT OR UPDATE OR DELETE ON public.contacts
+  FOR EACH ROW
+  EXECUTE FUNCTION public.person_profile_upsert_from_contact();
+
+-- Activity trigger (multiple triggers on same table)
+CREATE TRIGGER trg_person_profile_activities
+  AFTER INSERT OR UPDATE OR DELETE ON public.activities
+  FOR EACH ROW
+  EXECUTE FUNCTION public.person_profile_after_activity();
+```
+
+**Critical Lessons (Feb 4, 2026)**:
+
+1. **PostgreSQL Polymorphic Functions**:
+   - Functions like `NULLIF()` and `COALESCE()` require matching types on all arguments
+   - When `search_path` includes `pg_catalog`, cast BOTH arguments explicitly:
+     ```sql
+     -- ❌ FAILS: NULLIF(column, '')
+     -- ✅ WORKS: NULLIF(column::text, ''::text)
+     ```
+
+2. **RECORD Type Handling**:
+   - Cannot use `COALESCE(NEW, OLD)` on trigger RECORD types
+   - Must use explicit conditionals:
+     ```sql
+     -- ❌ FAILS: RETURN COALESCE(NEW, OLD);
+     -- ✅ WORKS:
+     IF TG_OP = 'DELETE' THEN
+       RETURN OLD;
+     ELSE
+       RETURN NEW;
+     END IF;
+     ```
+
+3. **Debugging Trigger Issues**:
+   - Use `SELECT tgfoid::regprocedure FROM pg_trigger` to find ACTUAL function called
+   - Test triggers with direct psql INSERT to bypass application caching layers
+   - Check `pg_get_functiondef(oid)` to see current function source
+
+**Historical Note**: Migration 123 initially fixed the wrong function (`sync_contact_to_person_profile()`) because we didn't verify which function the trigger actually called. Always query `pg_trigger` table first!
+
 ---
 
 **[Continue to Part 2 for Chapters 7-12 and Appendices](./AISHA_CRM_DATABASE_MANUAL_PART2.md)**

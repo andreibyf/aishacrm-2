@@ -29,13 +29,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 | Document | Description |
 |----------|-------------|
+| [COPILOT_PLAYBOOK.md](./COPILOT_PLAYBOOK.md) | **⭐ START HERE** - Operations guide, testing, migrations |
 | [docs/USER_GUIDE.md](./docs/USER_GUIDE.md) | End-user guide for CRM operations |
 | [docs/ADMIN_GUIDE.md](./docs/ADMIN_GUIDE.md) | System administration, deployment |
 | [docs/AI_ASSISTANT_GUIDE.md](./docs/AI_ASSISTANT_GUIDE.md) | AiSHA AI assistant features |
 | [docs/DEVELOPER_MANUAL.md](./docs/DEVELOPER_MANUAL.md) | Development setup, architecture |
-| [docs/DATABASE_GUIDE.md](./docs/DATABASE_GUIDE.md) | Database schema, migrations |
+| [docs/DATABASE_GUIDE.md](./docs/DATABASE_GUIDE.md) | Database schema, migrations, **trigger patterns** |
 | [docs/SECURITY_GUIDE.md](./docs/SECURITY_GUIDE.md) | Security, RLS, authentication |
 | [docs/BRANDING_GUIDE.md](./docs/BRANDING_GUIDE.md) | Brand assets, colors |
+
+**⚠️ IMPORTANT**: Before making ANY changes, read [COPILOT_PLAYBOOK.md](./COPILOT_PLAYBOOK.md) for operational procedures, migration workflows, and critical lessons learned.
 
 Legacy documentation is archived in `docs/archive/`.
 
