@@ -112,16 +112,16 @@ const ENTITY_FIELD_CONTRACTS = {
     endpoint: '/api/v2/activities',
     required: ['tenant_id', 'type', 'subject'],
     fields: [
-      'id', 'tenant_id', 'type', 'subject', 'description', 'status',
-      'due_date', 'completed_date', 'priority',
+      'id', 'tenant_id', 'type', 'subject', 'body', 'status',
+      'due_date', 'due_time', 'priority', 'location',
       // Polymorphic relationship (can relate to lead, contact, account, or opportunity)
       'related_id', 'related_to',
-      // Assignment
-      'assigned_to', 'owner_id',
+      // Assignment/ownership
+      'created_by', 'assigned_to',
       // Test data flag
       'is_test_data',
-      // Timestamps
-      'created_at', 'updated_at',
+      // Timestamps (activities uses created_date/updated_date per migration 002)
+      'created_date', 'updated_date',
       'metadata'
     ]
   },
