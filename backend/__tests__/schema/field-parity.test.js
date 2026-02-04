@@ -251,10 +251,20 @@ function addOptionalFields(payload, fields) {
  * Test helper: make API request
  */
 async function apiRequest(method, path, body = null) {
+  const authHeaders = getAuthHeaders();
+  
+  // Debug: log auth headers on first call
+  if (!apiRequest._logged) {
+    console.log('[field-parity DEBUG] Auth headers:', JSON.stringify(authHeaders, null, 2));
+    console.log('[field-parity DEBUG] Has Authorization:', !!authHeaders.Authorization);
+    console.log('[field-parity DEBUG] Has apikey:', !!authHeaders.apikey);
+    apiRequest._logged = true;
+  }
+  
   const options = {
     method,
     headers: {
-      ...getAuthHeaders(),
+      ...authHeaders,
       'x-tenant-id': TENANT_ID
     },
   };

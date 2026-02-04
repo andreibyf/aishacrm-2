@@ -39,8 +39,31 @@ export async function authenticateRequest(req, _res, next) {
     const authHeader = req.headers?.authorization || '';
     const hasCookie = !!req.cookies?.aisha_access;
     const hasBearer = authHeader.startsWith('Bearer ');
+    const hasApiKey = !!req.headers?.apikey;
     if (process.env.AUTH_DEBUG === 'true') {
-      logger.debug('[Auth Debug] path=' + req.path + ' hasCookie=' + hasCookie + ' hasBearer=' + hasBearer);
+      logger.debug('[Auth Debug] path=' + req.path + ' hasCookie=' + hasCookie + ' hasBearer=' + hasBearer + ' hasApiKey=' + hasApiKey);
+    }
+
+    // 0) Check for Supabase service role key (for tests and admin operations)
+    // Service role keys bypass RLS and have full admin access
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const providedApiKey = req.headers?.apikey || (hasBearer ? authHeader.substring(7).trim() : null);
+    
+    if (serviceRoleKey && providedApiKey === serviceRoleKey) {
+      // Service role key match - grant superadmin access
+      req.user = {
+        id: 'service-role',
+        email: 'service-role@system',
+        name: 'Service Role',
+        role: 'superadmin',
+        tenant_id: null, // Service role has access to all tenants
+        tenant_uuid: null,
+        service_role: true
+      };
+      if (process.env.AUTH_DEBUG === 'true') {
+        logger.debug('[Auth Debug] Service role key authenticated:', { path: req.path });
+      }
+      return next();
     }
 
     // 1) Try backend JWT access cookie first (primary auth method)
