@@ -13,7 +13,7 @@
  * Run with: node --test backend/lib/care/__tests__/careStateEngine.test.js
  */
 
-import { describe, _it, test } from 'node:test';
+import { describe, test } from 'node:test';
 import assert from 'node:assert';
 import {
   validateCareState,
