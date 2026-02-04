@@ -35,6 +35,9 @@ function getJWKSClient() {
 
 export async function authenticateRequest(req, _res, next) {
   try {
+    // DEBUG: Log EVERY request to see if middleware runs
+    logger.warn(`[AUTH] Processing ${req.method} ${req.path}`);
+    
     // DEBUG: Log auth context for diagnostics (only when AUTH_DEBUG=true)
     const authHeader = req.headers?.authorization || '';
     const hasCookie = !!req.cookies?.aisha_access;
@@ -48,6 +51,20 @@ export async function authenticateRequest(req, _res, next) {
     // Service role keys bypass RLS and have full admin access
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     const providedApiKey = req.headers?.apikey || (hasBearer ? authHeader.substring(7).trim() : null);
+    
+    // DEBUG: Temporary logging for leads POST
+    if (req.path.includes('/api/leads')) {
+      logger.warn('[AUTH DEBUG] Service Role Check for /api/leads:', {
+        method: req.method,
+        hasServiceKey: !!serviceRoleKey,
+        serviceKeyLen: serviceRoleKey?.length,
+        hasProvidedKey: !!providedApiKey,
+        providedKeyLen: providedApiKey?.length,
+        keysMatch: serviceRoleKey === providedApiKey,
+        hasApiKeyHeader: !!req.headers?.apikey,
+        hasBearerToken: hasBearer
+      });
+    }
     
     if (serviceRoleKey && providedApiKey === serviceRoleKey) {
       // Service role key match - grant superadmin access
