@@ -257,17 +257,17 @@ app.use("/api/ai-settings", authenticateRequest, aiSettingsRoutes); // AI config
 app.use("/api/mcp", createMcpRoutes(measuredPgPool));
 app.use("/api/devai", devaiRoutes); // Phase 6: Developer AI approvals (superadmin only)
 app.use("/api/devai", devaiHealthAlertsRoutes); // Health monitoring alerts (superadmin only)
-app.use("/api/accounts", createAccountRoutes(measuredPgPool));
-app.use("/api/leads", createLeadRoutes(measuredPgPool));
-app.use("/api/contacts", createContactRoutes(measuredPgPool));
+app.use("/api/accounts", authenticateRequest, createAccountRoutes(measuredPgPool));
+app.use("/api/leads", authenticateRequest, createLeadRoutes(measuredPgPool));
+app.use("/api/contacts", authenticateRequest, createContactRoutes(measuredPgPool));
 app.use("/api/validation", createValidationRoutes(measuredPgPool));
-app.use("/api/billing", createBillingRoutes(measuredPgPool));
-app.use("/api/storage", createStorageRoutes(measuredPgPool));
+app.use("/api/billing", authenticateRequest, createBillingRoutes(measuredPgPool));
+app.use("/api/storage", authenticateRequest, createStorageRoutes(measuredPgPool));
 app.use("/api/webhooks", createWebhookRoutes(measuredPgPool));
 app.use("/api/system", createSystemRoutes(measuredPgPool));
 app.use("/api/system-settings", createSystemSettingsRoutes(measuredPgPool));
 app.use("/api/users", createUserRoutes(measuredPgPool, supabaseAuth));
-app.use("/api/employees", createEmployeeRoutes(measuredPgPool));
+app.use("/api/employees", authenticateRequest, createEmployeeRoutes(measuredPgPool));
 app.use("/api/permissions", createPermissionRoutes(measuredPgPool));
 app.use("/api/testing", createTestingRoutes(measuredPgPool));
 app.use("/api/documents", createDocumentRoutes(measuredPgPool));
@@ -283,22 +283,22 @@ app.use("/api/utils", createUtilsRoutes(measuredPgPool));
 app.use("/api/bizdevsources", createBizDevSourceRoutes(measuredPgPool));
 app.use("/api/clients", createClientRoutes(measuredPgPool));
 app.use("/api/workflows", authenticateRequest, validateTenantAccess, createWorkflowRoutes(measuredPgPool));
-app.use("/api/workflowexecutions", createWorkflowExecutionRoutes(measuredPgPool));
+app.use("/api/workflowexecutions", authenticateRequest, createWorkflowExecutionRoutes(measuredPgPool));
 // V1 activities route RETIRED - use /api/v2/activities (tenant-isolated, secure DELETE)
 // app.use("/api/activities", createActivityRoutes(measuredPgPool));
-app.use("/api/opportunities", createOpportunityRoutes(measuredPgPool));
+app.use("/api/opportunities", authenticateRequest, createOpportunityRoutes(measuredPgPool));
 // v2 opportunities endpoints (Phase 4.2 internal pilot).
 // Always mounted in local/dev backend; production gating is handled via CI/CD.
 logger.debug("Mounting /api/v2/opportunities routes (dev/internal)");
-app.use("/api/v2/opportunities", createOpportunityV2Routes(measuredPgPool));
+app.use("/api/v2/opportunities", authenticateRequest, createOpportunityV2Routes(measuredPgPool));
 logger.debug("Mounting /api/v2/activities routes (dev/internal)");
-app.use("/api/v2/activities", createActivityV2Routes(measuredPgPool));
+app.use("/api/v2/activities", authenticateRequest, createActivityV2Routes(measuredPgPool));
 logger.debug("Mounting /api/v2/contacts routes (dev/internal)");
-app.use("/api/v2/contacts", createContactV2Routes(measuredPgPool));
+app.use("/api/v2/contacts", authenticateRequest, createContactV2Routes(measuredPgPool));
 logger.debug("Mounting /api/v2/accounts routes (dev/internal)");
-app.use("/api/v2/accounts", createAccountV2Routes(measuredPgPool));
+app.use("/api/v2/accounts", authenticateRequest, createAccountV2Routes(measuredPgPool));
 logger.debug("Mounting /api/v2/leads routes (dev/internal)");
-app.use("/api/v2/leads", createLeadsV2Routes(measuredPgPool));
+app.use("/api/v2/leads", authenticateRequest, createLeadsV2Routes(measuredPgPool));
 logger.debug("Mounting /api/v2/reports routes (dev/internal)");
 app.use("/api/v2/reports", createReportsV2Routes(measuredPgPool));
 logger.debug("Mounting /api/v2/workflows routes (dev/internal)");
