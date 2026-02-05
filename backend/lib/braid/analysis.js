@@ -257,6 +257,80 @@ export const TOOL_GRAPH = {
     description: 'Delete an activity'
   },
 
+  // ========== CONTACTS ==========
+  create_contact: {
+    category: 'CONTACTS',
+    dependencies: [],
+    inputs: ['first_name', 'last_name', 'email', 'phone', 'job_title', 'account_id'],
+    outputs: ['contact'],
+    effects: ['create'],
+    description: 'Create a new contact record'
+  },
+  get_contact_details: {
+    category: 'CONTACTS',
+    dependencies: [],
+    inputs: ['contact_id'],
+    outputs: ['contact'],
+    effects: ['read'],
+    description: 'Retrieve contact details by ID'
+  },
+  list_contacts_for_account: {
+    category: 'CONTACTS',
+    dependencies: [],
+    inputs: ['account_id', 'limit'],
+    outputs: ['contacts[]'],
+    effects: ['read'],
+    description: 'List all contacts associated with an account'
+  },
+  search_contacts: {
+    category: 'CONTACTS',
+    dependencies: [],
+    inputs: ['query', 'limit'],
+    outputs: ['contacts[]'],
+    effects: ['read'],
+    description: 'Search contacts by name or other fields'
+  },
+  get_contact_by_name: {
+    category: 'CONTACTS',
+    dependencies: [],
+    inputs: ['name'],
+    outputs: ['contact'],
+    effects: ['read'],
+    description: 'Get contact details by searching for name'
+  },
+  list_all_contacts: {
+    category: 'CONTACTS',
+    dependencies: [],
+    inputs: ['limit'],
+    outputs: ['contacts[]'],
+    effects: ['read'],
+    description: 'List all contacts with pagination'
+  },
+  search_contacts_by_status: {
+    category: 'CONTACTS',
+    dependencies: [],
+    inputs: ['status', 'limit'],
+    outputs: ['contacts[]'],
+    effects: ['read'],
+    description: 'Search contacts filtered by status'
+  },
+  update_contact: {
+    category: 'CONTACTS',
+    dependencies: ['get_contact_details'],
+    inputs: ['contact_id', 'updates'],
+    outputs: ['contact'],
+    effects: ['update'],
+    description: 'Update contact fields'
+  },
+  delete_contact: {
+    category: 'CONTACTS',
+    dependencies: ['get_contact_details'],
+    inputs: ['contact_id'],
+    outputs: [],
+    effects: ['delete'],
+    description: 'Delete a contact record'
+  },
+
   // ========== SNAPSHOT ==========
   fetch_tenant_snapshot: {
     category: 'SNAPSHOT',
