@@ -1,5 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { getAuthHeaders } from '../helpers/auth.js';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
@@ -11,7 +12,10 @@ const createdIds = [];
 async function createLead(payload) {
   const res = await fetch(`${BASE_URL}/api/leads`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify({ tenant_id: TENANT_ID, ...payload })
   });
   const json = await res.json();
@@ -19,7 +23,10 @@ async function createLead(payload) {
 }
 
 async function deleteLead(id) {
-  const res = await fetch(`${BASE_URL}/api/leads/${id}`, { method: 'DELETE' });
+  const res = await fetch(`${BASE_URL}/api/leads/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders()
+  });
   return res.status;
 }
 
@@ -43,7 +50,9 @@ after(async () => {
 });
 
 (SHOULD_RUN ? test : test.skip)('GET /api/leads returns 200 with tenant_id', async () => {
-  const res = await fetch(`${BASE_URL}/api/leads?tenant_id=${TENANT_ID}`);
+  const res = await fetch(`${BASE_URL}/api/leads?tenant_id=${TENANT_ID}`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 200, 'expected 200 from leads list');
   const json = await res.json();
   assert.equal(json.status, 'success');
@@ -52,7 +61,9 @@ after(async () => {
 
 (SHOULD_RUN ? test : test.skip)('GET /api/leads supports status $nin (NOT IN)', async () => {
   const nin = encodeURIComponent(JSON.stringify({ $nin: ['lost', 'converted'] }));
-  const res = await fetch(`${BASE_URL}/api/leads?tenant_id=${TENANT_ID}&status=${nin}`);
+  const res = await fetch(`${BASE_URL}/api/leads?tenant_id=${TENANT_ID}&status=${nin}`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 200, 'expected 200 from leads list with $nin');
   const json = await res.json();
   const leads = json.data?.leads || [];
@@ -65,7 +76,9 @@ after(async () => {
 });
 
 (SHOULD_RUN ? test : test.skip)('GET /api/leads/search returns matching leads', async () => {
-  const res = await fetch(`${BASE_URL}/api/leads/search?tenant_id=${TENANT_ID}&q=Unit`);
+  const res = await fetch(`${BASE_URL}/api/leads/search?tenant_id=${TENANT_ID}&q=Unit`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 200, 'expected 200 from leads search');
   const json = await res.json();
   assert.equal(json.status, 'success');
@@ -74,14 +87,18 @@ after(async () => {
 });
 
 (SHOULD_RUN ? test : test.skip)('GET /api/leads/search requires q parameter', async () => {
-  const res = await fetch(`${BASE_URL}/api/leads/search?tenant_id=${TENANT_ID}`);
+  const res = await fetch(`${BASE_URL}/api/leads/search?tenant_id=${TENANT_ID}`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 400, 'expected 400 when q is missing');
   const json = await res.json();
   assert.equal(json.status, 'error');
 });
 
 (SHOULD_RUN ? test : test.skip)('GET /api/leads/search requires tenant_id', async () => {
-  const res = await fetch(`${BASE_URL}/api/leads/search?q=test`);
+  const res = await fetch(`${BASE_URL}/api/leads/search?q=test`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 400, 'expected 400 when tenant_id is missing');
   const json = await res.json();
   assert.equal(json.status, 'error');

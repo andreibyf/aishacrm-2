@@ -45,12 +45,34 @@ export default function createAnnouncementRoutes(_pgPool) {
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
-
+  // GET /api/announcements/active - Get active announcements
+  router.get('/active', async (req, res) => {
+    try {
+      const { tenant_id } = req.query;
+      
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+      
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      // Don't filter by is_active as that column may not exist
+      const { data, error } = await supabase
+        .from('announcement')
+        .select('*')
+        .eq('tenant_id', tenant_id)
+        .order('created_date', { ascending: false });
+      if (error) throw new Error(error.message);
+      return res.json(data || []);
+    } catch (error) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
   // GET /api/announcements/:id - Get single announcement (tenant aware)
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id } = req.query || {};
+      const tenant_id = req.tenant?.id || req.query.tenant_id;
       if (!validateTenantScopedId(id, tenant_id, res)) return;
       
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
@@ -104,7 +126,7 @@ export default function createAnnouncementRoutes(_pgPool) {
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id } = req.query || {};
+      const tenant_id = req.tenant?.id || req.query.tenant_id;
       const u = req.body;
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
@@ -139,7 +161,7 @@ export default function createAnnouncementRoutes(_pgPool) {
   router.delete('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id } = req.query || {};
+      const tenant_id = req.tenant?.id || req.query.tenant_id;
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
 
@@ -148,9 +170,9 @@ export default function createAnnouncementRoutes(_pgPool) {
       const { data, error } = await supabase
         .from('announcement')
         .delete()
-        .or(`tenant_id.eq.${tenant_id},tenant_id.is.null`)
         .eq('id', id)
-        .select('id')
+        .eq('tenant_id', tenant_id)
+        .select()
         .maybeSingle();
       if (error && error.code !== 'PGRST116') throw new Error(error.message);
       if (!data) return res.status(404).json({ status: 'error', message: 'Not found' });

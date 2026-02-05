@@ -1,5 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { getAuthHeaders } from '../helpers/auth.js';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
@@ -11,7 +12,10 @@ const createdIds = [];
 async function createOpportunityV2(payload) {
   const res = await fetch(`${BASE_URL}/api/v2/opportunities`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify({ tenant_id: TENANT_ID, ...payload })
   });
   const json = await res.json();
@@ -20,7 +24,8 @@ async function createOpportunityV2(payload) {
 
 async function deleteOpportunityV2(id) {
   const res = await fetch(`${BASE_URL}/api/v2/opportunities/${id}?tenant_id=${TENANT_ID}`, { 
-    method: 'DELETE' 
+    method: 'DELETE',
+    headers: getAuthHeaders()
   });
   return res.status;
 }
@@ -76,7 +81,9 @@ after(async () => {
 });
 
 (SHOULD_RUN ? test : test.skip)('GET /api/v2/opportunities returns 200 with tenant_id', async () => {
-  const res = await fetch(`${BASE_URL}/api/v2/opportunities?tenant_id=${TENANT_ID}`);
+  const res = await fetch(`${BASE_URL}/api/v2/opportunities?tenant_id=${TENANT_ID}`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 200, 'expected 200 from v2 opportunities list');
   const json = await res.json();
   assert.equal(json.status, 'success');
@@ -86,7 +93,9 @@ after(async () => {
 });
 
 (SHOULD_RUN ? test : test.skip)('GET /api/v2/opportunities supports single sort field', async () => {
-  const res = await fetch(`${BASE_URL}/api/v2/opportunities?tenant_id=${TENANT_ID}&sort=-updated_at`);
+  const res = await fetch(`${BASE_URL}/api/v2/opportunities?tenant_id=${TENANT_ID}&sort=-updated_at`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 200, 'expected 200 from v2 opportunities list with single sort');
   const json = await res.json();
   assert.equal(json.status, 'success');
@@ -95,7 +104,9 @@ after(async () => {
 });
 
 (SHOULD_RUN ? test : test.skip)('GET /api/v2/opportunities supports multi-field sort (descending)', async () => {
-  const res = await fetch(`${BASE_URL}/api/v2/opportunities?tenant_id=${TENANT_ID}&sort=-updated_at,-id`);
+  const res = await fetch(`${BASE_URL}/api/v2/opportunities?tenant_id=${TENANT_ID}&sort=-updated_at,-id`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 200, 'expected 200 from v2 opportunities list with multi-field sort');
   const json = await res.json();
   assert.equal(json.status, 'success');
@@ -105,7 +116,9 @@ after(async () => {
 });
 
 (SHOULD_RUN ? test : test.skip)('GET /api/v2/opportunities supports multi-field sort (ascending)', async () => {
-  const res = await fetch(`${BASE_URL}/api/v2/opportunities?tenant_id=${TENANT_ID}&sort=amount,name`);
+  const res = await fetch(`${BASE_URL}/api/v2/opportunities?tenant_id=${TENANT_ID}&sort=amount,name`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 200, 'expected 200 from v2 opportunities list with ascending multi-field sort');
   const json = await res.json();
   assert.equal(json.status, 'success');
@@ -114,7 +127,9 @@ after(async () => {
 });
 
 (SHOULD_RUN ? test : test.skip)('GET /api/v2/opportunities supports mixed sort directions', async () => {
-  const res = await fetch(`${BASE_URL}/api/v2/opportunities?tenant_id=${TENANT_ID}&sort=-amount,name`);
+  const res = await fetch(`${BASE_URL}/api/v2/opportunities?tenant_id=${TENANT_ID}&sort=-amount,name`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 200, 'expected 200 from v2 opportunities list with mixed sort directions');
   const json = await res.json();
   assert.equal(json.status, 'success');
@@ -137,7 +152,9 @@ after(async () => {
 
 (SHOULD_RUN ? test : test.skip)('GET /api/v2/opportunities handles invalid sort gracefully', async () => {
   // Test with invalid sort parameter - should not crash
-  const res = await fetch(`${BASE_URL}/api/v2/opportunities?tenant_id=${TENANT_ID}&sort=,,,`);
+  const res = await fetch(`${BASE_URL}/api/v2/opportunities?tenant_id=${TENANT_ID}&sort=,,,`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 200, 'expected 200 even with invalid sort (should use default)');
   const json = await res.json();
   assert.equal(json.status, 'success');
@@ -146,7 +163,9 @@ after(async () => {
 
 (SHOULD_RUN ? test : test.skip)('GET /api/v2/opportunities rejects invalid field names', async () => {
   // Test with SQL injection attempt - should ignore invalid fields
-  const res = await fetch(`${BASE_URL}/api/v2/opportunities?tenant_id=${TENANT_ID}&sort=-malicious_field,invalid_column`);
+  const res = await fetch(`${BASE_URL}/api/v2/opportunities?tenant_id=${TENANT_ID}&sort=-malicious_field,invalid_column`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 200, 'expected 200 (invalid fields should be ignored)');
   const json = await res.json();
   assert.equal(json.status, 'success');
@@ -155,7 +174,9 @@ after(async () => {
 });
 
 (SHOULD_RUN ? test : test.skip)('GET /api/v2/opportunities with pagination and sort', async () => {
-  const res = await fetch(`${BASE_URL}/api/v2/opportunities?tenant_id=${TENANT_ID}&sort=-updated_at,-id&limit=10&offset=0`);
+  const res = await fetch(`${BASE_URL}/api/v2/opportunities?tenant_id=${TENANT_ID}&sort=-updated_at,-id&limit=10&offset=0`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 200, 'expected 200 from v2 opportunities with pagination and sort');
   const json = await res.json();
   assert.equal(json.status, 'success');

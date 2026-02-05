@@ -6,6 +6,7 @@
  */
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { getAuthHeaders } from '../helpers/auth.js';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:4001';
 const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
@@ -25,6 +26,7 @@ async function createActivity(payload) {
   const res = await fetch(`${BASE_URL}/api/v2/activities`, {
     method: 'POST',
     headers: {
+      ...getAuthHeaders(),
       'Content-Type': 'application/json',
       'x-tenant-id': TENANT_ID,
     },
@@ -50,7 +52,8 @@ async function createActivity(payload) {
 async function deleteActivity(id) {
   try {
     await fetch(`${BASE_URL}/api/v2/activities/${id}?tenant_id=${TENANT_ID}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: getAuthHeaders(),
     });
   } catch {
     // Ignore cleanup errors
@@ -110,7 +113,9 @@ after(async () => {
 
 // Test: Basic list with tenant_id filter
 (SHOULD_RUN ? test : test.skip)('GET /api/v2/activities returns list with tenant_id', async () => {
-  const res = await fetch(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&limit=10`);
+  const res = await fetch(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&limit=10`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 200);
 
   const json = await res.json();
@@ -121,7 +126,9 @@ after(async () => {
 
 // Test: Filter by status
 (SHOULD_RUN ? test : test.skip)('Filter by status=scheduled returns scheduled activities', async () => {
-  const res = await fetch(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&status=scheduled&limit=50`);
+  const res = await fetch(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&status=scheduled&limit=50`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 200);
 
   const json = await res.json();
@@ -143,7 +150,9 @@ after(async () => {
     return;
   }
 
-  const res = await fetch(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&is_test_data=true&limit=50`);
+  const res = await fetch(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&is_test_data=true&limit=50`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 200);
 
   const json = await res.json();
@@ -159,7 +168,9 @@ after(async () => {
 
 // Test: Filter by is_test_data=false excludes test data
 (SHOULD_RUN ? test : test.skip)('Filter by is_test_data=false excludes test activities', async () => {
-  const res = await fetch(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&is_test_data=false&limit=50`);
+  const res = await fetch(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&is_test_data=false&limit=50`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 200);
 
   const json = await res.json();
@@ -176,13 +187,17 @@ after(async () => {
 // Test: Pagination works correctly
 (SHOULD_RUN ? test : test.skip)('Pagination with limit and offset works', async () => {
   // First page
-  const res1 = await fetch(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&limit=5&offset=0`);
+  const res1 = await fetch(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&limit=5&offset=0`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res1.status, 200);
   const json1 = await res1.json();
   const page1 = json1.data?.activities || [];
 
   // Second page
-  const res2 = await fetch(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&limit=5&offset=5`);
+  const res2 = await fetch(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&limit=5&offset=5`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res2.status, 200);
   const json2 = await res2.json();
   const page2 = json2.data?.activities || [];
@@ -236,7 +251,9 @@ after(async () => {
     return;
   }
 
-  const res = await fetch(`${BASE_URL}/api/v2/activities/${createdIds[0]}?tenant_id=${TENANT_ID}`);
+  const res = await fetch(`${BASE_URL}/api/v2/activities/${createdIds[0]}?tenant_id=${TENANT_ID}`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 200);
 
   const json = await res.json();
@@ -250,7 +267,9 @@ after(async () => {
 
 // Test: Activity type filter
 (SHOULD_RUN ? test : test.skip)('Filter by type=task returns task activities', async () => {
-  const res = await fetch(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&type=task&limit=50`);
+  const res = await fetch(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&type=task&limit=50`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 200);
 
   const json = await res.json();
@@ -263,7 +282,9 @@ after(async () => {
 
 // Test: Include stats query param
 (SHOULD_RUN ? test : test.skip)('include_stats=true returns activity counts', async () => {
-  const res = await fetch(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&include_stats=true&limit=10`);
+  const res = await fetch(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&include_stats=true&limit=10`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 200);
 
   const json = await res.json();
@@ -299,7 +320,9 @@ after(async () => {
   
   console.log('Testing search filter with $regex. URL length:', url.length);
   
-  const res = await fetch(url);
+  const res = await fetch(url, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 200, `Expected 200 OK, got ${res.status}`);
 
   const json = await res.json();
@@ -341,7 +364,9 @@ after(async () => {
 
   const url = `${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&include_stats=false&filter=${encodeURIComponent(JSON.stringify(searchFilter))}`;
   
-  const res = await fetch(url);
+  const res = await fetch(url, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 200, `Expected 200 OK for special character search, got ${res.status}`);
 
   const json = await res.json();

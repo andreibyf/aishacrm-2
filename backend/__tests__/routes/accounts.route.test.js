@@ -1,5 +1,6 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { getAuthHeaders } from '../helpers/auth.js';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
@@ -11,7 +12,10 @@ const createdIds = [];
 async function createAccount(payload) {
   const res = await fetch(`${BASE_URL}/api/accounts`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify({ tenant_id: TENANT_ID, ...payload })
   });
   const json = await res.json();
@@ -19,7 +23,9 @@ async function createAccount(payload) {
 }
 
 async function getAccount(id) {
-  const res = await fetch(`${BASE_URL}/api/accounts/${id}?tenant_id=${TENANT_ID}`);
+  const res = await fetch(`${BASE_URL}/api/accounts/${id}?tenant_id=${TENANT_ID}`, {
+    headers: getAuthHeaders()
+  });
   const json = await res.json();
   return { status: res.status, json };
 }
@@ -27,7 +33,10 @@ async function getAccount(id) {
 async function updateAccount(id, payload) {
   const res = await fetch(`${BASE_URL}/api/accounts/${id}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify({ tenant_id: TENANT_ID, ...payload })
   });
   const json = await res.json();
@@ -35,7 +44,10 @@ async function updateAccount(id, payload) {
 }
 
 async function deleteAccount(id) {
-  const res = await fetch(`${BASE_URL}/api/accounts/${id}?tenant_id=${TENANT_ID}`, { method: 'DELETE' });
+  const res = await fetch(`${BASE_URL}/api/accounts/${id}?tenant_id=${TENANT_ID}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders()
+  });
   return res.status;
 }
 
@@ -73,7 +85,9 @@ describe('Accounts Routes', { skip: !SHOULD_RUN }, () => {
   });
 
   test('GET /api/accounts returns 200 with tenant_id', async () => {
-    const res = await fetch(`${BASE_URL}/api/accounts?tenant_id=${TENANT_ID}`);
+    const res = await fetch(`${BASE_URL}/api/accounts?tenant_id=${TENANT_ID}`, {
+      headers: getAuthHeaders()
+    });
     assert.equal(res.status, 200, 'expected 200 from accounts list');
     const json = await res.json();
     assert.equal(json.status, 'success');
@@ -100,7 +114,9 @@ describe('Accounts Routes', { skip: !SHOULD_RUN }, () => {
     assert.ok(id, 'need a valid account id');
     
     // Try to access with wrong tenant_id (non-existent tenant)
-    const res = await fetch(`${BASE_URL}/api/accounts/${id}?tenant_id=wrong-tenant-999`);
+    const res = await fetch(`${BASE_URL}/api/accounts/${id}?tenant_id=wrong-tenant-999`, {
+      headers: getAuthHeaders()
+    });
     // Should return 403/404 for cross-tenant access, or 500 if tenant validation fails
     assert.ok([403, 404, 500].includes(res.status), `expected 403/404/500 for invalid tenant access, got ${res.status}`);
   });
@@ -143,7 +159,9 @@ describe('Accounts Routes', { skip: !SHOULD_RUN }, () => {
   });
 
   test('GET /api/accounts supports type filter', async () => {
-    const res = await fetch(`${BASE_URL}/api/accounts?tenant_id=${TENANT_ID}&type=customer`);
+    const res = await fetch(`${BASE_URL}/api/accounts?tenant_id=${TENANT_ID}&type=customer`, {
+      headers: getAuthHeaders()
+    });
     assert.equal(res.status, 200, 'expected 200 from accounts list with type filter');
     const json = await res.json();
     const accounts = json.data?.accounts || [];
@@ -158,7 +176,10 @@ describe('Accounts Routes', { skip: !SHOULD_RUN }, () => {
   test('POST /api/accounts requires tenant_id', async () => {
     const res = await fetch(`${BASE_URL}/api/accounts`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify({ name: 'No Tenant Account' })
     });
     assert.equal(res.status, 400, 'expected 400 when tenant_id is missing');
@@ -189,7 +210,9 @@ describe('Accounts Routes', { skip: !SHOULD_RUN }, () => {
   });
 
   test('GET /api/accounts/search returns matching accounts', async () => {
-    const res = await fetch(`${BASE_URL}/api/accounts/search?tenant_id=${TENANT_ID}&q=Unit`);
+    const res = await fetch(`${BASE_URL}/api/accounts/search?tenant_id=${TENANT_ID}&q=Unit`, {
+      headers: getAuthHeaders()
+    });
     assert.equal(res.status, 200, 'expected 200 from accounts search');
     const json = await res.json();
     assert.equal(json.status, 'success');
@@ -198,14 +221,18 @@ describe('Accounts Routes', { skip: !SHOULD_RUN }, () => {
   });
 
   test('GET /api/accounts/search requires q parameter', async () => {
-    const res = await fetch(`${BASE_URL}/api/accounts/search?tenant_id=${TENANT_ID}`);
+    const res = await fetch(`${BASE_URL}/api/accounts/search?tenant_id=${TENANT_ID}`, {
+      headers: getAuthHeaders()
+    });
     assert.equal(res.status, 400, 'expected 400 when q is missing');
     const json = await res.json();
     assert.equal(json.status, 'error');
   });
 
   test('GET /api/accounts/search requires tenant_id', async () => {
-    const res = await fetch(`${BASE_URL}/api/accounts/search?q=test`);
+    const res = await fetch(`${BASE_URL}/api/accounts/search?q=test`, {
+      headers: getAuthHeaders()
+    });
     assert.equal(res.status, 400, 'expected 400 when tenant_id is missing');
     const json = await res.json();
     assert.equal(json.status, 'error');

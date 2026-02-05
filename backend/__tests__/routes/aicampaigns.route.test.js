@@ -1,5 +1,6 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { getAuthHeaders } from '../helpers/auth.js';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
@@ -11,7 +12,10 @@ const createdIds = [];
 async function createCampaign(payload) {
   const res = await fetch(`${BASE_URL}/api/aicampaigns`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify({ tenant_id: TENANT_ID, ...payload })
   });
   const json = await res.json();
@@ -19,7 +23,10 @@ async function createCampaign(payload) {
 }
 
 async function deleteCampaign(id) {
-  const res = await fetch(`${BASE_URL}/api/aicampaigns/${id}?tenant_id=${TENANT_ID}`, { method: 'DELETE' });
+  const res = await fetch(`${BASE_URL}/api/aicampaigns/${id}?tenant_id=${TENANT_ID}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders()
+  });
   return res.status;
 }
 
@@ -47,7 +54,9 @@ describe('AI Campaigns Routes', { skip: !SHOULD_RUN }, () => {
   });
 
   test('GET /api/aicampaigns returns 200 with tenant_id', async () => {
-    const res = await fetch(`${BASE_URL}/api/aicampaigns?tenant_id=${TENANT_ID}`);
+    const res = await fetch(`${BASE_URL}/api/aicampaigns?tenant_id=${TENANT_ID}`, {
+      headers: getAuthHeaders()
+    });
     assert.equal(res.status, 200, 'expected 200 from campaigns list');
     const json = await res.json();
     assert.equal(json.status, 'success');
@@ -76,7 +85,10 @@ describe('AI Campaigns Routes', { skip: !SHOULD_RUN }, () => {
   test('POST /api/aicampaigns requires name', async () => {
     const res = await fetch(`${BASE_URL}/api/aicampaigns`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify({ tenant_id: TENANT_ID, type: 'email' })
     });
     // 400/422 = proper validation, 500 = API lacks validation (acceptable - separate fix)
@@ -86,7 +98,9 @@ describe('AI Campaigns Routes', { skip: !SHOULD_RUN }, () => {
   test('GET /api/aicampaigns/:id returns specific campaign', async () => {
     if (createdIds.length === 0) return;
     const id = createdIds[0];
-    const res = await fetch(`${BASE_URL}/api/aicampaigns/${id}?tenant_id=${TENANT_ID}`);
+    const res = await fetch(`${BASE_URL}/api/aicampaigns/${id}?tenant_id=${TENANT_ID}`, {
+      headers: getAuthHeaders()
+    });
     assert.equal(res.status, 200, 'expected 200 for specific campaign');
     const json = await res.json();
     assert.equal(json.status, 'success');
@@ -97,7 +111,10 @@ describe('AI Campaigns Routes', { skip: !SHOULD_RUN }, () => {
     const id = createdIds[0];
     const res = await fetch(`${BASE_URL}/api/aicampaigns/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify({ 
         tenant_id: TENANT_ID,
         status: 'scheduled'
@@ -111,7 +128,10 @@ describe('AI Campaigns Routes', { skip: !SHOULD_RUN }, () => {
     const id = createdIds[0];
     const res = await fetch(`${BASE_URL}/api/aicampaigns/${id}/start`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify({ tenant_id: TENANT_ID })
     });
     // May succeed or fail based on campaign state
@@ -123,7 +143,10 @@ describe('AI Campaigns Routes', { skip: !SHOULD_RUN }, () => {
     const id = createdIds[0];
     const res = await fetch(`${BASE_URL}/api/aicampaigns/${id}/pause`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify({ tenant_id: TENANT_ID })
     });
     assert.ok([200, 400, 422].includes(res.status), `expected valid response, got ${res.status}`);
@@ -132,7 +155,9 @@ describe('AI Campaigns Routes', { skip: !SHOULD_RUN }, () => {
   test('GET /api/aicampaigns/:id/stats returns campaign statistics', async () => {
     if (createdIds.length === 0) return;
     const id = createdIds[0];
-    const res = await fetch(`${BASE_URL}/api/aicampaigns/${id}/stats?tenant_id=${TENANT_ID}`);
+    const res = await fetch(`${BASE_URL}/api/aicampaigns/${id}/stats?tenant_id=${TENANT_ID}`, {
+      headers: getAuthHeaders()
+    });
     assert.ok([200, 404].includes(res.status), `expected 200 or 404, got ${res.status}`);
   });
 });

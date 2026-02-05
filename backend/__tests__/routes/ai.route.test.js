@@ -1,5 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { getAuthHeaders } from '../helpers/auth.js';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
@@ -9,7 +10,9 @@ const SHOULD_RUN = process.env.CI ? (process.env.CI_BACKEND_TESTS === 'true') : 
 describe('AI Routes', { skip: !SHOULD_RUN }, () => {
 
   test('GET /api/ai/assistants returns list of assistants', async () => {
-    const res = await fetch(`${BASE_URL}/api/ai/assistants?tenant_id=${TENANT_ID}`);
+    const res = await fetch(`${BASE_URL}/api/ai/assistants?tenant_id=${TENANT_ID}`, {
+      headers: getAuthHeaders()
+    });
     assert.equal(res.status, 200, 'expected 200 from assistants list');
     const json = await res.json();
     assert.equal(json.status, 'success');
@@ -24,7 +27,9 @@ describe('AI Routes', { skip: !SHOULD_RUN }, () => {
   });
 
   test('GET /api/ai/conversations returns conversations list', async () => {
-    const res = await fetch(`${BASE_URL}/api/ai/conversations?tenant_id=${TENANT_ID}`);
+    const res = await fetch(`${BASE_URL}/api/ai/conversations?tenant_id=${TENANT_ID}`, {
+      headers: getAuthHeaders()
+    });
     assert.ok([200, 500].includes(res.status), `expected 200 or 500, got ${res.status}`);
     const json = await res.json();
     if (res.status === 200) {
@@ -37,7 +42,10 @@ describe('AI Routes', { skip: !SHOULD_RUN }, () => {
   test('POST /api/ai/chat returns 400 without message', async () => {
     const res = await fetch(`${BASE_URL}/api/ai/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify({ tenant_id: TENANT_ID })
     });
     // Should require message
@@ -47,7 +55,10 @@ describe('AI Routes', { skip: !SHOULD_RUN }, () => {
   test('POST /api/ai/summarize handles missing text', async () => {
     const res = await fetch(`${BASE_URL}/api/ai/summarize`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify({ tenant_id: TENANT_ID })
     });
     // May return 200 (with error in body), 400, 404, or 422 depending on implementation
@@ -57,7 +68,10 @@ describe('AI Routes', { skip: !SHOULD_RUN }, () => {
   test('POST /api/ai/sentiment handles missing text', async () => {
     const res = await fetch(`${BASE_URL}/api/ai/sentiment`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify({ tenant_id: TENANT_ID })
     });
     // May return 400, 404 (not implemented), or 422
@@ -65,7 +79,9 @@ describe('AI Routes', { skip: !SHOULD_RUN }, () => {
   });
 
   test('GET /api/ai/context returns context info', async () => {
-    const res = await fetch(`${BASE_URL}/api/ai/context?tenant_id=${TENANT_ID}`);
+    const res = await fetch(`${BASE_URL}/api/ai/context?tenant_id=${TENANT_ID}`, {
+      headers: getAuthHeaders()
+    });
     // May return 200 or 404 if no context exists
     assert.ok([200, 404].includes(res.status), `expected 200 or 404, got ${res.status}`);
     if (res.status === 200) {
@@ -75,7 +91,9 @@ describe('AI Routes', { skip: !SHOULD_RUN }, () => {
   });
 
   test('GET /api/ai/tools returns available tools or 404', async () => {
-    const res = await fetch(`${BASE_URL}/api/ai/tools?tenant_id=${TENANT_ID}`);
+    const res = await fetch(`${BASE_URL}/api/ai/tools?tenant_id=${TENANT_ID}`, {
+      headers: getAuthHeaders()
+    });
     // May return 200 with tools or 404 if not implemented
     assert.ok([200, 404].includes(res.status), `expected 200 or 404, got ${res.status}`);
     if (res.status === 200) {
@@ -87,7 +105,10 @@ describe('AI Routes', { skip: !SHOULD_RUN }, () => {
   test('POST /api/ai/brain-test requires auth key', async () => {
     const res = await fetch(`${BASE_URL}/api/ai/brain-test`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify({ 
         tenant_id: TENANT_ID,
         user_id: 'test-user',
@@ -102,7 +123,8 @@ describe('AI Routes', { skip: !SHOULD_RUN }, () => {
   test('DELETE /api/ai/conversations/:id validates conversation exists', async () => {
     const fakeId = '00000000-0000-0000-0000-000000000000';
     const res = await fetch(`${BASE_URL}/api/ai/conversations/${fakeId}?tenant_id=${TENANT_ID}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: getAuthHeaders()
     });
     // Should return 404 for non-existent conversation
     assert.ok([200, 404].includes(res.status), `expected 200 or 404, got ${res.status}`);

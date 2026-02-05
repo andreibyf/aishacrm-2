@@ -61,7 +61,7 @@ export default function createApikeyRoutes(_pgPool) {
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id } = req.query;
+      const tenant_id = req.tenant?.id || req.query.tenant_id;
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
 
@@ -86,7 +86,7 @@ export default function createApikeyRoutes(_pgPool) {
   router.delete('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id } = req.query;
+      const tenant_id = req.tenant?.id || req.query.tenant_id;
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
 

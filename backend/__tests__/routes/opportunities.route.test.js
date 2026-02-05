@@ -1,5 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { getAuthHeaders } from '../helpers/auth.js';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
@@ -11,7 +12,10 @@ const createdIds = [];
 async function createOpportunity(payload) {
   const res = await fetch(`${BASE_URL}/api/opportunities`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify({ tenant_id: TENANT_ID, ...payload })
   });
   const json = await res.json();
@@ -19,7 +23,9 @@ async function createOpportunity(payload) {
 }
 
 async function getOpportunity(id) {
-  const res = await fetch(`${BASE_URL}/api/opportunities/${id}?tenant_id=${TENANT_ID}`);
+  const res = await fetch(`${BASE_URL}/api/opportunities/${id}?tenant_id=${TENANT_ID}`, {
+    headers: getAuthHeaders()
+  });
   const json = await res.json();
   return { status: res.status, json };
 }
@@ -27,7 +33,10 @@ async function getOpportunity(id) {
 async function updateOpportunity(id, payload) {
   const res = await fetch(`${BASE_URL}/api/opportunities/${id}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify({ tenant_id: TENANT_ID, ...payload })
   });
   const json = await res.json();
@@ -35,7 +44,10 @@ async function updateOpportunity(id, payload) {
 }
 
 async function deleteOpportunity(id) {
-  const res = await fetch(`${BASE_URL}/api/opportunities/${id}?tenant_id=${TENANT_ID}`, { method: 'DELETE' });
+  const res = await fetch(`${BASE_URL}/api/opportunities/${id}?tenant_id=${TENANT_ID}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders()
+  });
   return res.status;
 }
 
@@ -75,7 +87,9 @@ after(async () => {
 });
 
 (SHOULD_RUN ? test : test.skip)('GET /api/opportunities returns 200 with tenant_id', async () => {
-  const res = await fetch(`${BASE_URL}/api/opportunities?tenant_id=${TENANT_ID}`);
+  const res = await fetch(`${BASE_URL}/api/opportunities?tenant_id=${TENANT_ID}`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 200, 'expected 200 from opportunities list');
   const json = await res.json();
   assert.equal(json.status, 'success');
@@ -103,7 +117,9 @@ after(async () => {
   assert.ok(id, 'need a valid opportunity id');
   
   // Try to access with wrong tenant_id (non-existent tenant)
-  const res = await fetch(`${BASE_URL}/api/opportunities/${id}?tenant_id=wrong-tenant-999`);
+  const res = await fetch(`${BASE_URL}/api/opportunities/${id}?tenant_id=wrong-tenant-999`, {
+    headers: getAuthHeaders()
+  });
   // Should return 403/404 for cross-tenant access, or 500 if tenant validation fails
   assert.ok([403, 404, 500].includes(res.status), `expected 403/404/500 for invalid tenant access, got ${res.status}`);
 });
@@ -151,7 +167,10 @@ after(async () => {
 (SHOULD_RUN ? test : test.skip)('POST /api/opportunities requires tenant_id', async () => {
   const res = await fetch(`${BASE_URL}/api/opportunities`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify({ name: 'No Tenant Opp', stage: 'prospecting', amount: 5000 })
   });
   assert.equal(res.status, 400, 'expected 400 when tenant_id is missing');
@@ -197,7 +216,9 @@ after(async () => {
 });
 
 (SHOULD_RUN ? test : test.skip)('GET /api/opportunities/search returns matching opportunities', async () => {
-  const res = await fetch(`${BASE_URL}/api/opportunities/search?tenant_id=${TENANT_ID}&q=Unit`);
+  const res = await fetch(`${BASE_URL}/api/opportunities/search?tenant_id=${TENANT_ID}&q=Unit`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 200, 'expected 200 from opportunities search');
   const json = await res.json();
   assert.equal(json.status, 'success');
@@ -206,14 +227,18 @@ after(async () => {
 });
 
 (SHOULD_RUN ? test : test.skip)('GET /api/opportunities/search requires q parameter', async () => {
-  const res = await fetch(`${BASE_URL}/api/opportunities/search?tenant_id=${TENANT_ID}`);
+  const res = await fetch(`${BASE_URL}/api/opportunities/search?tenant_id=${TENANT_ID}`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 400, 'expected 400 when q is missing');
   const json = await res.json();
   assert.equal(json.status, 'error');
 });
 
 (SHOULD_RUN ? test : test.skip)('GET /api/opportunities/search requires tenant_id', async () => {
-  const res = await fetch(`${BASE_URL}/api/opportunities/search?q=test`);
+  const res = await fetch(`${BASE_URL}/api/opportunities/search?q=test`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 400, 'expected 400 when tenant_id is missing');
   const json = await res.json();
   assert.equal(json.status, 'error');

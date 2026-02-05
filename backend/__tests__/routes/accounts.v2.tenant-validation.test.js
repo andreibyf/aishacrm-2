@@ -6,6 +6,7 @@
 
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { getAuthHeaders } from '../helpers/auth.js';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:4001';
 const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
@@ -16,7 +17,10 @@ let testAccountId = null;
 async function createTestAccount() {
   const res = await fetch(`${BASE_URL}/api/v2/accounts`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify({
       tenant_id: TENANT_ID,
       name: 'Test Account for tenant_id validation',
@@ -31,7 +35,8 @@ async function createTestAccount() {
 async function deleteTestAccount(id) {
   try {
     await fetch(`${BASE_URL}/api/v2/accounts/${id}?tenant_id=${TENANT_ID}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: getAuthHeaders()
     });
   } catch {
     // Ignore cleanup errors
@@ -55,7 +60,9 @@ describe('Accounts V2 - tenant_id validation for GET by ID', { skip: !SHOULD_RUN
   });
 
   test('GET /api/v2/accounts/:id WITH tenant_id returns 200', async () => {
-    const res = await fetch(`${BASE_URL}/api/v2/accounts/${testAccountId}?tenant_id=${TENANT_ID}`);
+    const res = await fetch(`${BASE_URL}/api/v2/accounts/${testAccountId}?tenant_id=${TENANT_ID}`, {
+      headers: getAuthHeaders()
+    });
     const json = await res.json();
     
     assert.equal(res.status, 200, 'Should return 200 when tenant_id is provided');
@@ -64,7 +71,9 @@ describe('Accounts V2 - tenant_id validation for GET by ID', { skip: !SHOULD_RUN
   });
 
   test('GET /api/v2/accounts/:id WITHOUT tenant_id returns 400', async () => {
-    const res = await fetch(`${BASE_URL}/api/v2/accounts/${testAccountId}`);
+    const res = await fetch(`${BASE_URL}/api/v2/accounts/${testAccountId}`, {
+      headers: getAuthHeaders()
+    });
     const json = await res.json();
     
     assert.equal(res.status, 400, 'Should return 400 when tenant_id is missing');
@@ -74,7 +83,9 @@ describe('Accounts V2 - tenant_id validation for GET by ID', { skip: !SHOULD_RUN
 
   test('GET /api/v2/accounts/:id with WRONG tenant_id returns 404', async () => {
     const wrongTenantId = '00000000-0000-0000-0000-000000000000';
-    const res = await fetch(`${BASE_URL}/api/v2/accounts/${testAccountId}?tenant_id=${wrongTenantId}`);
+    const res = await fetch(`${BASE_URL}/api/v2/accounts/${testAccountId}?tenant_id=${wrongTenantId}`, {
+      headers: getAuthHeaders()
+    });
     const json = await res.json();
     
     assert.equal(res.status, 404, 'Should return 404 when accessing with wrong tenant_id');
@@ -82,7 +93,9 @@ describe('Accounts V2 - tenant_id validation for GET by ID', { skip: !SHOULD_RUN
   });
 
   test('GET /api/v2/accounts/:id with empty tenant_id returns 400', async () => {
-    const res = await fetch(`${BASE_URL}/api/v2/accounts/${testAccountId}?tenant_id=`);
+    const res = await fetch(`${BASE_URL}/api/v2/accounts/${testAccountId}?tenant_id=`, {
+      headers: getAuthHeaders()
+    });
     const json = await res.json();
     
     assert.equal(res.status, 400, 'Should return 400 when tenant_id is empty');

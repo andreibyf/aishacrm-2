@@ -1,5 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { getAuthHeaders } from '../helpers/auth.js';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
@@ -14,7 +15,10 @@ const createdIds = [];
 async function createActivity(payload) {
   const res = await fetch(API_BASE, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify({ tenant_id: TENANT_ID, type: 'task', subject: 'UT', description: 'node test', ...payload })
   });
   const json = await res.json();
@@ -22,7 +26,10 @@ async function createActivity(payload) {
 }
 
 async function deleteActivity(id) {
-  const res = await fetch(`${API_BASE}/${id}?tenant_id=${TENANT_ID}`, { method: 'DELETE' });
+  const res = await fetch(`${API_BASE}/${id}?tenant_id=${TENANT_ID}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders()
+  });
   return res.status;
 }
 
@@ -45,7 +52,9 @@ after(async () => {
 });
 
 (SHOULD_RUN ? test : test.skip)('GET /api/v2/activities returns 200 with tenant_id and includes total', async () => {
-  const res = await fetch(`${API_BASE}?tenant_id=${TENANT_ID}`);
+  const res = await fetch(`${API_BASE}?tenant_id=${TENANT_ID}`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 200, 'expected 200 from activities list');
   const json = await res.json();
   assert.equal(json.status, 'success');
@@ -55,7 +64,9 @@ after(async () => {
 
 // V2 uses query params for filtering (search, status, type) on main endpoint - no separate /search
 (SHOULD_RUN ? test : test.skip)('GET /api/v2/activities supports search query param', async () => {
-  const res = await fetch(`${API_BASE}?tenant_id=${TENANT_ID}&search=UT`);
+  const res = await fetch(`${API_BASE}?tenant_id=${TENANT_ID}&search=UT`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 200, 'expected 200 from activities with search');
   const json = await res.json();
   assert.equal(json.status, 'success');
@@ -63,14 +74,18 @@ after(async () => {
 });
 
 (SHOULD_RUN ? test : test.skip)('GET /api/v2/activities supports status filter', async () => {
-  const res = await fetch(`${API_BASE}?tenant_id=${TENANT_ID}&status=pending`);
+  const res = await fetch(`${API_BASE}?tenant_id=${TENANT_ID}&status=pending`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 200, 'expected 200 from activities with status filter');
   const json = await res.json();
   assert.equal(json.status, 'success');
 });
 
 (SHOULD_RUN ? test : test.skip)('GET /api/v2/activities requires tenant_id', async () => {
-  const res = await fetch(`${API_BASE}`);
+  const res = await fetch(`${API_BASE}`, {
+    headers: getAuthHeaders()
+  });
   assert.equal(res.status, 400, 'expected 400 when tenant_id is missing');
   const json = await res.json();
   assert.equal(json.status, 'error');
