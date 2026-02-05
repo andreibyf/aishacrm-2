@@ -61,7 +61,7 @@ export default function createAnnouncementRoutes(_pgPool) {
         .from('announcement')
         .select('*')
         .eq('tenant_id', tenant_id)
-        .order('created_date', { ascending: false });
+        .order('created_at', { ascending: false });
       if (error) throw new Error(error.message);
       return res.json(data || []);
     } catch (error) {
