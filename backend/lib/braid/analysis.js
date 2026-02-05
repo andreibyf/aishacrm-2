@@ -331,6 +331,72 @@ export const TOOL_GRAPH = {
     description: 'Delete a contact record'
   },
 
+  // ========== LEADS ==========
+  create_lead: {
+    category: 'LEADS',
+    dependencies: [],
+    inputs: ['first_name', 'last_name', 'email', 'phone', 'company', 'status', 'source'],
+    outputs: ['lead'],
+    effects: ['create'],
+    description: 'Create a new lead record'
+  },
+  get_lead_details: {
+    category: 'LEADS',
+    dependencies: [],
+    inputs: ['lead_id'],
+    outputs: ['lead'],
+    effects: ['read'],
+    description: 'Retrieve lead details by ID'
+  },
+  list_leads: {
+    category: 'LEADS',
+    dependencies: [],
+    inputs: ['status', 'account_id', 'limit'],
+    outputs: ['leads[]'],
+    effects: ['read'],
+    description: 'List leads with optional status filter'
+  },
+  search_leads: {
+    category: 'LEADS',
+    dependencies: [],
+    inputs: ['query', 'limit'],
+    outputs: ['leads[]'],
+    effects: ['read'],
+    description: 'Search leads by name, email, or company'
+  },
+  search_leads_by_status: {
+    category: 'LEADS',
+    dependencies: [],
+    inputs: ['status', 'limit'],
+    outputs: ['leads[]'],
+    effects: ['read'],
+    description: 'Search leads filtered by status'
+  },
+  qualify_lead: {
+    category: 'LEADS',
+    dependencies: ['get_lead_details'],
+    inputs: ['lead_id'],
+    outputs: ['lead'],
+    effects: ['update'],
+    description: 'Mark lead as qualified'
+  },
+  update_lead: {
+    category: 'LEADS',
+    dependencies: ['get_lead_details'],
+    inputs: ['lead_id', 'updates'],
+    outputs: ['lead'],
+    effects: ['update'],
+    description: 'Update lead fields'
+  },
+  delete_lead: {
+    category: 'LEADS',
+    dependencies: ['get_lead_details'],
+    inputs: ['lead_id'],
+    outputs: [],
+    effects: ['delete'],
+    description: 'Delete a lead record'
+  },
+
   // ========== SNAPSHOT ==========
   fetch_tenant_snapshot: {
     category: 'SNAPSHOT',
