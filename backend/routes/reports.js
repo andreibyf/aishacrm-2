@@ -235,7 +235,10 @@ export default function createReportRoutes(_pgPool) {
         revenue: { total: 0, thisMonth: 0, lastMonth: 0 },
       };
 
-      res.json({ status: 'success', data: stats });
+      // Add AI context enrichment with insights and suggestions
+      const aiContext = buildDashboardAiContext(stats);
+
+      res.json({ status: 'success', data: { ...stats, aiContext } });
     } catch (error) {
       res.status(500).json({
         status: 'error',
@@ -243,6 +246,121 @@ export default function createReportRoutes(_pgPool) {
       });
     }
   });
+
+  /**
+   * Build AI context for dashboard stats
+   * Provides insights and suggestions based on current CRM metrics
+   */
+  function buildDashboardAiContext(stats) {
+    const insights = [];
+    const suggestions = [];
+    let healthScore = 50; // Base score
+
+    // Analyze contact/lead ratio
+    if (stats.totalLeads > 0 && stats.totalContacts > 0) {
+      const ratio = stats.totalContacts / stats.totalLeads;
+      if (ratio > 2) {
+        insights.push(`Strong conversion: ${stats.totalContacts} contacts from ${stats.totalLeads} leads (${(ratio * 100).toFixed(0)}% conversion)`);
+        healthScore += 15;
+      } else if (ratio < 0.5) {
+        insights.push(`Low conversion: Only ${stats.totalContacts} contacts from ${stats.totalLeads} leads (${(ratio * 100).toFixed(0)}% conversion)`);
+        suggestions.push({
+          action: 'improve_conversion',
+          priority: 'high',
+          reason: 'Lead to contact conversion is below 50%',
+          confidence: 0.8
+        });
+        healthScore -= 10;
+      }
+    }
+
+    // Analyze opportunity coverage
+    if (stats.totalAccounts > 0 && stats.totalOpportunities > 0) {
+      const oppPerAccount = stats.totalOpportunities / stats.totalAccounts;
+      if (oppPerAccount > 1.5) {
+        insights.push(`Healthy pipeline: ${(oppPerAccount).toFixed(1)} opportunities per account`);
+        healthScore += 10;
+      } else if (oppPerAccount < 0.3) {
+        insights.push(`Low opportunity coverage: ${(oppPerAccount).toFixed(1)} opportunities per account`);
+        suggestions.push({
+          action: 'identify_opportunities',
+          priority: 'medium',
+          reason: 'Many accounts lack active opportunities',
+          confidence: 0.75
+        });
+        healthScore -= 5;
+      }
+    }
+
+    // Analyze activity levels
+    if (stats.totalActivities > 0 && stats.totalContacts > 0) {
+      const activitiesPerContact = stats.totalActivities / stats.totalContacts;
+      if (activitiesPerContact < 2) {
+        insights.push(`Low activity level: ${(activitiesPerContact).toFixed(1)} activities per contact`);
+        suggestions.push({
+          action: 'increase_touchpoints',
+          priority: 'medium',
+          reason: 'Contact engagement is below recommended level',
+          confidence: 0.7
+        });
+        healthScore -= 5;
+      } else if (activitiesPerContact > 5) {
+        insights.push(`High engagement: ${(activitiesPerContact).toFixed(1)} activities per contact`);
+        healthScore += 10;
+      }
+    }
+
+    // Check for data gaps
+    if (stats.totalLeads === 0) {
+      suggestions.push({
+        action: 'add_leads',
+        priority: 'high',
+        reason: 'No leads in pipeline - add lead sources or import data',
+        confidence: 0.9
+      });
+      healthScore -= 20;
+    }
+
+    if (stats.totalAccounts === 0 && stats.totalContacts > 0) {
+      suggestions.push({
+        action: 'create_accounts',
+        priority: 'medium',
+        reason: 'Contacts exist without account associations',
+        confidence: 0.8
+      });
+      healthScore -= 10;
+    }
+
+    // Recent activity check
+    if (stats.recentActivities && stats.recentActivities.length === 0) {
+      insights.push('No recent activity recorded');
+      suggestions.push({
+        action: 'log_activities',
+        priority: 'high',
+        reason: 'No activities in the last 10 records - ensure team is logging interactions',
+        confidence: 0.85
+      });
+      healthScore -= 15;
+    } else if (stats.recentActivities && stats.recentActivities.length > 0) {
+      insights.push(`${stats.recentActivities.length} recent activities logged`);
+      healthScore += 5;
+    }
+
+    // Ensure healthScore stays in 0-100 range
+    healthScore = Math.max(0, Math.min(100, healthScore));
+
+    return {
+      confidence: 0.85,
+      healthScore,
+      insights,
+      suggestions,
+      predictions: {
+        pipelineHealth: healthScore >= 70 ? 'healthy' : healthScore >= 50 ? 'moderate' : 'needs_attention',
+        recommendedActions: suggestions.filter(s => s.priority === 'high').length,
+      },
+      processingTime: Date.now(),
+    };
+  }
 
   /**
    * @openapi
