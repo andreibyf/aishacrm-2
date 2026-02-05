@@ -1,5 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { getAuthHeaders } from '../helpers/auth.js';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
@@ -34,7 +35,9 @@ describe('V1 API Deprecation Enforcement', { skip: !SHOULD_RUN }, () => {
 
   describe('Before Sunset Date (current behavior)', () => {
     test('v1 endpoints should include deprecation headers', { skip: isAfterSunset() }, async () => {
-      const res = await fetch(`${BASE_URL}/api/accounts?tenant_id=${TENANT_ID}`);
+      const res = await fetch(`${BASE_URL}/api/accounts?tenant_id=${TENANT_ID}`, {
+        headers: getAuthHeaders()
+      });
       
       // Should get successful response
       assert.ok(res.ok, 'v1 endpoint should still work before sunset');
@@ -48,7 +51,9 @@ describe('V1 API Deprecation Enforcement', { skip: !SHOULD_RUN }, () => {
     });
 
     test('v2 endpoints should not have deprecation headers', { skip: isAfterSunset() }, async () => {
-      const res = await fetch(`${BASE_URL}/api/v2/accounts?tenant_id=${TENANT_ID}`);
+      const res = await fetch(`${BASE_URL}/api/v2/accounts?tenant_id=${TENANT_ID}`, {
+        headers: getAuthHeaders()
+      });
       
       // Should get successful response
       assert.ok(res.ok, 'v2 endpoint should work');
@@ -61,7 +66,9 @@ describe('V1 API Deprecation Enforcement', { skip: !SHOULD_RUN }, () => {
 
   describe('After Sunset Date (enforcement behavior)', () => {
     test('v1 endpoints should return 410 Gone', { skip: !isAfterSunset() }, async () => {
-      const res = await fetch(`${BASE_URL}/api/accounts?tenant_id=${TENANT_ID}`);
+      const res = await fetch(`${BASE_URL}/api/accounts?tenant_id=${TENANT_ID}`, {
+        headers: getAuthHeaders()
+      });
       
       // Should return 410 Gone
       assert.strictEqual(res.status, 410, 'v1 endpoint should return 410 Gone after sunset');
@@ -79,7 +86,9 @@ describe('V1 API Deprecation Enforcement', { skip: !SHOULD_RUN }, () => {
 
     test('all v1 endpoints with v2 alternatives should return 410', { skip: !isAfterSunset() }, async () => {
       for (const [v1Path, v2Path] of Object.entries(v1ToV2Map)) {
-        const res = await fetch(`${BASE_URL}${v1Path}?tenant_id=${TENANT_ID}`);
+        const res = await fetch(`${BASE_URL}${v1Path}?tenant_id=${TENANT_ID}`, {
+          headers: getAuthHeaders()
+        });
         
         assert.strictEqual(res.status, 410, `${v1Path} should return 410 Gone`);
         
@@ -90,7 +99,9 @@ describe('V1 API Deprecation Enforcement', { skip: !SHOULD_RUN }, () => {
     });
 
     test('v2 endpoints should continue working normally', { skip: !isAfterSunset() }, async () => {
-      const res = await fetch(`${BASE_URL}/api/v2/accounts?tenant_id=${TENANT_ID}`);
+      const res = await fetch(`${BASE_URL}/api/v2/accounts?tenant_id=${TENANT_ID}`, {
+        headers: getAuthHeaders()
+      });
       
       // Should get successful response (200 or 304)
       assert.ok(res.ok || res.status === 304, 'v2 endpoint should work after sunset');
@@ -111,7 +122,9 @@ describe('V1 API Deprecation Enforcement', { skip: !SHOULD_RUN }, () => {
 
   describe('Error Response Format', () => {
     test('410 response should have all required fields', { skip: !isAfterSunset() }, async () => {
-      const res = await fetch(`${BASE_URL}/api/opportunities?tenant_id=${TENANT_ID}`);
+      const res = await fetch(`${BASE_URL}/api/opportunities?tenant_id=${TENANT_ID}`, {
+        headers: getAuthHeaders()
+      });
       
       if (res.status === 410) {
         const json = await res.json();
@@ -141,7 +154,9 @@ describe('V1 API Deprecation Enforcement', { skip: !SHOULD_RUN }, () => {
     test('nested v1 paths should map to nested v2 paths', { skip: !isAfterSunset() }, async () => {
       // Test that /api/accounts/123 maps to /api/v2/accounts/123
       const accountId = 'test-id-123';
-      const res = await fetch(`${BASE_URL}/api/accounts/${accountId}?tenant_id=${TENANT_ID}`);
+      const res = await fetch(`${BASE_URL}/api/accounts/${accountId}?tenant_id=${TENANT_ID}`, {
+        headers: getAuthHeaders()
+      });
       
       if (res.status === 410) {
         const json = await res.json();
