@@ -202,14 +202,19 @@ class ApiHealthMonitor {
     
     if (suggestion.canAutoFix) {
       console.info(`[API Health Monitor] Auto-fix suggestion for ${endpoint}:`, suggestion);
-      toast.warning(`Missing endpoint detected: ${endpoint}`, {
-        description: suggestion.fixDescription,
-        action: {
-          label: 'Copy Fix',
-          onClick: () => this.copyFixToClipboard(suggestion)
-        },
-        duration: 10000
-      });
+      
+      // Suppress toasts during testing (check for test runner active flag)
+      const isTestRunning = typeof sessionStorage !== 'undefined' && sessionStorage.getItem('test_runner_active') === 'true';
+      if (!isTestRunning) {
+        toast.warning(`Missing endpoint detected: ${endpoint}`, {
+          description: suggestion.fixDescription,
+          action: {
+            label: 'Copy Fix',
+            onClick: () => this.copyFixToClipboard(suggestion)
+          },
+          duration: 10000
+        });
+      }
     } else {
       console.warn(`[API Health Monitor] No auto-fix available for ${endpoint}`, suggestion);
     }

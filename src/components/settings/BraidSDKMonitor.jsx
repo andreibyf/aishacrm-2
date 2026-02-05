@@ -200,17 +200,33 @@ export default function BraidSDKMonitor() {
   }, []);
   
   // Fetch tool impact when selected
-  const fetchToolImpact = useCallback(async (toolName) => {
-    // Guard against undefined toolName
-    if (!toolName) {
-      console.warn('fetchToolImpact called with undefined toolName');
+  const fetchToolImpact = useCallback(async (tool) => {
+    // Guard against undefined tool
+    if (!tool) {
+      console.warn('fetchToolImpact called with undefined tool');
       return;
     }
+    
+    const toolName = tool.name || tool.tool;
+    if (!toolName) {
+      console.warn('fetchToolImpact: tool has no name property');
+      return;
+    }
+    
+    // Immediately show the tool data we already have
+    setSelectedTool({
+      name: toolName,
+      tool: toolName,
+      ...tool,
+    });
+    
+    // Then try to fetch additional impact data (optional)
     try {
       const data = await fetchWithAuth(`/api/braid/graph/tool/${toolName}/impact`);
-      setSelectedTool({ name: toolName, ...data });
+      setSelectedTool(prev => ({ ...prev, ...data }));
     } catch (err) {
-      console.error('Failed to fetch tool impact:', err);
+      console.warn('Could not fetch tool impact details:', err.message);
+      // Don't clear selectedTool - keep the basic info visible
     }
   }, []);
   
@@ -440,7 +456,7 @@ export default function BraidSDKMonitor() {
                   <ToolRow 
                     key={tool.name || tool.tool || idx} 
                     tool={tool} 
-                    onClick={(t) => fetchToolImpact(t.name || t.tool)} 
+                    onClick={(t) => fetchToolImpact(t)} 
                   />
                 ))}
                 {(!tm?.tools || tm.tools.length === 0) && (
@@ -463,7 +479,51 @@ export default function BraidSDKMonitor() {
                 <CardDescription>{selectedTool.category}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-3 gap-4 text-sm">
+                <div className="grid grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Success Rate</p>
+                    <p className="text-xl font-bold">{(selectedTool.successRate || 0).toFixed(1)}%</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Total Calls</p>
+                    <p className="text-xl font-bold">{(selectedTool.calls || selectedTool.total || 0).toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Avg Latency</p>
+                    <p className="text-xl font-bold">{selectedTool.avgLatencyMs || selectedTool.avgLatency || 0}ms</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Errors</p>
+                    <p className="text-xl font-bold text-red-500">{selectedTool.errors || 0}</p>
+                  </div>
+                </div>
+                
+                {/* Error Details */}
+                {selectedTool.errors > 0 && selectedTool.recentErrors && (
+                  <div className="mt-4">
+                    <p className="text-sm font-medium mb-2">Recent Errors</p>
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {selectedTool.recentErrors.map((err, idx) => (
+                        <div key={idx} className="text-xs bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded p-2">
+                          <p className="font-mono text-red-600 dark:text-red-400">{err.message || err.error || 'Unknown error'}</p>
+                          {err.timestamp && (
+                            <p className="text-muted-foreground mt-1">{new Date(err.timestamp).toLocaleString()}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Show fallback message if no error details available */}
+                {selectedTool.errors > 0 && !selectedTool.recentErrors && (
+                  <div className="mt-4 text-sm text-muted-foreground bg-muted/50 rounded p-3">
+                    <p>⚠️ This tool has {selectedTool.errors} error(s) but detailed error information is not available.</p>
+                    <p className="mt-1">Check system logs or enable error tracking for more details.</p>
+                  </div>
+                )}
+                
+                <div className="grid grid-cols-3 gap-4 text-sm pt-4 border-t">
                   <div>
                     <p className="text-muted-foreground">Impact Score</p>
                     <p className="text-xl font-bold">{selectedTool.impactScore || 0}</p>

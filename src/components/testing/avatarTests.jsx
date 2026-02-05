@@ -1,157 +1,14 @@
-// Avatar Widget Tests with Braid Integration
-// Tests the AvatarWidget component functionality, state management, and Braid MCP integration
+// Braid Integration Tests
+// Tests Braid MCP integration, health checks, and AI conversation endpoints
+// NOTE: Legacy AvatarWidget component has been archived - tests now focus on Braid/backend integration
 
 import { getBackendUrl } from '@/api/backendUrl';
 
 const BACKEND_URL = getBackendUrl();
 
-/**
- * Helper to render AvatarWidget wrapped in required context provider.
- * AvatarWidget uses useAiSidebarState() which requires AiSidebarProvider.
- */
-const renderAvatarWithProvider = async (React, ReactDOM, container, props = {}) => {
-  const { default: AvatarWidget } = await import('../ai/AvatarWidget.jsx');
-  const { AiSidebarProvider } = await import('../ai/useAiSidebarState.jsx');
-  
-  const defaultProps = {
-    agentId: 'test-agent',
-    apiKey: 'test-key',
-    onMessage: () => {},
-    onNavigate: () => {}
-  };
-  
-  const mergedProps = { ...defaultProps, ...props };
-  
-  const root = ReactDOM.createRoot(container);
-  await new Promise(resolve => {
-    // Wrap AvatarWidget in AiSidebarProvider as the component requires this context
-    root.render(
-      React.createElement(AiSidebarProvider, null,
-        React.createElement(AvatarWidget, mergedProps)
-      )
-    );
-    setTimeout(resolve, 100);
-  });
-  
-  return root;
-};
-
 export const avatarTests = {
-  name: 'Avatar Widget & Braid Integration',
+  name: 'Braid Integration & AI Backend',
   tests: [
-    {
-      name: 'Avatar component mounts successfully',
-      fn: async () => {
-        // Create a temporary container for the avatar
-        const container = document.createElement('div');
-        container.id = 'avatar-test-container';
-        document.body.appendChild(container);
-
-        try {
-          // Dynamically import React and the Avatar component
-          const React = await import('react');
-          const ReactDOM = await import('react-dom/client');
-
-          const root = await renderAvatarWithProvider(React, ReactDOM, container, {
-            agentId: 'test-agent-123',
-            apiKey: 'test-api-key'
-          });
-
-          // Check if the avatar launcher element exists
-          const avatarElement = document.getElementById('ai-avatar-launcher');
-          if (!avatarElement) {
-            throw new Error('Avatar launcher element not found in DOM');
-          }
-
-          // Check if avatar has correct dimensions (allow ±1px for sub-pixel rendering)
-          const styles = window.getComputedStyle(avatarElement);
-          const width = parseFloat(styles.width);
-          const height = parseFloat(styles.height);
-          if (Math.abs(width - 80) > 1 || Math.abs(height - 80) > 1) {
-            throw new Error(`Avatar dimensions incorrect: ${styles.width} x ${styles.height}`);
-          }
-
-          // Check if it's positioned correctly
-          if (styles.position !== 'fixed') {
-            throw new Error('Avatar should be positioned as fixed');
-          }
-
-          // Cleanup
-          root.unmount();
-          return { success: true, message: 'Avatar mounted with correct structure' };
-        } finally {
-          document.body.removeChild(container);
-        }
-      }
-    },
-    {
-      name: 'Avatar responds to speaking state changes',
-      fn: async () => {
-        const container = document.createElement('div');
-        container.id = 'avatar-test-container-2';
-        document.body.appendChild(container);
-
-        try {
-          const React = await import('react');
-          const ReactDOM = await import('react-dom/client');
-
-          const root = await renderAvatarWithProvider(React, ReactDOM, container);
-
-          // Trigger speaking event
-          window.dispatchEvent(new CustomEvent('ai:speaking'));
-          await new Promise(resolve => setTimeout(resolve, 50));
-
-          const avatarElement = document.getElementById('ai-avatar-launcher');
-          const glowRing = avatarElement.querySelector('[class*="animate-pulse"]');
-          
-          if (!glowRing) {
-            throw new Error('Glow ring animation not activated on speaking');
-          }
-
-          // Trigger idle event to stop speaking
-          window.dispatchEvent(new CustomEvent('ai:idle'));
-          await new Promise(resolve => setTimeout(resolve, 50));
-
-          root.unmount();
-          return { success: true, message: 'Avatar responds correctly to state changes' };
-        } finally {
-          document.body.removeChild(container);
-        }
-      }
-    },
-    {
-      name: 'Avatar responds to listening state changes',
-      fn: async () => {
-        const container = document.createElement('div');
-        container.id = 'avatar-test-container-3';
-        document.body.appendChild(container);
-
-        try {
-          const React = await import('react');
-          const ReactDOM = await import('react-dom/client');
-
-          const root = await renderAvatarWithProvider(React, ReactDOM, container);
-
-          // Trigger listening event
-          window.dispatchEvent(new CustomEvent('ai:listening', { detail: { isListening: true } }));
-          await new Promise(resolve => setTimeout(resolve, 50));
-
-          const avatarElement = document.getElementById('ai-avatar-launcher');
-          if (!avatarElement) {
-            throw new Error('Avatar element not found');
-          }
-
-          // Stop listening
-          window.dispatchEvent(new CustomEvent('ai:listening', { detail: { isListening: false } }));
-          await new Promise(resolve => setTimeout(resolve, 50));
-
-          root.unmount();
-          return { success: true, message: 'Avatar listening state toggled successfully' };
-        } finally {
-          document.body.removeChild(container);
-        }
-      }
-    },
     {
       name: 'Braid MCP health check (via backend proxy)',
       fn: async () => {
@@ -248,132 +105,6 @@ export const avatarTests = {
       }
     },
     {
-      name: 'Avatar event listeners cleanup on unmount',
-      fn: async () => {
-        // First, clean up any existing avatar elements from previous tests
-        const existingAvatars = document.querySelectorAll('#ai-avatar-launcher');
-        existingAvatars.forEach(el => el.remove());
-        
-        const container = document.createElement('div');
-        container.id = 'avatar-test-container-cleanup';
-        document.body.appendChild(container);
-
-        try {
-          const React = await import('react');
-          const ReactDOM = await import('react-dom/client');
-
-          const root = await renderAvatarWithProvider(React, ReactDOM, container);
-
-          // Verify avatar was mounted (it may be null if sidebar isOpen)
-          const avatarBeforeUnmount = document.getElementById('ai-avatar-launcher');
-          
-          // Unmount component (event listeners should be cleaned up by React's useEffect cleanup)
-          root.unmount();
-          
-          // Allow time for React's async unmount to complete
-          await new Promise(resolve => setTimeout(resolve, 300));
-
-          // Manually clean up the container contents since React unmount is async
-          // The test is validating that the component CAN be unmounted, not DOM removal timing
-          container.innerHTML = '';
-
-          // Check that our container is now empty
-          const containerHasContent = container.children.length > 0;
-          
-          if (containerHasContent) {
-            throw new Error('Container still has content after unmount and cleanup');
-          }
-
-          return { 
-            success: true, 
-            message: avatarBeforeUnmount 
-              ? 'Avatar unmounted and cleaned up successfully' 
-              : 'Avatar was not rendered (sidebar open state), unmount cleanup verified'
-          };
-        } finally {
-          document.body.removeChild(container);
-        }
-      }
-    },
-    {
-      name: 'Avatar image loads correctly',
-      fn: async () => {
-        const container = document.createElement('div');
-        container.id = 'avatar-test-container-image';
-        document.body.appendChild(container);
-
-        try {
-          const React = await import('react');
-          const ReactDOM = await import('react-dom/client');
-
-          // Use longer timeout for image loading
-          const root = await renderAvatarWithProvider(React, ReactDOM, container);
-          await new Promise(resolve => setTimeout(resolve, 100)); // Extra time for image
-
-          const avatarElement = document.getElementById('ai-avatar-launcher');
-          const imgElement = avatarElement.querySelector('img');
-          
-          if (!imgElement) {
-            throw new Error('Avatar image element not found');
-          }
-
-          if (!imgElement.src.includes('aisha-executive-portrait.jpg')) {
-            throw new Error('Incorrect avatar image source');
-          }
-
-          if (imgElement.alt !== 'AiSHA executive assistant') {
-            throw new Error('Incorrect avatar alt text');
-          }
-
-          root.unmount();
-          return { 
-            success: true, 
-            message: 'Avatar image configured correctly' 
-          };
-        } finally {
-          document.body.removeChild(container);
-        }
-      }
-    },
-    {
-      name: 'Avatar status indicator updates with state',
-      fn: async () => {
-        const container = document.createElement('div');
-        container.id = 'avatar-test-container-status';
-        document.body.appendChild(container);
-
-        try {
-          const React = await import('react');
-          const ReactDOM = await import('react-dom/client');
-
-          const root = await renderAvatarWithProvider(React, ReactDOM, container);
-
-          const avatarElement = document.getElementById('ai-avatar-launcher');
-          // Select the bottom-right status dot explicitly
-          const statusDot = avatarElement.querySelector('.absolute.bottom-0.right-0');
-          if (!statusDot) {
-            throw new Error('Status indicator not found');
-          }
-
-          // Test speaking state changes indicator
-          window.dispatchEvent(new CustomEvent('ai:speaking'));
-          await new Promise(resolve => setTimeout(resolve, 100));
-
-          // Test listening state changes indicator
-          window.dispatchEvent(new CustomEvent('ai:listening', { detail: { isListening: true } }));
-          await new Promise(resolve => setTimeout(resolve, 100));
-
-          root.unmount();
-          return { 
-            success: true, 
-            message: 'Avatar status indicator responds to state changes' 
-          };
-        } finally {
-          document.body.removeChild(container);
-        }
-      }
-    },
-    {
       name: 'Braid MCP execute action (mock conversation)',
       fn: async () => {
         try {
@@ -405,9 +136,18 @@ export const avatarTests = {
             throw new Error(`Conversation API failed: ${response.status}`);
           }
 
-          const data = await response.json();
+          const result = await response.json();
           
-          if (!data.conversation_id && !data.message) {
+          // Accept multiple valid response structures:
+          // 1. { status: 'success', data: { id: ... } } - database conversation created
+          // 2. { conversation_id: ... } - legacy format
+          // 3. { message: ... } - simple response
+          const isValidStructure = 
+            (result.status === 'success' && result.data?.id) || 
+            result.conversation_id || 
+            result.message;
+          
+          if (!isValidStructure) {
             throw new Error('Invalid conversation response structure');
           }
 
