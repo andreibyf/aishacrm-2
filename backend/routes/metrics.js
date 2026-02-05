@@ -37,9 +37,32 @@ export default function createMetricsRoutes(pgPool) {
       const sumFallback = durations.reduce((a, b) => a + b, 0);
       const maxFallback = durations.reduce((a, b) => Math.max(a, b), 0);
       const minFallback = durations.length ? durations.reduce((a, b) => Math.min(a, b), durations[0]) : 0;
-      const errorCountFallback = logs.filter(l => Number(l.status_code) >= 400).length;
+      
+      // Helper: Check if 401 is expected for this endpoint (auth-required endpoints)
+      const isExpected401 = (endpoint) => {
+        const authRequiredEndpoints = [
+          '/api/ai/conversations',
+          '/api/braid/metrics/realtime',
+          '/api/users/profile',
+          '/api/settings',
+          '/api/modulesettings'
+        ];
+        return authRequiredEndpoints.some(path => endpoint?.startsWith(path));
+      };
+      
+      // Count only unexpected errors (exclude expected 401s for auth-required endpoints)
+      const errorCountFallback = logs.filter(l => {
+        const sc = Number(l.status_code);
+        if (sc < 400) return false; // Not an error
+        if (sc === 401 && isExpected401(l.endpoint)) return false; // Expected auth requirement
+        return true; // Actual error
+      }).length;
       const serverErrorCountFallback = logs.filter(l => Number(l.status_code) >= 500).length;
-      const successCountFallback = logs.filter(l => Number(l.status_code) < 400).length;
+      const successCountFallback = logs.filter(l => {
+        const sc = Number(l.status_code);
+        // Count both 2xx/3xx and expected 401s as "success" (system working correctly)
+        return sc < 400 || (sc === 401 && isExpected401(l.endpoint));
+      }).length;
       // Success work calls (JS fallback) excluding 304 and non-work endpoints
       const successWorkCallsFallback = logs.filter(l => {
         const sc = Number(l.status_code) || 0;
@@ -69,9 +92,19 @@ export default function createMetricsRoutes(pgPool) {
       const sumNo304 = no304Durations.reduce((a, b) => a + b, 0);
       const maxNo304 = no304Durations.reduce((a, b) => Math.max(a, b), 0);
       const minNo304 = no304Durations.length ? no304Durations.reduce((a, b) => Math.min(a, b), no304Durations[0]) : 0;
-      const errNo304 = no304Logs.filter(l => Number(l.status_code) >= 400).length;
+      
+      // Apply same expected 401 logic for no304 view
+      const errNo304 = no304Logs.filter(l => {
+        const sc = Number(l.status_code);
+        if (sc < 400) return false;
+        if (sc === 401 && isExpected401(l.endpoint)) return false;
+        return true;
+      }).length;
       const srvErrNo304 = no304Logs.filter(l => Number(l.status_code) >= 500).length;
-      const succNo304 = no304Logs.filter(l => Number(l.status_code) < 400).length;
+      const succNo304 = no304Logs.filter(l => {
+        const sc = Number(l.status_code);
+        return sc < 400 || (sc === 401 && isExpected401(l.endpoint));
+      }).length;
       // Success work calls (JS fallback) on no304 view
       const successWorkCallsFallbackNo304 = no304Logs.filter(l => {
         const sc = Number(l.status_code) || 0;
@@ -106,9 +139,25 @@ export default function createMetricsRoutes(pgPool) {
           AVG(duration_ms) as avg_response_time,
           MAX(duration_ms) as max_response_time,
           MIN(duration_ms) as min_response_time,
-          COUNT(*) FILTER (WHERE status_code >= 400) as error_count,
+          COUNT(*) FILTER (WHERE status_code >= 400 
+            AND NOT (status_code = 401 AND endpoint IN (
+              '/api/ai/conversations',
+              '/api/braid/metrics/realtime',
+              '/api/users/profile',
+              '/api/settings',
+              '/api/modulesettings'
+            ))
+          ) as error_count,
           COUNT(*) FILTER (WHERE status_code >= 500) as server_error_count,
-          COUNT(*) FILTER (WHERE status_code < 400) as success_count,
+          COUNT(*) FILTER (WHERE status_code < 400 
+            OR (status_code = 401 AND endpoint IN (
+              '/api/ai/conversations',
+              '/api/braid/metrics/realtime',
+              '/api/users/profile',
+              '/api/settings',
+              '/api/modulesettings'
+            ))
+          ) as success_count,
           COUNT(*) FILTER (
             WHERE status_code BETWEEN 200 AND 299
               AND status_code <> 304
@@ -138,9 +187,25 @@ export default function createMetricsRoutes(pgPool) {
                AVG(duration_ms) as avg_response_time,
                MAX(duration_ms) as max_response_time,
                MIN(duration_ms) as min_response_time,
-               COUNT(*) FILTER (WHERE status_code >= 400) as error_count,
+               COUNT(*) FILTER (WHERE status_code >= 400 
+                 AND NOT (status_code = 401 AND endpoint IN (
+                   '/api/ai/conversations',
+                   '/api/braid/metrics/realtime',
+                   '/api/users/profile',
+                   '/api/settings',
+                   '/api/modulesettings'
+                 ))
+               ) as error_count,
                COUNT(*) FILTER (WHERE status_code >= 500) as server_error_count,
-               COUNT(*) FILTER (WHERE status_code < 400) as success_count,
+               COUNT(*) FILTER (WHERE status_code < 400 
+                 OR (status_code = 401 AND endpoint IN (
+                   '/api/ai/conversations',
+                   '/api/braid/metrics/realtime',
+                   '/api/users/profile',
+                   '/api/settings',
+                   '/api/modulesettings'
+                 ))
+               ) as success_count,
                COUNT(*) FILTER (
                  WHERE status_code BETWEEN 200 AND 299
                    AND status_code <> 304
