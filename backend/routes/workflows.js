@@ -1600,6 +1600,13 @@ export default function createWorkflowRoutes(pgPool) {
       const { id } = req.params;
       const payload = req.body?.payload ?? req.body ?? {};
       
+      // === WEBHOOK AUTHENTICATION BYPASS ===
+      // Webhooks can be called from:
+      // 1. External systems (n8n, Pabbly, etc.) - no auth required
+      // 2. Internal C.A.R.E. triggers - signature validated if secret configured
+      // Skip the global authenticateRequest middleware for webhooks
+      // Tenant validation happens below via CARE node config
+      
       // === BLOCKLIST FOR DELETED/PROBLEMATIC WORKFLOWS ===
       const BLOCKED_WORKFLOW_IDS = [
         'ad38e6cf-1454-48ac-a80d-0cfc79c5aa94' // C.A.R.E. Workflow Test (old deleted ID) - keep blocked permanently

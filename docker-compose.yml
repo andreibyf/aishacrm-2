@@ -98,13 +98,14 @@ services:
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:4000}
       - PGSSLMODE=require
       - REDIS_URL=redis://redis-memory:6379
+      # GitHub tokens loaded from .env.local (not overridden here)
       - REDIS_CACHE_URL=redis://redis-cache:6379
       # BACKEND_PORT=3001 set by Doppler (container internal port)
       - SYSTEM_TENANT_ID=a11dfb63-4b18-4eb8-872e-747af2e37c46
       - TENANT_RESOLVE_CACHE_TTL_MS=${TENANT_RESOLVE_CACHE_TTL_MS:-300000}
       - BRAID_MCP_URL=http://braid-mcp-server:8000
       - MCP_NODE_HEALTH_URL=http://braid-mcp-server:8000/health
-      - AI_TRIGGERS_WORKER_ENABLED=${AI_TRIGGERS_WORKER_ENABLED:-false}
+      # AI_TRIGGERS_WORKER_ENABLED loaded from Doppler
       - MCP_NODE_ID=aishacrm-backend
       - DEFAULT_TENANT_ID=a11dfb63-4b18-4eb8-872e-747af2e37c46
       - CRM_BACKEND_URL=http://backend:3001
@@ -112,14 +113,13 @@ services:
       - SUPABASE_URL=${SUPABASE_URL:-https://efzqxjpfewkrgpdootte.supabase.co}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
       # LLM_PROVIDER and API keys loaded from Doppler in entrypoint
-      # GitHub Issues integration
-      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
-      - GH_TOKEN=${GH_TOKEN:-}
+      # GitHub Issues integration - loaded from .env.local
       - REPO_OWNER=${REPO_OWNER:-andreibyf}
       - REPO_NAME=${REPO_NAME:-aishacrm-2}
-      # Customer C.A.R.E. Configuration
-      - CARE_AUTONOMY_ENABLED=${CARE_AUTONOMY_ENABLED:-false}
-      - CARE_SHADOW_MODE=${CARE_SHADOW_MODE:-true}
+      # Customer C.A.R.E. Configuration loaded from Doppler:
+      #   AI_TRIGGERS_WORKER_ENABLED, AI_TRIGGERS_WORKER_INTERVAL_MS
+      #   CARE_STATE_WRITE_ENABLED, CARE_WORKFLOW_TRIGGERS_ENABLED
+      #   CARE_AUTONOMY_ENABLED, CARE_SHADOW_MODE
       # Telemetry
       - TELEMETRY_ENABLED=true
       - TELEMETRY_LOG_PATH=/telemetry/telemetry.ndjson

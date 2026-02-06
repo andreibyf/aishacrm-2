@@ -282,7 +282,21 @@ app.use("/api/metrics", createMetricsRoutes(resilientPerfDb));
 app.use("/api/utils", createUtilsRoutes(measuredPgPool));
 app.use("/api/bizdevsources", createBizDevSourceRoutes(measuredPgPool));
 app.use("/api/clients", createClientRoutes(measuredPgPool));
-app.use("/api/workflows", authenticateRequest, validateTenantAccess, createWorkflowRoutes(measuredPgPool));
+// Workflow routes with conditional auth: webhooks bypass auth, all other routes require auth
+app.use("/api/workflows", (req, res, next) => {
+  // Allow unauthenticated webhook calls (external systems, internal C.A.R.E. triggers)
+  // Auth bypass for: POST /api/workflows/:id/webhook
+  // req.path will be "/:id/webhook" after the /api/workflows prefix is stripped
+  
+  if (req.method === 'POST' && req.path.endsWith('/webhook')) {
+    logger.debug(`[Workflows] Bypassing auth for webhook: ${req.method} ${req.path}`);
+    return next(); // Skip auth, go straight to route handler
+  }
+  // All other workflow routes require authentication + tenant validation
+  authenticateRequest(req, res, () => {
+    validateTenantAccess(req, res, next);
+  });
+}, createWorkflowRoutes(measuredPgPool));
 app.use("/api/workflowexecutions", authenticateRequest, createWorkflowExecutionRoutes(measuredPgPool));
 // V1 activities route RETIRED - use /api/v2/activities (tenant-isolated, secure DELETE)
 // app.use("/api/activities", createActivityRoutes(measuredPgPool));
