@@ -287,11 +287,49 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
                 resolved_email: email
               };
               
+              // Propagate full CARE payload into context.variables for downstream nodes
+              // This is critical so Pabbly webhook, email, and other nodes can access CARE fields
+              const carePayload = context.payload || {};
+              context.variables.care_trigger = {
+                event_id: carePayload.event_id || `trigger-${Date.now()}-sample`,
+                type: carePayload.type || 'care.trigger_detected',
+                ts: carePayload.ts || new Date().toISOString(),
+                tenant_id: tenant_id,
+                entity_type: carePayload.entity_type || entity_type,
+                entity_id: carePayload.entity_id || entity_id,
+                signal_entity_type: carePayload.signal_entity_type || entity_type,
+                signal_entity_id: carePayload.signal_entity_id || entity_id,
+                trigger_type: carePayload.trigger_type || 'unknown',
+                action_origin: carePayload.action_origin || 'care_autonomous',
+                policy_gate_result: carePayload.policy_gate_result || 'allowed',
+                reason: carePayload.reason || '',
+                care_state: carePayload.care_state || null,
+                previous_state: carePayload.previous_state || null,
+                escalation_detected: carePayload.escalation_detected || false,
+                escalation_status: carePayload.escalation_status || null,
+                deep_link: carePayload.deep_link || `/app/${entity_type}s/${entity_id}`,
+                intent: carePayload.intent || 'triage_trigger',
+                meta: carePayload.meta || {},
+                resolved_email: email
+              };
+              // Also set individual variables for easy template access
+              context.variables.trigger_type = carePayload.trigger_type || 'unknown';
+              context.variables.care_state = carePayload.care_state || null;
+              context.variables.reason = carePayload.reason || '';
+              context.variables.entity_type = carePayload.entity_type || entity_type;
+              context.variables.entity_id = carePayload.entity_id || entity_id;
+              context.variables.signal_entity_type = carePayload.signal_entity_type || entity_type;
+              context.variables.signal_entity_id = carePayload.signal_entity_id || entity_id;
+              context.variables.escalation_detected = carePayload.escalation_detected || false;
+              context.variables.resolved_email = email;
+              
               log.output = { 
                 payload: context.payload,
                 resolved_email: email,
                 entity_type,
-                entity_id
+                entity_id,
+                care_trigger_variables_set: true,
+                trigger_type: carePayload.trigger_type
               };
               
             } catch (error) {
@@ -1187,30 +1225,67 @@ Respond with ONLY a JSON object in this exact format:
                 }
               }
             } else {
-              payload = {
-                source: 'aisha_crm',
-                workflow_id: workflow.id,
-                workflow_name: workflow.name,
-                tenant_id: workflow.tenant_id,
-                timestamp: new Date().toISOString(),
-                entity_type: lead ? 'lead' : (contact ? 'contact' : (opportunity ? 'opportunity' : (account ? 'account' : 'unknown'))),
-                entity: entity ? { ...entity } : null,
-                ai_summary: context.variables.ai_summary,
-                ai_email: context.variables.ai_email,
-                call_result: context.variables.call_result
-              };
+              // Check if we have CARE trigger data from the care_trigger node
+              const careTrigger = context.variables.care_trigger;
+              
+              if (careTrigger) {
+                // CARE workflow: send the full CARE event payload matching CARE_EVENT_CONTRACT.md
+                payload = {
+                  event_id: careTrigger.event_id,
+                  type: careTrigger.type,
+                  ts: careTrigger.ts,
+                  tenant_id: careTrigger.tenant_id,
+                  entity_type: careTrigger.entity_type,
+                  entity_id: careTrigger.entity_id,
+                  signal_entity_type: careTrigger.signal_entity_type,
+                  signal_entity_id: careTrigger.signal_entity_id,
+                  trigger_type: careTrigger.trigger_type,
+                  action_origin: careTrigger.action_origin,
+                  policy_gate_result: careTrigger.policy_gate_result,
+                  reason: careTrigger.reason,
+                  care_state: careTrigger.care_state,
+                  previous_state: careTrigger.previous_state,
+                  escalation_detected: careTrigger.escalation_detected,
+                  escalation_status: careTrigger.escalation_status,
+                  deep_link: careTrigger.deep_link,
+                  intent: careTrigger.intent,
+                  meta: careTrigger.meta,
+                  // Additional context
+                  resolved_email: careTrigger.resolved_email,
+                  source: 'aisha_crm',
+                  workflow_id: workflow.id,
+                  workflow_name: workflow.name
+                };
+              } else {
+                // Non-CARE workflow: send generic CRM entity payload
+                payload = {
+                  source: 'aisha_crm',
+                  workflow_id: workflow.id,
+                  workflow_name: workflow.name,
+                  tenant_id: workflow.tenant_id,
+                  timestamp: new Date().toISOString(),
+                  entity_type: lead ? 'lead' : (contact ? 'contact' : (opportunity ? 'opportunity' : (account ? 'account' : 'unknown'))),
+                  entity: entity ? { ...entity } : null,
+                  ai_summary: context.variables.ai_summary,
+                  ai_email: context.variables.ai_email,
+                  call_result: context.variables.call_result
+                };
+              }
             }
 
             if (cfg.extra_fields && typeof cfg.extra_fields === 'object') {
               payload = { ...payload, ...cfg.extra_fields };
             }
 
+            // Wrap payload under "data" key for Pabbly parsing compatibility
+            const wrappedPayload = { data: payload };
+
             try {
               // Log the actual payload being sent (for debugging)
               logger.info('[Pabbly Webhook] Sending data:', {
                 url: webhookUrl.substring(0, 50) + '...',
-                payload_preview: JSON.stringify(payload).substring(0, 500),
-                payload_size_bytes: JSON.stringify(payload).length
+                payload_preview: JSON.stringify(wrappedPayload).substring(0, 500),
+                payload_size_bytes: JSON.stringify(wrappedPayload).length
               });
 
               const response = await fetch(webhookUrl, {
@@ -1220,7 +1295,7 @@ Respond with ONLY a JSON object in this exact format:
                   'User-Agent': 'AishaCRM-Workflow/1.0',
                   ...(cfg.headers && typeof cfg.headers === 'object' ? cfg.headers : {})
                 },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(wrappedPayload)
               });
 
               let result = {};
@@ -1243,7 +1318,7 @@ Respond with ONLY a JSON object in this exact format:
                 status: response.ok ? 'sent' : 'failed',
                 http_status: response.status,
                 success: response.ok,
-                payload_sent: payload, // Store full payload in execution log
+                payload_sent: wrappedPayload, // Store full wrapped payload in execution log
                 response_received: result
               };
               context.variables.pabbly_result = result;

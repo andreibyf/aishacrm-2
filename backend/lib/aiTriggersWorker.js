@@ -372,16 +372,26 @@ async function processTriggersForTenant(tenant) {
         }
 
         // PR8: Trigger workflow webhook for ALL stagnant leads (not just escalations)
-        // Simplified payload structure - matches CARE event contract
+        // Full payload structure - matches CARE_EVENT_CONTRACT.md
         await triggerCareWorkflowForTenant(tenantUuid, {
+          event_id: `trigger-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          type: escalation.is_escalation ? 'care.escalation_detected' : 'care.trigger_detected',
+          ts: new Date().toISOString(),
+          tenant_id: tenantUuid,
           entity_id: lead.id,
           entity_type: 'lead',
           signal_entity_id: lead.id,
           signal_entity_type: 'lead',
-          tenant_id: tenantUuid,
           trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
+          action_origin: 'care_autonomous',
+          policy_gate_result: 'allowed',
           reason: `Lead is stagnant for ${lead.days_stagnant} days (status=${lead.status})`,
+          care_state: effectiveState,
+          previous_state: currentState !== effectiveState ? currentState : null,
           escalation_detected: escalation.is_escalation,
+          escalation_status: escalation.is_escalation ? escalation.severity : null,
+          deep_link: `/app/leads/${lead.id}`,
+          intent: 'triage_trigger',
           meta: {
             lead_name: `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
             first_name: lead.first_name,
@@ -390,7 +400,8 @@ async function processTriggersForTenant(tenant) {
             phone: lead.phone || null,
             status: lead.status,
             days_stagnant: lead.days_stagnant,
-            severity: escalation.is_escalation ? escalation.severity : null
+            severity: escalation.is_escalation ? escalation.severity : null,
+            state_transition: currentState !== effectiveState ? `${currentState} → ${effectiveState}` : null
           }
         });
 
@@ -602,27 +613,38 @@ async function processTriggersForTenant(tenant) {
           });
 
           // PR8: Trigger workflow webhook with updated state
-          // Simplified payload structure - matches CARE event contract
+          // Full payload structure - matches CARE_EVENT_CONTRACT.md
           // Normalize opportunity (signal) to parent account or lead (entity)
           const entityId = deal.account_id || deal.lead_id;
           const entityType = deal.account_id ? 'account' : 'lead';
           
           await triggerCareWorkflowForTenant(tenantUuid, {
+            event_id: `trigger-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            type: escalation.is_escalation ? 'care.escalation_detected' : 'care.trigger_detected',
+            ts: new Date().toISOString(),
+            tenant_id: tenantUuid,
             entity_id: entityId,
             entity_type: entityType,
             signal_entity_id: deal.id,
             signal_entity_type: 'opportunity',
-            tenant_id: tenantUuid,
             trigger_type: TRIGGER_TYPES.DEAL_DECAY,
+            action_origin: 'care_autonomous',
+            policy_gate_result: 'allowed',
             reason: escalation.reason || `Opportunity inactive for ${deal.days_inactive} days`,
+            care_state: effectiveState,
+            previous_state: currentState !== effectiveState ? currentState : null,
             escalation_detected: escalation.is_escalation,
+            escalation_status: escalation.is_escalation ? escalation.severity : null,
+            deep_link: `/app/opportunities/${deal.id}`,
+            intent: 'triage_trigger',
             meta: {
               deal_name: deal.name,
               amount: deal.amount,
               stage: deal.stage,
               days_inactive: deal.days_inactive,
               close_date: deal.close_date || null,
-              severity: escalation.severity
+              severity: escalation.severity,
+              state_transition: currentState !== effectiveState ? `${currentState} → ${effectiveState}` : null
             }
           });
         }
@@ -860,23 +882,34 @@ async function processTriggersForTenant(tenant) {
         }
 
         // PR8: Trigger workflow webhook for ALL activity_overdue (not just escalations)
-        // Simplified payload structure - matches CARE event contract
+        // Full payload structure - matches CARE_EVENT_CONTRACT.md
         await triggerCareWorkflowForTenant(tenantUuid, {
+          event_id: `trigger-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          type: escalation.is_escalation ? 'care.escalation_detected' : 'care.trigger_detected',
+          ts: new Date().toISOString(),
+          tenant_id: tenantUuid,
           entity_id: normalizedEntityId,
           entity_type: normalizedEntityType,
           signal_entity_id: activity.id,
           signal_entity_type: 'activity',
-          tenant_id: tenantUuid,
           trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
+          action_origin: 'care_autonomous',
+          policy_gate_result: 'allowed',
           reason: escalation.is_escalation ? escalation.reason : `Activity is overdue by ${activity.days_overdue} days`,
+          care_state: effectiveState,
+          previous_state: currentState !== effectiveState ? currentState : null,
           escalation_detected: escalation.is_escalation,
+          escalation_status: escalation.is_escalation ? escalation.severity : null,
+          deep_link: `/app/activities/${activity.id}`,
+          intent: 'triage_trigger',
           meta: {
-            activity_subject: activity.subject,
+            subject: activity.subject,
             activity_type: activity.type,
             due_date: activity.due_date,
             days_overdue: activity.days_overdue,
             assigned_to: activity.assigned_to || null,
-            severity: escalation.is_escalation ? escalation.severity : null
+            severity: escalation.is_escalation ? escalation.severity : null,
+            state_transition: currentState !== effectiveState ? `${currentState} → ${effectiveState}` : null
           }
         });
 
@@ -1097,20 +1130,30 @@ async function processTriggersForTenant(tenant) {
           });
 
           // PR8: Trigger workflow webhook with updated state
-          // Simplified payload structure - matches CARE event contract
+          // Full payload structure - matches CARE_EVENT_CONTRACT.md
           // Normalize opportunity (signal) to parent account or lead (entity)
           const entityId = opp.account_id || opp.lead_id;
           const entityType = opp.account_id ? 'account' : 'lead';
           
           await triggerCareWorkflowForTenant(tenantUuid, {
+            event_id: `trigger-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            type: 'care.escalation_detected',
+            ts: new Date().toISOString(),
+            tenant_id: tenantUuid,
             entity_id: entityId,
             entity_type: entityType,
             signal_entity_id: opp.id,
             signal_entity_type: 'opportunity',
-            tenant_id: tenantUuid,
             trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
+            action_origin: 'care_autonomous',
+            policy_gate_result: 'allowed',
             reason: escalation.reason || `High-value opportunity closing soon (${opp.days_to_close} days)`,
+            care_state: effectiveState,
+            previous_state: currentState !== effectiveState ? currentState : null,
             escalation_detected: true,
+            escalation_status: escalation.severity,
+            deep_link: `/app/opportunities/${opp.id}`,
+            intent: 'triage_trigger',
             meta: {
               deal_name: opp.name,
               amount: opp.amount,
@@ -1118,7 +1161,8 @@ async function processTriggersForTenant(tenant) {
               stage: opp.stage,
               days_to_close: opp.days_to_close,
               close_date: opp.close_date || null,
-              severity: escalation.severity
+              severity: escalation.severity,
+              state_transition: currentState !== effectiveState ? `${currentState} → ${effectiveState}` : null
             }
           });
         }

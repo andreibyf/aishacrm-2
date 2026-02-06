@@ -179,7 +179,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
     };
     setTestPayload(genericSamplePayload);
     setShowPayload(true);
-    toast.info('Loaded a generic sample payload.');
+    toast({ title: "Sample loaded", description: "Loaded a generic sample payload." });
     setShowExecutions(false); // Hide executions list if showing
   };
 
@@ -194,7 +194,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
     setShowExecutions(false);
 
     try {
-      toast.info('Waiting for a new webhook to be sent (max 30 seconds)...');
+      toast({ title: "Waiting for webhook", description: "Listening for a new webhook (max 30 seconds)..." });
       
       // Get the current latest execution timestamp
       const currentExecutions = await WorkflowExecution.filter(
@@ -232,7 +232,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
 
         if (attempts >= maxAttempts) {
           setWaitingForWebhook(false);
-          toast.warn('No new webhook detected. Try sending a test webhook to the URL above, or use a sample payload.');
+          toast({ title: "No webhook detected", description: "Try sending a test webhook to the URL above, or use a sample payload.", variant: "destructive" });
           handleUseSamplePayload(); // Fallback to sample
           return true;
         }
@@ -377,7 +377,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
       if (executions && executions.length > 0) {
         toast({ title: "Executions loaded", description: 'Recent webhook executions loaded.' });
       } else {
-        toast.info('No recent webhook executions found for this workflow.');
+        toast({ title: "No executions", description: "No recent webhook executions found for this workflow." });
       }
     } catch (error) {
       console.error('Error loading executions:', error);
@@ -389,7 +389,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
 
   const handleNextExecutionsPage = async () => {
     if (recentExecutions.length < executionLimit) {
-      toast.info('You are on the last page');
+      toast({ title: "Last page", description: "You are on the last page." });
       return;
     }
     setExecutionOffset(executionOffset + executionLimit);
@@ -1080,22 +1080,36 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                     return;
                   }
                   
+                  // Sample payload matching CARE EVENT CONTRACT (docs/CARE_EVENT_CONTRACT.md)
                   const samplePayload = {
-                    entity_id: "6fe96ad8-84d8-49f3-9dcc-74c41fa8b24c",
-                    entity_type: "activity",
+                    event_id: `trigger-${Date.now()}-sample${Math.random().toString(36).substr(2, 6)}`,
+                    type: "care.trigger_detected",
+                    ts: new Date().toISOString(),
                     tenant_id: "a11dfb63-4b18-4eb8-872e-747af2e37c46",
+                    entity_type: "contact",
+                    entity_id: "6fe96ad8-84d8-49f3-9dcc-74c41fa8b24c",
+                    signal_entity_type: "activity",
+                    signal_entity_id: "a1b2c3d4-5678-9012-3456-789012345678",
                     trigger_type: "activity_overdue",
-                    reason: "Activity is overdue by 2 days",
+                    action_origin: "care_autonomous",
+                    policy_gate_result: "allowed",
+                    reason: "Activity overdue by 2 days",
+                    care_state: "at_risk",
+                    previous_state: "aware",
                     escalation_detected: true,
+                    escalation_status: null,
+                    deep_link: "/app/contacts/6fe96ad8-84d8-49f3-9dcc-74c41fa8b24c",
+                    intent: "triage_trigger",
                     meta: {
-                      activity_subject: "Follow-up call with prospect",
-                      due_date: "2026-01-24T15:00:00Z",
-                      assigned_to: "john.doe@company.com"
+                      subject: "Follow-up call with prospect",
+                      days_overdue: 2,
+                      type: "task",
+                      state_transition: "aware → at_risk"
                     }
                   };
                   
                   // Trigger the workflow with sample payload
-                  fetch(`/api/workflows/${workflow.id}/webhook`, {
+                  fetch(`${BACKEND_URL}/api/workflows/${workflow.id}/webhook`, {
                     method: 'POST',
                     headers: {
                       'Content-Type': 'application/json',
@@ -1135,19 +1149,32 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
             {/* Sample Payload Display */}
             <div className="space-y-3">
               <div>
-                <Label className="text-slate-300 text-sm">Complete Sample Payload</Label>
+                <Label className="text-slate-300 text-sm">Complete CARE Event Payload (per EVENT CONTRACT)</Label>
                 <div className="bg-slate-900 border border-slate-700 rounded-lg p-3 mt-2">
                   <pre className="text-xs text-slate-300 whitespace-pre-wrap overflow-x-auto">{JSON.stringify({
-                    entity_id: "6fe96ad8-84d8-49f3-9dcc-74c41fa8b24c",
-                    entity_type: "activity",
+                    event_id: "trigger-1706234567890-abc123def",
+                    type: "care.trigger_detected",
+                    ts: "2026-01-26T12:34:56.789Z",
                     tenant_id: "a11dfb63-4b18-4eb8-872e-747af2e37c46",
+                    entity_type: "contact",
+                    entity_id: "CONTACT_UUID",
+                    signal_entity_type: "activity",
+                    signal_entity_id: "ACTIVITY_UUID",
                     trigger_type: "activity_overdue",
-                    reason: "Activity is overdue by 2 days",
+                    action_origin: "care_autonomous",
+                    policy_gate_result: "allowed",
+                    reason: "Activity overdue by 2 days",
+                    care_state: "at_risk",
+                    previous_state: "aware",
                     escalation_detected: true,
+                    escalation_status: null,
+                    deep_link: "/app/contacts/CONTACT_UUID",
+                    intent: "triage_trigger",
                     meta: {
-                      activity_subject: "Follow-up call with prospect",
-                      due_date: "2026-01-24T15:00:00Z",
-                      assigned_to: "john.doe@company.com"
+                      subject: "Follow-up call with prospect",
+                      days_overdue: 2,
+                      type: "task",
+                      state_transition: "aware → at_risk"
                     }
                   }, null, 2)}</pre>
                 </div>
@@ -2945,7 +2972,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    const samplePayload = node.config?.payload_type === 'custom' 
+                    const innerPayload = node.config?.payload_type === 'custom' 
                       ? {
                           // Show custom mapping example
                           ...(node.config?.field_mappings || []).reduce((acc, m) => {
@@ -2956,23 +2983,38 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                           }, {})
                         }
                       : {
-                          // Show full payload example
+                          // CARE event payload matching CARE_EVENT_CONTRACT.md
+                          event_id: 'trigger-1706234567890-abc123def',
+                          type: 'care.trigger_detected',
+                          ts: new Date().toISOString(),
+                          tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
+                          entity_type: 'contact',
+                          entity_id: 'CONTACT_UUID',
+                          signal_entity_type: 'activity',
+                          signal_entity_id: 'ACTIVITY_UUID',
+                          trigger_type: 'activity_overdue',
+                          action_origin: 'care_autonomous',
+                          policy_gate_result: 'allowed',
+                          reason: 'Activity overdue by 2 days',
+                          care_state: 'at_risk',
+                          previous_state: 'aware',
+                          escalation_detected: true,
+                          escalation_status: null,
+                          deep_link: '/app/contacts/CONTACT_UUID',
+                          intent: 'triage_trigger',
+                          meta: {
+                            subject: 'Follow-up call with prospect',
+                            days_overdue: 2,
+                            type: 'task',
+                            state_transition: 'aware → at_risk'
+                          },
+                          resolved_email: 'contact@example.com',
                           source: 'aisha_crm',
                           workflow_id: workflow?.id || 'uuid',
-                          workflow_name: workflow?.name || 'My Workflow',
-                          tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
-                          timestamp: new Date().toISOString(),
-                          entity_type: 'activity',
-                          entity: {
-                            id: '6fe96ad8-84d8-49f3-9dcc-74c41fa8b24c',
-                            subject: 'Follow-up call with prospect',
-                            due_date: '2026-01-24T15:00:00Z',
-                            assigned_to: 'john.doe@company.com',
-                            status: 'completed'
-                          },
-                          ai_summary: 'Activity completed successfully',
-                          trigger_type: 'activity_overdue'
+                          workflow_name: workflow?.name || 'My Workflow'
                         };
+                    // Wrap under "data" key for Pabbly field parsing
+                    const samplePayload = { data: innerPayload };
                     
                     navigator.clipboard.writeText(JSON.stringify(samplePayload, null, 2));
                     toast({ title: "Copied to clipboard!", description: "Paste this into Pabbly to map fields" });
@@ -2985,7 +3027,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               <div className="bg-slate-950 rounded p-3 max-h-60 overflow-y-auto">
                 <pre className="text-xs text-slate-300 font-mono whitespace-pre-wrap">
                   {JSON.stringify(
-                    node.config?.payload_type === 'custom'
+                    { data: node.config?.payload_type === 'custom'
                       ? {
                           ...(node.config?.field_mappings || []).reduce((acc, m) => {
                             if (m.pabbly_field) {
@@ -2995,22 +3037,28 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                           }, {})
                         }
                       : {
+                          event_id: 'trigger-...-sample',
+                          type: 'care.trigger_detected',
+                          ts: '2026-01-26T12:34:56.789Z',
+                          tenant_id: 'tenant_uuid',
+                          entity_type: 'contact',
+                          entity_id: 'CONTACT_UUID',
+                          signal_entity_type: 'activity',
+                          signal_entity_id: 'ACTIVITY_UUID',
+                          trigger_type: 'activity_overdue',
+                          action_origin: 'care_autonomous',
+                          reason: 'Activity overdue by 2 days',
+                          care_state: 'at_risk',
+                          previous_state: 'aware',
+                          escalation_detected: true,
+                          deep_link: '/app/contacts/CONTACT_UUID',
+                          meta: { subject: '...', days_overdue: 2 },
+                          resolved_email: 'contact@example.com',
                           source: 'aisha_crm',
                           workflow_id: workflow?.id || 'uuid',
-                          workflow_name: workflow?.name || 'My Workflow',
-                          tenant_id: 'tenant_uuid',
-                          timestamp: new Date().toISOString(),
-                          entity_type: 'activity',
-                          entity: {
-                            id: 'entity_uuid',
-                            subject: 'Example activity',
-                            due_date: '2026-01-24T15:00:00Z',
-                            assigned_to: 'user@example.com',
-                            status: 'completed'
-                          },
-                          ai_summary: 'AI-generated summary will appear here',
-                          trigger_type: 'activity_overdue'
-                        },
+                          workflow_name: workflow?.name || 'My Workflow'
+                        }
+                    },
                     null,
                     2
                   )}

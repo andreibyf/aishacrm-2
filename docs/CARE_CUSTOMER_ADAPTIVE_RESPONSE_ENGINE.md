@@ -254,23 +254,36 @@ CARE_WORKFLOW_TRIGGERS_ENABLED=true          # Allow webhook triggers
   "type": "care.trigger_detected",
   "ts": "2026-01-25T17:48:58.197Z",
   "tenant_id": "a11dfb63-4b18-4eb8-872e-747af2e37c46",
+  
   "entity_type": "lead",
   "entity_id": "92d02dd6-ce91-472d-8d20-4f1631ef03f2",
+  
+  "signal_entity_type": "lead",
+  "signal_entity_id": "92d02dd6-ce91-472d-8d20-4f1631ef03f2",
+  
+  "trigger_type": "lead_stagnant",
   "action_origin": "care_autonomous",
-  "trigger_type": "lead_stagnant", 
   "policy_gate_result": "allowed",
   "reason": "Lead stagnant 8 days (status=new)",
+  
   "care_state": "unaware",
+  "previous_state": null,
+  "escalation_detected": false,
   "escalation_status": null,
+  
   "deep_link": "/app/leads/92d02dd6-ce91-472d-8d20-4f1631ef03f2",
   "intent": "triage_trigger",
+  
   "meta": {
     "days_stagnant": 8,
     "lead_name": "John Smith",
-    "status": "new"
+    "status": "new",
+    "state_transition": null
   }
 }
 ```
+
+> **Canonical Reference:** See [CARE_EVENT_CONTRACT.md](./CARE_EVENT_CONTRACT.md) for the full field definition and mental model.
 
 ### Supported Webhook Events
 
