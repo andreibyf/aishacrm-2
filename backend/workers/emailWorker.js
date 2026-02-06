@@ -130,12 +130,20 @@ async function fetchQueuedEmails() {
     .select('*')
     .eq('type', 'email')
     .eq('status', 'queued')
-    .or(`metadata->delivery->>next_attempt_at.is.null,metadata->delivery->>next_attempt_at.lte.${now}`)
+    // Fixed JSONB path: use -> for nested navigation, ->> only for final text extraction
+    .or(`metadata->delivery->next_attempt_at.is.null,metadata->delivery->>next_attempt_at.lte.${now}`)
     .order('created_date', { ascending: true })
     .limit(BATCH_LIMIT);
   
   if (error) {
-    logger.error('[fetchQueuedEmails] Error fetching queued emails:', error.message);
+    // Enhanced error logging with full error details
+    logger.error('[fetchQueuedEmails] Error fetching queued emails:', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+      fullError: error
+    });
     return [];
   }
   
