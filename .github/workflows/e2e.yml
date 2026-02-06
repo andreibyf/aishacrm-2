@@ -47,7 +47,7 @@ jobs:
       RATE_LIMIT_SKIP: '0'
       # Authentication credentials for E2E tests
       SUPERADMIN_EMAIL: 'abyfield@4vdataconsulting.com'
-      SUPERADMIN_PASSWORD: 'Pa$$w0rd123'
+    SUPERADMIN_PASSWORD: 'DevTest#002'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
