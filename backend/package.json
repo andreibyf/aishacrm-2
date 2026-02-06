@@ -61,6 +61,7 @@
   "devDependencies": {
     "c8": "^9.0.0",
     "supertest": "^7.2.2",
-    "vitest": "^4.0.18"
+    "vitest": "^4.0.18",
+    "yaml": "^2.8.2"
   }
 }
