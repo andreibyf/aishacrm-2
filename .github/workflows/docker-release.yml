@@ -41,6 +41,39 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Verify required secrets and variables
+        run: |
+          echo "Verifying GitHub configuration..."
+          MISSING_CONFIG=()
+          
+          # Check required secrets
+          if [ -z "${{ secrets.DOPPLER_TOKEN }}" ]; then
+            MISSING_CONFIG+=("DOPPLER_TOKEN (secret)")
+          fi
+          
+          # Check required variables  
+          if [ -z "${{ vars.DOPPLER_PROJECT }}" ]; then
+            MISSING_CONFIG+=("DOPPLER_PROJECT (variable)")
+          fi
+          if [ -z "${{ vars.DOPPLER_CONFIG }}" ]; then
+            MISSING_CONFIG+=("DOPPLER_CONFIG (variable)")
+          fi
+          
+          if [ ${#MISSING_CONFIG[@]} -gt 0 ]; then
+            echo "ERROR: Missing required GitHub configuration:"
+            for item in "${MISSING_CONFIG[@]}"; do
+              echo "  - $item"
+            done
+            echo ""
+            echo "To fix this:"
+            echo "  1. Go to: https://github.com/${{ github.repository }}/settings/secrets/actions"
+            echo "  2. Add missing secrets (DOPPLER_TOKEN)"
+            echo "  3. Go to: https://github.com/${{ github.repository }}/settings/variables/actions"
+            echo "  4. Add missing variables (DOPPLER_PROJECT, DOPPLER_CONFIG)"
+            exit 1
+          fi
+          echo "✓ All required configuration present"
+
       - name: Install Doppler CLI
         uses: dopplerhq/cli-action@014df23b1329b615816a38eb5f473bb9000700b1  # v3
         timeout-minutes: 5
@@ -223,6 +256,39 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Verify required secrets and variables
+        run: |
+          echo "Verifying GitHub configuration..."
+          MISSING_CONFIG=()
+          
+          # Check required secrets
+          if [ -z "${{ secrets.DOPPLER_TOKEN }}" ]; then
+            MISSING_CONFIG+=("DOPPLER_TOKEN (secret)")
+          fi
+          
+          # Check required variables
+          if [ -z "${{ vars.DOPPLER_PROJECT }}" ]; then
+            MISSING_CONFIG+=("DOPPLER_PROJECT (variable)")
+          fi
+          if [ -z "${{ vars.DOPPLER_CONFIG }}" ]; then
+            MISSING_CONFIG+=("DOPPLER_CONFIG (variable)")
+          fi
+          
+          if [ ${#MISSING_CONFIG[@]} -gt 0 ]; then
+            echo "ERROR: Missing required GitHub configuration:"
+            for item in "${MISSING_CONFIG[@]}"; do
+              echo "  - $item"
+            done
+            echo ""
+            echo "To fix this:"
+            echo "  1. Go to: https://github.com/${{ github.repository }}/settings/secrets/actions"
+            echo "  2. Add missing secrets (DOPPLER_TOKEN)"
+            echo "  3. Go to: https://github.com/${{ github.repository }}/settings/variables/actions"
+            echo "  4. Add missing variables (DOPPLER_PROJECT, DOPPLER_CONFIG)"
+            exit 1
+          fi
+          echo "✓ All required configuration present"
+
       - name: Install Doppler CLI
         uses: dopplerhq/cli-action@014df23b1329b615816a38eb5f473bb9000700b1  # v3
         timeout-minutes: 5
@@ -324,6 +390,33 @@ jobs:
           source: "docker-compose.prod.yml,nginx-n8n.conf,nginx-proxy/nginx.conf,braid-mcp-node-server/docker-compose.prod.yml,braid-mcp-node-server/.env.example"
           target: "/opt/aishacrm/"
           strip_components: 0
+          timeout: 120s
+          command_timeout: 120s
+
+      - name: Verify SCP deployment
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ steps.doppler-deploy.outputs.PROD_VPS_HOST }}
+          username: ${{ steps.doppler-deploy.outputs.PROD_VPS_USER }}
+          key: ${{ steps.doppler-deploy.outputs.PROD_VPS_SSH_KEY }}
+          port: ${{ steps.doppler-deploy.outputs.PROD_VPS_PORT || 22 }}
+          script: |
+            echo "Verifying SCP deployment..."
+            echo "=== Main directory files ==="
+            ls -lah /opt/aishacrm/ | grep -E "docker-compose|nginx"
+            echo ""
+            echo "=== MCP directory files ==="
+            ls -lah /opt/aishacrm/braid-mcp-node-server/ | head -20
+            echo ""
+            if [ ! -f /opt/aishacrm/docker-compose.prod.yml ]; then
+              echo "ERROR: Main docker-compose.prod.yml missing!"
+              exit 1
+            fi
+            if [ ! -f /opt/aishacrm/braid-mcp-node-server/docker-compose.prod.yml ]; then
+              echo "ERROR: MCP docker-compose.prod.yml missing!"
+              exit 1
+            fi
+            echo "✓ All compose files verified"
 
       - name: Deploy to Production VPS
         uses: appleboy/ssh-action@v1.0.3
@@ -478,13 +571,26 @@ jobs:
 
             echo "MCP .env configuration updated"
 
-            # Check if docker-compose.prod.yml exists
+            # Verify docker-compose.prod.yml exists (should have been copied by SCP)
             if [ ! -f docker-compose.prod.yml ]; then
               echo "ERROR: docker-compose.prod.yml not found in /opt/aishacrm/braid-mcp-node-server/"
-              echo "SCP may have failed. Listing directory contents:"
-              ls -la /opt/aishacrm/braid-mcp-node-server/
+              echo "This file should have been copied by the 'Deploy Compose File to VPS' step."
+              echo ""
+              echo "=== Current directory contents ==="
+              pwd
+              ls -lah
+              echo ""
+              echo "=== Parent directory contents ==="
+              ls -lah /opt/aishacrm/
+              echo ""
+              echo "Possible causes:"
+              echo "  1. SCP action failed silently"
+              echo "  2. Source file doesn't exist in repository"
+              echo "  3. SSH permissions issue"
+              echo "  4. Directory permissions issue"
               exit 1
             fi
+            echo "✓ docker-compose.prod.yml verified"
 
             # Clean up any orphaned/conflicting MCP containers before starting
             echo "Cleaning up orphaned MCP containers..."
