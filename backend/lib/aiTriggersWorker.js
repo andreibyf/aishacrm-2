@@ -376,6 +376,8 @@ async function processTriggersForTenant(tenant) {
         await triggerCareWorkflowForTenant(tenantUuid, {
           entity_id: lead.id,
           entity_type: 'lead',
+          signal_entity_id: lead.id,
+          signal_entity_type: 'lead',
           tenant_id: tenantUuid,
           trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
           reason: `Lead is stagnant for ${lead.days_stagnant} days (status=${lead.status})`,
@@ -601,9 +603,15 @@ async function processTriggersForTenant(tenant) {
 
           // PR8: Trigger workflow webhook with updated state
           // Simplified payload structure - matches CARE event contract
+          // Normalize opportunity (signal) to parent account or lead (entity)
+          const entityId = deal.account_id || deal.lead_id;
+          const entityType = deal.account_id ? 'account' : 'lead';
+          
           await triggerCareWorkflowForTenant(tenantUuid, {
-            entity_id: deal.id,
-            entity_type: 'opportunity',
+            entity_id: entityId,
+            entity_type: entityType,
+            signal_entity_id: deal.id,
+            signal_entity_type: 'opportunity',
             tenant_id: tenantUuid,
             trigger_type: TRIGGER_TYPES.DEAL_DECAY,
             reason: escalation.reason || `Opportunity inactive for ${deal.days_inactive} days`,
@@ -614,7 +622,6 @@ async function processTriggersForTenant(tenant) {
               stage: deal.stage,
               days_inactive: deal.days_inactive,
               close_date: deal.close_date || null,
-              account_id: deal.account_id || null,
               severity: escalation.severity
             }
           });
@@ -855,8 +862,10 @@ async function processTriggersForTenant(tenant) {
         // PR8: Trigger workflow webhook for ALL activity_overdue (not just escalations)
         // Simplified payload structure - matches CARE event contract
         await triggerCareWorkflowForTenant(tenantUuid, {
-          entity_id: activity.id,
-          entity_type: 'activity',
+          entity_id: normalizedEntityId,
+          entity_type: normalizedEntityType,
+          signal_entity_id: activity.id,
+          signal_entity_type: 'activity',
           tenant_id: tenantUuid,
           trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
           reason: escalation.is_escalation ? escalation.reason : `Activity is overdue by ${activity.days_overdue} days`,
@@ -867,8 +876,6 @@ async function processTriggersForTenant(tenant) {
             due_date: activity.due_date,
             days_overdue: activity.days_overdue,
             assigned_to: activity.assigned_to || null,
-            related_to: activity.related_to || null,
-            related_id: activity.related_id || null,
             severity: escalation.is_escalation ? escalation.severity : null
           }
         });
@@ -1091,9 +1098,15 @@ async function processTriggersForTenant(tenant) {
 
           // PR8: Trigger workflow webhook with updated state
           // Simplified payload structure - matches CARE event contract
+          // Normalize opportunity (signal) to parent account or lead (entity)
+          const entityId = opp.account_id || opp.lead_id;
+          const entityType = opp.account_id ? 'account' : 'lead';
+          
           await triggerCareWorkflowForTenant(tenantUuid, {
-            entity_id: opp.id,
-            entity_type: 'opportunity',
+            entity_id: entityId,
+            entity_type: entityType,
+            signal_entity_id: opp.id,
+            signal_entity_type: 'opportunity',
             tenant_id: tenantUuid,
             trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
             reason: escalation.reason || `High-value opportunity closing soon (${opp.days_to_close} days)`,
@@ -1105,7 +1118,6 @@ async function processTriggersForTenant(tenant) {
               stage: opp.stage,
               days_to_close: opp.days_to_close,
               close_date: opp.close_date || null,
-              account_id: opp.account_id || null,
               severity: escalation.severity
             }
           });
@@ -1222,9 +1234,10 @@ async function detectDealDecay(tenantUuid) {
   try {
     // Step 1: Get candidate opportunities (simple query)
     // Exclude test data records
+    // Include account_id and lead_id for entity normalization
     const { data: opportunities, error } = await supabase
       .from('opportunities')
-      .select('id, name, stage, amount, close_date, updated_at, created_at, is_test_data')
+      .select('id, name, stage, amount, close_date, updated_at, created_at, is_test_data, account_id, lead_id')
       .eq('tenant_id', tenantUuid)
       .not('stage', 'in', '(closed_won,closed_lost)')
       .lt('updated_at', decayDate.toISOString())
@@ -1342,9 +1355,10 @@ async function detectHotOpportunities(tenantUuid) {
   try {
     // Step 1: Get candidate opportunities (simple query)
     // Exclude test data records
+    // Include account_id and lead_id for entity normalization
     const { data: opportunities, error } = await supabase
       .from('opportunities')
-      .select('id, name, stage, amount, probability, close_date, is_test_data')
+      .select('id, name, stage, amount, probability, close_date, is_test_data, account_id, lead_id')
       .eq('tenant_id', tenantUuid)
       .not('stage', 'in', '(closed_won,closed_lost)')
       .gte('probability', 70)
