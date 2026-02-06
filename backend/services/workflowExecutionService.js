@@ -1206,6 +1206,13 @@ Respond with ONLY a JSON object in this exact format:
             }
 
             try {
+              // Log the actual payload being sent (for debugging)
+              logger.info('[Pabbly Webhook] Sending data:', {
+                url: webhookUrl.substring(0, 50) + '...',
+                payload_preview: JSON.stringify(payload).substring(0, 500),
+                payload_size_bytes: JSON.stringify(payload).length
+              });
+
               const response = await fetch(webhookUrl, {
                 method: 'POST',
                 headers: {
@@ -1223,18 +1230,31 @@ Respond with ONLY a JSON object in this exact format:
                 result = { raw_status: response.status };
               }
 
+              // Enhanced logging with response details
+              logger.info('[Pabbly Webhook] Response received:', {
+                http_status: response.status,
+                success: response.ok,
+                response_preview: JSON.stringify(result).substring(0, 200)
+              });
+
               log.output = {
                 provider: 'pabbly',
                 webhook_url: webhookUrl.substring(0, 50) + '...',
                 status: response.ok ? 'sent' : 'failed',
                 http_status: response.status,
-                success: response.ok
+                success: response.ok,
+                payload_sent: payload, // Store full payload in execution log
+                response_received: result
               };
               context.variables.pabbly_result = result;
 
             } catch (err) {
               log.status = 'error';
               log.error = `Pabbly webhook failed: ${err.message}`;
+              logger.error('[Pabbly Webhook] Error sending:', {
+                error: err.message,
+                url: webhookUrl.substring(0, 50) + '...'
+              });
             }
             break;
           }

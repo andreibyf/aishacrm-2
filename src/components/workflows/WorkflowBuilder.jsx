@@ -50,7 +50,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
     setNodes(JSON.parse(JSON.stringify(template.nodes || [])));
     setConnections(JSON.parse(JSON.stringify(template.connections || [])));
     setShowTemplates(false);
-    toast.success(`Template "${template.name}" loaded successfully!`);
+    toast({ title: "Template loaded", description: `Template "${template.name}" loaded successfully!` });
   };
 
   // Update state when workflow prop changes (for editing)
@@ -159,7 +159,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
     const webhookUrl = workflow?.id ? `/api/workflows/${workflow.id}/webhook` : '/api/workflows/PENDING/webhook';
     navigator.clipboard.writeText(webhookUrl);
     setCopied(true);
-    toast.success('Webhook URL copied to clipboard');
+    toast({ title: "Copied", description: 'Webhook URL copied to clipboard' });
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -185,7 +185,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
 
   const handleWaitForWebhook = async () => {
     if (!workflow?.id) {
-      toast.error('Please save the workflow first to wait for a real webhook.');
+      toast({ title: "Save required", description: 'Please save the workflow first to wait for a real webhook.', variant: 'destructive' });
       return;
     }
 
@@ -225,7 +225,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
             setTestPayload(latest.trigger_data);
             setShowPayload(true);
             setWaitingForWebhook(false);
-            toast.success('Webhook received! Payload loaded successfully.');
+            toast({ title: "Webhook received", description: 'Payload loaded successfully.' });
             return true;
           }
         }
@@ -247,7 +247,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
 
     } catch (error) {
       console.error('Error waiting for webhook:', error);
-      toast.error('Failed to wait for webhook. Using sample payload instead.');
+      toast({ title: "Webhook timeout", description: 'Failed to wait for webhook. Using sample payload instead.', variant: 'destructive' });
       handleUseSamplePayload(); // Fallback to sample on error
       setWaitingForWebhook(false);
     }
@@ -359,7 +359,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
   // New function: loadRecentExecutions (from outline)
   const loadRecentExecutions = async () => {
     if (!workflow?.id) {
-      toast.error('Please save the workflow first');
+      toast({ title: "Save required", description: 'Please save the workflow first', variant: 'destructive' });
       return;
     }
 
@@ -375,13 +375,13 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
       setRecentExecutions(executions || []);
       setShowExecutions(true); // Show the executions list
       if (executions && executions.length > 0) {
-        toast.success('Recent webhook executions loaded.');
+        toast({ title: "Executions loaded", description: 'Recent webhook executions loaded.' });
       } else {
         toast.info('No recent webhook executions found for this workflow.');
       }
     } catch (error) {
       console.error('Error loading executions:', error);
-      toast.error('Failed to load webhook history');
+      toast({ title: "Load failed", description: 'Failed to load webhook history', variant: 'destructive' });
     } finally {
       setLoadingExecutions(false);
     }
@@ -408,10 +408,10 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
     if (execution.trigger_data) {
       setTestPayload(execution.trigger_data);
       setShowPayload(true);
-      toast.success('Payload loaded from execution');
+      toast({ title: "Payload loaded", description: 'Payload loaded from execution' });
       setShowExecutions(false); // Hide executions list once a payload is selected
     } else {
-      toast.error('No payload data in this execution');
+      toast({ title: "No payload", description: 'No payload data in this execution', variant: 'destructive' });
     }
   };
 
@@ -2855,6 +2855,9 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 className="bg-slate-800 border-slate-700 text-slate-200"
                 placeholder="https://connect.pabbly.com/workflow/sendwebhookdata/..."
               />
+              <p className="text-xs text-pink-400 mt-1">
+                💡 Copy this URL from Pabbly Connect &quot;Webhook&quot; trigger step
+              </p>
             </div>
             <div>
               <Label className="text-slate-200">Payload Type</Label>
@@ -2933,6 +2936,104 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 Use &quot;Full Entity Data&quot; to send all context, or map specific fields.
               </p>
             </div>
+
+            {/* Payload Preview Section */}
+            <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <Label className="text-slate-200 text-sm font-semibold">📦 Sample Payload Preview</Label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    const samplePayload = node.config?.payload_type === 'custom' 
+                      ? {
+                          // Show custom mapping example
+                          ...(node.config?.field_mappings || []).reduce((acc, m) => {
+                            if (m.pabbly_field) {
+                              acc[m.pabbly_field] = m.source_value ? `{{${m.source_value}}}` : 'example_value';
+                            }
+                            return acc;
+                          }, {})
+                        }
+                      : {
+                          // Show full payload example
+                          source: 'aisha_crm',
+                          workflow_id: workflow?.id || 'uuid',
+                          workflow_name: workflow?.name || 'My Workflow',
+                          tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
+                          timestamp: new Date().toISOString(),
+                          entity_type: 'activity',
+                          entity: {
+                            id: '6fe96ad8-84d8-49f3-9dcc-74c41fa8b24c',
+                            subject: 'Follow-up call with prospect',
+                            due_date: '2026-01-24T15:00:00Z',
+                            assigned_to: 'john.doe@company.com',
+                            status: 'completed'
+                          },
+                          ai_summary: 'Activity completed successfully',
+                          trigger_type: 'activity_overdue'
+                        };
+                    
+                    navigator.clipboard.writeText(JSON.stringify(samplePayload, null, 2));
+                    toast({ title: "Copied to clipboard!", description: "Paste this into Pabbly to map fields" });
+                  }}
+                  className="text-pink-400 hover:text-pink-300 text-xs"
+                >
+                  📋 Copy JSON
+                </Button>
+              </div>
+              <div className="bg-slate-950 rounded p-3 max-h-60 overflow-y-auto">
+                <pre className="text-xs text-slate-300 font-mono whitespace-pre-wrap">
+                  {JSON.stringify(
+                    node.config?.payload_type === 'custom'
+                      ? {
+                          ...(node.config?.field_mappings || []).reduce((acc, m) => {
+                            if (m.pabbly_field) {
+                              acc[m.pabbly_field] = m.source_value ? `{{${m.source_value}}}` : 'example_value';
+                            }
+                            return acc;
+                          }, {})
+                        }
+                      : {
+                          source: 'aisha_crm',
+                          workflow_id: workflow?.id || 'uuid',
+                          workflow_name: workflow?.name || 'My Workflow',
+                          tenant_id: 'tenant_uuid',
+                          timestamp: new Date().toISOString(),
+                          entity_type: 'activity',
+                          entity: {
+                            id: 'entity_uuid',
+                            subject: 'Example activity',
+                            due_date: '2026-01-24T15:00:00Z',
+                            assigned_to: 'user@example.com',
+                            status: 'completed'
+                          },
+                          ai_summary: 'AI-generated summary will appear here',
+                          trigger_type: 'activity_overdue'
+                        },
+                    null,
+                    2
+                  )}
+                </pre>
+              </div>
+              <p className="text-xs text-slate-500 mt-2">
+                This is what Pabbly will receive. Use &quot;Use Sample CARE Payload&quot; button above to test with real data.
+              </p>
+            </div>
+
+            {/* Pabbly Setup Instructions */}
+            <div className="bg-blue-900/10 border border-blue-700/30 rounded-lg p-3">
+              <p className="text-sm text-blue-300 font-semibold mb-2">
+                📚 How to see data in Pabbly:
+              </p>
+              <ol className="text-xs text-blue-400 space-y-1 list-decimal list-inside">
+                <li>In Pabbly, add &quot;Webhook&quot; as your trigger step</li>
+                <li>Copy the webhook URL and paste it above</li>
+                <li>Click &quot;Use Sample CARE Payload&quot; in the trigger section</li>
+                <li>Return to Pabbly and click &quot;Capture Webhook Response&quot;</li>
+                <li>You&apos;ll see all the fields sent - now you can map them!</li>
+              </ol>
+            </div>
           </div>
         );
 
@@ -3009,17 +3110,17 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
 
   const handleSave = async () => {
     if (!name.trim()) {
-      toast.error('Please enter a workflow name');
+      toast({ title: "Name required", description: 'Please enter a workflow name', variant: 'destructive' });
       return;
     }
 
     if (nodes.length === 0) {
-      toast.error('Add at least one node to your workflow');
+      toast({ title: "Nodes required", description: 'Add at least one node to your workflow', variant: 'destructive' });
       return;
     }
 
     if (!user) {
-      toast.error('User not loaded. Please try again.');
+      toast({ title: "User error", description: 'User not loaded. Please try again.', variant: 'destructive' });
       return;
     }
 
@@ -3039,7 +3140,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
       }
 
       if (!tenantId) {
-        toast.error('No tenant selected. Please choose a tenant and try again.');
+        toast({ title: "Tenant required", description: 'No tenant selected. Please choose a tenant and try again.', variant: 'destructive' });
         setSaving(false);
         return;
       }
@@ -3083,11 +3184,11 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
         });
       }
 
-      toast.success('Workflow saved successfully');
+      toast({ title: "Workflow saved", description: 'Workflow saved successfully' });
       onSave();
     } catch (error) {
       console.error('Failed to save workflow:', error);
-      toast.error('Failed to save workflow');
+      toast({ title: "Save failed", description: 'Failed to save workflow', variant: 'destructive' });
     } finally {
       setSaving(false);
     }
