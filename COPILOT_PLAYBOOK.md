@@ -40,13 +40,53 @@ git branch --show-current
 ### 3. Check Container Status
 
 ```bash
-# View running containers
+# View main application containers
 docker compose ps
 
 # Check health of critical services
 docker compose ps | grep -E "backend|frontend|redis"
 
-# Expected: All showing "Up" status
+# Expected: 4 containers (backend, frontend, redis-memory, redis-cache)
+
+# CRITICAL: Also check Braid MCP containers (separate docker-compose)
+cd braid-mcp-node-server && docker compose ps && cd ..
+
+# Expected: 3 containers (braid-mcp-server, braid-mcp-1, braid-mcp-2)
+
+# CRITICAL: Also check Agent Office containers (addon)
+docker ps --format "table {{.Names}}\t{{.Status}}" | grep -E "aisha-|redpanda"
+
+# Expected: 3 containers (aisha-redpanda, aisha-telemetry-sidecar, aisha-office-viz)
+```
+
+**Required Containers** (10 total):
+
+**Main Application** (4):
+1. `aishacrm-backend` - Main API server (port 4001)
+2. `aishacrm-frontend` - React app (port 4000)
+3. `aishacrm-redis-memory` - Ephemeral cache (port 6379)
+4. `aishacrm-redis-cache` - Persistent cache (port 6380)
+
+**Braid MCP** (3):
+5. `braid-mcp-server` - MCP server main (port 8000)
+6. `braid-mcp-1` - MCP worker 1
+7. `braid-mcp-2` - MCP worker 2
+
+**Agent Office Addon** (3):
+8. `aisha-redpanda` - Event bus (Kafka-compatible, port 9092)
+9. `aisha-telemetry-sidecar` - Telemetry collector
+10. `aisha-office-viz` - Office visualization UI
+
+**Start Missing Containers**:
+```bash
+# Main containers
+docker compose up -d
+
+# Braid MCP (if missing)
+cd braid-mcp-node-server && docker compose up -d && cd ..
+
+# Agent Office (if missing)
+cd addons/agent-office && docker compose -f docker-compose.agent-office.yml up -d && cd ../..
 ```
 
 ---
@@ -506,6 +546,109 @@ docker compose ps | grep -c "Up"
 curl -o /dev/null -s -w '%{time_total}\n' http://localhost:4001/api/system/health
 # Target: <0.5s
 ```
+
+---
+
+## 🤖 C.A.R.E. (CUSTOMER ADAPTIVE RESPONSE ENGINE) CONFIGURATION
+
+### Overview
+
+C.A.R.E. configuration is **100% UI-driven** via Workflow Builder. No manual API calls, SQL inserts, or environment variable setup is required for per-tenant configuration.
+
+### Two-Level Configuration Architecture
+
+**1. System-Wide Settings (One-Time Setup via Doppler)**
+
+Controls global C.A.R.E. behavior across all tenants:
+
+```bash
+# Production (prd_prd Doppler config)
+AI_TRIGGERS_WORKER_ENABLED=true              # Enable automatic trigger detection
+AI_TRIGGERS_WORKER_INTERVAL_MS=15000         # Poll every 15 seconds
+CARE_STATE_WRITE_ENABLED=true                # Allow state persistence globally
+CARE_WORKFLOW_TRIGGERS_ENABLED=true          # Allow workflow webhook triggers
+
+# Development (dev_personal Doppler config)  
+AI_TRIGGERS_WORKER_ENABLED=false             # Disable automatic polling (manual only)
+AI_TRIGGERS_WORKER_INTERVAL_MS=15000         # Interval if enabled
+CARE_STATE_WRITE_ENABLED=true                # Allow state persistence
+CARE_WORKFLOW_TRIGGERS_ENABLED=true          # Allow workflow triggers
+```
+
+**2. Per-Tenant Settings (UI-Driven via Workflow Builder)**
+
+Configured through Workflow Builder interface:
+
+1. Navigate to **Workflows** → **Create New Workflow**
+2. Drag **"CARE Start"** trigger node onto canvas
+3. Configure node settings:
+   - **Tenant ID** (required): Tenant UUID
+   - **Enabled**: Toggle on/off (default: true)
+   - **Shadow Mode**: Observation-only (default: true)
+   - **State Write**: Allow state updates (default: false)
+   - **Webhook Timeout**: Request timeout in ms (default: 3000)
+   - **Max Retries**: Retry attempts (default: 2)
+4. Click **"Save Workflow"**
+5. Backend automatically syncs to `care_workflow_config` table
+
+### Auto-Sync Mechanism
+
+When you save a workflow with a CARE Start node, the backend automatically:
+
+1. Calls `syncCareWorkflowConfig()` function (in `backend/routes/workflows.js`)
+2. Finds CARE Start node in workflow.nodes array
+3. Extracts configuration from node.config
+4. Upserts `care_workflow_config` table entry
+5. Generates webhook URL: `http://backend:3001/api/workflows/{workflow_id}/webhook`
+
+**If you remove the CARE Start node and save**, the config entry is automatically deleted.
+
+### Important Constraints
+
+**One C.A.R.E. Workflow Per Tenant**:
+- `care_workflow_config` table has PRIMARY KEY on `tenant_id`
+- Each tenant can have MULTIPLE workflows with CARE Start nodes
+- Only the MOST RECENTLY SAVED workflow becomes active
+- Previous workflows remain but are NOT triggered by C.A.R.E.
+
+### Verification
+
+**Check Database Configuration**:
+
+```sql
+SELECT 
+  tenant_id, 
+  workflow_id, 
+  webhook_url, 
+  is_enabled, 
+  shadow_mode,
+  state_write_enabled
+FROM care_workflow_config
+WHERE tenant_id = 'YOUR_TENANT_UUID';
+```
+
+**Integration Test**:
+
+```javascript
+import { getCareConfigForTenant } from './lib/care/careTenantConfig.js';
+const config = await getCareConfigForTenant('YOUR_TENANT_UUID');
+console.log('Config source:', config._source); // Should be "database"
+```
+
+### Common Pitfalls
+
+❌ **DON'T**: Manually insert into `care_workflow_config` table  
+✅ **DO**: Save workflow with CARE Start node (automatic sync)
+
+❌ **DON'T**: Set per-tenant config via environment variables  
+✅ **DO**: Configure CARE Start node in Workflow Builder UI
+
+❌ **DON'T**: Create multiple CARE workflows and expect them all to trigger  
+✅ **DO**: Design one comprehensive workflow per tenant with conditional logic
+
+### Complete Documentation
+
+See [docs/CARE_SETUP_GUIDE.md](./docs/CARE_SETUP_GUIDE.md) for complete setup instructions.
 
 ---
 

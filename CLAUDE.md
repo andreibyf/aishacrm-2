@@ -33,6 +33,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | [docs/USER_GUIDE.md](./docs/USER_GUIDE.md) | End-user guide for CRM operations |
 | [docs/ADMIN_GUIDE.md](./docs/ADMIN_GUIDE.md) | System administration, deployment |
 | [docs/AI_ASSISTANT_GUIDE.md](./docs/AI_ASSISTANT_GUIDE.md) | AiSHA AI assistant features |
+| [docs/CARE_SETUP_GUIDE.md](./docs/CARE_SETUP_GUIDE.md) | **C.A.R.E.** configuration (UI-driven via Workflow Builder) |
 | [docs/DEVELOPER_MANUAL.md](./docs/DEVELOPER_MANUAL.md) | Development setup, architecture |
 | [docs/DATABASE_GUIDE.md](./docs/DATABASE_GUIDE.md) | Database schema, migrations, **trigger patterns** |
 | [docs/SECURITY_GUIDE.md](./docs/SECURITY_GUIDE.md) | Security, RLS, authentication |

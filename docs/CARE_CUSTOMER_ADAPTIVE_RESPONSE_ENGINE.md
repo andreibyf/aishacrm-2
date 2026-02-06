@@ -199,17 +199,52 @@ Every C.A.R.E. decision is logged for analysis and improvement:
 
 ## Workflow Integration
 
-C.A.R.E. can trigger external workflows through webhooks for seamless automation:
+C.A.R.E. can trigger external workflows through webhooks for seamless automation.
 
-### Webhook Configuration
+### Configuration (UI-Driven via Workflow Builder)
+
+**C.A.R.E. configuration is 100% UI-driven** through the Workflow Builder:
+
+1. **Open Workflow Builder**: Navigate to Workflows → Create New Workflow
+2. **Add CARE Start Node**: Drag "CARE Start" node from node library onto canvas
+3. **Configure Node**: Click node to open configuration panel:
+   - **Tenant ID** (required): UUID of tenant (e.g., `a11dfb63-4b18-4eb8-872e-747af2e37c46`)
+   - **Enabled**: Toggle on/off (default: enabled)
+   - **Shadow Mode**: Observation-only mode (default: enabled for safety)
+   - **State Write**: Allow state persistence (default: disabled)
+   - **Webhook Timeout**: Request timeout in milliseconds (default: 3000)
+   - **Max Retries**: Webhook retry attempts (default: 2)
+4. **Save Workflow**: Click "Save" - backend automatically:
+   - Creates/updates `care_workflow_config` table entry
+   - Links workflow to C.A.R.E. system
+   - Generates webhook URL: `http://backend:3001/api/workflows/{workflow_id}/webhook`
+   - **No manual API calls required!**
+
+**Important: One Config Per Tenant**
+- Each tenant can have MULTIPLE workflows with CARE Start nodes
+- Only the MOST RECENTLY SAVED workflow becomes active for that tenant
+- Saving a new CARE workflow updates the tenant's configuration
+- Removing the CARE Start node and saving deletes the configuration
+
+### Environment Variables (System-Wide Control Only)
+
+Environment variables control **system-wide behavior**, NOT per-tenant configuration:
 
 ```bash
-# Environment Variables
-CARE_WORKFLOW_ESCALATION_WEBHOOK_URL=https://your-workflow.com/webhook
-CARE_WORKFLOW_WEBHOOK_SECRET=your_secret_key
-CARE_WORKFLOW_WEBHOOK_TIMEOUT_MS=3000
-CARE_WORKFLOW_WEBHOOK_MAX_RETRIES=2
+# Production settings (via Doppler)
+AI_TRIGGERS_WORKER_ENABLED=true              # Enable automatic trigger polling
+AI_TRIGGERS_WORKER_INTERVAL_MS=15000         # Poll every 15 seconds
+CARE_STATE_WRITE_ENABLED=true                # Allow state persistence globally
+CARE_WORKFLOW_TRIGGERS_ENABLED=true          # Allow webhook triggers globally
+
+# Development settings (via Doppler)
+AI_TRIGGERS_WORKER_ENABLED=false             # Disable automatic polling (manual only)
+AI_TRIGGERS_WORKER_INTERVAL_MS=15000         # Interval if enabled
+CARE_STATE_WRITE_ENABLED=true                # Allow state persistence
+CARE_WORKFLOW_TRIGGERS_ENABLED=true          # Allow webhook triggers
 ```
+
+**Note**: Per-tenant settings (workflow_id, is_enabled, shadow_mode, webhook_timeout_ms, webhook_max_retries) come from the `care_workflow_config` database table, populated automatically when you save a workflow with a CARE Start node.
 
 ### Webhook Payload Schema
 
@@ -250,32 +285,44 @@ CARE_WORKFLOW_WEBHOOK_MAX_RETRIES=2
 
 ## CRM Integration Guide
 
-### Step 1: Enable C.A.R.E. Triggers
+### Step 1: Enable C.A.R.E. System (One-Time Setup)
+
+Configure system-wide C.A.R.E. behavior via environment variables (Doppler for production):
 
 ```bash
-# In your .env file
-AI_TRIGGERS_WORKER_ENABLED=true
-AI_TRIGGERS_WORKER_INTERVAL_MS=60000  # 1 minute
+# Production Environment (via Doppler prd_prd config)
+AI_TRIGGERS_WORKER_ENABLED=true              # Enable automatic trigger detection
+AI_TRIGGERS_WORKER_INTERVAL_MS=15000         # Poll every 15 seconds
+CARE_STATE_WRITE_ENABLED=true                # Allow state persistence
+CARE_WORKFLOW_TRIGGERS_ENABLED=true          # Allow workflow webhooks
 
-# Optional: Enable state persistence
-CARE_STATE_WRITE_ENABLED=true
+# Development Environment (via Doppler dev_personal config)
+AI_TRIGGERS_WORKER_ENABLED=false             # Disable automatic polling
+AI_TRIGGERS_WORKER_INTERVAL_MS=15000         # Interval if enabled
+CARE_STATE_WRITE_ENABLED=true                # Allow state persistence
+CARE_WORKFLOW_TRIGGERS_ENABLED=true          # Allow workflow webhooks
 ```
 
-### Step 2: Configure Webhook Endpoints
+**Note**: This is a one-time system configuration. Per-tenant settings are configured via the Workflow Builder UI (see Step 2).
 
-```bash
-# Set webhook URL for your CRM/automation platform
-CARE_WORKFLOW_ESCALATION_WEBHOOK_URL=https://your-crm.com/aishacare/webhook
+### Step 2: Configure C.A.R.E. Workflow (Per-Tenant, UI-Driven)
 
-# Set authentication secret
-CARE_WORKFLOW_WEBHOOK_SECRET=your_secure_secret_key
+1. **Open Workflow Builder**: Navigate to Workflows in AiSHA CRM
+2. **Create New Workflow**: Click "Create New Workflow"
+3. **Add CARE Start Node**: Drag "CARE Start" trigger node onto canvas
+4. **Configure CARE Start Node**:
+   - **Tenant ID**: Enter tenant UUID (required)
+   - **Enabled**: Toggle to enable C.A.R.E. for this tenant (default: on)
+   - **Shadow Mode**: Observation-only mode (default: on for safety)
+   - **State Write**: Allow state persistence (default: off)
+   - **Webhook Timeout**: Request timeout in ms (default: 3000)
+   - **Max Retries**: Retry attempts (default: 2)
+5. **Add Workflow Steps**: Design your response workflow (tasks, notifications, etc.)
+6. **Save Workflow**: Backend automatically syncs configuration to `care_workflow_config` table
 
-# Optional: Adjust timeouts and retries
-CARE_WORKFLOW_WEBHOOK_TIMEOUT_MS=5000
-CARE_WORKFLOW_WEBHOOK_MAX_RETRIES=3
-```
+**No manual API calls or SQL inserts required!** The Workflow Builder handles everything.
 
-### Step 3: Implement Webhook Receiver
+### Step 3: Implement Webhook Receiver (If Using External System)
 
 ```javascript
 // Example webhook receiver for your CRM
