@@ -39,6 +39,8 @@ AI_TRIGGERS_WORKER_ENABLED=true              # Enable automatic trigger detectio
 AI_TRIGGERS_WORKER_INTERVAL_MS=15000         # Poll every 15 seconds
 CARE_STATE_WRITE_ENABLED=true                # Allow state persistence globally
 CARE_WORKFLOW_TRIGGERS_ENABLED=true          # Allow workflow webhook triggers globally
+CARE_AUTONOMY_ENABLED=false                  # Master kill switch for autonomous actions (default: false)
+CARE_SHADOW_MODE=true                        # System-wide observe-only mode (default: true)
 ```
 
 #### Development Environment (`dev_personal` config)
@@ -48,6 +50,8 @@ AI_TRIGGERS_WORKER_ENABLED=false             # Disable automatic polling (manual
 AI_TRIGGERS_WORKER_INTERVAL_MS=15000         # Polling interval (if enabled)
 CARE_STATE_WRITE_ENABLED=true                # Allow state persistence
 CARE_WORKFLOW_TRIGGERS_ENABLED=true          # Allow workflow triggers
+CARE_AUTONOMY_ENABLED=false                  # Master kill switch for autonomous actions (default: false)
+CARE_SHADOW_MODE=true                        # System-wide observe-only mode (default: true)
 ```
 
 ### What Each Variable Does
@@ -58,8 +62,32 @@ CARE_WORKFLOW_TRIGGERS_ENABLED=true          # Allow workflow triggers
 | `AI_TRIGGERS_WORKER_INTERVAL_MS` | How often worker polls for triggers (milliseconds) | `15000` | `15000` |
 | `CARE_STATE_WRITE_ENABLED` | Allow C.A.R.E. to write relationship state changes to database | `true` | `true` |
 | `CARE_WORKFLOW_TRIGGERS_ENABLED` | Allow C.A.R.E. to send webhook notifications to workflows | `true` | `true` |
+| `CARE_AUTONOMY_ENABLED` | **Master kill switch** for autonomous actions (requires explicit opt-in) | `false` | `false` |
+| `CARE_SHADOW_MODE` | System-wide observe-only mode (logs decisions but never executes) | `true` | `true` |
 
 **Note**: These control **system behavior**, not per-tenant configuration. Per-tenant settings come from the Workflow Builder UI.
+
+#### Autonomy Safety Gates
+
+For C.A.R.E. to execute autonomous actions (without human approval), **ALL** of these must be true:
+
+1. ✅ `CARE_AUTONOMY_ENABLED=true` (system-wide kill switch)
+2. ✅ `CARE_SHADOW_MODE=false` (not in observe-only mode)
+3. ✅ Entity has `hands_off_enabled=true` (per-lead/contact flag)
+4. ✅ No open escalations for the entity
+5. ✅ Action not on prohibited list
+
+**If ANY gate fails → Action is blocked or escalated to human.**
+
+**Safe Defaults** (when variables not set in Doppler):
+- `CARE_AUTONOMY_ENABLED` defaults to `false` (no autonomous actions)
+- `CARE_SHADOW_MODE` defaults to `true` (observe-only)
+- This means C.A.R.E. will **only log and observe**, never execute actions
+
+**Shadow Mode Behavior:**
+- **System-wide** (`CARE_SHADOW_MODE=true`): Global observe-only, overrides all tenant settings
+- **Per-tenant** (CARE Start node config): Tenant-specific shadow mode (only applies if system-wide is `false`)
+- Use system-wide shadow mode for initial deployment, then enable per-tenant for gradual rollout
 
 ---
 
