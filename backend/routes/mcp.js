@@ -460,6 +460,7 @@ export default function createMCPRoutes(_pgPool) {
 
   // POST /api/mcp/execute-tool - Execute MCP tool
   router.post("/execute-tool", async (req, res) => {
+    const supa = getSupa();
     try {
       const { server_id, tool_name, parameters } = req.body || {};
 
@@ -1402,6 +1403,7 @@ export default function createMCPRoutes(_pgPool) {
 
   // POST /api/mcp/market-insights - Orchestrate web + CRM tools and summarize via LLM into JSON schema
   router.post("/market-insights", async (req, res) => {
+    const supa = getSupa();
     try {
       // User-Agent required by Wikipedia/MediaWiki API policy
       const WIKIPEDIA_USER_AGENT = 'AishaCRM/1.0 (market-insights; contact@aishacrm.com)';

@@ -28,10 +28,14 @@ ENV NODE_ENV=production
 # Create non-root user for security
 RUN addgroup -S app && adduser -S app -G app
 
-# Install Doppler CLI for runtime secret injection
+# Install Chromium for Puppeteer PDF generation + Doppler CLI for runtime secret injection
 RUN wget -q -t3 'https://packages.doppler.com/public/cli/rsa.8004D9FF50437357.key' -O /etc/apk/keys/cli@doppler-8004D9FF50437357.rsa.pub && \
     echo 'https://packages.doppler.com/public/cli/alpine/any-version/main' | tee -a /etc/apk/repositories && \
-    apk add doppler wget
+    apk add doppler wget chromium nss freetype harfbuzz ca-certificates ttf-freefont
+
+# Tell Puppeteer to use system Chromium instead of downloading its own
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
 # Copy package files and install production dependencies only
 COPY --from=build /app/package*.json ./

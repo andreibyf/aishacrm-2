@@ -1267,6 +1267,7 @@ export default function createReportRoutes(_pgPool) {
       // Launch browser
       browser = await puppeteer.default.launch({
         headless: 'new',
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
       });
 
@@ -1874,6 +1875,7 @@ export default function createReportRoutes(_pgPool) {
       // Launch browser with appropriate options
       browser = await puppeteer.default.launch({
         headless: 'new',
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
