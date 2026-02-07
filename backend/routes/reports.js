@@ -1306,11 +1306,12 @@ export default function createReportRoutes(_pgPool) {
           <meta charset="UTF-8">
           <title>Executive Market Intelligence Report</title>
           <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Merriweather:wght@300;400;700&display=swap');
+            /* System fonts for reliable Docker/Puppeteer rendering */
+            @page { margin: 0; }
             
             * { box-sizing: border-box; }
             body { 
-              font-family: 'Inter', sans-serif; 
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
               margin: 0; 
               padding: 0; 
               color: #1e293b; 
@@ -1346,7 +1347,7 @@ export default function createReportRoutes(_pgPool) {
             }
             
             .cover-title {
-              font-family: 'Merriweather', serif;
+              font-family: Georgia, 'Times New Roman', serif;
               font-size: 48px;
               font-weight: 700;
               margin-bottom: 20px;
@@ -1416,7 +1417,7 @@ export default function createReportRoutes(_pgPool) {
             }
             
             .section-title {
-              font-family: 'Merriweather', serif;
+              font-family: Georgia, 'Times New Roman', serif;
               font-size: 22px;
               font-weight: 700;
               color: #0f172a;
@@ -1429,7 +1430,16 @@ export default function createReportRoutes(_pgPool) {
             }
             
             .section-icon {
-              color: #3b82f6;
+              display: inline-block;
+              width: 10px;
+              height: 10px;
+              border-radius: 50%;
+              background: #3b82f6;
+              vertical-align: middle;
+              font-size: 0;
+              line-height: 0;
+              overflow: hidden;
+              flex-shrink: 0;
             }
             
             .narrative-box {
@@ -1623,6 +1633,105 @@ export default function createReportRoutes(_pgPool) {
               margin-right: 5px;
               margin-bottom: 5px;
             }
+
+            /* Executive Summary */
+            .exec-summary {
+              font-size: 16px;
+              line-height: 1.8;
+              color: #1e293b;
+              background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+              border: 1px solid #bfdbfe;
+              border-radius: 10px;
+              padding: 25px 30px;
+              font-weight: 500;
+            }
+
+            /* Industry Trends */
+            .trends-grid {
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 15px;
+              margin-top: 15px;
+            }
+            .trend-card {
+              background: #f8fafc;
+              border: 1px solid #e2e8f0;
+              border-radius: 8px;
+              padding: 18px;
+              border-left: 4px solid #8b5cf6;
+            }
+            .trend-name {
+              font-weight: 700;
+              font-size: 14px;
+              color: #1e293b;
+              margin-bottom: 6px;
+            }
+            .trend-desc {
+              font-size: 12px;
+              color: #475569;
+              line-height: 1.5;
+              margin-bottom: 8px;
+            }
+            .trend-meta {
+              display: flex;
+              gap: 10px;
+              font-size: 11px;
+            }
+            .trend-impact {
+              padding: 2px 8px;
+              border-radius: 10px;
+              font-weight: 600;
+              text-transform: uppercase;
+            }
+            .impact-high { background: #fee2e2; color: #991b1b; }
+            .impact-medium { background: #fef3c7; color: #92400e; }
+            .impact-low { background: #dcfce7; color: #166534; }
+            .trend-timeframe {
+              color: #64748b;
+              font-style: italic;
+            }
+
+            /* Enhanced Recommendations */
+            .rec-actions {
+              margin-top: 12px;
+              background: #f1f5f9;
+              border-radius: 6px;
+              padding: 12px 16px;
+            }
+            .rec-actions-title {
+              font-size: 12px;
+              font-weight: 700;
+              color: #334155;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+              margin-bottom: 8px;
+            }
+            .rec-actions-list {
+              margin: 0;
+              padding-left: 18px;
+              font-size: 12px;
+              color: #475569;
+            }
+            .rec-actions-list li {
+              margin-bottom: 4px;
+              line-height: 1.5;
+            }
+            .rec-meta {
+              display: flex;
+              gap: 20px;
+              margin-top: 12px;
+              font-size: 12px;
+              color: #475569;
+              flex-wrap: wrap;
+            }
+            .rec-meta strong {
+              color: #334155;
+            }
+
+            /* Page breaks */
+            .page-break {
+              page-break-before: always;
+            }
           </style>
         </head>
         <body>
@@ -1659,11 +1768,23 @@ export default function createReportRoutes(_pgPool) {
               <div class="header-title">Confidential</div>
             </div>
 
+            <!-- Executive Summary -->
+            ${insights.executive_summary ? `
+              <div class="section">
+                <div class="section-title">
+                  <span class="section-icon">S</span> Executive Summary
+                </div>
+                <div class="exec-summary">
+                  ${insights.executive_summary}
+                </div>
+              </div>
+            `: ''}
+
             <!-- Market Overview -->
             ${insights.market_overview ? `
               <div class="section">
                 <div class="section-title">
-                  <span class="section-icon">🌐</span> Market Overview
+                  <span class="section-icon">M</span> Market Overview
                 </div>
                 <div class="narrative-box">
                   ${insights.market_overview}
@@ -1675,7 +1796,7 @@ export default function createReportRoutes(_pgPool) {
             ${(insights.swot_analysis?.strengths?.length || insights.swot_analysis?.weaknesses?.length || insights.swot_analysis?.opportunities?.length || insights.swot_analysis?.threats?.length) ? `
               <div class="section">
                 <div class="section-title">
-                  <span class="section-icon">📊</span> SWOT Analysis
+                  <span class="section-icon">S</span> SWOT Analysis
                 </div>
                 <div class="swot-grid">
                   <div class="swot-card swot-strengths">
@@ -1710,7 +1831,7 @@ export default function createReportRoutes(_pgPool) {
             ${insights.competitive_landscape ? `
               <div class="section">
                 <div class="section-title">
-                  <span class="section-icon">🏆</span> Competitive Landscape
+                  <span class="section-icon">C</span> Competitive Landscape
                 </div>
                 <div class="narrative-box">
                   <p>${insights.competitive_landscape.overview || ''}</p>
@@ -1733,11 +1854,32 @@ export default function createReportRoutes(_pgPool) {
               </div>
             `: ''}
 
+            <!-- Industry Trends -->
+            ${safeArray(insights.industry_trends).length > 0 ? `
+              <div class="section page-break">
+                <div class="section-title">
+                  <span class="section-icon">T</span> Industry Trends
+                </div>
+                <div class="trends-grid">
+                  ${safeArray(insights.industry_trends).map(trend => `
+                    <div class="trend-card">
+                      <div class="trend-name">${trend.name}</div>
+                      <div class="trend-desc">${trend.description || ''}</div>
+                      <div class="trend-meta">
+                        <span class="trend-impact impact-${trend.impact || 'medium'}">${(trend.impact || 'medium').toUpperCase()} IMPACT</span>
+                        ${trend.timeframe ? `<span class="trend-timeframe">${trend.timeframe}</span>` : ''}
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            `: ''}
+
             <!-- Economic Indicators -->
             ${safeArray(insights.economic_indicators).length > 0 ? `
               <div class="section">
                 <div class="section-title">
-                  <span class="section-icon">📈</span> Key Economic Indicators
+                  <span class="section-icon">I</span> Key Economic Indicators
                 </div>
                 <div class="indicators-grid">
                   ${safeArray(insights.economic_indicators).map(ind => `
@@ -1757,7 +1899,7 @@ export default function createReportRoutes(_pgPool) {
             ${safeArray(insights.major_news).length > 0 ? `
               <div class="section">
                 <div class="section-title">
-                  <span class="section-icon">📰</span> Major News & Events
+                  <span class="section-icon">N</span> Major News & Events
                 </div>
                 <div>
                   ${safeArray(insights.major_news).slice(0, 5).map(news => `
@@ -1778,18 +1920,32 @@ export default function createReportRoutes(_pgPool) {
 
             <!-- Strategic Recommendations -->
             ${safeArray(insights.recommendations).length > 0 ? `
-              <div class="section">
+              <div class="section page-break">
                 <div class="section-title">
-                  <span class="section-icon">⚡</span> Strategic Recommendations
+                  <span class="section-icon">R</span> Strategic Recommendations
                 </div>
                 <div>
                   ${safeArray(insights.recommendations).map(rec => `
                     <div class="rec-card">
                       <div class="rec-header">
                         <div class="rec-title">${rec.title}</div>
-                        <div class="rec-priority priority-${rec.priority || 'medium'}">${rec.priority || 'MEDIUM'} PRIORITY</div>
+                        <div class="rec-priority priority-${rec.priority || 'medium'}">${(rec.priority || 'MEDIUM').toUpperCase()} PRIORITY</div>
                       </div>
                       <div class="rec-desc">${rec.description || ''}</div>
+                      ${safeArray(rec.action_items).length > 0 ? `
+                        <div class="rec-actions">
+                          <div class="rec-actions-title">Action Items</div>
+                          <ul class="rec-actions-list">
+                            ${safeArray(rec.action_items).map(item => `<li>${item}</li>`).join('')}
+                          </ul>
+                        </div>
+                      ` : ''}
+                      ${rec.timeline || rec.expected_impact ? `
+                        <div class="rec-meta">
+                          ${rec.timeline ? `<span><strong>Timeline:</strong> ${rec.timeline}</span>` : ''}
+                          ${rec.expected_impact ? `<span><strong>Expected Impact:</strong> ${rec.expected_impact}</span>` : ''}
+                        </div>
+                      ` : ''}
                     </div>
                   `).join('')}
                 </div>
