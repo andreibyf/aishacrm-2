@@ -1,11 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import {
   DndContext,
-  closestCenter,
+  pointerWithin,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
+  useDroppable,
 } from '@dnd-kit/core';
 import {
   SortableContext,
@@ -24,6 +25,21 @@ import {
 import OpportunityForm from './OpportunityForm';
 import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
 import { toast } from "sonner";
+
+// Wrapper that registers each stage column as a droppable target
+function DroppableColumn({ id, children }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      className={`kanban-droppable p-2 rounded-lg transition-colors flex-1 min-h-[400px] ${
+        isOver ? 'bg-blue-900/30 ring-2 ring-blue-500/40' : 'bg-slate-800/30'
+      }`}
+    >
+      {children}
+    </div>
+  );
+}
 
 const stageConfig = {
   prospecting: { title: 'Prospecting', color: "border-t-blue-500", cardId: 'opportunity_prospecting' },
@@ -259,7 +275,7 @@ export default function OpportunityKanbanBoard({ opportunities, accounts, contac
       
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCenter}
+        collisionDetection={pointerWithin}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
         onDragCancel={handleDragCancel}
@@ -290,9 +306,7 @@ export default function OpportunityKanbanBoard({ opportunities, accounts, contac
                   items={opportunityIds}
                   strategy={verticalListSortingStrategy}
                 >
-                  <div
-                    className="kanban-droppable p-2 rounded-lg transition-colors flex-1 min-h-[400px] bg-slate-800/30"
-                  >
+                  <DroppableColumn id={`stage-${stage.id}`}>
                     {stageOpportunities.map((opp) => (
                       <OpportunityKanbanCard
                         key={opp.id}
@@ -304,7 +318,7 @@ export default function OpportunityKanbanBoard({ opportunities, accounts, contac
                         onView={onView}
                       />
                     ))}
-                  </div>
+                  </DroppableColumn>
                 </SortableContext>
               </div>
             );
