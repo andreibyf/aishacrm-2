@@ -7,11 +7,19 @@ models:
     provider: lmstudio
     model: qwen2.5-coder-32b
     apiBase: http://localhost:1234/v1
+    roles:
+      - chat
+      - edit
+      - apply
 
   - name: DeepSeek-Coder-V2-Lite
     provider: lmstudio
-    model: deepseek-coder-v2-lite
+    model: deepseek-coder-v2-lite-16b
     apiBase: http://localhost:1234/v1
+    roles:
+      - chat
+      - edit
+      - apply
 
 context:
   - provider: repo-map
