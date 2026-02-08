@@ -1,4 +1,7 @@
 import { execSync, spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert';
 import test from 'node:test';
 import { withTimeoutSkip, getTestTimeoutMs } from '../helpers/timeout.js';
@@ -27,10 +30,22 @@ async function isOfficeVizHealthy() {
   }
 }
 
-function injectTestEvents() {
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+function resolveEmitScriptPath() {
+  const candidates = [
+    path.resolve(process.cwd(), 'scripts', 'maintenance', 'emit_viz_test_events.js'),
+    path.resolve(process.cwd(), '..', 'scripts', 'maintenance', 'emit_viz_test_events.js'),
+    path.resolve(__dirname, '..', '..', '..', 'scripts', 'maintenance', 'emit_viz_test_events.js'),
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate)) || null;
+}
+
+function injectTestEvents(scriptPath) {
   // Generate a small, deterministic set of events and pipe them into the telemetry sidecar volume.
   const events = execSync(
-    'node scripts/maintenance/emit_viz_test_events.js --count 1 --complete 1 --assignee ops_manager:dev --tenant dev --interval-ms 10',
+    `node "${scriptPath}" --count 1 --complete 1 --assignee ops_manager:dev --tenant dev --interval-ms 10`,
     { cwd: process.cwd() }
   );
 
@@ -61,10 +76,17 @@ test('office-viz ingests backoffice agent telemetry (timeout-protected)', { time
   await withTimeoutSkip(t, async () => {
     if (!(await isOfficeVizHealthy())) {
       t.skip('office-viz not reachable on /health');
+      return;
+    }
+
+    const emitScriptPath = resolveEmitScriptPath();
+    if (!emitScriptPath) {
+      t.skip('emit_viz_test_events.js not available in this environment');
+      return;
     }
 
     // Inject a single backoffice/ops task event set into the telemetry stream.
-    injectTestEvents();
+    injectTestEvents(emitScriptPath);
 
     const evt = await waitForEvent(
       (e) => e?.type === 'task_created' && e?.agent_id === 'ops_manager:dev',

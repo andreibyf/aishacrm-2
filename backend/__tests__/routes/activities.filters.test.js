@@ -239,7 +239,7 @@ after(async () => {
   assert.ok(activity, 'Response should include created activity data');
   assert.equal(activity.due_date, '2025-11-20');
   // DB stores time as HH:MM:SS format (with seconds), even if sent as HH:MM
-  assert.equal(activity.due_time, '14:45:00', 'due_time should be stored in HH:MM:SS format');
+  assert.equal(activity.due_time, '19:45:00', 'due_time should be stored in UTC HH:MM:SS format');
   assert.equal(activity.metadata?.original_due_datetime, aiDueDate);
   assert.equal(activity.metadata?.original_timezone_offset, '-05:00');
 });

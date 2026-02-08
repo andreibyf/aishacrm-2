@@ -11,6 +11,7 @@ export function getTestTimeoutMs() {
 export async function withTimeoutSkip(t, fn, timeoutMs = getTestTimeoutMs()) {
   let timer = null;
   let timedOut = false;
+  let runError = null;
 
   const timeout = new Promise((resolve) => {
     timer = setTimeout(() => {
@@ -20,8 +21,13 @@ export async function withTimeoutSkip(t, fn, timeoutMs = getTestTimeoutMs()) {
   });
 
   const run = (async () => {
-    await fn();
-    return true;
+    try {
+      await fn();
+      return true;
+    } catch (err) {
+      runError = err;
+      return false;
+    }
   })();
 
   await Promise.race([run, timeout]);
@@ -32,5 +38,9 @@ export async function withTimeoutSkip(t, fn, timeoutMs = getTestTimeoutMs()) {
 
   if (timedOut) {
     t.skip(`Skipped after ${timeoutMs}ms (investigate later)`);
+  }
+
+  if (runError) {
+    throw runError;
   }
 }
