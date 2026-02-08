@@ -380,14 +380,27 @@ jobs:
           DOPPLER_PROJECT: ${{ vars.DOPPLER_PROJECT }}
           DOPPLER_CONFIG: ${{ vars.DOPPLER_CONFIG }}
 
-      - name: Deploy Compose File to VPS
+      - name: Deploy root-level files to VPS
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ steps.doppler-deploy.outputs.PROD_VPS_HOST }}
           username: ${{ steps.doppler-deploy.outputs.PROD_VPS_USER }}
           key: ${{ steps.doppler-deploy.outputs.PROD_VPS_SSH_KEY }}
           port: ${{ steps.doppler-deploy.outputs.PROD_VPS_PORT || 22 }}
-          source: "docker-compose.prod.yml,nginx-n8n.conf,nginx-proxy/nginx.conf,braid-mcp-node-server/docker-compose.prod.yml,braid-mcp-node-server/.env.example"
+          source: "docker-compose.prod.yml,nginx-n8n.conf,nginx-proxy/nginx.conf"
+          target: "/opt/aishacrm/"
+          strip_components: 0
+          timeout: 120s
+          command_timeout: 120s
+
+      - name: Deploy MCP files to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ steps.doppler-deploy.outputs.PROD_VPS_HOST }}
+          username: ${{ steps.doppler-deploy.outputs.PROD_VPS_USER }}
+          key: ${{ steps.doppler-deploy.outputs.PROD_VPS_SSH_KEY }}
+          port: ${{ steps.doppler-deploy.outputs.PROD_VPS_PORT || 22 }}
+          source: "braid-mcp-node-server/docker-compose.prod.yml,braid-mcp-node-server/.env.example"
           target: "/opt/aishacrm/"
           strip_components: 0
           timeout: 120s
