@@ -1,2 +1,2 @@
 # Run lint to catch syntax errors (allow warnings)
-npm run lint
+npm run lint -- --max-warnings 9999

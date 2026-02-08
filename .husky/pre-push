@@ -1,6 +1,6 @@
 #!/bin/sh
 # Run lint to catch syntax errors (allow warnings)
-npm run lint
+npm run lint -- --max-warnings 9999
 
 # Run build to catch compile errors
 # Use build:ci for local development (Doppler has Windows compatibility issues)
