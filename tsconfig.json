@@ -32,6 +32,7 @@
     "src/**/*.js",
     "src/**/*.jsx",
     "vite.config.ts",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    "playwright.config.ts"
   ]
 }

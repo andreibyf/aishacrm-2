@@ -7,15 +7,20 @@ models:
     provider: lmstudio
     model: qwen2.5-coder-32b
     apiBase: http://localhost:1234/v1
-    useLegacyCompletions: false
 
   - name: DeepSeek-Coder-V2-Lite
     provider: lmstudio
     model: deepseek-coder-v2-lite
     apiBase: http://localhost:1234/v1
-    useLegacyCompletions: false
 
 context:
   - provider: repo-map
     params:
       includeSignatures: false
+      include:
+        - src/**
+        - backend/**
+        - shared/**
+        - pages/**
+        - tests/**
+        - supabase/**
