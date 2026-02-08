@@ -392,9 +392,15 @@ export default function createOpportunityV2Routes(_pgPool) {
         sortFields.push({ field: 'updated_at', ascending: false });
       }
 
+      // When sorting by amount, exclude nulls to avoid descending order issues
+      // with PostgREST null-first behavior on DESC queries.
+      if (sortFields.some(({ field }) => field === 'amount')) {
+        q = q.not('amount', 'is', null);
+      }
+
       // Apply all sort fields in order
       for (const { field, ascending } of sortFields) {
-        q = q.order(field, { ascending });
+        q = q.order(field, { ascending, nullsFirst: false });
       }
       
       // Apply pagination range
@@ -403,7 +409,43 @@ export default function createOpportunityV2Routes(_pgPool) {
       const { data, error, count } = await q;
       if (error) throw new Error(error.message);
 
-      const opportunities = (data || []).map(opp => {
+      let rows = Array.isArray(data) ? data : [];
+
+      if (sortFields.some(({ field }) => field === 'amount')) {
+        const withAmount = rows.filter(row => row?.amount !== null && row?.amount !== undefined);
+        if (withAmount.length > 0) {
+          rows = withAmount;
+        }
+      }
+
+      // Ensure deterministic ordering for null values (PostgREST defaults to nulls first on DESC).
+      if (rows.length > 1 && sortFields.length > 0) {
+        rows.sort((left, right) => {
+          for (const { field, ascending } of sortFields) {
+            const aVal = left?.[field];
+            const bVal = right?.[field];
+
+            if (aVal === null || aVal === undefined) {
+              if (bVal === null || bVal === undefined) continue;
+              return 1; // nulls last
+            }
+            if (bVal === null || bVal === undefined) {
+              return -1; // nulls last
+            }
+
+            if (aVal === bVal) continue;
+
+            const aComp = typeof aVal === 'string' ? aVal.toLowerCase() : aVal;
+            const bComp = typeof bVal === 'string' ? bVal.toLowerCase() : bVal;
+            const comparison = aComp > bComp ? 1 : -1;
+
+            return ascending ? comparison : -comparison;
+          }
+          return 0;
+        });
+      }
+
+      const opportunities = rows.map(opp => {
         const expanded = expandMetadata(opp);
         // Add denormalized names from FK joins
         if (opp.employee) {

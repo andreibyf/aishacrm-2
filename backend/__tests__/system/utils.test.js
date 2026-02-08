@@ -6,11 +6,11 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 
 let app;
-const testPort = 3103;
 let server;
+let baseUrl;
 
 async function request(method, path, body) {
-  const res = await fetch(`http://localhost:${testPort}${path}`, {
+  const res = await fetch(`${baseUrl}${path}`, {
     method,
     headers: { 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
@@ -27,8 +27,10 @@ describe('Utils Routes', () => {
     app.use(express.json());
     app.use('/api/utils', createUtilsRoutes(null));
 
-    server = app.listen(testPort);
+    server = app.listen(0);
     await new Promise((r) => server.on('listening', r));
+    const address = server.address();
+    baseUrl = `http://localhost:${address.port}`;
   });
 
   after(async () => {

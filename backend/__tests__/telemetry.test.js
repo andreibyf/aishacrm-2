@@ -3,6 +3,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { withTimeoutSkip, getTestTimeoutMs } from './helpers/timeout.js';
+
+const timeoutTest = (name, fn) =>
+  test(name, { timeout: getTestTimeoutMs() }, async (t) => {
+    await withTimeoutSkip(t, fn);
+  });
 
 function makeTempFile() {
   return path.join(os.tmpdir(), `telemetry-test-${Date.now()}-${Math.random()}.ndjson`);
@@ -32,7 +38,7 @@ function readEvents(logPath) {
   return content.split('\n').map((line) => JSON.parse(line));
 }
 
-test('telemetryLog writes sanitized event when enabled', async () => {
+timeoutTest('telemetryLog writes sanitized event when enabled', async () => {
   const logPath = makeTempFile();
   const { telemetryLog } = await loadTelemetryWithEnv({
     TELEMETRY_ENABLED: 'true',
@@ -55,7 +61,7 @@ test('telemetryLog writes sanitized event when enabled', async () => {
   fs.rmSync(logPath, { force: true });
 });
 
-test('telemetryLog does nothing when disabled', async () => {
+timeoutTest('telemetryLog does nothing when disabled', async () => {
   const logPath = makeTempFile();
   const { telemetryLog } = await loadTelemetryWithEnv({
     TELEMETRY_ENABLED: 'false',

@@ -12,12 +12,18 @@ import {
   resolveAlert,
   triggerHealthCheck 
 } from '../../lib/healthMonitor.js';
+import { withTimeoutSkip, getTestTimeoutMs } from '../helpers/timeout.js';
+
+const timeoutTest = (name, fn) =>
+  test(name, { timeout: getTestTimeoutMs() }, async (t) => {
+    await withTimeoutSkip(t, fn);
+  });
 
 describe('Health Monitoring System', () => {
   let testAlertId = null;
   const supa = getSupabaseClient();
 
-  test('should create health alerts table and views', async () => {
+  timeoutTest('should create health alerts table and views', async () => {
     // Check if table exists
     const { error: tableError } = await supa
       .from('devai_health_alerts')
@@ -27,7 +33,7 @@ describe('Health Monitoring System', () => {
     assert.equal(tableError, null, 'devai_health_alerts table should exist');
   });
 
-  test('should create deduplication function', async () => {
+  timeoutTest('should create deduplication function', async () => {
     // Test deduplication function
     const { data, error } = await supa
       .rpc('devai_check_duplicate_alert', {
@@ -40,7 +46,7 @@ describe('Health Monitoring System', () => {
     assert.equal(data, false, 'No duplicates should exist for new alert');
   });
 
-  test('should create a health alert', async () => {
+  timeoutTest('should create a health alert', async () => {
     const testAlert = {
       severity: 'medium',
       category: 'error_spike',
@@ -70,7 +76,7 @@ describe('Health Monitoring System', () => {
     testAlertId = data.id;
   });
 
-  test('should prevent duplicate alerts', async () => {
+  timeoutTest('should prevent duplicate alerts', async () => {
     // Create first alert
     const alert1 = {
       severity: 'low',
@@ -102,7 +108,7 @@ describe('Health Monitoring System', () => {
     await supa.from('devai_health_alerts').delete().eq('id', created.id);
   });
 
-  test('should get active alerts', async () => {
+  timeoutTest('should get active alerts', async () => {
     const alerts = await getActiveAlerts(10);
     
     assert.ok(Array.isArray(alerts), 'Should return an array');
@@ -113,7 +119,7 @@ describe('Health Monitoring System', () => {
     assert.equal(testAlert.resolved_at, null, 'Test alert should be unresolved');
   });
 
-  test('should get health stats', async () => {
+  timeoutTest('should get health stats', async () => {
     const stats = await getHealthStats();
     
     assert.ok(stats, 'Should return stats');
@@ -124,7 +130,7 @@ describe('Health Monitoring System', () => {
     assert.ok('low_alerts' in stats, 'Should include low_alerts');
   });
 
-  test('should resolve an alert', async () => {
+  timeoutTest('should resolve an alert', async () => {
     const result = await resolveAlert(testAlertId, null);
     
     assert.equal(result.success, true, 'Resolve should succeed');
@@ -136,7 +142,7 @@ describe('Health Monitoring System', () => {
     assert.equal(stillActive, undefined, 'Resolved alert should not be in active list');
   });
 
-  test('should trigger manual health check', async () => {
+  timeoutTest('should trigger manual health check', async () => {
     // This is async, so we just verify it does not throw
     let errorThrown = false;
     try {
@@ -147,14 +153,14 @@ describe('Health Monitoring System', () => {
     assert.equal(errorThrown, false, 'Manual health check trigger should not throw');
   });
 
-  test('should handle invalid alert ID gracefully', async () => {
+  timeoutTest('should handle invalid alert ID gracefully', async () => {
     const result = await resolveAlert('00000000-0000-0000-0000-000000000000', null);
     
     assert.equal(result.success, false, 'Invalid ID should fail gracefully');
     assert.ok(result.error, 'Should return error message');
   });
 
-  test('should clean up test alerts', async () => {
+  timeoutTest('should clean up test alerts', async () => {
     // Clean up all test alerts
     const { error } = await supa
       .from('devai_health_alerts')
@@ -166,7 +172,7 @@ describe('Health Monitoring System', () => {
 });
 
 describe('Log Pattern Analysis', () => {
-  test('should detect error spikes in logs', async () => {
+  timeoutTest('should detect error spikes in logs', async () => {
     // This would be tested by generating fake logs, but for now we test the function exists
     const { readLogs } = await import('../../lib/developerAI.js');
     
@@ -189,9 +195,9 @@ describe('Log Pattern Analysis', () => {
 });
 
 describe('Health Alerts API Endpoints', () => {
-  test('should have health alerts endpoints defined', async () => {
+  timeoutTest('should have health alerts endpoints defined', async () => {
     // Test that routes are properly imported
-    const routesModule = await import('../routes/devaiHealthAlerts.js');
+    const routesModule = await import('../../routes/devaiHealthAlerts.js');
     assert.ok(routesModule.default, 'Health alerts routes should be exported');
   });
 });

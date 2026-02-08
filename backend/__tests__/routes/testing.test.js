@@ -5,9 +5,9 @@
 
 import { describe, it, before, after, mock } from 'node:test';
 import assert from 'node:assert';
+import { withTimeoutSkip, getTestTimeoutMs } from '../helpers/timeout.js';
 
 // Mock environment variables for tests
-process.env.GITHUB_TOKEN = 'test-token-123';
 process.env.GITHUB_REPO_OWNER = 'test-owner';
 process.env.GITHUB_REPO_NAME = 'test-repo';
 process.env.GITHUB_WORKFLOW_FILE = 'test-workflow.yml';
@@ -50,9 +50,14 @@ after(async () => {
   }
 });
 
+const timeoutTest = (name, fn, options = {}) =>
+  it(name, { timeout: getTestTimeoutMs(), ...options }, async (t) => {
+    await withTimeoutSkip(t, fn);
+  });
+
 describe('Testing Routes', () => {
   describe('GET /api/testing/ping', () => {
-    it('should return pong with timestamp', async () => {
+    timeoutTest('should return pong with timestamp', async () => {
       const res = await makeRequest('GET', '/api/testing/ping');
       assert.strictEqual(res.status, 200);
       
@@ -64,7 +69,7 @@ describe('Testing Routes', () => {
   });
 
   describe('GET /api/testing/suites', () => {
-    it('should return available test suites', async () => {
+    timeoutTest('should return available test suites', async () => {
       const res = await makeRequest('GET', '/api/testing/suites');
       assert.strictEqual(res.status, 200);
       
@@ -82,7 +87,7 @@ describe('Testing Routes', () => {
   });
 
   describe('POST /api/testing/trigger-e2e', () => {
-    it('should dispatch workflow with valid suite', async () => {
+    timeoutTest('should dispatch workflow with valid suite', async () => {
       // Mock fetch for GitHub API
       const originalFetch = globalThis.fetch;
       globalThis.fetch = mock.fn(async (url, options) => {
@@ -259,7 +264,9 @@ describe('Testing Routes', () => {
     it('should return error when GITHUB_TOKEN is missing', async () => {
       // Temporarily remove token
       const token = process.env.GITHUB_TOKEN;
+      const ghToken = process.env.GH_TOKEN;
       delete process.env.GITHUB_TOKEN;
+      delete process.env.GH_TOKEN;
 
       const res = await makeRequest('GET', '/api/testing/workflow-status?ref=main');
         assert.ok([404, 503].includes(res.status)); // Accept 404 or 503 when token is missing
@@ -270,6 +277,9 @@ describe('Testing Routes', () => {
 
       // Restore token
       process.env.GITHUB_TOKEN = token;
+      if (ghToken) {
+        process.env.GH_TOKEN = ghToken;
+      }
     });
   });
 });

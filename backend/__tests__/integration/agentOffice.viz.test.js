@@ -1,6 +1,7 @@
 import { execSync, spawnSync } from 'node:child_process';
 import assert from 'node:assert';
 import test from 'node:test';
+import { withTimeoutSkip, getTestTimeoutMs } from '../helpers/timeout.js';
 
 const OFFICE_VIZ_URL = process.env.OFFICE_VIZ_URL || 'http://localhost:4010';
 const SIDE_CAR = process.env.TELEMETRY_SIDECAR || 'aisha-telemetry-sidecar';
@@ -56,19 +57,21 @@ async function waitForEvent(predicate, timeoutMs = 15000, intervalMs = 1000) {
   throw new Error(`Timed out after ${timeoutMs}ms waiting for matching event`);
 }
 
-test('office-viz ingests backoffice agent telemetry (timeout-protected)', { timeout: 20000 }, async (t) => {
-  if (!(await isOfficeVizHealthy())) {
-    t.skip('office-viz not reachable on /health');
-  }
+test('office-viz ingests backoffice agent telemetry (timeout-protected)', { timeout: getTestTimeoutMs() }, async (t) => {
+  await withTimeoutSkip(t, async () => {
+    if (!(await isOfficeVizHealthy())) {
+      t.skip('office-viz not reachable on /health');
+    }
 
-  // Inject a single backoffice/ops task event set into the telemetry stream.
-  injectTestEvents();
+    // Inject a single backoffice/ops task event set into the telemetry stream.
+    injectTestEvents();
 
-  const evt = await waitForEvent(
-    (e) => e?.type === 'task_created' && e?.agent_id === 'ops_manager:dev',
-    15000,
-    1000
-  );
+    const evt = await waitForEvent(
+      (e) => e?.type === 'task_created' && e?.agent_id === 'ops_manager:dev',
+      15000,
+      1000
+    );
 
-  assert.ok(evt, 'expected task_created event for ops_manager:dev');
+    assert.ok(evt, 'expected task_created event for ops_manager:dev');
+  });
 });

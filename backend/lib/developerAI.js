@@ -681,7 +681,7 @@ async function searchCode({ pattern, directory = 'backend', file_pattern, case_i
   }
 }
 
-async function readLogs({ log_type, lines = 100, filter, analyze_patterns = false, since_minutes = null }) {
+export async function readLogs({ log_type, lines = 100, filter, analyze_patterns = false, since_minutes = null }) {
   const maxLines = Math.min(lines, 500);
   const isProduction = process.env.NODE_ENV === 'production';
   const isDocker = process.env.DOCKER_CONTAINER === 'true' || await isRunningInDocker();

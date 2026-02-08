@@ -547,17 +547,64 @@ async function isRunningInDocker() {
 export async function getHealthStats() {
   try {
     const supa = getSupabaseClient();
+    const normalizeStats = (stats) => ({
+      active_alerts: stats?.active_alerts ?? 0,
+      critical_alerts: stats?.critical_alerts ?? 0,
+      high_alerts: stats?.high_alerts ?? 0,
+      medium_alerts: stats?.medium_alerts ?? 0,
+      low_alerts: stats?.low_alerts ?? 0,
+      alerts_24h: stats?.alerts_24h ?? 0,
+      alerts_1h: stats?.alerts_1h ?? 0,
+      last_alert_time: stats?.last_alert_time ?? null,
+    });
     const { data, error } = await supa
       .from('devai_health_stats')
       .select('*')
-      .single();
+      .maybeSingle();
 
-    if (error) {
-      console.error('[Health Monitor] Failed to get stats:', error.message);
+    if (!error && data) {
+      return normalizeStats(data);
+    }
+
+    if (error && error.code !== 'PGRST116') {
+      console.warn('[Health Monitor] devai_health_stats unavailable, falling back:', error.message);
+    }
+
+    // Fallback: compute stats from alerts table when the stats view is missing.
+    const { data: alerts, error: alertsError } = await supa
+      .from('devai_health_alerts')
+      .select('severity, detected_at, resolved_at');
+
+    if (alertsError) {
+      console.error('[Health Monitor] Failed to compute stats:', alertsError.message);
       return null;
     }
 
-    return data;
+    const rows = alerts || [];
+    const activeAlerts = rows.filter(row => !row.resolved_at);
+    const now = Date.now();
+    const oneHourAgo = now - 60 * 60 * 1000;
+    const dayAgo = now - 24 * 60 * 60 * 1000;
+
+    const lastAlertTime = rows
+      .map(row => row.detected_at)
+      .filter(Boolean)
+      .sort()
+      .slice(-1)[0] || null;
+
+    const countBySeverity = (severity) =>
+      activeAlerts.filter(row => row.severity === severity).length;
+
+    return normalizeStats({
+      active_alerts: activeAlerts.length,
+      critical_alerts: countBySeverity('critical'),
+      high_alerts: countBySeverity('high'),
+      medium_alerts: countBySeverity('medium'),
+      low_alerts: countBySeverity('low'),
+      alerts_24h: rows.filter(row => row.detected_at && new Date(row.detected_at).getTime() >= dayAgo).length,
+      alerts_1h: rows.filter(row => row.detected_at && new Date(row.detected_at).getTime() >= oneHourAgo).length,
+      last_alert_time: lastAlertTime,
+    });
   } catch (err) {
     console.error('[Health Monitor] getHealthStats failed:', err.message);
     return null;

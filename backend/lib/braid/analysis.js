@@ -397,6 +397,56 @@ export const TOOL_GRAPH = {
     description: 'Delete a lead record'
   },
 
+  // ========== OPPORTUNITIES ==========
+  create_opportunity: {
+    category: 'OPPORTUNITIES',
+    dependencies: [],
+    inputs: ['name', 'amount', 'stage', 'close_date', 'account_id', 'contact_id'],
+    outputs: ['opportunity'],
+    effects: ['create'],
+    description: 'Create a new opportunity (deal)'
+  },
+  get_opportunity_details: {
+    category: 'OPPORTUNITIES',
+    dependencies: [],
+    inputs: ['opportunity_id'],
+    outputs: ['opportunity'],
+    effects: ['read'],
+    description: 'Retrieve opportunity details by ID'
+  },
+  list_opportunities_by_stage: {
+    category: 'OPPORTUNITIES',
+    dependencies: [],
+    inputs: ['stage', 'limit'],
+    outputs: ['opportunities[]'],
+    effects: ['read'],
+    description: 'List opportunities filtered by stage'
+  },
+  search_opportunities: {
+    category: 'OPPORTUNITIES',
+    dependencies: [],
+    inputs: ['query', 'limit'],
+    outputs: ['opportunities[]'],
+    effects: ['read'],
+    description: 'Search opportunities by name or description'
+  },
+  update_opportunity: {
+    category: 'OPPORTUNITIES',
+    dependencies: ['get_opportunity_details'],
+    inputs: ['opportunity_id', 'updates'],
+    outputs: ['opportunity'],
+    effects: ['update'],
+    description: 'Update opportunity fields'
+  },
+  delete_opportunity: {
+    category: 'OPPORTUNITIES',
+    dependencies: ['get_opportunity_details'],
+    inputs: ['opportunity_id'],
+    outputs: [],
+    effects: ['delete'],
+    description: 'Delete an opportunity'
+  },
+
   // ========== SNAPSHOT ==========
   fetch_tenant_snapshot: {
     category: 'SNAPSHOT',

@@ -76,6 +76,7 @@ export function startAiTriggersWorker(_pool, intervalMs = DEFAULT_INTERVAL_MS) {
     return;
   }
 
+  console.info('[AiTriggersWorker] Starting');
   logger.info({ intervalMs }, '[AiTriggersWorker] Starting');
   
   // Run immediately on start

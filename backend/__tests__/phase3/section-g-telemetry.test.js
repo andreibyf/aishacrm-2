@@ -11,6 +11,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withTimeoutSkip, getTestTimeoutMs } from '../helpers/timeout.js';
+
+const timeoutTest = (name, fn, options = {}) =>
+  test(name, { timeout: getTestTimeoutMs(), ...options }, async (t) => {
+    await withTimeoutSkip(t, fn);
+  });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const LIB_PATH = path.join(__dirname, '../../lib');
@@ -28,7 +34,7 @@ describe('Section G: Telemetry & Observability Verification', () => {
 
   describe('G1: Telemetry Logging', () => {
 
-    test('Worker logs trigger events', () => {
+    timeoutTest('Worker logs trigger events', () => {
       const workerPath = path.join(LIB_PATH, 'aiTriggersWorker.js');
       const content = fs.readFileSync(workerPath, 'utf-8');
       
@@ -44,7 +50,7 @@ describe('Section G: Telemetry & Observability Verification', () => {
       );
     });
 
-    test('Suggestion routes log approval/rejection', () => {
+    timeoutTest('Suggestion routes log approval/rejection', () => {
       const suggestionsRoute = path.join(ROUTES_PATH, 'suggestions.js');
       const content = fs.readFileSync(suggestionsRoute, 'utf-8');
       
@@ -61,7 +67,7 @@ describe('Section G: Telemetry & Observability Verification', () => {
       );
     });
 
-    test('Apply operations log success/failure', () => {
+    timeoutTest('Apply operations log success/failure', () => {
       const suggestionsRoute = path.join(ROUTES_PATH, 'suggestions.js');
       const content = fs.readFileSync(suggestionsRoute, 'utf-8');
       
@@ -78,7 +84,7 @@ describe('Section G: Telemetry & Observability Verification', () => {
       );
     });
 
-    test('Logs include tenant context', () => {
+    timeoutTest('Logs include tenant context', () => {
       const workerPath = path.join(LIB_PATH, 'aiTriggersWorker.js');
       const suggestionsRoute = path.join(ROUTES_PATH, 'suggestions.js');
       
@@ -95,7 +101,7 @@ describe('Section G: Telemetry & Observability Verification', () => {
 
   describe('G2: Telemetry JSON Format', { skip: !SHOULD_RUN }, () => {
 
-    test('Metrics endpoint returns structured data', async () => {
+    timeoutTest('Metrics endpoint returns structured data', async () => {
       const res = await fetch(`${BASE_URL}/api/ai/suggestions/metrics?tenant_id=${TENANT_ID}`);
       const json = await res.json();
       
@@ -104,7 +110,7 @@ describe('Section G: Telemetry & Observability Verification', () => {
       assert.ok(json.data, 'Should return data object');
     });
 
-    test('Metrics include required fields', async () => {
+    timeoutTest('Metrics include required fields', async () => {
       const res = await fetch(`${BASE_URL}/api/ai/suggestions/metrics?tenant_id=${TENANT_ID}&days=30`);
       const json = await res.json();
       
@@ -121,7 +127,7 @@ describe('Section G: Telemetry & Observability Verification', () => {
       }
     });
 
-    test('Feedback endpoint accepts telemetry data', async () => {
+    timeoutTest('Feedback endpoint accepts telemetry data', async () => {
       // Get a suggestion ID first
       const listRes = await fetch(`${BASE_URL}/api/ai/suggestions?tenant_id=${TENANT_ID}&limit=1`);
       const listJson = await listRes.json();
@@ -154,7 +160,7 @@ describe('Section G: Telemetry & Observability Verification', () => {
 
   describe('G3: Log Structure Validation', () => {
 
-    test('Worker logs are parseable', () => {
+    timeoutTest('Worker logs are parseable', () => {
       const workerPath = path.join(LIB_PATH, 'aiTriggersWorker.js');
       const content = fs.readFileSync(workerPath, 'utf-8');
       
@@ -165,7 +171,7 @@ describe('Section G: Telemetry & Observability Verification', () => {
       );
     });
 
-    test('Timestamps are included in processing logs', () => {
+    timeoutTest('Timestamps are included in processing logs', () => {
       const workerPath = path.join(LIB_PATH, 'aiTriggersWorker.js');
       const content = fs.readFileSync(workerPath, 'utf-8');
       

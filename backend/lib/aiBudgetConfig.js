@@ -72,7 +72,7 @@ export const DEFAULT_MEMORY = {
   TOP_K: 8,
   
   // Max characters per memory chunk (before token estimation)
-  MAX_CHUNK_CHARS: 3500,
+  MAX_CHUNK_CHARS: 2000,
   
   // Minimum similarity score for memory retrieval
   MIN_SIMILARITY: 0.7,
