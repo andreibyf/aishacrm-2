@@ -3,36 +3,51 @@ version: 1.0.0
 schema: v1
 
 models:
-  - name: Llama 3.1 (Chat)
+  # PRIMARY: Fast chat model (~2-3x faster than 7B on CPU)
+  - name: Qwen 3B (Intel GPU)
     provider: ollama
-    model: llama3.1:8b
-    apiBase: http://127.0.0.1:11435
+    model: qwen2.5-coder:3b
+    apiBase: http://127.0.0.1:11434
+    defaultCompletionOptions:
+      maxTokens: 1024
+      temperature: 0.3
     roles:
       - chat
-    # Best for: General reasoning, conversation, understanding context
+      - edit
+      - apply
 
-  - name: Qwen Coder (Code Chat)
+  # AUTOCOMPLETE: Fastest model for inline completions
+  - name: DeepSeek 1.3B (Autocomplete)
+    provider: ollama
+    model: deepseek-coder:1.3b
+    apiBase: http://127.0.0.1:11434
+    roles:
+      - autocomplete
+
+  # FALLBACK: Larger models available for complex tasks (manually select)
+  - name: Qwen 7B (Deep Analysis)
     provider: ollama
     model: qwen2.5-coder:7b
     apiBase: http://127.0.0.1:11435
-    # Available as secondary chat option - code-focused conversations
+    defaultCompletionOptions:
+      maxTokens: 1024
+      temperature: 0.3
 
-  - name: DeepSeek Coder (Edit)
+  - name: DeepSeek 6.7B (Code Gen)
     provider: ollama
     model: deepseek-coder:6.7b
     apiBase: http://127.0.0.1:11435
-    roles:
-      - edit
-      - apply
-    # Best for: Code generation, refactoring, precise edits
+    defaultCompletionOptions:
+      maxTokens: 1024
+      temperature: 0.3
 
-  - name: DeepSeek Coder (Autocomplete)
+  - name: Llama 3.1 8B (Reasoning)
     provider: ollama
-    model: deepseek-coder:1.3b
+    model: llama3.1:8b
     apiBase: http://127.0.0.1:11435
-    roles:
-      - autocomplete
-    # Best for: Fast inline completions, minimal latency
+    defaultCompletionOptions:
+      maxTokens: 1024
+      temperature: 0.3
 
 context:
   - provider: repo-map
