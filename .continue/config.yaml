@@ -3,23 +3,27 @@ version: 1.0.0
 schema: v1
 
 models:
-  - name: Qwen2.5-Coder-32B
-    provider: lmstudio
-    model: qwen2.5-coder-32b
-    apiBase: http://localhost:1234/v1
+  - name: Qwen Coder (Context)
+    provider: ollama
+    model: qwen2.5-coder:7b
+    apiBase: http://127.0.0.1:11435
     roles:
       - chat
+
+  - name: DeepSeek Coder (Debug)
+    provider: ollama
+    model: deepseek-coder:6.7b
+    apiBase: http://127.0.0.1:11435
+    roles:
       - edit
       - apply
 
-  - name: DeepSeek-Coder-V2-Lite
-    provider: lmstudio
-    model: deepseek-coder-v2-lite-16b
-    apiBase: http://localhost:1234/v1
+  - name: DeepSeek Coder Fast
+    provider: ollama
+    model: deepseek-coder:1.3b
+    apiBase: http://127.0.0.1:11435
     roles:
-      - chat
-      - edit
-      - apply
+      - autocomplete
 
 context:
   - provider: repo-map
