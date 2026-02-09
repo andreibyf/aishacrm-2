@@ -3,27 +3,36 @@ version: 1.0.0
 schema: v1
 
 models:
-  - name: Qwen Coder (Context)
+  - name: Llama 3.1 (Chat)
     provider: ollama
-    model: qwen2.5-coder:7b
+    model: llama3.1:8b
     apiBase: http://127.0.0.1:11435
     roles:
       - chat
+    # Best for: General reasoning, conversation, understanding context
 
-  - name: DeepSeek Coder (Debug)
+  - name: Qwen Coder (Code Chat)
+    provider: ollama
+    model: qwen2.5-coder:7b
+    apiBase: http://127.0.0.1:11435
+    # Available as secondary chat option - code-focused conversations
+
+  - name: DeepSeek Coder (Edit)
     provider: ollama
     model: deepseek-coder:6.7b
     apiBase: http://127.0.0.1:11435
     roles:
       - edit
       - apply
+    # Best for: Code generation, refactoring, precise edits
 
-  - name: DeepSeek Coder Fast
+  - name: DeepSeek Coder (Autocomplete)
     provider: ollama
     model: deepseek-coder:1.3b
     apiBase: http://127.0.0.1:11435
     roles:
       - autocomplete
+    # Best for: Fast inline completions, minimal latency
 
 context:
   - provider: repo-map
