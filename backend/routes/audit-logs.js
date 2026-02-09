@@ -6,6 +6,63 @@ import logger from '../lib/logger.js';
 export default function createAuditLogRoutes(_pgPool) {
   const router = express.Router();
 
+  /**
+   * @openapi
+   * /api/audit-logs:
+   *   get:
+   *     summary: List audit logs
+   *     tags: [system-logs]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 50 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0 }
+   *     responses:
+   *       200:
+   *         description: List of audit log entries
+   *   post:
+   *     summary: Create audit log entry
+   *     tags: [system-logs]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, action, entity_type]
+   *             properties:
+   *               tenant_id: { type: string, format: uuid }
+   *               action: { type: string }
+   *               entity_type: { type: string }
+   *               entity_id: { type: string }
+   *               changes: { type: object }
+   *     responses:
+   *       201:
+   *         description: Audit log entry created
+   * /api/audit-logs/{id}:
+   *   get:
+   *     summary: Get audit log entry by ID
+   *     tags: [system-logs]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Audit log entry details
+   */
+
   // POST /api/audit-logs - Create audit log entry
   // Requires authentication - req.user is populated by authenticateRequest middleware
   router.post('/', async (req, res) => {

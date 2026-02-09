@@ -49,6 +49,13 @@ models:
       maxTokens: 1024
       temperature: 0.3
 
+  - name: Cohere Reranker
+    provider: cohere
+    model: rerank-english-v3.0
+    apiKey: 29xqrpbKFMsRwulagyI6C8n9Apd7BABMF7baW3Ei
+    roles:
+      - rerank
+
 context:
   - provider: repo-map
     params:

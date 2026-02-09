@@ -114,6 +114,188 @@ export default function createAIRoutes(pgPool) {
   // SSE clients storage for real-time conversation updates
   const conversationClients = new Map(); // conversationId -> Set<res>
 
+  /**
+   * @openapi
+   * /api/ai/assistants:
+   *   get:
+   *     summary: List AI assistants
+   *     tags: [assistant]
+   *     description: Returns available AI assistants configured for the tenant
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: List of assistants
+   * /api/ai/chat:
+   *   post:
+   *     summary: AI chat endpoint with tool calling
+   *     tags: [assistant]
+   *     description: Main AI chat endpoint supporting streaming, tool calling, Braid integration, and multi-turn conversations
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [messages, tenant_id]
+   *             properties:
+   *               messages: { type: array, items: { type: object } }
+   *               tenant_id: { type: string, format: uuid }
+   *               conversation_id: { type: string, format: uuid }
+   *               stream: { type: boolean, default: false }
+   *               model: { type: string }
+   *     responses:
+   *       200:
+   *         description: Chat response with tool calls
+   * /api/ai/conversations:
+   *   get:
+   *     summary: List conversations
+   *     tags: [assistant]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 50 }
+   *     responses:
+   *       200:
+   *         description: List of conversations
+   *   post:
+   *     summary: Create new conversation
+   *     tags: [assistant]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id]
+   *             properties:
+   *               tenant_id: { type: string, format: uuid }
+   *               title: { type: string }
+   *     responses:
+   *       201:
+   *         description: Conversation created
+   * /api/ai/conversations/{id}:
+   *   get:
+   *     summary: Get conversation details
+   *     tags: [assistant]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Conversation details
+   * /api/ai/conversations/{id}/messages:
+   *   get:
+   *     summary: Get conversation messages
+   *     tags: [assistant]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: List of messages
+   *   post:
+   *     summary: Add message to conversation
+   *     tags: [assistant]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [role, content]
+   *             properties:
+   *               role: { type: string, enum: [user, assistant, system] }
+   *               content: { type: string }
+   *     responses:
+   *       201:
+   *         description: Message added
+   * /api/ai/speech-to-text:
+   *   post:
+   *     summary: Convert speech to text (Whisper)
+   *     tags: [assistant]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         multipart/form-data:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               file: { type: string, format: binary }
+   *     responses:
+   *       200:
+   *         description: Transcribed text
+   * /api/ai/tts:
+   *   post:
+   *     summary: Convert text to speech
+   *     tags: [assistant]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [text]
+   *             properties:
+   *               text: { type: string }
+   *               voice: { type: string, default: shimmer }
+   *     responses:
+   *       200:
+   *         description: Audio file
+   *         content:
+   *           audio/mpeg:
+   *             schema:
+   *               type: string
+   *               format: binary
+   * /api/ai/summarize:
+   *   post:
+   *     summary: Summarize text using AI
+   *     tags: [assistant]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [text]
+   *             properties:
+   *               text: { type: string }
+   *     responses:
+   *       200:
+   *         description: Summary text
+   * /api/ai/embeddings:
+   *   post:
+   *     summary: Generate embeddings for text
+   *     tags: [assistant]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [input]
+   *             properties:
+   *               input: { type: string }
+   *     responses:
+   *       200:
+   *         description: Embedding vector
+   */
+
   // GET /api/ai/assistants - List AI assistants
   router.get('/assistants', async (req, res) => {
     try {

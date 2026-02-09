@@ -12,6 +12,42 @@ export default function createDashboardFunnelRoutes(_pgPool) {
   const getSupabase = () => getSupabaseAdmin({ throwOnMissing: false }) || getSupabaseAdmin();
 
   /**
+   * @openapi
+   * /api/dashboard/funnel-counts:
+   *   get:
+   *     summary: Get funnel metrics and pipeline data
+   *     tags: [reports]
+   *     description: Returns pre-computed funnel counts (sources, leads, contacts, accounts) and pipeline data from materialized view
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: include_test_data
+   *         schema: { type: boolean, default: true }
+   *     responses:
+   *       200:
+   *         description: Funnel metrics and pipeline data
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 funnel:
+   *                   type: object
+   *                   properties:
+   *                     sources: { type: integer }
+   *                     leads: { type: integer }
+   *                     contacts: { type: integer }
+   *                     accounts: { type: integer }
+   *                 pipeline:
+   *                   type: array
+   *                   items:
+   *                     type: object
+   */
+
+  /**
    * GET /api/dashboard/funnel-counts
    * Returns pre-computed funnel counts AND pipeline data from materialized view
    * Query params:

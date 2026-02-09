@@ -66,6 +66,89 @@ async function logAuditEvent(actor, action, approvalId = null, details = {}) {
   }
 }
 
+/**
+ * @openapi
+ * /api/devai/approvals:
+ *   get:
+ *     summary: List Developer AI approval requests (superadmin only)
+ *     tags: [developer-ai]
+ *     security:
+ *       - bearerAuth: []
+ *     description: Returns all Developer AI code change approval requests. Requires superadmin role.
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [pending, approved, rejected] }
+ *     responses:
+ *       200:
+ *         description: List of approval requests
+ *       403:
+ *         description: Forbidden - superadmin required
+ * /api/devai/approvals/{id}:
+ *   get:
+ *     summary: Get approval request details (superadmin only)
+ *     tags: [developer-ai]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Approval request details
+ * /api/devai/approvals/{id}/approve:
+ *   post:
+ *     summary: Approve code change request (superadmin only)
+ *     tags: [developer-ai]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Approval granted and code changes applied
+ * /api/devai/approvals/{id}/reject:
+ *   post:
+ *     summary: Reject code change request (superadmin only)
+ *     tags: [developer-ai]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason: { type: string }
+ *     responses:
+ *       200:
+ *         description: Approval request rejected
+ * /api/devai/approvals/{id}/export:
+ *   get:
+ *     summary: Export approval request as JSON (superadmin only)
+ *     tags: [developer-ai]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Approval request JSON export
+ */
+
 // ============================================================================
 // GET /api/devai/approvals - List approvals with optional status filter
 // ============================================================================

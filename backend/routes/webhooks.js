@@ -11,6 +11,105 @@ import logger from '../lib/logger.js';
 export default function createWebhookRoutes(_pgPool) {
   const router = express.Router();
 
+  /**
+   * @openapi
+   * /api/webhooks:
+   *   get:
+   *     summary: List all webhooks
+   *     tags: [integrations]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: is_active
+   *         schema: { type: boolean }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 50 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0 }
+   *     responses:
+   *       200:
+   *         description: Webhooks list
+   *       400:
+   *         description: Missing tenant_id
+   *   post:
+   *     summary: Create new webhook
+   *     tags: [integrations]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, name, url]
+   *             properties:
+   *               tenant_id: { type: string, format: uuid }
+   *               name: { type: string }
+   *               url: { type: string, format: uri }
+   *               is_active: { type: boolean, default: true }
+   *     responses:
+   *       201:
+   *         description: Webhook created
+   * /api/webhooks/{id}:
+   *   get:
+   *     summary: Get webhook by ID
+   *     tags: [integrations]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Webhook details
+   *       404:
+   *         description: Webhook not found
+   *   put:
+   *     summary: Update webhook
+   *     tags: [integrations]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               name: { type: string }
+   *               url: { type: string, format: uri }
+   *               is_active: { type: boolean }
+   *     responses:
+   *       200:
+   *         description: Webhook updated
+   *   delete:
+   *     summary: Delete webhook
+   *     tags: [integrations]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Webhook deleted
+   */
+
   // GET /api/webhooks - List webhooks
   router.get('/', cacheList('webhooks', 180), async (req, res) => {
     try {

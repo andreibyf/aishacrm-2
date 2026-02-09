@@ -10,6 +10,60 @@ import logger from '../lib/logger.js';
 export default function createApikeyRoutes(_pgPool) {
   const router = express.Router();
 
+  /**
+   * @openapi
+   * /api/apikeys:
+   *   get:
+   *     summary: List API keys for tenant
+   *     tags: [system]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 100 }
+   *     responses:
+   *       200:
+   *         description: List of API keys
+   *   post:
+   *     summary: Create new API key
+   *     tags: [system]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, key_name, key_value]
+   *             properties:
+   *               tenant_id: { type: string, format: uuid }
+   *               key_name: { type: string }
+   *               key_value: { type: string }
+   *               description: { type: string }
+   *               created_by: { type: string }
+   *     responses:
+   *       201:
+   *         description: API key created
+   * /api/apikeys/{id}:
+   *   get:
+   *     summary: Get API key by ID
+   *     tags: [system]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: API key details
+   */
+
   // GET /api/apikeys - List API keys for a tenant
   router.get('/', async (req, res) => {
     try {

@@ -225,6 +225,83 @@ export default function createMCPRoutes(_pgPool) {
 
   // API key resolution now handled by centralized lib/aiEngine/keyResolver.js
 
+  /**
+   * @openapi
+   * /api/mcp/servers:
+   *   get:
+   *     summary: List available MCP servers
+   *     tags: [integrations]
+   *     description: Returns list of registered MCP (Model Context Protocol) servers with their capabilities
+   *     responses:
+   *       200:
+   *         description: List of MCP servers
+   * /api/mcp/execute-tool:
+   *   post:
+   *     summary: Execute MCP tool
+   *     tags: [integrations]
+   *     description: Execute a tool on an MCP server. Routes through Braid bridge for orchestration.
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [serverName, toolName, arguments]
+   *             properties:
+   *               serverName: { type: string, example: aishadb }
+   *               toolName: { type: string, example: find_accounts }
+   *               arguments: { type: object }
+   *     responses:
+   *       200:
+   *         description: Tool execution result
+   *       400:
+   *         description: Invalid request
+   *       500:
+   *         description: Tool execution failed
+   * /api/mcp/resources:
+   *   get:
+   *     summary: List MCP resources
+   *     tags: [integrations]
+   *     description: Returns available resources from MCP servers
+   *     responses:
+   *       200:
+   *         description: List of MCP resources
+   * /api/mcp/config-status:
+   *   get:
+   *     summary: Get MCP configuration status
+   *     tags: [integrations]
+   *     description: Returns status of MCP servers and configuration
+   *     responses:
+   *       200:
+   *         description: Configuration status
+   * /api/mcp/admin/status:
+   *   get:
+   *     summary: Get MCP admin status (superadmin only)
+   *     tags: [integrations]
+   *     security:\n   *       - bearerAuth: []\n   *     description: Get detailed MCP server status and health - requires superadmin role
+   *     responses:
+   *       200:
+   *         description: Admin status details
+   *       403:
+   *         description: Forbidden - superadmin required
+   * /api/mcp/market-insights:
+   *   post:
+   *     summary: Get market insights using MCP tools
+   *     tags: [integrations]
+   *     description: Fetches market insights for accounts using MCP AI tools
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               accountId: { type: string }\n   *               company: { type: string }
+   *     responses:
+   *       200:
+   *         description: Market insights data
+   */
+
   // GET /api/mcp/servers - List available MCP servers
   router.get("/servers", async (req, res) => {
     try {

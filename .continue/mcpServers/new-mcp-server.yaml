@@ -9,3 +9,10 @@ mcpServers:
     env:
       MCP_BASE_URL: http://localhost:8000
       MCP_ALLOW_DELETE: "false"
+  
+  - name: Reranker
+    command: node
+    args:
+      - .continue/reranker/mcp-server.mjs
+    env:
+      RERANKER_URL: http://localhost:5001

@@ -52,6 +52,123 @@ function cookieOpts(maxAgeMs) {
 export default function createAuthRoutes(_pgPool) {
   const router = express.Router();
 
+  /**
+   * @openapi
+   * /api/auth/login:
+   *   post:
+   *     summary: User login with email/password
+   *     tags: [users]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [email, password]
+   *             properties:
+   *               email: { type: string, format: email }
+   *               password: { type: string, format: password }
+   *     responses:
+   *       200:
+   *         description: Login successful, returns JWT tokens
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 status: { type: string, example: success }
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     access_token: { type: string }
+   *                     refresh_token: { type: string }
+   *                     user:
+   *                       type: object
+   *                       properties:
+   *                         id: { type: string, format: uuid }
+   *                         email: { type: string }
+   *                         tenant_id: { type: string, format: uuid }
+   *       401:
+   *         description: Invalid credentials
+   * /api/auth/logout:
+   *   post:
+   *     summary: Logout user and clear tokens
+   *     tags: [users]
+   *     responses:
+   *       200:
+   *         description: Logout successful
+   * /api/auth/refresh:
+   *   post:
+   *     summary: Refresh access token using refresh token
+   *     tags: [users]
+   *     responses:
+   *       200:
+   *         description: New access token issued
+   *       401:
+   *         description: Invalid refresh token
+   * /api/auth/me:
+   *   get:
+   *     summary: Get current authenticated user
+   *     tags: [users]
+   *     responses:
+   *       200:
+   *         description: Current user profile
+   *       401:
+   *         description: Not authenticated
+   * /api/auth/verify-token:
+   *   post:
+   *     summary: Verify JWT token validity
+   *     tags: [users]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               token: { type: string }
+   *     responses:
+   *       200:
+   *         description: Token is valid
+   *       401:
+   *         description: Token is invalid or expired
+   * /api/auth/password/reset/request:
+   *   post:
+   *     summary: Request password reset email
+   *     tags: [users]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [email]
+   *             properties:
+   *               email: { type: string, format: email }
+   *     responses:
+   *       200:
+   *         description: Reset email sent if account exists
+   * /api/auth/password/reset/confirm:
+   *   post:
+   *     summary: Confirm password reset with token
+   *     tags: [users]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [token, password]
+   *             properties:
+   *               token: { type: string }
+   *               password: { type: string, format: password }
+   *     responses:
+   *       200:
+   *         description: Password reset successful
+   *       400:
+   *         description: Invalid or expired token
+   */
+
   // Email-based throttling for password resets (recommended by Supabase)
   // Prevents hitting Supabase's 1 email/60s rate limit
   const attemptsByEmail = new Map(); // email -> { count, resetAt }
@@ -84,6 +201,47 @@ export default function createAuthRoutes(_pgPool) {
     }
   }
 
+  /**
+   * @openapi
+   * /api/auth/verify-token:
+   *   post:
+   *     summary: Verify JWT token validity
+   *     tags: [users]
+   *     security: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [token]
+   *             properties:
+   *               token:
+   *                 type: string
+   *                 description: JWT token to verify
+   *     responses:
+   *       200:
+   *         description: Token verification result
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 status:
+   *                   type: string
+   *                   example: success
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     valid:
+   *                       type: boolean
+   *                     user_id:
+   *                       type: string
+   *                       format: uuid
+   *                     tenant_id:
+   *                       type: string
+   *                       format: uuid
+   */
   // POST /api/auth/verify-token - Verify JWT token validity
   router.post('/verify-token', async (req, res) => {
     try {
