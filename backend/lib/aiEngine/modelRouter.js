@@ -110,7 +110,8 @@ export function pickModel({ capability, override } = {}) {
     case "brain_read_only":
       return (
         process.env.MODEL_BRAIN_READ_ONLY ||
-        "gpt-4o-mini"
+        process.env.DEFAULT_OPENAI_MODEL ||
+        "gpt-4o"
       );
 
     case "brain_plan_actions":

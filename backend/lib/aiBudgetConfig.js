@@ -61,7 +61,7 @@ export const DEFAULT_BUDGET = {
   TOOL_RESULT_CAP: 700,
   
   // Reserved tokens for model output (max_tokens parameter)
-  OUTPUT_MAX_TOKENS: 200,
+  OUTPUT_MAX_TOKENS: 350,
 };
 
 /**
