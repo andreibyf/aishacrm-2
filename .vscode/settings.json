@@ -1,75 +1,19 @@
 {
-  // ========================================
-  // TWINNY - PRIMARY AI ASSISTANT
-  // ========================================
-  // Fast, private, local AI code completion and chat
-  // Uses Intel GPU via IPEX-LLM Ollama (Port 11434)
-  
   "twinny.enabled": true,
-  
-  // Ollama Server Configuration
-  "twinny.ollamaApiUrl": "http://localhost:11434",
-  
-  // Model Selection
-  "twinny.fimModel": "deepseek-coder:1.3b",        // Fast inline completions (FIM)
-  "twinny.chatModel": "qwen2.5-coder:3b",          // Conversational assistance
-  
-  // Completion Settings (Primary Feature)
+  "twinny.fimModelName": "deepseek-coder:1.3b",
+  "twinny.chatModelName": "qwen2.5-coder:3b",
+  "twinny.provider": "ollama",
+  "twinny.apiProvider": "ollama",
+  "twinny.ollamaApiUrl": "http://127.0.0.1:11434",
+  "twinny.fimProvider": "ollama",
+  "twinny.chatProvider": "ollama",
+  "twinny.ollamaApiHostname": "http://127.0.0.1:11434",
+  "twinny.fimModel": "deepseek-coder:1.3b",
+  "twinny.chatModel": "qwen2.5-coder:3b",
   "twinny.enableCompletions": true,
-  "twinny.enableSubsequentCompletions": true,
-  "twinny.completionCacheEnabled": true,
-  "twinny.numLineContext": 100,                    // Context window lines
-  "twinny.debounceWait": 300,                      // Response delay (ms)
-  "twinny.temperature": 0.2,                       // Low for consistent code
-  "twinny.maxTokens": 500,                         // Inline completion length
-  
-  // Chat Settings
-  "twinny.enableChat": true,
-  "twinny.chatTemperature": 0.3,
-  "twinny.chatMaxTokens": 1024,
-  
-  // Performance Optimization for Intel iGPU
-  "twinny.contextLength": 2048,                    // Conservative for shared memory
-  "twinny.keepAlive": "5m",                        // Model persistence
-  
-  // UI Preferences
-  "twinny.enableInlineCompletion": true,
-  "twinny.showLoadingIndicator": true,
-  "twinny.enableStatusBarItem": true,
-  
-  // ========================================
-  // CONTINUE.DEV - SECONDARY (COMPLEX TASKS)
-  // ========================================
-  // Disabled autocomplete to avoid conflict with Twinny
-  // Use for: multi-file refactoring, codebase analysis, advanced workflows
-  
-  "continue.enableTabAutocomplete": false,         // ⚠️ CRITICAL: Prevent conflict with Twinny
-  "continue.telemetryEnabled": false,              // Privacy
-  "continue.showInlineTip": false,                 // Reduce UI clutter
-  
-  // ========================================
-  // PROJECT-SPECIFIC SETTINGS
-  // ========================================
-  
-  // AiSHA CRM Context (shared by both AI assistants)
-  "twinny.systemPrompt": "You are an expert full-stack developer working on AiSHA CRM, a multi-tenant SaaS application. Tech stack: React 18, Node.js, Express, Supabase PostgreSQL. Always use UUID-based tenant isolation (req.tenant.id). Route API calls through fallbackFunctions.js. Follow V2 API patterns for new features.",
-  
-  // Editor Settings (optimize for AI assistance)
-  "editor.inlineSuggest.enabled": true,
-  "editor.suggestOnTriggerCharacters": true,
-  "editor.quickSuggestions": {
-    "other": true,
-    "comments": false,
-    "strings": true
-  },
-  
-  // Files to exclude from AI context (performance)
-  "files.watcherExclude": {
-    "**/.git/objects/**": true,
-    "**/.git/subtree-cache/**": true,
-    "**/node_modules/**": true,
-    "**/dist/**": true,
-    "**/build/**": true,
-    "**/.next/**": true
+  "twinny.enabledLanguages": {
+    "*": true,
+    "python": true,
+    "javascript": false
   }
 }
