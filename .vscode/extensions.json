@@ -1,5 +1,10 @@
 {
   "recommendations": [
+    // AI Assistants (Intel iGPU optimized)
+    "rjmacarthy.twinny",                          // Primary: Fast local AI completion
+    "continue.continue",                          // Secondary: Complex workflows
+    
+    // Development Tools
     "denoland.vscode-deno",
     "supabase-snippets.supabase-javascript-snippets"
   ]
