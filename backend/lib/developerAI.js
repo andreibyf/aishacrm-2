@@ -1742,7 +1742,10 @@ AiSHA CRM is a multi-tenant SaaS CRM platform with AI-powered features including
 You are here to help the superadmin understand, debug, and improve the AiSHA CRM codebase efficiently.`;
 
 // Main chat function for Developer AI
-export async function developerChat(messages, userId) {
+// @param {Array} messages - Conversation messages
+// @param {string} userId - User ID for audit logging
+// @param {Function} onProgress - Optional callback for streaming progress: onProgress({ type, message, data })
+export async function developerChat(messages, userId, onProgress = null) {
   let client;
 
   // Try to get the Anthropic client with user-friendly error handling
@@ -1757,6 +1760,15 @@ export async function developerChat(messages, userId) {
   }
   
   console.log('[Developer AI] Starting chat with', messages.length, 'messages');
+  
+  // Send initial progress event
+  if (onProgress) {
+    try {
+      onProgress({ type: 'start', message: 'Initializing Developer AI...' });
+    } catch (progressErr) {
+      console.warn('[Developer AI] Progress callback error:', progressErr.message);
+    }
+  }
   
   // Load AI settings from database (with fallback to defaults)
   let aiSettings;
@@ -1887,6 +1899,14 @@ export async function developerChat(messages, userId) {
   }
 
   // Initial API call
+  if (onProgress) {
+    try {
+      onProgress({ type: 'thinking', message: 'Analyzing your request...' });
+    } catch (progressErr) {
+      console.warn('[Developer AI] Progress callback error:', progressErr.message);
+    }
+  }
+  
   const response = await callAnthropic(messages);
   
   console.log('[Developer AI] Initial response:', response.stop_reason);
@@ -1904,6 +1924,30 @@ export async function developerChat(messages, userId) {
     
     for (const toolUse of toolUseBlocks) {
       console.log('[Developer AI] Tool call:', toolUse.name);
+      
+      // Send progress update for tool execution
+      if (onProgress) {
+        const toolLabel = {
+          read_file: '📄 Reading file',
+          search_code: '🔍 Searching code',
+          list_directory: '📁 Listing directory',
+          read_logs: '📋 Reading logs',
+          get_file_outline: '🗂️ Getting file outline',
+          propose_change: '✏️ Proposing changes',
+          test_aisha: '🤖 Testing AiSHA AI'
+        }[toolUse.name] || `🔧 ${toolUse.name}`;
+        
+        try {
+          onProgress({ 
+            type: 'tool', 
+            message: toolLabel,
+            data: { tool: toolUse.name, iteration: toolIterations }
+          });
+        } catch (progressErr) {
+          console.warn('[Developer AI] Progress callback error:', progressErr.message);
+        }
+      }
+      
       try {
         const result = await executeDeveloperTool(toolUse.name, toolUse.input, userId);
         toolResults.push({
@@ -1935,6 +1979,14 @@ export async function developerChat(messages, userId) {
     });
     
     // Continue conversation
+    if (onProgress) {
+      try {
+        onProgress({ type: 'thinking', message: 'Analyzing results...' });
+      } catch (progressErr) {
+        console.warn('[Developer AI] Progress callback error:', progressErr.message);
+      }
+    }
+    
     currentResponse = await callAnthropic(conversationHistory);
     
     console.log('[Developer AI] Continued response:', currentResponse.stop_reason);
@@ -1947,6 +1999,15 @@ export async function developerChat(messages, userId) {
   // Extract final text response
   const textBlocks = currentResponse.content.filter(block => block.type === 'text');
   const responseText = textBlocks.map(b => b.text).join('\n');
+  
+  // Send completion progress
+  if (onProgress) {
+    try {
+      onProgress({ type: 'complete', message: 'Response ready', data: { iterations: toolIterations } });
+    } catch (progressErr) {
+      console.warn('[Developer AI] Progress callback error:', progressErr.message);
+    }
+  }
   
   return {
     response: responseText,

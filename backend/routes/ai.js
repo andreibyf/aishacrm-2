@@ -4169,6 +4169,139 @@ ${conversationSummary}`;
   });
 
   // ============================================
+  // DEVELOPER AI - Streaming chat (SSE)
+  // ============================================
+
+  /**
+   * @swagger
+   * /api/ai/developer/stream:
+   *   post:
+   *     summary: Developer AI Streaming Chat
+   *     description: |
+   *       Superadmin-only AI chat with Server-Sent Events streaming.
+   *       Shows real-time progress as the AI executes tools (reading files, searching code, etc.)
+   *     tags: [developer-ai]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - messages
+   *             properties:
+   *               messages:
+   *                 type: array
+   *                 items:
+   *                   type: object
+   *     responses:
+   *       200:
+   *         description: SSE stream of progress events
+   *         content:
+   *           text/event-stream:
+   *             schema:
+   *               type: string
+   *       403:
+   *         description: Access denied - superadmin role required
+   */
+  router.post('/developer/stream', async (req, res) => {
+    const startedAt = Date.now();
+
+    try {
+      const { messages = [] } = req.body || {};
+
+      // Get user from request (with header fallback)
+      let user = req.user;
+      if (!user) {
+        const headerRole = req.headers['x-user-role'];
+        const headerEmail = req.headers['x-user-email'];
+        if (headerRole === 'superadmin') {
+          user = { role: headerRole, email: headerEmail || 'unknown' };
+          logger.debug('[Developer AI Stream] Using header-based auth:', headerEmail);
+        }
+      }
+
+      // SECURITY: Superadmin-only access
+      if (!isSuperadmin(user)) {
+        logger.warn('[Developer AI Stream] Access denied:', user?.email, 'role:', user?.role);
+        return res.status(403).json({
+          status: 'error',
+          message: 'Developer AI is restricted to superadmin users only',
+        });
+      }
+
+      if (!Array.isArray(messages) || messages.length === 0) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'messages array is required',
+        });
+      }
+
+      // Check if Anthropic API key is configured
+      if (!process.env.ANTHROPIC_API_KEY) {
+        return res.status(503).json({
+          status: 'error',
+          message: 'Developer AI is not configured. ANTHROPIC_API_KEY is missing.',
+        });
+      }
+
+      // Set SSE headers
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+
+      logger.debug('[Developer AI Stream] Starting for:', user?.email);
+
+      // Send initial connection message
+      res.write(`data: ${JSON.stringify({ type: 'connected' })}\\n\\n`);
+
+      // Progress callback to stream events
+      const onProgress = (event) => {
+        try {
+          res.write(`data: ${JSON.stringify(event)}\\n\\n`);
+        } catch (writeErr) {
+          logger.error('[Developer AI Stream] Failed to write progress:', writeErr.message);
+        }
+      };
+
+      // Execute Developer AI with streaming
+      const result = await developerChat(messages, user?.id, onProgress);
+
+      // Send final response
+      res.write(`data: ${JSON.stringify({
+        type: 'response',
+        response: result.response,
+        model: result.model,
+        usage: result.usage,
+        durationMs: Date.now() - startedAt,
+      })}\\n\\n`);
+
+      // Send done signal
+      res.write(`data: ${JSON.stringify({ type: 'done' })}\\n\\n`);
+      res.end();
+
+      logger.debug('[Developer AI Stream] Completed in', Date.now() - startedAt, 'ms');
+
+    } catch (error) {
+      logger.error('[Developer AI Stream] Error:', error);
+      try {
+        res.write(`data: ${JSON.stringify({
+          type: 'error',
+          message: error.message,
+          durationMs: Date.now() - startedAt,
+        })}\\n\\n`);
+        res.end();
+      } catch (writeErr) {
+        // Connection already closed
+        logger.error('[Developer AI Stream] Failed to send error:', writeErr.message);
+      }
+    }
+  });
+
+  // ============================================
   // DEVELOPER AI - Approve pending action
   // ============================================
 

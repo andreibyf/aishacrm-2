@@ -13,6 +13,7 @@ export default function DeveloperAI() {
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [currentProgress, setCurrentProgress] = useState('');
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -21,7 +22,7 @@ export default function DeveloperAI() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, currentProgress]);
 
   const sendMessage = async (e) => {
     e.preventDefault();
@@ -31,9 +32,10 @@ export default function DeveloperAI() {
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
+    setCurrentProgress('');
 
     try {
-      const response = await fetch(`${getBackendUrl()}/api/ai/developer`, {
+      const response = await fetch(`${getBackendUrl()}/api/ai/developer/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -46,22 +48,65 @@ export default function DeveloperAI() {
         }),
       });
 
-      const data = await response.json();
-
-      if (response.ok && data.status === 'success') {
-        setMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
-      } else {
-        setMessages(prev => [...prev, { 
-          role: 'assistant', 
-          content: `Error: ${data.message || 'Failed to get response from Developer AI'}` 
-        }]);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to connect to Developer AI');
       }
+
+      // Read SSE stream
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\\n');
+        buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const event = JSON.parse(line.slice(6));
+              
+              if (event.type === 'connected') {
+                setCurrentProgress('🔌 Connected to Developer AI');
+              } else if (event.type === 'start') {
+                setCurrentProgress(event.message);
+              } else if (event.type === 'thinking') {
+                setCurrentProgress(`🤔 ${event.message}`);
+              } else if (event.type === 'tool') {
+                setCurrentProgress(`${event.message} (iteration ${event.data?.iteration})`);
+              } else if (event.type === 'complete') {
+                setCurrentProgress('');
+              } else if (event.type === 'response') {
+                setMessages(prev => [...prev, { role: 'assistant', content: event.response }]);
+                setCurrentProgress('');
+              } else if (event.type === 'error') {
+                setMessages(prev => [...prev, {
+                  role: 'assistant',
+                  content: `Error: ${event.message}`
+                }]);
+                setCurrentProgress('');
+              } else if (event.type === 'done') {
+                // Stream complete
+              }
+            } catch (parseErr) {
+              console.warn('Failed to parse SSE event:', line);
+            }
+          }
+        }
+      }
+
     } catch (error) {
       console.error('Developer AI error:', error);
       setMessages(prev => [...prev, { 
         role: 'assistant', 
         content: `Error: ${error.message || 'Network error connecting to Developer AI'}` 
       }]);
+      setCurrentProgress('');
     } finally {
       setIsLoading(false);
     }
@@ -137,7 +182,15 @@ export default function DeveloperAI() {
           {isLoading && (
             <div className="flex justify-start">
               <div className="max-w-3xl rounded-lg p-4 bg-slate-700/50 text-slate-100 border border-slate-600/50">
-                <Loader2 className="w-5 h-5 animate-spin" />
+                <div className="flex items-center gap-3">
+                  <Loader2 className="w-5 h-5 animate-spin text-cyan-400" />
+                  {currentProgress && (
+                    <span className="text-slate-300">{currentProgress}</span>
+                  )}
+                  {!currentProgress && (
+                    <span className="text-slate-400">Thinking...</span>
+                  )}
+                </div>
               </div>
             </div>
           )}
