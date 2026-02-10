@@ -1,4 +1,7 @@
 {
+  // ==========================================
+  // AI Assistants (Twinny Primary)
+  // ==========================================
   "twinny.enabled": true,
   "twinny.fimModelName": "deepseek-coder:1.3b",
   "twinny.chatModelName": "qwen2.5-coder:3b",
@@ -15,5 +18,149 @@
     "*": true,
     "python": true,
     "javascript": false
-  }
+  },
+
+  // ==========================================
+  // Editor & Formatting
+  // ==========================================
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+  "editor.tabSize": 2,
+  "editor.insertSpaces": true,
+  "editor.bracketPairColorization.enabled": true,
+  "editor.guides.bracketPairs": true,
+  "editor.suggestSelection": "first",
+  "editor.inlineSuggest.enabled": true,
+  "editor.quickSuggestions": {
+    "strings": true
+  },
+
+  // ==========================================
+  // Language-Specific Formatting
+  // ==========================================
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[javascriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[markdown]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[sql]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+
+  // ==========================================
+  // ESLint
+  // ==========================================
+  "eslint.validate": [
+    "javascript",
+    "javascriptreact",
+    "typescript",
+    "typescriptreact"
+  ],
+  "eslint.workingDirectories": [
+    { "mode": "auto" }
+  ],
+
+  // ==========================================
+  // TypeScript/JavaScript
+  // ==========================================
+  "typescript.updateImportsOnFileMove.enabled": "always",
+  "javascript.updateImportsOnFileMove.enabled": "always",
+  "typescript.preferences.importModuleSpecifier": "relative",
+  "javascript.preferences.importModuleSpecifier": "relative",
+  "typescript.suggest.autoImports": true,
+  "javascript.suggest.autoImports": true,
+
+  // ==========================================
+  // File Associations
+  // ==========================================
+  "files.associations": {
+    "*.braid": "yaml",
+    "*.http": "http",
+    ".env.*": "dotenv",
+    "doppler.yaml": "yaml"
+  },
+
+  // ==========================================
+  // Files & Search Exclusions
+  // ==========================================
+  "files.exclude": {
+    "**/.git": true,
+    "**/.DS_Store": true,
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/.next": true,
+    "**/playwright-report": true,
+    "**/test-results": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/build": true,
+    "**/.next": true,
+    "**/coverage": true,
+    "**/.nyc_output": true,
+    "**/playwright-report": true,
+    "**/test-results": true,
+    "package-lock.json": true,
+    "pnpm-lock.yaml": true
+  },
+
+  // ==========================================
+  // Git & GitLens
+  // ==========================================
+  "git.autofetch": true,
+  "git.confirmSync": false,
+  "git.enableSmartCommit": true,
+  "gitlens.codeLens.enabled": false,
+  "gitlens.currentLine.enabled": false,
+
+  // ==========================================
+  // Playwright
+  // ==========================================
+  "playwright.reuseBrowser": true,
+  "playwright.showTrace": false,
+
+  // ==========================================
+  // Path Intellisense
+  // ==========================================
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "path-intellisense.mappings": {
+    "@": "${workspaceFolder}/src"
+  },
+
+  // ==========================================
+  // Terminal
+  // ==========================================
+  "terminal.integrated.defaultProfile.windows": "Git Bash",
+  "terminal.integrated.scrollback": 10000,
+
+  // ==========================================
+  // Miscellaneous
+  // ==========================================
+  "emmet.includeLanguages": {
+    "javascript": "javascriptreact",
+    "typescript": "typescriptreact"
+  },
+  "npm.packageManager": "npm",
+  "explorer.confirmDelete": false,
+  "explorer.confirmDragAndDrop": false
 }
