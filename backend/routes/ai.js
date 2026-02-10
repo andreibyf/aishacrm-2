@@ -4262,6 +4262,15 @@ ${conversationSummary}`;
       // Send initial connection message
       res.write(`data: ${JSON.stringify({ type: 'connected' })}\\n\\n`);
 
+      // Heartbeat to keep connection alive (every 10 seconds)
+      const heartbeat = setInterval(() => {
+        try {
+          res.write(`: heartbeat\\n\\n`);
+        } catch (err) {
+          clearInterval(heartbeat);
+        }
+      }, 10000);
+
       // Progress callback to stream events
       const onProgress = (event) => {
         try {
@@ -4272,7 +4281,12 @@ ${conversationSummary}`;
       };
 
       // Execute Developer AI with streaming
-      const result = await developerChat(messages, user?.id, onProgress);
+      let result;
+      try {
+        result = await developerChat(messages, user?.id, onProgress);
+      } finally {
+        clearInterval(heartbeat);
+      }
 
       // Send final response
       res.write(`data: ${JSON.stringify({
