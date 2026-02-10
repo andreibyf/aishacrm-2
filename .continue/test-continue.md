@@ -23,7 +23,13 @@ Explain what this file does
 
 ## 4. Repo Context Test
 ```
-@Codebase Find all files related to authentication
+
+{
+  "name": "file_glob_search",
+  "arguments": {
+    "pattern": "**/auth/**"
+  }
+}
 ```
 **Expected:** Should search workspace and list auth-related files
 
