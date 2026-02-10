@@ -4247,11 +4247,15 @@ ${conversationSummary}`;
         });
       }
 
-      // Set SSE headers
+      // Set SSE headers with proper CORS for credentials
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
-      res.setHeader('Access-Control-Allow-Origin', '*');
+      
+      // CORS: When using credentials, must specify exact origin (not wildcard)
+      const origin = req.headers.origin || 'https://app.aishacrm.com';
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
 
       logger.debug('[Developer AI Stream] Starting for:', user?.email);
 
