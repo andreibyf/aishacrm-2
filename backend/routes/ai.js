@@ -4260,12 +4260,12 @@ ${conversationSummary}`;
       logger.debug('[Developer AI Stream] Starting for:', user?.email);
 
       // Send initial connection message
-      res.write(`data: ${JSON.stringify({ type: 'connected' })}\\n\\n`);
+      res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
 
       // Heartbeat to keep connection alive (every 10 seconds)
       const heartbeat = setInterval(() => {
         try {
-          res.write(`: heartbeat\\n\\n`);
+          res.write(`: heartbeat\n\n`);
         } catch (err) {
           clearInterval(heartbeat);
         }
@@ -4274,7 +4274,7 @@ ${conversationSummary}`;
       // Progress callback to stream events
       const onProgress = (event) => {
         try {
-          res.write(`data: ${JSON.stringify(event)}\\n\\n`);
+          res.write(`data: ${JSON.stringify(event)}\n\n`);
         } catch (writeErr) {
           logger.error('[Developer AI Stream] Failed to write progress:', writeErr.message);
         }
@@ -4295,10 +4295,10 @@ ${conversationSummary}`;
         model: result.model,
         usage: result.usage,
         durationMs: Date.now() - startedAt,
-      })}\\n\\n`);
+      })}\n\n`);
 
       // Send done signal
-      res.write(`data: ${JSON.stringify({ type: 'done' })}\\n\\n`);
+      res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
       res.end();
 
       logger.debug('[Developer AI Stream] Completed in', Date.now() - startedAt, 'ms');
@@ -4310,7 +4310,7 @@ ${conversationSummary}`;
           type: 'error',
           message: error.message,
           durationMs: Date.now() - startedAt,
-        })}\\n\\n`);
+        })}\n\n`);
         res.end();
       } catch (writeErr) {
         // Connection already closed
