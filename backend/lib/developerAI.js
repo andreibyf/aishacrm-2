@@ -12,6 +12,7 @@ import { promisify } from 'util';
 import { getSupabaseClient } from './supabase-db.js';
 import { classifyCommand } from './commandSafety.js';
 import { redactSecretsFromObject, sanitizeCommand } from './devaiSecurity.js';
+import { loadAiSettings } from './aiSettingsLoader.js';
 
 const execAsync = promisify(exec);
 
@@ -1757,6 +1758,24 @@ export async function developerChat(messages, userId) {
   
   console.log('[Developer AI] Starting chat with', messages.length, 'messages');
   
+  // Load AI settings from database (with fallback to defaults)
+  let aiSettings;
+  try {
+    aiSettings = await loadAiSettings('developer', null);
+    console.log('[Developer AI] Loaded settings:', {
+      temperature: aiSettings.temperature,
+      max_iterations: aiSettings.max_iterations,
+      require_approval: aiSettings.require_approval_for_destructive
+    });
+  } catch (settingsErr) {
+    console.warn('[Developer AI] Failed to load settings, using defaults:', settingsErr.message);
+    aiSettings = {
+      temperature: 0.2,
+      max_iterations: 10,
+      require_approval_for_destructive: true
+    };
+  }
+  
   // Load execution context for self-awareness (what environment am I in?)
   let executionContextStr = '';
   try {
@@ -1821,6 +1840,7 @@ export async function developerChat(messages, userId) {
       return await client.messages.create({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 16384,
+        temperature: aiSettings.temperature,
         system: contextualSystemPrompt,
         tools: DEVELOPER_TOOLS,
         messages: validMessages,
@@ -1875,7 +1895,7 @@ export async function developerChat(messages, userId) {
   let currentResponse = response;
   const conversationHistory = [...messages];
   let toolIterations = 0;
-  const MAX_TOOL_ITERATIONS = 10; // Prevent infinite loops
+  const MAX_TOOL_ITERATIONS = aiSettings.max_iterations || 10; // From database settings
   
   while (currentResponse.stop_reason === 'tool_use' && toolIterations < MAX_TOOL_ITERATIONS) {
     toolIterations++;

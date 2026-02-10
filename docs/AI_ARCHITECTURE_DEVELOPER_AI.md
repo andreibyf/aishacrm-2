@@ -1,7 +1,7 @@
 # Developer AI Architecture
 
-**Version:** 1.1  
-**Last Updated:** January 1, 2026  
+**Version:** 1.2  
+**Last Updated:** February 10, 2026  
 **Status:** Production  
 **Purpose:** Superadmin-only AI assistant for code development and system maintenance
 
@@ -9,11 +9,12 @@
 
 ## Overview
 
-Developer AI is an autonomous coding assistant built on **Claude 3.5 Sonnet** (Anthropic), designed exclusively for superadmin users to perform advanced development tasks within the Aisha CRM codebase.
+Developer AI is an autonomous coding assistant built on **Claude Sonnet 4** (Anthropic), designed exclusively for superadmin users to perform advanced development tasks within the Aisha CRM codebase.
 
 **Key Characteristics:**
 - **Access Level:** Superadmin only (verified via `isSuperadmin()`)
-- **Model:** Claude 3.5 Sonnet (claude-3-5-sonnet-20241022)
+- **Model:** Claude Sonnet 4 (claude-sonnet-4-20250514)
+- **Configuration:** Database-driven settings via `ai_settings` table
 - **Execution Environment:** Docker container (`aishacrm-backend`)
 - **Security:** Sandboxed, approval workflow required for destructive operations
 - **Scope:** Backend development, debugging, testing, system diagnostics
@@ -38,9 +39,10 @@ User → POST /api/ai/developer-chat → developerChat(message, userId, tenantId
 graph TD
     A[User Message] --> B{Superadmin Check}
     B -->|Fail| C[403 Forbidden]
-    B -->|Pass| D[Load Conversation History]
-    D --> E[Inject System Prompt]
-    E --> F[Claude 3.5 Sonnet API]
+    B -->|Pass| D[Load AI Settings from DB]
+    D --> E[Load Conversation History]
+    E --> F[Inject System Prompt]
+    F --> G[Claude Sonnet 4 API]
     F --> G{Response Type}
     G -->|Text Only| H[Return to User]
     G -->|Tool Call| I[Execute Tool]
@@ -95,6 +97,30 @@ Developer AI MUST provide 2-4 contextual follow-up suggestions based on:
     { text: "Explain the algorithm", action: "explain" }
   ]
 }
+```
+
+---
+
+## Configuration Settings
+
+**Location:** Database table `ai_settings` (agent_role = 'developer')  
+**UI:** Settings page → Developer AI tab  
+**Loader:** `backend/lib/aiSettingsLoader.js`
+
+| Setting | Default | Range | Description |
+|---------|---------|-------|-------------|
+| **temperature** | 0.2 | 0-1 | Controls response randomness. Lower = more deterministic/precise code. |
+| **max_iterations** | 5 | 1-15 | Maximum tool-calling iterations per request. Higher = can handle complex multi-step tasks. |
+| **require_approval_for_destructive** | true | bool | When enabled, destructive operations (delete, drop) require explicit confirmation. |
+
+**Loading Flow:**
+```javascript
+// In developerChat()
+const aiSettings = await loadAiSettings('developer', null);
+// Used in:
+// - API temperature parameter
+// - MAX_TOOL_ITERATIONS loop limit
+// - Tool approval checks
 ```
 
 ---
