@@ -41,6 +41,15 @@ coverage/
 test-results/
 test-regression.log
 
+# Temporary diagnostic/troubleshooting scripts
+check-*-settings.js
+check-*-settings.sh
+check-*-database.sh
+fix-*-duplicates.sh
+fix-*-settings.js
+test-*-settings.js
+*_SETTINGS_FIX.md
+
 # Lock files (should be committed but listed here for reference)
 # package-lock.json should be committed for security audits
 
