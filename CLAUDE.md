@@ -30,6 +30,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Document | Description |
 |----------|-------------|
 | [COPILOT_PLAYBOOK.md](./COPILOT_PLAYBOOK.md) | **⭐ START HERE** - Operations guide, testing, migrations |
+| [docs/Intel-iGPU-Local-AI-Development-Guide.md](./docs/Intel-iGPU-Local-AI-Development-Guide.md) | **Local AI Setup** - Twinny + Continue.dev with Intel GPU |
 | [docs/USER_GUIDE.md](./docs/USER_GUIDE.md) | End-user guide for CRM operations |
 | [docs/ADMIN_GUIDE.md](./docs/ADMIN_GUIDE.md) | System administration, deployment |
 | [docs/AI_ASSISTANT_GUIDE.md](./docs/AI_ASSISTANT_GUIDE.md) | AiSHA AI assistant features |
@@ -42,6 +43,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **⚠️ IMPORTANT**: Before making ANY changes, read [COPILOT_PLAYBOOK.md](./COPILOT_PLAYBOOK.md) for operational procedures, migration workflows, and critical lessons learned.
 
 Legacy documentation is archived in `docs/archive/`.
+
+---
+
+## 🤖 Local AI Development Tools
+
+This project uses a **dual-AI assistant setup** for enhanced developer productivity:
+
+**Primary: Twinny** (`rjmacarthy.twinny`)
+- Fast inline code completions (FIM) via `deepseek-coder:1.3b`
+- Real-time code chat via `qwen2.5-coder:3b`
+- 100% local, zero telemetry, complete privacy
+- Optimized for Intel iGPU acceleration via IPEX-LLM Ollama
+- **Use for**: 80% of daily coding - completions, quick questions, debugging
+
+**Secondary: Continue.dev** (`continue.continue`)
+- Autocomplete **DISABLED** to prevent conflicts with Twinny
+- Advanced codebase-wide analysis and multi-file refactoring
+- Complex workflows with repository context
+- **Use for**: 20% of tasks - architecture decisions, large refactorings
+
+**Configuration:**
+- `.vscode/settings.json` - Workspace AI settings (Twinny primary, Continue secondary)
+- `.continue/config.yaml` - Continue.dev models and context providers
+- Both tools use Ollama server on `http://localhost:11434` (Intel GPU)
+
+**Setup Guide:** See [docs/Intel-iGPU-Local-AI-Development-Guide.md](./docs/Intel-iGPU-Local-AI-Development-Guide.md)
 
 ---
 
@@ -254,7 +281,7 @@ cd C:\Users\andre\Documents\GitHub\ai-sha-crm-copy-c872be53
 ### Docker vs Local Development
 
 | Mode | Frontend | Backend |
-|------|----------|---------|
+|------|----------|---------|-----|
 | **Local Dev** | http://localhost:5173 | http://localhost:3001 |
 | **Docker** | http://localhost:4000 | http://localhost:4001 |
 
