@@ -64,9 +64,21 @@ export function getDefaultAgentProfile(role, tenant_id = null) {
         // BRAID TOOLS ONLY - orchestration and oversight focused
         tool_allowlist: [
           'fetch_tenant_snapshot',  // Get overview of all CRM data
+
+          // Leads – allow AiSHA to inspect and correct lead records
+          'create_lead',
+          'update_lead',
+          'get_lead_details',
+          'search_leads',
+          'search_leads_by_status',
+          'list_leads',
+
+          // Activities and notes
           'create_activity',        // Create tasks for team
           'list_activities',        // Check team calendar/tasks
           'create_note',            // Document decisions, plans
+
+          // Delegation
           'delegate_task',          // Delegate to specialists
         ],
         memory_namespace: 'ops',

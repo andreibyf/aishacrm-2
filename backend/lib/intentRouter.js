@@ -209,7 +209,9 @@ export function shouldForceToolChoice(intentCode) {
     'AI_SUGGEST_NEXT_ACTIONS',
     'SYSTEM_SNAPSHOT',
     'SYSTEM_DEBUG',
-    'NAVIGATE_TO_PAGE'
+    'NAVIGATE_TO_PAGE',
+    // Writes that must actually hit CRM instead of "talking about" changes
+    'LEAD_UPDATE'
   ];
 
   if (forcedIntents.includes(intentCode)) return true;

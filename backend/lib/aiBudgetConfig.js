@@ -114,6 +114,8 @@ export const CORE_TOOLS = [
   'search_notes',
   'list_activities',
   'create_lead',
+  // Critical write tools that must always remain available
+  'update_lead',
   'create_activity',
   'create_note',
   'update_activity',
