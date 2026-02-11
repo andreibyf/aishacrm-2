@@ -1,6 +1,6 @@
 {
   "name": "aishacrm-backend",
-  "version": "4.5.4",
+  "version": "4.5.23",
   "description": "Independent backend server for ai-sha crm - your own backend infrastructure",
   "main": "server.js",
   "type": "module",

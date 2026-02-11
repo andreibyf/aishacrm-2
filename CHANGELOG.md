@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased] - 2026-01-09
+## [Unreleased]
 
 ### Added
 - **Dynamic Date Awareness for AI** - System prompt now includes current date/time dynamically
@@ -32,6 +32,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `create_activity` tool description updated with critical date rules
 - `update_activity` tool description updated with date validation guidance
 - `create_note` tool description now lists all valid note types (general, call_log, meeting, email, task, follow_up, important, demo, proposal)
+
+## [4.5.23] - 2026-02-10
+
+### Fixed
+- **Developer AI log access behavior**
+  - Ensure `readLogs` always retrieves and analyzes logs via `system_logs` instead of redirecting users to external platform dashboards
+  - Updated execution context metadata so Developer AI accurately reports its log access method in Docker/production environments
 
 ---
 
