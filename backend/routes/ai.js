@@ -4136,11 +4136,11 @@ ${conversationSummary}`;
         });
       }
 
-      // Check if Anthropic API key is configured
-      if (!process.env.ANTHROPIC_API_KEY) {
+      // Check if OpenAI API key is configured
+      if (!process.env.OPENAI_API_KEY) {
         return res.status(503).json({
           status: 'error',
-          message: 'Developer AI is not configured. ANTHROPIC_API_KEY is missing.',
+          message: 'Developer AI is not configured. OPENAI_API_KEY is missing.',
         });
       }
 
@@ -4239,11 +4239,11 @@ ${conversationSummary}`;
         });
       }
 
-      // Check if Anthropic API key is configured
-      if (!process.env.ANTHROPIC_API_KEY) {
+      // Check if OpenAI API key is configured
+      if (!process.env.OPENAI_API_KEY) {
         return res.status(503).json({
           status: 'error',
-          message: 'Developer AI is not configured. ANTHROPIC_API_KEY is missing.',
+          message: 'Developer AI is not configured. OPENAI_API_KEY is missing.',
         });
       }
 

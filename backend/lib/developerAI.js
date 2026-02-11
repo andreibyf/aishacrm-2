@@ -1,10 +1,10 @@
 /**
  * Developer AI - Superadmin-only AI assistant for code development
- * Uses Claude 3.5 Sonnet for advanced coding tasks
+ * Uses GPT-4o for advanced coding tasks
  * Phase 6: Integrated with approval workflow for safety
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import fs from 'fs/promises';
 import path from 'path';
 import { exec } from 'child_process';
@@ -16,21 +16,21 @@ import { loadAiSettings } from './aiSettingsLoader.js';
 
 const execAsync = promisify(exec);
 
-// Initialize Anthropic client
-let anthropicClient = null;
+// Initialize OpenAI client
+let openaiClient = null;
 
-function getAnthropicClient() {
-  if (!anthropicClient) {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+function getOpenAIClient() {
+  if (!openaiClient) {
+    const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      throw new Error('ANTHROPIC_API_KEY not configured');
+      throw new Error('OPENAI_API_KEY not configured');
     }
-    anthropicClient = new Anthropic({
+    openaiClient = new OpenAI({
       apiKey,
-      baseURL: process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com',
+      baseURL: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
     });
   }
-  return anthropicClient;
+  return openaiClient;
 }
 
 /**
@@ -529,6 +529,20 @@ Use this to understand my environment before making assumptions about log access
     },
   },
 ];
+
+// Convert Anthropic tool format to OpenAI format
+function convertToolsToOpenAI(anthropicTools) {
+  return anthropicTools.map(tool => ({
+    type: 'function',
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.input_schema,
+    },
+  }));
+}
+
+const DEVELOPER_TOOLS_OPENAI = convertToolsToOpenAI(DEVELOPER_TOOLS);
 
 // Security check for file paths
 function isPathAllowed(filePath) {
@@ -1748,17 +1762,16 @@ You are here to help the superadmin understand, debug, and improve the AiSHA CRM
 export async function developerChat(messages, userId, onProgress = null) {
   let client;
 
-  // Try to get the Anthropic client with user-friendly error handling
+  // Try to get the OpenAI client with user-friendly error handling
   try {
-    client = getAnthropicClient();
+    client = getOpenAIClient();
   } catch (error) {
     console.error('[Developer AI] Failed to initialize client:', error.message);
-    if (error.message.includes('ANTHROPIC_API_KEY')) {
-      throw new Error('Developer AI is not configured. Please ensure the ANTHROPIC_API_KEY environment variable is set.');
+    if (error.message.includes('OPENAI_API_KEY')) {
+      throw new Error('Developer AI is not configured. Please ensure the OPENAI_API_KEY environment variable is set.');
     }
     throw new Error('Unable to initialize Developer AI. Please try again later.');
   }
-  
   console.log('[Developer AI] Starting chat with', messages.length, 'messages');
   
   // Send initial progress event
@@ -1826,36 +1839,41 @@ export async function developerChat(messages, userId, onProgress = null) {
   // Inject execution context and health alerts into system prompt
   const contextualSystemPrompt = DEVELOPER_SYSTEM_PROMPT + executionContextStr + healthAlertsContext;
   
-  // Helper to make Anthropic API calls with retry logic
-  async function callAnthropic(conversationMessages, retryCount = 0) {
+  // Helper to make OpenAI API calls with retry logic
+  async function callOpenAI(conversationMessages, retryCount = 0) {
     const MAX_RETRIES = 1;
 
-    // Filter and validate messages - Anthropic requires non-empty content
-    const validMessages = conversationMessages
-      .map(m => ({
-        role: m.role,
-        content: m.content,
-      }))
-      .filter(m => {
-        // Check if content is valid
-        if (!m.content) return false;
-        if (typeof m.content === 'string' && m.content.trim() === '') return false;
-        if (Array.isArray(m.content) && m.content.length === 0) return false;
-        return true;
-      });
+    // Filter and validate messages - BUT preserve full structure for tool calling
+    // CRITICAL: OpenAI needs tool_calls, tool_call_id, and role='tool' preserved
+    const validMessages = conversationMessages.filter(m => {
+      // Check if content is valid (but allow tool role with no content if it has tool_call_id)
+      if (m.role === 'tool') {
+        return m.tool_call_id && m.content !== undefined;
+      }
+      if (!m.content) return false;
+      if (typeof m.content === 'string' && m.content.trim() === '') return false;
+      if (Array.isArray(m.content) && m.content.length === 0) return false;
+      return true;
+    });
 
     if (validMessages.length === 0) {
       throw new Error('No valid messages to send. Please provide a message.');
     }
 
+    // Add system message at start
+    const messagesWithSystem = [
+      { role: 'system', content: contextualSystemPrompt },
+      ...validMessages
+    ];
+
     try {
-      return await client.messages.create({
-        model: 'claude-sonnet-4-20250514',
+      return await client.chat.completions.create({
+        model: 'gpt-4o',
         max_tokens: 16384,
         temperature: aiSettings.temperature,
-        system: contextualSystemPrompt,
-        tools: DEVELOPER_TOOLS,
-        messages: validMessages,
+        messages: messagesWithSystem,
+        tools: DEVELOPER_TOOLS_OPENAI,
+        tool_choice: 'auto',
       });
     } catch (error) {
       console.error(`[Developer AI] API call failed (attempt ${retryCount + 1}):`, error.message);
@@ -1880,7 +1898,7 @@ export async function developerChat(messages, userId, onProgress = null) {
         errorMessage.includes('fetch failed') || statusCode >= 500) && retryCount < MAX_RETRIES) {
         console.log('[Developer AI] Retrying after network error...');
         await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
-        return callAnthropic(conversationMessages, retryCount + 1);
+        return callOpenAI(conversationMessages, retryCount + 1);
       }
 
       // Server errors
@@ -1907,9 +1925,10 @@ export async function developerChat(messages, userId, onProgress = null) {
     }
   }
   
-  const response = await callAnthropic(messages);
+  const response = await callOpenAI(messages);
   
-  console.log('[Developer AI] Initial response:', response.stop_reason);
+  const finishReason = response.choices[0]?.finish_reason;
+  console.log('[Developer AI] Initial response:', finishReason);
   
   // Handle tool use loop
   let currentResponse = response;
@@ -1917,13 +1936,18 @@ export async function developerChat(messages, userId, onProgress = null) {
   let toolIterations = 0;
   const MAX_TOOL_ITERATIONS = aiSettings.max_iterations || 10; // From database settings
   
-  while (currentResponse.stop_reason === 'tool_use' && toolIterations < MAX_TOOL_ITERATIONS) {
+  while (currentResponse.choices[0]?.finish_reason === 'tool_calls' && toolIterations < MAX_TOOL_ITERATIONS) {
     toolIterations++;
-    const toolUseBlocks = currentResponse.content.filter(block => block.type === 'tool_use');
+    const toolCalls = currentResponse.choices[0]?.message?.tool_calls || [];
     const toolResults = [];
     
-    for (const toolUse of toolUseBlocks) {
-      console.log('[Developer AI] Tool call:', toolUse.name);
+    // Add assistant message with tool calls to history
+    conversationHistory.push(currentResponse.choices[0].message);
+    
+    for (const toolCall of toolCalls) {
+      const toolName = toolCall.function.name;
+      const toolArgs = JSON.parse(toolCall.function.arguments);
+      console.log('[Developer AI] Tool call:', toolName);
       
       // Send progress update for tool execution
       if (onProgress) {
@@ -1935,13 +1959,13 @@ export async function developerChat(messages, userId, onProgress = null) {
           get_file_outline: '🗂️ Getting file outline',
           propose_change: '✏️ Proposing changes',
           test_aisha: '🤖 Testing AiSHA AI'
-        }[toolUse.name] || `🔧 ${toolUse.name}`;
+        }[toolName] || `🔧 ${toolName}`;
         
         try {
           onProgress({ 
             type: 'tool', 
             message: toolLabel,
-            data: { tool: toolUse.name, iteration: toolIterations }
+            data: { tool: toolName, iteration: toolIterations }
           });
         } catch (progressErr) {
           console.warn('[Developer AI] Progress callback error:', progressErr.message);
@@ -1949,34 +1973,24 @@ export async function developerChat(messages, userId, onProgress = null) {
       }
       
       try {
-        const result = await executeDeveloperTool(toolUse.name, toolUse.input, userId);
+        const result = await executeDeveloperTool(toolName, toolArgs, userId);
         toolResults.push({
-          type: 'tool_result',
-          tool_use_id: toolUse.id,
+          role: 'tool',
+          tool_call_id: toolCall.id,
           content: JSON.stringify(result, null, 2),
         });
       } catch (toolError) {
         console.error('[Developer AI] Tool execution error:', toolError.message);
         toolResults.push({
-          type: 'tool_result',
-          tool_use_id: toolUse.id,
+          role: 'tool',
+          tool_call_id: toolCall.id,
           content: JSON.stringify({ error: toolError.message || 'Tool execution failed' }),
-          is_error: true,
         });
       }
     }
     
-    // Add assistant message with tool calls
-    conversationHistory.push({
-      role: 'assistant',
-      content: currentResponse.content,
-    });
-    
-    // Add tool results
-    conversationHistory.push({
-      role: 'user',
-      content: toolResults,
-    });
+    // Add tool results to history
+    conversationHistory.push(...toolResults);
     
     // Continue conversation
     if (onProgress) {
@@ -1987,9 +2001,9 @@ export async function developerChat(messages, userId, onProgress = null) {
       }
     }
     
-    currentResponse = await callAnthropic(conversationHistory);
+    currentResponse = await callOpenAI(conversationHistory);
     
-    console.log('[Developer AI] Continued response:', currentResponse.stop_reason);
+    console.log('[Developer AI] Continued response:', currentResponse.choices[0]?.finish_reason);
   }
   
   if (toolIterations >= MAX_TOOL_ITERATIONS) {
@@ -1997,8 +2011,7 @@ export async function developerChat(messages, userId, onProgress = null) {
   }
 
   // Extract final text response
-  const textBlocks = currentResponse.content.filter(block => block.type === 'text');
-  const responseText = textBlocks.map(b => b.text).join('\n');
+  const responseText = currentResponse.choices[0]?.message?.content || '';
   
   // Send completion progress
   if (onProgress) {
@@ -2012,7 +2025,7 @@ export async function developerChat(messages, userId, onProgress = null) {
   return {
     response: responseText,
     usage: currentResponse.usage,
-    model: 'claude-sonnet-4-20250514',
+    model: 'gpt-4o',
   };
 }
 
