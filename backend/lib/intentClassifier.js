@@ -62,7 +62,11 @@ const INTENT_PATTERNS = {
   
   LEAD_UPDATE: [
     /\b(update|modify|change|edit)\s+(the\s+)?lead\b/i,
-    /\b(set|change)\s+.+\s+lead\s+(to|=)\b/i
+    /\b(set|change)\s+.+\s+lead\s+(to|=)\b/i,
+    // Corrections/fixes to an existing lead, often phrased around the name
+    /\b(correct|fix)\s+(the\s+)?lead\b/i,
+    /\b(correct|fix)\s+(the\s+)?(name|info|information|details)\b.*\blead\b/i,
+    /\blead\b.*\bname\b.*\b(wrong|incorrect|misspelled|spelled\s+wrong|needs\s+correction|needs\s+fix)\b/i
   ],
   
   LEAD_QUALIFY: [

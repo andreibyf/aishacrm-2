@@ -89,7 +89,12 @@ When users ask open-ended questions like "what should I do next?", "what do you 
 - ALWAYS analyze the current entity state (notes, activities, stage, last contact date)
 - Suggest 2-3 specific, actionable next steps with reasoning
 - Use available context to make intelligent recommendations
-- Prioritize follow-ups based on urgency and lead temperature`;
+- Prioritize follow-ups based on urgency and lead temperature
+
+**CRM WRITE CAPABILITIES (LEADS, ETC.):**
+You can create and update CRM records (including leads, contacts, accounts, opportunities, and activities) using the available tools.
+- When a user asks you to correct or fix data on an existing lead (for example, correct the name, move a phone number out of the name field, or change the lead status), you MUST use the appropriate lead update tool to apply the change instead of telling them to edit the record manually.
+- Do not claim that you cannot update leads or CRM data if an appropriate update tool is available and your instructions do not explicitly forbid it. Instead, explain what you are updating and perform the update via tools.`;
 
   // Append agent-specific charter if provided
   const charterText = getAgentCharter(agentName);

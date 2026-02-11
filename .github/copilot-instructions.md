@@ -48,13 +48,20 @@ const { data } = await supabase.from('accounts').select('*').eq('tenant_id', req
 ## Development Commands
 
 ```bash
-docker compose up -d --build                     # Start all
+docker compose up -d --build                     # Start core stack (frontend, backend, redis-memory, redis-cache)
+docker compose -f braid-mcp-node-server/docker-compose.yml up -d   # Start Braid MCP server + worker nodes
+docker compose -f addons/agent-office/docker-compose.agent-office.yml up -d  # Start Agent Office + office-viz stack
 docker exec aishacrm-backend npm test            # Backend tests
 npm run test:e2e                                 # Playwright E2E
 doppler run -- node backend/run-sql.js           # Run SQL with secrets
 ```
 
-**Ports:** Frontend=4000, Backend=4001, Redis Memory=6379, Redis Cache=6380
+**Required DEV containers (AiSHA AI):**
+- Core: `aishacrm-backend` (4001), `aishacrm-frontend` (4000), `aishacrm-redis-memory` (6379), `aishacrm-redis-cache` (6380)
+- Braid MCP: `braid-mcp-server`, `braid-mcp-1`, `braid-mcp-2`
+- Agent Office / Office Viz: `aisha-redpanda`, `aisha-telemetry-sidecar`, `aisha-office-viz` (4010)
+
+**Ports:** Frontend=4000, Backend=4001, Redis Memory=6379, Redis Cache=6380, Office Viz=4010, Braid MCP=8000 (loopback)
 
 ## Common Pitfalls
 

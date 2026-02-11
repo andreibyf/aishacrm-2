@@ -5,7 +5,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyIntent } from '../../lib/intentClassifier.js';
+import { classifyIntent, extractEntityMentions } from '../../lib/intentClassifier.js';
 
 describe('Intent Classifier', () => {
   
@@ -375,6 +375,50 @@ describe('Intent Classifier', () => {
             `Should match NOTE_CREATE, not NOTE_LIST_FOR_RECORD for: "${message}" (got: ${intent})`);
         }
       });
+    });
+  });
+
+  describe('LEAD_UPDATE intent for correction/fix phrasing', () => {
+
+    test('matches direct lead correction phrases', () => {
+      const testCases = [
+        'please correct the lead',
+        'can you fix the lead',
+        'correct the lead for me'
+      ];
+
+      for (const message of testCases) {
+        const intent = classifyIntent(message);
+        assert.equal(intent, 'LEAD_UPDATE',
+          `Expected LEAD_UPDATE for: "${message}"`);
+      }
+    });
+
+    test('matches correcting the name when lead is mentioned', () => {
+      const testCases = [
+        'please correct the name for this lead',
+        'can you fix the name on that lead',
+        'the lead name is wrong, please correct it',
+        'this lead name is spelled wrong and needs correction'
+      ];
+
+      for (const message of testCases) {
+        const intent = classifyIntent(message);
+        assert.equal(intent, 'LEAD_UPDATE',
+          `Expected LEAD_UPDATE for: "${message}"`);
+      }
+    });
+
+    test('falls back to entity-based routing when only "lead" is present', () => {
+      const message = 'it\'s a lead, it should be Josh Johnson';
+      const intent = classifyIntent(message);
+      const entities = extractEntityMentions(message);
+
+      // Intent may be null here, but entityMentions.lead should be true
+      assert.equal(entities.lead, true,
+        'Expected entityMentions.lead to be true when "lead" is mentioned');
+      assert.equal(intent === null || intent === 'LEAD_UPDATE', true,
+        `Intent should be null or LEAD_UPDATE, got: ${intent}`);
     });
   });
 

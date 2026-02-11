@@ -33,6 +33,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `update_activity` tool description updated with date validation guidance
 - `create_note` tool description now lists all valid note types (general, call_log, meeting, email, task, follow_up, important, demo, proposal)
 
+## [4.5.24] - 2026-02-10
+
+### Fixed
+- **AiSHA lead correction & updates**
+  - Adjusted intent classifier and routing so phrases like "please correct the name for this lead" reliably map to the `update_lead` tool
+  - Updated AiSHA's system prompt to explicitly state she can update CRM records (including leads) via tools and should not claim she "cannot update leads" when update tools are available
+  - Added routing and light `/api/ai/chat` tests to lock in the new lead-correction behavior
+
 ## [4.5.23] - 2026-02-10
 
 ### Fixed
