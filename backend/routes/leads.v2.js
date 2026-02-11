@@ -621,7 +621,15 @@ export default function createLeadsV2Routes() {
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id, ...updates } = req.body;
+      let { tenant_id, ...updates } = req.body || {};
+
+      // Fallback: if tenant_id is not provided in the body, use req.tenant.id
+      // This keeps multi-tenant isolation while allowing internal callers
+      // (like AI tools) that rely on authenticated tenant context to work
+      // without explicitly passing tenant_id in the payload.
+      if (!tenant_id && req.tenant?.id) {
+        tenant_id = req.tenant.id;
+      }
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
