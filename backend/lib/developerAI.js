@@ -127,10 +127,14 @@ async function getExecutionContext() {
     environment: 'PRODUCTION',
     warnings: [
       'File writes may not persist (ephemeral filesystem)',
-      'Logs accessed via platform dashboard, not docker logs',
       'Be cautious with database mutations',
     ],
-    logsAccess: 'Platform logging dashboard (Railway, Render, etc.)',
+    // In production, Developer AI should rely on the system_logs table for log access.
+    // Platform logging dashboards (Railway, Render, etc.) are for human operators,
+    // not for this AI assistant to redirect users to.
+    logsAccess: isDocker
+      ? 'system_logs table (primary source); platform dashboard is secondary for humans'
+      : 'system_logs table via database; platform dashboard may also exist',
   } : {
     environment: nodeEnv.toUpperCase(),
     warnings: [],
@@ -696,20 +700,16 @@ async function searchCode({ pattern, directory = 'backend', file_pattern, case_i
   }
 }
 
-export async function readLogs({ log_type, lines = 100, filter, analyze_patterns = false, since_minutes = null }) {
+export async function readLogs({
+  log_type,
+  lines = 100,
+  filter,
+  analyze_patterns = false,
+  since_minutes = null,
+}) {
   const maxLines = Math.min(lines, 500);
-  const isProduction = process.env.NODE_ENV === 'production';
-  const isDocker = process.env.DOCKER_CONTAINER === 'true' || await isRunningInDocker();
-  
-  // In production, logs aren't accessible via docker - they're in the platform's logging system
-  if (isProduction) {
-    return {
-      log_type,
-      note: 'In production, logs are accessed via the deployment platform (Railway, Render, etc.) rather than via Docker. Use the platform\'s log viewer for production debugging.',
-      suggestion: 'For real-time debugging in production, check the platform\'s logging dashboard or consider searching the codebase for error handling related to the issue.',
-    };
-  }
-  
+  const isDocker = process.env.DOCKER_CONTAINER === 'true' || (await isRunningInDocker());
+
   // When running inside Docker, we can't call docker CLI
   // Instead, query the database for logged entries or suggest using docker logs from host
   if (isDocker) {
@@ -717,19 +717,19 @@ export async function readLogs({ log_type, lines = 100, filter, analyze_patterns
       // Try to fetch recent logs from system_logs table instead
       const { getSupabaseClient } = await import('./supabase-db.js');
       const supabase = getSupabaseClient();
-      
+
       let query = supabase
         .from('system_logs')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(maxLines);
-      
+
       // Apply time-based filter if since_minutes is specified (prevents stale issue reporting)
       if (since_minutes && since_minutes > 0) {
         const cutoff = new Date(Date.now() - since_minutes * 60 * 1000).toISOString();
         query = query.gte('created_at', cutoff);
       }
-      
+
       // Apply log type filter
       if (log_type === 'errors') {
         query = query.in('level', ['error', 'critical', 'fatal']);
@@ -738,72 +738,82 @@ export async function readLogs({ log_type, lines = 100, filter, analyze_patterns
       } else if (log_type === 'braid') {
         query = query.ilike('category', '%braid%');
       }
-      
+
       // Apply text filter if provided
       if (filter) {
         query = query.ilike('message', `%${filter}%`);
       }
-      
+
       const { data: logs, error } = await query;
-      
+
       if (error) {
         return {
           log_type,
           note: 'Running inside Docker container. Cannot access docker logs directly.',
-          suggestion: 'Run `docker logs aishacrm-backend --tail 100` from the HOST machine to view container logs.',
+          suggestion:
+            'Run `docker logs aishacrm-backend --tail 100` from the HOST machine to view container logs.',
           db_logs_error: error.message,
         };
       }
-      
+
       if (!logs || logs.length === 0) {
         return {
           log_type,
           lines_found: 0,
-          time_filter: since_minutes ? `last ${since_minutes} minutes` : 'none (showing historical logs)',
+          time_filter: since_minutes
+            ? `last ${since_minutes} minutes`
+            : 'none (showing historical logs)',
           note: 'No matching logs found in system_logs table.',
-          suggestion: 'For real-time container output, run `docker logs aishacrm-backend --tail 100` from the HOST machine.',
-          system_status: since_minutes 
+          suggestion:
+            'For real-time container output, run `docker logs aishacrm-backend --tail 100` from the HOST machine.',
+          system_status: since_minutes
             ? `Backend is running (this response proves it). No errors in the last ${since_minutes} minutes.`
             : 'Backend is running (this response proves it). No errors logged recently.',
         };
       }
-      
+
       // Format logs for display
-      const formattedLogs = logs.map(log => 
-        `[${log.created_at}] [${log.level || 'info'}] ${log.category || 'general'}: ${log.message}`
-      ).join('\n');
-      
+      const formattedLogs = logs
+        .map(
+          (log) =>
+            `[${log.created_at}] [${log.level || 'info'}] ${log.category || 'general'}: ${log.message}`,
+        )
+        .join('\n');
+
       const result = {
         log_type,
         source: 'system_logs table',
-        time_filter: since_minutes ? `last ${since_minutes} minutes` : 'none (showing historical logs - may include stale issues)',
+        time_filter: since_minutes
+          ? `last ${since_minutes} minutes`
+          : 'none (showing historical logs - may include stale issues)',
         lines_found: logs.length,
         content: formattedLogs,
-        note: since_minutes 
-          ? `Logs from the last ${since_minutes} minutes. For raw container stdout, run \`docker logs\` from host.`
-          : 'Logs retrieved from database (no time filter - may include resolved issues). For raw container stdout, run `docker logs` from host.',
+        note: since_minutes
+          ? `Successfully retrieved ${logs.length} log entries from the last ${since_minutes} minutes. Analyze the content above for errors, warnings, and patterns.`
+          : `Successfully retrieved ${logs.length} log entries. Analyze the content above for errors, warnings, and patterns. Note: no time filter applied, some issues may already be resolved.`,
       };
-      
+
       if (analyze_patterns && formattedLogs) {
         result.pattern_analysis = analyzeLogPatterns(formattedLogs, log_type);
       }
-      
+
       return result;
     } catch (dbError) {
       return {
         log_type,
         note: 'Running inside Docker container. Cannot access docker logs directly.',
-        suggestion: 'Run `docker logs aishacrm-backend --tail 100` from the HOST machine to view container logs.',
+        suggestion:
+          'Run `docker logs aishacrm-backend --tail 100` from the HOST machine to view container logs.',
         error: dbError.message,
         system_status: 'Backend is running (this response proves it).',
       };
     }
   }
-  
+
   try {
     // Local development outside Docker: Read from container stdout/stderr (captured by Docker)
     let cmd;
-    
+
     switch (log_type) {
       case 'backend':
         cmd = `docker logs aishacrm-backend --tail ${maxLines} 2>&1`;
@@ -820,29 +830,29 @@ export async function readLogs({ log_type, lines = 100, filter, analyze_patterns
       default:
         return { error: `Unknown log type: ${log_type}` };
     }
-    
+
     // Sanitize filter to prevent shell injection (CWE-78)
     if (filter) {
       const safeFilter = escapeShellArg(filter);
       cmd = `${cmd} | grep -i ${safeFilter}`;
     }
-    
+
     const { stdout } = await execAsync(cmd, { maxBuffer: 1024 * 1024 });
     const logContent = stdout || 'No logs found matching criteria';
-    
+
     const result = {
       log_type,
       lines_requested: maxLines,
       filter: filter || null,
       content: logContent,
     };
-    
+
     // Analyze patterns if requested
     if (analyze_patterns && logContent && logContent !== 'No logs found matching criteria') {
       const analysis = analyzeLogPatterns(logContent, log_type);
       result.pattern_analysis = analysis;
     }
-    
+
     return result;
   } catch (error) {
     return {
@@ -858,7 +868,7 @@ export async function readLogs({ log_type, lines = 100, filter, analyze_patterns
  * Analyze log patterns for anomalies and trends
  */
 function analyzeLogPatterns(logContent, logType) {
-  const lines = logContent.split('\n').filter(l => l.trim());
+  const lines = logContent.split('\n').filter((l) => l.trim());
   const analysis = {
     total_lines: lines.length,
     error_patterns: {},
@@ -866,28 +876,28 @@ function analyzeLogPatterns(logContent, logType) {
     anomalies: [],
     recommendations: [],
   };
-  
+
   // Extract error patterns (recurring errors)
   const errorRegex = /error:?\s*([^:\n]+)|exception:?\s*([^:\n]+)/gi;
   const errors = {};
-  
-  lines.forEach(line => {
+
+  lines.forEach((line) => {
     const matches = [...line.matchAll(errorRegex)];
-    matches.forEach(match => {
+    matches.forEach((match) => {
       const errorMsg = (match[1] || match[2] || '').trim().substring(0, 100);
       if (errorMsg) {
         errors[errorMsg] = (errors[errorMsg] || 0) + 1;
       }
     });
   });
-  
+
   // Find recurring errors (appear 3+ times)
   Object.entries(errors).forEach(([msg, count]) => {
     if (count >= 3) {
       analysis.error_patterns[msg] = count;
     }
   });
-  
+
   // Detect error spikes
   if (Object.keys(analysis.error_patterns).length > 0) {
     const totalRecurringErrors = Object.values(analysis.error_patterns).reduce((a, b) => a + b, 0);
@@ -898,13 +908,15 @@ function analyzeLogPatterns(logContent, logType) {
         message: `${totalRecurringErrors} recurring errors detected`,
         top_error: Object.entries(analysis.error_patterns).sort((a, b) => b[1] - a[1])[0],
       });
-      analysis.recommendations.push('Investigate recurring errors - they may indicate a systemic issue');
+      analysis.recommendations.push(
+        'Investigate recurring errors - they may indicate a systemic issue',
+      );
     }
   }
-  
+
   // Check for slow response times (if AI/Braid logs)
   if (logType === 'ai' || logType === 'braid') {
-    const slowQueries = lines.filter(line => {
+    const slowQueries = lines.filter((line) => {
       const timeMatch = line.match(/(\d+)ms|(\d+\.\d+)s/);
       if (timeMatch) {
         const time = parseFloat(timeMatch[1] || timeMatch[2] * 1000);
@@ -912,7 +924,7 @@ function analyzeLogPatterns(logContent, logType) {
       }
       return false;
     });
-    
+
     if (slowQueries.length > 5) {
       analysis.anomalies.push({
         type: 'performance_degradation',
@@ -923,12 +935,12 @@ function analyzeLogPatterns(logContent, logType) {
       analysis.recommendations.push('Check for slow database queries or API calls');
     }
   }
-  
+
   // Check for authentication failures
-  const authFailures = lines.filter(line => 
-    line.match(/unauthorized|authentication failed|invalid.*token|forbidden/i)
+  const authFailures = lines.filter((line) =>
+    line.match(/unauthorized|authentication failed|invalid.*token|forbidden/i),
   );
-  
+
   if (authFailures.length > 5) {
     analysis.warnings.push({
       type: 'security',
@@ -936,12 +948,10 @@ function analyzeLogPatterns(logContent, logType) {
       suggestion: 'Check for brute force attempts or misconfigured API keys',
     });
   }
-  
+
   // Check for rate limiting
-  const rateLimitHits = lines.filter(line => 
-    line.match(/rate limit|too many requests|429/i)
-  );
-  
+  const rateLimitHits = lines.filter((line) => line.match(/rate limit|too many requests|429/i));
+
   if (rateLimitHits.length > 0) {
     analysis.warnings.push({
       type: 'rate_limiting',
@@ -949,22 +959,22 @@ function analyzeLogPatterns(logContent, logType) {
       suggestion: 'External API may be throttling requests',
     });
   }
-  
+
   // Summary recommendation
   if (analysis.anomalies.length === 0 && Object.keys(analysis.error_patterns).length === 0) {
     analysis.recommendations.push('No significant issues detected in logs');
   }
-  
+
   return analysis;
 }
 
 async function getFileOutline({ file_path }) {
   const result = await readFile({ file_path });
   if (result.error) return result;
-  
+
   const lines = result.content.split('\n');
   const outline = [];
-  
+
   // Simple regex-based outline extraction for JS/TS
   const patterns = [
     { type: 'function', regex: /^\d+:\s*(export\s+)?(async\s+)?function\s+(\w+)/ },
@@ -973,7 +983,7 @@ async function getFileOutline({ file_path }) {
     { type: 'class', regex: /^\d+:\s*(export\s+)?class\s+(\w+)/ },
     { type: 'method', regex: /^\d+:\s+(async\s+)?(\w+)\s*\([^)]*\)\s*{/ },
   ];
-  
+
   for (const line of lines) {
     for (const { type, regex } of patterns) {
       const match = line.match(regex);
@@ -987,7 +997,7 @@ async function getFileOutline({ file_path }) {
       }
     }
   }
-  
+
   return {
     file: file_path,
     total_lines: result.total_lines,
@@ -1005,7 +1015,8 @@ function proposeChange({ file_path, change_description, original_code, new_code 
       original: original_code,
       proposed: new_code,
     },
-    instructions: 'Review this proposed change. To apply it, copy the new code and paste it into the file, or ask me to write it directly.',
+    instructions:
+      'Review this proposed change. To apply it, copy the new code and paste it into the file, or ask me to write it directly.',
   };
 }
 
@@ -1080,33 +1091,35 @@ const BLOCKED_COMMANDS = [
 // Check if command is safe to auto-approve
 function _isCommandSafe(command) {
   const normalized = command.trim().toLowerCase();
-  
+
   // Check blocked commands first
   for (const pattern of BLOCKED_COMMANDS) {
     if (pattern.test(normalized)) {
       return { safe: false, blocked: true, reason: 'This command is blocked for security reasons' };
     }
   }
-  
+
   // Check safe commands
   for (const pattern of SAFE_COMMANDS) {
     if (pattern.test(normalized)) {
       return { safe: true, blocked: false };
     }
   }
-  
+
   return { safe: false, blocked: false, reason: 'Requires user approval' };
 }
 
 // Write file implementation - returns approval request
 async function writeFile({ file_path, content, description }) {
   if (!isPathAllowed(file_path)) {
-    return { error: `Access denied: ${file_path} is not in an allowed directory or contains forbidden patterns` };
+    return {
+      error: `Access denied: ${file_path} is not in an allowed directory or contains forbidden patterns`,
+    };
   }
-  
+
   const fullPath = path.join('/app', file_path);
   const actionId = `write_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  
+
   // Check if file exists
   let existingContent = null;
   try {
@@ -1114,7 +1127,7 @@ async function writeFile({ file_path, content, description }) {
   } catch {
     // File doesn't exist - that's okay for write_file
   }
-  
+
   // Store pending action
   pendingActions.set(actionId, {
     type: 'write_file',
@@ -1125,7 +1138,7 @@ async function writeFile({ file_path, content, description }) {
     createdAt: Date.now(),
     status: 'pending',
   });
-  
+
   // Return approval request
   return {
     type: 'approval_required',
@@ -1142,21 +1155,25 @@ async function writeFile({ file_path, content, description }) {
 // Create file implementation - returns approval request
 async function createFile({ file_path, content, description }) {
   if (!isPathAllowed(file_path)) {
-    return { error: `Access denied: ${file_path} is not in an allowed directory or contains forbidden patterns` };
+    return {
+      error: `Access denied: ${file_path} is not in an allowed directory or contains forbidden patterns`,
+    };
   }
-  
+
   const fullPath = path.join('/app', file_path);
-  
+
   // Check if file already exists
   try {
     await fs.access(fullPath);
-    return { error: `File already exists: ${file_path}. Use write_file to overwrite or propose_change for edits.` };
+    return {
+      error: `File already exists: ${file_path}. Use write_file to overwrite or propose_change for edits.`,
+    };
   } catch {
     // File doesn't exist - good
   }
-  
+
   const actionId = `create_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  
+
   // Store pending action
   pendingActions.set(actionId, {
     type: 'create_file',
@@ -1166,7 +1183,7 @@ async function createFile({ file_path, content, description }) {
     createdAt: Date.now(),
     status: 'pending',
   });
-  
+
   // Return approval request
   return {
     type: 'approval_required',
@@ -1184,27 +1201,27 @@ async function createFile({ file_path, content, description }) {
 async function runCommand({ command, working_directory, reason }) {
   // Use new command safety classification
   const classification = classifyCommand(command);
-  
+
   if (classification.level === 'blocked') {
     return {
       error: classification.reason,
       command: sanitizeCommand(command),
-      blocked: true
+      blocked: true,
     };
   }
-  
+
   const cwd = working_directory ? path.join('/app', working_directory) : '/app';
-  
+
   if (classification.autoExecute) {
     // Auto-execute safe commands
     try {
       console.log(`[Developer AI] Auto-executing safe command: ${sanitizeCommand(command)}`);
-      const { stdout, stderr } = await execAsync(command, { 
-        cwd, 
+      const { stdout, stderr } = await execAsync(command, {
+        cwd,
         maxBuffer: 1024 * 1024,
-        timeout: 30000 // 30 second timeout
+        timeout: 30000, // 30 second timeout
       });
-      
+
       return {
         command: sanitizeCommand(command),
         auto_approved: true,
@@ -1223,10 +1240,10 @@ async function runCommand({ command, working_directory, reason }) {
       };
     }
   }
-  
+
   // Requires approval - use in-memory for now (TODO: move to DB approvals)
   const actionId = `cmd_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  
+
   pendingActions.set(actionId, {
     type: 'run_command',
     command: sanitizeCommand(command),
@@ -1235,7 +1252,7 @@ async function runCommand({ command, working_directory, reason }) {
     createdAt: Date.now(),
     status: 'pending',
   });
-  
+
   return {
     type: 'approval_required',
     action_id: actionId,
@@ -1243,24 +1260,25 @@ async function runCommand({ command, working_directory, reason }) {
     command,
     working_directory: cwd,
     reason,
-    instructions: 'This command requires your approval. Click "Approve" to execute or "Reject" to cancel.',
+    instructions:
+      'This command requires your approval. Click "Approve" to execute or "Reject" to cancel.',
   };
 }
 
 // Execute an approved action
 export async function executeApprovedAction(actionId) {
   const action = pendingActions.get(actionId);
-  
+
   if (!action) {
     return { error: 'Action not found or already executed' };
   }
-  
+
   if (action.status !== 'pending') {
     return { error: `Action is ${action.status}, cannot execute` };
   }
-  
+
   action.status = 'executing';
-  
+
   try {
     switch (action.type) {
       case 'write_file':
@@ -1278,7 +1296,7 @@ export async function executeApprovedAction(actionId) {
           message: `File ${action.type === 'create_file' ? 'created' : 'written'} successfully`,
         };
       }
-      
+
       case 'run_command': {
         const { stdout, stderr } = await execAsync(action.command, {
           cwd: action.working_directory,
@@ -1295,7 +1313,7 @@ export async function executeApprovedAction(actionId) {
           exit_code: 0,
         };
       }
-      
+
       default:
         action.status = 'failed';
         return { error: `Unknown action type: ${action.type}` };
@@ -1313,14 +1331,14 @@ export async function executeApprovedAction(actionId) {
 // Reject an action
 export function rejectAction(actionId) {
   const action = pendingActions.get(actionId);
-  
+
   if (!action) {
     return { error: 'Action not found' };
   }
-  
+
   action.status = 'rejected';
   pendingActions.delete(actionId);
-  
+
   return {
     success: true,
     action_id: actionId,
@@ -1340,7 +1358,9 @@ async function testAisha(args) {
 
   try {
     // Import the AI processing functions dynamically to avoid circular dependencies
-    const { processMessage: _processMessage, getTenantSnapshot: _getTenantSnapshot } = await import('./braidIntegration-v2.js');
+    const { processMessage: _processMessage, getTenantSnapshot: _getTenantSnapshot } = await import(
+      './braidIntegration-v2.js'
+    );
     const { getSupabaseClient } = await import('./supabase-db.js');
     const supa = getSupabaseClient();
 
@@ -1356,13 +1376,19 @@ async function testAisha(args) {
         tenantName = tenants[0].name;
       } else {
         return {
-          error: 'No tenants found in database. Please provide a tenant_id or create a tenant first.',
-          suggestion: 'You can find available tenants by querying: SELECT tenant_id, name FROM tenant LIMIT 10'
+          error:
+            'No tenants found in database. Please provide a tenant_id or create a tenant first.',
+          suggestion:
+            'You can find available tenants by querying: SELECT tenant_id, name FROM tenant LIMIT 10',
         };
       }
     } else {
       // Verify the tenant exists
-      const { data: tenant } = await supa.from('tenant').select('name').eq('tenant_id', testTenantId).single();
+      const { data: tenant } = await supa
+        .from('tenant')
+        .select('name')
+        .eq('tenant_id', testTenantId)
+        .single();
       if (tenant) {
         tenantName = tenant.name;
       }
@@ -1385,7 +1411,7 @@ async function testAisha(args) {
             is_dev_test: true,
             created_by: 'developer_ai',
             test_timestamp: new Date().toISOString(),
-          }
+          },
         })
         .select('id')
         .single();
@@ -1393,20 +1419,18 @@ async function testAisha(args) {
       if (convError) {
         return {
           error: `Failed to create test conversation: ${convError.message}`,
-          details: convError
+          details: convError,
         };
       }
       conversationIdToUse = newConv.id;
     }
 
     // Insert the user message
-    await supa
-      .from('conversation_messages')
-      .insert({
-        conversation_id: conversationIdToUse,
-        role: 'user',
-        content: message,
-      });
+    await supa.from('conversation_messages').insert({
+      conversation_id: conversationIdToUse,
+      role: 'user',
+      content: message,
+    });
 
     // Now we need to simulate the AI chat process
     // We'll call the internal generateAssistantResponse function if available
@@ -1425,7 +1449,7 @@ async function testAisha(args) {
         'x-user-email': 'developer-ai@system.local',
       },
       body: JSON.stringify({
-        messages: [{ role: 'user', content: message }],  // Fixed: send as messages array
+        messages: [{ role: 'user', content: message }], // Fixed: send as messages array
         conversation_id: conversationIdToUse,
       }),
     });
@@ -1481,7 +1505,7 @@ async function testAisha(args) {
     };
 
     if (include_tool_details && toolCalls.length > 0) {
-      testResult.tool_calls = toolCalls.map(tc => ({
+      testResult.tool_calls = toolCalls.map((tc) => ({
         name: tc.name || tc.tool_name,
         status: tc.status || (tc.error ? 'error' : 'success'),
         preview: tc.result_preview?.substring(0, 200) || tc.result?.substring?.(0, 200),
@@ -1489,22 +1513,25 @@ async function testAisha(args) {
     }
 
     // Add the full conversation history for context
-    testResult.conversation_history = messages?.map(m => ({
+    testResult.conversation_history = messages?.map((m) => ({
       role: m.role,
-      content: typeof m.content === 'string' ? m.content.substring(0, 500) : JSON.stringify(m.content).substring(0, 500),
+      content:
+        typeof m.content === 'string'
+          ? m.content.substring(0, 500)
+          : JSON.stringify(m.content).substring(0, 500),
       has_metadata: !!m.metadata && Object.keys(m.metadata).length > 0,
     }));
 
     console.log('[Developer AI] AiSHA test completed in', responseTime, 'ms');
 
     return testResult;
-
   } catch (error) {
     console.error('[Developer AI] Error testing AiSHA:', error);
     return {
       error: `AiSHA test failed: ${error.message}`,
       stack: error.stack?.split('\n').slice(0, 5).join('\n'),
-      suggestion: 'Check if the backend server is running and accessible. You can use read_logs to check for errors.',
+      suggestion:
+        'Check if the backend server is running and accessible. You can use read_logs to check for errors.',
     };
   }
 }
@@ -1524,15 +1551,20 @@ async function applyPatch({ patch, target_dir = '/app', description }, userId) {
   }
 
   // Create approval in database
-  const approvalId = await createApproval(userId, 'apply_patch', {
-    patch: '[REDACTED - see preview]', // Don't store full patch twice
-    target_dir,
-    description,
-  }, {
-    description,
-    changed_files: changedFiles,
-    patch_preview: patch.substring(0, 1000) + (patch.length > 1000 ? '\n... (truncated)' : ''),
-  });
+  const approvalId = await createApproval(
+    userId,
+    'apply_patch',
+    {
+      patch: '[REDACTED - see preview]', // Don't store full patch twice
+      target_dir,
+      description,
+    },
+    {
+      description,
+      changed_files: changedFiles,
+      patch_preview: patch.substring(0, 1000) + (patch.length > 1000 ? '\n... (truncated)' : ''),
+    },
+  );
 
   return {
     type: 'approval_required',
@@ -1540,7 +1572,8 @@ async function applyPatch({ patch, target_dir = '/app', description }, userId) {
     action_type: 'apply_patch',
     description,
     changed_files: changedFiles,
-    instructions: 'This patch modifies multiple files and requires approval. Visit /api/devai/approvals to review and approve.',
+    instructions:
+      'This patch modifies multiple files and requires approval. Visit /api/devai/approvals to review and approve.',
   };
 }
 
@@ -1552,7 +1585,7 @@ export function getPendingAction(actionId) {
 // Execute a developer tool
 async function executeDeveloperTool(toolName, args, userId = null) {
   console.log(`[Developer AI] Executing tool: ${toolName}`, JSON.stringify(args).substring(0, 200));
-  
+
   switch (toolName) {
     case 'read_file':
       return readFile(args);
@@ -1732,7 +1765,7 @@ AiSHA CRM is a multi-tenant SaaS CRM platform with AI-powered features including
 1. **Read and analyze code** - Use read_file to examine specific files
 2. **Search codebase** - Use search_code to find patterns, function calls, or bugs
 3. **Browse structure** - Use list_directory to explore the codebase
-4. **Review logs** - Use read_logs to diagnose runtime issues
+4. **Review logs** - Use read_logs to diagnose runtime issues. ALWAYS analyze and summarize the actual log content returned. NEVER tell the user to check an external dashboard — you have direct access to logs via the system_logs database table.
 5. **Get outlines** - Use get_file_outline to understand file structure
 6. **Propose changes** - Use propose_change to suggest code modifications
 7. **Test AiSHA** - Use test_aisha to send test messages to the AiSHA AI assistant and observe responses, tool calls, and errors
@@ -1746,6 +1779,7 @@ AiSHA CRM is a multi-tenant SaaS CRM platform with AI-powered features including
 5. Follow existing code patterns and conventions
 6. For AI tool changes, remember to update both .braid files AND braidIntegration-v2.js
 7. **CRITICAL FOR HEALTH CHECKS:** When checking current system health or diagnosing live issues, ALWAYS use \`read_logs\` with \`since_minutes=15\` (or similar small value) to only analyze RECENT logs. The system_logs table contains historical entries that may include already-fixed issues. Without time filtering, you will report stale errors that no longer exist.
+8. **CRITICAL FOR LOG ANALYSIS:** When read_logs returns log content, you MUST analyze and summarize the actual data. Also use \`get_execution_context\` to get current system health (database, Redis, memory, uptime). Present a structured health summary including connection status, memory, uptime, and any errors/warnings found in the logs. NEVER tell the user to check an external dashboard or platform — you have full access to logs and system status.
 
 ## SECURITY BOUNDARIES
 
@@ -1768,12 +1802,14 @@ export async function developerChat(messages, userId, onProgress = null) {
   } catch (error) {
     console.error('[Developer AI] Failed to initialize client:', error.message);
     if (error.message.includes('OPENAI_API_KEY')) {
-      throw new Error('Developer AI is not configured. Please ensure the OPENAI_API_KEY environment variable is set.');
+      throw new Error(
+        'Developer AI is not configured. Please ensure the OPENAI_API_KEY environment variable is set.',
+      );
     }
     throw new Error('Unable to initialize Developer AI. Please try again later.');
   }
   console.log('[Developer AI] Starting chat with', messages.length, 'messages');
-  
+
   // Send initial progress event
   if (onProgress) {
     try {
@@ -1782,7 +1818,7 @@ export async function developerChat(messages, userId, onProgress = null) {
       console.warn('[Developer AI] Progress callback error:', progressErr.message);
     }
   }
-  
+
   // Load AI settings from database (with fallback to defaults)
   let aiSettings;
   try {
@@ -1790,17 +1826,17 @@ export async function developerChat(messages, userId, onProgress = null) {
     console.log('[Developer AI] Loaded settings:', {
       temperature: aiSettings.temperature,
       max_iterations: aiSettings.max_iterations,
-      require_approval: aiSettings.require_approval_for_destructive
+      require_approval: aiSettings.require_approval_for_destructive,
     });
   } catch (settingsErr) {
     console.warn('[Developer AI] Failed to load settings, using defaults:', settingsErr.message);
     aiSettings = {
       temperature: 0.2,
       max_iterations: 10,
-      require_approval_for_destructive: true
+      require_approval_for_destructive: true,
     };
   }
-  
+
   // Load execution context for self-awareness (what environment am I in?)
   let executionContextStr = '';
   try {
@@ -1809,13 +1845,13 @@ export async function developerChat(messages, userId, onProgress = null) {
   } catch (ctxErr) {
     console.warn('[Developer AI] Failed to load execution context:', ctxErr.message);
   }
-  
+
   // Load recent health alerts to inject into system prompt
   let healthAlertsContext = '';
   try {
     const { getActiveAlerts } = await import('./healthMonitor.js');
     const activeAlerts = await getActiveAlerts(5); // Get top 5 active alerts
-    
+
     if (activeAlerts && activeAlerts.length > 0) {
       healthAlertsContext = `\n\n## 🚨 ACTIVE SYSTEM ALERTS\n\n${activeAlerts.length} issue(s) detected by autonomous health monitoring:\n\n`;
       activeAlerts.forEach((alert, idx) => {
@@ -1835,17 +1871,18 @@ export async function developerChat(messages, userId, onProgress = null) {
     console.warn('[Developer AI] Failed to load health alerts:', alertErr.message);
     // Don't block chat if alert loading fails
   }
-  
+
   // Inject execution context and health alerts into system prompt
-  const contextualSystemPrompt = DEVELOPER_SYSTEM_PROMPT + executionContextStr + healthAlertsContext;
-  
+  const contextualSystemPrompt =
+    DEVELOPER_SYSTEM_PROMPT + executionContextStr + healthAlertsContext;
+
   // Helper to make OpenAI API calls with retry logic
   async function callOpenAI(conversationMessages, retryCount = 0) {
     const MAX_RETRIES = 1;
 
     // Filter and validate messages - BUT preserve full structure for tool calling
     // CRITICAL: OpenAI needs tool_calls, tool_call_id, and role='tool' preserved
-    const validMessages = conversationMessages.filter(m => {
+    const validMessages = conversationMessages.filter((m) => {
       // Allow tool role with tool_call_id even if no content
       if (m.role === 'tool') {
         return m.tool_call_id && m.content !== undefined;
@@ -1866,7 +1903,7 @@ export async function developerChat(messages, userId, onProgress = null) {
     // Add system message at start
     const messagesWithSystem = [
       { role: 'system', content: contextualSystemPrompt },
-      ...validMessages
+      ...validMessages,
     ];
 
     try {
@@ -1886,36 +1923,61 @@ export async function developerChat(messages, userId, onProgress = null) {
       const statusCode = error.status || error.statusCode;
 
       // Rate limit - suggest waiting
-      if (statusCode === 429 || errorMessage.includes('rate_limit') || errorMessage.includes('Rate limit')) {
-        throw new Error('Developer AI is temporarily rate limited. Please wait a moment and try again.');
+      if (
+        statusCode === 429 ||
+        errorMessage.includes('rate_limit') ||
+        errorMessage.includes('Rate limit')
+      ) {
+        throw new Error(
+          'Developer AI is temporarily rate limited. Please wait a moment and try again.',
+        );
       }
 
       // Authentication issues
-      if (statusCode === 401 || statusCode === 403 || errorMessage.includes('authentication') || errorMessage.includes('unauthorized')) {
-        throw new Error('Developer AI authentication failed. Please verify the API key configuration.');
+      if (
+        statusCode === 401 ||
+        statusCode === 403 ||
+        errorMessage.includes('authentication') ||
+        errorMessage.includes('unauthorized')
+      ) {
+        throw new Error(
+          'Developer AI authentication failed. Please verify the API key configuration.',
+        );
       }
 
       // Network/connection errors - retry once
-      if ((errorMessage.includes('network') || errorMessage.includes('ECONNREFUSED') ||
-        errorMessage.includes('timeout') || errorMessage.includes('ETIMEDOUT') ||
-        errorMessage.includes('fetch failed') || statusCode >= 500) && retryCount < MAX_RETRIES) {
+      if (
+        (errorMessage.includes('network') ||
+          errorMessage.includes('ECONNREFUSED') ||
+          errorMessage.includes('timeout') ||
+          errorMessage.includes('ETIMEDOUT') ||
+          errorMessage.includes('fetch failed') ||
+          statusCode >= 500) &&
+        retryCount < MAX_RETRIES
+      ) {
         console.log('[Developer AI] Retrying after network error...');
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+        await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1 second before retry
         return callOpenAI(conversationMessages, retryCount + 1);
       }
 
       // Server errors
       if (statusCode >= 500) {
-        throw new Error('Developer AI service is temporarily unavailable. Please try again in a few minutes.');
+        throw new Error(
+          'Developer AI service is temporarily unavailable. Please try again in a few minutes.',
+        );
       }
 
       // Invalid request
       if (statusCode === 400) {
-        throw new Error('Developer AI received an invalid request. Please try rephrasing your question.');
+        throw new Error(
+          'Developer AI received an invalid request. Please try rephrasing your question.',
+        );
       }
 
       // Default error message
-      throw new Error(`Developer AI encountered an issue: ${errorMessage || 'Unknown error'}. Please try again.`);
+      throw new Error(
+        `Developer AI encountered an issue: ${errorMessage || 'Unknown error'}. Please try again.`,
+      );
     }
   }
 
@@ -1927,60 +1989,70 @@ export async function developerChat(messages, userId, onProgress = null) {
       console.warn('[Developer AI] Progress callback error:', progressErr.message);
     }
   }
-  
+
   const response = await callOpenAI(messages);
-  
+
   const finishReason = response.choices[0]?.finish_reason;
   console.log('[Developer AI] Initial response:', finishReason);
-  
+
   // Handle tool use loop
   let currentResponse = response;
   const conversationHistory = [...messages];
   let toolIterations = 0;
   const MAX_TOOL_ITERATIONS = aiSettings.max_iterations || 10; // From database settings
-  
-  while (currentResponse.choices[0]?.finish_reason === 'tool_calls' && toolIterations < MAX_TOOL_ITERATIONS) {
+
+  while (
+    currentResponse.choices[0]?.finish_reason === 'tool_calls' &&
+    toolIterations < MAX_TOOL_ITERATIONS
+  ) {
     toolIterations++;
     const toolCalls = currentResponse.choices[0]?.message?.tool_calls || [];
     const toolResults = [];
-    
+
     // Add assistant message with tool calls to history
     conversationHistory.push(currentResponse.choices[0].message);
-    
+
     for (const toolCall of toolCalls) {
       const toolName = toolCall.function.name;
       const toolArgs = JSON.parse(toolCall.function.arguments);
       console.log('[Developer AI] Tool call:', toolName);
-      
+
       // Send progress update for tool execution
       if (onProgress) {
-        const toolLabel = {
-          read_file: '📄 Reading file',
-          search_code: '🔍 Searching code',
-          list_directory: '📁 Listing directory',
-          read_logs: '📋 Reading logs',
-          get_file_outline: '🗂️ Getting file outline',
-          propose_change: '✏️ Proposing changes',
-          test_aisha: '🤖 Testing AiSHA AI'
-        }[toolName] || `🔧 ${toolName}`;
-        
+        const toolLabel =
+          {
+            read_file: '📄 Reading file',
+            search_code: '🔍 Searching code',
+            list_directory: '📁 Listing directory',
+            read_logs: '📋 Reading logs',
+            get_file_outline: '🗂️ Getting file outline',
+            propose_change: '✏️ Proposing changes',
+            test_aisha: '🤖 Testing AiSHA AI',
+          }[toolName] || `🔧 ${toolName}`;
+
         try {
-          onProgress({ 
-            type: 'tool', 
+          onProgress({
+            type: 'tool',
             message: toolLabel,
-            data: { tool: toolName, iteration: toolIterations }
+            data: { tool: toolName, iteration: toolIterations },
           });
         } catch (progressErr) {
           console.warn('[Developer AI] Progress callback error:', progressErr.message);
         }
       }
-      
+
       try {
         const result = await executeDeveloperTool(toolName, toolArgs, userId);
+        console.log(`[Developer AI] Executing tool: ${toolName}`, JSON.stringify(toolArgs));
+        const toolContent = JSON.stringify(result, null, 2);
+        console.log(
+          `[Developer AI] Tool result (${toolName}): ${toolContent.length} chars, preview:`,
+          toolContent.substring(0, 200),
+        );
         toolResults.push({
           role: 'tool',
           tool_call_id: toolCall.id,
-          content: JSON.stringify(result, null, 2),
+          content: toolContent,
         });
       } catch (toolError) {
         console.error('[Developer AI] Tool execution error:', toolError.message);
@@ -1991,10 +2063,10 @@ export async function developerChat(messages, userId, onProgress = null) {
         });
       }
     }
-    
+
     // Add tool results to history
     conversationHistory.push(...toolResults);
-    
+
     // Continue conversation
     if (onProgress) {
       try {
@@ -2003,28 +2075,32 @@ export async function developerChat(messages, userId, onProgress = null) {
         console.warn('[Developer AI] Progress callback error:', progressErr.message);
       }
     }
-    
+
     currentResponse = await callOpenAI(conversationHistory);
-    
+
     console.log('[Developer AI] Continued response:', currentResponse.choices[0]?.finish_reason);
   }
-  
+
   if (toolIterations >= MAX_TOOL_ITERATIONS) {
     console.warn('[Developer AI] Hit max tool iterations limit');
   }
 
   // Extract final text response
   const responseText = currentResponse.choices[0]?.message?.content || '';
-  
+
   // Send completion progress
   if (onProgress) {
     try {
-      onProgress({ type: 'complete', message: 'Response ready', data: { iterations: toolIterations } });
+      onProgress({
+        type: 'complete',
+        message: 'Response ready',
+        data: { iterations: toolIterations },
+      });
     } catch (progressErr) {
       console.warn('[Developer AI] Progress callback error:', progressErr.message);
     }
   }
-  
+
   return {
     response: responseText,
     usage: currentResponse.usage,

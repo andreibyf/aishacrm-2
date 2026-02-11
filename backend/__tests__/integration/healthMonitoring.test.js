@@ -194,6 +194,45 @@ describe('Log Pattern Analysis', () => {
   });
 });
 
+describe('Developer AI Log Access Behavior', () => {
+  timeoutTest('readLogs in production Docker environment should not suggest platform dashboards', async () => {
+    const prevNodeEnv = process.env.NODE_ENV;
+    const prevDockerFlag = process.env.DOCKER_CONTAINER;
+
+    try {
+      process.env.NODE_ENV = 'production';
+      process.env.DOCKER_CONTAINER = 'true';
+
+      const { readLogs } = await import('../../lib/developerAI.js');
+
+      const result = await readLogs({
+        log_type: 'backend',
+        lines: 50,
+        analyze_patterns: false,
+        since_minutes: 15,
+      });
+
+      assert.ok(result, 'readLogs should return a result object');
+
+      const note = (result.note || '').toLowerCase();
+      const suggestion = (result.suggestion || '').toLowerCase();
+
+      assert.ok(
+        !note.includes('platform') && !note.includes('dashboard'),
+        'readLogs note should not direct users to a platform logging dashboard',
+      );
+
+      assert.ok(
+        !suggestion.includes('platform') && !suggestion.includes('dashboard'),
+        'readLogs suggestion should not direct users to a platform logging dashboard',
+      );
+    } finally {
+      process.env.NODE_ENV = prevNodeEnv;
+      process.env.DOCKER_CONTAINER = prevDockerFlag;
+    }
+  });
+});
+
 describe('Health Alerts API Endpoints', () => {
   timeoutTest('should have health alerts endpoints defined', async () => {
     // Test that routes are properly imported
