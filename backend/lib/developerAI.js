@@ -1,10 +1,10 @@
 /**
  * Developer AI - Superadmin-only AI assistant for code development
- * Uses Claude 3.5 Sonnet for advanced coding tasks
- * Phase 6: Integrated with approval workflow for safety
+ * Uses ChatGPT (OpenAI) for advanced coding tasks
+ * Unrestricted mode for superadmin use only
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import fs from 'fs/promises';
 import path from 'path';
 import { exec } from 'child_process';
@@ -16,21 +16,21 @@ import { loadAiSettings } from './aiSettingsLoader.js';
 
 const execAsync = promisify(exec);
 
-// Initialize Anthropic client
-let anthropicClient = null;
+// Initialize OpenAI client
+let openaiClient = null;
 
-function getAnthropicClient() {
-  if (!anthropicClient) {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+function getOpenAIClient() {
+  if (!openaiClient) {
+    const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      throw new Error('ANTHROPIC_API_KEY not configured');
+      throw new Error('OPENAI_API_KEY not configured');
     }
-    anthropicClient = new Anthropic({
+    openaiClient = new OpenAI({
       apiKey,
-      baseURL: process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com',
+      baseURL: process.env.OPENAI_BASE_URL,
     });
   }
-  return anthropicClient;
+  return openaiClient;
 }
 
 /**
@@ -247,268 +247,303 @@ function escapeShellArg(arg) {
   return "'" + String(arg).replace(/'/g, "'\\''") + "'";
 }
 
-// Developer AI Tools
+// Developer AI Tools (OpenAI function calling format)
 const DEVELOPER_TOOLS = [
   {
-    name: 'read_file',
-    description: 'Read the contents of a file from the codebase. Use this to understand existing code before making changes.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        file_path: {
-          type: 'string',
-          description: 'Path to the file relative to /app (e.g., "backend/routes/ai.js")',
+    type: 'function',
+    function: {
+      name: 'read_file',
+      description: 'Read the contents of a file from the codebase. Use this to understand existing code before making changes.',
+      parameters: {
+        type: 'object',
+        properties: {
+          file_path: {
+            type: 'string',
+            description: 'Path to the file relative to /app (e.g., "backend/routes/ai.js")',
+          },
+          start_line: {
+            type: 'integer',
+            description: 'Optional: Start reading from this line number (1-indexed)',
+          },
+          end_line: {
+            type: 'integer',
+            description: 'Optional: Stop reading at this line number (inclusive)',
+          },
         },
-        start_line: {
-          type: 'integer',
-          description: 'Optional: Start reading from this line number (1-indexed)',
-        },
-        end_line: {
-          type: 'integer',
-          description: 'Optional: Stop reading at this line number (inclusive)',
-        },
+        required: ['file_path'],
       },
-      required: ['file_path'],
     },
   },
   {
-    name: 'list_directory',
-    description: 'List files and directories in a path. Use this to explore the codebase structure.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        dir_path: {
-          type: 'string',
-          description: 'Path to directory relative to /app (e.g., "backend/routes")',
+    type: 'function',
+    function: {
+      name: 'list_directory',
+      description: 'List files and directories in a path. Use this to explore the codebase structure.',
+      parameters: {
+        type: 'object',
+        properties: {
+          dir_path: {
+            type: 'string',
+            description: 'Path to directory relative to /app (e.g., "backend/routes")',
+          },
+          recursive: {
+            type: 'boolean',
+            description: 'If true, list contents recursively (max 3 levels deep)',
+          },
         },
-        recursive: {
-          type: 'boolean',
-          description: 'If true, list contents recursively (max 3 levels deep)',
-        },
+        required: ['dir_path'],
       },
-      required: ['dir_path'],
     },
   },
   {
-    name: 'search_code',
-    description: 'Search for a pattern in the codebase using grep. Returns matching lines with context.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        pattern: {
-          type: 'string',
-          description: 'Search pattern (supports regex)',
+    type: 'function',
+    function: {
+      name: 'search_code',
+      description: 'Search for a pattern in the codebase using grep. Returns matching lines with context.',
+      parameters: {
+        type: 'object',
+        properties: {
+          pattern: {
+            type: 'string',
+            description: 'Search pattern (supports regex)',
+          },
+          directory: {
+            type: 'string',
+            description: 'Directory to search in, relative to /app (e.g., "backend")',
+          },
+          file_pattern: {
+            type: 'string',
+            description: 'Optional: File pattern to filter (e.g., "*.js")',
+          },
+          case_insensitive: {
+            type: 'boolean',
+            description: 'If true, search is case-insensitive',
+          },
         },
-        directory: {
-          type: 'string',
-          description: 'Directory to search in, relative to /app (e.g., "backend")',
-        },
-        file_pattern: {
-          type: 'string',
-          description: 'Optional: File pattern to filter (e.g., "*.js")',
-        },
-        case_insensitive: {
-          type: 'boolean',
-          description: 'If true, search is case-insensitive',
-        },
+        required: ['pattern'],
       },
-      required: ['pattern'],
     },
   },
   {
-    name: 'read_logs',
-    description: 'Read application logs from the container. Use analyze_patterns=true to auto-detect recurring errors, performance issues, and anomalies. Use since_minutes to filter to only recent logs (recommended for health checks).',
-    input_schema: {
-      type: 'object',
-      properties: {
-        log_type: {
-          type: 'string',
-          enum: ['backend', 'errors', 'ai', 'braid'],
-          description: 'Type of logs to read',
+    type: 'function',
+    function: {
+      name: 'read_logs',
+      description: 'Read application logs from the container. Use analyze_patterns=true to auto-detect recurring errors, performance issues, and anomalies. Use since_minutes to filter to only recent logs (recommended for health checks).',
+      parameters: {
+        type: 'object',
+        properties: {
+          log_type: {
+            type: 'string',
+            enum: ['backend', 'errors', 'ai', 'braid'],
+            description: 'Type of logs to read',
+          },
+          lines: {
+            type: 'integer',
+            description: 'Number of recent log lines to retrieve (default: 100, max: 500)',
+          },
+          filter: {
+            type: 'string',
+            description: 'Optional: Filter logs containing this string',
+          },
+          analyze_patterns: {
+            type: 'boolean',
+            description: 'Auto-analyze logs for recurring errors, performance degradation, and security issues',
+          },
+          since_minutes: {
+            type: 'integer',
+            description: 'Only return logs from the last N minutes. Recommended: 15-30 for health checks to avoid stale issues. Default: null (no time filter)',
+          },
         },
-        lines: {
-          type: 'integer',
-          description: 'Number of recent log lines to retrieve (default: 100, max: 500)',
-        },
-        filter: {
-          type: 'string',
-          description: 'Optional: Filter logs containing this string',
-        },
-        analyze_patterns: {
-          type: 'boolean',
-          description: 'Auto-analyze logs for recurring errors, performance degradation, and security issues',
-        },
-        since_minutes: {
-          type: 'integer',
-          description: 'Only return logs from the last N minutes. Recommended: 15-30 for health checks to avoid stale issues. Default: null (no time filter)',
-        },
+        required: ['log_type'],
       },
-      required: ['log_type'],
     },
   },
   {
-    name: 'get_file_outline',
-    description: 'Get an outline of functions and classes in a JavaScript/TypeScript file',
-    input_schema: {
-      type: 'object',
-      properties: {
-        file_path: {
-          type: 'string',
-          description: 'Path to the file relative to /app',
+    type: 'function',
+    function: {
+      name: 'get_file_outline',
+      description: 'Get an outline of functions and classes in a JavaScript/TypeScript file',
+      parameters: {
+        type: 'object',
+        properties: {
+          file_path: {
+            type: 'string',
+            description: 'Path to the file relative to /app',
+          },
         },
+        required: ['file_path'],
       },
-      required: ['file_path'],
     },
   },
   {
-    name: 'propose_change',
-    description: 'Propose a code change. This generates a diff that the superadmin can review and apply.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        file_path: {
-          type: 'string',
-          description: 'Path to the file to modify',
+    type: 'function',
+    function: {
+      name: 'propose_change',
+      description: 'Propose a code change. This generates a diff that the superadmin can review and apply.',
+      parameters: {
+        type: 'object',
+        properties: {
+          file_path: {
+            type: 'string',
+            description: 'Path to the file to modify',
+          },
+          change_description: {
+            type: 'string',
+            description: 'Description of what the change does',
+          },
+          original_code: {
+            type: 'string',
+            description: 'The exact original code to replace',
+          },
+          new_code: {
+            type: 'string',
+            description: 'The new code to insert',
+          },
         },
-        change_description: {
-          type: 'string',
-          description: 'Description of what the change does',
-        },
-        original_code: {
-          type: 'string',
-          description: 'The exact original code to replace',
-        },
-        new_code: {
-          type: 'string',
-          description: 'The new code to insert',
-        },
+        required: ['file_path', 'change_description', 'original_code', 'new_code'],
       },
-      required: ['file_path', 'change_description', 'original_code', 'new_code'],
     },
   },
   {
-    name: 'write_file',
-    description: 'Write content to a file. This will REPLACE the entire file content. Requires user approval. Use propose_change for targeted edits.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        file_path: {
-          type: 'string',
-          description: 'Path to the file relative to /app (e.g., "backend/routes/test.js")',
+    type: 'function',
+    function: {
+      name: 'write_file',
+      description: 'Write content to a file. This will REPLACE the entire file content. Use propose_change for targeted edits.',
+      parameters: {
+        type: 'object',
+        properties: {
+          file_path: {
+            type: 'string',
+            description: 'Path to the file relative to /app (e.g., "backend/routes/test.js")',
+          },
+          content: {
+            type: 'string',
+            description: 'The complete file content to write',
+          },
+          description: {
+            type: 'string',
+            description: 'Brief description of what this file does or why it is being written',
+          },
         },
-        content: {
-          type: 'string',
-          description: 'The complete file content to write',
-        },
-        description: {
-          type: 'string',
-          description: 'Brief description of what this file does or why it is being written',
-        },
+        required: ['file_path', 'content', 'description'],
       },
-      required: ['file_path', 'content', 'description'],
     },
   },
   {
-    name: 'create_file',
-    description: 'Create a new file. Fails if the file already exists. Requires user approval.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        file_path: {
-          type: 'string',
-          description: 'Path for the new file relative to /app',
+    type: 'function',
+    function: {
+      name: 'create_file',
+      description: 'Create a new file. Fails if the file already exists.',
+      parameters: {
+        type: 'object',
+        properties: {
+          file_path: {
+            type: 'string',
+            description: 'Path for the new file relative to /app',
+          },
+          content: {
+            type: 'string',
+            description: 'The initial content for the new file',
+          },
+          description: {
+            type: 'string',
+            description: 'Brief description of what this file is for',
+          },
         },
-        content: {
-          type: 'string',
-          description: 'The initial content for the new file',
-        },
-        description: {
-          type: 'string',
-          description: 'Brief description of what this file is for',
-        },
+        required: ['file_path', 'content', 'description'],
       },
-      required: ['file_path', 'content', 'description'],
     },
   },
   {
-    name: 'run_command',
-    description: 'Execute a shell command in the container. Safe commands (npm run lint, npm test, etc.) are auto-approved. Other commands require user approval.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        command: {
-          type: 'string',
-          description: 'The command to execute (e.g., "npm run lint", "npm test backend/lib/test.js")',
+    type: 'function',
+    function: {
+      name: 'run_command',
+      description: 'Execute a shell command in the container.',
+      parameters: {
+        type: 'object',
+        properties: {
+          command: {
+            type: 'string',
+            description: 'The command to execute (e.g., "npm run lint", "npm test backend/lib/test.js")',
+          },
+          working_directory: {
+            type: 'string',
+            description: 'Optional: Directory to run the command in, relative to /app (default: /app)',
+          },
+          reason: {
+            type: 'string',
+            description: 'Why this command needs to be run',
+          },
         },
-        working_directory: {
-          type: 'string',
-          description: 'Optional: Directory to run the command in, relative to /app (default: /app)',
-        },
-        reason: {
-          type: 'string',
-          description: 'Why this command needs to be run',
-        },
+        required: ['command', 'reason'],
       },
-      required: ['command', 'reason'],
     },
   },
   {
-    name: 'apply_patch',
-    description: 'Apply a unified diff patch to modify multiple files. REQUIRES APPROVAL. Use this for batch code changes across multiple files.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        patch: {
-          type: 'string',
-          description: 'Unified diff format patch (generated by git diff or diff -u)',
+    type: 'function',
+    function: {
+      name: 'apply_patch',
+      description: 'Apply a unified diff patch to modify multiple files. Use this for batch code changes across multiple files.',
+      parameters: {
+        type: 'object',
+        properties: {
+          patch: {
+            type: 'string',
+            description: 'Unified diff format patch (generated by git diff or diff -u)',
+          },
+          target_dir: {
+            type: 'string',
+            description: 'Directory to apply patch in (default: /app)',
+          },
+          description: {
+            type: 'string',
+            description: 'Description of what this patch does',
+          },
         },
-        target_dir: {
-          type: 'string',
-          description: 'Directory to apply patch in (default: /app)',
-        },
-        description: {
-          type: 'string',
-          description: 'Description of what this patch does',
-        },
+        required: ['patch', 'description'],
       },
-      required: ['patch', 'description'],
     },
   },
   {
-    name: 'test_aisha',
-    description: `Test the AiSHA AI assistant by sending a message and observing the response. 
+    type: 'function',
+    function: {
+      name: 'test_aisha',
+      description: `Test the AiSHA AI assistant by sending a message and observing the response. 
 This tool allows you to:
 - Send test messages to AiSHA
 - See what tools AiSHA calls
 - Observe how AiSHA interprets queries
 - Debug error handling and edge cases
 Use this to troubleshoot AiSHA behavior before users encounter issues.`,
-    input_schema: {
-      type: 'object',
-      properties: {
-        message: {
-          type: 'string',
-          description: 'The test message to send to AiSHA (e.g., "Show me all leads" or "Create an activity for John")',
+      parameters: {
+        type: 'object',
+        properties: {
+          message: {
+            type: 'string',
+            description: 'The test message to send to AiSHA (e.g., "Show me all leads" or "Create an activity for John")',
+          },
+          tenant_id: {
+            type: 'string',
+            description: 'Optional: Tenant ID to test with (default: uses a test tenant or first available tenant)',
+          },
+          include_tool_details: {
+            type: 'boolean',
+            description: 'If true, include detailed information about tool calls and their results (default: true)',
+          },
+          conversation_id: {
+            type: 'string',
+            description: 'Optional: Continue a previous conversation by providing its ID',
+          },
         },
-        tenant_id: {
-          type: 'string',
-          description: 'Optional: Tenant ID to test with (default: uses a test tenant or first available tenant)',
-        },
-        include_tool_details: {
-          type: 'boolean',
-          description: 'If true, include detailed information about tool calls and their results (default: true)',
-        },
-        conversation_id: {
-          type: 'string',
-          description: 'Optional: Continue a previous conversation by providing its ID',
-        },
+        required: ['message'],
       },
-      required: ['message'],
     },
   },
   {
-    name: 'get_execution_context',
-    description: `Get real-time information about the execution environment I'm running in.
+    type: 'function',
+    function: {
+      name: 'get_execution_context',
+      description: `Get real-time information about the execution environment I'm running in.
 This provides:
 - Runtime info (Node version, uptime, memory usage)
 - Connectivity status (database, Redis cache, Redis memory)
@@ -517,15 +552,16 @@ This provides:
 - What capabilities I have (file access, docker CLI, logs)
 - Production warnings if applicable
 Use this to understand my environment before making assumptions about log access, docker commands, or file operations.`,
-    input_schema: {
-      type: 'object',
-      properties: {
-        include_connectivity_check: {
-          type: 'boolean',
-          description: 'If true, verify database and Redis connectivity in real-time (adds ~100ms latency). Default: true',
+      parameters: {
+        type: 'object',
+        properties: {
+          include_connectivity_check: {
+            type: 'boolean',
+            description: 'If true, verify database and Redis connectivity in real-time (adds ~100ms latency). Default: true',
+          },
         },
+        required: [],
       },
-      required: [],
     },
   },
 ];
@@ -1748,13 +1784,13 @@ You are here to help the superadmin understand, debug, and improve the AiSHA CRM
 export async function developerChat(messages, userId, onProgress = null) {
   let client;
 
-  // Try to get the Anthropic client with user-friendly error handling
+  // Try to get the OpenAI client with user-friendly error handling
   try {
-    client = getAnthropicClient();
+    client = getOpenAIClient();
   } catch (error) {
     console.error('[Developer AI] Failed to initialize client:', error.message);
-    if (error.message.includes('ANTHROPIC_API_KEY')) {
-      throw new Error('Developer AI is not configured. Please ensure the ANTHROPIC_API_KEY environment variable is set.');
+    if (error.message.includes('OPENAI_API_KEY')) {
+      throw new Error('Developer AI is not configured. Please ensure the OPENAI_API_KEY environment variable is set.');
     }
     throw new Error('Unable to initialize Developer AI. Please try again later.');
   }
@@ -1826,14 +1862,14 @@ export async function developerChat(messages, userId, onProgress = null) {
   // Inject execution context and health alerts into system prompt
   const contextualSystemPrompt = DEVELOPER_SYSTEM_PROMPT + executionContextStr + healthAlertsContext;
   
-  // Helper to make Anthropic API calls with retry logic
-  async function callAnthropic(conversationMessages, retryCount = 0) {
+  // Helper to make OpenAI API calls with retry logic
+  async function callOpenAI(conversationMessages, retryCount = 0) {
     const MAX_RETRIES = 1;
 
-    // Filter and validate messages - Anthropic requires non-empty content
+    // Filter and validate messages - OpenAI requires non-empty content
     const validMessages = conversationMessages
       .map(m => ({
-        role: m.role,
+        role: m.role === 'user' || m.role === 'assistant' ? m.role : 'user',
         content: m.content,
       }))
       .filter(m => {
@@ -1848,14 +1884,20 @@ export async function developerChat(messages, userId, onProgress = null) {
       throw new Error('No valid messages to send. Please provide a message.');
     }
 
+    // Add system message at start
+    const messagesWithSystem = [
+      { role: 'system', content: contextualSystemPrompt },
+      ...validMessages
+    ];
+
     try {
-      return await client.messages.create({
-        model: 'claude-sonnet-4-20250514',
+      return await client.chat.completions.create({
+        model: 'gpt-4o',
         max_tokens: 16384,
         temperature: aiSettings.temperature,
-        system: contextualSystemPrompt,
+        messages: messagesWithSystem,
         tools: DEVELOPER_TOOLS,
-        messages: validMessages,
+        tool_choice: 'auto',
       });
     } catch (error) {
       console.error(`[Developer AI] API call failed (attempt ${retryCount + 1}):`, error.message);
@@ -1880,7 +1922,7 @@ export async function developerChat(messages, userId, onProgress = null) {
         errorMessage.includes('fetch failed') || statusCode >= 500) && retryCount < MAX_RETRIES) {
         console.log('[Developer AI] Retrying after network error...');
         await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
-        return callAnthropic(conversationMessages, retryCount + 1);
+        return callOpenAI(conversationMessages, retryCount + 1);
       }
 
       // Server errors
@@ -1907,9 +1949,10 @@ export async function developerChat(messages, userId, onProgress = null) {
     }
   }
   
-  const response = await callAnthropic(messages);
+  const response = await callOpenAI(messages);
   
-  console.log('[Developer AI] Initial response:', response.stop_reason);
+  const finishReason = response.choices[0]?.finish_reason;
+  console.log('[Developer AI] Initial response:', finishReason);
   
   // Handle tool use loop
   let currentResponse = response;
@@ -1917,13 +1960,18 @@ export async function developerChat(messages, userId, onProgress = null) {
   let toolIterations = 0;
   const MAX_TOOL_ITERATIONS = aiSettings.max_iterations || 10; // From database settings
   
-  while (currentResponse.stop_reason === 'tool_use' && toolIterations < MAX_TOOL_ITERATIONS) {
+  while (currentResponse.choices[0]?.finish_reason === 'tool_calls' && toolIterations < MAX_TOOL_ITERATIONS) {
     toolIterations++;
-    const toolUseBlocks = currentResponse.content.filter(block => block.type === 'tool_use');
+    const toolCalls = currentResponse.choices[0]?.message?.tool_calls || [];
     const toolResults = [];
     
-    for (const toolUse of toolUseBlocks) {
-      console.log('[Developer AI] Tool call:', toolUse.name);
+    // Add assistant message with tools to history
+    conversationHistory.push(currentResponse.choices[0].message);
+    
+    for (const toolCall of toolCalls) {
+      const toolName = toolCall.function.name;
+      const toolArgs = JSON.parse(toolCall.function.arguments);
+      console.log('[Developer AI] Tool call:', toolName);
       
       // Send progress update for tool execution
       if (onProgress) {
@@ -1935,13 +1983,13 @@ export async function developerChat(messages, userId, onProgress = null) {
           get_file_outline: '🗂️ Getting file outline',
           propose_change: '✏️ Proposing changes',
           test_aisha: '🤖 Testing AiSHA AI'
-        }[toolUse.name] || `🔧 ${toolUse.name}`;
+        }[toolName] || `🔧 ${toolName}`;
         
         try {
           onProgress({ 
             type: 'tool', 
             message: toolLabel,
-            data: { tool: toolUse.name, iteration: toolIterations }
+            data: { tool: toolName, iteration: toolIterations }
           });
         } catch (progressErr) {
           console.warn('[Developer AI] Progress callback error:', progressErr.message);
@@ -1949,34 +1997,24 @@ export async function developerChat(messages, userId, onProgress = null) {
       }
       
       try {
-        const result = await executeDeveloperTool(toolUse.name, toolUse.input, userId);
+        const result = await executeDeveloperTool(toolName, toolArgs, userId);
         toolResults.push({
-          type: 'tool_result',
-          tool_use_id: toolUse.id,
+          role: 'tool',
+          tool_call_id: toolCall.id,
           content: JSON.stringify(result, null, 2),
         });
       } catch (toolError) {
         console.error('[Developer AI] Tool execution error:', toolError.message);
         toolResults.push({
-          type: 'tool_result',
-          tool_use_id: toolUse.id,
+          role: 'tool',
+          tool_call_id: toolCall.id,
           content: JSON.stringify({ error: toolError.message || 'Tool execution failed' }),
-          is_error: true,
         });
       }
     }
     
-    // Add assistant message with tool calls
-    conversationHistory.push({
-      role: 'assistant',
-      content: currentResponse.content,
-    });
-    
-    // Add tool results
-    conversationHistory.push({
-      role: 'user',
-      content: toolResults,
-    });
+    // Add tool results to history
+    conversationHistory.push(...toolResults);
     
     // Continue conversation
     if (onProgress) {
@@ -1987,9 +2025,9 @@ export async function developerChat(messages, userId, onProgress = null) {
       }
     }
     
-    currentResponse = await callAnthropic(conversationHistory);
+    currentResponse = await callOpenAI(conversationHistory);
     
-    console.log('[Developer AI] Continued response:', currentResponse.stop_reason);
+    console.log('[Developer AI] Continued response:', currentResponse.choices[0]?.finish_reason);
   }
   
   if (toolIterations >= MAX_TOOL_ITERATIONS) {
@@ -1997,8 +2035,7 @@ export async function developerChat(messages, userId, onProgress = null) {
   }
 
   // Extract final text response
-  const textBlocks = currentResponse.content.filter(block => block.type === 'text');
-  const responseText = textBlocks.map(b => b.text).join('\n');
+  const responseText = currentResponse.choices[0]?.message?.content || '';
   
   // Send completion progress
   if (onProgress) {
@@ -2012,7 +2049,7 @@ export async function developerChat(messages, userId, onProgress = null) {
   return {
     response: responseText,
     usage: currentResponse.usage,
-    model: 'claude-sonnet-4-20250514',
+    model: 'gpt-4o',
   };
 }
 
