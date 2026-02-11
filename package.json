@@ -1,7 +1,7 @@
 {
   "name": "aishacrm-app",
   "private": true,
-  "version": "4.5.13",
+  "version": "4.5.21",
   "type": "module",
   "scripts": {
     "dev": "doppler run -- node scripts/copy-docs-to-public.js && doppler run -- node scripts/database/dev-frontend.js",
