@@ -239,6 +239,27 @@ export const TOOL_REGISTRY = {
 };
 
 /**
+ * Parameter descriptions for tools to guide LLM on correct field usage
+ * Prevents field scrambling by providing semantic meaning to each parameter
+ */
+export const PARAMETER_DESCRIPTIONS = {
+  create_lead: {
+    tenant: 'Tenant UUID (automatically provided by system)',
+    first_name: 'Contact\'s first/given name (e.g., "Josh" from "Josh Johnson")',
+    last_name: 'Contact\'s last/family name (e.g., "Johnson" from "Josh Johnson")',
+    email: 'Contact\'s email address (must be valid email format like josh@company.com)',
+    company: 'Organization/company name where the contact works (e.g., "TechStart Solutions")',
+    phone: 'Contact\'s phone number in any format (e.g., "(555) 123-4567" or "555-123-4567")',
+    source: 'How they found us: Website, Referral, Cold Call, LinkedIn, Trade Show, etc.'
+  },
+  update_lead: {
+    tenant: 'Tenant UUID (automatically provided by system)',
+    lead_id: 'UUID of the lead to update (from previous search or get_lead_details)',
+    updates: 'Object with fields to update (e.g., {first_name: "Josh", company: "TechStart"})'
+  }
+};
+
+/**
  * Human-readable descriptions for each tool
  * These are exposed to the AI to help it understand when to use each tool
  */
@@ -418,12 +439,26 @@ export async function generateToolSchemas(allowedToolNames = null) {
       const schema = await loadToolSchema(braidPath, config.function);
       const description = TOOL_DESCRIPTIONS[toolName];
 
+      // Enrich parameter descriptions with semantic meaning
+      const enrichedParameters = { ...schema.function?.parameters };
+      if (PARAMETER_DESCRIPTIONS[toolName] && enrichedParameters?.properties) {
+        for (const [paramName, paramDesc] of Object.entries(PARAMETER_DESCRIPTIONS[toolName])) {
+          if (enrichedParameters.properties[paramName]) {
+            enrichedParameters.properties[paramName] = {
+              ...enrichedParameters.properties[paramName],
+              description: paramDesc
+            };
+          }
+        }
+      }
+
       schemas.push({
         ...schema,
         function: {
           ...schema.function,
           name: toolName,
-          description: description || schema.function?.description
+          description: description || schema.function?.description,
+          parameters: enrichedParameters
         }
       });
     } catch (error) {
