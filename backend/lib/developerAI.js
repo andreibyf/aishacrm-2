@@ -1846,12 +1846,15 @@ export async function developerChat(messages, userId, onProgress = null) {
     // Filter and validate messages - BUT preserve full structure for tool calling
     // CRITICAL: OpenAI needs tool_calls, tool_call_id, and role='tool' preserved
     const validMessages = conversationMessages.filter(m => {
-      // Check if content is valid (but allow tool role with no content if it has tool_call_id)
+      // Allow tool role with tool_call_id even if no content
       if (m.role === 'tool') {
         return m.tool_call_id && m.content !== undefined;
       }
-      if (!m.content) return false;
-      if (typeof m.content === 'string' && m.content.trim() === '') return false;
+      // Allow assistant role with tool_calls even if no content
+      if (m.role === 'assistant' && m.tool_calls) {
+        return true;
+      }
+      // For other messages, require valid content
       if (Array.isArray(m.content) && m.content.length === 0) return false;
       return true;
     });
