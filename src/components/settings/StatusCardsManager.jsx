@@ -107,7 +107,7 @@ export default function StatusCardsManager() {
         <CardHeader>
           <CardTitle>Status Card Management</CardTitle>
           <CardDescription>
-            Customize and manage status cards displayed across your CRM. Rename cards to match your terminology and hide ones you don't use.
+            Customize status cards across your CRM. Rename cards to match your terminology, or toggle off statuses you don&apos;t use — hidden statuses are also removed from dropdown selectors in forms.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
