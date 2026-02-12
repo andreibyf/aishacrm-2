@@ -130,3 +130,23 @@ query-*.sql
 braid-mcp-wrapper/
 !braid-mcp-wrapper/README.md
 nul
+
+# Local Playwright auth state
+playwright/.auth/
+
+# Local Developer AI/OpenAI scratch tests
+test-developer-ai*.js
+backend/test-openai-direct.js
+backend/test-parameter-descriptions.js
+
+# Claude Code worktrees
+.claude/worktrees/
+
+# Generated reports
+playwright-report/
+
+# Scratch files
+FIX_CRON_TIMEOUTS.md
+Supabase.txt
+fix-cron-jobs.sql
+backend/pause-cron-jobs.js

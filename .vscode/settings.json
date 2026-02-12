@@ -17,8 +17,23 @@
   "twinny.enabledLanguages": {
     "*": true,
     "python": true,
-    "javascript": false
+    "javascript": true
   },
+  "twinny.enableSubsequentCompletions": true,
+  "twinny.completionCacheEnabled": true,
+  "twinny.numLineContext": 100,
+  "twinny.debounceWait": 300,
+  "twinny.temperature": 0.2,
+  "twinny.maxTokens": 500,
+  "twinny.enableChat": true,
+  "twinny.chatTemperature": 0.3,
+  "twinny.chatMaxTokens": 1024,
+  "twinny.contextLength": 2048,
+  "twinny.keepAlive": "5m",
+  "twinny.enableInlineCompletion": true,
+  "twinny.showLoadingIndicator": true,
+  "twinny.enableStatusBarItem": true,
+  "twinny.systemPrompt": "You are an expert full-stack developer working on AiSHA CRM, a multi-tenant SaaS application. Tech stack: React 18, Node.js, Express, Supabase PostgreSQL. Always use UUID-based tenant isolation (req.tenant.id). Route API calls through fallbackFunctions.js. Follow V2 API patterns for new features.",
 
   // ==========================================
   // Editor & Formatting
@@ -37,6 +52,13 @@
   "editor.quickSuggestions": {
     "strings": true
   },
+
+  // ==========================================
+  // Continue.dev - Secondary AI Assistant
+  // ==========================================
+  "continue.enableTabAutocomplete": false,
+  "continue.telemetryEnabled": false,
+  "continue.showInlineTip": false,
 
   // ==========================================
   // Language-Specific Formatting
@@ -69,15 +91,8 @@
   // ==========================================
   // ESLint
   // ==========================================
-  "eslint.validate": [
-    "javascript",
-    "javascriptreact",
-    "typescript",
-    "typescriptreact"
-  ],
-  "eslint.workingDirectories": [
-    { "mode": "auto" }
-  ],
+  "eslint.validate": ["javascript", "javascriptreact", "typescript", "typescriptreact"],
+  "eslint.workingDirectories": [{ "mode": "auto" }],
 
   // ==========================================
   // TypeScript/JavaScript
