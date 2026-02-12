@@ -621,15 +621,21 @@ export default function createAccountV2Routes(_pgPool) {
 
       const supabase = getSupabaseClient();
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('accounts')
         .delete()
         .eq('id', id)
-        .eq('tenant_id', tenant_id);
+        .eq('tenant_id', tenant_id)
+        .select('id')
+        .maybeSingle();
 
-      if (error) {
+      if (error && error.code !== 'PGRST116') {
         logger.error('[accounts.v2] Delete error:', error);
         return res.status(500).json({ status: 'error', message: error.message });
+      }
+
+      if (!data) {
+        return res.status(404).json({ status: 'error', message: 'Account not found' });
       }
 
       return res.json({ status: 'success', message: 'Account deleted successfully' });

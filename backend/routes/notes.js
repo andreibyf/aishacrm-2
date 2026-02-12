@@ -5,7 +5,7 @@
 
 import express from 'express';
 import { validateTenantScopedId } from '../lib/validation.js';
-import { cacheList } from '../lib/cacheMiddleware.js';
+import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 
 export default function createNoteRoutes(_pgPool) {
@@ -383,7 +383,7 @@ export default function createNoteRoutes(_pgPool) {
    *               $ref: '#/components/schemas/Error'
    */
   // DELETE /api/notes/:id - Delete note (tenant scoped)
-  router.delete('/:id', async (req, res) => {
+  router.delete('/:id', invalidateCache('notes'), async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query || {};

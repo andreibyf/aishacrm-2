@@ -137,8 +137,8 @@ export const CRM_POLICIES = {
     tool_class: 'delete',
     // Require confirmation for destructive operations
     requires_confirmation: true,
-    // Soft delete by default, hard delete requires explicit flag
-    soft_delete_default: true
+    // Hard delete — all entity routes perform permanent deletion
+    soft_delete_default: false
   },
   
   ADMIN_ONLY: {

@@ -757,12 +757,8 @@ export default function LeadsPage() {
     if (!confirmed) return;
 
     try {
-      const tenantId = getTenantFilter().tenant_id || user.tenant_id;
-      if (!tenantId) {
-        throw new Error('Cannot delete: tenant_id is not available');
-      }
-      await Lead.delete(id, { tenant_id: tenantId });
-      clearCache("Lead"); clearCacheByKey("Lead");
+      await Lead.delete(id);
+      clearCache("Lead");
       clearCacheByKey("Lead");
       
       // Force reload with fresh data (bypass cache)

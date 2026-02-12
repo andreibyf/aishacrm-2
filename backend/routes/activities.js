@@ -332,111 +332,132 @@ export default function createActivityRoutes(_pgPool) {
         return val;
       };
 
-      // Use Supabase for base query, client-side filter for complex metadata queries
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
-      
-      let query = supabase.from('activities').select('*').eq('tenant_id', tenant_id);
-      
-      // Simple column filters via Supabase (ignore 'all', 'any', '', 'undefined' as they mean no filter)
+
+      // ── Determine if we need $or client-side filtering ──
+      // $or with regex patterns can't be pushed to Supabase, so we detect this upfront
+      let hasComplexOr = false;
+      let parsedOr = null;
+      if (req.query['$or']) {
+        parsedOr = parseMaybeJson(req.query['$or']);
+        if (Array.isArray(parsedOr) && parsedOr.length > 0) {
+          hasComplexOr = true;
+        }
+      }
+
+      // ── Build DB-level query: push all filterable columns to Supabase ──
+      // Use count: 'exact' only when we don't need client-side filtering
+      let query = hasComplexOr
+        ? supabase.from('activities').select('*').eq('tenant_id', tenant_id)
+        : supabase.from('activities').select('*', { count: 'exact' }).eq('tenant_id', tenant_id);
+
+      // Column filters via Supabase (ignore 'all', 'any', '', 'undefined' as they mean no filter)
       if (req.query.status && req.query.status !== 'all' && req.query.status !== 'any' && req.query.status !== '' && req.query.status !== 'undefined') {
         query = query.eq('status', req.query.status);
       }
       if (req.query.type) query = query.eq('type', req.query.type);
       if (req.query.related_id) query = query.eq('related_id', req.query.related_id);
-      
-      query = query.order('created_at', { ascending: false });
-      
-      const { data: allData, error } = await query;
-      if (error) throw new Error(error.message);
-      
-      // Client-side filtering for complex metadata queries
-      let filtered = allData || [];
-      
+
+      // Push related_to filter to DB (top-level column exists)
       if (req.query.related_to) {
         const v = parseMaybeJson(req.query.related_to);
         if (typeof v === 'string') {
-          filtered = filtered.filter(row => row.metadata?.related_to === v);
+          query = query.eq('related_to', v);
         }
       }
-      
+
+      // Push assigned_to filter to DB (top-level uuid column exists)
       if (req.query.assigned_to) {
         const v = parseMaybeJson(req.query.assigned_to);
         if (typeof v === 'string') {
-          filtered = filtered.filter(row => row.metadata?.assigned_to === v);
+          query = query.eq('assigned_to', v);
         }
       }
-      
+
+      // Push is_test_data filter to DB (top-level boolean column exists)
       if (req.query.is_test_data) {
         const v = parseMaybeJson(req.query.is_test_data);
         if (v && typeof v === 'object' && v.$ne === true) {
-          filtered = filtered.filter(row => !(row.metadata?.is_test_data === true));
+          // Exclude test data: is_test_data IS NULL OR is_test_data = false
+          query = query.or('is_test_data.is.null,is_test_data.eq.false');
         } else if (v === true || v === 'true') {
-          filtered = filtered.filter(row => row.metadata?.is_test_data === true);
+          query = query.eq('is_test_data', true);
         }
       }
-      
+
+      // Push tags filter to DB (top-level array column exists)
       if (req.query.tags) {
         const v = parseMaybeJson(req.query.tags);
         if (v && typeof v === 'object' && Array.isArray(v.$all)) {
-          const requiredTags = v.$all;
-          filtered = filtered.filter(row => {
-            const tags = row.metadata?.tags;
-            if (!Array.isArray(tags)) return false;
-            return requiredTags.every(tag => tags.includes(tag));
-          });
+          // Supabase contains: check that tags array contains all required tags
+          query = query.contains('tags', v.$all);
         }
       }
-      
+
+      // Push due_date range filter to DB (top-level date column exists)
       if (req.query.due_date) {
         const v = parseMaybeJson(req.query.due_date);
         if (v && typeof v === 'object') {
-          filtered = filtered.filter(row => {
-            const dueDate = row.metadata?.due_date;
-            if (!dueDate) return false;
-            const date = new Date(dueDate);
-            if (v.$gte && date < new Date(v.$gte)) return false;
-            if (v.$lte && date > new Date(v.$lte)) return false;
-            return true;
-          });
+          if (v.$gte) query = query.gte('due_date', v.$gte);
+          if (v.$lte) query = query.lte('due_date', v.$lte);
         }
       }
-      
-      if (req.query['$or']) {
-        const v = parseMaybeJson(req.query['$or']);
-        if (Array.isArray(v) && v.length > 0) {
+
+      query = query.order('created_at', { ascending: false });
+
+      // ── Two paths: fast DB-paginated vs. $or client-side fallback ──
+      let filtered;
+      let total;
+
+      if (!hasComplexOr) {
+        // FAST PATH: All filtering done at DB level, paginate at DB level
+        query = query.range(offset, offset + limit - 1);
+        const { data, error, count } = await query;
+        if (error) throw new Error(error.message);
+        filtered = data || [];
+        total = count || 0;
+      } else {
+        // FALLBACK PATH: Need client-side $or regex filtering
+        // Still apply all other filters at DB level (above), only $or is client-side
+        const { data: allData, error } = await query;
+        if (error) throw new Error(error.message);
+        filtered = allData || [];
+
+        // Apply $or filter client-side (regex patterns can't be pushed to Supabase)
+        if (parsedOr && parsedOr.length > 0) {
           filtered = filtered.filter(row => {
-            return v.some(cond => {
+            return parsedOr.some(cond => {
               const [field, expr] = Object.entries(cond)[0] || [];
               if (!field) return false;
-              
+
               if (field === 'subject' && expr && typeof expr === 'object' && expr.$regex) {
                 const regex = safeRegex(expr.$regex);
                 return regex ? regex.test(row.subject || '') : false;
               }
               if (field === 'description' && expr && typeof expr === 'object' && expr.$regex) {
                 const regex = safeRegex(expr.$regex);
-                const desc = row.body || row.metadata?.description || '';
+                const desc = row.body || row.description || '';
                 return regex ? regex.test(desc) : false;
               }
               if (field === 'related_name' && expr && typeof expr === 'object' && expr.$regex) {
                 const regex = safeRegex(expr.$regex);
-                return regex ? regex.test(row.metadata?.related_name || '') : false;
+                return regex ? regex.test(row.related_name || '') : false;
               }
               if (field === 'assigned_to') {
-                const assigned = row.metadata?.assigned_to;
+                const assigned = row.assigned_to;
                 if (expr === null) return assigned == null;
-                if (expr === '') return assigned === '';
-                return assigned === expr;
+                if (expr === '') return !assigned;
+                return String(assigned) === String(expr);
               }
               return false;
             });
           });
         }
+
+        total = filtered.length;
+        filtered = filtered.slice(offset, offset + limit);
       }
-      
-      const total = filtered.length;
-      const paginated = filtered.slice(offset, offset + limit);
 
       let counts = null;
       const includeStats = (req.query.include_stats === 'true' || req.query.include_stats === '1');
@@ -584,7 +605,7 @@ export default function createActivityRoutes(_pgPool) {
       res.json({
         status: 'success',
         data: {
-          activities: paginated.map(normalizeActivity),
+          activities: filtered.map(normalizeActivity),
           total,
           limit,
           offset,
@@ -870,6 +891,12 @@ export default function createActivityRoutes(_pgPool) {
         ...rest
       } = payload;
 
+      // Resolve tenant_id from body or query for tenant scoping
+      const tenant_id = _tenantId || req.query.tenant_id;
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
       const hasBodyChange = description !== undefined || body !== undefined;
       const bodyText = hasBodyChange ? (description ?? body ?? null) : undefined;
 
@@ -879,6 +906,7 @@ export default function createActivityRoutes(_pgPool) {
         .from('activities')
         .select('*')
         .eq('id', id)
+        .eq('tenant_id', tenant_id)
         .single();
       if (fetchErr?.code === 'PGRST116') {
         return res.status(404).json({
@@ -962,6 +990,7 @@ export default function createActivityRoutes(_pgPool) {
         .from('activities')
         .update(updatePayload)
         .eq('id', id)
+        .eq('tenant_id', tenant_id)
         .select('*')
         .single();
       if (error?.code === 'PGRST116') {
@@ -1020,12 +1049,17 @@ export default function createActivityRoutes(_pgPool) {
   router.delete('/:id', async (req, res) => {
     try {
       const { id } = req.params;
+      const tenant_id = req.query.tenant_id || req.body?.tenant_id;
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
         .from('activities')
         .delete()
         .eq('id', id)
+        .eq('tenant_id', tenant_id)
         .select('*')
         .maybeSingle();
       if (error && error.code !== 'PGRST116') throw new Error(error.message);

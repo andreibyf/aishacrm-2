@@ -3,6 +3,7 @@ import { Account } from "@/api/entities";
 import { Contact } from "@/api/entities";
 import { Employee } from "@/api/entities";
 import { useApiManager } from "../components/shared/ApiManager";
+import { useConfirmDialog } from "../components/shared/ConfirmDialog";
 import { loadUsersSafely } from "../components/shared/userLoader"; // TODO: remove after refactor if unused
 import { useUser } from "@/components/shared/useUser.js";
 import AccountCard from "../components/accounts/AccountCard";
@@ -65,6 +66,7 @@ import { useAiShaEvents } from "@/hooks/useAiShaEvents";
 export default function AccountsPage() {
   const { plural: accountsLabel, singular: accountLabel } = useEntityLabel('accounts');
   const { getCardLabel, isCardVisible } = useStatusCardPreferences();
+  const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
   const [accounts, setAccounts] = useState([]);
   const [, setContacts] = useState([]);
   const [users, setUsers] = useState([]);
@@ -638,9 +640,14 @@ export default function AccountsPage() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this account?")) {
-      return;
-    }
+    const confirmed = await confirm({
+      title: "Delete account?",
+      description: "This action cannot be undone.",
+      variant: "destructive",
+      confirmText: "Delete",
+      cancelText: "Cancel",
+    });
+    if (!confirmed) return;
 
     try {
       await Account.delete(id);
@@ -1091,6 +1098,7 @@ export default function AccountsPage() {
   }
 
   return (
+    <>
     <TooltipProvider>
       <div className="space-y-6">
         <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
@@ -1700,5 +1708,7 @@ export default function AccountsPage() {
           )}
       </div>
     </TooltipProvider>
+    {ConfirmDialogPortal}
+    </>
   );
 }
