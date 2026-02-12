@@ -2342,7 +2342,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         const employee = employeeRows[0];
 
         // Check if user already exists in Supabase Auth
-        const existingAuthUser = await getAuthUserByEmail(employee.email);
+        const authResult = await getAuthUserByEmail(employee.email);
+        const existingAuthUser = authResult?.user;
         
         if (existingAuthUser) {
           // User already exists in Auth - send password reset instead
@@ -2506,7 +2507,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         const employee = employeeRows[0];
 
         // Check if user already exists in Supabase Auth
-        const existingAuthUser = await getAuthUserByEmail(employee.email);
+        const authResult = await getAuthUserByEmail(employee.email);
+        const existingAuthUser = authResult?.user;
         
         if (existingAuthUser) {
           // User already exists in Auth - send password reset instead

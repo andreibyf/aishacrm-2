@@ -374,10 +374,11 @@ export default function createEmployeeRoutes(_pgPool) {
 
       const employee = expandMetadata(data);
 
-      // If CRM access requested and email provided, send Supabase Auth invite
+      // If CRM access requested and email provided, send Supabase Auth invite + create users record
       let invitation_sent = false;
       let invitation_error = null;
       const hasCrmAccess = combinedMetadata.has_crm_access === true || req.body.has_crm_access === true;
+      const crmRole = combinedMetadata.crm_user_employee_role || role || 'employee';
 
       if (hasCrmAccess && email) {
         try {
@@ -392,7 +393,7 @@ export default function createEmployeeRoutes(_pgPool) {
               {
                 first_name,
                 last_name,
-                role: role || 'employee',
+                role: crmRole,
                 tenant_id,
                 display_name: `${first_name} ${last_name || ''}`.trim(),
                 employee_id: data.id,
@@ -409,6 +410,57 @@ export default function createEmployeeRoutes(_pgPool) {
         } catch (authErr) {
           logger.error('[EmployeeRoutes] Auth invite exception:', authErr);
           invitation_error = authErr.message;
+        }
+
+        // Also ensure a users table record exists so employee appears in User Management
+        try {
+          const { data: existingUser } = await supabase
+            .from('users')
+            .select('id')
+            .eq('email', email.toLowerCase())
+            .limit(1)
+            .maybeSingle();
+
+          if (!existingUser) {
+            const { error: userInsertErr } = await supabase
+              .from('users')
+              .insert({
+                email: email.toLowerCase(),
+                first_name,
+                last_name,
+                role: crmRole,
+                tenant_id,
+                status: 'active',
+                metadata: {
+                  crm_access: true,
+                  is_active: true,
+                  display_name: `${first_name} ${last_name || ''}`.trim(),
+                  employee_role: crmRole,
+                  employee_id: data.id,
+                  requested_access: 'read_write',
+                  created_via: 'employee_form',
+                },
+              });
+            if (userInsertErr) {
+              logger.error('[EmployeeRoutes] Failed to create users record:', userInsertErr);
+            } else {
+              logger.info(`[EmployeeRoutes] Users record created for ${email}`);
+            }
+          } else {
+            // Reactivate existing user record if it was deactivated
+            const { error: userUpdateErr } = await supabase
+              .from('users')
+              .update({ status: 'active', updated_at: new Date().toISOString() })
+              .eq('id', existingUser.id);
+            if (userUpdateErr) {
+              logger.warn('[EmployeeRoutes] Failed to reactivate users record:', userUpdateErr);
+            } else {
+              logger.info(`[EmployeeRoutes] Reactivated existing users record for ${email}`);
+            }
+          }
+        } catch (userSyncErr) {
+          // Non-fatal: employee was created, user sync is best-effort
+          logger.error('[EmployeeRoutes] Users table sync error:', userSyncErr);
         }
       }
 
@@ -561,14 +613,16 @@ export default function createEmployeeRoutes(_pgPool) {
 
       const employee = expandMetadata(data);
 
-      // Check if CRM access was just enabled (toggled from off → on)
+      // Check if CRM access was just enabled (toggled from off → on) or disabled (on → off)
       const prevCrmAccess = currentMetadata.has_crm_access === true;
       const newCrmAccess = updatedMetadata.has_crm_access === true;
       const employeeEmail = data.email || email;
+      const crmRole = updatedMetadata.crm_user_employee_role || data.role || 'employee';
       let invitation_sent = false;
       let invitation_error = null;
 
       if (newCrmAccess && !prevCrmAccess && employeeEmail) {
+        // CRM access toggled ON
         try {
           const { user: existingAuth } = await getAuthUserByEmail(employeeEmail);
           if (existingAuth) {
@@ -580,7 +634,7 @@ export default function createEmployeeRoutes(_pgPool) {
               {
                 first_name: data.first_name,
                 last_name: data.last_name,
-                role: data.role || 'employee',
+                role: crmRole,
                 tenant_id,
                 display_name: `${data.first_name} ${data.last_name || ''}`.trim(),
                 employee_id: data.id,
@@ -597,6 +651,72 @@ export default function createEmployeeRoutes(_pgPool) {
         } catch (authErr) {
           logger.error('[EmployeeRoutes] Auth invite exception on update:', authErr);
           invitation_error = authErr.message;
+        }
+
+        // Ensure users table record exists (for User Management visibility)
+        try {
+          const { data: existingUser } = await supabase
+            .from('users')
+            .select('id')
+            .eq('email', employeeEmail.toLowerCase())
+            .limit(1)
+            .maybeSingle();
+
+          if (!existingUser) {
+            const { error: userInsertErr } = await supabase
+              .from('users')
+              .insert({
+                email: employeeEmail.toLowerCase(),
+                first_name: data.first_name,
+                last_name: data.last_name,
+                role: crmRole,
+                tenant_id,
+                status: 'active',
+                metadata: {
+                  crm_access: true,
+                  is_active: true,
+                  display_name: `${data.first_name} ${data.last_name || ''}`.trim(),
+                  employee_role: crmRole,
+                  employee_id: data.id,
+                  requested_access: 'read_write',
+                  created_via: 'employee_crm_toggle',
+                },
+              });
+            if (userInsertErr) {
+              logger.error('[EmployeeRoutes] Failed to create users record on toggle:', userInsertErr);
+            } else {
+              logger.info(`[EmployeeRoutes] Users record created for ${employeeEmail}`);
+            }
+          } else {
+            // Reactivate existing user record
+            await supabase
+              .from('users')
+              .update({ status: 'active', updated_at: new Date().toISOString() })
+              .eq('id', existingUser.id);
+            logger.info(`[EmployeeRoutes] Reactivated users record for ${employeeEmail}`);
+          }
+        } catch (userSyncErr) {
+          logger.error('[EmployeeRoutes] Users table sync error on toggle-on:', userSyncErr);
+        }
+      } else if (!newCrmAccess && prevCrmAccess && employeeEmail) {
+        // CRM access toggled OFF — deactivate the users table record
+        try {
+          const { data: existingUser } = await supabase
+            .from('users')
+            .select('id')
+            .eq('email', employeeEmail.toLowerCase())
+            .limit(1)
+            .maybeSingle();
+
+          if (existingUser) {
+            await supabase
+              .from('users')
+              .update({ status: 'inactive', updated_at: new Date().toISOString() })
+              .eq('id', existingUser.id);
+            logger.info(`[EmployeeRoutes] CRM access removed, deactivated users record for ${employeeEmail}`);
+          }
+        } catch (userSyncErr) {
+          logger.error('[EmployeeRoutes] Users table sync error on toggle-off:', userSyncErr);
         }
       }
 
