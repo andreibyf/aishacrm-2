@@ -613,10 +613,46 @@ export default function createValidationRoutes(_pgPool) {
 
       // ── Phase 2: Bulk insert validated records ──
       if (validRecords.length > 0) {
-        // Supabase .insert() accepts an array and inserts all rows in a single
-        // round-trip. We skip .select() to avoid pulling all rows back over
-        // the wire — we only need the count, not the returned data.
-        const payload = validRecords.map((v) => v.record);
+        // Discover actual column names for the target table so we can strip
+        // any mapped keys that don't exist (prevents schema cache errors).
+        let tableColumns = null;
+        try {
+          // Probe table: even on an empty table, Supabase returns column keys
+          // when at least one row exists. For empty tables, we query
+          // information_schema via PostgREST's built-in RPC.
+          const { data: probeRows } = await supabase.from(table).select('*').limit(1);
+          if (probeRows && probeRows.length > 0) {
+            tableColumns = new Set(Object.keys(probeRows[0]));
+          }
+        } catch { /* ignore */ }
+
+        // Fallback for empty tables: query column names via Supabase RPC
+        if (!tableColumns) {
+          try {
+            const { data: colRows } = await supabase.rpc('get_columns_for_table', { t_name: table });
+            if (Array.isArray(colRows) && colRows.length > 0) {
+              tableColumns = new Set(colRows.map(r => r.column_name));
+            }
+          } catch { /* RPC may not exist — will attempt insert without filtering */ }
+        }
+
+        // Strip unknown columns from every record
+        const strippedKeys = new Set();
+        const payload = validRecords.map((v) => {
+          if (!tableColumns) return v.record;
+          const cleaned = {};
+          for (const [key, val] of Object.entries(v.record)) {
+            if (tableColumns.has(key)) {
+              cleaned[key] = val;
+            } else {
+              strippedKeys.add(key);
+            }
+          }
+          return cleaned;
+        });
+        if (strippedKeys.size > 0) {
+          logger.warn(`⏭️ Stripped unknown columns from ${table} import: ${[...strippedKeys].join(', ')}`);
+        }
 
         const { error: bulkErr, count: insertedCount } = await supabase
           .from(table)
