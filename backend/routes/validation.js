@@ -441,6 +441,7 @@ export default function createValidationRoutes(_pgPool) {
   });
 
   // POST /api/validation/validate-and-import - Validate and import records
+  // OPTIMIZED: Uses bulk insert instead of row-by-row to minimize DB round-trips.
   router.post('/validate-and-import', async (req, res) => {
     try {
       const { records, entityType, mapping: _mapping, fileName, accountLinkColumn, tenant_id } = req.body;
@@ -505,7 +506,7 @@ export default function createValidationRoutes(_pgPool) {
         logger.debug(`🔗 Processing account links via column: ${accountLinkColumn}`);
         const { data: accountsData, error: accountsErr } = await supabase
           .from('accounts')
-          .select('*')
+          .select('id, name, legacy_id')
           .eq('tenant_id', tenant_id);
         if (accountsErr) throw new Error(accountsErr.message);
 
@@ -525,7 +526,9 @@ export default function createValidationRoutes(_pgPool) {
         logger.debug(`📚 Built account lookup with ${Object.keys(accountLookupMap).length} entries`);
       }
 
-      // Process each record
+      // ── Phase 1: Validate all records and prepare for bulk insert ──
+      const validRecords = [];
+
       for (let i = 0; i < records.length; i++) {
         const record = records[i];
         const rowNumber = i + 2; // +2 for header row and 0-index
@@ -533,7 +536,6 @@ export default function createValidationRoutes(_pgPool) {
         try {
           // Validate required fields based on entity type
           if (entityType === 'Contact') {
-            // Require at least one name field, default the other to 'UNK'
             if (!record.first_name && !record.last_name) {
               results.errors.push({
                 row_number: rowNumber,
@@ -542,7 +544,6 @@ export default function createValidationRoutes(_pgPool) {
               results.failCount++;
               continue;
             }
-            // Default missing name to 'UNK'
             if (!record.first_name) record.first_name = 'UNK';
             if (!record.last_name) record.last_name = 'UNK';
           } else if (entityType === 'BizDevSource') {
@@ -554,7 +555,6 @@ export default function createValidationRoutes(_pgPool) {
               results.failCount++;
               continue;
             }
-            // Set default source if not provided
             if (!record.source) {
               record.source = fileName || 'CSV Import';
             }
@@ -599,28 +599,53 @@ export default function createValidationRoutes(_pgPool) {
             delete record._company_name;
           }
 
-          // Add tenant_id
+          // Add tenant_id and track original row number
           record.tenant_id = tenant_id;
-
-          // Build INSERT query dynamically
-          const fields = Object.keys(record);
-          const _values = Object.values(record);
-          const _placeholders = fields.map((_, idx) => `$${idx + 1}`).join(', ');
-
-          const { data: _insertData, error: insertErr } = await supabase
-            .from(table)
-            .insert([record])
-            .select('*')
-            .single();
-          if (insertErr) throw new Error(insertErr.message);
-          results.successCount++;
+          validRecords.push({ record, rowNumber });
         } catch (error) {
-          logger.error(`Row ${rowNumber} failed:`, error);
           results.errors.push({
             row_number: rowNumber,
-            error: error.message || 'Unknown error',
+            error: error.message || 'Validation error',
           });
           results.failCount++;
+        }
+      }
+
+      // ── Phase 2: Bulk insert validated records ──
+      if (validRecords.length > 0) {
+        // Supabase .insert() accepts an array and inserts all rows in a single
+        // round-trip. We skip .select() to avoid pulling all rows back over
+        // the wire — we only need the count, not the returned data.
+        const payload = validRecords.map((v) => v.record);
+
+        const { error: bulkErr, count: insertedCount } = await supabase
+          .from(table)
+          .insert(payload, { count: 'exact' });
+
+        if (bulkErr) {
+          // If the bulk insert fails entirely (e.g. constraint violation on one
+          // row causes Postgres to reject the whole batch), fall back to
+          // row-by-row so we can identify the problematic rows.
+          logger.warn(`⚠️ Bulk insert failed (${bulkErr.message}), falling back to row-by-row`);
+
+          for (const { record, rowNumber } of validRecords) {
+            try {
+              const { error: rowErr } = await supabase
+                .from(table)
+                .insert([record]);
+              if (rowErr) throw new Error(rowErr.message);
+              results.successCount++;
+            } catch (rowError) {
+              results.errors.push({
+                row_number: rowNumber,
+                error: rowError.message || 'Insert failed',
+              });
+              results.failCount++;
+            }
+          }
+        } else {
+          // Bulk insert succeeded — all valid records inserted
+          results.successCount = insertedCount ?? validRecords.length;
         }
       }
 
