@@ -140,10 +140,15 @@ export default function EmployeeForm({ employee: legacyEmployee, initialData, on
           result = await Employee.create(entityPayload);
         }
         console.log('[EmployeeForm] API call successful:', result);
-        toast.success(employee?.id ? 'Employee updated successfully' : 'Employee created successfully');
+        const isEdit = !!employee?.id;
+        if (formData.has_crm_access && formData.email) {
+          toast.success(isEdit ? 'Employee updated – CRM invitation sent' : 'Employee created – CRM invitation sent');
+        } else {
+          toast.success(isEdit ? 'Employee updated successfully' : 'Employee created successfully');
+        }
       } catch (err) {
         console.error('[EmployeeForm] API call failed:', err);
-        const msg = err?.response?.data?.error || err?.message || 'Failed to save employee';
+        const msg = err?.response?.data?.error || err?.response?.data?.message || err?.message || 'Failed to save employee';
         toast.error(msg);
         throw err;
       }

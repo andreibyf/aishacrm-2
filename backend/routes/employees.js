@@ -6,6 +6,7 @@
 import express from 'express';
 import { cacheList } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
+import { inviteUserByEmail, getAuthUserByEmail } from '../lib/supabaseAuth.js';
 
 export default function createEmployeeRoutes(_pgPool) {
   const router = express.Router();
@@ -373,10 +374,56 @@ export default function createEmployeeRoutes(_pgPool) {
 
       const employee = expandMetadata(data);
 
+      // If CRM access requested and email provided, send Supabase Auth invite
+      let invitation_sent = false;
+      let invitation_error = null;
+      const hasCrmAccess = combinedMetadata.has_crm_access === true || req.body.has_crm_access === true;
+
+      if (hasCrmAccess && email) {
+        try {
+          // Check if auth user already exists
+          const { user: existingAuth } = await getAuthUserByEmail(email);
+          if (existingAuth) {
+            logger.debug(`[EmployeeRoutes] Auth user already exists for ${email}, skipping invite`);
+            invitation_sent = true; // Already has auth access
+          } else {
+            const { user: authUser, error: authError } = await inviteUserByEmail(
+              email,
+              {
+                first_name,
+                last_name,
+                role: role || 'employee',
+                tenant_id,
+                display_name: `${first_name} ${last_name || ''}`.trim(),
+                employee_id: data.id,
+              }
+            );
+            if (authError) {
+              logger.error('[EmployeeRoutes] Auth invite failed:', authError);
+              invitation_error = authError.message;
+            } else {
+              logger.info(`[EmployeeRoutes] Auth invite sent to ${email}`);
+              invitation_sent = true;
+            }
+          }
+        } catch (authErr) {
+          logger.error('[EmployeeRoutes] Auth invite exception:', authErr);
+          invitation_error = authErr.message;
+        }
+      }
+
       res.status(201).json({
-        status: 'success',
-        message: 'Employee created',
-        data: { employee },
+        status: invitation_error ? 'partial' : 'success',
+        message: invitation_error
+          ? `Employee created but CRM invitation failed: ${invitation_error}. Use Resend Invite to retry.`
+          : hasCrmAccess && email
+            ? `Employee created and invitation sent to ${email}`
+            : 'Employee created',
+        data: {
+          employee,
+          invitation_sent,
+          ...(invitation_error && { invitation_error }),
+        },
       });
     } catch (error) {
       logger.error('Error creating employee:', error);
@@ -514,10 +561,57 @@ export default function createEmployeeRoutes(_pgPool) {
 
       const employee = expandMetadata(data);
 
+      // Check if CRM access was just enabled (toggled from off → on)
+      const prevCrmAccess = currentMetadata.has_crm_access === true;
+      const newCrmAccess = updatedMetadata.has_crm_access === true;
+      const employeeEmail = data.email || email;
+      let invitation_sent = false;
+      let invitation_error = null;
+
+      if (newCrmAccess && !prevCrmAccess && employeeEmail) {
+        try {
+          const { user: existingAuth } = await getAuthUserByEmail(employeeEmail);
+          if (existingAuth) {
+            logger.debug(`[EmployeeRoutes] Auth user already exists for ${employeeEmail}, skipping invite`);
+            invitation_sent = true;
+          } else {
+            const { user: authUser, error: authError } = await inviteUserByEmail(
+              employeeEmail,
+              {
+                first_name: data.first_name,
+                last_name: data.last_name,
+                role: data.role || 'employee',
+                tenant_id,
+                display_name: `${data.first_name} ${data.last_name || ''}`.trim(),
+                employee_id: data.id,
+              }
+            );
+            if (authError) {
+              logger.error('[EmployeeRoutes] Auth invite on CRM access toggle failed:', authError);
+              invitation_error = authError.message;
+            } else {
+              logger.info(`[EmployeeRoutes] CRM access enabled, invite sent to ${employeeEmail}`);
+              invitation_sent = true;
+            }
+          }
+        } catch (authErr) {
+          logger.error('[EmployeeRoutes] Auth invite exception on update:', authErr);
+          invitation_error = authErr.message;
+        }
+      }
+
       res.json({
-        status: 'success',
-        message: 'Employee updated',
-        data: { employee },
+        status: invitation_error ? 'partial' : 'success',
+        message: invitation_error
+          ? `Employee updated but CRM invitation failed: ${invitation_error}. Use Resend Invite to retry.`
+          : invitation_sent
+            ? `Employee updated and invitation sent to ${employeeEmail}`
+            : 'Employee updated',
+        data: {
+          employee,
+          ...(invitation_sent && { invitation_sent }),
+          ...(invitation_error && { invitation_error }),
+        },
       });
     } catch (error) {
       logger.error('Error updating employee:', error);

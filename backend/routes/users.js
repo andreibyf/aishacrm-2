@@ -1156,11 +1156,11 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
       if (authError) {
         logger.error("[POST /api/users/invite] Supabase Auth invitation error:", authError);
-        // User was created but invitation failed - still return success but with warning
-        return res.status(201).json({
+        // User was created but invitation failed - report as partial failure
+        return res.status(207).json({
           status: "partial",
           success: true,
-          message: `User created but invitation email failed: ${authError.message}. You can resend the invitation later.`,
+          message: `User record created but invitation email failed: ${authError.message}. Use 'Resend Invite' to retry.`,
           data: {
             user: createdUser,
             invitation_sent: false,

@@ -150,7 +150,7 @@ export async function sendPasswordResetEmail(email, redirectTo) {
  * @param {Object} metadata - User metadata
  * @returns {Promise<{user, error}>}
  */
-export async function inviteUserByEmail(email, metadata = {}) {
+export async function inviteUserByEmail(email, metadata = {}, redirectUrl = null) {
   if (!supabaseAdmin) {
     throw new Error("Supabase Auth not initialized");
   }
@@ -167,6 +167,7 @@ export async function inviteUserByEmail(email, metadata = {}) {
       throw new Error('FRONTEND_URL environment variable is required for user invitations in production');
     }
 
+    const finalRedirectTo = redirectUrl || inviteRedirectTo;
     const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(
       email,
       {
@@ -174,7 +175,7 @@ export async function inviteUserByEmail(email, metadata = {}) {
           ...metadata,
           password_change_required: true,
         },
-        redirectTo: inviteRedirectTo,
+        redirectTo: finalRedirectTo,
       },
     );
 

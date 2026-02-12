@@ -164,12 +164,22 @@ export default function InviteUserDialog(
       console.log("[InviteUserDialog] Response:", { status: response.status, data });
 
       if (response.ok && data?.success) {
-        toast({
-          title: "User Created Successfully",
-          description: data.message ||
-            `${formData.email} has been added to the system.`,
-          duration: 5000, // Auto-dismiss after 5 seconds
-        });
+        // Check if invitation was actually sent or just the record created
+        if (data?.data?.invitation_sent === false || data?.status === 'partial') {
+          toast({
+            variant: "destructive",
+            title: "User Created – Invitation Failed",
+            description: data.message || `User record created but invitation could not be sent. Use 'Resend Invite' to retry.`,
+            duration: 8000,
+          });
+        } else {
+          toast({
+            title: "User Created Successfully",
+            description: data.message ||
+              `${formData.email} has been added to the system.`,
+            duration: 5000,
+          });
+        }
 
         onOpenChange(false);
         if (onSuccess) onSuccess();
@@ -181,7 +191,7 @@ export default function InviteUserDialog(
           variant: "destructive",
           title: "User Creation Failed",
           description: errorMsg,
-          duration: 5000, // Auto-dismiss after 5 seconds
+          duration: 5000,
         });
       }
     } catch (error) {
