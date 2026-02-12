@@ -156,7 +156,14 @@ class ApiHealthMonitor {
       
       if (!suppressOutput) {
         console.error(`[API Health Monitor] ${errorInfo.title} detected: ${endpoint}`, context);
-        if (this.reportingEnabled) {
+        
+        // Only show toasts for errors the user can act on.
+        // Suppress: rate limits (transient), network errors (infra), validation (dev-only).
+        // Suppress: GitHub auto-issue creation toasts.
+        const suppressToastTypes = new Set(['429', 'NETWORK', 'TIMEOUT']);
+        const shouldShowToast = this.reportingEnabled && !suppressToastTypes.has(errorInfo.type);
+        
+        if (shouldShowToast) {
           const toastFn = errorInfo.severity === 'critical' ? toast.error : toast.warning;
           toastFn(`${errorInfo.title}: ${endpoint}`, {
             description: errorInfo.description,
@@ -164,8 +171,10 @@ class ApiHealthMonitor {
           });
         }
         
-        // Automatically create GitHub issue for critical/high severity errors in production
-        if (this.autoCreateIssues && 
+        // Auto-create GitHub issues ONLY in production for 404s and 500s.
+        // Skip for transient errors (429, network, timeout) to avoid noise.
+        const issueWorthy = !suppressToastTypes.has(errorInfo.type) && errorInfo.type !== '400';
+        if (this.autoCreateIssues && issueWorthy &&
             (errorInfo.severity === 'critical' || errorInfo.severity === 'high') &&
             !this.issuesCreated.has(key)) {
           this._createGitHubIssueAsync(endpoint, context, errorInfo);
@@ -396,14 +405,7 @@ Pluralization Rule:
       
       if (result.success) {
         console.info(`[API Health Monitor] Auto-created GitHub issue #${result.issue.number} for ${endpoint}`);
-        toast.info(`GitHub issue #${result.issue.number} auto-created`, {
-          description: `Tracking error: ${endpoint}`,
-          action: {
-            label: 'View',
-            onClick: () => window.open(result.issue.url, '_blank')
-          },
-          duration: 8000
-        });
+        // Don't show toast to customers about GitHub issues — this is internal tooling
       }
     } catch (error) {
       console.error('[API Health Monitor] Failed to auto-create GitHub issue:', error);

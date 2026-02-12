@@ -78,14 +78,14 @@ fn getUpcomingActivities(
   tenant: String,
   assigned_to: String,
   days: Number
-) -> Result<Array, CRMError> !net, clock {
+) -> Result<Array, CRMError> !net {
   let url = "/api/v2/activities";
-  let now = clock.now();
+  // TODO: Filter by due_date range using days param when API supports date range queries
   let params = {
     tenant_id: tenant,
     assigned_to: assigned_to,
     status: "scheduled",
-    limit: 50
+    limit: days * 10
   };
   
   let response = http.get(url, { params: params });
@@ -107,15 +107,16 @@ fn scheduleMeeting(
   assigned_to: String
 ) -> Result<Activity, CRMError> !net {
   let url = "/api/v2/activities";
+  let attendee_list = attendees.join(", ");
   let payload = {
     tenant_id: tenant,
     subject: subject,
     activity_type: "meeting",
     due_date: date_time,
     assigned_to: assigned_to,
-    body: "Attendees: meeting",
+    body: "Attendees: " + attendee_list,
     status: "scheduled",
-    metadata: {}
+    metadata: { duration_minutes: duration_minutes, attendees: attendees }
   };
   
   let response = http.post(url, { body: payload });
@@ -189,10 +190,11 @@ fn searchActivities(
   query: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
-  // Use list endpoint - v2 activities doesn't have dedicated search
+  // Use list endpoint with search param - filters by subject
   let url = "/api/v2/activities";
   let params = {
     tenant_id: tenant,
+    search: query,
     limit: limit
   };
   

@@ -31,18 +31,54 @@ export default function BulkDeleteDialog({ sources, onClose, onComplete }) {
         errors: []
       };
 
-      // Delete each source individually
-      for (const source of sources) {
-        try {
-          await BizDevSource.delete(source.id);
-          results.successful++;
-        } catch (error) {
-          results.failed++;
-          results.errors.push({
-            id: source.id,
-            name: source.company_name || source.source || source.source_name,
-            error: error.message
-          });
+      // Delete in batches to avoid rate limiting
+      const BATCH_SIZE = 10;
+      const BATCH_DELAY_MS = 500; // pause between batches
+      const MAX_RETRIES = 3;
+
+      for (let i = 0; i < sources.length; i += BATCH_SIZE) {
+        const batch = sources.slice(i, i + BATCH_SIZE);
+
+        // Process batch concurrently
+        const batchResults = await Promise.allSettled(
+          batch.map(async (source) => {
+            let lastErr;
+            for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+              try {
+                await BizDevSource.delete(source.id);
+                return { success: true };
+              } catch (err) {
+                lastErr = err;
+                const is429 = err.message?.includes('429') || err.message?.includes('Too many') || err.message?.includes('rate');
+                if (is429 && attempt < MAX_RETRIES - 1) {
+                  // Exponential backoff: 1s, 2s, 4s
+                  await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)));
+                  continue;
+                }
+                throw err;
+              }
+            }
+            throw lastErr;
+          })
+        );
+
+        batchResults.forEach((result, idx) => {
+          if (result.status === 'fulfilled') {
+            results.successful++;
+          } else {
+            results.failed++;
+            const source = batch[idx];
+            results.errors.push({
+              id: source.id,
+              name: source.company_name || source.source,
+              error: result.reason?.message || 'Delete failed'
+            });
+          }
+        });
+
+        // Pause between batches (skip after last batch)
+        if (i + BATCH_SIZE < sources.length) {
+          await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
         }
       }
 
@@ -63,7 +99,7 @@ export default function BulkDeleteDialog({ sources, onClose, onComplete }) {
       onClose();
     } catch (error) {
       console.error('Delete error:', error);
-      toast.error(error.message || 'Failed to delete BizDev Sources');
+      toast.error('Failed to delete BizDev Sources. Please try again.');
     } finally {
       setDeleting(false);
     }

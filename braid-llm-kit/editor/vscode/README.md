@@ -5,13 +5,26 @@
 ## Features
 
 ### Syntax Highlighting
-- Keywords: `fn`, `type`, `enum`, `match`, `let`, etc.
-- Types: `Result`, `Option`, `String`, `Number`, `Boolean`
-- Effects: `!net`, `!clock`, `!fs`
-- CRM Types: `Account`, `Lead`, `Contact`, `Opportunity`, `Activity`
-- Error Types: `NotFound`, `ValidationError`, `NetworkError`
-- HTTP methods: `http.get`, `http.post`, `http.put`, `http.delete`
+- Keywords: `fn`, `type`, `enum`, `match`, `let`, `const`, `actor`, `spawn`, etc.
+- Types: `Result`, `Option`, `String`, `Number`, `Boolean`, and all CRM entity types
+- Effects: `!net`, `!clock`, `!fs`, `!db`, `!notify`, and compound effects like `!db.write`
+- CRM Types: `Account`, `Lead`, `Contact`, `Opportunity`, `Activity`, `Employee`, `BizDevSource`
+- Error Types: `NotFound`, `ValidationError`, `NetworkError`, `CRMError`, `APIError`
+- HTTP methods: `http.get`, `http.post`, `http.put`, `http.patch`, `http.delete`
 - Result constructors: `Ok`, `Err`
+- Doc comments: `///`
+- String interpolation: `${expr}` inside double-quoted strings
+- Capability types: `Http`, `Clock`, `Fs`, `Notify`, `Addr`
+
+### Document Formatting (NEW in v0.4.0)
+- **Format Document** (Shift+Alt+F) — auto-indents, normalizes spacing, cleans up whitespace
+- **Format Selection** — format only selected lines
+- **On-Type Formatting** — auto-dedent when typing `}`
+- Configurable indent size (default: 2 spaces)
+- Collapses multiple blank lines
+- Inserts blank line separators between top-level `fn` declarations
+- Trailing whitespace removal
+- String-aware (doesn't modify content inside string literals)
 
 ### Snippets
 
@@ -34,12 +47,33 @@
 | `searchtool` | Search tool template |
 | `validate` | Validation function template |
 
+### Language Configuration
+- Auto-closing pairs for `{}`, `[]`, `()`, `<>`, `""`
+- Bracket matching including angle brackets
+- Comment toggling (line `//` and block `/* */`)
+- Code folding via bracket matching and `// #region` markers
+- Smart indentation rules
+
+## Configuration
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `braid.format.indentSize` | `2` | Spaces per indent level |
+| `braid.format.insertFinalNewline` | `true` | Add newline at end of file |
+| `braid.format.maxLineLength` | `120` | Soft limit for formatting hints |
+
 ## Installation
+
+### From VSIX
+```bash
+code --install-extension braid-language-0.4.0.vsix
+```
 
 ### From Source (Development)
 ```bash
 cd braid-llm-kit/editor/vscode
-code --install-extension .
+npx @vscode/vsce package
+code --install-extension braid-language-0.4.0.vsix
 ```
 
 ### Manual Installation

@@ -12,11 +12,16 @@
     { "include": "#functions" },
     { "include": "#operators" },
     { "include": "#result-constructors" },
-    { "include": "#annotations" }
+    { "include": "#annotations" },
+    { "include": "#punctuation" }
   ],
   "repository": {
     "comments": {
       "patterns": [
+        {
+          "name": "comment.line.documentation.braid",
+          "match": "///.*$"
+        },
         {
           "name": "comment.line.double-slash.braid",
           "match": "//.*$"
@@ -24,7 +29,10 @@
         {
           "name": "comment.block.braid",
           "begin": "/\\*",
-          "end": "\\*/"
+          "end": "\\*/",
+          "patterns": [
+            { "name": "comment.block.braid", "match": "." }
+          ]
         }
       ]
     },
@@ -37,11 +45,16 @@
           "patterns": [
             {
               "name": "constant.character.escape.braid",
-              "match": "\\\\."
+              "match": "\\\\[\"\\\\nrt0]"
             },
             {
               "name": "variable.interpolation.braid",
-              "match": "\\$\\{[^}]+\\}"
+              "begin": "\\$\\{",
+              "end": "\\}",
+              "patterns": [
+                { "include": "#keywords" },
+                { "include": "#numbers" }
+              ]
             }
           ]
         }
@@ -50,8 +63,12 @@
     "numbers": {
       "patterns": [
         {
+          "name": "constant.numeric.hex.braid",
+          "match": "\\b0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*\\b"
+        },
+        {
           "name": "constant.numeric.float.braid",
-          "match": "\\b\\d+\\.\\d+\\b"
+          "match": "\\b\\d+\\.\\d+([eE][+-]?\\d+)?\\b"
         },
         {
           "name": "constant.numeric.integer.braid",
@@ -63,15 +80,19 @@
       "patterns": [
         {
           "name": "keyword.control.braid",
-          "match": "\\b(fn|type|enum|trait|impl|match|if|else|return|let|mut|import|from|as)\\b"
+          "match": "\\b(fn|type|enum|trait|impl|for|match|if|else|return|let|mut|import|from|as|in|const)\\b"
         },
         {
           "name": "keyword.other.braid",
-          "match": "\\b(actor|async|await|requires|ensures|policy)\\b"
+          "match": "\\b(actor|async|await|spawn|requires|ensures|policy|self)\\b"
         },
         {
-          "name": "constant.language.braid",
+          "name": "constant.language.boolean.braid",
           "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.language.null.braid",
+          "match": "\\b(null|None)\\b"
         }
       ]
     },
@@ -79,19 +100,28 @@
       "patterns": [
         {
           "name": "support.type.primitive.braid",
-          "match": "\\b(String|Number|Boolean|Bool|JSONB|Array|i32|i64|u64|f32|f64)\\b"
+          "match": "\\b(String|Number|Boolean|Bool|JSONB|Array|Object|Void|Int|i32|i64|u32|u64|f32|f64)\\b"
         },
         {
           "name": "support.type.result.braid",
-          "match": "\\b(Result|Option|Some|None)\\b"
+          "match": "\\b(Result|Option|Some)\\b"
         },
         {
-          "name": "entity.name.type.braid",
-          "match": "\\b(Account|Lead|Contact|Opportunity|Activity|Note|User|Tenant|Snapshot|Policy|CRMError)\\b"
+          "name": "entity.name.type.crm.braid",
+          "match": "\\b(Account|Lead|Contact|Opportunity|Activity|Note|User|Tenant|Snapshot|Policy|Employee|BizDevSource|ConversionResult|Summary|Assignment|Document|Workflow|WorkflowStep)\\b"
         },
         {
           "name": "entity.name.type.error.braid",
-          "match": "\\b(NotFound|ValidationError|PermissionDenied|NetworkError|DatabaseError|PolicyViolation)\\b"
+          "match": "\\b(CRMError|NotFound|ValidationError|PermissionDenied|NetworkError|DatabaseError|PolicyViolation|APIError)\\b"
+        },
+        {
+          "name": "entity.name.type.capability.braid",
+          "match": "\\b(Http|Clock|Fs|Db|Email|Notify|Auth|Response|HttpError|IoError|Path|ReadOnly|File|Addr)\\b"
+        },
+        {
+          "comment": "User-defined type names starting with uppercase",
+          "name": "entity.name.type.user.braid",
+          "match": "(?<=:\\s*)[A-Z][a-zA-Z0-9_]*(?=\\s*[,)}>|=])"
         }
       ]
     },
@@ -99,31 +129,44 @@
       "patterns": [
         {
           "name": "keyword.other.effect.braid",
-          "match": "!(net|clock|fs|db|email|io)\\b"
-        },
-        {
-          "name": "keyword.operator.effect.braid",
-          "match": "!"
+          "match": "!(net|clock|fs|db|email|io|notify|db\\.write|db\\.drop|db\\.truncate|fs\\.delete_system|auth\\.bypass|billing\\.refund|user\\.delete)\\b"
         }
       ]
     },
     "functions": {
       "patterns": [
         {
-          "name": "entity.name.function.braid",
-          "match": "\\b(http\\.get|http\\.post|http\\.put|http\\.delete|http\\.patch)\\b"
+          "name": "entity.name.function.http.braid",
+          "match": "\\bhttp\\.(get|post|put|patch|delete|app|serve)\\b"
         },
         {
           "name": "entity.name.function.clock.braid",
-          "match": "\\b(clock\\.now|clock\\.today)\\b"
+          "match": "\\bclock\\.(now|today)\\b"
+        },
+        {
+          "name": "entity.name.function.fs.braid",
+          "match": "\\bfs\\.(open|read|write)\\b"
+        },
+        {
+          "name": "entity.name.function.notify.braid",
+          "match": "\\bnotify\\.send\\b"
         },
         {
           "name": "entity.name.function.builtin.braid",
-          "match": "\\b(len|includes|toString|parseInt|parseFloat|reduce|map|filter)\\b"
+          "match": "\\b(len|includes|toString|parseInt|parseFloat|encodeURIComponent|reduce|map|filter)\\b"
+        },
+        {
+          "name": "entity.name.function.method.braid",
+          "match": "\\.(join|push|pop|length|trim|toLowerCase|toUpperCase|split|slice|concat|find|forEach|some|every|keys|values|entries)\\b"
         },
         {
           "name": "entity.name.function.definition.braid",
           "match": "(?<=fn\\s+)[a-zA-Z_][a-zA-Z0-9_]*"
+        },
+        {
+          "comment": "Function/method call — identifier followed by (",
+          "name": "entity.name.function.call.braid",
+          "match": "\\b([a-z_][a-zA-Z0-9_]*)(?=\\s*\\()"
         }
       ]
     },
@@ -142,8 +185,12 @@
     "operators": {
       "patterns": [
         {
+          "name": "keyword.operator.fat-arrow.braid",
+          "match": "=>"
+        },
+        {
           "name": "keyword.operator.arrow.braid",
-          "match": "->|=>"
+          "match": "->"
         },
         {
           "name": "keyword.operator.comparison.braid",
@@ -151,7 +198,23 @@
         },
         {
           "name": "keyword.operator.logical.braid",
-          "match": "&&|\\|\\||!"
+          "match": "&&|\\|\\|"
+        },
+        {
+          "name": "keyword.operator.null-coalescing.braid",
+          "match": "\\?\\?"
+        },
+        {
+          "name": "keyword.operator.propagation.braid",
+          "match": "\\?"
+        },
+        {
+          "name": "keyword.operator.pipe.braid",
+          "match": "\\|>"
+        },
+        {
+          "name": "keyword.operator.assignment.compound.braid",
+          "match": "\\+=|-=|\\*=|/="
         },
         {
           "name": "keyword.operator.assignment.braid",
@@ -166,8 +229,8 @@
           "match": "\\.\\.\\."
         },
         {
-          "name": "keyword.operator.question.braid",
-          "match": "\\?\\?"
+          "name": "keyword.operator.scope.braid",
+          "match": "::"
         }
       ]
     },
@@ -176,6 +239,22 @@
         {
           "name": "entity.name.tag.annotation.braid",
           "match": "@[a-zA-Z_][a-zA-Z0-9_]*"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "name": "punctuation.separator.comma.braid",
+          "match": ","
+        },
+        {
+          "name": "punctuation.terminator.semicolon.braid",
+          "match": ";"
+        },
+        {
+          "name": "punctuation.separator.colon.braid",
+          "match": ":"
         }
       ]
     }

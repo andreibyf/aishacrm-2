@@ -108,7 +108,7 @@
   // File Associations
   // ==========================================
   "files.associations": {
-    "*.braid": "yaml",
+    "*.braid": "braid",
     "*.http": "http",
     ".env.*": "dotenv",
     "doppler.yaml": "yaml"

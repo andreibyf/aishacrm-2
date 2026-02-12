@@ -1,8 +1,8 @@
 {
   "name": "braid-language",
   "displayName": "Braid - AI-Native DSL",
-  "description": "Syntax highlighting, snippets, and language support for Braid - the type-safe, capability-controlled language for AI tool definitions",
-  "version": "0.3.0",
+  "description": "Syntax highlighting, formatting, snippets, and language support for Braid - the type-safe, capability-controlled language for AI tool definitions",
+  "version": "0.4.0",
   "publisher": "aisha-crm",
   "repository": {
     "type": "git",
@@ -11,8 +11,13 @@
   "engines": {
     "vscode": "^1.86.0"
   },
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:braid"
+  ],
   "categories": [
     "Programming Languages",
+    "Formatters",
     "Snippets"
   ],
   "keywords": [
@@ -21,7 +26,8 @@
     "llm",
     "dsl",
     "tool-calling",
-    "type-safe"
+    "type-safe",
+    "formatter"
   ],
   "contributes": {
     "languages": [
@@ -29,6 +35,10 @@
         "id": "braid",
         "extensions": [".braid"],
         "aliases": ["Braid", "braid"],
+        "icon": {
+          "light": "./icons/braid-light.png",
+          "dark": "./icons/braid-dark.png"
+        },
         "configuration": "./language-configuration.json"
       }
     ],
@@ -44,6 +54,26 @@
         "language": "braid",
         "path": "./snippets/core.json"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Braid",
+      "properties": {
+        "braid.format.indentSize": {
+          "type": "number",
+          "default": 2,
+          "description": "Number of spaces per indentation level"
+        },
+        "braid.format.insertFinalNewline": {
+          "type": "boolean",
+          "default": true,
+          "description": "Insert a final newline at end of file"
+        },
+        "braid.format.maxLineLength": {
+          "type": "number",
+          "default": 120,
+          "description": "Preferred maximum line length (soft limit for formatting hints)"
+        }
+      }
+    }
   }
 }

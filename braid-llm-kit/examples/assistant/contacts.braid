@@ -70,7 +70,7 @@ fn listContactsForAccount(
   
   // Note: Empty array is a VALID result (account has no contacts), not an error
   return match response {
-    Ok{value} => Ok(value.data),
+    Ok{value} => Ok(value.data.contacts),
     Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "list_contacts" }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
@@ -142,7 +142,7 @@ fn listAllContacts(
   
   // Returns full contact details including name, email, phone, job title, etc.
   return match response {
-    Ok{value} => Ok(value.data),
+    Ok{value} => Ok(value.data.contacts),
     Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "list_all_contacts" }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
@@ -167,7 +167,7 @@ fn searchContactsByStatus(
   
   // Returns full contact details including name, email, phone, job title, etc.
   return match response {
-    Ok{value} => Ok(value.data),
+    Ok{value} => Ok(value.data.contacts),
     Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_contacts_by_status", status: status }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
@@ -196,7 +196,7 @@ fn getContactDetails(
   let response = http.get(url, { params: params });
   
   return match response {
-    Ok{value} => Ok(value.data),
+    Ok{value} => Ok(value.data.contact),
     Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_contact", entity: "Contact", id: contact_id }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
