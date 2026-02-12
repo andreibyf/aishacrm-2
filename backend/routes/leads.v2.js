@@ -489,10 +489,25 @@ export default function createLeadsV2Routes() {
         metadata,
       };
 
+      // ── Auto-swap: detect AI sending phone in company and vice versa ──
+      let fixedPhone = phone;
+      let fixedCompany = company;
+      if (phone && company) {
+        const phoneIsDigits   = /^[\d\s\-\(\)\+\.]+$/.test(phone.trim());
+        const companyIsDigits = /^[\d\s\-\(\)\+\.]+$/.test(company.trim());
+        const phoneHasLetters = /[a-zA-Z]/.test(phone);
+        const companyHasLetters = /[a-zA-Z]/.test(company);
+        if (companyIsDigits && !companyHasLetters && phoneHasLetters && !phoneIsDigits) {
+          logger.warn(`🔄 [AUTO-FIX] Swapping company/phone — AI sent them incorrectly`);
+          fixedPhone = company;
+          fixedCompany = phone;
+        }
+      }
+
       // Optional fields
       if (email) payload.email = email;
-      if (phone) payload.phone = phone;
-      if (company) payload.company = company;
+      if (fixedPhone) payload.phone = fixedPhone;
+      if (fixedCompany) payload.company = fixedCompany;
       if (job_title) payload.job_title = job_title;
       if (source) payload.source = source;
       if (score !== undefined) payload.score = score;
@@ -510,17 +525,74 @@ export default function createLeadsV2Routes() {
       if (tags) payload.tags = Array.isArray(tags) ? tags : [];
       if (typeof is_test_data === 'boolean') payload.is_test_data = is_test_data;
 
+      // ── Use SECURITY DEFINER for INSERT (bypasses 8s PostgREST timeout) ──
       const supabase = getSupabaseClient();
-      const { data, error } = await supabase
-        .from('leads')
-        .insert([payload])
-        .select('*')
-        .single();
+      const insertStart = Date.now();
+      const { data: insertedId, error: rpcErr } = await supabase.rpc('leads_insert_definer', {
+        p_tenant_id: tenant_id,
+        p_first_name: first_name.trim(),
+        p_last_name: last_name.trim(),
+        p_email: email || null,
+        p_phone: fixedPhone || null,
+        p_company: fixedCompany || null,
+        p_job_title: job_title || null,
+        p_source: source || null,
+        p_status: status || 'new',
+        p_metadata: metadata || {},
+      });
+      const insertMs = Date.now() - insertStart;
+      logger.info(`[Leads v2 POST] INSERT via definer in ${insertMs}ms`);
+      if (insertMs > 2000) logger.warn(`[Leads v2 POST] SLOW INSERT: ${insertMs}ms`);
 
-      if (error) throw new Error(error.message);
+      if (rpcErr) throw new Error(rpcErr.message);
 
-      // Invalidate cache for leads list
-      await invalidateTenantCache(tenant_id, 'leads');
+      // Patch extra fields the definer doesn't accept (address, score, tags, etc.)
+      const extraFields = {};
+      if (score !== undefined) extraFields.score = score;
+      if (score_reason) extraFields.score_reason = score_reason;
+      if (estimated_value !== undefined) extraFields.estimated_value = estimated_value;
+      if (do_not_call !== undefined) extraFields.do_not_call = do_not_call;
+      if (do_not_text !== undefined) extraFields.do_not_text = do_not_text;
+      if (address_1) extraFields.address_1 = address_1;
+      if (address_2) extraFields.address_2 = address_2;
+      if (city) extraFields.city = city;
+      if (state) extraFields.state = state;
+      if (zip) extraFields.zip = zip;
+      if (country) extraFields.country = country;
+      if (unique_id) extraFields.unique_id = unique_id;
+      if (tags) extraFields.tags = Array.isArray(tags) ? tags : [];
+      if (typeof is_test_data === 'boolean') extraFields.is_test_data = is_test_data;
+
+      let data;
+      if (Object.keys(extraFields).length > 0) {
+        // Patch extra fields + fetch full record
+        const { data: patched, error: patchErr } = await supabase
+          .from('leads')
+          .update(extraFields)
+          .eq('id', insertedId)
+          .eq('tenant_id', tenant_id)
+          .select('*')
+          .single();
+        if (patchErr) logger.warn('[Leads v2 POST] Extra fields patch failed:', patchErr.message);
+        data = patched;
+      }
+      if (!data) {
+        // Fetch full record
+        const { data: fetched } = await supabase
+          .from('leads')
+          .select('*')
+          .eq('id', insertedId)
+          .eq('tenant_id', tenant_id)
+          .single();
+        data = fetched;
+      }
+
+      if (!data) throw new Error('Lead created but could not be fetched');
+
+      // Invalidate cache in background
+      invalidateTenantCache(tenant_id, 'leads').catch(err =>
+        logger.warn('[Leads v2 POST] Cache invalidation failed:', err.message)
+      );
 
       const created = expandMetadata(data);
       const aiContext = await buildLeadAiContext(created, { tenantId: tenant_id });
@@ -654,29 +726,34 @@ export default function createLeadsV2Routes() {
         }
       });
 
+      // ── Use SECURITY DEFINER for UPDATE (bypasses 8s PostgREST timeout) ──
       const supabase = getSupabaseClient();
-      const { data, error } = await supabase
-        .from('leads')
-        .update(payload)
-        .eq('id', id)
-        .eq('tenant_id', tenant_id)
-        .select('*')
-        .single();
+      const updateStart = Date.now();
+      const { data: result, error } = await supabase.rpc('leads_update_definer', {
+        p_lead_id: id,
+        p_tenant_id: tenant_id,
+        p_payload: payload,
+      });
+      const updateMs = Date.now() - updateStart;
+      logger.info(`[Leads v2 PUT] UPDATE via definer in ${updateMs}ms`);
+      if (updateMs > 2000) logger.warn(`[Leads v2 PUT] SLOW UPDATE: ${updateMs}ms`);
 
       if (error) {
-        if (error.code === 'PGRST116') {
+        if (error.message && error.message.includes('not found')) {
           return res.status(404).json({ status: 'error', message: 'Lead not found' });
         }
         throw new Error(error.message);
       }
 
-      // Invalidate cache for leads list
-      await invalidateTenantCache(tenant_id, 'leads');
+      // Invalidate cache in background
+      invalidateTenantCache(tenant_id, 'leads').catch(err =>
+        logger.warn('[Leads v2 PUT] Cache invalidation failed:', err.message)
+      );
 
       res.json({
         status: 'success',
         message: 'Lead updated',
-        data: expandMetadata(data),
+        data: expandMetadata(result || {}),
       });
     } catch (err) {
       logger.error('[Leads v2 PUT] Error:', err.message);
@@ -714,17 +791,19 @@ export default function createLeadsV2Routes() {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
 
+      // ── Use SECURITY DEFINER for DELETE (bypasses 8s PostgREST timeout) ──
       const supabase = getSupabaseClient();
-      const { data, error } = await supabase
-        .from('leads')
-        .delete()
-        .eq('id', id)
-        .eq('tenant_id', tenant_id)
-        .select('id')
-        .single();
+      const deleteStart = Date.now();
+      const { error } = await supabase.rpc('leads_delete_definer', {
+        p_lead_id: id,
+        p_tenant_id: tenant_id,
+      });
+      const deleteMs = Date.now() - deleteStart;
+      logger.info(`[Leads v2 DELETE] DELETE via definer in ${deleteMs}ms`);
+      if (deleteMs > 2000) logger.warn(`[Leads v2 DELETE] SLOW DELETE: ${deleteMs}ms`);
 
       if (error) {
-        if (error.code === 'PGRST116') {
+        if (error.message && error.message.includes('not found')) {
           return res.status(404).json({ status: 'error', message: 'Lead not found' });
         }
         throw new Error(error.message);
@@ -733,7 +812,7 @@ export default function createLeadsV2Routes() {
       res.json({
         status: 'success',
         message: 'Lead deleted',
-        data: { id: data.id },
+        data: { id },
       });
     } catch (err) {
       logger.error('[Leads v2 DELETE] Error:', err.message);

@@ -245,12 +245,12 @@ export const TOOL_REGISTRY = {
 export const PARAMETER_DESCRIPTIONS = {
   create_lead: {
     tenant: 'Tenant UUID (automatically provided by system)',
-    first_name: 'Contact\'s first/given name (e.g., "Josh" from "Josh Johnson")',
-    last_name: 'Contact\'s last/family name (e.g., "Johnson" from "Josh Johnson")',
-    email: 'Contact\'s email address (must be valid email format like josh@company.com)',
-    company: 'Organization/company name where the contact works (e.g., "TechStart Solutions")',
-    phone: 'Contact\'s phone number in any format (e.g., "(555) 123-4567" or "555-123-4567")',
-    source: 'How they found us: Website, Referral, Cold Call, LinkedIn, Trade Show, etc.'
+    first_name: 'PERSON\'S first/given name only - NOT a phone number, NOT a company! Example: "Josh" from "Josh Johnson"',
+    last_name: 'PERSON\'S last/family name only - NOT a phone number, NOT a company! Example: "Johnson" from "Josh Johnson")',
+    email: 'Email address in format user@domain.com - MUST contain @ symbol. Example: "josh@company.com" NOT a phone number or company name!',
+    company: 'COMPANY/ORGANIZATION NAME - NOT a phone number! Should be a business name like "TechStart Solutions", "ABC Liquor", "MarcusLabs". If you see digits like "3526599887", that is a PHONE NUMBER not a company!',
+    phone: 'PHONE NUMBER ONLY - digits/numbers like "555-1234" or "3526599887" or "(415) 555-0199". If you see text like "MarcusLabs" or "TechStart", that is a COMPANY NAME not a phone number!',
+    source: 'How they found us: Website, Referral, Cold Call, LinkedIn, Trade Show, Manual Entry, etc.'
   },
   update_lead: {
     tenant: 'Tenant UUID (automatically provided by system)',

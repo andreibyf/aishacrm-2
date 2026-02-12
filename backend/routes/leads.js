@@ -510,25 +510,26 @@ export default function createLeadRoutes(_pgPool) {
 
       // Validate required name fields
       if (!first_name || !first_name.trim()) {
-        return res.status(400).json({ 
-          status: 'error', 
+        return res.status(400).json({
+          status: 'error',
           message: 'first_name is required and cannot be empty',
-          field: 'first_name'
+          field: 'first_name',
         });
       }
 
       if (!last_name || !last_name.trim()) {
-        return res.status(400).json({ 
-          status: 'error', 
+        return res.status(400).json({
+          status: 'error',
           message: 'last_name is required and cannot be empty',
-          field: 'last_name'
+          field: 'last_name',
         });
       }
 
       const normalizedStatus = typeof status === 'string' && status.trim() ? status.trim() : 'new';
       const metadataExtras = {};
       if (title !== undefined && title !== null) metadataExtras.title = title;
-      if (description !== undefined && description !== null) metadataExtras.description = description;
+      if (description !== undefined && description !== null)
+        metadataExtras.description = description;
       if (account_id !== undefined) metadataExtras.account_id = account_id;
       const combinedMetadata = sanitizeMetadataPayload(metadata, otherFields, metadataExtras);
 
@@ -570,11 +571,54 @@ export default function createLeadRoutes(_pgPool) {
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
-      const { data, error } = await supabase
-        .from('leads')
-        .insert([leadPayload])
-        .select('*')
-        .single();
+
+      // Use optimized SECURITY DEFINER function for performance (bypasses RLS overhead)
+      const { data: leadId, error: rpcError } = await supabase.rpc('leads_insert_definer', {
+        p_tenant_id: leadPayload.tenant_id,
+        p_first_name: leadPayload.first_name,
+        p_last_name: leadPayload.last_name,
+        p_email: leadPayload.email || null,
+        p_phone: leadPayload.phone || null,
+        p_company: leadPayload.company || null,
+        p_job_title: leadPayload.job_title || null,
+        p_source: leadPayload.source || null,
+        p_status: leadPayload.status || 'new',
+        p_lead_type: leadPayload.lead_type || 'b2b',
+        p_assigned_to: leadPayload.assigned_to || null,
+        p_person_id: null,
+        p_score: leadPayload.score || null,
+        p_score_reason: leadPayload.score_reason || null,
+        p_ai_action: 'none',
+        p_qualification_status: 'unqualified',
+        p_conversion_probability: null,
+        p_next_action: null,
+        p_address_1: leadPayload.address_1 || null,
+        p_address_2: leadPayload.address_2 || null,
+        p_city: leadPayload.city || null,
+        p_state: leadPayload.state || null,
+        p_zip: leadPayload.zip || null,
+        p_country: leadPayload.country || null,
+        p_created_date: null,
+        p_last_contacted: null,
+        p_last_synced: null,
+        p_metadata: leadPayload.metadata || {},
+        p_activity_metadata: {},
+        p_tags: leadPayload.tags || [],
+        p_is_test_data: leadPayload.is_test_data || false,
+        p_do_not_call: leadPayload.do_not_call || false,
+        p_do_not_text: leadPayload.do_not_text || false,
+        p_estimated_value: leadPayload.estimated_value || null,
+        p_unique_id: leadPayload.unique_id || null,
+        p_legacy_id: null,
+        p_source_id: null,
+      });
+
+      if (rpcError) throw new Error(rpcError.message);
+      if (!leadId) throw new Error('Lead creation failed - no ID returned');
+
+      // Fetch created lead for V1 response format
+      const { data, error } = await supabase.from('leads').select('*').eq('id', leadId).single();
+
       if (error) throw new Error(error.message);
 
       const lead = expandMetadata(data);

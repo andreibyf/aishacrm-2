@@ -58,6 +58,11 @@ export function validateToolAccessToken(accessToken) {
  * @param {Object} accessToken - REQUIRED: Security token proving tenant authorization passed (default: false = denied)
  */
 export async function executeBraidTool(toolName, args, tenantRecord, userId = null, accessToken = false) {
+  // DEBUG: Log create_lead calls to debug field scrambling
+  if (toolName === 'create_lead') {
+    console.log('🔍 [DEBUG] create_lead called with args:', JSON.stringify(args, null, 2));
+  }
+  
   // SECURITY: Verify the access token before any tool execution
   // This is the "key to the toolshed" - without it, no tools can be accessed
   if (!validateToolAccessToken(accessToken)) {
