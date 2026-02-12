@@ -74,31 +74,43 @@ export default function createBizDevSourceRoutes(pgPool) {
 
       // Parse requested limit (default 5000 to avoid Supabase's 1000-row default)
       const rowLimit = Math.min(parseInt(limit, 10) || 5000, 10000);
-      
-      let query = supabase
-        .from('bizdev_sources')
-        .select('*')
-        .eq('tenant_id', tenant_id)  // Always enforce tenant scoping
-        .order('created_at', { ascending: false })
-        .limit(rowLimit);
 
-      // Filter out "undefined" string from query params (braid sends these)
-      if (status && status !== 'undefined') {
-        // Case-insensitive status filter using ilike
-        query = query.ilike('status', status);
+      // Build base query with filters (reusable for paginated fetches)
+      function buildQuery(from, to) {
+        let q = supabase
+          .from('bizdev_sources')
+          .select('*')
+          .eq('tenant_id', tenant_id)
+          .order('created_at', { ascending: false })
+          .range(from, to);
+
+        if (status && status !== 'undefined') {
+          q = q.ilike('status', status);
+        }
+        if (source_type && source_type !== 'undefined') {
+          q = q.eq('source_type', source_type);
+        }
+        if (priority && priority !== 'undefined') {
+          q = q.eq('priority', priority);
+        }
+        return q;
       }
 
-      if (source_type && source_type !== 'undefined') {
-        query = query.eq('source_type', source_type);
+      // Supabase PostgREST caps at ~1000 rows per request.
+      // Paginate with .range() to fetch all rows up to rowLimit.
+      const PAGE_SIZE = 1000;
+      let allData = [];
+
+      for (let offset = 0; offset < rowLimit; offset += PAGE_SIZE) {
+        const end = Math.min(offset + PAGE_SIZE - 1, rowLimit - 1);
+        const { data: page, error: pageErr } = await buildQuery(offset, end);
+        if (pageErr) throw pageErr;
+        if (!page || page.length === 0) break;
+        allData = allData.concat(page);
+        if (page.length < PAGE_SIZE) break; // last page
       }
 
-      if (priority && priority !== 'undefined') {
-        query = query.eq('priority', priority);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
+      const data = allData;
 
       // Map 'source' column to 'source_name' for frontend compatibility
       const mappedData = (data || []).map(row => ({
