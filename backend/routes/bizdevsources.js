@@ -61,7 +61,7 @@ export default function createBizDevSourceRoutes(pgPool) {
   // Get all bizdev sources (with optional filtering)
   router.get('/', cacheList('bizdevsources', 180), async (req, res) => {
     try {
-      const { status, source_type, priority } = req.query;
+      const { status, source_type, priority, limit, sort } = req.query;
 
       // Enforce tenant isolation - support both middleware tenant and query param
       const tenant_id = req.tenant?.id || req.query.tenant_id;
@@ -71,12 +71,16 @@ export default function createBizDevSourceRoutes(pgPool) {
           message: 'tenant_id is required'
         });
       }
+
+      // Parse requested limit (default 5000 to avoid Supabase's 1000-row default)
+      const rowLimit = Math.min(parseInt(limit, 10) || 5000, 10000);
       
       let query = supabase
         .from('bizdev_sources')
         .select('*')
         .eq('tenant_id', tenant_id)  // Always enforce tenant scoping
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(rowLimit);
 
       // Filter out "undefined" string from query params (braid sends these)
       if (status && status !== 'undefined') {

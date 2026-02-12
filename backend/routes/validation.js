@@ -6,6 +6,7 @@
 
 import express from 'express';
 import logger from '../lib/logger.js';
+import { invalidateTenantCache } from '../lib/cacheMiddleware.js';
 
 // Helper to normalize strings for duplicate detection
 function normalizeString(str) {
@@ -686,6 +687,24 @@ export default function createValidationRoutes(_pgPool) {
       }
 
       logger.debug(`✅ Import complete: ${results.successCount} success, ${results.failCount} failed`);
+
+      // Invalidate cache so the UI shows new data immediately
+      if (results.successCount > 0 && tenant_id && table) {
+        // Map DB table name back to cache module name
+        const cacheModuleMap = {
+          contacts: 'contacts',
+          accounts: 'accounts',
+          leads: 'leads',
+          opportunities: 'opportunities',
+          activities: 'activities',
+          bizdev_sources: 'bizdevsources',
+        };
+        const cacheModule = cacheModuleMap[table];
+        if (cacheModule) {
+          await invalidateTenantCache(tenant_id, cacheModule);
+          logger.debug(`🗑️ Cache invalidated: ${cacheModule} for tenant ${tenant_id}`);
+        }
+      }
 
       res.json({
         status: 'success',
