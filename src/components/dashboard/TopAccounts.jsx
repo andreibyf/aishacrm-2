@@ -5,12 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, DollarSign } from "lucide-react";
 import { createPageUrl } from "@/utils";
 import { formatIndustry } from "@/utils/industryUtils";
+import { useEntityLabel } from "@/components/shared/entityLabelsHooks";
 
 export default function TopAccounts({ tenantFilter, showTestData }) {
   const [accounts, setAccounts] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const { loading: userLoading } = useUser();
   const { authCookiesReady } = useAuthCookiesReady();
+  const { plural: accountsLabel } = useEntityLabel('accounts');
 
   React.useEffect(() => {
     // Wait for user + auth cookies readiness
@@ -114,7 +116,7 @@ export default function TopAccounts({ tenantFilter, showTestData }) {
       <CardHeader>
         <CardTitle className="text-slate-100 flex items-center gap-2">
           <Building2 className="w-5 h-5 text-blue-400" />
-          Top Customers by Won Deals
+          Top {accountsLabel} by Won Deals
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -158,7 +160,7 @@ export default function TopAccounts({ tenantFilter, showTestData }) {
         ) : (
           <div className="text-center py-8 text-slate-500">
             <Building2 className="w-12 h-12 mx-auto mb-2 opacity-50" />
-            <p>No accounts with won deals</p>
+            <p>No {accountsLabel.toLowerCase()} with won deals</p>
           </div>
         )}
       </CardContent>

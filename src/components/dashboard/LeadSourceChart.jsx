@@ -13,6 +13,7 @@ import { useUser } from "@/components/shared/useUser";
 import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
 import { Loader2, PieChart as PieChartIcon, TrendingUp } from "lucide-react";
 import { useApiManager } from "@/components/shared/ApiManager"; // Updated import path for useApiManager
+import { useEntityLabel } from "@/components/shared/entityLabelsHooks";
 
 // Define colors for the chart slices
 const COLORS = [
@@ -28,6 +29,7 @@ function LeadSourceChart(props) { // Changed to receive `props`
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const { cachedRequest } = useApiManager();
+  const { singular: leadLabel, plural: leadsLabel } = useEntityLabel('leads');
   const { loading: userLoading } = useUser();
   const { authCookiesReady } = useAuthCookiesReady();
 
@@ -181,9 +183,9 @@ function LeadSourceChart(props) { // Changed to receive `props`
       <CardHeader className="border-b border-slate-700">
         <CardTitle className="text-slate-100 flex items-center gap-2">
           <TrendingUp className="w-5 h-5 text-green-400" />
-          Lead Sources
+          {leadLabel} Sources
         </CardTitle>
-        <p className="text-slate-400 text-sm">Where your leads come from</p>
+        <p className="text-slate-400 text-sm">Where your {leadsLabel.toLowerCase()} come from</p>
       </CardHeader>
       <CardContent className="p-6">
         {loading
@@ -200,9 +202,9 @@ function LeadSourceChart(props) { // Changed to receive `props`
               ? ( // Check if all values are zero
                 <div className="text-center py-8 text-slate-500 h-[300px] flex flex-col justify-center items-center">
                   <PieChartIcon className="w-12 h-12 mx-auto mb-4 text-slate-600" />
-                  <p className="text-slate-400">No lead data available</p>
+                  <p className="text-slate-400">No {leadLabel.toLowerCase()} data available</p>
                   <p className="text-sm text-slate-500">
-                    Lead sources will appear here
+                    {leadLabel} sources will appear here
                   </p>
                 </div>
               )

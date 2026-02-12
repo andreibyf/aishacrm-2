@@ -1,6 +1,7 @@
 import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowRight, Target, Percent } from "lucide-react";
+import { useEntityLabel } from "@/components/shared/entityLabelsHooks";
 
 /**
  * ConversionRates Widget
@@ -11,6 +12,8 @@ import { ArrowRight, Target, Percent } from "lucide-react";
  * Uses pre-fetched stats from dashboard bundle - no extra API calls.
  */
 export default function ConversionRates({ stats = {} }) {
+  const { singular: leadLabel, plural: leadsLabel } = useEntityLabel('leads');
+  const { singular: opportunityLabel, plural: opportunitiesLabel } = useEntityLabel('opportunities');
   // Calculate conversion rates using the correct formula:
   // conversion_rate = promoted / (active + promoted)
   const rates = React.useMemo(() => {
@@ -52,8 +55,8 @@ export default function ConversionRates({ stats = {} }) {
   // Using Tailwind's blue and cyan palette
   const funnelSteps = [
     {
-      label: "Lead → Opportunity",
-      description: "Leads that became opportunities",
+      label: `${leadLabel} → ${opportunityLabel}`,
+      description: `${leadsLabel} that became ${opportunitiesLabel.toLowerCase()}`,
       rate: rates.leadToOppRate,
       numerator: rates.totalOpportunities,
       denominator: rates.totalLeads,
@@ -63,8 +66,8 @@ export default function ConversionRates({ stats = {} }) {
       barColor: "bg-blue-500",
     },
     {
-      label: "Opportunity → Won",
-      description: "Win rate on opportunities",
+      label: `${opportunityLabel} → Won`,
+      description: `Win rate on ${opportunitiesLabel.toLowerCase()}`,
       rate: rates.oppWinRate,
       numerator: rates.wonOpportunities,
       denominator: rates.totalOpportunities,
@@ -74,7 +77,7 @@ export default function ConversionRates({ stats = {} }) {
       barColor: "bg-cyan-500",
     },
     {
-      label: "Lead → Won",
+      label: `${leadLabel} → Won`,
       description: "Overall sales efficiency",
       rate: rates.leadToWonRate,
       numerator: rates.wonOpportunities,

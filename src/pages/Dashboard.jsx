@@ -45,6 +45,7 @@ import { useUser } from "@/components/shared/useUser.js";
 import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
 import { useLogger } from "../components/shared/Logger";
 import { useLoadingToast } from "@/hooks/useLoadingToast";
+import { useEntityLabel } from "@/components/shared/entityLabelsHooks";
 
 const ALL_WIDGETS = [
   {
@@ -152,6 +153,25 @@ export default function DashboardPage() {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  // Dynamic entity labels for widget names
+  const { plural: leadsLabel } = useEntityLabel('leads');
+  const { plural: accountsLabel } = useEntityLabel('accounts');
+  const { plural: activitiesLabel } = useEntityLabel('activities');
+
+  // Widget name overrides using custom entity labels
+  const dynamicWidgetNames = useMemo(() => ({
+    leadSourceChart: `${leadsLabel.split(' ')[0]} Sources`,
+    topAccounts: `Top ${accountsLabel}`,
+    leadAgeReport: `${leadsLabel.split(' ')[0]} Age Report`,
+    recentActivities: `Recent ${activitiesLabel}`,
+  }), [leadsLabel, accountsLabel, activitiesLabel]);
+
+  // ALL_WIDGETS with dynamic names applied
+  const labeledWidgets = useMemo(() =>
+    ALL_WIDGETS.map(w => dynamicWidgetNames[w.id] ? { ...w, name: dynamicWidgetNames[w.id] } : w),
+    [dynamicWidgetNames]
   );
 
   // Removed per-page user loading; user comes from context
@@ -834,7 +854,7 @@ export default function DashboardPage() {
             <WidgetPickerModal
               open={isPickerOpen}
               onOpenChange={setIsPickerOpen}
-              availableWidgets={ALL_WIDGETS}
+              availableWidgets={labeledWidgets}
               currentPreferences={widgetPreferences}
               onSave={handleSaveWidgetPreferences}
             />

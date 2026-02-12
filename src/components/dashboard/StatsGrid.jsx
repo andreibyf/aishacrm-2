@@ -13,35 +13,41 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useEntityLabel } from "@/components/shared/entityLabelsHooks";
 
 export default function StatsGrid({ stats }) {
+  const { plural: contactsLabel } = useEntityLabel('contacts');
+  const { plural: leadsLabel } = useEntityLabel('leads');
+  const { plural: opportunitiesLabel } = useEntityLabel('opportunities');
+  const { plural: activitiesLabel } = useEntityLabel('activities');
+
   const statCards = [
     {
-      title: "Total Contacts",
+      title: `Total ${contactsLabel}`,
       value: stats?.totalContacts || 0,
       icon: Users,
       color: "blue",
       ringColor: "ring-blue-500",
       textColor: "text-blue-400",
-      description: "All contacts in your CRM",
+      description: `All ${contactsLabel.toLowerCase()} in your CRM`,
     },
     {
-      title: "New Leads",
+      title: `New ${leadsLabel}`,
       value: stats?.newLeads || 0,
       icon: Target,
       color: "green",
       ringColor: "ring-green-500",
       textColor: "text-green-400",
-      description: "New leads in last 30 days",
+      description: `New ${leadsLabel.toLowerCase()} in last 30 days`,
     },
     {
-      title: "Active Opportunities",
+      title: `Active ${opportunitiesLabel}`,
       value: stats?.activeOpportunities || 0,
       icon: TrendingUp,
       color: "orange",
       ringColor: "ring-orange-500",
       textColor: "text-orange-400",
-      description: "Active sales opportunities (not won or lost)",
+      description: `Active sales ${opportunitiesLabel.toLowerCase()} (not won or lost)`,
     },
     {
       title: "Won Deals",
@@ -50,7 +56,7 @@ export default function StatsGrid({ stats }) {
       color: "green",
       ringColor: "ring-green-600",
       textColor: "text-green-500",
-      description: "Total closed-won opportunities",
+      description: `Total closed-won ${opportunitiesLabel.toLowerCase()}`,
       secondaryValue: typeof stats?.wonValue === "number"
         ? `$${(stats.wonValue / 1000).toFixed(0)}K`
         : null,
@@ -64,16 +70,16 @@ export default function StatsGrid({ stats }) {
       color: "emerald",
       ringColor: "ring-emerald-500",
       textColor: "text-emerald-400",
-      description: "Total value of open opportunities",
+      description: `Total value of open ${opportunitiesLabel.toLowerCase()}`,
     },
     {
-      title: "Activities Logged",
+      title: `${activitiesLabel} Logged`,
       value: stats?.activitiesLogged || 0,
       icon: Calendar,
       color: "cyan",
       ringColor: "ring-cyan-500",
       textColor: "text-cyan-400",
-      description: "Activities created in last 30 days",
+      description: `${activitiesLabel} created in last 30 days`,
     },
   ];
 
