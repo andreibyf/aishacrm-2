@@ -75,13 +75,30 @@ export default function createBizDevSourceRoutes(pgPool) {
       // Parse requested limit (default 5000 to avoid Supabase's 1000-row default)
       const rowLimit = Math.min(parseInt(limit, 10) || 5000, 10000);
 
+      // Parse sort param: "-field" = descending, "field" = ascending (default: -created_at)
+      const allowedSortColumns = new Set([
+        'created_at', 'updated_at', 'company_name', 'status', 'source',
+        'source_type', 'priority', 'city', 'state_province', 'batch_id',
+        'contact_person', 'email', 'industry'
+      ]);
+      let sortColumn = 'created_at';
+      let sortAscending = false;
+      if (sort && sort !== 'undefined') {
+        const desc = sort.startsWith('-');
+        const col = sort.replace(/^-/, '');
+        if (allowedSortColumns.has(col)) {
+          sortColumn = col;
+          sortAscending = !desc;
+        }
+      }
+
       // Build base query with filters (reusable for paginated fetches)
       function buildQuery(from, to) {
         let q = supabase
           .from('bizdev_sources')
           .select('*')
           .eq('tenant_id', tenant_id)
-          .order('created_at', { ascending: false })
+          .order(sortColumn, { ascending: sortAscending })
           .range(from, to);
 
         if (status && status !== 'undefined') {

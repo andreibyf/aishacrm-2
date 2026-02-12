@@ -62,6 +62,21 @@ export default function BizDevSourcesPage() {
   const [licenseStatusFilter, setLicenseStatusFilter] = useState("all");
   const [batchFilter, setBatchFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
+  const [sortField, setSortField] = useState("created_at");
+  const [sortDirection, setSortDirection] = useState("desc");
+
+  const sortOptions = useMemo(() => [
+    { label: "Newest First", field: "created_at", direction: "desc" },
+    { label: "Oldest First", field: "created_at", direction: "asc" },
+    { label: "Company A-Z", field: "company_name", direction: "asc" },
+    { label: "Company Z-A", field: "company_name", direction: "desc" },
+    { label: "Status A-Z", field: "status", direction: "asc" },
+    { label: "Status Z-A", field: "status", direction: "desc" },
+    { label: "City A-Z", field: "city", direction: "asc" },
+    { label: "State A-Z", field: "state_province", direction: "asc" },
+    { label: "Source A-Z", field: "source", direction: "asc" },
+    { label: "Recently Updated", field: "updated_at", direction: "desc" },
+  ], []);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -449,11 +464,32 @@ export default function BizDevSourcesPage() {
   const uniqueBatches = [...new Set(sources.map(s => s.batch_id).filter(Boolean))];
   const uniqueSources = [...new Set(sources.map(s => s.source).filter(Boolean))];
 
+  // Sort filtered results client-side
+  const sortedSources = useMemo(() => {
+    const sorted = [...filteredSources];
+    sorted.sort((a, b) => {
+      let aVal = a[sortField] ?? '';
+      let bVal = b[sortField] ?? '';
+      // Date fields: compare as timestamps
+      if (sortField === 'created_at' || sortField === 'updated_at') {
+        aVal = new Date(aVal || 0).getTime();
+        bVal = new Date(bVal || 0).getTime();
+      } else if (typeof aVal === 'string') {
+        aVal = aVal.toLowerCase();
+        bVal = (bVal || '').toLowerCase();
+      }
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [filteredSources, sortField, sortDirection]);
+
   const paginatedSources = useMemo(() => {
     const startIndex = (currentPage - 1) * pageSize;
     const endIndex = startIndex + pageSize;
-    return filteredSources.slice(startIndex, endIndex);
-  }, [filteredSources, currentPage, pageSize]);
+    return sortedSources.slice(startIndex, endIndex);
+  }, [sortedSources, currentPage, pageSize]);
 
   const totalPages = Math.ceil(filteredSources.length / pageSize);
 
@@ -484,7 +520,7 @@ export default function BizDevSourcesPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, licenseStatusFilter, batchFilter, sourceFilter]);
+  }, [searchTerm, statusFilter, licenseStatusFilter, batchFilter, sourceFilter, sortField, sortDirection]);
 
   const stats = {
     total: sources.length,
@@ -707,6 +743,31 @@ export default function BizDevSourcesPage() {
                 <SelectItem value="all">All Sources</SelectItem>
                 {uniqueSources.map(source => (
                   <SelectItem key={source} value={source}>{source}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={`${sortField}:${sortDirection}`}
+              onValueChange={(value) => {
+                const option = sortOptions.find(o => `${o.field}:${o.direction}` === value);
+                if (option) {
+                  setSortField(option.field);
+                  setSortDirection(option.direction);
+                  setCurrentPage(1);
+                }
+              }}
+            >
+              <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-100 w-44">
+                <SelectValue placeholder="Sort by..." />
+              </SelectTrigger>
+              <SelectContent>
+                {sortOptions.map((option) => (
+                  <SelectItem
+                    key={`${option.field}:${option.direction}`}
+                    value={`${option.field}:${option.direction}`}
+                  >
+                    {option.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
