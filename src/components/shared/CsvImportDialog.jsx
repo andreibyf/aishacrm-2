@@ -335,7 +335,7 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
       
       // PERFORMANCE OPTIMIZATION: Increased batch size and removed client-side delays.
       // ApiOptimizer handles rate limiting automatically.
-      const BATCH_SIZE = 25; // Increased from 5
+      const BATCH_SIZE = 100;
 
       const batches = [];
       for (let i = 0; i < validRecords.length; i += BATCH_SIZE) {
@@ -481,7 +481,8 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
           <DialogHeader>
             <DialogTitle className="text-slate-100">Import {schema?.name || 'Data'}</DialogTitle>
             <DialogDescription className="text-slate-400">
-              Upload CSV and map columns. System handles unique IDs, account linking, and validation automatically.
+              Upload CSV and map columns. System handles unique IDs, account linking, and validation
+              automatically.
             </DialogDescription>
           </DialogHeader>
 
@@ -489,11 +490,21 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
             <div className="p-6 text-center border-2 border-dashed border-slate-600 rounded-lg bg-slate-700/30">
               <Upload className="mx-auto h-12 w-12 text-slate-400" />
               <h3 className="mt-2 text-sm font-semibold text-slate-200">Select CSV file</h3>
-              <p className="mt-1 text-sm text-slate-400">File should have a header row with column names</p>
+              <p className="mt-1 text-sm text-slate-400">
+                File should have a header row with column names
+              </p>
               <div className="mt-4">
-                <Input id="csv-upload" type="file" accept=".csv" onChange={handleFileChange} className="sr-only" />
+                <Input
+                  id="csv-upload"
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileChange}
+                  className="sr-only"
+                />
                 <Button asChild className="bg-blue-600 hover:bg-blue-700 text-white">
-                  <Label htmlFor="csv-upload" className="cursor-pointer">Browse Files</Label>
+                  <Label htmlFor="csv-upload" className="cursor-pointer">
+                    Browse Files
+                  </Label>
                 </Button>
               </div>
             </div>
@@ -502,7 +513,7 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
           {step === 'map' && (
             <div>
               <Alert className="mb-4 bg-slate-700/50 border-slate-600">
-                <File className="h-4 w-4 text-blue-400"/>
+                <File className="h-4 w-4 text-blue-400" />
                 <AlertTitle className="text-slate-200">Map Your Data Fields</AlertTitle>
                 <AlertDescription className="text-slate-400">
                   Match CSV columns to {schema?.name} fields. Required fields must be mapped.
@@ -514,7 +525,11 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
                   <AlertCircle className="h-4 w-4 text-red-300" />
                   <AlertTitle className="text-red-300">Required Fields Missing</AlertTitle>
                   <AlertDescription className="text-red-400">
-                    Map: {crmFields.filter(f => f.required && !Object.values(mapping).includes(f.value)).map(f => f.label).join(', ')}
+                    Map:{' '}
+                    {crmFields
+                      .filter((f) => f.required && !Object.values(mapping).includes(f.value))
+                      .map((f) => f.label)
+                      .join(', ')}
                   </AlertDescription>
                 </Alert>
               )}
@@ -524,7 +539,9 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
                   <CheckCircle className="h-4 w-4 text-green-400" />
                   <AlertTitle className="text-green-300">Auto-Linking Enabled</AlertTitle>
                   <AlertDescription className="text-green-400">
-                    Column &quot;<strong>{accountLinkColumn}</strong>&quot; will link contacts to accounts.<br />
+                    Column &quot;<strong>{accountLinkColumn}</strong>&quot; will link contacts to
+                    accounts.
+                    <br />
                     <span className="text-xs text-green-300 mt-1 block">
                       Matches by: Company Name, Legacy ID (Company ID), or Account ID
                     </span>
@@ -541,13 +558,22 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
                     Assign all imported records to:
                   </Label>
                   <Select value={assignedTo || '__unassigned__'} onValueChange={setAssignedTo}>
-                    <SelectTrigger id="assigned-to" className="bg-slate-700 border-slate-600 text-slate-200">
+                    <SelectTrigger
+                      id="assigned-to"
+                      className="bg-slate-700 border-slate-600 text-slate-200"
+                    >
                       <SelectValue placeholder="Leave unassigned" />
                     </SelectTrigger>
                     <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                      <SelectItem value="__unassigned__" className="hover:bg-slate-700">Leave Unassigned</SelectItem>
+                      <SelectItem value="__unassigned__" className="hover:bg-slate-700">
+                        Leave Unassigned
+                      </SelectItem>
                       {employees.map((emp) => (
-                        <SelectItem key={emp.id} value={emp.email || emp.user_email} className="hover:bg-slate-700">
+                        <SelectItem
+                          key={emp.id}
+                          value={emp.email || emp.user_email}
+                          className="hover:bg-slate-700"
+                        >
                           {emp.first_name} {emp.last_name}
                         </SelectItem>
                       ))}
@@ -557,7 +583,9 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
               )}
 
               <div className="mb-4">
-                <h4 className="text-sm font-semibold text-slate-200 mb-2">Preview (first 5 rows)</h4>
+                <h4 className="text-sm font-semibold text-slate-200 mb-2">
+                  Preview (first 5 rows)
+                </h4>
                 <div className="bg-slate-700/30 rounded p-2 text-xs text-slate-400 max-h-32 overflow-auto">
                   {previewData.slice(0, 3).map((row, idx) => (
                     <div key={idx} className="mb-1">
@@ -576,10 +604,14 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {headers.map(header => {
-                      const isLinkColumn = schema?.name === 'Contact' && header === accountLinkColumn;
+                    {headers.map((header) => {
+                      const isLinkColumn =
+                        schema?.name === 'Contact' && header === accountLinkColumn;
                       return (
-                        <TableRow key={header} className={`border-slate-700 ${isLinkColumn ? 'bg-green-900/10' : ''}`}>
+                        <TableRow
+                          key={header}
+                          className={`border-slate-700 ${isLinkColumn ? 'bg-green-900/10' : ''}`}
+                        >
                           <TableCell className="font-medium text-slate-200">
                             {header}
                             {isLinkColumn && (
@@ -589,19 +621,30 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
                             )}
                           </TableCell>
                           <TableCell>
-                            <Select 
+                            <Select
                               value={mapping[header] || '__skip__'}
-                              onValueChange={value => handleMappingChange(header, value)}
+                              onValueChange={(value) => handleMappingChange(header, value)}
                               disabled={isLinkColumn}
                             >
-                              <SelectTrigger className={`bg-slate-700 border-slate-600 text-slate-200 ${isLinkColumn ? 'opacity-50' : ''}`}>
-                                <SelectValue placeholder={isLinkColumn ? "Auto-linked" : "Select field..."} />
+                              <SelectTrigger
+                                className={`bg-slate-700 border-slate-600 text-slate-200 ${isLinkColumn ? 'opacity-50' : ''}`}
+                              >
+                                <SelectValue
+                                  placeholder={isLinkColumn ? 'Auto-linked' : 'Select field...'}
+                                />
                               </SelectTrigger>
                               <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                                <SelectItem value="__skip__" className="hover:bg-slate-700">-- Skip this column --</SelectItem>
-                                {crmFields.map(field => (
-                                  <SelectItem key={field.value} value={field.value} className="hover:bg-slate-700">
-                                    {field.label} {field.required && <span className="text-red-400">*</span>}
+                                <SelectItem value="__skip__" className="hover:bg-slate-700">
+                                  -- Skip this column --
+                                </SelectItem>
+                                {crmFields.map((field) => (
+                                  <SelectItem
+                                    key={field.value}
+                                    value={field.value}
+                                    className="hover:bg-slate-700"
+                                  >
+                                    {field.label}{' '}
+                                    {field.required && <span className="text-red-400">*</span>}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -620,21 +663,28 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
             <div className="p-10 flex flex-col items-center justify-center text-center">
               <Loader2 className="h-16 w-16 animate-spin text-blue-400 mb-4" />
               <h3 className="text-xl font-semibold text-slate-200">Importing Data...</h3>
-              <p className="text-slate-400">Validating and creating records with full audit trail</p>
+              <p className="text-slate-400">
+                Validating and creating records with full audit trail
+              </p>
               {/* The global progress overlay now handles detailed progress */}
             </div>
           )}
 
           {/* This 'done' step now acts as a bridge to the detailed results dialog */}
           {step === 'done' && (
-              <div className="p-6 text-center">
-                <AlertTriangle className="mx-auto h-12 w-12 text-yellow-400 mb-4" />
-                <h3 className="text-xl font-semibold text-slate-200 mb-2">Import Processed</h3>
-                <p className="text-slate-400">Review detailed results for a summary of successes, failures, and account linking.</p>
-                <Button onClick={() => setShowDetailedResults(true)} className="mt-4 bg-blue-600 hover:bg-blue-700 text-white">
-                    Show Detailed Results
-                </Button>
-              </div>
+            <div className="p-6 text-center">
+              <AlertTriangle className="mx-auto h-12 w-12 text-yellow-400 mb-4" />
+              <h3 className="text-xl font-semibold text-slate-200 mb-2">Import Processed</h3>
+              <p className="text-slate-400">
+                Review detailed results for a summary of successes, failures, and account linking.
+              </p>
+              <Button
+                onClick={() => setShowDetailedResults(true)}
+                className="mt-4 bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                Show Detailed Results
+              </Button>
+            </div>
           )}
 
           <DialogFooter className="bg-slate-700/30 border-t border-slate-700">
@@ -650,9 +700,9 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
             )}
             {/* The 'Close' button is available for upload and done steps to close the main dialog */}
             {(step === 'upload' || step === 'done') && (
-              <Button 
-                variant="outline" 
-                onClick={() => handleDialogClose(false)} 
+              <Button
+                variant="outline"
+                onClick={() => handleDialogClose(false)}
                 className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
               >
                 Close
@@ -677,18 +727,26 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
             <div className="space-y-4">
               <div>
                 <div className="flex justify-between text-sm text-slate-300 mb-2">
-                  <span>Batch {importProgress.currentBatchNum} of {importProgress.totalBatchCount}</span>
-                  <span>{importProgress.itemsImported} of {importProgress.totalItems} records imported</span>
+                  <span>
+                    Batch {importProgress.currentBatchNum} of {importProgress.totalBatchCount}
+                  </span>
+                  <span>
+                    {importProgress.itemsImported} of {importProgress.totalItems} records imported
+                  </span>
                 </div>
                 <Progress
-                  value={importProgress.totalItems > 0 ? (importProgress.itemsImported / importProgress.totalItems) * 100 : 0}
+                  value={
+                    importProgress.totalItems > 0
+                      ? (importProgress.itemsImported / importProgress.totalItems) * 100
+                      : 0
+                  }
                   className="h-2 bg-blue-500/20"
                   indicatorClassName="bg-blue-600"
                 />
               </div>
 
               <div className="bg-slate-700/50 rounded p-3 text-xs text-slate-400">
-                <p className="mb-1">• Processing in batches of 25 records</p>
+                <p className="mb-1">• Processing in batches of 100 records</p>
                 <p className="mb-1">• No intentional delay between batches</p>
                 <p>• Total records to process: {importProgress.totalItems}</p>
               </div>
@@ -715,7 +773,9 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
                   <CardContent className="p-4 flex items-center justify-between">
                     <div>
                       <p className="text-sm text-green-400">Successfully Imported</p>
-                      <p className="text-2xl font-bold text-green-300">{importResults.successCount}</p>
+                      <p className="text-2xl font-bold text-green-300">
+                        {importResults.successCount}
+                      </p>
                     </div>
                     <CheckCircle2 className="w-8 h-8 text-green-400" />
                   </CardContent>
@@ -737,7 +797,9 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
                       <CardContent className="p-4 flex items-center justify-between">
                         <div>
                           <p className="text-sm text-blue-400">Accounts Linked</p>
-                          <p className="text-2xl font-bold text-blue-300">{importResults.accountsLinked || 0}</p>
+                          <p className="text-2xl font-bold text-blue-300">
+                            {importResults.accountsLinked || 0}
+                          </p>
                         </div>
                         <Link2 className="w-8 h-8 text-blue-400" />
                       </CardContent>
@@ -747,7 +809,9 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
                       <CardContent className="p-4 flex items-center justify-between">
                         <div>
                           <p className="text-sm text-yellow-400">Accounts Not Found</p>
-                          <p className="text-2xl font-bold text-yellow-300">{importResults.accountsNotFound || 0}</p>
+                          <p className="text-2xl font-bold text-yellow-300">
+                            {importResults.accountsNotFound || 0}
+                          </p>
                         </div>
                         <AlertTriangle className="w-8 h-8 text-yellow-400" />
                       </CardContent>
@@ -757,44 +821,51 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
               </div>
 
               {/* Account Linking Details */}
-              {schema?.name === 'Contact' && importResults.matchingDetails && importResults.matchingDetails.length > 0 && (
-                <Card className="bg-slate-700/50 border-slate-600">
-                  <CardHeader>
-                    <CardTitle className="text-slate-100 text-lg">Account Linking Details</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3 max-h-64 overflow-y-auto">
-                    {importResults.matchingDetails.map((detail, idx) => (
-                      <div key={idx} className={`p-3 rounded-lg border ${
-                        detail.matched 
-                          ? 'bg-green-900/10 border-green-700/50' 
-                          : 'bg-yellow-900/10 border-yellow-700/50'
-                      }`}>
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-slate-200">
-                              Row {detail.rowNumber}: &quot;{detail.companyValue}&quot;
-                            </p>
+              {schema?.name === 'Contact' &&
+                importResults.matchingDetails &&
+                importResults.matchingDetails.length > 0 && (
+                  <Card className="bg-slate-700/50 border-slate-600">
+                    <CardHeader>
+                      <CardTitle className="text-slate-100 text-lg">
+                        Account Linking Details
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3 max-h-64 overflow-y-auto">
+                      {importResults.matchingDetails.map((detail, idx) => (
+                        <div
+                          key={idx}
+                          className={`p-3 rounded-lg border ${
+                            detail.matched
+                              ? 'bg-green-900/10 border-green-700/50'
+                              : 'bg-yellow-900/10 border-yellow-700/50'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-slate-200">
+                                Row {detail.rowNumber}: &quot;{detail.companyValue}&quot;
+                              </p>
+                              {detail.matched ? (
+                                <p className="text-xs text-green-400 mt-1">
+                                  ✓ Linked to account via {detail.matchMethod}
+                                </p>
+                              ) : (
+                                <p className="text-xs text-yellow-400 mt-1">
+                                  ⚠ No matching account found
+                                </p>
+                              )}
+                            </div>
                             {detail.matched ? (
-                              <p className="text-xs text-green-400 mt-1">
-                                ✓ Linked to account via {detail.matchMethod}
-                              </p>
+                              <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0" />
                             ) : (
-                              <p className="text-xs text-yellow-400 mt-1">
-                                ⚠ No matching account found
-                              </p>
+                              <AlertTriangle className="w-5 h-5 text-yellow-400 flex-shrink-0" />
                             )}
                           </div>
-                          {detail.matched ? (
-                            <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0" />
-                          ) : (
-                            <AlertTriangle className="w-5 h-5 text-yellow-400 flex-shrink-0" />
-                          )}
                         </div>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              )}
+                      ))}
+                    </CardContent>
+                  </Card>
+                )}
 
               {/* Error Details */}
               {importResults.errors && importResults.errors.length > 0 && (
@@ -804,7 +875,10 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
                   </CardHeader>
                   <CardContent className="space-y-2 max-h-64 overflow-y-auto">
                     {importResults.errors.map((error, idx) => (
-                      <div key={idx} className="p-3 bg-red-900/30 rounded-lg border border-red-700/50">
+                      <div
+                        key={idx}
+                        className="p-3 bg-red-900/30 rounded-lg border border-red-700/50"
+                      >
                         <p className="text-sm font-medium text-red-300">Row {error.row_number}</p>
                         <p className="text-xs text-red-400 mt-1">{error.error}</p>
                       </div>
