@@ -474,7 +474,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
           placeholder="e.g., My Company OpenAI"
           required />
 
-                <p className="text-xs text-slate-500">A friendly name for this integration.</p>
+                <p className="text-xs text-muted-foreground">A friendly name for this integration.</p>
             </div>
             
             <div className="space-y-2">
@@ -503,11 +503,11 @@ function IntegrationForm({ integration, onSave, onCancel }) {
             
             {/* ── Twilio ── */}
             {formData.integration_type === 'twilio' &&
-      <Card className="p-4 bg-slate-50 border-slate-200">
+      <Card className="p-4 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700">
                     <CardContent className="space-y-4 pt-4">
                         <div className="space-y-2">
                             <Label htmlFor="account_sid" className="flex items-center gap-2">
-                                <Key className="w-4 h-4 text-slate-500" />
+                                <Key className="w-4 h-4 text-muted-foreground" />
                                 Account SID
                             </Label>
                             <Input
@@ -520,7 +520,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="auth_token" className="flex items-center gap-2">
-                                <Key className="w-4 h-4 text-slate-500" />
+                                <Key className="w-4 h-4 text-muted-foreground" />
                                 Auth Token
                             </Label>
                             <Input
@@ -534,7 +534,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="from_number" className="flex items-center gap-2">
-                                <Phone className="w-4 h-4 text-slate-500" />
+                                <Phone className="w-4 h-4 text-muted-foreground" />
                                 From Number (E.164)
                             </Label>
                             <Input
@@ -542,8 +542,8 @@ function IntegrationForm({ integration, onSave, onCancel }) {
               value={formData.api_credentials.from_number || ''}
               onChange={(e) => handleCredentialChange('from_number', e.target.value)}
               placeholder="+15551234567" />
-                            <p className="text-xs text-slate-500">
-                                Your Twilio phone number. Find it in the <a href="https://console.twilio.com/us1/develop/phone-numbers/manage/incoming" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Twilio Console</a>.
+                            <p className="text-xs text-muted-foreground">
+                                Your Twilio phone number. Find it in the <a href="https://console.twilio.com/us1/develop/phone-numbers/manage/incoming" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 underline">Twilio Console</a>.
                             </p>
                         </div>
                         <div className="space-y-2">
@@ -554,7 +554,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
               onChange={(e) => handleConfigChange('messaging_service_sid', e.target.value)}
               placeholder="MGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
               className="font-mono" />
-                            <p className="text-xs text-slate-500">
+                            <p className="text-xs text-muted-foreground">
                                 Use a Messaging Service instead of a single From number for better deliverability.
                             </p>
                         </div>
@@ -564,11 +564,11 @@ function IntegrationForm({ integration, onSave, onCancel }) {
 
             {/* ── WhatsApp Business ── */}
             {formData.integration_type === 'whatsapp_business' &&
-      <Card className="p-4 bg-slate-50 border-slate-200">
+      <Card className="p-4 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700">
                     <CardContent className="space-y-4 pt-4">
                         <div className="space-y-2">
                             <Label htmlFor="wa_api_key" className="flex items-center gap-2">
-                                <Key className="w-4 h-4 text-slate-500" />
+                                <Key className="w-4 h-4 text-muted-foreground" />
                                 API Key / Access Token
                             </Label>
                             <Input
@@ -597,8 +597,8 @@ function IntegrationForm({ integration, onSave, onCancel }) {
               onChange={(e) => handleCredentialChange('business_account_id', e.target.value)}
               placeholder="e.g. 123456789012345"
               className="font-mono" />
-                            <p className="text-xs text-slate-500">
-                                Get these from the <a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Meta Developer Portal</a>.
+                            <p className="text-xs text-muted-foreground">
+                                Get these from the <a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 underline">Meta Developer Portal</a>.
                             </p>
                         </div>
                     </CardContent>
@@ -607,11 +607,11 @@ function IntegrationForm({ integration, onSave, onCancel }) {
 
             {/* ── OpenAI LLM ── */}
             {formData.integration_type === 'openai_llm' &&
-      <Card className="p-4 bg-slate-50 border-slate-200">
+      <Card className="p-4 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700">
                     <CardContent className="space-y-4 pt-4">
                         <div className="space-y-2">
                             <Label htmlFor="api_key" className="flex items-center gap-2">
-                                <Key className="w-4 h-4 text-slate-500" />
+                                <Key className="w-4 h-4 text-muted-foreground" />
                                 OpenAI API Key
                             </Label>
                             <Input
@@ -623,8 +623,8 @@ function IntegrationForm({ integration, onSave, onCancel }) {
               className="font-mono"
               required />
 
-                            <p className="text-xs text-slate-500">
-                                Your key is encrypted and stored securely. Get it from the <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">OpenAI Platform</a>.
+                            <p className="text-xs text-muted-foreground">
+                                Your key is encrypted and stored securely. Get it from the <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 underline">OpenAI Platform</a>.
                             </p>
                         </div>
                         <div className="space-y-2">
@@ -649,11 +649,11 @@ function IntegrationForm({ integration, onSave, onCancel }) {
 
             {/* ── Stripe ── */}
             {formData.integration_type === 'stripe' &&
-      <Card className="p-4 bg-slate-50 border-slate-200">
+      <Card className="p-4 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700">
                     <CardContent className="space-y-4 pt-4">
                         <div className="space-y-2">
                             <Label htmlFor="stripe_secret_key" className="flex items-center gap-2">
-                                <Key className="w-4 h-4 text-slate-500" />
+                                <Key className="w-4 h-4 text-muted-foreground" />
                                 Secret Key
                             </Label>
                             <Input
@@ -674,8 +674,8 @@ function IntegrationForm({ integration, onSave, onCancel }) {
               onChange={(e) => handleCredentialChange('webhook_secret', e.target.value)}
               placeholder="whsec_..."
               className="font-mono" />
-                            <p className="text-xs text-slate-500">
-                                Get your keys from the <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Stripe Dashboard</a>.
+                            <p className="text-xs text-muted-foreground">
+                                Get your keys from the <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 underline">Stripe Dashboard</a>.
                             </p>
                         </div>
                     </CardContent>
@@ -684,11 +684,11 @@ function IntegrationForm({ integration, onSave, onCancel }) {
 
             {/* ── Slack ── */}
             {formData.integration_type === 'slack' &&
-      <Card className="p-4 bg-slate-50 border-slate-200">
+      <Card className="p-4 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700">
                     <CardContent className="space-y-4 pt-4">
                         <div className="space-y-2">
                             <Label htmlFor="slack_bot_token" className="flex items-center gap-2">
-                                <Key className="w-4 h-4 text-slate-500" />
+                                <Key className="w-4 h-4 text-muted-foreground" />
                                 Bot Token
                             </Label>
                             <Input
@@ -707,8 +707,8 @@ function IntegrationForm({ integration, onSave, onCancel }) {
               value={formData.configuration.default_channel || ''}
               onChange={(e) => handleConfigChange('default_channel', e.target.value)}
               placeholder="#general or C0123456789" />
-                            <p className="text-xs text-slate-500">
-                                Create a Slack App at <a href="https://api.slack.com/apps" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">api.slack.com</a>.
+                            <p className="text-xs text-muted-foreground">
+                                Create a Slack App at <a href="https://api.slack.com/apps" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 underline">api.slack.com</a>.
                             </p>
                         </div>
                     </CardContent>
@@ -717,11 +717,11 @@ function IntegrationForm({ integration, onSave, onCancel }) {
 
             {/* ── Google Calendar ── */}
             {formData.integration_type === 'google_calendar' &&
-      <Card className="p-4 bg-slate-50 border-slate-200">
+      <Card className="p-4 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700">
                     <CardContent className="space-y-4 pt-4">
                         <div className="space-y-2">
                             <Label htmlFor="gcal_client_id" className="flex items-center gap-2">
-                                <Key className="w-4 h-4 text-slate-500" />
+                                <Key className="w-4 h-4 text-muted-foreground" />
                                 OAuth Client ID
                             </Label>
                             <Input
@@ -742,8 +742,8 @@ function IntegrationForm({ integration, onSave, onCancel }) {
               placeholder="GOCSPX-..."
               className="font-mono"
               required />
-                            <p className="text-xs text-slate-500">
-                                Create credentials in the <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Google Cloud Console</a>.
+                            <p className="text-xs text-muted-foreground">
+                                Create credentials in the <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 underline">Google Cloud Console</a>.
                             </p>
                         </div>
                     </CardContent>
@@ -752,11 +752,11 @@ function IntegrationForm({ integration, onSave, onCancel }) {
 
             {/* ── Pabbly Connect ── */}
             {formData.integration_type === 'pabbly' &&
-      <Card className="p-4 bg-slate-50 border-slate-200">
+      <Card className="p-4 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700">
                     <CardContent className="space-y-4 pt-4">
                         <div className="space-y-2">
                             <Label htmlFor="pabbly_api_key" className="flex items-center gap-2">
-                                <Key className="w-4 h-4 text-slate-500" />
+                                <Key className="w-4 h-4 text-muted-foreground" />
                                 API Key
                             </Label>
                             <Input
@@ -775,8 +775,8 @@ function IntegrationForm({ integration, onSave, onCancel }) {
               value={formData.configuration.webhook_url || ''}
               onChange={(e) => handleConfigChange('webhook_url', e.target.value)}
               placeholder="https://connect.pabbly.com/workflow/..." />
-                            <p className="text-xs text-slate-500">
-                                Get your API key from <a href="https://www.pabbly.com/connect/" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Pabbly Connect</a>.
+                            <p className="text-xs text-muted-foreground">
+                                Get your API key from <a href="https://www.pabbly.com/connect/" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 underline">Pabbly Connect</a>.
                             </p>
                         </div>
                     </CardContent>
@@ -785,11 +785,11 @@ function IntegrationForm({ integration, onSave, onCancel }) {
 
             {/* ── Google Drive ── */}
             {formData.integration_type === 'google_drive' &&
-      <Card className="p-4 bg-slate-50 border-slate-200">
+      <Card className="p-4 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700">
                     <CardContent className="space-y-4 pt-4">
                         <div className="space-y-2">
                             <Label htmlFor="gdrive_client_id" className="flex items-center gap-2">
-                                <Key className="w-4 h-4 text-slate-500" />
+                                <Key className="w-4 h-4 text-muted-foreground" />
                                 OAuth Client ID
                             </Label>
                             <Input
@@ -810,8 +810,8 @@ function IntegrationForm({ integration, onSave, onCancel }) {
               placeholder="GOCSPX-..."
               className="font-mono"
               required />
-                            <p className="text-xs text-slate-500">
-                                Create credentials in the <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Google Cloud Console</a>.
+                            <p className="text-xs text-muted-foreground">
+                                Create credentials in the <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 underline">Google Cloud Console</a>.
                             </p>
                         </div>
                     </CardContent>
@@ -820,11 +820,11 @@ function IntegrationForm({ integration, onSave, onCancel }) {
 
             {/* ── OneDrive ── */}
             {formData.integration_type === 'onedrive' &&
-      <Card className="p-4 bg-slate-50 border-slate-200">
+      <Card className="p-4 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700">
                     <CardContent className="space-y-4 pt-4">
                         <div className="space-y-2">
                             <Label htmlFor="od_client_id" className="flex items-center gap-2">
-                                <Key className="w-4 h-4 text-slate-500" />
+                                <Key className="w-4 h-4 text-muted-foreground" />
                                 Application (Client) ID
                             </Label>
                             <Input
@@ -854,8 +854,8 @@ function IntegrationForm({ integration, onSave, onCancel }) {
               onChange={(e) => handleCredentialChange('directory_tenant_id', e.target.value)}
               placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx or common"
               className="font-mono" />
-                            <p className="text-xs text-slate-500">
-                                Register an app in the <a href="https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Azure Portal</a>.
+                            <p className="text-xs text-muted-foreground">
+                                Register an app in the <a href="https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 underline">Azure Portal</a>.
                             </p>
                         </div>
                     </CardContent>
@@ -864,11 +864,11 @@ function IntegrationForm({ integration, onSave, onCancel }) {
 
             {/* ── Generic "Other" ── */}
             {formData.integration_type === 'other' &&
-      <Card className="p-4 bg-slate-50 border-slate-200">
+      <Card className="p-4 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700">
                     <CardContent className="space-y-4 pt-4">
                         <div className="space-y-2">
                             <Label htmlFor="other_api_key" className="flex items-center gap-2">
-                                <Key className="w-4 h-4 text-slate-500" />
+                                <Key className="w-4 h-4 text-muted-foreground" />
                                 API Key / Token
                             </Label>
                             <Input
