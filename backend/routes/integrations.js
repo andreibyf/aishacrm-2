@@ -4,6 +4,8 @@
  */
 
 import express from 'express';
+import { sendSms, checkTwilioStatus, getTwilioCredentials } from '../lib/twilioService.js';
+import logger from '../lib/logger.js';
 
 export default function createIntegrationRoutes(_pgPool) {
   const router = express.Router();
@@ -336,7 +338,9 @@ export default function createIntegrationRoutes(_pgPool) {
    * /api/integrations/twilio/send-sms:
    *   post:
    *     summary: Send SMS via Twilio
-   *     description: Sends an SMS (placeholder).
+   *     description: >
+   *       Sends an SMS using per-tenant Twilio credentials (from tenant_integrations)
+   *       or falls back to global env vars. Optionally logs an activity against a contact/lead.
    *     tags: [integrations]
    *     requestBody:
    *       required: true
@@ -344,34 +348,178 @@ export default function createIntegrationRoutes(_pgPool) {
    *         application/json:
    *           schema:
    *             type: object
+   *             required: [tenant_id, to, body]
    *             properties:
+   *               tenant_id:
+   *                 type: string
+   *                 format: uuid
    *               to:
    *                 type: string
-   *               message:
+   *                 description: Recipient phone number (E.164 preferred)
+   *               body:
    *                 type: string
+   *                 description: SMS message body (max 1600 chars)
+   *               from:
+   *                 type: string
+   *                 description: Override sender number (uses tenant config if omitted)
+   *               contact_id:
+   *                 type: string
+   *                 format: uuid
+   *                 description: Optional contact/lead ID to log activity against
+   *               metadata:
+   *                 type: object
+   *                 description: Extra metadata to store on the activity log
    *     responses:
    *       200:
-   *         description: Placeholder response
+   *         description: SMS sent (or queued) successfully
    *         content:
    *           application/json:
    *             schema:
-   *               $ref: '#/components/schemas/Success'
+   *               type: object
+   *               properties:
+   *                 status:
+   *                   type: string
+   *                   example: success
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     message_sid:
+   *                       type: string
+   *                     to:
+   *                       type: string
+   *                     from:
+   *                       type: string
+   *                     status:
+   *                       type: string
+   *                       example: queued
+   *       400:
+   *         description: Missing required fields
+   *       500:
+   *         description: Twilio API error or not configured
    */
-  // POST /api/integrations/twilio/send-sms - Send SMS via Twilio
+  // POST /api/integrations/twilio/send-sms - Send SMS via Twilio (per-tenant)
   router.post('/twilio/send-sms', async (req, res) => {
     try {
-      const { to, message } = req.body;
+      const { tenant_id, to, body, from, contact_id, metadata } = req.body;
 
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+      if (!to) {
+        return res.status(400).json({ status: 'error', message: 'Recipient phone number (to) is required' });
+      }
+      if (!body) {
+        return res.status(400).json({ status: 'error', message: 'Message body is required' });
+      }
+
+      const result = await sendSms({ tenant_id, to, body, from, contact_id, metadata });
+
+      if (!result.success) {
+        return res.status(502).json({
+          status: 'error',
+          message: result.error || 'Failed to send SMS',
+          data: result,
+        });
+      }
+
+      res.json({ status: 'success', data: result });
+    } catch (error) {
+      logger.error('[Integrations] Twilio send-sms error:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  /**
+   * @openapi
+   * /api/integrations/twilio/status:
+   *   get:
+   *     summary: Check Twilio integration status for a tenant
+   *     description: Returns whether Twilio is configured, which credential source is used, and whether the account is reachable.
+   *     tags: [integrations]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *     responses:
+   *       200:
+   *         description: Twilio status for the tenant
+   */
+  router.get('/twilio/status', async (req, res) => {
+    try {
+      const { tenant_id } = req.query;
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      const result = await checkTwilioStatus(tenant_id);
+      res.json({ status: 'success', data: result });
+    } catch (error) {
+      logger.error('[Integrations] Twilio status error:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  /**
+   * @openapi
+   * /api/integrations/twilio/config:
+   *   get:
+   *     summary: Get Twilio configuration for a tenant (safe – no secrets)
+   *     description: Returns whether the tenant has Twilio configured and which features are available, without exposing credentials.
+   *     tags: [integrations]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *     responses:
+   *       200:
+   *         description: Twilio configuration summary
+   */
+  router.get('/twilio/config', async (req, res) => {
+    try {
+      const { tenant_id } = req.query;
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      const creds = await getTwilioCredentials(tenant_id);
+      if (!creds) {
+        return res.json({
+          status: 'success',
+          data: {
+            configured: false,
+            source: null,
+            has_from_number: false,
+            has_messaging_service: false,
+            hint: 'Add Twilio integration via POST /api/tenantintegrations with integration_type "twilio"',
+          },
+        });
+      }
+
+      // Return safe summary (no secrets)
       res.json({
         status: 'success',
-        message: 'Twilio SMS not yet implemented',
-        data: { to, message_length: message?.length || 0 },
+        data: {
+          configured: true,
+          source: creds.source,
+          // Mask account SID – show last 4 chars
+          account_sid_hint: creds.account_sid
+            ? `...${creds.account_sid.slice(-4)}`
+            : null,
+          has_from_number: !!creds.from_number,
+          from_number: creds.from_number || null,
+          has_messaging_service: !!creds.config?.messaging_service_sid,
+          has_status_callback: !!creds.config?.status_callback_url,
+        },
       });
     } catch (error) {
-      res.status(500).json({
-        status: 'error',
-        message: error.message,
-      });
+      logger.error('[Integrations] Twilio config error:', error);
+      res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
