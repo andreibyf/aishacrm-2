@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { TenantIntegration } from "@/api/entities";
-import { Loader2, Save, Trash2, AlertCircle, Plus, Edit, Cloud, Bot, Mail, Zap, Key, Link } from 'lucide-react';
+import { Loader2, Save, Trash2, AlertCircle, Plus, Edit, Cloud, Bot, Mail, Zap, Key, Link, Phone, MessageSquare, CreditCard, Calendar, HardDrive } from 'lucide-react';
 import { toast } from "sonner";
 import {
   Dialog,
@@ -69,35 +69,50 @@ export default function TenantIntegrationSettings() {
     loadIntegrations();
   }, [loadIntegrations]); // Now loadIntegrations is a stable function due to useCallback
 
+  const testableTypes = ['openai_llm', 'twilio'];
+
   const handleTestConnection = async (integration) => {
-    if (integration.integration_type !== 'openai_llm') {
-      toast.error("Connection testing is only available for OpenAI integrations.");
-      return;
-    }
-
-    if (!integration.api_credentials?.api_key) {
-      toast.error("No API key found for this integration.");
-      return;
-    }
-
-    // Validate API key format before sending
-    const apiKey = integration.api_credentials.api_key;
-    if (!apiKey.startsWith('sk-') || apiKey.length < 20) {
-      toast.error("Invalid API key format. OpenAI API keys should start with 'sk-'.");
+    if (!testableTypes.includes(integration.integration_type)) {
+      toast.error("Connection testing is not available for this integration type.");
       return;
     }
 
     setTestingIntegration(integration.id);
     try {
-      const { testSystemOpenAI } = await import("@/api/functions");
-      const response = await testSystemOpenAI({
-        api_key: apiKey,
-        model: integration.configuration?.model || 'gpt-4o-mini'
-      });
+      let success = false;
+      let errorMessage = null;
 
-      console.log("Test response:", response);
+      if (integration.integration_type === 'openai_llm') {
+        // OpenAI test
+        const apiKey = integration.api_credentials?.api_key;
+        if (!apiKey) {
+          toast.error("No API key found for this integration.");
+          setTestingIntegration(null);
+          return;
+        }
+        if (!apiKey.startsWith('sk-') || apiKey.length < 20) {
+          toast.error("Invalid API key format. OpenAI API keys should start with 'sk-'.");
+          setTestingIntegration(null);
+          return;
+        }
+        const { testSystemOpenAI } = await import("@/api/functions");
+        const response = await testSystemOpenAI({
+          api_key: apiKey,
+          model: integration.configuration?.model || 'gpt-4o-mini'
+        });
+        success = !!response.data?.success;
+        errorMessage = response.data?.details || response.data?.error || null;
+      } else if (integration.integration_type === 'twilio') {
+        // Twilio test — call the status endpoint
+        const tenantFilter = getTenantFilter(currentUser, selectedTenantId);
+        const BACKEND_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4001';
+        const res = await fetch(`${BACKEND_URL}/api/integrations/twilio/status?tenant_id=${tenantFilter.tenant_id}`);
+        const json = await res.json();
+        success = json.data?.status === 'active';
+        errorMessage = json.data?.message || (!success ? `Twilio status: ${json.data?.status || 'unknown'}` : null);
+      }
 
-      if (response.data?.success) {
+      if (success) {
         // Update the integration status to 'connected'
         await TenantIntegration.update(integration.id, {
           sync_status: 'connected',
@@ -108,12 +123,12 @@ export default function TenantIntegrationSettings() {
         loadIntegrations(); // Refresh the list
       } else {
         // Update status to 'error'
-        const errorMessage = response.data?.details || response.data?.error || 'Connection test failed';
+        const errMsg = errorMessage || 'Connection test failed';
         await TenantIntegration.update(integration.id, {
           sync_status: 'error',
-          error_message: errorMessage
+          error_message: errMsg
         });
-        toast.error(`Connection failed: ${errorMessage}`);
+        toast.error(`Connection failed: ${errMsg}`);
         loadIntegrations();
       }
     } catch (error) {
@@ -205,6 +220,13 @@ export default function TenantIntegrationSettings() {
       gmail_smtp: Mail,
       openai_llm: Bot,
       google_drive: Cloud,
+      onedrive: HardDrive,
+      twilio: Phone,
+      whatsapp_business: MessageSquare,
+      pabbly: Zap,
+      stripe: CreditCard,
+      slack: MessageSquare,
+      google_calendar: Calendar,
       zapier: Zap,
       other: Link
     };
@@ -332,7 +354,7 @@ export default function TenantIntegrationSettings() {
                                     </div>
                                     {canManage &&
                   <div className="flex space-x-2">
-                                            {integration.integration_type === 'openai_llm' &&
+                                            {testableTypes.includes(integration.integration_type) &&
                     <Button
                       variant="outline"
                       size="sm"
@@ -403,11 +425,11 @@ export default function TenantIntegrationSettings() {
 // Integration Form Component
 function IntegrationForm({ integration, onSave, onCancel }) {
   const [formData, setFormData] = useState({
-    integration_type: integration?.integration_type || 'other',
+    integration_type: integration?.integration_type || 'twilio',
     integration_name: integration?.integration_name || '',
     is_active: integration?.is_active ?? true,
-    configuration: integration?.configuration || { model: 'gpt-4o-mini' },
-    api_credentials: integration?.api_credentials || { api_key: '' }
+    configuration: integration?.configuration || {},
+    api_credentials: integration?.api_credentials || {}
   });
 
   const handleSubmit = (e) => {
@@ -418,6 +440,10 @@ function IntegrationForm({ integration, onSave, onCancel }) {
     }
     if (formData.integration_type === 'openai_llm' && !formData.api_credentials.api_key) {
       toast.error("OpenAI API Key is required for this integration type.");
+      return;
+    }
+    if (formData.integration_type === 'twilio' && (!formData.api_credentials.account_sid || !formData.api_credentials.auth_token)) {
+      toast.error("Twilio Account SID and Auth Token are required.");
       return;
     }
     onSave(formData);
@@ -461,14 +487,125 @@ function IntegrationForm({ integration, onSave, onCancel }) {
                         <SelectValue placeholder="Select an integration type" />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="openai_llm">OpenAI LLM</SelectItem>
+                        <SelectItem value="twilio">Twilio (SMS & Voice)</SelectItem>
+                        <SelectItem value="whatsapp_business">WhatsApp Business</SelectItem>
                         <SelectItem value="google_drive">Google Drive</SelectItem>
-                        <SelectItem value="zapier">Zapier</SelectItem>
+                        <SelectItem value="onedrive">OneDrive</SelectItem>
+                        <SelectItem value="pabbly">Pabbly Connect</SelectItem>
+                        <SelectItem value="openai_llm">OpenAI LLM</SelectItem>
+                        <SelectItem value="stripe">Stripe (Payments)</SelectItem>
+                        <SelectItem value="slack">Slack</SelectItem>
+                        <SelectItem value="google_calendar">Google Calendar</SelectItem>
                         <SelectItem value="other">Other</SelectItem>
                     </SelectContent>
                 </Select>
             </div>
             
+            {/* ── Twilio ── */}
+            {formData.integration_type === 'twilio' &&
+      <Card className="p-4 bg-slate-50 border-slate-200">
+                    <CardContent className="space-y-4 pt-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="account_sid" className="flex items-center gap-2">
+                                <Key className="w-4 h-4 text-slate-500" />
+                                Account SID
+                            </Label>
+                            <Input
+              id="account_sid"
+              value={formData.api_credentials.account_sid || ''}
+              onChange={(e) => handleCredentialChange('account_sid', e.target.value)}
+              placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              className="font-mono"
+              required />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="auth_token" className="flex items-center gap-2">
+                                <Key className="w-4 h-4 text-slate-500" />
+                                Auth Token
+                            </Label>
+                            <Input
+              id="auth_token"
+              type="password"
+              value={formData.api_credentials.auth_token || ''}
+              onChange={(e) => handleCredentialChange('auth_token', e.target.value)}
+              placeholder="Your Twilio auth token"
+              className="font-mono"
+              required />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="from_number" className="flex items-center gap-2">
+                                <Phone className="w-4 h-4 text-slate-500" />
+                                From Number (E.164)
+                            </Label>
+                            <Input
+              id="from_number"
+              value={formData.api_credentials.from_number || ''}
+              onChange={(e) => handleCredentialChange('from_number', e.target.value)}
+              placeholder="+15551234567" />
+                            <p className="text-xs text-slate-500">
+                                Your Twilio phone number. Find it in the <a href="https://console.twilio.com/us1/develop/phone-numbers/manage/incoming" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Twilio Console</a>.
+                            </p>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="messaging_service_sid">Messaging Service SID (optional)</Label>
+                            <Input
+              id="messaging_service_sid"
+              value={formData.configuration.messaging_service_sid || ''}
+              onChange={(e) => handleConfigChange('messaging_service_sid', e.target.value)}
+              placeholder="MGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              className="font-mono" />
+                            <p className="text-xs text-slate-500">
+                                Use a Messaging Service instead of a single From number for better deliverability.
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
+      }
+
+            {/* ── WhatsApp Business ── */}
+            {formData.integration_type === 'whatsapp_business' &&
+      <Card className="p-4 bg-slate-50 border-slate-200">
+                    <CardContent className="space-y-4 pt-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="wa_api_key" className="flex items-center gap-2">
+                                <Key className="w-4 h-4 text-slate-500" />
+                                API Key / Access Token
+                            </Label>
+                            <Input
+              id="wa_api_key"
+              type="password"
+              value={formData.api_credentials.api_key || ''}
+              onChange={(e) => handleCredentialChange('api_key', e.target.value)}
+              placeholder="Your WhatsApp Business API token"
+              className="font-mono"
+              required />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="wa_phone_number_id">Phone Number ID</Label>
+                            <Input
+              id="wa_phone_number_id"
+              value={formData.api_credentials.phone_number_id || ''}
+              onChange={(e) => handleCredentialChange('phone_number_id', e.target.value)}
+              placeholder="e.g. 123456789012345"
+              className="font-mono" />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="wa_business_id">Business Account ID</Label>
+                            <Input
+              id="wa_business_id"
+              value={formData.api_credentials.business_account_id || ''}
+              onChange={(e) => handleCredentialChange('business_account_id', e.target.value)}
+              placeholder="e.g. 123456789012345"
+              className="font-mono" />
+                            <p className="text-xs text-slate-500">
+                                Get these from the <a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Meta Developer Portal</a>.
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
+      }
+
+            {/* ── OpenAI LLM ── */}
             {formData.integration_type === 'openai_llm' &&
       <Card className="p-4 bg-slate-50 border-slate-200">
                     <CardContent className="space-y-4 pt-4">
@@ -505,6 +642,250 @@ function IntegrationForm({ integration, onSave, onCancel }) {
                                     <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
                                 </SelectContent>
                             </Select>
+                        </div>
+                    </CardContent>
+                </Card>
+      }
+
+            {/* ── Stripe ── */}
+            {formData.integration_type === 'stripe' &&
+      <Card className="p-4 bg-slate-50 border-slate-200">
+                    <CardContent className="space-y-4 pt-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="stripe_secret_key" className="flex items-center gap-2">
+                                <Key className="w-4 h-4 text-slate-500" />
+                                Secret Key
+                            </Label>
+                            <Input
+              id="stripe_secret_key"
+              type="password"
+              value={formData.api_credentials.secret_key || ''}
+              onChange={(e) => handleCredentialChange('secret_key', e.target.value)}
+              placeholder="sk_live_... or sk_test_..."
+              className="font-mono"
+              required />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="stripe_webhook_secret">Webhook Signing Secret (optional)</Label>
+                            <Input
+              id="stripe_webhook_secret"
+              type="password"
+              value={formData.api_credentials.webhook_secret || ''}
+              onChange={(e) => handleCredentialChange('webhook_secret', e.target.value)}
+              placeholder="whsec_..."
+              className="font-mono" />
+                            <p className="text-xs text-slate-500">
+                                Get your keys from the <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Stripe Dashboard</a>.
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
+      }
+
+            {/* ── Slack ── */}
+            {formData.integration_type === 'slack' &&
+      <Card className="p-4 bg-slate-50 border-slate-200">
+                    <CardContent className="space-y-4 pt-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="slack_bot_token" className="flex items-center gap-2">
+                                <Key className="w-4 h-4 text-slate-500" />
+                                Bot Token
+                            </Label>
+                            <Input
+              id="slack_bot_token"
+              type="password"
+              value={formData.api_credentials.bot_token || ''}
+              onChange={(e) => handleCredentialChange('bot_token', e.target.value)}
+              placeholder="xoxb-..."
+              className="font-mono"
+              required />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="slack_channel">Default Channel</Label>
+                            <Input
+              id="slack_channel"
+              value={formData.configuration.default_channel || ''}
+              onChange={(e) => handleConfigChange('default_channel', e.target.value)}
+              placeholder="#general or C0123456789" />
+                            <p className="text-xs text-slate-500">
+                                Create a Slack App at <a href="https://api.slack.com/apps" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">api.slack.com</a>.
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
+      }
+
+            {/* ── Google Calendar ── */}
+            {formData.integration_type === 'google_calendar' &&
+      <Card className="p-4 bg-slate-50 border-slate-200">
+                    <CardContent className="space-y-4 pt-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="gcal_client_id" className="flex items-center gap-2">
+                                <Key className="w-4 h-4 text-slate-500" />
+                                OAuth Client ID
+                            </Label>
+                            <Input
+              id="gcal_client_id"
+              value={formData.api_credentials.client_id || ''}
+              onChange={(e) => handleCredentialChange('client_id', e.target.value)}
+              placeholder="xxxxx.apps.googleusercontent.com"
+              className="font-mono"
+              required />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="gcal_client_secret">OAuth Client Secret</Label>
+                            <Input
+              id="gcal_client_secret"
+              type="password"
+              value={formData.api_credentials.client_secret || ''}
+              onChange={(e) => handleCredentialChange('client_secret', e.target.value)}
+              placeholder="GOCSPX-..."
+              className="font-mono"
+              required />
+                            <p className="text-xs text-slate-500">
+                                Create credentials in the <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Google Cloud Console</a>.
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
+      }
+
+            {/* ── Pabbly Connect ── */}
+            {formData.integration_type === 'pabbly' &&
+      <Card className="p-4 bg-slate-50 border-slate-200">
+                    <CardContent className="space-y-4 pt-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="pabbly_api_key" className="flex items-center gap-2">
+                                <Key className="w-4 h-4 text-slate-500" />
+                                API Key
+                            </Label>
+                            <Input
+              id="pabbly_api_key"
+              type="password"
+              value={formData.api_credentials.api_key || ''}
+              onChange={(e) => handleCredentialChange('api_key', e.target.value)}
+              placeholder="Your Pabbly Connect API key"
+              className="font-mono"
+              required />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="pabbly_webhook_url">Webhook URL (optional)</Label>
+                            <Input
+              id="pabbly_webhook_url"
+              value={formData.configuration.webhook_url || ''}
+              onChange={(e) => handleConfigChange('webhook_url', e.target.value)}
+              placeholder="https://connect.pabbly.com/workflow/..." />
+                            <p className="text-xs text-slate-500">
+                                Get your API key from <a href="https://www.pabbly.com/connect/" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Pabbly Connect</a>.
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
+      }
+
+            {/* ── Google Drive ── */}
+            {formData.integration_type === 'google_drive' &&
+      <Card className="p-4 bg-slate-50 border-slate-200">
+                    <CardContent className="space-y-4 pt-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="gdrive_client_id" className="flex items-center gap-2">
+                                <Key className="w-4 h-4 text-slate-500" />
+                                OAuth Client ID
+                            </Label>
+                            <Input
+              id="gdrive_client_id"
+              value={formData.api_credentials.client_id || ''}
+              onChange={(e) => handleCredentialChange('client_id', e.target.value)}
+              placeholder="xxxxx.apps.googleusercontent.com"
+              className="font-mono"
+              required />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="gdrive_client_secret">OAuth Client Secret</Label>
+                            <Input
+              id="gdrive_client_secret"
+              type="password"
+              value={formData.api_credentials.client_secret || ''}
+              onChange={(e) => handleCredentialChange('client_secret', e.target.value)}
+              placeholder="GOCSPX-..."
+              className="font-mono"
+              required />
+                            <p className="text-xs text-slate-500">
+                                Create credentials in the <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Google Cloud Console</a>.
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
+      }
+
+            {/* ── OneDrive ── */}
+            {formData.integration_type === 'onedrive' &&
+      <Card className="p-4 bg-slate-50 border-slate-200">
+                    <CardContent className="space-y-4 pt-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="od_client_id" className="flex items-center gap-2">
+                                <Key className="w-4 h-4 text-slate-500" />
+                                Application (Client) ID
+                            </Label>
+                            <Input
+              id="od_client_id"
+              value={formData.api_credentials.client_id || ''}
+              onChange={(e) => handleCredentialChange('client_id', e.target.value)}
+              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+              className="font-mono"
+              required />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="od_client_secret">Client Secret</Label>
+                            <Input
+              id="od_client_secret"
+              type="password"
+              value={formData.api_credentials.client_secret || ''}
+              onChange={(e) => handleCredentialChange('client_secret', e.target.value)}
+              placeholder="Your Microsoft app client secret"
+              className="font-mono"
+              required />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="od_tenant_id">Directory (Tenant) ID</Label>
+                            <Input
+              id="od_tenant_id"
+              value={formData.api_credentials.directory_tenant_id || ''}
+              onChange={(e) => handleCredentialChange('directory_tenant_id', e.target.value)}
+              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx or common"
+              className="font-mono" />
+                            <p className="text-xs text-slate-500">
+                                Register an app in the <a href="https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Azure Portal</a>.
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
+      }
+
+            {/* ── Generic "Other" ── */}
+            {formData.integration_type === 'other' &&
+      <Card className="p-4 bg-slate-50 border-slate-200">
+                    <CardContent className="space-y-4 pt-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="other_api_key" className="flex items-center gap-2">
+                                <Key className="w-4 h-4 text-slate-500" />
+                                API Key / Token
+                            </Label>
+                            <Input
+              id="other_api_key"
+              type="password"
+              value={formData.api_credentials.api_key || ''}
+              onChange={(e) => handleCredentialChange('api_key', e.target.value)}
+              placeholder="Your API key or access token"
+              className="font-mono" />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="other_base_url">Base URL (optional)</Label>
+                            <Input
+              id="other_base_url"
+              value={formData.configuration.base_url || ''}
+              onChange={(e) => handleConfigChange('base_url', e.target.value)}
+              placeholder="https://api.example.com/v1" />
                         </div>
                     </CardContent>
                 </Card>
