@@ -1,4 +1,4 @@
-# Customer C.A.R.E. v1 – PR4 Implementation Pack (Audit + Telemetry Internal Only)
+# C.A.R.E. v1 – PR4 Implementation Pack (Audit + Telemetry Internal Only)
 
 This document contains:
 
@@ -17,7 +17,7 @@ Depends on:
 
 ## PR4 goal
 
-Implement an **internal audit + telemetry emitter** for Customer C.A.R.E. that:
+Implement an **internal audit + telemetry emitter** for C.A.R.E. that:
 
 - standardizes how we log “why” decisions
 - can be used in PR5/PR6 (shadow wiring)

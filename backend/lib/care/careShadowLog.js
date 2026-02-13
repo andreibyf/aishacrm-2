@@ -1,5 +1,5 @@
 /**
- * Customer C.A.R.E. Shadow Audit Logger
+ * C.A.R.E. Shadow Audit Logger
  * 
  * Standardized logging for "would have acted" events during shadow mode.
  * 

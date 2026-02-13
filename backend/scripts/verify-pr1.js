@@ -2,7 +2,7 @@
 /**
  * PR1 Verification Script
  * 
- * Validates that Customer C.A.R.E. database tables were created correctly.
+ * Validates that C.A.R.E. (Cognitive Adaptive Response Engine) database tables were created correctly.
  * 
  * Run: node backend/scripts/verify-pr1.js
  * 
@@ -29,7 +29,7 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-console.log('🔍 PR1 Verification: Customer C.A.R.E. Database Tables\n');
+console.log('🔍 PR1 Verification: C.A.R.E. Database Tables\n');
 
 let allPassed = true;
 

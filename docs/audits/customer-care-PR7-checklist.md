@@ -1,4 +1,4 @@
-# Customer C.A.R.E. v1 – PR7 Implementation Pack (Persist State + Policy Gate, No Actions)
+# C.A.R.E. v1 – PR7 Implementation Pack (Persist State + Policy Gate, No Actions)
 
 This document contains:
 

@@ -1,4 +1,4 @@
-# Customer C.A.R.E. v1 – PR3 Implementation Pack (Escalation Detector Read-Only)
+# C.A.R.E. v1 – PR3 Implementation Pack (Escalation Detector Read-Only)
 
 This document contains:
 1) PR3 implementation checklist (exact files + scope)
@@ -176,7 +176,7 @@ Copy/paste into Copilot for PR3.
 
 You are working in the `andreibyf/aishacrm-2` repo.
 
-Your task is **PR3 only** for Customer C.A.R.E. v1: implement a **read-only escalation detector** with deterministic heuristics and unit tests.
+Your task is **PR3 only** for C.A.R.E. v1: implement a **read-only escalation detector** with deterministic heuristics and unit tests.
 
 You MUST comply with:
 - `docs/product/customer-care-v1.md` (behavioral contract; includes Action Origin classification)

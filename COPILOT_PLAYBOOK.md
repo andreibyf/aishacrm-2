@@ -549,7 +549,7 @@ curl -o /dev/null -s -w '%{time_total}\n' http://localhost:4001/api/system/healt
 
 ---
 
-## 🤖 C.A.R.E. (CUSTOMER ADAPTIVE RESPONSE ENGINE) CONFIGURATION
+## 🤖 C.A.R.E. (COGNITIVE ADAPTIVE RESPONSE ENGINE) CONFIGURATION
 
 ### Overview
 

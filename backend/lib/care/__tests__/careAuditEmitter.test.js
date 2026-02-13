@@ -1,5 +1,5 @@
 /**
- * Customer C.A.R.E. v1 – Audit Emitter Tests
+ * C.A.R.E. v1 – Audit Emitter Tests
  * 
  * Unit tests for careAuditEmitter.js
  * 

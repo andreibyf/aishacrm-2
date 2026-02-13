@@ -1,5 +1,5 @@
 /**
- * Customer C.A.R.E. v1 - Escalation Detector Tests
+ * C.A.R.E. v1 - Escalation Detector Tests
  * 
  * PR3: Unit tests for read-only escalation detection
  * 

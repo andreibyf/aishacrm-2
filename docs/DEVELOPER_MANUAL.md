@@ -87,7 +87,7 @@
 - [12.3 Bug Fixes](#123-bug-fixes)
 - [12.4 Pull Request Guidelines](#124-pull-request-guidelines)
 
-### Chapter 13: Developing for Customer C.A.R.E.
+### Chapter 13: Developing for C.A.R.E.
 - [13.1 C.A.R.E. Architecture for Developers](#131-care-architecture-for-developers)
 - [13.2 Adding Custom Escalation Detectors](#132-adding-custom-escalation-detectors)
 - [13.3 Extending Policy Gates](#133-extending-policy-gates)
@@ -2517,13 +2517,13 @@ window.addEventListener('error', (event) => {
 
 ---
 
-# Chapter 13: Developing for Customer C.A.R.E.
+# Chapter 13: Developing for C.A.R.E.
 
 ## 13.1 C.A.R.E. Architecture for Developers
 
 ### Component Overview
 
-Customer C.A.R.E. is built as a modular autonomous system with clear boundaries:
+C.A.R.E. (Cognitive Adaptive Response Engine) is built as a modular autonomous system with clear boundaries:
 
 ```
 ┌─────────────────────────────────────────────────┐

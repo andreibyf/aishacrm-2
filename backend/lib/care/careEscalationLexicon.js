@@ -1,5 +1,5 @@
 /**
- * Customer C.A.R.E. v1 - Escalation Detection Lexicon
+ * C.A.R.E. v1 - Escalation Detection Lexicon
  * 
  * PR3: Deterministic phrase libraries for escalation triggers
  * 

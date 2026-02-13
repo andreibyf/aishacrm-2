@@ -116,7 +116,7 @@ services:
       # GitHub Issues integration - loaded from .env.local
       - REPO_OWNER=${REPO_OWNER:-andreibyf}
       - REPO_NAME=${REPO_NAME:-aishacrm-2}
-      # Customer C.A.R.E. Configuration loaded from Doppler:
+      # C.A.R.E. (Cognitive Adaptive Response Engine) Configuration loaded from Doppler:
       #   AI_TRIGGERS_WORKER_ENABLED, AI_TRIGGERS_WORKER_INTERVAL_MS
       #   CARE_STATE_WRITE_ENABLED, CARE_WORKFLOW_TRIGGERS_ENABLED
       #   CARE_AUTONOMY_ENABLED, CARE_SHADOW_MODE

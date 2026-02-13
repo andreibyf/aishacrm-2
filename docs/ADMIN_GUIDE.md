@@ -85,7 +85,7 @@
 - [12.3 Incident Response](#123-incident-response)
 - [12.4 Reporting](#124-reporting)
 
-### Chapter 13: Customer C.A.R.E. v1 - Autonomous Relationship Management
+### Chapter 13: C.A.R.E. v1 - Autonomous Relationship Management
 - [13.1 C.A.R.E. Overview](#131-care-overview)
 - [13.2 Kill Switch Configuration](#132-kill-switch-configuration)
 - [13.3 State Engine and Transitions](#133-state-engine-and-transitions)
@@ -2497,13 +2497,13 @@ PS C:\> psql $env:DATABASE_URL < backup-before-upgrade.sql
 
 ---
 
-# Chapter 13: Customer C.A.R.E. v1 - Autonomous Relationship Management
+# Chapter 13: C.A.R.E. v1 - Autonomous Relationship Management
 
 ## 13.1 C.A.R.E. Overview
 
-### What is Customer C.A.R.E.?
+### What is C.A.R.E.?
 
-**Customer C.A.R.E.** is AiSHA's autonomous relationship management system that maintains customer relationship momentum without requiring constant human supervision.
+**C.A.R.E. (Cognitive Adaptive Response Engine)** is AiSHA's autonomous relationship management system that maintains customer relationship momentum without requiring constant human supervision.
 
 **C.A.R.E.** stands for:
 - **Communication** – maintaining presence and responsiveness
@@ -3084,7 +3084,7 @@ WHERE created_at < NOW() - INTERVAL '90 days';
 
 ```bash
 # ============================================================================
-# Customer C.A.R.E. v1 Configuration
+# C.A.R.E. v1 Configuration
 # ============================================================================
 
 # Master kill switch (default: false for safety)

@@ -1,5 +1,5 @@
 /**
- * Customer C.A.R.E. Configuration
+ * C.A.R.E. Configuration
  * 
  * Central configuration for Customer Cognitive Autonomous Relationship Execution.
  * 

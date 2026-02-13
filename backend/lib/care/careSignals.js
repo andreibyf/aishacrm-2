@@ -1,5 +1,5 @@
 /**
- * Customer C.A.R.E. Signals
+ * C.A.R.E. Signals
  * 
  * Defines the signal schema used to drive state transitions in the C.A.R.E. engine.
  * 

@@ -1,5 +1,5 @@
 /**
- * Customer C.A.R.E. v1 – Audit Event Types
+ * C.A.R.E. v1 – Audit Event Types
  * 
  * Type definitions and constants for C.A.R.E. audit events.
  * Used by careAuditEmitter for structured logging and telemetry.
@@ -52,7 +52,7 @@ export const CareAuditEventType = {
 /**
  * C.A.R.E. Audit Event
  * 
- * Structured audit event for Customer C.A.R.E. v1 decision tracking.
+ * Structured audit event for C.A.R.E. v1 decision tracking.
  * All fields are required unless marked optional.
  * 
  * @typedef {Object} CareAuditEvent

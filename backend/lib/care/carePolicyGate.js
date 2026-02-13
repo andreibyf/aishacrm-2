@@ -1,5 +1,5 @@
 /**
- * Customer C.A.R.E. Policy Gate
+ * C.A.R.E. Policy Gate
  * 
  * Evaluates whether a proposed C.A.R.E. action is allowed based on:
  * - Action Origin (care_autonomous vs user_directed)

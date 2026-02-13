@@ -1,5 +1,5 @@
 /**
- * Customer C.A.R.E. State Engine Tests
+ * C.A.R.E. State Engine Tests
  * 
  * Unit tests for the C.A.R.E. state engine (PR2).
  * 

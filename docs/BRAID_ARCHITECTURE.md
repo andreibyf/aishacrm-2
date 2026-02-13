@@ -908,7 +908,7 @@ tool getAccountFullDetails(tenant_id: uuid, account_id: uuid) -> ComplexObject {
 
 ## C.A.R.E. Integration
 
-Braid tools power the Customer C.A.R.E. (Communication, Acquisition, Retention, Engagement) system.
+Braid tools power the C.A.R.E. (Cognitive Adaptive Response Engine) system, supporting the customer-facing C.A.R.E. framework (Communication, Acquisition, Retention, Engagement).
 
 ### Escalation Detection Flow
 

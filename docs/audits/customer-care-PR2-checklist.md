@@ -1,4 +1,4 @@
-# Customer C.A.R.E. v1 – PR2 Implementation Pack (State Engine Logic Only)
+# C.A.R.E. v1 – PR2 Implementation Pack (State Engine Logic Only)
 
 This document contains:
 1) PR2 implementation checklist (exact files + scope)
@@ -8,7 +8,7 @@ This document contains:
 
 ## PR2 — C.A.R.E. State Engine (Pure Logic)
 
-**PR2 goal:** Implement the **canonical Customer C.A.R.E. state engine** as **pure logic + store helpers only**.
+**PR2 goal:** Implement the **canonical C.A.R.E. state engine** as **pure logic + store helpers only**.
 
 This PR MUST NOT:
 - change runtime behavior

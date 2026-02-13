@@ -1,5 +1,5 @@
 /**
- * Customer C.A.R.E. State Write Gate
+ * C.A.R.E. State Write Gate
  * 
  * Controls whether C.A.R.E. is allowed to persist state changes to the database.
  * 

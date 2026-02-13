@@ -1,4 +1,4 @@
--- Customer C.A.R.E. PR1 - Smoke Test
+-- C.A.R.E. PR1 - Smoke Test
 -- Purpose: Verify migration 116 applied correctly
 -- Run after applying migration: psql < backend/migrations/116_customer_care_state_smoke_test.sql
 

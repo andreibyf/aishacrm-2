@@ -2,7 +2,7 @@
 /**
  * PR0 Verification Script
  * 
- * Validates that Customer C.A.R.E. kill switch and shadow mode are correctly implemented.
+ * Validates that C.A.R.E. (Cognitive Adaptive Response Engine) kill switch and shadow mode are correctly implemented.
  * 
  * Run: node backend/scripts/verify-pr0.js
  */
@@ -10,7 +10,7 @@
 import { isCareAutonomyEnabled, getCareAutonomyStatus } from '../lib/care/isCareAutonomyEnabled.js';
 import { getCareConfig as _getCareConfig } from '../lib/care/careConfig.js';
 
-console.log('🔍 PR0 Verification: Customer C.A.R.E. Kill Switch + Shadow Mode\n');
+console.log('🔍 PR0 Verification: C.A.R.E. Kill Switch + Shadow Mode\n');
 
 // Test 1: Default state (safe)
 console.log('Test 1: Default State (No Env Vars)');

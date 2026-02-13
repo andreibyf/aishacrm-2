@@ -4,7 +4,7 @@
  * Clean Test Cron Jobs
  * 
  * This script safely removes test/development cron jobs while preserving
- * production jobs like the C.A.R.E. Customer Adaptive Response Engine.
+ * production jobs like the C.A.R.E. Cognitive Adaptive Response Engine.
  * 
  * Usage: node backend/clean-test-crons.js
  */

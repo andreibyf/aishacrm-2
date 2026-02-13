@@ -2,7 +2,7 @@
 
 **Version:** 3.0.x  
 **Last Updated:** February 6, 2026  
-**Purpose:** Complete guide for configuring C.A.R.E. (Customer Adaptive Response Engine)
+**Purpose:** Complete guide for configuring C.A.R.E. (Cognitive Adaptive Response Engine)
 
 ---
 

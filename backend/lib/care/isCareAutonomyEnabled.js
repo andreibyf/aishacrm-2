@@ -1,5 +1,5 @@
 /**
- * Customer C.A.R.E. Autonomy Gate
+ * C.A.R.E. Autonomy Gate
  * 
  * Canonical helper to determine if C.A.R.E. autonomous actions are permitted.
  * 

@@ -1,5 +1,5 @@
 /**
- * Customer C.A.R.E. Autonomy Gate - Tests
+ * C.A.R.E. Autonomy Gate - Tests
  * 
  * Validates that isCareAutonomyEnabled() enforces strict safety rules.
  */

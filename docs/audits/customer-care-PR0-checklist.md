@@ -1,4 +1,4 @@
-# Customer C.A.R.E. v1 – PR0 Implementation Checklist (Kill Switch + Shadow Mode)
+# C.A.R.E. v1 – PR0 Implementation Checklist (Kill Switch + Shadow Mode)
 
 **PR0 goal:** Introduce **global kill switch + shadow mode scaffolding** with **zero runtime behavior change**.
 
@@ -210,7 +210,7 @@ Nothing else.
 
 ## 7) PR Title & Description
 
-**Title:** `Customer C.A.R.E. PR0: Add kill switch + shadow mode flags`
+**Title:** `C.A.R.E. PR0: Add kill switch + shadow mode flags`
 
 **Description:**
 - Adds env flags `CARE_AUTONOMY_ENABLED` and `CARE_SHADOW_MODE` with safe defaults

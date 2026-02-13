@@ -4,7 +4,7 @@
  * Clean Test Cron Jobs via API
  * 
  * This script uses the backend API to safely remove test/development cron jobs
- * while preserving production jobs like the C.A.R.E. Customer Adaptive Response Engine.
+ * while preserving production jobs like the C.A.R.E. Cognitive Adaptive Response Engine.
  * 
  * Usage: node backend/clean-test-crons-api.js
  */
@@ -112,7 +112,7 @@ async function cleanTestCronsViaApi() {
   if (successCount > 0) {
     console.log('\n🎉 Cleanup complete! Your cron monitor should now show only production jobs.');
     console.log('💡 Refresh your Settings → System → Cron Jobs page to see the cleaned interface.');
-    console.log(`⚡ The C.A.R.E. Customer Adaptive Response Engine should remain untouched.`);
+    console.log(`⚡ The C.A.R.E. Cognitive Adaptive Response Engine should remain untouched.`);
   }
 
   if (errorCount > 0) {

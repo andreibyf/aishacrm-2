@@ -1,4 +1,4 @@
-# Customer C.A.R.E. v1 – PR8 Implementation Pack (Workflow Webhook Trigger → Routing via Pabbly / Thoughtly / CallFluent)
+# C.A.R.E. v1 – PR8 Implementation Pack (Workflow Webhook Trigger → Routing via Pabbly / Thoughtly / CallFluent)
 
 This document contains:
 

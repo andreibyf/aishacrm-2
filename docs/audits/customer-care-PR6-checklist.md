@@ -1,4 +1,4 @@
-# Customer C.A.R.E. v1 – PR6 Implementation Pack (Triggers Worker Shadow Wiring)
+# C.A.R.E. v1 – PR6 Implementation Pack (Triggers Worker Shadow Wiring)
 
 This document contains:
 
@@ -19,7 +19,7 @@ Depends on:
 
 ## PR6 goal
 
-Wire Customer C.A.R.E. into **non-call time-decay triggers** in **SHADOW MODE ONLY**.
+Wire C.A.R.E. into **non-call time-decay triggers** in **SHADOW MODE ONLY**.
 
 PR6 will:
 

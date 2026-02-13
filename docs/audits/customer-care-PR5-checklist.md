@@ -1,4 +1,4 @@
-# Customer C.A.R.E. v1 – PR5 Implementation Pack (Call Flow Shadow Wiring)
+# C.A.R.E. v1 – PR5 Implementation Pack (Call Flow Shadow Wiring)
 
 This document contains:
 
@@ -18,7 +18,7 @@ Depends on:
 
 ## PR5 goal
 
-Wire Customer C.A.R.E. **into call flows in SHADOW MODE ONLY**.
+Wire C.A.R.E. **into call flows in SHADOW MODE ONLY**.
 
 PR5 will:
 

@@ -1,8 +1,8 @@
--- Migration 116: Customer C.A.R.E. State Tables
+-- Migration 116: C.A.R.E. State Tables
 --
--- Purpose: Add database tables for Customer Cognitive Autonomous Relationship Execution (C.A.R.E.)
+-- Purpose: Add database tables for Cognitive Adaptive Response Engine (C.A.R.E.)
 -- Impact: ADDITIVE ONLY - no existing tables modified, no runtime behavior change
--- Phase: PR1 of Customer C.A.R.E. v1 rollout
+-- Phase: PR1 of C.A.R.E. v1 rollout
 --
 -- Tables:
 --   - customer_care_state: Current C.A.R.E. state per entity (lead/contact/account)
@@ -196,10 +196,10 @@ CREATE POLICY "customer_care_state_history_tenant_select" ON public.customer_car
 -- =============================================================================
 
 COMMENT ON TABLE public.customer_care_state IS 
-    'Customer C.A.R.E. state: Current relationship state per entity (PR1 - Phase 1)';
+    'C.A.R.E. state: Current relationship state per entity (PR1 - Phase 1)';
 
 COMMENT ON TABLE public.customer_care_state_history IS 
-    'Customer C.A.R.E. history: Audit trail of all state transitions and autonomous decisions';
+    'C.A.R.E. history: Audit trail of all state transitions and autonomous decisions';
 
 COMMENT ON COLUMN public.customer_care_state.hands_off_enabled IS 
     'Opt-in flag for autonomous actions. Default FALSE for safety. Set TRUE only after explicit customer consent.';

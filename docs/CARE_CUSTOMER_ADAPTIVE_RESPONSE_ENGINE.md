@@ -1,7 +1,7 @@
-# C.A.R.E. - Customer Adaptive Response Engine
+# C.A.R.E. - Cognitive Adaptive Response Engine
 
 **Version:** 3.0.x  
-**Last Updated:** January 25, 2026  
+**Last Updated:** February 13, 2026  
 **Status:** Production  
 **Purpose:** Intelligent decision layer for autonomous customer relationship management
 
@@ -9,7 +9,7 @@
 
 ## Overview
 
-**C.A.R.E. (Customer Adaptive Response Engine)** is AiSHA's decision layer that continuously evaluates customer signals, determines relationship state, detects risk or opportunity, and decides _when action is required_—before any automation or agent execution occurs.
+**C.A.R.E. (Cognitive Adaptive Response Engine)** is AiSHA's decision layer that continuously evaluates customer signals, determines relationship state, detects risk or opportunity, and decides _when action is required_—before any automation or agent execution occurs.
 
 C.A.R.E. operates as a cognitive layer that:
 - **Monitors** customer behavior patterns and engagement signals

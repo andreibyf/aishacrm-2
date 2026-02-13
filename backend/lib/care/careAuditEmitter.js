@@ -1,5 +1,5 @@
 /**
- * Customer C.A.R.E. v1 – Audit Emitter
+ * C.A.R.E. v1 – Audit Emitter
  * 
  * Logger-based audit emitter for C.A.R.E. decision tracking.
  * Emits structured JSON logs for offline analysis and debugging.

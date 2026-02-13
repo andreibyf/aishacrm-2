@@ -1,5 +1,5 @@
 /**
- * Customer C.A.R.E. State Engine
+ * C.A.R.E. State Engine
  * 
  * Core state machine for Customer Cognitive Autonomous Relationship Execution.
  * 

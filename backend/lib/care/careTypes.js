@@ -1,5 +1,5 @@
 /**
- * Customer C.A.R.E. Type Definitions
+ * C.A.R.E. Type Definitions
  * 
  * Canonical types for Customer Cognitive Autonomous Relationship Execution (C.A.R.E.).
  * 

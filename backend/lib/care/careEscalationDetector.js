@@ -1,5 +1,5 @@
 /**
- * Customer C.A.R.E. v1 - Escalation Detector
+ * C.A.R.E. v1 - Escalation Detector
  * 
  * PR3: Read-only escalation detection with deterministic heuristics
  * 

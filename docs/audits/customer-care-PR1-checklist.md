@@ -1,6 +1,6 @@
-# Customer C.A.R.E. v1 – PR1 Implementation Checklist (DB Tables Only)
+# C.A.R.E. v1 – PR1 Implementation Checklist (DB Tables Only)
 
-**PR1 goal:** Add **Customer C.A.R.E. state storage** as **additive migrations only**.
+**PR1 goal:** Add **C.A.R.E. state storage** as **additive migrations only**.
 
 This PR MUST NOT:
 - change runtime behavior
@@ -157,7 +157,7 @@ Insert one row (adjust tenant/entity IDs to match your dev data):
 
 ## 7) PR Title & Description
 
-**Title:** `Customer C.A.R.E. PR1: Add customer_care_state tables (additive)`
+**Title:** `C.A.R.E. PR1: Add customer_care_state tables (additive)`
 
 **Description:**
 - Adds normalized state and history tables

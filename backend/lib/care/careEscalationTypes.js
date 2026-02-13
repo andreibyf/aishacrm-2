@@ -1,5 +1,5 @@
 /**
- * Customer C.A.R.E. v1 - Escalation Type Definitions
+ * C.A.R.E. v1 - Escalation Type Definitions
  * 
  * PR3: Read-only escalation detector types
  * 

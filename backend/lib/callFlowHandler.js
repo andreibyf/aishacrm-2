@@ -8,7 +8,7 @@
  * - Automatic note/activity creation
  * - Lead qualification scoring
  * 
- * PR5: Shadow wiring for Customer C.A.R.E. v1
+ * PR5: Shadow wiring for C.A.R.E. v1
  * - Escalation detection (read-only)
  * - State transition proposals (read-only)
  * - Action candidate logging (shadow mode)

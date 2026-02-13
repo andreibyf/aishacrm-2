@@ -1,5 +1,5 @@
 /**
- * Customer C.A.R.E. State Store
+ * C.A.R.E. State Store
  * 
  * Database access layer for C.A.R.E. state persistence.
  * 

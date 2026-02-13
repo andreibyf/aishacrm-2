@@ -1,5 +1,5 @@
 /**
- * Customer C.A.R.E. v1 – Call Signal Adapter
+ * C.A.R.E. v1 – Call Signal Adapter
  * 
  * PR5: Shadow wiring for call flows
  * 
