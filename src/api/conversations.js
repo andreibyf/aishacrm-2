@@ -56,8 +56,16 @@ export async function createConversation({ agent_name = 'crm_assistant', metadat
   });
 
   if (!response.ok) {
-    console.error(`[Conversations API] Failed to create conversation: ${response.status} ${response.statusText}`);
-    throw new Error(`Failed to create conversation: ${response.statusText}`);
+    // 401 on initial load is expected for admin users before auth cookie is fully established
+    // (see KNOWN_ISSUES.md — "Precursor 401 on /api/ai/conversations")
+    if (response.status === 401) {
+      console.debug(`[Conversations API] Auth not ready yet (401) — will retry when session is established`);
+    } else {
+      console.error(`[Conversations API] Failed to create conversation: ${response.status} ${response.statusText}`);
+    }
+    const err = new Error(`Failed to create conversation: ${response.statusText}`);
+    err.status = response.status;
+    throw err;
   }
 
   const result = await response.json();
@@ -84,8 +92,14 @@ export async function getConversation(conversationId) {
   });
 
   if (!response.ok) {
-    console.error(`[Conversations API] Failed to get conversation: ${response.status} ${response.statusText}`);
-    throw new Error(`Failed to get conversation: ${response.statusText}`);
+    if (response.status === 401) {
+      console.debug(`[Conversations API] Auth not ready yet (401) for getConversation`);
+    } else {
+      console.error(`[Conversations API] Failed to get conversation: ${response.status} ${response.statusText}`);
+    }
+    const err = new Error(`Failed to get conversation: ${response.statusText}`);
+    err.status = response.status;
+    throw err;
   }
 
   const result = await response.json();
@@ -118,8 +132,14 @@ export async function listConversations({ agent_name, limit } = {}) {
   });
 
   if (!response.ok) {
-    console.error(`[Conversations API] Failed to list conversations: ${response.status} ${response.statusText}`);
-    throw new Error(`Failed to list conversations: ${response.statusText}`);
+    if (response.status === 401) {
+      console.debug(`[Conversations API] Auth not ready yet (401) for listConversations`);
+    } else {
+      console.error(`[Conversations API] Failed to list conversations: ${response.status} ${response.statusText}`);
+    }
+    const err = new Error(`Failed to list conversations: ${response.statusText}`);
+    err.status = response.status;
+    throw err;
   }
 
   const result = await response.json();

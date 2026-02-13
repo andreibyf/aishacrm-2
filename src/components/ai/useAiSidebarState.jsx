@@ -132,6 +132,10 @@ export function AiSidebarProvider({ children }) {
   }, [sessionEntityContext]);
 
   // Create initial conversation on mount (requires tenant context)
+  // NOTE: For admin users, the first attempt may 401 because the auth cookie
+  // isn't fully established yet when the user object loads from cache.
+  // This is a known precursor error — we retry silently after a short delay.
+  // See KNOWN_ISSUES.md — "Precursor 401 on /api/ai/conversations"
   useEffect(() => {
     let mounted = true;
     if (!user) return; // Wait for user to be loaded
@@ -142,7 +146,7 @@ export function AiSidebarProvider({ children }) {
       return;
     }
 
-    (async () => {
+    const attemptCreateConversation = async (retryCount = 0) => {
       try {
         const newConv = await conversations.createConversation({
           agent_name: 'aisha_sidebar',
@@ -157,9 +161,22 @@ export function AiSidebarProvider({ children }) {
           console.log('[AI Sidebar] Initial conversation created:', newConv.id);
         }
       } catch (err) {
-        console.error('[AI Sidebar] Failed to create initial conversation:', err);
+        // 401 = auth cookie not ready yet (common for admin users on initial load)
+        // Retry up to 2 times with exponential backoff
+        if (err.status === 401 && retryCount < 2) {
+          const delayMs = (retryCount + 1) * 2000; // 2s, 4s
+          console.debug(`[AI Sidebar] Auth not ready, retrying in ${delayMs / 1000}s (attempt ${retryCount + 1}/2)`);
+          setTimeout(() => { if (mounted) attemptCreateConversation(retryCount + 1); }, delayMs);
+        } else if (err.status === 401) {
+          // Final 401 — user will create conversation on first interaction, no need to alarm
+          console.debug('[AI Sidebar] Conversation will be created on first user interaction');
+        } else {
+          console.error('[AI Sidebar] Failed to create initial conversation:', err);
+        }
       }
-    })();
+    };
+
+    attemptCreateConversation();
 
     return () => { mounted = false; };
   }, [user]); // Create conversation once user is loaded with tenant context
