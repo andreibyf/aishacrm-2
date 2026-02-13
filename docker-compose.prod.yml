@@ -48,9 +48,11 @@ services:
         condition: service_healthy
     ports:
       - "127.0.0.1:4001:3001"
-    env_file:
-      - .env.from-doppler
     environment:
+      # Doppler injects secrets at runtime via backend entrypoint (doppler run)
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-prd_prd}
       - NODE_ENV=production
       - NODE_OPTIONS=${NODE_OPTIONS:---dns-result-order=ipv4first}
       # Override Docker network URLs
@@ -117,8 +119,6 @@ services:
     image: ghcr.io/andreibyf/aishacrm-2-telemetry-sidecar:latest
     container_name: aishacrm-telemetry-sidecar
     restart: unless-stopped
-    env_file:
-      - .env.from-doppler
     environment:
       - TELEMETRY_INPUT_PATH=/telemetry/telemetry.ndjson
       - BUS_TYPE=kafka
@@ -138,8 +138,6 @@ services:
     image: ghcr.io/andreibyf/aishacrm-2-office-viz:latest
     container_name: aishacrm-office-viz
     restart: unless-stopped
-    env_file:
-      - .env.from-doppler
     environment:
       - PORT=4010
       - BUS_TYPE=kafka
@@ -166,8 +164,11 @@ services:
         condition: service_started
     ports:
       - "4000:3000"  # External port 4000 maps to internal 3000
-    env_file:
-      - .env.from-doppler
+    environment:
+      # Doppler injects secrets at runtime via frontend entrypoint
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-prd_prd}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
       interval: 30s

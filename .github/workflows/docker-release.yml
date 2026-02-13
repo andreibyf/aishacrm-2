@@ -448,22 +448,27 @@ jobs:
             cd /opt/aishacrm
             echo "Deploying version: $VERSION_TAG"
 
-            # === REFRESH DOPPLER SECRETS ===
-            # Regenerate .env.from-doppler to pick up any new secrets added to Doppler
-            echo "Refreshing secrets from Doppler..."
-            if command -v doppler &> /dev/null && [ -n "$DOPPLER_TOKEN" ]; then
-              DOPPLER_TOKEN="$DOPPLER_TOKEN" doppler secrets download \
-                -p aishacrm -c prd_prd \
-                --no-file --format env > .env.from-doppler.new
-              if [ -s .env.from-doppler.new ]; then
-                mv .env.from-doppler.new .env.from-doppler
-                echo "Successfully refreshed .env.from-doppler from Doppler"
-              else
-                echo "WARNING: Doppler download returned empty file, keeping existing .env.from-doppler"
-                rm -f .env.from-doppler.new
+            # === DOPPLER RUNTIME INJECTION ===
+            # Secrets are injected at container startup via Doppler CLI in entrypoints.
+            # No secrets are written to disk. DOPPLER_TOKEN is the only credential on the VPS.
+            echo "Configuring Doppler token for runtime secret injection..."
+            if [ -n "$DOPPLER_TOKEN" ]; then
+              # Write DOPPLER_TOKEN to a minimal .env used by docker compose
+              # This is the ONLY secret stored on disk — containers fetch everything else at runtime
+              grep -q "^DOPPLER_TOKEN=" .env 2>/dev/null && \
+                sed -i "s|^DOPPLER_TOKEN=.*|DOPPLER_TOKEN=$DOPPLER_TOKEN|" .env || \
+                echo "DOPPLER_TOKEN=$DOPPLER_TOKEN" >> .env
+              grep -q "^DOPPLER_PROJECT=" .env 2>/dev/null || echo "DOPPLER_PROJECT=aishacrm" >> .env
+              grep -q "^DOPPLER_CONFIG=" .env 2>/dev/null || echo "DOPPLER_CONFIG=prd_prd" >> .env
+              echo "✓ Doppler token configured for runtime injection"
+
+              # Clean up legacy .env.from-doppler if it exists (secrets no longer stored on disk)
+              if [ -f .env.from-doppler ]; then
+                rm -f .env.from-doppler
+                echo "✓ Removed legacy .env.from-doppler (secrets now injected at runtime)"
               fi
             else
-              echo "WARNING: Doppler CLI not available or DOPPLER_TOKEN not set, skipping secrets refresh"
+              echo "WARNING: DOPPLER_TOKEN not set, containers will start without Doppler"
             fi
 
             # === FULL CLEANUP: Remove orphaned containers and broken references ===
