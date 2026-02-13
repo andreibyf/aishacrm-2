@@ -493,8 +493,8 @@ export default function createLeadsV2Routes() {
       let fixedPhone = phone;
       let fixedCompany = company;
       if (phone && company) {
-        const phoneIsDigits   = /^[\d\s\-\(\)\+\.]+$/.test(phone.trim());
-        const companyIsDigits = /^[\d\s\-\(\)\+\.]+$/.test(company.trim());
+        const phoneIsDigits   = /^[\d\s\-().+]+$/.test(phone.trim());
+        const companyIsDigits = /^[\d\s\-().+]+$/.test(company.trim());
         const phoneHasLetters = /[a-zA-Z]/.test(phone);
         const companyHasLetters = /[a-zA-Z]/.test(company);
         if (companyIsDigits && !companyHasLetters && phoneHasLetters && !phoneIsDigits) {

@@ -34,6 +34,10 @@ export default [
       'backend/archive/**',
       // Addons have their own Docker context and linting
       'addons/**',
+      // Claude Code worktrees (auto-generated, mirrors main repo)
+      '.claude/**',
+      // Continue.dev reranker venv (vendored Python packages)
+      '.continue/**',
       // Migration and utility scripts (one-off scripts, not production code)
       'backend/migrations/**',
       'backend/apply-*.js',
@@ -129,6 +133,28 @@ export default [
           ],
         },
       ],
+    },
+  },
+  // VS Code extension: CommonJS / Node.js context
+  {
+    files: ['braid-llm-kit/editor/vscode/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2020,
+      globals: {
+        ...globals.node,
+        require: 'readonly',
+        module: 'readonly',
+        exports: 'readonly',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+      },
+      sourceType: 'commonjs',
+    },
+    plugins: {},
+    rules: {
+      ...js.configs.recommended.rules,
+      'no-undef': 'off',
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
   },
   // Maintenance scripts override: allow 'pg' in non-runtime backend scripts
