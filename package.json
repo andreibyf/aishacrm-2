@@ -122,7 +122,7 @@
     "@typescript-eslint/eslint-plugin": "^8.47.0",
     "@typescript-eslint/parser": "^8.47.0",
     "@vitejs/plugin-react": "^4.3.4",
-    "@vitest/ui": "^4.0.8",
+    "@vitest/ui": "4.0.8",
     "autoprefixer": "^10.4.20",
     "dotenv": "^17.2.3",
     "eslint": "^9.19.0",
@@ -142,7 +142,7 @@
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
     "vite": "^6.1.0",
-    "vitest": "^4.0.8"
+    "vitest": "4.0.8"
   },
   "lint-staged": {
     "*.{js,jsx,json,css,md}": [

@@ -25,7 +25,8 @@ export default defineConfig({
     poolOptions: {
       threads: {
         singleThread: false,
-        isolate: true
+        isolate: true,
+        execArgv: ["--no-warnings=ExperimentalWarning"]
       }
     },
     onConsoleLog: () => true,
