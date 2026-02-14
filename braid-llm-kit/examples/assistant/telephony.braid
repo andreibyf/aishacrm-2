@@ -4,9 +4,9 @@
 import { Result, CRMError } from "../../spec/types.braid"
 
 // Initiate an outbound AI call to a contact or lead
-@policy(READ_ONLY)
+@policy(WRITE_OPERATIONS)
 fn initiateCall(
-  tenant: String,
+  tenant_id: String,
   provider: String,
   phone_number: String,
   contact_name: String,
@@ -16,7 +16,7 @@ fn initiateCall(
 ) -> Result<Object, CRMError> !net {
   let url = "/api/telephony/initiate-call";
   let payload = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     provider: provider,
     phone_number: phone_number,
     contact_name: contact_name,
@@ -29,16 +29,16 @@ fn initiateCall(
   
   return match response {
     Ok{value} => Ok(value),
-    Err{error} => CRMError.network(url, error.status, "unknown"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 // Initiate call to a specific contact by ID
 // Note: This function gets contact details first, then initiates the call
-@policy(READ_ONLY)
+@policy(WRITE_OPERATIONS)
 fn callContact(
-  tenant: String,
+  tenant_id: String,
   contact_id: String,
   provider: String,
   purpose: String,
@@ -47,7 +47,7 @@ fn callContact(
   // Initiate the call using the contact ID directly
   let call_url = "/api/telephony/initiate-call";
   let payload = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     provider: provider,
     contact_id: contact_id,
     purpose: purpose,
@@ -58,43 +58,43 @@ fn callContact(
   
   return match call_response {
     Ok{value} => Ok(value),
-    Err{error} => CRMError.network(call_url, error.status, "unknown"),
-    _ => CRMError.network(call_url, 500, "unknown")
+    Err{error} => Err({ tag: "NetworkError", url: call_url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: call_url, code: 500 })
   };
 }
 
 // Check if a calling provider is configured for the tenant
 @policy(READ_ONLY)
 fn checkCallingProvider(
-  tenant: String,
+  tenant_id: String,
   provider: String
 ) -> Result<Object, CRMError> !net {
   let url = "/api/telephony/provider-status/" + provider;
-  let params = { tenant_id: tenant };
+  let params = { tenant_id: tenant_id };
   
   let response = http.get(url, { params: params });
   
   return match response {
     Ok{value} => Ok(value),
-    Err{error} => CRMError.network(url, error.status, "unknown"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 // Get available AI agents for a provider
 @policy(READ_ONLY)
 fn getCallingAgents(
-  tenant: String,
+  tenant_id: String,
   provider: String
 ) -> Result<Object, CRMError> !net {
   let url = "/api/telephony/agents/" + provider;
-  let params = { tenant_id: tenant };
+  let params = { tenant_id: tenant_id };
   
   let response = http.get(url, { params: params });
   
   return match response {
     Ok{value} => Ok(value),
-    Err{error} => CRMError.network(url, error.status, "unknown"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }

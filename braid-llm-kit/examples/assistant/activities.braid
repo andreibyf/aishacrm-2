@@ -8,7 +8,7 @@ import { Result, Activity, CRMError } from "../../spec/types.braid"
 
 @policy(WRITE_OPERATIONS)
 fn createActivity(
-  tenant: String,
+  tenant_id: String,
   subject: String,
   activity_type: String,
   due_date: String,
@@ -21,7 +21,7 @@ fn createActivity(
   let url = "/api/v2/activities";
   // Transform entity_type/entity_id to DB column names: related_to/related_id
   let payload = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     subject: subject,
     activity_type: activity_type,
     due_date: due_date,
@@ -38,14 +38,14 @@ fn createActivity(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "create_activity"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "create_activity" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(WRITE_OPERATIONS)
 fn updateActivity(
-  tenant: String,
+  tenant_id: String,
   activity_id: String,
   updates: Object
 ) -> Result<Activity, CRMError> !net {
@@ -55,14 +55,14 @@ fn updateActivity(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "update_activity"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "update_activity", entity: "Activity", id: activity_id }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(WRITE_OPERATIONS)
 fn markActivityComplete(
-  tenant: String,
+  tenant_id: String,
   activity_id: String
 ) -> Result<Activity, CRMError> !net {
   let url = "/api/v2/activities/" + activity_id;
@@ -72,21 +72,21 @@ fn markActivityComplete(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "complete_activity"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "complete_activity", entity: "Activity", id: activity_id }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(READ_ONLY)
 fn getUpcomingActivities(
-  tenant: String,
+  tenant_id: String,
   assigned_to: String,
   days: Number
 ) -> Result<Array, CRMError> !net {
   let url = "/api/v2/activities";
   // TODO: Filter by due_date range using days param when API supports date range queries
   let params = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     assigned_to: assigned_to,
     status: "scheduled",
     limit: days * 10
@@ -97,14 +97,14 @@ fn getUpcomingActivities(
   // Note: Empty array is a VALID result (no upcoming activities), not an error
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "list_activities"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "list_activities" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(WRITE_OPERATIONS)
 fn scheduleMeeting(
-  tenant: String,
+  tenant_id: String,
   subject: String,
   attendees: Array,
   date_time: String,
@@ -114,7 +114,7 @@ fn scheduleMeeting(
   let url = "/api/v2/activities";
   let attendee_list = attendees.join(", ");
   let payload = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     subject: subject,
     activity_type: "meeting",
     due_date: date_time,
@@ -128,28 +128,28 @@ fn scheduleMeeting(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "schedule_meeting"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "schedule_meeting" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
-@policy(WRITE_OPERATIONS)
+@policy(DELETE_OPERATIONS)
 fn deleteActivity(
-  tenant: String,
+  tenant_id: String,
   activity_id: String
 ) -> Result<Boolean, CRMError> !net {
   let url = "/api/v2/activities/" + activity_id;
   let response = http.delete(url, {});
   return match response {
     Ok{value} => Ok(true),
-    Err{error} => CRMError.fromHTTP(url, error.status, "delete_activity"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "delete_activity", entity: "Activity", id: activity_id }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(READ_ONLY)
 fn listActivities(
-  tenant: String,
+  tenant_id: String,
   status: String,
   entity_type: String,
   entity_id: String,
@@ -159,7 +159,7 @@ fn listActivities(
   // entity_type: lead, contact, account, opportunity
   // API query params use related_to_type/related_to_id
   let params = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     status: status,
     related_to_type: entity_type,
     related_to_id: entity_id,
@@ -171,38 +171,38 @@ fn listActivities(
   // Note: Empty array is a VALID result (no activities match filter), not an error
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "list_activities"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "list_activities" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(READ_ONLY)
 fn getActivityDetails(
-  tenant: String,
+  tenant_id: String,
   activity_id: String
 ) -> Result<Activity, CRMError> !net {
   let url = "/api/v2/activities/" + activity_id;
-  let params = { tenant_id: tenant };
+  let params = { tenant_id: tenant_id };
   
   let response = http.get(url, { params: params });
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "get_activity"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_activity", entity: "Activity", id: activity_id }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(READ_ONLY)
 fn searchActivities(
-  tenant: String,
+  tenant_id: String,
   query: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
   // Use list endpoint with search param - filters by subject
   let url = "/api/v2/activities";
   let params = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     search: query,
     limit: limit
   };
@@ -212,7 +212,7 @@ fn searchActivities(
   // Note: Empty array is a VALID result (no matches found), not an error
   return match response {
     Ok{value} => Ok(value.data.activities),
-    Err{error} => CRMError.fromHTTP(url, error.status, "search_activities"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_activities", query: query }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }

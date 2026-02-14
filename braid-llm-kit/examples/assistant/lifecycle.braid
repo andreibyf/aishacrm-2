@@ -5,7 +5,7 @@ import { Result, CRMError } from "../../spec/types.braid"
 
 @policy(WRITE_OPERATIONS)
 fn advanceToLead(
-  tenant: String,
+  tenant_id: String,
   bizdev_source_id: String,
   notes: String
 ) -> Result<Object, CRMError> !net {
@@ -13,7 +13,7 @@ fn advanceToLead(
   // Status: BizDev source "active" → "promoted", Lead created as "new"
   let url = "/api/bizdevsources/" + bizdev_source_id + "/promote";
   let body = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     notes: notes
   };
   
@@ -27,14 +27,14 @@ fn advanceToLead(
       lead_id: value.data.lead.id,
       lead_type: value.data.lead_type
     }),
-    Err{error} => CRMError.fromHTTP(url, error.status, "promote"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "PromotionError", code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(WRITE_OPERATIONS)
 fn advanceToQualified(
-  tenant: String,
+  tenant_id: String,
   lead_id: String,
   qualification_notes: String
 ) -> Result<Object, CRMError> !net {
@@ -42,7 +42,7 @@ fn advanceToQualified(
   // This step prepares the lead for conversion
   let url = "/api/v2/leads/" + lead_id;
   let body = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     status: "qualified",
     qualification_notes: qualification_notes
   };
@@ -56,14 +56,14 @@ fn advanceToQualified(
       lead_id: lead_id,
       ready_for_conversion: true
     }),
-    Err{error} => CRMError.fromHTTP(url, error.status, "qualify"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "QualificationError", code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(WRITE_OPERATIONS)
 fn advanceToAccount(
-  tenant: String,
+  tenant_id: String,
   lead_id: String,
   create_account: Boolean,
   account_name: String,
@@ -77,7 +77,7 @@ fn advanceToAccount(
   // Creates: Contact (prospect), Account, Opportunity (prospecting stage)
   let url = "/api/v2/leads/" + lead_id + "/convert";
   let body = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     create_account: create_account,
     account_name: account_name,
     selected_account_id: selected_account_id,
@@ -97,14 +97,14 @@ fn advanceToAccount(
       opportunity_id: value.data.opportunity.id,
       opportunity_stage: "prospecting"
     }),
-    Err{error} => CRMError.fromHTTP(url, error.status, "convert"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "ConversionError", code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(WRITE_OPERATIONS)
 fn advanceOpportunityStage(
-  tenant: String,
+  tenant_id: String,
   opportunity_id: String,
   new_stage: String,
   probability: Number,
@@ -117,7 +117,7 @@ fn advanceOpportunityStage(
   let url = "/api/v2/opportunities/" + opportunity_id;
   
   let body = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     stage: new_stage,
     probability: probability,
     stage_notes: notes
@@ -132,14 +132,14 @@ fn advanceOpportunityStage(
       stage: new_stage,
       probability: probability
     }),
-    Err{error} => CRMError.fromHTTP(url, error.status, "advance_stage"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "StageUpdateError", code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
-@policy(READ_ONLY)
+@policy(WRITE_OPERATIONS)
 fn fullLifecycleAdvance(
-  tenant: String,
+  tenant_id: String,
   bizdev_source_id: String,
   qualification_notes: String,
   create_account: Boolean,
@@ -153,28 +153,28 @@ fn fullLifecycleAdvance(
   
   // Step 1: Promote BizDev Source to Lead
   let promoteUrl = "/api/bizdevsources/" + bizdev_source_id + "/promote";
-  let promoteResponse = http.post(promoteUrl, { body: { tenant_id: tenant } });
+  let promoteResponse = http.post(promoteUrl, { body: { tenant_id: tenant_id } });
   
   // Check promotion result
   if promoteResponse.tag == "Err" {
-    return CRMError.fromHTTP(url, promoteResponse.error, "promote");
+    return Err({ tag: "PromotionError", step: 1, code: promoteResponse.error.status });
   }
   
   let leadId = promoteResponse.value.data.lead.id;
   
   // Step 2: Qualify the Lead
   let qualifyUrl = "/api/v2/leads/" + leadId;
-  let qualifyResponse = http.put(qualifyUrl, { body: { tenant_id: tenant, status: "qualified", qualification_notes: qualification_notes } });
+  let qualifyResponse = http.put(qualifyUrl, { body: { tenant_id: tenant_id, status: "qualified", qualification_notes: qualification_notes } });
   
   // Check qualification result
   if qualifyResponse.tag == "Err" {
-    return CRMError.fromHTTP(url, qualifyResponse.error, "qualify");
+    return Err({ tag: "QualificationError", step: 2, code: qualifyResponse.error.status });
   }
   
   // Step 3: Convert Lead to Contact + Account + Opportunity
   let convertUrl = "/api/v2/leads/" + leadId + "/convert";
   let convertBody = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     create_account: create_account,
     account_name: account_name,
     create_opportunity: create_opportunity,
@@ -193,7 +193,7 @@ fn fullLifecycleAdvance(
       account_id: value.data.account.id,
       opportunity_id: value.data.opportunity.id
     }),
-    Err{error} => CRMError.fromHTTP(url, error.status, "convert"),
-    _ => CRMError.network(convertUrl, 500, "convert")
+    Err{error} => Err({ tag: "ConversionError", step: 3, code: error.status }),
+    _ => Err({ tag: "NetworkError", step: 3, url: convertUrl, code: 500 })
   };
 }

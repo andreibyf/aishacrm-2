@@ -4,10 +4,10 @@
 import { Result, Snapshot, CRMError } from "../spec/types.braid"
 
 @policy(READ_ONLY)
-fn fetchSnapshot(tenant: String, scope: String, limit: Number) -> Result<Snapshot, CRMError> !net, clock {
+fn fetchSnapshot(tenant_id: String, scope: String, limit: Number) -> Result<Snapshot, CRMError> !net, clock {
   let url = "/api/ai/snapshot-internal";
   let params = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     scope: scope,
     limit: limit
   };
@@ -16,12 +16,11 @@ fn fetchSnapshot(tenant: String, scope: String, limit: Number) -> Result<Snapsho
   return match response {
     Ok{value} => Ok(value),
     Err{error} => Err(error),
-    _ => CRMError.network(url, 500, "unknown")
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 // Minimal probe to validate Ok(value) propagation end-to-end
-@policy(READ_ONLY)
 fn probe() -> Result<Object, CRMError> {
   return Ok({ probe: true });
 }

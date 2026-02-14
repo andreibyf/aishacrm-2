@@ -383,6 +383,12 @@ describe('EmployeeForm - Unified Submission Pattern', () => {
         })
       );
     });
+
+    // Wait for the delayed onSubmit callback (setTimeout 500ms in component)
+    // to prevent it leaking into the next test
+    await waitFor(() => {
+      expect(mockOnSubmit).toHaveBeenCalledTimes(1);
+    }, { timeout: 2000 });
   });
 
   it('should require tenant_id for new employees', async () => {

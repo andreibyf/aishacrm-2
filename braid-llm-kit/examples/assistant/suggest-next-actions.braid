@@ -6,7 +6,7 @@ import { Result, CRMError } from "../../spec/types.braid"
 
 @policy(READ_ONLY)
 fn suggestNextActions(
-  tenant: String,
+  tenant_id: String,
   entity_type: String,
   entity_id: String,
   limit: Number
@@ -17,7 +17,7 @@ fn suggestNextActions(
   
   let url = "/api/ai/suggest-next-actions";
   let body = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     entity_type: entity_type,
     entity_id: entity_id,
     limit: limit
@@ -27,7 +27,17 @@ fn suggestNextActions(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "suggest_next_actions"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ 
+      tag: "APIError", 
+      operation: "suggest_next_actions",
+      entity: entity_type,
+      id: entity_id,
+      code: error.status 
+    }),
+    _ => Err({ 
+      tag: "NetworkError", 
+      url: url, 
+      code: 500 
+    })
   };
 }

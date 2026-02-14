@@ -9,7 +9,7 @@ import { Result, Account, CRMError } from "../../spec/types.braid"
 
 @policy(WRITE_OPERATIONS)
 fn createAccount(
-  tenant: String,
+  tenant_id: String,
   name: String,
   annual_revenue: Number,
   industry: String,
@@ -19,7 +19,7 @@ fn createAccount(
 ) -> Result<Account, CRMError> !net {
   let url = "/api/v2/accounts";
   let body = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     name: name,
     annual_revenue: annual_revenue,
     industry: industry,
@@ -40,7 +40,7 @@ fn createAccount(
 
 @policy(WRITE_OPERATIONS)
 fn updateAccount(
-  tenant: String,
+  tenant_id: String,
   account_id: String,
   updates: Object
 ) -> Result<Account, CRMError> !net {
@@ -57,11 +57,11 @@ fn updateAccount(
 
 @policy(READ_ONLY)
 fn getAccountDetails(
-  tenant: String,
+  tenant_id: String,
   account_id: String
 ) -> Result<Account, CRMError> !net {
   let url = "/api/v2/accounts/" + account_id;
-  let params = { tenant_id: tenant };
+  let params = { tenant_id: tenant_id };
   
   let response = http.get(url, { params: params });
   
@@ -74,13 +74,13 @@ fn getAccountDetails(
 
 @policy(READ_ONLY)
 fn listAccounts(
-  tenant: String,
+  tenant_id: String,
   limit: Number,
   offset: Number
 ) -> Result<Array, CRMError> !net {
   let url = "/api/v2/accounts";
   let params = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     limit: limit,
     offset: offset
   };
@@ -97,14 +97,14 @@ fn listAccounts(
 
 @policy(READ_ONLY)
 fn searchAccounts(
-  tenant: String,
+  tenant_id: String,
   query: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
   // Use the list endpoint with search parameter instead of a separate search endpoint
   let url = "/api/v2/accounts";
   let params = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     search: query,
     limit: limit
   };
@@ -124,13 +124,13 @@ fn searchAccounts(
 // Status values: active, inactive, prospect, churned
 @policy(READ_ONLY)
 fn searchAccountsByStatus(
-  tenant: String,
+  tenant_id: String,
   status: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
   let url = "/api/v2/accounts";
   let params = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     status: status,
     limit: limit
   };
@@ -147,7 +147,7 @@ fn searchAccountsByStatus(
 
 @policy(WRITE_OPERATIONS)
 fn deleteAccount(
-  tenant: String,
+  tenant_id: String,
   account_id: String
 ) -> Result<Boolean, CRMError> !net {
   let url = "/api/v2/accounts/" + account_id;

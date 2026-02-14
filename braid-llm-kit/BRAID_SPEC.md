@@ -161,8 +161,8 @@ fn validateEmail(email: String) -> Boolean {
 ### 3.2 Effectful Functions
 ```braid
 @policy(READ_ONLY)
-fn searchAccounts(tenant: String, query: String) -> Result<Array, CRMError> !net {
-  let url = `/api/v2/accounts?tenant_id=${tenant}&q=${query}`;
+fn searchAccounts(tenant_id: String, query: String) -> Result<Array, CRMError> !net {
+  let url = `/api/v2/accounts?tenant_id=${tenant_id}&q=${query}`;
   let response = http.get(url, {});
 
   return match response {
@@ -176,7 +176,7 @@ fn searchAccounts(tenant: String, query: String) -> Result<Array, CRMError> !net
 ### 3.3 Typed Parameters
 ```braid
 fn createLead(
-  tenant: String,
+  tenant_id: String,
   first_name: String,
   last_name: String,
   email: String,
@@ -277,7 +277,7 @@ match response {
 
 ### 6.1 Template Strings
 ```braid
-let url = `/api/v2/leads?tenant_id=${tenant}&q=${query}`;
+let url = `/api/v2/leads?tenant_id=${tenant_id}&q=${query}`;
 let msg = `Found ${len(results)} results for ${query}`;
 ```
 
@@ -302,7 +302,7 @@ let combined = [...existing, newItem];
 
 In objects:
 ```braid
-let updated = { ...base, status: "active", tenant_id: tenant };
+let updated = { ...base, status: "active", tenant_id: tenant_id };
 ```
 
 Rest parameters:
@@ -313,7 +313,7 @@ fn process(...args: Array) -> Result { ... }
 ### 6.5 Object and Array Literals
 ```braid
 let payload = {
-  tenant_id: tenant,
+  tenant_id: tenant_id,
   name: name,
   status: "new",
   metadata: {}
@@ -377,16 +377,16 @@ Every effectful function should have a `@policy` annotation:
 
 ```braid
 @policy(READ_ONLY)
-fn listAccounts(tenant: String) -> Result<Array, CRMError> !net { ... }
+fn listAccounts(tenant_id: String) -> Result<Array, CRMError> !net { ... }
 
 @policy(WRITE_OPERATIONS)
-fn createLead(tenant: String, name: String) -> Result<Lead, CRMError> !net { ... }
+fn createLead(tenant_id: String, name: String) -> Result<Lead, CRMError> !net { ... }
 
 @policy(DELETE_OPERATIONS)
-fn deleteAccount(tenant: String, id: String) -> Result<Boolean, CRMError> !net { ... }
+fn deleteAccount(tenant_id: String, id: String) -> Result<Boolean, CRMError> !net { ... }
 
 @policy(ADMIN_OPERATIONS)
-fn purgeAllData(tenant: String) -> Result<Boolean, CRMError> !net { ... }
+fn purgeAllData(tenant_id: String) -> Result<Boolean, CRMError> !net { ... }
 ```
 
 ### 8.2 Valid Policies
@@ -492,8 +492,8 @@ Every effectful Braid function follows this pattern:
 
 ```braid
 @policy(READ_ONLY)
-fn getAccount(tenant: String, id: String) -> Result<Account, CRMError> !net {
-  let url = `/api/v2/accounts/${id}?tenant_id=${tenant}`;
+fn getAccount(tenant_id: String, id: String) -> Result<Account, CRMError> !net {
+  let url = `/api/v2/accounts/${id}?tenant_id=${tenant_id}`;
   let response = http.get(url, {});
 
   return match response {
@@ -544,8 +544,8 @@ cap(policy, "net");  // throws BRAID_CAP if policy denies !net
 The transpiler emits `checkType()` calls for every typed parameter:
 
 ```javascript
-// For fn createLead(tenant: String, name: String)
-checkType(tenant, "String", "tenant");
+// For fn createLead(tenant_id: String, name: String)
+checkType(tenant_id, "String", "tenant_id");
 checkType(name, "String", "name");
 ```
 
@@ -613,8 +613,8 @@ braid-llm-kit/
 The IR is a flat list of SSA-like instructions where every intermediate value gets a named temporary. This makes code generation trivial — each IR instruction maps 1:1 to a statement in the target language.
 
 ```
-fn searchLeads(tenant: String, query: String) !net @policy(READ_ONLY)
-  let __t0 = template(`/api/v2/leads?tenant_id=`, tenant, `&q=`, query)
+fn searchLeads(tenant_id: String, query: String) !net @policy(READ_ONLY)
+  let __t0 = template(`/api/v2/leads?tenant_id=`, tenant_id, `&q=`, query)
   let __t1 = member(http, get)
   let __t2 = call(__t1, __t0, {})
   match __t2
@@ -679,19 +679,19 @@ cd core && node --test braid-core.test.js braid-ir.test.js e2e-v05.test.js
 ```braid
 // ✅ Policy declared
 @policy(READ_ONLY)
-fn listLeads(tenant: String) -> Result<Array, CRMError> !net { ... }
+fn listLeads(tenant_id: String) -> Result<Array, CRMError> !net { ... }
 
 // ❌ Missing policy
-fn listLeads(tenant: String) -> Result<Array, CRMError> !net { ... }
+fn listLeads(tenant_id: String) -> Result<Array, CRMError> !net { ... }
 ```
 
 ### 14.2 Tenant-first parameters
 ```braid
 // ✅ tenant_id is first parameter
-fn createLead(tenant: String, name: String) -> Result<Lead, CRMError> !net
+fn createLead(tenant_id: String, name: String) -> Result<Lead, CRMError> !net
 
 // ❌ tenant_id buried
-fn createLead(name: String, tenant: String) -> Result<Lead, CRMError> !net
+fn createLead(name: String, tenant_id: String) -> Result<Lead, CRMError> !net
 ```
 
 ### 14.3 Use CRMError constructors
@@ -751,4 +751,4 @@ Primary     = Ident | Number | String | Template | Bool | Null
 
 ---
 
-*Braid v0.5.0 — 149 tests passing, 119 production functions, 20 .braid files*
+*Braid v0.5.0 — 274 tests passing, 119 production functions, 20 .braid files*

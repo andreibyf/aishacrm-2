@@ -12,8 +12,8 @@ Braid constrains what LLM tool calls can do. Every function declares its effects
 
 ```braid
 @policy(READ_ONLY)
-fn searchLeads(tenant: String, query: String) -> Result<Array, CRMError> !net {
-  let url = `/api/v2/leads?tenant_id=${tenant}&q=${query}`;
+fn searchLeads(tenant_id: String, query: String) -> Result<Array, CRMError> !net {
+  let url = `/api/v2/leads?tenant_id=${tenant_id}&q=${query}`;
   let response = http.get(url, {});
 
   return match response {
@@ -143,8 +143,8 @@ code --install-extension braid-language-0.7.0.vsix
 ```bash
 cd braid-llm-kit/core
 
-# All tests (149 passing)
-node --test braid-core.test.js braid-ir.test.js e2e-v05.test.js
+# All tests (274 passing)
+node --test braid-core.test.js braid-ir.test.js e2e-v05.test.js braid-integration.test.js
 
 # Core only (73 tests: parser, transpiler, runtime, sandbox)
 node --test braid-core.test.js
@@ -189,7 +189,7 @@ const result = await executeBraid(
   'searchLeads',
   CRM_POLICIES.READ_ONLY,
   deps,
-  [tenantId, 'acme'],
+  [tenant_id, 'acme'],
   { cache: true, timeout: 30000 }
 );
 ```
@@ -202,4 +202,4 @@ See `core/grammar.ebnf` for the formal EBNF grammar.
 
 ---
 
-*149 tests, 119 production functions, 20 .braid files, 2 compilation targets*
+*274 tests, 119 production functions, 20 .braid files, 2 compilation targets*

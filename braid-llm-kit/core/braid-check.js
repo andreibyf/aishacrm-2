@@ -9,6 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import { parse } from './braid-parse.js';
 import { transpileToJS, extractPolicies, detectUsedEffects, IO_EFFECT_MAP, VALID_POLICIES, BRAID_TYPE_MAP } from './braid-transpile.js';
+import { typeCheck } from './braid-types.js';
 
 // ============================================================================
 // DIAGNOSTIC COLLECTOR
@@ -88,7 +89,17 @@ function check(src, filename = 'stdin') {
     checkForNull(fn.body, fn.name, push);
   }
 
-  // --- Phase 3: Transpiler validation (catches type/policy errors) ---
+  // --- Phase 3: Type checking ---
+  try {
+    const { diagnostics: tcDiags } = typeCheck(ast);
+    for (const d of tcDiags) {
+      diags.push({ code: d.code, severity: d.severity, message: d.message, file: filename, line: d.line || 0, col: d.col || 0 });
+    }
+  } catch (e) {
+    push('TC999', 'warning', `Type checker error: ${e.message}`);
+  }
+
+  // --- Phase 4: Transpiler validation (catches type/policy errors) ---
   try {
     transpileToJS(ast, { source: filename, pure: false, sandbox: false });
   } catch (e) {

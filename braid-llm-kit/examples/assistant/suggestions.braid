@@ -5,130 +5,130 @@ import { Result, CRMError } from "../../spec/types.braid"
 
 @policy(READ_ONLY)
 fn listSuggestions(
-  tenant: String,
+  tenant_id: String,
   status: String,
   limit: Number
 ) -> Result<Array<Suggestion>, CRMError> !net {
   // List AI-generated suggestions for review
   // Status options: pending, approved, rejected, applied, expired, all
-  let url = "/api/ai/suggestions?tenant_id=" + tenant + "&status=" + status + "&limit=" + limit;
+  let url = "/api/ai/suggestions?tenant_id=" + tenant_id + "&status=" + status + "&limit=" + limit;
   let response = http.get(url);
   
   return match response {
     Ok{value} => Ok(value.data.suggestions),
-    Err{error} => CRMError.network(url, error.status, "unknown"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(READ_ONLY)
 fn getSuggestionDetails(
-  tenant: String,
+  tenant_id: String,
   suggestion_id: String
 ) -> Result<Suggestion, CRMError> !net {
   // Get full details of a specific suggestion including reasoning
-  let url = "/api/ai/suggestions/" + suggestion_id + "?tenant_id=" + tenant;
+  let url = "/api/ai/suggestions/" + suggestion_id + "?tenant_id=" + tenant_id;
   let response = http.get(url);
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.network(url, error.status, "unknown"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(READ_ONLY)
 fn getSuggestionStats(
-  tenant: String
+  tenant_id: String
 ) -> Result<SuggestionStats, CRMError> !net {
   // Get statistics about suggestions: counts by status, priority, record type
-  let url = "/api/ai/suggestions/stats?tenant_id=" + tenant;
+  let url = "/api/ai/suggestions/stats?tenant_id=" + tenant_id;
   let response = http.get(url);
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.network(url, error.status, "unknown"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(WRITE_OPERATIONS)
 fn approveSuggestion(
-  tenant: String,
+  tenant_id: String,
   suggestion_id: String,
   reviewer_notes: String
 ) -> Result<Suggestion, CRMError> !net {
   // Approve a pending suggestion (marks it ready for application)
   let url = "/api/ai/suggestions/" + suggestion_id + "/approve";
   let body = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     reviewer_notes: reviewer_notes
   };
   let response = http.post(url, { body: body });
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "approve"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "ApprovalError", code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(WRITE_OPERATIONS)
 fn rejectSuggestion(
-  tenant: String,
+  tenant_id: String,
   suggestion_id: String,
   rejection_reason: String
 ) -> Result<Suggestion, CRMError> !net {
   // Reject a suggestion with reason for feedback improvement
   let url = "/api/ai/suggestions/" + suggestion_id + "/reject";
   let body = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     rejection_reason: rejection_reason
   };
   let response = http.post(url, { body: body });
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "reject"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "RejectionError", code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(WRITE_OPERATIONS)
 fn applySuggestion(
-  tenant: String,
+  tenant_id: String,
   suggestion_id: String
 ) -> Result<ApplyResult, CRMError> !net {
   // Apply an approved suggestion - executes the suggested action
   let url = "/api/ai/suggestions/" + suggestion_id + "/apply";
   let body = {
-    tenant_id: tenant
+    tenant_id: tenant_id
   };
   let response = http.post(url, { body: body });
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "apply"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "ApplyError", code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(WRITE_OPERATIONS)
 fn triggerSuggestionGeneration(
-  tenant: String,
+  tenant_id: String,
   trigger_id: String
 ) -> Result<TriggerResult, CRMError> !net {
   // Manually trigger suggestion generation for a specific trigger
   let url = "/api/ai/suggestions/trigger";
   let body = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     trigger_id: trigger_id
   };
   let response = http.post(url, { body: body });
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "trigger"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "TriggerError", code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }

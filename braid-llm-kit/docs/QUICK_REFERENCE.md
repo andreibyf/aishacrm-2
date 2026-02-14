@@ -10,8 +10,8 @@ fn calculate(x: Number, y: Number) -> Number {
 
 // Effectful function with policy
 @policy(READ_ONLY)
-fn fetchData(tenant: String) -> Result<Array, CRMError> !net {
-  let response = http.get(`/api/v2/data?tenant_id=${tenant}`, {});
+fn fetchData(tenant_id: String) -> Result<Array, CRMError> !net {
+  let response = http.get(`/api/v2/data?tenant_id=${tenant_id}`, {});
   return match response {
     Ok{value} => Ok(value.data),
     Err{error} => CRMError.fromHTTP(url, error.status, "fetch_data"),
@@ -86,7 +86,7 @@ match response {
 ## Template Strings
 
 ```braid
-let url = `/api/v2/leads?tenant_id=${tenant}&q=${query}`;
+let url = `/api/v2/leads?tenant_id=${tenant_id}&q=${query}`;
 let msg = `Found ${len(results)} results`;
 ```
 
@@ -185,7 +185,7 @@ import { Result, Lead, CRMError } from "../../spec/types.braid"
 
 @policy(WRITE_OPERATIONS)
 fn createLead(
-  tenant: String,
+  tenant_id: String,
   first_name: String,
   last_name: String,
   email: String,
@@ -193,7 +193,7 @@ fn createLead(
 ) -> Result<Lead, CRMError> !net {
   let url = "/api/v2/leads";
   let body = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     first_name: first_name,
     last_name: last_name,
     email: email,
@@ -238,8 +238,8 @@ examples/assistant/          20 .braid files, 119 functions
 
 ```bash
 cd core
-node --test braid-core.test.js braid-ir.test.js e2e-v05.test.js
-# 149 tests, 0 failures
+node --test braid-core.test.js braid-ir.test.js e2e-v05.test.js braid-integration.test.js
+# 274 tests, 0 failures
 ```
 
 ## Diagnostic Codes

@@ -12,13 +12,13 @@ import { Result, Report, CRMError } from "../../spec/types.braid"
 /// Returns: totalLeads, totalAccounts, totalContacts, totalOpportunities, openLeads, wonOpportunities, etc.
 @policy(READ_ONLY)
 fn getDashboardBundle(
-  tenant: String,
+  tenant_id: String,
   time_range: String,
   include_forecasts: Boolean
 ) -> Result<Object, CRMError> !net {
   let url = "/api/v2/reports/dashboard-bundle";
   let params = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     time_range: time_range,
     include_forecasts: include_forecasts
   };
@@ -27,37 +27,37 @@ fn getDashboardBundle(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "get_dashboard_bundle"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_dashboard_bundle" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(READ_ONLY)
 fn getHealthSummary(
-  tenant: String
+  tenant_id: String
 ) -> Result<Object, CRMError> !net {
   let url = "/api/v2/reports/health-summary";
-  let params = { tenant_id: tenant };
+  let params = { tenant_id: tenant_id };
   
   let response = http.get(url, { params: params });
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "get_health_summary"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_health_summary" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(READ_ONLY)
 fn getSalesReport(
-  tenant: String,
+  tenant_id: String,
   start_date: String,
   end_date: String,
   group_by: String
 ) -> Result<Object, CRMError> !net {
   let url = "/api/reports/sales";
   let params = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     start_date: start_date,
     end_date: end_date,
     group_by: group_by
@@ -67,19 +67,19 @@ fn getSalesReport(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "get_sales_report"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_sales_report" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(READ_ONLY)
 fn getPipelineReport(
-  tenant: String,
+  tenant_id: String,
   include_history: Boolean
 ) -> Result<Object, CRMError> !net {
   let url = "/api/reports/pipeline";
   let params = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     include_history: include_history
   };
   
@@ -87,21 +87,21 @@ fn getPipelineReport(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "get_pipeline_report"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_pipeline_report" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(READ_ONLY)
 fn getActivityReport(
-  tenant: String,
+  tenant_id: String,
   start_date: String,
   end_date: String,
   employee_id: String
 ) -> Result<Object, CRMError> !net {
   let url = "/api/reports/activities";
   let params = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     start_date: start_date,
     end_date: end_date,
     employee_id: employee_id
@@ -111,20 +111,20 @@ fn getActivityReport(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "get_activity_report"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_activity_report" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(READ_ONLY)
 fn getLeadConversionReport(
-  tenant: String,
+  tenant_id: String,
   start_date: String,
   end_date: String
 ) -> Result<Object, CRMError> !net {
   let url = "/api/reports/lead-conversion";
   let params = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     start_date: start_date,
     end_date: end_date
   };
@@ -133,19 +133,19 @@ fn getLeadConversionReport(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "get_lead_conversion_report"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_lead_conversion_report" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(READ_ONLY)
 fn getRevenueForecasts(
-  tenant: String,
+  tenant_id: String,
   months_ahead: Number
 ) -> Result<Object, CRMError> !net {
   let url = "/api/reports/forecasts";
   let params = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     months_ahead: months_ahead
   };
   
@@ -153,19 +153,19 @@ fn getRevenueForecasts(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "get_revenue_forecasts"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_revenue_forecasts" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
-@policy(READ_ONLY)
+@policy(DELETE_OPERATIONS)
 fn clearReportCache(
-  tenant: String,
+  tenant_id: String,
   report_type: String
 ) -> Result<Boolean, CRMError> !net {
   let url = "/api/v2/reports/clear-cache";
   let body = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     report_type: report_type
   };
   
@@ -173,7 +173,7 @@ fn clearReportCache(
   
   return match response {
     Ok{value} => Ok(true),
-    Err{error} => CRMError.fromHTTP(url, error.status, "clear_report_cache"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "clear_report_cache" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }

@@ -80,7 +80,7 @@ export const cap = (policy, eff) => {
 ### 6. Canonical Examples
 **09_route_endpoint.braid** - Fetch snapshot with validation:
 ```braid
-fn fetchSnapshot(tenant: String, scope: String, limit: Number) -> Result<Snapshot, CRMError> !net, clock {
+fn fetchSnapshot(tenant_id: String, scope: String, limit: Number) -> Result<Snapshot, CRMError> !net, clock {
   let response = http.get("/api/reports/snapshot", { params: {tenant, scope, limit} });
   return match response {
     Ok{data} => Ok({ accounts: data.accounts, metadata: { fetched_at: clock.now() }}),
@@ -91,11 +91,11 @@ fn fetchSnapshot(tenant: String, scope: String, limit: Number) -> Result<Snapsho
 
 **10_create_lead.braid** - Create with validation:
 ```braid
-fn createLead(name: String, email: String, tenant: String) -> Result<Lead, CRMError> !net, clock {
+fn createLead(tenant_id: String, name: String, email: String) -> Result<Lead, CRMError> !net, clock {
   if !validateEmail(email) {
     return Err(ValidationError{ field: "email", message: "Invalid format" });
   }
-  let payload = { name, email, tenant_id: tenant, created_at: clock.now() };
+  let payload = { name, email, tenant_id: tenant_id, created_at: clock.now() };
   let response = http.post("/api/v2/leads", { body: payload });
   // ... error handling
 }
@@ -103,7 +103,7 @@ fn createLead(name: String, email: String, tenant: String) -> Result<Lead, CRMEr
 
 **11_update_account.braid** - Update with metadata merge:
 ```braid
-fn updateAccountRevenue(accountId: String, newRevenue: Number, tenant: String) -> Result<Account, CRMError> !net {
+fn updateAccountRevenue(tenant_id: String, accountId: String, newRevenue: Number) -> Result<Account, CRMError> !net {
   let getResponse = http.get("/api/v2/accounts/" + accountId);
   return match getResponse {
     Ok{data} => {

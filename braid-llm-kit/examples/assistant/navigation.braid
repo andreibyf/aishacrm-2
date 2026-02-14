@@ -3,9 +3,8 @@
 
 import { Result, CRMError } from "../../spec/types.braid"
 
-@policy(READ_ONLY)
 fn navigateTo(
-  tenant: String,
+  tenant_id: String,
   page: String,
   record_identifier: String
 ) -> Result<Object, CRMError> {
@@ -24,9 +23,8 @@ fn navigateTo(
   });
 }
 
-@policy(READ_ONLY)
 fn getCurrentPage(
-  tenant: String
+  tenant_id: String
 ) -> Result<Object, CRMError> {
   // This is a client-side only operation
   // Returns a placeholder - frontend will inject actual location

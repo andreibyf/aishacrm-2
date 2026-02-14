@@ -21,8 +21,8 @@ fn searchWeb(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.network(url, error.status, "unknown"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
@@ -40,8 +40,8 @@ fn fetchWebPage(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.network(url, error.status, "unknown"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
@@ -59,7 +59,7 @@ fn lookupCompanyInfo(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.network(url, error.status, "unknown"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }

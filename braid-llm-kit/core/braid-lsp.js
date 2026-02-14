@@ -17,6 +17,7 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { parse } from './braid-parse.js';
 import { transpileToJS, detectUsedEffects, extractPolicies, VALID_POLICIES, IO_EFFECT_MAP, BRAID_TYPE_MAP } from './braid-transpile.js';
+import { typeCheck } from './braid-types.js';
 
 // ============================================================================
 // SERVER SETUP
@@ -180,6 +181,25 @@ function validateDocument(doc) {
 
     // Unreachable code after return
     checkUnreachable(fn.body, diagnostics);
+  }
+
+  // Phase 3: Type checking
+  try {
+    const { diagnostics: tcDiags } = typeCheck(ast);
+    for (const d of tcDiags) {
+      diagnostics.push({
+        severity: d.severity === 'error' ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning,
+        range: {
+          start: { line: (d.line || 1) - 1, character: (d.col || 1) - 1 },
+          end: { line: (d.line || 1) - 1, character: (d.col || 1) + 10 },
+        },
+        message: d.message,
+        source: 'braid-types',
+        code: d.code,
+      });
+    }
+  } catch (e) {
+    // Type checker should not crash the LSP
   }
 
   connection.sendDiagnostics({ uri, diagnostics });

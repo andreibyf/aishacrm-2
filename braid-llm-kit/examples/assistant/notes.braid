@@ -5,7 +5,7 @@ import { Result, Note, CRMError } from "../../spec/types.braid"
 
 @policy(WRITE_OPERATIONS)
 fn createNote(
-  tenant: String,
+  tenant_id: String,
   title: String,
   content: String,
   entity_type: String,
@@ -14,7 +14,7 @@ fn createNote(
 ) -> Result<Note, CRMError> !net {
   let url = "/api/notes";
   let body = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     title: title,
     content: content,
     related_type: entity_type,
@@ -26,14 +26,14 @@ fn createNote(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.network(url, error.status, "unknown"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(WRITE_OPERATIONS)
 fn updateNote(
-  tenant: String,
+  tenant_id: String,
   note_id: String,
   updates: Object
 ) -> Result<Note, CRMError> !net {
@@ -43,21 +43,21 @@ fn updateNote(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.network(url, error.status, "unknown"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(READ_ONLY)
 fn searchNotes(
-  tenant: String,
+  tenant_id: String,
   query: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
   // Use list endpoint - notes doesn't have dedicated search
   let url = "/api/notes";
   let params = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     limit: limit
   };
   
@@ -65,20 +65,20 @@ fn searchNotes(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.network(url, error.status, "unknown"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(READ_ONLY)
 fn getNotesForRecord(
-  tenant: String,
+  tenant_id: String,
   entity_type: String,
   entity_id: String
 ) -> Result<Array, CRMError> !net {
   let url = "/api/notes";
   let params = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     related_type: entity_type,
     related_id: entity_id
   };
@@ -87,33 +87,33 @@ fn getNotesForRecord(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.network(url, error.status, "unknown"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(READ_ONLY)
 fn getNoteDetails(
-  tenant: String,
+  tenant_id: String,
   note_id: String
 ) -> Result<Note, CRMError> !net {
   let url = "/api/notes/" + note_id;
   let params = {
-    tenant_id: tenant
+    tenant_id: tenant_id
   };
   
   let response = http.get(url, { params: params });
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.network(url, error.status, "unknown"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
-@policy(WRITE_OPERATIONS)
+@policy(DELETE_OPERATIONS)
 fn deleteNote(
-  tenant: String,
+  tenant_id: String,
   note_id: String
 ) -> Result<Boolean, CRMError> !net {
   let url = "/api/notes/" + note_id;
@@ -122,7 +122,7 @@ fn deleteNote(
   
   return match response {
     Ok{value} => Ok(true),
-    Err{error} => CRMError.network(url, error.status, "unknown"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }

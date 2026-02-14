@@ -6,12 +6,12 @@ import { Result, CRMError } from "../../spec/types.braid"
 // List all available workflow templates
 @policy(READ_ONLY)
 fn listWorkflowTemplates(
-  tenant: String,
+  tenant_id: String,
   category: String
 ) -> Result<Array, CRMError> !net {
   let url = "/api/workflow-templates";
   let params = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     is_active: true,
     category: category
   };
@@ -20,40 +20,40 @@ fn listWorkflowTemplates(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.network(url, error.status, "unknown"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 // Get detailed information about a specific template
 @policy(READ_ONLY)
 fn getWorkflowTemplate(
-  tenant: String,
+  tenant_id: String,
   template_id: String
 ) -> Result<Object, CRMError> !net {
   let url = "/api/workflow-templates/" + template_id;
-  let params = { tenant_id: tenant };
+  let params = { tenant_id: tenant_id };
   
   let response = http.get(url, { params: params });
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.network(url, error.status, "unknown"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 // Instantiate a workflow from a template with provided parameters
-@policy(READ_ONLY)
+@policy(WRITE_OPERATIONS)
 fn instantiateWorkflowTemplate(
-  tenant: String,
+  tenant_id: String,
   template_id: String,
   workflow_name: String,
   parameters: Object
 ) -> Result<Object, CRMError> !net {
   let url = "/api/workflow-templates/" + template_id + "/instantiate";
   let payload = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     workflow_name: workflow_name,
     parameters: parameters
   };
@@ -62,7 +62,7 @@ fn instantiateWorkflowTemplate(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.network(url, error.status, "unknown"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }

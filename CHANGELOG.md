@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.7.5] - 2026-02-14
+
+### Added
+- **Braid type system** — Type checker module (`braid-types.js`) for Braid DSL
+- **Braid integration tests** — Integration test suite (`braid-integration.test.js`) for cross-module validation
+
+### Changed
+- **Braid DSL v0.5 .braid files updated** — All 17 assistant tool definitions updated to latest syntax
+- **Braid checker & LSP** — Updated `braid-check.js` and `braid-lsp.js` for new type system
+- **Braid Python emitter** — Updated `braid-emit-py.js`
+- **Braid documentation** — Updated spec, production guide, README, and quick reference
+
+---
+
 ## [4.7.4] - 2026-02-14
 
 ### Added

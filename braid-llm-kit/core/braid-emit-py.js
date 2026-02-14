@@ -93,7 +93,7 @@ export function emitPython(ir, opts = {}) {
   out.push("        raise TypeError(f'[BRAID_TYPE] {fn}(): {param} is None, expected {expected}')");
   out.push("    actual = type(value).__name__");
   out.push("    type_map = {'string': 'str', 'number': 'float', 'boolean': 'bool'}");
-  out.push("    if type_map.get(expected, expected) != actual and not (expected == 'number' and actual == 'int'):");
+  out.push("    if type_map.get(expected, expected) != actual and not (expected == 'number' and actual == 'int') and not (expected == 'float' and actual == 'int'):");
   out.push("        raise TypeError(f'[BRAID_TYPE] {fn}(): {param} expected {expected}, got {actual}')");
   out.push('');
   out.push('def _braid_flatten(lst, depth=1):');

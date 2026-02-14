@@ -3,10 +3,17 @@
 
 import { Result, Lead, CRMError } from "../../spec/types.braid"
 
+// Error handling note: HTTP errors return CRMError with specific tags based on status code.
+// The backend summarizeToolResult function interprets these error codes to provide
+// appropriate user-facing messages.
+// - 400 = ValidationError
+// - 401/403 = PermissionDenied  
+// - 404 = NotFound
+// - 5xx = NetworkError
 
 @policy(WRITE_OPERATIONS)
 fn createLead(
-  tenant: String,
+  tenant_id: String,
   first_name: String,
   last_name: String,
   email: String,
@@ -16,7 +23,7 @@ fn createLead(
 ) -> Result<Lead, CRMError> !net {
   let url = "/api/v2/leads";
   let body = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     first_name: first_name,
     last_name: last_name,
     email: email,
@@ -31,28 +38,28 @@ fn createLead(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "create_lead"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "create_lead" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
-@policy(WRITE_OPERATIONS)
+@policy(DELETE_OPERATIONS)
 fn deleteLead(
-  tenant: String,
+  tenant_id: String,
   lead_id: String
 ) -> Result<Boolean, CRMError> !net {
   let url = "/api/v2/leads/" + lead_id;
   let response = http.delete(url, {});
   return match response {
     Ok{value} => Ok(true),
-    Err{error} => CRMError.fromHTTP(url, error.status, "delete_lead"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "delete_lead", entity: "Lead", id: lead_id }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(WRITE_OPERATIONS)
 fn qualifyLead(
-  tenant: String,
+  tenant_id: String,
   lead_id: String,
   notes: String
 ) -> Result<Lead, CRMError> !net {
@@ -60,7 +67,7 @@ fn qualifyLead(
   // This prepares the lead for conversion to Contact + Account + Opportunity
   let url = "/api/v2/leads/" + lead_id;
   let body = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     status: "qualified",
     qualification_notes: notes
   };
@@ -69,14 +76,14 @@ fn qualifyLead(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "qualify_lead"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "qualify_lead", entity: "Lead", id: lead_id }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(WRITE_OPERATIONS)
 fn updateLead(
-  tenant: String,
+  tenant_id: String,
   lead_id: String,
   updates: Object
 ) -> Result<Lead, CRMError> !net {
@@ -86,14 +93,14 @@ fn updateLead(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "update_lead"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "update_lead", entity: "Lead", id: lead_id }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(WRITE_OPERATIONS)
 fn convertLeadToAccount(
-  tenant: String,
+  tenant_id: String,
   lead_id: String,
   options: Object
 ) -> Result<Object, CRMError> !net {
@@ -104,14 +111,14 @@ fn convertLeadToAccount(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "convert_lead"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "convert_lead", entity: "Lead", id: lead_id }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(READ_ONLY)
 fn listLeads(
-  tenant: String,
+  tenant_id: String,
   status: String,
   account_id: String,
   limit: Number
@@ -120,7 +127,7 @@ fn listLeads(
   
   // Build params with optional status and account_id filters
   let params = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     status: status,
     account_id: account_id,
     limit: limit
@@ -131,38 +138,38 @@ fn listLeads(
   // Note: Empty array is a VALID result (no matches), not an error
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "list_leads"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "list_leads" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(READ_ONLY)
 fn getLeadDetails(
-  tenant: String,
+  tenant_id: String,
   lead_id: String
 ) -> Result<Lead, CRMError> !net {
   let url = "/api/v2/leads/" + lead_id;
-  let params = { tenant_id: tenant };
+  let params = { tenant_id: tenant_id };
   
   let response = http.get(url, { params: params });
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "get_lead"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_lead", entity: "Lead", id: lead_id }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(READ_ONLY)
 fn searchLeads(
-  tenant: String,
+  tenant_id: String,
   query: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
   // Use list endpoint - v2 leads doesn't have dedicated search
   let url = "/api/v2/leads";
   let params = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     limit: limit,
     query: query
   };
@@ -173,8 +180,8 @@ fn searchLeads(
   // The AI should NOT report "network error" for empty search results
   return match response {
     Ok{value} => Ok(value.data.leads),
-    Err{error} => CRMError.fromHTTP(url, error.status, "search_leads"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_leads", query: query }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
@@ -183,13 +190,13 @@ fn searchLeads(
 // Status values: new, contacted, qualified, warm, hot, cold, lost, converted
 @policy(READ_ONLY)
 fn searchLeadsByStatus(
-  tenant: String,
+  tenant_id: String,
   status: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
   let url = "/api/v2/leads";
   let params = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     status: status,
     limit: limit
   };
@@ -199,7 +206,7 @@ fn searchLeadsByStatus(
   // Returns full lead details including name, company, email, phone, etc.
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "search_leads_by_status"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_leads_by_status", status: status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }

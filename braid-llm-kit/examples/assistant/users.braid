@@ -9,13 +9,13 @@ import { Result, User, CRMError } from "../../spec/types.braid"
 
 @policy(READ_ONLY)
 fn listUsers(
-  tenant: String,
+  tenant_id: String,
   role: String,
   active_only: Boolean
 ) -> Result<Array, CRMError> !net {
   let url = "/api/users";
   let params = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     role: role,
     active_only: active_only
   };
@@ -24,63 +24,63 @@ fn listUsers(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "list_users"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "list_users" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(READ_ONLY)
 fn getUserDetails(
-  tenant: String,
+  tenant_id: String,
   user_id: String
 ) -> Result<User, CRMError> !net {
   let url = "/api/users/" + user_id;
-  let params = { tenant_id: tenant };
+  let params = { tenant_id: tenant_id };
   
   let response = http.get(url, { params: params });
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.notFound("User", user_id, "get"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "NotFound", entity: "User", id: user_id }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(READ_ONLY)
 fn getCurrentUserProfile(
-  tenant: String
+  tenant_id: String
 ) -> Result<User, CRMError> !net {
   let url = "/api/users/profile";
-  let params = { tenant_id: tenant };
+  let params = { tenant_id: tenant_id };
   
   let response = http.get(url, { params: params });
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "get_profile"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_profile" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(READ_ONLY)
 fn getUserProfiles(
-  tenant: String
+  tenant_id: String
 ) -> Result<Array, CRMError> !net {
   let url = "/api/users/profiles";
-  let params = { tenant_id: tenant };
+  let params = { tenant_id: tenant_id };
   
   let response = http.get(url, { params: params });
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "get_user_profiles"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_user_profiles" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(WRITE_OPERATIONS)
 fn createUser(
-  tenant: String,
+  tenant_id: String,
   email: String,
   first_name: String,
   last_name: String,
@@ -89,7 +89,7 @@ fn createUser(
 ) -> Result<User, CRMError> !net {
   let url = "/api/users";
   let body = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     email: email,
     first_name: first_name,
     last_name: last_name,
@@ -102,14 +102,14 @@ fn createUser(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "create_user"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "create_user" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(WRITE_OPERATIONS)
 fn updateUser(
-  tenant: String,
+  tenant_id: String,
   user_id: String,
   updates: Object
 ) -> Result<User, CRMError> !net {
@@ -119,37 +119,37 @@ fn updateUser(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "update_user"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "update_user", entity: "User", id: user_id }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
-@policy(WRITE_OPERATIONS)
+@policy(DELETE_OPERATIONS)
 fn deleteUser(
-  tenant: String,
+  tenant_id: String,
   user_id: String
 ) -> Result<Boolean, CRMError> !net {
   let url = "/api/users/" + user_id;
-  let params = { tenant_id: tenant };
+  let params = { tenant_id: tenant_id };
   
   let response = http.delete(url, { params: params });
   
   return match response {
     Ok{value} => Ok(true),
-    Err{error} => CRMError.fromHTTP(url, error.status, "delete_user"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "delete_user", entity: "User", id: user_id }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
 @policy(READ_ONLY)
 fn searchUsers(
-  tenant: String,
+  tenant_id: String,
   query: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
   let url = "/api/users";
   let params = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     search: query,
     limit: limit
   };
@@ -158,20 +158,20 @@ fn searchUsers(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "search_users"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_users", query: query }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 
-@policy(READ_ONLY)
+@policy(WRITE_OPERATIONS)
 fn inviteUser(
-  tenant: String,
+  tenant_id: String,
   user_id: String,
   invitation_message: String
 ) -> Result<Object, CRMError> !net {
   let url = "/api/users/" + user_id + "/invite";
   let body = {
-    tenant_id: tenant,
+    tenant_id: tenant_id,
     message: invitation_message
   };
   
@@ -179,7 +179,7 @@ fn inviteUser(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => CRMError.fromHTTP(url, error.status, "invite_user"),
-    _ => CRMError.network(url, 500, "unknown")
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "invite_user" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
