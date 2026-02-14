@@ -1,35 +1,59 @@
 {
   "name": "@braid-lang/core",
-  "version": "0.3.0",
-  "description": "Braid — AI-native DSL for type-safe, capability-controlled LLM tool execution",
+  "version": "0.5.0",
+  "description": "Braid — multi-target DSL for type-safe, capability-controlled LLM tool execution",
   "type": "module",
   "main": "./braid-rt.js",
   "exports": {
     ".": "./braid-rt.js",
     "./runtime": "./braid-rt.js",
     "./parser": "./braid-parse.js",
+    "./ir": "./braid-ir.js",
+    "./emit/js": "./braid-emit-js.js",
+    "./emit/python": "./braid-emit-py.js",
     "./transpiler": "./braid-transpile.js",
     "./sandbox": "./braid-sandbox.js",
-    "./check": "./braid-check.js"
+    "./check": "./braid-check.js",
+    "./lsp": "./braid-lsp.js"
   },
   "bin": {
-    "braid-check": "./braid-check.js",
-    "braid-transpile": "./braid-transpile.js"
+    "braid-check": "braid-check.js",
+    "braid-transpile": "braid-transpile.js"
   },
   "files": [
     "braid-rt.js",
     "braid-parse.js",
+    "braid-ir.js",
+    "braid-emit-js.js",
+    "braid-emit-py.js",
     "braid-transpile.js",
     "braid-sandbox.js",
     "braid-check.js",
+    "braid-lsp.js",
     "grammar.ebnf",
     "README.md"
   ],
   "scripts": {
-    "test": "node --test braid-core.test.js",
+    "test": "node --test braid-core.test.js braid-ir.test.js",
     "check": "node braid-check.js"
   },
-  "keywords": ["ai", "llm", "dsl", "security", "capability", "sandbox", "tool-calling"],
+  "keywords": [
+    "ai",
+    "llm",
+    "dsl",
+    "security",
+    "capability",
+    "sandbox",
+    "tool-calling"
+  ],
   "license": "MIT",
-  "engines": { "node": ">=18.0.0" }
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "",
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.12"
+  }
 }

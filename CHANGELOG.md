@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.7.3] - 2026-02-14
+
+### Added
+- **Braid IR layer** — Intermediate representation module (`braid-ir.js`) with test suite (`braid-ir.test.js`)
+- **Braid multi-target emitters** — JavaScript (`braid-emit-js.js`) and Python (`braid-emit-py.js`) code emitters
+- **Pre-commit Braid tests** — Braid core tests (`braid-llm-kit/core/*.test.js`) now run as part of pre-commit hook
+
+### Changed
+- **Pre-commit hook enhanced** — Now runs ESLint + Braid core tests (was ESLint only)
+- **Braid core grammar updated** — Updated `grammar.ebnf` and `package.json` exports
+
+---
+
 ## [4.7.2] - 2026-02-14
 
 ### Added

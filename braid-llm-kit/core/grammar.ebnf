@@ -1,158 +1,105 @@
-(* Braid Language Grammar — v0.3.0 *)
-(* Matches the implemented parser (braid-parse.js)                     *)
-(* Includes: annotations, typed params, match arm blocks, CRMError     *)
+(* Braid Language Grammar — v0.5.0 *)
+(* Target-agnostic DSL for capability-controlled tool execution *)
+(* Pipeline: source → parse → AST → lower → IR → emit(js|py|rs|...) *)
 
-Ident       = Letter , { Letter | Digit | "_" } ;
-Letter      = "A"…"Z" | "a"…"z" ;
-Digit       = "0"…"9" ;
+program     = { item } ;
+item        = { annotation } ( fn_decl | type_decl | import_decl ) ;
 
-(* ================================================================== *)
-(* PROGRAM                                                             *)
-(* ================================================================== *)
+(* ── Annotations ────────────────────────────────────────── *)
+annotation  = "@" IDENT [ "(" arg_list ")" ] ;
+arg_list    = IDENT { "," IDENT } ;
 
-Program     = { Item } ;
-Item        = { Annotation } , ( FnDecl | TypeDecl | ImportDecl ) ;
+(* ── Functions ──────────────────────────────────────────── *)
+fn_decl     = "fn" IDENT "(" [ params ] ")" "->" type_ref [ effects ] block ;
+params      = param { "," param } ;
+param       = [ "..." ] IDENT [ ":" type_ref ] ;
+effects     = "!" IDENT { "," IDENT } ;
 
-(* ================================================================== *)
-(* ANNOTATIONS                                                         *)
-(* ================================================================== *)
+(* ── Types ──────────────────────────────────────────────── *)
+type_decl   = "type" IDENT [ type_params ] "=" type_body ;
+type_params = "<" IDENT { "," IDENT } ">" ;
+type_body   = variant { "|" variant } ;
+variant     = IDENT [ "{" fields "}" ] | "{" fields "}" ;
+fields      = field { "," field } ;
+field       = IDENT ":" type_ref ;
+type_ref    = IDENT [ "<" type_ref { "," type_ref } ">" ] ;
 
-Annotation  = "@" Ident [ "(" ArgList ")" ] ;
-ArgList     = Ident { "," Ident } ;
+(* ── Imports ────────────────────────────────────────────── *)
+import_decl = "import" "{" IDENT { "," IDENT } "}" "from" STRING ;
 
-(* ================================================================== *)
-(* TYPE DECLARATIONS                                                   *)
-(* ================================================================== *)
+(* ── Statements ─────────────────────────────────────────── *)
+block       = "{" { statement } "}" ;
+statement   = let_stmt | return_stmt | if_stmt | for_stmt
+            | while_stmt | break_stmt | continue_stmt | expr_stmt ;
+let_stmt    = "let" IDENT [ ":" type_ref ] "=" expr ";" ;
+return_stmt = "return" expr ";" ;
+if_stmt     = "if" [ "(" ] expr [ ")" ] block [ "else" ( if_stmt | block ) ] ;
+for_stmt    = "for" IDENT "in" expr block ;
+while_stmt  = "while" [ "(" ] expr [ ")" ] block ;
+break_stmt  = "break" ";" ;
+continue_stmt = "continue" ";" ;
+expr_stmt   = expr ";" ;
 
-TypeDecl    = "type" Ident [ TypeParams ] "=" TypeBody ;
-TypeParams  = "<" Ident { "," Ident } ">" ;
-TypeBody    = Variant { "|" Variant } ;
-Variant     = Ident [ RecordType ] | RecordType ;
-RecordType  = "{" Field { "," Field } "}" ;
-Field       = Ident ":" TypeRef ;
+(* ── Expressions (by precedence, low to high) ───────────── *)
+expr        = pipe_expr ;
+pipe_expr   = or_expr { "|>" or_expr } ;
+or_expr     = and_expr { "||" and_expr } ;
+and_expr    = eq_expr { "&&" eq_expr } ;
+eq_expr     = cmp_expr { ( "==" | "!=" ) cmp_expr } ;
+cmp_expr    = add_expr { ( "<" | ">" | "<=" | ">=" ) add_expr } ;
+add_expr    = mul_expr { ( "+" | "-" ) mul_expr } ;
+mul_expr    = unary_expr { ( "*" | "/" | "%" ) unary_expr } ;
+unary_expr  = ( "-" | "!" ) unary_expr | postfix_expr ;
+postfix_expr = primary { "." IDENT | "?." IDENT | "[" expr "]" | "(" [ arg_exprs ] ")" } ;
+arg_exprs   = arg_expr { "," arg_expr } ;
+arg_expr    = [ "..." ] expr ;
 
-TypeRef     = Ident [ "<" TypeRef { "," TypeRef } ">" ] ;
+(* ── Primary Expressions ────────────────────────────────── *)
+primary     = NUMBER | STRING | TEMPLATE | BOOL | "null"
+            | IDENT | match_expr | lambda_expr
+            | array_lit | object_lit | "(" expr ")" ;
 
-(* ================================================================== *)
-(* IMPORT DECLARATIONS                                                 *)
-(* ================================================================== *)
+match_expr  = "match" expr "{" { match_arm } "}" ;
+match_arm   = pattern "=>" ( block | "return" expr | expr ) [ "," ] ;
+pattern     = "_" | IDENT [ "{" IDENT { "," IDENT } "}" ] ;
 
-ImportDecl  = "import" "{" Ident { "," Ident } "}" "from" StringLit ;
+lambda_expr = "(" [ IDENT { "," IDENT } ] ")" "=>" ( block | expr ) ;
+array_lit   = "[" [ array_elem { "," array_elem } ] "]" ;
+array_elem  = [ "..." ] expr ;
+object_lit  = "{" [ obj_prop { "," obj_prop } ] "}" ;
+obj_prop    = "..." expr | IDENT ":" expr ;
 
-(* ================================================================== *)
-(* FUNCTION DECLARATIONS                                               *)
-(* ================================================================== *)
+(* ── Terminals ──────────────────────────────────────────── *)
+TEMPLATE    = "`" { CHAR | "${" expr "}" } "`" ;
+STRING      = '"' { CHAR } '"' | "'" { CHAR } "'" ;
+NUMBER      = DIGIT { DIGIT } [ "." DIGIT { DIGIT } ] ;
+BOOL        = "true" | "false" ;
+IDENT       = LETTER { LETTER | DIGIT | "_" } ;
 
-FnDecl      = "fn" Ident "(" [ Params ] ")" "->" TypeRef [ EffectDecl ] Block ;
-Params      = Param { "," Param } ;
-Param       = Ident [ ":" TypeRef ] ;
-EffectDecl  = "!" Ident { "," Ident } ;
+(* ── Built-in ADTs ──────────────────────────────────────── *)
+(* Result<T, E> = Ok { value: T } | Err { error: E }       *)
+(* Option<T>    = Some { value: T } | None                  *)
 
-(* ================================================================== *)
-(* BLOCKS AND STATEMENTS                                               *)
-(* ================================================================== *)
+(* ── CRMError Constructors ──────────────────────────────── *)
+(* CRMError.fromHTTP(url, status, operation)                *)
+(* CRMError.notFound(entity, id, operation)                 *)
+(* CRMError.validation(fn, field, message)                  *)
+(* CRMError.forbidden(operation, role, required)            *)
+(* CRMError.network(url, code, operation)                   *)
 
-Block       = "{" { Stmt } "}" ;
-Stmt        = LetStmt | ReturnStmt | IfStmt | MatchStmt | ExprStmt ;
+(* ── IO Namespaces (require effects) ────────────────────── *)
+(* http.{get,post,put,delete}(url, opts) !net               *)
+(* clock.{now,sleep}()                   !clock             *)
+(* fs.{read,write}(path, data)           !fs                *)
+(* rng.{random,uuid}()                   !rng               *)
 
-LetStmt     = "let" Ident [ ":" TypeRef ] "=" Expr ";" ;
-ReturnStmt  = "return" Expr ";" ;
-IfStmt      = "if" [ "(" ] Expr [ ")" ] Block [ "else" Block ] ;
-MatchStmt   = MatchExpr ";" ;
-ExprStmt    = Expr ( ";" | (* optional before } *) ) ;
+(* ── Stdlib (target-agnostic) ───────────────────────────── *)
+(* len, map, filter, reduce, find, some, every, includes,   *)
+(* join, sort, reverse, flat, sum, avg,                     *)
+(* keys, values, entries, parseInt, parseFloat, toString     *)
 
-(* ================================================================== *)
-(* EXPRESSIONS                                                         *)
-(* ================================================================== *)
-
-Expr        = BinaryExpr ;
-
-BinaryExpr  = UnaryExpr { BinOp UnaryExpr } ;
-BinOp       = "||" | "&&" | "==" | "!=" | "<" | ">" | "<=" | ">="
-            | "+" | "-" | "*" | "/" | "%" ;
-(* Precedence (low→high): ||, &&, ==/!=, </>/<=/>= , +/-, *//% *)
-
-UnaryExpr   = [ "-" | "!" ] PostfixExpr ;
-
-PostfixExpr = Primary { "." Ident | "[" Expr "]" | "(" [ Expr { "," Expr } ] ")" } ;
-
-Primary     = NumberLit
-            | StringLit
-            | BoolLit
-            | Ident
-            | "(" LambdaOrParen ")"
-            | ArrayLit
-            | ObjectLit
-            | MatchExpr
-            ;
-
-NumberLit   = Digit { Digit } [ "." Digit { Digit } ] ;
-StringLit   = ( '"' { Char } '"' ) | ( "'" { Char } "'" ) ;
-BoolLit     = "true" | "false" ;
-ArrayLit    = "[" [ Expr { "," Expr } ] "]" ;
-ObjectLit   = "{" [ Ident ":" Expr { "," Ident ":" Expr } ] "}" ;
-
-LambdaOrParen = [ Ident { "," Ident } ] ")" "=>" ( Block | Expr )
-              | Expr ")"  (* simple parenthesized expr *) ;
-
-(* ================================================================== *)
-(* MATCH EXPRESSIONS                                                   *)
-(* ================================================================== *)
-
-MatchExpr   = "match" Expr "{" MatchArm { "," MatchArm } "}" ;
-MatchArm    = Pattern "=>" MatchValue ;
-
-Pattern     = "_"
-            | Ident [ "{" [ Ident { "," Ident } ] "}" ]  (* Tag{bind1, bind2} *)
-            ;
-
-MatchValue  = Block             (* block body: { let x = ...; expr } *)
-            | "return" Expr     (* bare return in match arm *)
-            | Expr              (* normal expression *)
-            ;
-
-(* ================================================================== *)
-(* STANDARD LIBRARY CALLS (transpiled to JS builtins)                  *)
-(* ================================================================== *)
-
-(* len(arr) → arr.length                                               *)
-(* map(arr, fn) → arr.map(fn)                                         *)
-(* filter(arr, fn) → arr.filter(fn)                                   *)
-(* reduce(arr, fn [, init]) → arr.reduce(fn [, init])                 *)
-(* find(arr, fn) → arr.find(fn)                                       *)
-(* some(arr, fn) → arr.some(fn)                                       *)
-(* every(arr, fn) → arr.every(fn)                                     *)
-(* includes(arr, val) → arr.includes(val)                              *)
-(* join(arr, sep) → arr.join(sep)                                     *)
-(* sort(arr [, fn]) → arr.sort([fn])                                  *)
-(* sum(arr) → arr.reduce((a,b)=>a+b, 0)                               *)
-(* avg(arr) → sum(arr) / len(arr)                                     *)
-
-(* ================================================================== *)
-(* RESULT / OPTION CONSTRUCTORS                                        *)
-(* ================================================================== *)
-
-(* Ok(value)           → { tag: 'Ok', value }                         *)
-(* Err(error)          → { tag: 'Err', error }                        *)
-(* Some(value)         → { tag: 'Some', value }                       *)
-(* None                → { tag: 'None' }                              *)
-(* CRMError.fromHTTP(url, status, op)                                 *)
-(* CRMError.notFound(entity, id, op)                                  *)
-(* CRMError.network(url, code, op)                                    *)
-(* CRMError.validation(fn, field, msg)                                *)
-(* CRMError.forbidden(op, role, required)                              *)
-
-(* ================================================================== *)
-(* IO NAMESPACES (require corresponding effect declarations)           *)
-(* ================================================================== *)
-
-(* http.get(url [, opts])     — requires !net                          *)
-(* http.post(url [, opts])    — requires !net                          *)
-(* http.put(url [, opts])     — requires !net                          *)
-(* http.delete(url [, opts])  — requires !net                          *)
-(* clock.now()                — requires !clock                        *)
-(* clock.sleep(ms)            — requires !clock                        *)
-(* fs.read(path)              — requires !fs                           *)
-(* fs.write(path, data)       — requires !fs                           *)
-(* rng.random()               — requires !rng                          *)
-(* rng.uuid()                 — requires !rng                          *)
+(* ── Compilation Pipeline ───────────────────────────────── *)
+(* source.braid → parse() → AST → lower() → IR             *)
+(*   → emitJS()     → JavaScript                           *)
+(*   → emitPython() → Python 3                             *)
+(*   → emit???()    → any target                           *)
