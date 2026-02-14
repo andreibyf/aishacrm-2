@@ -39,6 +39,30 @@
     "strings": {
       "patterns": [
         {
+          "name": "string.template.braid",
+          "begin": "`",
+          "end": "`",
+          "patterns": [
+            {
+              "name": "constant.character.escape.braid",
+              "match": "\\\\[`\\\\nrt0$]"
+            },
+            {
+              "name": "meta.template.expression.braid",
+              "begin": "\\$\\{",
+              "end": "\\}",
+              "beginCaptures": { "0": { "name": "punctuation.definition.template-expression.begin.braid" } },
+              "endCaptures": { "0": { "name": "punctuation.definition.template-expression.end.braid" } },
+              "patterns": [
+                { "include": "#keywords" },
+                { "include": "#numbers" },
+                { "include": "#functions" },
+                { "include": "#operators" }
+              ]
+            }
+          ]
+        },
+        {
           "name": "string.quoted.double.braid",
           "begin": "\"",
           "end": "\"",
@@ -80,7 +104,7 @@
       "patterns": [
         {
           "name": "keyword.control.braid",
-          "match": "\\b(fn|type|enum|trait|impl|for|match|if|else|return|let|mut|import|from|as|in|const)\\b"
+          "match": "\\b(fn|type|enum|trait|impl|for|match|if|else|return|let|mut|import|from|as|in|const|while|break|continue)\\b"
         },
         {
           "name": "keyword.other.braid",
@@ -92,7 +116,7 @@
         },
         {
           "name": "constant.language.null.braid",
-          "match": "\\b(null|None)\\b"
+          "match": "\\b(null|None|undefined)\\b"
         }
       ]
     },
@@ -153,7 +177,7 @@
         },
         {
           "name": "entity.name.function.builtin.braid",
-          "match": "\\b(len|includes|toString|parseInt|parseFloat|encodeURIComponent|reduce|map|filter)\\b"
+          "match": "\\b(len|includes|toString|parseInt|parseFloat|encodeURIComponent|reduce|map|filter|sum|avg|flat|reverse|sort)\\b"
         },
         {
           "name": "entity.name.function.method.braid",
@@ -203,6 +227,10 @@
         {
           "name": "keyword.operator.null-coalescing.braid",
           "match": "\\?\\?"
+        },
+        {
+          "name": "keyword.operator.optional-chaining.braid",
+          "match": "\\?\\."  
         },
         {
           "name": "keyword.operator.propagation.braid",

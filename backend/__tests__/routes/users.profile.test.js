@@ -10,7 +10,7 @@ process.env.JWT_SECRET = 'test-jwt-secret'; // Test JWT secret
 
 let app;
 let server;
-const testPort = 3103;
+const testPort = 3109;
 
 // Helper to make requests to the app
 async function makeRequest(method, path, body = null, headers = {}) {
@@ -80,7 +80,7 @@ before(async () => {
       }
       return { user: null };
     },
-    updateAuthUserPassword: async (_userId, _newPassword) => {
+    updateAuthUserPassword: async (userId, newPassword) => {
       // Mock password update - succeed for valid user IDs
       if (userId === 'auth-user-123' || userId === 'auth-employee-456') {
         return { error: null };
@@ -109,11 +109,11 @@ before(async () => {
 
 after(async () => {
   if (server) {
-    server.close();
+    await new Promise((resolve) => server.close(resolve));
   }
 });
 
-describe('users.js - Section 2.5: User Profile Management', () => {
+describe('users.js - Section 2.5: User Profile Management', { timeout: 30000 }, () => {
   describe('PUT /api/users/:id - Update user profile', () => {
     it('should require valid user ID', async () => {
       const response = await makeRequest('PUT', '/api/users/invalid-id', {

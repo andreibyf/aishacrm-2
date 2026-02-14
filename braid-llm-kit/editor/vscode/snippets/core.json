@@ -1,5 +1,5 @@
 {
-  "Function": {
+  "Function (pure)": {
     "prefix": "fn",
     "body": [
       "fn ${1:functionName}(${2:params}) -> ${3:ReturnType} {",
@@ -8,26 +8,28 @@
     ],
     "description": "Define a pure function"
   },
-  "Function with Net Effect": {
+  "Function with @policy + Net Effect": {
     "prefix": "fnnet",
     "body": [
-      "fn ${1:functionName}(${2:tenant: String}) -> Result<${3:T}, ${4:CRMError}> !net {",
+      "@policy(${1|READ_ONLY,WRITE_OPERATIONS,DELETE_OPERATIONS,ADMIN_ONLY,SYSTEM_INTERNAL,AI_SUGGESTIONS,EXTERNAL_API|})",
+      "fn ${2:functionName}(tenant_id: String${3:, params}) -> Result<${4:T}, CRMError> !net {",
       "  let url = \"${5:/api/v2/endpoint}\";",
-      "  let response = http.${6|get,post,put,delete|}(url${7:, { params: { tenant_id: tenant } }});",
+      "  let response = http.${6|get,post,put,delete|}(url${7:, { params: { tenant_id: tenant_id } }});",
       "  ",
       "  return match response {",
       "    Ok{value} => Ok(value.data),",
-      "    Err{error} => Err({ tag: \"APIError\", url: url, code: error.status, operation: \"${8:operation_name}\" }),",
-      "    _ => Err({ tag: \"NetworkError\", url: url, code: 500 })",
+      "    Err{error} => CRMError.fromHTTP(url, error.status, \"${8:operation_name}\"),",
+      "    _ => CRMError.network(url, 500, \"${8:operation_name}\")",
       "  };",
       "}"
     ],
-    "description": "Define a function with network effect"
+    "description": "Define a function with @policy annotation and network effect"
   },
   "Function with Multiple Effects": {
     "prefix": "fneffects",
     "body": [
-      "fn ${1:functionName}(${2:params}) -> Result<${3:T}, ${4:CRMError}> !net, clock {",
+      "@policy(${1|READ_ONLY,WRITE_OPERATIONS,DELETE_OPERATIONS,ADMIN_ONLY|})",
+      "fn ${2:functionName}(tenant_id: String${3:, params}) -> Result<${4:T}, CRMError> !net, clock {",
       "  let timestamp = clock.now();",
       "  $0",
       "}"
@@ -45,16 +47,30 @@
     ],
     "description": "Pattern match expression"
   },
-  "Match Result": {
+  "Match Result with CRMError": {
     "prefix": "matchres",
     "body": [
       "match ${1:response} {",
       "  Ok{value} => Ok(${2:value.data}),",
-      "  Err{error} => Err({ tag: \"APIError\", url: ${3:url}, code: error.status, operation: \"${4:op}\" }),",
-      "  _ => Err({ tag: \"NetworkError\", url: ${3:url}, code: 500 })",
+      "  Err{error} => CRMError.fromHTTP(${3:url}, error.status, \"${4:operation}\"),",
+      "  _ => CRMError.network(${3:url}, 500, \"${4:operation}\")",
       "}"
     ],
-    "description": "Pattern match a Result type"
+    "description": "Pattern match a Result type with CRMError.fromHTTP"
+  },
+  "Match Result with Block Body": {
+    "prefix": "matchblock",
+    "body": [
+      "match ${1:response} {",
+      "  Ok{value} => {",
+      "    let ${2:data} = value.data;",
+      "    ${3:Ok(data)}",
+      "  },",
+      "  Err{error} => CRMError.fromHTTP(${4:url}, error.status, \"${5:op}\"),",
+      "  _ => CRMError.network(${4:url}, 500, \"${5:op}\")",
+      "}"
+    ],
+    "description": "Pattern match with block body in Ok arm"
   },
   "Type Alias": {
     "prefix": "type",
@@ -73,60 +89,58 @@
     ],
     "description": "Record type definition"
   },
-  "Enum Type": {
-    "prefix": "enum",
-    "body": [
-      "enum ${1:EnumName} {",
-      "  ${2:Variant1},",
-      "  ${3:Variant2}(${4:value}: ${5:String})",
-      "}"
-    ],
-    "description": "Enum type definition"
-  },
-  "Error Type": {
+  "Union Error Type": {
     "prefix": "error",
     "body": [
       "type ${1:ErrorName} = ",
-      "  | ${2:NotFound} { entity: String, id: String }",
-      "  | ${3:ValidationError} { field: String, message: String }",
-      "  | ${4:NetworkError} { url: String, code: Number }"
+      "  | NotFound { entity: String, id: String }",
+      "  | ValidationError { field: String, message: String }",
+      "  | PermissionDenied { operation: String, role: String }",
+      "  | NetworkError { url: String, code: Number }"
     ],
-    "description": "Union error type definition"
+    "description": "Union error type definition matching CRMError"
   },
   "Let Binding": {
     "prefix": "let",
     "body": [
       "let ${1:name}: ${2:Type} = ${3:value};"
     ],
-    "description": "Let binding"
+    "description": "Typed let binding"
+  },
+  "Let Binding (untyped)": {
+    "prefix": "letv",
+    "body": [
+      "let ${1:name} = ${2:value};"
+    ],
+    "description": "Untyped let binding"
   },
   "HTTP GET": {
     "prefix": "httpget",
     "body": [
-      "let response = http.get(${1:url});"
+      "let response = http.get(${1:url}, { params: { tenant_id: tenant_id } });"
     ],
-    "description": "HTTP GET request"
+    "description": "HTTP GET request with tenant isolation"
   },
   "HTTP POST": {
     "prefix": "httppost",
     "body": [
-      "let response = http.post(${1:url}, { body: ${2:payload} });"
+      "let response = http.post(${1:url}, { body: { tenant_id: tenant_id, ${2:field: value} } });"
     ],
-    "description": "HTTP POST request"
+    "description": "HTTP POST request with tenant isolation"
   },
   "HTTP PUT": {
     "prefix": "httpput",
     "body": [
-      "let response = http.put(${1:url}, { body: ${2:payload} });"
+      "let response = http.put(${1:url}, { body: { tenant_id: tenant_id, ${2:field: value} } });"
     ],
-    "description": "HTTP PUT request"
+    "description": "HTTP PUT request with tenant isolation"
   },
   "HTTP DELETE": {
     "prefix": "httpdel",
     "body": [
-      "let response = http.delete(${1:url});"
+      "let response = http.delete(${1:url}, { params: { tenant_id: tenant_id } });"
     ],
-    "description": "HTTP DELETE request"
+    "description": "HTTP DELETE request with tenant isolation"
   },
   "Ok Result": {
     "prefix": "ok",
@@ -135,71 +149,157 @@
     ],
     "description": "Ok result constructor"
   },
-  "Err Result": {
-    "prefix": "err",
+  "CRMError.fromHTTP": {
+    "prefix": "errhttpfrom",
     "body": [
-      "Err({ tag: \"${1|APIError,NetworkError,NotFound,ValidationError|}\", ${2:url: url, code: error.status, operation: \"op\"} })"
+      "CRMError.fromHTTP(${1:url}, ${2:error.status}, \"${3:operation}\")"
     ],
-    "description": "Err result constructor with tag"
+    "description": "CRMError.fromHTTP — maps HTTP status to semantic error type"
+  },
+  "CRMError.notFound": {
+    "prefix": "errnotfound",
+    "body": [
+      "CRMError.notFound(\"${1:entity}\", ${2:id}, \"${3:operation}\")"
+    ],
+    "description": "CRMError.notFound — 404 entity not found"
+  },
+  "CRMError.validation": {
+    "prefix": "errval",
+    "body": [
+      "CRMError.validation(\"${1:fn}\", \"${2:field}\", \"${3:message}\")"
+    ],
+    "description": "CRMError.validation — 400 validation error"
+  },
+  "CRMError.forbidden": {
+    "prefix": "errforbid",
+    "body": [
+      "CRMError.forbidden(\"${1:operation}\", \"${2:role}\", \"${3:required}\")"
+    ],
+    "description": "CRMError.forbidden — 403 permission denied"
+  },
+  "CRMError.network": {
+    "prefix": "errnet",
+    "body": [
+      "CRMError.network(${1:url}, ${2:500}, \"${3:operation}\")"
+    ],
+    "description": "CRMError.network — 5xx server/network error"
   },
   "Import Types": {
     "prefix": "import",
     "body": [
-      "import { ${1:Result}, ${2:Lead}, ${3:CRMError} } from \"${4:../../spec/types.braid}\""
+      "import { ${1:Result, Lead, CRMError} } from \"${2:../../spec/types.braid}\""
     ],
     "description": "Import statement"
   },
-  "CRM Tool Template": {
-    "prefix": "crmtool",
+  "@policy Annotation": {
+    "prefix": "@policy",
     "body": [
-      "// ${1:Tool Description}",
-      "",
-      "import { Result, ${3:Lead}, CRMError } from \"../../spec/types.braid\"",
-      "",
-      "fn ${4:toolName}(tenant: String, ${5:params}) -> Result<${6:Lead}, CRMError> !net {",
-      "  let url = \"/api/v2/${7:leads}\";",
+      "@policy(${1|READ_ONLY,WRITE_OPERATIONS,DELETE_OPERATIONS,ADMIN_ONLY,SYSTEM_INTERNAL,AI_SUGGESTIONS,EXTERNAL_API|})"
+    ],
+    "description": "Policy annotation for function-level access control"
+  },
+  "CRM Read Tool Template": {
+    "prefix": "crmread",
+    "body": [
+      "@policy(READ_ONLY)",
+      "fn ${1:get}${2:Leads}(tenant_id: String${3:, id: String}) -> Result<${4:Lead}, CRMError> !net {",
+      "  let url = \"/api/v2/${5:leads}\";",
+      "  let response = http.get(url, { params: { tenant_id: tenant_id${6:, id: id} } });",
+      "  ",
+      "  return match response {",
+      "    Ok{value} => Ok(value.data),",
+      "    Err{error} => CRMError.fromHTTP(url, error.status, \"${7:get_leads}\"),",
+      "    _ => CRMError.network(url, 500, \"${7:get_leads}\")",
+      "  };",
+      "}"
+    ],
+    "description": "CRM read-only tool with @policy(READ_ONLY)"
+  },
+  "CRM Write Tool Template": {
+    "prefix": "crmwrite",
+    "body": [
+      "@policy(WRITE_OPERATIONS)",
+      "fn ${1:create}${2:Lead}(tenant_id: String, ${3:data: Object}) -> Result<${4:Lead}, CRMError> !net {",
+      "  let url = \"/api/v2/${5:leads}\";",
       "  let payload = {",
-      "    tenant_id: tenant,",
-      "    $8",
+      "    tenant_id: tenant_id,",
+      "    ${6:field: value}",
       "  };",
       "  ",
       "  let response = http.post(url, { body: payload });",
       "  ",
       "  return match response {",
       "    Ok{value} => Ok(value.data),",
-      "    Err{error} => Err({ tag: \"APIError\", url: url, code: error.status, operation: \"${9:create_entity}\" }),",
-      "    _ => Err({ tag: \"NetworkError\", url: url, code: 500 })",
+      "    Err{error} => CRMError.fromHTTP(url, error.status, \"${7:create_lead}\"),",
+      "    _ => CRMError.network(url, 500, \"${7:create_lead}\")",
       "  };",
       "}"
     ],
-    "description": "Complete CRM tool template"
+    "description": "CRM write tool with @policy(WRITE_OPERATIONS)"
+  },
+  "CRM Delete Tool Template": {
+    "prefix": "crmdelete",
+    "body": [
+      "@policy(DELETE_OPERATIONS)",
+      "fn ${1:delete}${2:Lead}(tenant_id: String, id: String) -> Result<${3:Boolean}, CRMError> !net {",
+      "  let url = \"/api/v2/${4:leads}/\" + id;",
+      "  let response = http.delete(url, { params: { tenant_id: tenant_id } });",
+      "  ",
+      "  return match response {",
+      "    Ok{value} => Ok(true),",
+      "    Err{error} => CRMError.fromHTTP(url, error.status, \"${5:delete_lead}\"),",
+      "    _ => CRMError.network(url, 500, \"${5:delete_lead}\")",
+      "  };",
+      "}"
+    ],
+    "description": "CRM delete tool with @policy(DELETE_OPERATIONS)"
   },
   "Search Tool Template": {
-    "prefix": "searchtool",
+    "prefix": "crmsearch",
     "body": [
-      "fn ${1:search}${2:Leads}(tenant: String, query: String, limit: Number) -> Result<Array<${3:Lead}>, CRMError> !net {",
-      "  let url = \"/api/v2/${4:leads}\";",
-      "  let params = { tenant_id: tenant, q: query, limit: limit };",
-      "  let response = http.get(url, { params: params });",
+      "@policy(READ_ONLY)",
+      "fn search${1:Leads}(tenant_id: String, query: String, limit: Number) -> Result<Array<${2:Lead}>, CRMError> !net {",
+      "  let url = \"/api/v2/${3:leads}\";",
+      "  let response = http.get(url, { params: { tenant_id: tenant_id, q: query, limit: limit } });",
       "  ",
       "  return match response {",
       "    Ok{value} => Ok(value.data),",
-      "    Err{error} => Err({ tag: \"APIError\", url: url, code: error.status, operation: \"${5:search_leads}\" }),",
-      "    _ => Err({ tag: \"NetworkError\", url: url, code: 500 })",
+      "    Err{error} => CRMError.fromHTTP(url, error.status, \"search_${3:leads}\"),",
+      "    _ => CRMError.network(url, 500, \"search_${3:leads}\")",
       "  };",
       "}"
     ],
-    "description": "Search tool template with tenant and limit"
+    "description": "CRM search tool with tenant and limit"
   },
   "Validation Function": {
     "prefix": "validate",
     "body": [
       "fn validate${1:Email}(${2:email}: String) -> Boolean {",
-      "  let ${3:hasAt} = includes(${4:email}, \"${5:@}\");",
-      "  let ${6:hasDot} = includes(${7:email}, \"${8:.}\");",
-      "  return ${9:hasAt} && ${10:hasDot};",
+      "  let ${3:hasAt} = includes(${2:email}, \"@\");",
+      "  let ${4:hasDot} = includes(${2:email}, \".\");",
+      "  return ${3:hasAt} && ${4:hasDot};",
       "}"
     ],
     "description": "Pure validation function"
+  },
+  "If-Else": {
+    "prefix": "if",
+    "body": [
+      "if ${1:condition} {",
+      "  ${2:// then}",
+      "} else {",
+      "  ${3:// else}",
+      "}"
+    ],
+    "description": "If-else statement"
+  },
+  "If Guard (early return)": {
+    "prefix": "ifguard",
+    "body": [
+      "if ${1:response}.tag == \"Err\" {",
+      "  return CRMError.fromHTTP(${2:url}, ${1:response}.error.status, \"${3:operation}\");",
+      "}"
+    ],
+    "description": "Guard clause with early return on error"
   }
 }

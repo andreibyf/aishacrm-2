@@ -2,7 +2,7 @@
   "name": "braid-language",
   "displayName": "Braid - AI-Native DSL",
   "description": "Syntax highlighting, formatting, snippets, and language support for Braid - the type-safe, capability-controlled language for AI tool definitions",
-  "version": "0.5.0",
+  "version": "0.7.0",
   "publisher": "aisha-crm",
   "repository": {
     "type": "git",
@@ -11,10 +11,13 @@
   "engines": {
     "vscode": "^1.86.0"
   },
-  "main": "./extension.js",
+  "main": "./extension-client.js",
   "activationEvents": [
     "onLanguage:braid"
   ],
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
   "categories": [
     "Programming Languages",
     "Formatters",

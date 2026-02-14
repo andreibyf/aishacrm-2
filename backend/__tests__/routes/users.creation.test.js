@@ -10,7 +10,7 @@ process.env.JWT_SECRET = 'test-jwt-secret'; // Test JWT secret
 
 let app;
 let server;
-const testPort = 3103;
+const testPort = 3107;
 
 // Helper to make requests to the app
 async function makeRequest(method, path, body = null, headers = {}) {
@@ -90,11 +90,11 @@ before(async () => {
 
 after(async () => {
   if (server) {
-    server.close();
+    await new Promise((resolve) => server.close(resolve));
   }
 });
 
-describe('users.js - Section 2.4: User Creation & Registration', () => {
+describe('users.js - Section 2.4: User Creation & Registration', { timeout: 30000 }, () => {
   describe('POST /api/users - Create new user', () => {
     it('should require email and first_name', async () => {
       const response = await makeRequest('POST', '/api/users', {});

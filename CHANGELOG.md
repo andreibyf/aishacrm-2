@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.7.1] - 2026-02-14
+
+### Fixed
+- **Backend test port conflicts** — Remapped overlapping ports: system-logs (3109→3119), metrics (3107→3117), system port2 (3102→3112)
+- **Backend test timeouts** — Increased timeout for users.listing-retrieval, users.profile, and users.creation tests (5s→15s)
+- **System test teardown race** — Added `server.listening` guard and `closeAllConnections()` to prevent dangling promise warnings
+
+### Changed
+- **Pre-push hook enhanced** — Now runs 4-step quality gate: ESLint → Vite build → Frontend tests (Vitest) → Backend tests (Docker, auto-skips if container not running)
+- **Braid DSL v0.6.0** — Updated parser, runtime, and transpiler; added `braid-llm-kit/core/` module with grammar EBNF, sandbox, and checker; refreshed VS Code extension (snippets, syntax highlighting, language configuration)
+
+---
+
 ## [4.7.0] - 2026-02-13
 
 ### Added

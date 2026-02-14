@@ -1,0 +1,158 @@
+(* Braid Language Grammar — v0.3.0 *)
+(* Matches the implemented parser (braid-parse.js)                     *)
+(* Includes: annotations, typed params, match arm blocks, CRMError     *)
+
+Ident       = Letter , { Letter | Digit | "_" } ;
+Letter      = "A"…"Z" | "a"…"z" ;
+Digit       = "0"…"9" ;
+
+(* ================================================================== *)
+(* PROGRAM                                                             *)
+(* ================================================================== *)
+
+Program     = { Item } ;
+Item        = { Annotation } , ( FnDecl | TypeDecl | ImportDecl ) ;
+
+(* ================================================================== *)
+(* ANNOTATIONS                                                         *)
+(* ================================================================== *)
+
+Annotation  = "@" Ident [ "(" ArgList ")" ] ;
+ArgList     = Ident { "," Ident } ;
+
+(* ================================================================== *)
+(* TYPE DECLARATIONS                                                   *)
+(* ================================================================== *)
+
+TypeDecl    = "type" Ident [ TypeParams ] "=" TypeBody ;
+TypeParams  = "<" Ident { "," Ident } ">" ;
+TypeBody    = Variant { "|" Variant } ;
+Variant     = Ident [ RecordType ] | RecordType ;
+RecordType  = "{" Field { "," Field } "}" ;
+Field       = Ident ":" TypeRef ;
+
+TypeRef     = Ident [ "<" TypeRef { "," TypeRef } ">" ] ;
+
+(* ================================================================== *)
+(* IMPORT DECLARATIONS                                                 *)
+(* ================================================================== *)
+
+ImportDecl  = "import" "{" Ident { "," Ident } "}" "from" StringLit ;
+
+(* ================================================================== *)
+(* FUNCTION DECLARATIONS                                               *)
+(* ================================================================== *)
+
+FnDecl      = "fn" Ident "(" [ Params ] ")" "->" TypeRef [ EffectDecl ] Block ;
+Params      = Param { "," Param } ;
+Param       = Ident [ ":" TypeRef ] ;
+EffectDecl  = "!" Ident { "," Ident } ;
+
+(* ================================================================== *)
+(* BLOCKS AND STATEMENTS                                               *)
+(* ================================================================== *)
+
+Block       = "{" { Stmt } "}" ;
+Stmt        = LetStmt | ReturnStmt | IfStmt | MatchStmt | ExprStmt ;
+
+LetStmt     = "let" Ident [ ":" TypeRef ] "=" Expr ";" ;
+ReturnStmt  = "return" Expr ";" ;
+IfStmt      = "if" [ "(" ] Expr [ ")" ] Block [ "else" Block ] ;
+MatchStmt   = MatchExpr ";" ;
+ExprStmt    = Expr ( ";" | (* optional before } *) ) ;
+
+(* ================================================================== *)
+(* EXPRESSIONS                                                         *)
+(* ================================================================== *)
+
+Expr        = BinaryExpr ;
+
+BinaryExpr  = UnaryExpr { BinOp UnaryExpr } ;
+BinOp       = "||" | "&&" | "==" | "!=" | "<" | ">" | "<=" | ">="
+            | "+" | "-" | "*" | "/" | "%" ;
+(* Precedence (low→high): ||, &&, ==/!=, </>/<=/>= , +/-, *//% *)
+
+UnaryExpr   = [ "-" | "!" ] PostfixExpr ;
+
+PostfixExpr = Primary { "." Ident | "[" Expr "]" | "(" [ Expr { "," Expr } ] ")" } ;
+
+Primary     = NumberLit
+            | StringLit
+            | BoolLit
+            | Ident
+            | "(" LambdaOrParen ")"
+            | ArrayLit
+            | ObjectLit
+            | MatchExpr
+            ;
+
+NumberLit   = Digit { Digit } [ "." Digit { Digit } ] ;
+StringLit   = ( '"' { Char } '"' ) | ( "'" { Char } "'" ) ;
+BoolLit     = "true" | "false" ;
+ArrayLit    = "[" [ Expr { "," Expr } ] "]" ;
+ObjectLit   = "{" [ Ident ":" Expr { "," Ident ":" Expr } ] "}" ;
+
+LambdaOrParen = [ Ident { "," Ident } ] ")" "=>" ( Block | Expr )
+              | Expr ")"  (* simple parenthesized expr *) ;
+
+(* ================================================================== *)
+(* MATCH EXPRESSIONS                                                   *)
+(* ================================================================== *)
+
+MatchExpr   = "match" Expr "{" MatchArm { "," MatchArm } "}" ;
+MatchArm    = Pattern "=>" MatchValue ;
+
+Pattern     = "_"
+            | Ident [ "{" [ Ident { "," Ident } ] "}" ]  (* Tag{bind1, bind2} *)
+            ;
+
+MatchValue  = Block             (* block body: { let x = ...; expr } *)
+            | "return" Expr     (* bare return in match arm *)
+            | Expr              (* normal expression *)
+            ;
+
+(* ================================================================== *)
+(* STANDARD LIBRARY CALLS (transpiled to JS builtins)                  *)
+(* ================================================================== *)
+
+(* len(arr) → arr.length                                               *)
+(* map(arr, fn) → arr.map(fn)                                         *)
+(* filter(arr, fn) → arr.filter(fn)                                   *)
+(* reduce(arr, fn [, init]) → arr.reduce(fn [, init])                 *)
+(* find(arr, fn) → arr.find(fn)                                       *)
+(* some(arr, fn) → arr.some(fn)                                       *)
+(* every(arr, fn) → arr.every(fn)                                     *)
+(* includes(arr, val) → arr.includes(val)                              *)
+(* join(arr, sep) → arr.join(sep)                                     *)
+(* sort(arr [, fn]) → arr.sort([fn])                                  *)
+(* sum(arr) → arr.reduce((a,b)=>a+b, 0)                               *)
+(* avg(arr) → sum(arr) / len(arr)                                     *)
+
+(* ================================================================== *)
+(* RESULT / OPTION CONSTRUCTORS                                        *)
+(* ================================================================== *)
+
+(* Ok(value)           → { tag: 'Ok', value }                         *)
+(* Err(error)          → { tag: 'Err', error }                        *)
+(* Some(value)         → { tag: 'Some', value }                       *)
+(* None                → { tag: 'None' }                              *)
+(* CRMError.fromHTTP(url, status, op)                                 *)
+(* CRMError.notFound(entity, id, op)                                  *)
+(* CRMError.network(url, code, op)                                    *)
+(* CRMError.validation(fn, field, msg)                                *)
+(* CRMError.forbidden(op, role, required)                              *)
+
+(* ================================================================== *)
+(* IO NAMESPACES (require corresponding effect declarations)           *)
+(* ================================================================== *)
+
+(* http.get(url [, opts])     — requires !net                          *)
+(* http.post(url [, opts])    — requires !net                          *)
+(* http.put(url [, opts])     — requires !net                          *)
+(* http.delete(url [, opts])  — requires !net                          *)
+(* clock.now()                — requires !clock                        *)
+(* clock.sleep(ms)            — requires !clock                        *)
+(* fs.read(path)              — requires !fs                           *)
+(* fs.write(path, data)       — requires !fs                           *)
+(* rng.random()               — requires !rng                          *)
+(* rng.uuid()                 — requires !rng                          *)

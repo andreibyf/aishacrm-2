@@ -1,0 +1,35 @@
+{
+  "name": "@braid-lang/core",
+  "version": "0.3.0",
+  "description": "Braid — AI-native DSL for type-safe, capability-controlled LLM tool execution",
+  "type": "module",
+  "main": "./braid-rt.js",
+  "exports": {
+    ".": "./braid-rt.js",
+    "./runtime": "./braid-rt.js",
+    "./parser": "./braid-parse.js",
+    "./transpiler": "./braid-transpile.js",
+    "./sandbox": "./braid-sandbox.js",
+    "./check": "./braid-check.js"
+  },
+  "bin": {
+    "braid-check": "./braid-check.js",
+    "braid-transpile": "./braid-transpile.js"
+  },
+  "files": [
+    "braid-rt.js",
+    "braid-parse.js",
+    "braid-transpile.js",
+    "braid-sandbox.js",
+    "braid-check.js",
+    "grammar.ebnf",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test braid-core.test.js",
+    "check": "node braid-check.js"
+  },
+  "keywords": ["ai", "llm", "dsl", "security", "capability", "sandbox", "tool-calling"],
+  "license": "MIT",
+  "engines": { "node": ">=18.0.0" }
+}

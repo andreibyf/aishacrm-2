@@ -1,8 +1,69 @@
 #!/bin/sh
-# Run lint to catch syntax errors (allow warnings)
-npm run lint -- --max-warnings 9999
+# ============================================================
+# Pre-push hook: lint + build + tests
+# Runs before git push. Blocks push if anything fails.
+# Skip with: git push --no-verify
+# ============================================================
 
-# Run build to catch compile errors
-# Use build:ci for local development (Doppler has Windows compatibility issues)
-# Production/CI will use Doppler in Docker where it works correctly
-npm run build:ci
+set -e
+
+echo ""
+echo "╔══════════════════════════════════════════════╗"
+echo "║        PRE-PUSH CHECKS (v4.7.0+)            ║"
+echo "╚══════════════════════════════════════════════╝"
+echo ""
+
+# ── 1. Lint ──────────────────────────────────────────
+echo "▶ [1/4] Running ESLint..."
+if npm run lint -- --max-warnings 9999; then
+  echo "✅ Lint passed"
+else
+  echo ""
+  echo "❌ LINT FAILED — fix errors above before pushing"
+  exit 1
+fi
+echo ""
+
+# ── 2. Build ─────────────────────────────────────────
+echo "▶ [2/4] Running build..."
+if npm run build:ci; then
+  echo "✅ Build passed"
+else
+  echo ""
+  echo "❌ BUILD FAILED — fix errors above before pushing"
+  exit 1
+fi
+echo ""
+
+# ── 3. Frontend Tests (Vitest) ───────────────────────
+echo "▶ [3/4] Running frontend tests (Vitest)..."
+if npx vitest run --reporter=verbose 2>&1; then
+  echo "✅ Frontend tests passed"
+else
+  echo ""
+  echo "❌ FRONTEND TESTS FAILED — fix errors above before pushing"
+  exit 1
+fi
+echo ""
+
+# ── 4. Backend Tests (Docker) ────────────────────────
+echo "▶ [4/4] Running backend tests..."
+if docker ps --filter "name=aishacrm-backend" --filter "status=running" -q | grep -q .; then
+  echo "   (running in Docker container aishacrm-backend)"
+  if docker exec aishacrm-backend npm test 2>&1; then
+    echo "✅ Backend tests passed"
+  else
+    echo ""
+    echo "❌ BACKEND TESTS FAILED — fix errors above before pushing"
+    exit 1
+  fi
+else
+  echo "   ⚠️  Docker container aishacrm-backend not running — skipping backend tests"
+  echo "   To run: docker compose up -d backend"
+fi
+echo ""
+
+echo "╔══════════════════════════════════════════════╗"
+echo "║           ✅ ALL CHECKS PASSED               ║"
+echo "╚══════════════════════════════════════════════╝"
+echo ""

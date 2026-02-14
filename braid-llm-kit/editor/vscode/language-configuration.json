@@ -14,7 +14,8 @@
     { "open": "[", "close": "]" },
     { "open": "(", "close": ")" },
     { "open": "<", "close": ">", "notIn": ["string", "comment"] },
-    { "open": "\"", "close": "\"", "notIn": ["string"] }
+    { "open": "\"", "close": "\"", "notIn": ["string"] },
+    { "open": "`", "close": "`", "notIn": ["string", "comment"] }
   ],
   "surroundingPairs": [
     ["{", "}"],
@@ -30,7 +31,7 @@
     }
   },
   "indentationRules": {
-    "increaseIndentPattern": "^.*\\{[^}]*$|^.*\\([^)]*$|^\\s*(fn|match|if|else|type|enum|trait|impl|actor|policy|async)\\b",
+    "increaseIndentPattern": "^.*\\{[^}]*$|^.*\\([^)]*$|^\\s*(fn|match|if|else|for|while|type|enum|trait|impl|actor|policy|async)\\b",
     "decreaseIndentPattern": "^\\s*[})]"
   },
   "wordPattern": "(-?\\d*\\.\\d\\w*)|([^\\`\\~\\!\\@\\#\\%\\^\\&\\*\\(\\)\\-\\=\\+\\[\\{\\]\\}\\\\\\|\\;\\:\\'\\\"\\,\\.\\<\\>\\/\\?\\s]+)"

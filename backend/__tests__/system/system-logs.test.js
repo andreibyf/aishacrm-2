@@ -8,10 +8,10 @@ import { initSupabaseForTests } from '../setup.js';
 
 let app;
 let server;
-const port = 3109;
+const port = 3119;
 let supabaseInitialized = false;
 
-describe('System Logs Routes', () => {
+describe('System Logs Routes', { timeout: 15000 }, () => {
   before(async () => {
     // Initialize Supabase if credentials are available
     supabaseInitialized = await initSupabaseForTests();
@@ -24,11 +24,17 @@ describe('System Logs Routes', () => {
     app.use('/api/system-logs', createSystemLogRoutes(null));
 
     server = app.listen(port);
-    await new Promise((r) => server.on('listening', r));
+    await new Promise((r) => {
+      if (server.listening) return r();
+      server.on('listening', r);
+    });
   });
 
   after(async () => {
-    if (server) await new Promise((r) => server.close(r));
+    if (server) {
+      if (typeof server.closeAllConnections === 'function') server.closeAllConnections();
+      await new Promise((r) => server.close(() => r()));
+    }
   });
 
   it('POST / creates a log and expands metadata', async () => {

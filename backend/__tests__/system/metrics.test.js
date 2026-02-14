@@ -7,7 +7,7 @@ import assert from 'node:assert';
 
 let app;
 let server;
-const port = 3107;
+const port = 3117;
 
 async function request(method, path) {
   const res = await fetch(`http://localhost:${port}${path}`, { method });
