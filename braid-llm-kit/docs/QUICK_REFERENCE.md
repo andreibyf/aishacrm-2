@@ -238,8 +238,8 @@ examples/assistant/          20 .braid files, 119 functions
 
 ```bash
 cd core
-node --test braid-core.test.js braid-ir.test.js e2e-v05.test.js braid-integration.test.js
-# 274 tests, 0 failures
+node --test braid-core.test.js braid-ir.test.js e2e-v05.test.js braid-integration.test.js braid-scope.test.js
+# 305 tests, 0 failures
 ```
 
 ## Diagnostic Codes

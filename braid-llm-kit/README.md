@@ -36,8 +36,9 @@ braid-llm-kit/
 │   ├── braid-emit-py.js     IR → Python 3 emitter (392 lines)
 │   ├── braid-rt.js          Runtime kernel: ADTs, type checks, errors (251 lines)
 │   ├── braid-sandbox.js     Security sandbox (142 lines)
-│   ├── braid-lsp.js         Language Server Protocol server (744 lines)
-│   └── braid-check.js       CLI validator (215 lines)
+│   ├── braid-lsp.js         Language Server Protocol server (987 lines, 8 capabilities)
+│   ├── braid-scope.js       Scope indexer for references/rename (382 lines)
+│   └── braid-check.js       CLI validator (227 lines)
 │
 ├── tools/                   AiSHA CRM adapter layer
 │   ├── braid-adapter.js     Production executor (transpile → cache → run)
@@ -124,10 +125,12 @@ code --install-extension braid-language-0.7.0.vsix
 - 40+ snippets (`@policy`, CRMError constructors, tool templates)
 - **LSP: real-time diagnostics** (parse errors, effect mismatches, security warnings)
 - **LSP: hover docs** (function signatures, stdlib reference, IO namespace docs)
-- **LSP: go-to-definition** (functions, types, variables)
+- **LSP: go-to-definition** (functions, types, variables, cross-file imports)
 - **LSP: auto-completion** (keywords, stdlib, IO methods, policies, effects)
 - **LSP: signature help** (parameter hints)
 - **LSP: document symbols** (outline view)
+- **LSP: find-all-references** (variables, functions, parameters, cross-file)
+- **LSP: rename symbol** (variables, functions, parameters, cross-file)
 
 ## Security Model
 
@@ -143,8 +146,8 @@ code --install-extension braid-language-0.7.0.vsix
 ```bash
 cd braid-llm-kit/core
 
-# All tests (274 passing)
-node --test braid-core.test.js braid-ir.test.js e2e-v05.test.js braid-integration.test.js
+# All tests (305 passing)
+node --test braid-core.test.js braid-ir.test.js e2e-v05.test.js braid-integration.test.js braid-scope.test.js
 
 # Core only (73 tests: parser, transpiler, runtime, sandbox)
 node --test braid-core.test.js
@@ -154,6 +157,12 @@ node --test braid-ir.test.js
 
 # End-to-end (29 tests: full pipeline with all v0.4/v0.5 features)
 node --test e2e-v05.test.js
+
+# Integration (125 tests: production files, LSP, adapter, error recovery)
+node --test braid-integration.test.js
+
+# Scope (31 tests: scope resolution, references, rename, imports)
+node --test braid-scope.test.js
 ```
 
 ## CLI Tools
@@ -202,4 +211,4 @@ See `core/grammar.ebnf` for the formal EBNF grammar.
 
 ---
 
-*274 tests, 119 production functions, 20 .braid files, 2 compilation targets*
+*305 tests, 119 production functions, 20 .braid files, 2 compilation targets*

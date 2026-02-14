@@ -892,27 +892,41 @@ connection.onRenameRequest((params) => {
   const hit = fileIndex.symbolAtPosition(params.position.line, params.position.character);
   if (!hit || !hit.symbol) return null;
 
-  const symbol = hit.symbol;
+  let symbol = hit.symbol;
   const newName = params.newName;
 
   // Same guards as prepareRename
   if (STDLIB_NAMES.has(symbol.name)) return null;
   if (symbol.kind === 'import' && symbol.originSymbol) return null;
 
+  // Follow import to origin for cross-file rename
+  if (symbol.originSymbol) {
+    symbol = symbol.originSymbol;
+  }
+
   const changes = {};
-  const edits = [];
 
   // Definition
-  edits.push({ range: symbol.defRange, newText: newName });
+  if (!changes[symbol.uri]) changes[symbol.uri] = [];
+  changes[symbol.uri].push({ range: symbol.defRange, newText: newName });
 
-  // All references in this file
-  for (const ref of fileIndex.references) {
-    if (ref.symbol === symbol) {
-      edits.push({ range: ref.range, newText: newName });
+  // Collect references from all cached files
+  for (const [cachedUri, cachedIndex] of scopeCache) {
+    for (const ref of cachedIndex.references) {
+      if (ref.symbol === symbol || ref.symbol.originSymbol === symbol) {
+        if (!changes[cachedUri]) changes[cachedUri] = [];
+        changes[cachedUri].push({ range: ref.range, newText: newName });
+      }
+    }
+    // Also rename import definitions that point to this symbol
+    for (const def of cachedIndex.definitions) {
+      if (def.originSymbol === symbol && def !== symbol) {
+        if (!changes[cachedUri]) changes[cachedUri] = [];
+        changes[cachedUri].push({ range: def.defRange, newText: newName });
+      }
     }
   }
 
-  changes[uri] = edits;
   return { changes };
 });
 

@@ -256,12 +256,24 @@ describe('Production .braid files: parse validation', () => {
   // Read all .braid files from examples/assistant
   // They're not on this filesystem, but we can test with what we have + the accounts.braid
   const braidFiles = [];
-  const uploadsDir = '/home/claude/braid-files';
-  try {
-    for (const f of fs.readdirSync(uploadsDir)) {
-      if (f.endsWith('.braid')) braidFiles.push(path.join(uploadsDir, f));
-    }
-  } catch { /* optional dir */ }
+  // Try multiple possible locations for production .braid files
+  const possibleDirs = [
+    path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1')), '..', 'examples', 'assistant'),
+    '/home/claude/braid-files',
+  ];
+  let uploadsDir = null;
+  for (const dir of possibleDirs) {
+    try {
+      if (fs.statSync(dir).isDirectory()) { uploadsDir = dir; break; }
+    } catch { /* try next */ }
+  }
+  if (uploadsDir) {
+    try {
+      for (const f of fs.readdirSync(uploadsDir)) {
+        if (f.endsWith('.braid')) braidFiles.push(path.join(uploadsDir, f));
+      }
+    } catch { /* optional dir */ }
+  }
 
   if (braidFiles.length > 0) {
     for (const file of braidFiles) {

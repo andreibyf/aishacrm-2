@@ -1,22 +1,14 @@
 [
   {
     "symbol": "fs.open",
-    "sig": "fn(Path,Mode)->Result[File,IoError]!fs",
-    "caps": [
-      "fs"
-    ],
-    "effects": [
-      "fs"
-    ],
-    "examples": [
-      "let f = fs.open(p,ReadOnly)?;"
-    ]
+    "sig": "fn(Path, Mode) -> Result<File, IoError> !fs",
+    "caps": ["fs"],
+    "effects": ["fs"],
+    "examples": ["let f = fs.open(p, ReadOnly)?;"]
   },
   {
     "symbol": "http.serve",
-    "sig": "fn(App,Addr)->Result[Unit,NetErr]!net",
-    "effects": [
-      "net"
-    ]
+    "sig": "fn(App, Addr) -> Result<Unit, NetErr> !net",
+    "effects": ["net"]
   }
 ]

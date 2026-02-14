@@ -565,12 +565,15 @@ braid-llm-kit/
 │   ├── braid-emit-py.js     IR→Python 3 emitter (392 lines)
 │   ├── braid-rt.js          Runtime kernel (251 lines, zero app-specific code)
 │   ├── braid-sandbox.js     Security sandbox (142 lines)
-│   ├── braid-check.js       CLI validator (215 lines)
-│   ├── braid-lsp.js         Language Server Protocol (744 lines)
+│   ├── braid-check.js       CLI validator (227 lines)
+│   ├── braid-lsp.js         Language Server Protocol (987 lines, 8 capabilities)
+│   ├── braid-scope.js       Scope indexer for references/rename (382 lines)
 │   ├── grammar.ebnf          Formal grammar (105 lines)
 │   ├── braid-core.test.js   Core tests (73 passing)
 │   ├── braid-ir.test.js     IR + emitter tests (47 passing)
 │   ├── e2e-v05.test.js      End-to-end tests (29 passing)
+│   ├── braid-integration.test.js  Integration tests (125 passing)
+│   ├── braid-scope.test.js  Scope tests (31 passing)
 │   └── package.json          @braid-lang/core v0.5.0
 │
 ├── tools/                   ← AiSHA CRM adapter layer
@@ -635,10 +638,12 @@ Capabilities:
 - Code snippets (40+ snippets for common patterns)
 - **LSP — real-time diagnostics** (parse errors, security warnings, policy validation, effect mismatches)
 - **Hover documentation** (function signatures, stdlib docs, IO namespace docs)
-- **Go-to-definition** (functions, types, variables)
+- **Go-to-definition** (functions, types, variables, cross-file imports)
 - **Auto-completion** (keywords, stdlib, IO methods, policies, effects, functions from current file)
 - **Signature help** (parameter hints for stdlib and user functions)
 - **Document symbols** (outline view of functions and types)
+- **Find-all-references** (variables, functions, parameters, cross-file via scope index)
+- **Rename symbol** (variables, functions, parameters, cross-file; refuses stdlib and builtins)
 
 ### 13.2 CLI Tools
 
@@ -652,8 +657,8 @@ node tools/braid-transpile.js --file input.braid --out output.js
 # Transpile with sandbox guards
 node tools/braid-transpile.js --file input.braid --out output.js --sandbox
 
-# Run tests (149 total)
-cd core && node --test braid-core.test.js braid-ir.test.js e2e-v05.test.js
+# Run tests (305 total)
+cd core && node --test braid-core.test.js braid-ir.test.js e2e-v05.test.js braid-integration.test.js braid-scope.test.js
 ```
 
 ### 13.3 Diagnostic Codes
@@ -751,4 +756,4 @@ Primary     = Ident | Number | String | Template | Bool | Null
 
 ---
 
-*Braid v0.5.0 — 274 tests passing, 119 production functions, 20 .braid files*
+*Braid v0.5.0 — 305 tests passing, 119 production functions, 20 .braid files*

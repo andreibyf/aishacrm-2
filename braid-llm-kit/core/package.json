@@ -14,7 +14,8 @@
     "./transpiler": "./braid-transpile.js",
     "./sandbox": "./braid-sandbox.js",
     "./check": "./braid-check.js",
-    "./lsp": "./braid-lsp.js"
+    "./lsp": "./braid-lsp.js",
+    "./scope": "./braid-scope.js"
   },
   "bin": {
     "braid-check": "braid-check.js",
@@ -30,11 +31,12 @@
     "braid-sandbox.js",
     "braid-check.js",
     "braid-lsp.js",
+    "braid-scope.js",
     "grammar.ebnf",
     "README.md"
   ],
   "scripts": {
-    "test": "node --test braid-core.test.js braid-ir.test.js",
+    "test": "node --test braid-core.test.js braid-ir.test.js e2e-v05.test.js braid-integration.test.js braid-scope.test.js",
     "check": "node braid-check.js"
   },
   "keywords": [
