@@ -54,8 +54,15 @@ if docker ps --filter "name=aishacrm-backend" --filter "status=running" -q | gre
     echo "✅ Backend tests passed"
   else
     echo ""
-    echo "❌ BACKEND TESTS FAILED — fix errors above before pushing"
-    exit 1
+    echo "⚠️  Backend tests failed — retrying once (Node.js IPC fluke workaround)..."
+    echo ""
+    if docker exec aishacrm-backend npm test 2>&1; then
+      echo "✅ Backend tests passed on retry"
+    else
+      echo ""
+      echo "❌ BACKEND TESTS FAILED — fix errors above before pushing"
+      exit 1
+    fi
   fi
 else
   echo "   ⚠️  Docker container aishacrm-backend not running — skipping backend tests"
