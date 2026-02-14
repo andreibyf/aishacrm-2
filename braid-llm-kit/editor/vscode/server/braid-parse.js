@@ -118,27 +118,27 @@ export function parse(src, filename = "stdin", options = {}) {
   }
 
   function parseTypeDecl() {
-    const start = pos(); eat('kw', 'type'); const name = eat('ident').value;
+    const start = pos(); eat('kw', 'type'); const nameTok = eat('ident'); const name = nameTok.value;
     let typeParams = []; if (match('<', '<')) { while (true) { typeParams.push(eat('ident').value); if (match(',', ',')) continue; break; } eat('>', '>'); }
     eat('=', '='); const variants = [];
     while (true) { if (pk().type === '{') variants.push(parseObjectType()); else if (pk().type === 'ident') { const tag = eat('ident').value; let fields = null; if (pk().type === '{') fields = parseObjectType().fields; variants.push({ tag, fields }); } if (!match('|', '|')) break; }
-    return { type: 'TypeDecl', name, typeParams, variants, pos: start };
+    return { type: 'TypeDecl', name, typeParams, variants, pos: start, namePos: { line: nameTok.line, col: nameTok.col } };
   }
   function parseObjectType() { eat('{', '{'); const fields = []; if (pk().type !== '}') { while (true) { const key = eat('ident').value; eat(':', ':'); const fieldType = parseTypeRef(); fields.push({ name: key, type: fieldType }); if (match(',', ',')) continue; break; } } eat('}', '}'); return { type: 'ObjectType', fields }; }
   function parseTypeRef() { const base = eat('ident').value; let typeArgs = []; if (match('<', '<')) { while (true) { typeArgs.push(parseTypeRef()); if (match(',', ',')) continue; break; } eat('>', '>'); } return { base, typeArgs }; }
-  function parseImport() { const start = pos(); eat('kw', 'import'); eat('{', '{'); const names = []; while (true) { names.push(eat('ident').value); if (match(',', ',')) continue; break; } eat('}', '}'); eat('ident', 'from'); const path = eat('string').value; return { type: 'ImportDecl', names, path, pos: start }; }
+  function parseImport() { const start = pos(); eat('kw', 'import'); eat('{', '{'); const names = []; const nameTokens = []; while (true) { const tok = eat('ident'); names.push(tok.value); nameTokens.push({ name: tok.value, line: tok.line, col: tok.col }); if (match(',', ',')) continue; break; } eat('}', '}'); eat('ident', 'from'); const path = eat('string').value; return { type: 'ImportDecl', names, nameTokens, path, pos: start }; }
 
   function parseFnDecl(annotations = []) {
-    const start = pos(); eat('kw', 'fn'); const name = eat('ident').value; eat('(', '('); const params = parseParams(); eat(')', ')'); eat('op', '->'); const ret = parseTypeRef();
+    const start = pos(); eat('kw', 'fn'); const nameTok = eat('ident'); const name = nameTok.value; eat('(', '('); const params = parseParams(); eat(')', ')'); eat('op', '->'); const ret = parseTypeRef();
     let effects = []; if (match('!', '!')) effects = parseEffects();
     const body = parseBlock();
-    return { type: 'FnDecl', name, params, ret, effects, body, annotations, pos: start };
+    return { type: 'FnDecl', name, params, ret, effects, body, annotations, pos: start, namePos: { line: nameTok.line, col: nameTok.col } };
   }
   function parseParams() {
     const ps = []; if (pk().type === ')') return ps;
     while (true) {
-      if (pk().type === 'op' && pk().value === '...') { eat('op', '...'); const nm = eat('ident').value; let type = null; if (match(':', ':')) type = parseTypeRef(); ps.push({ name: nm, type, spread: true }); }
-      else { const nm = eat('ident').value; let type = null; if (match(':', ':')) type = parseTypeRef(); ps.push({ name: nm, type }); }
+      if (pk().type === 'op' && pk().value === '...') { eat('op', '...'); const tok = eat('ident'); const nm = tok.value; let type = null; if (match(':', ':')) type = parseTypeRef(); ps.push({ name: nm, type, spread: true, namePos: { line: tok.line, col: tok.col } }); }
+      else { const tok = eat('ident'); const nm = tok.value; let type = null; if (match(':', ':')) type = parseTypeRef(); ps.push({ name: nm, type, namePos: { line: tok.line, col: tok.col } }); }
       if (match(',', ',')) continue; break;
     } return ps;
   }
@@ -147,10 +147,10 @@ export function parse(src, filename = "stdin", options = {}) {
 
   function parseStmt() {
     const k = pk();
-    if (k.type === 'kw' && k.value === 'let') { eat('kw', 'let'); const name = eat('ident').value; let letType = null; if (match(':', ':')) letType = parseTypeRef(); eat('=', '='); const value = parseExpr(); eat(';', ';'); return { type: 'LetStmt', name, letType, value, pos: { line: k.line, col: k.col } }; }
+    if (k.type === 'kw' && k.value === 'let') { eat('kw', 'let'); const nameTok = eat('ident'); const name = nameTok.value; let letType = null; if (match(':', ':')) letType = parseTypeRef(); eat('=', '='); const value = parseExpr(); eat(';', ';'); return { type: 'LetStmt', name, letType, value, pos: { line: k.line, col: k.col }, namePos: { line: nameTok.line, col: nameTok.col } }; }
     if (k.type === 'kw' && k.value === 'return') { eat('kw', 'return'); const value = parseExpr(); eat(';', ';'); return { type: 'ReturnStmt', value, pos: { line: k.line, col: k.col } }; }
     if (k.type === 'kw' && k.value === 'if') return parseIfStmt();
-    if (k.type === 'kw' && k.value === 'for') { eat('kw', 'for'); const binding = eat('ident').value; eat('kw', 'in'); const iterable = parseExpr(); const body = parseBlock(); return { type: 'ForStmt', binding, iterable, body, pos: { line: k.line, col: k.col } }; }
+    if (k.type === 'kw' && k.value === 'for') { eat('kw', 'for'); const bindTok = eat('ident'); const binding = bindTok.value; eat('kw', 'in'); const iterable = parseExpr(); const body = parseBlock(); return { type: 'ForStmt', binding, iterable, body, pos: { line: k.line, col: k.col }, namePos: { line: bindTok.line, col: bindTok.col } }; }
     if (k.type === 'kw' && k.value === 'while') { eat('kw', 'while'); let cond; if (match('(', '(')) { cond = parseExpr(); eat(')', ')'); } else cond = parseExpr(); const body = parseBlock(); return { type: 'WhileStmt', cond, body, pos: { line: k.line, col: k.col } }; }
     if (k.type === 'kw' && k.value === 'break') { eat('kw', 'break'); eat(';', ';'); return { type: 'BreakStmt', pos: { line: k.line, col: k.col } }; }
     if (k.type === 'kw' && k.value === 'continue') { eat('kw', 'continue'); eat(';', ';'); return { type: 'ContinueStmt', pos: { line: k.line, col: k.col } }; }

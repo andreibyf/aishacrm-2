@@ -341,13 +341,16 @@ describe('LSP: structural validation', () => {
     assert.ok(lspSource.includes("from './braid-transpile.js'"), 'Should import transpiler');
   });
 
-  it('registers all 6 LSP capabilities', () => {
+  it('registers all 9 LSP capabilities', () => {
     assert.ok(lspSource.includes('textDocumentSync'), 'Should have textDocumentSync');
     assert.ok(lspSource.includes('completionProvider'), 'Should have completionProvider');
     assert.ok(lspSource.includes('hoverProvider'), 'Should have hoverProvider');
     assert.ok(lspSource.includes('definitionProvider'), 'Should have definitionProvider');
     assert.ok(lspSource.includes('signatureHelpProvider'), 'Should have signatureHelpProvider');
     assert.ok(lspSource.includes('documentSymbolProvider'), 'Should have documentSymbolProvider');
+    assert.ok(lspSource.includes('referencesProvider'), 'Should have referencesProvider');
+    assert.ok(lspSource.includes('renameProvider'), 'Should have renameProvider');
+    assert.ok(lspSource.includes('prepareProvider'), 'Should have prepareProvider for rename');
   });
 
   it('handles parse errors gracefully', () => {
@@ -364,6 +367,21 @@ describe('LSP: structural validation', () => {
   it('provides policy completions', () => {
     assert.ok(lspSource.includes('READ_ONLY') && lspSource.includes('WRITE_OPERATIONS'),
       'Should include policy completions');
+  });
+
+  it('imports scope indexer', () => {
+    assert.ok(lspSource.includes("from './braid-scope.js'"), 'Should import braid-scope');
+  });
+
+  it('has scopeCache for scope-aware features', () => {
+    assert.ok(lspSource.includes('scopeCache'), 'Should have scopeCache');
+  });
+
+  it('scope module exports buildFileIndex', () => {
+    const scopeSource = fs.readFileSync(new URL('./braid-scope.js', import.meta.url), 'utf8');
+    assert.ok(scopeSource.includes('export function buildFileIndex'), 'Should export buildFileIndex');
+    assert.ok(scopeSource.includes('export function resolveImportPath'), 'Should export resolveImportPath');
+    assert.ok(scopeSource.includes('export { Symbol, Scope, FileIndex'), 'Should export data structures');
   });
 });
 

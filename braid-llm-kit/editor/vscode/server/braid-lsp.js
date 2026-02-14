@@ -1,6 +1,6 @@
 // braid-lsp.js — Braid Language Server Protocol implementation
 // Provides: real-time diagnostics, hover info, go-to-definition,
-// completion, signature help, document symbols.
+// completion, signature help, document symbols, find-all-references, rename.
 "use strict";
 
 import {
@@ -17,6 +17,9 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { parse } from './braid-parse.js';
 import { transpileToJS, detectUsedEffects, extractPolicies, VALID_POLICIES, IO_EFFECT_MAP, BRAID_TYPE_MAP } from './braid-transpile.js';
+import { typeCheck } from './braid-types.js';
+import { buildFileIndex, resolveImportPath } from './braid-scope.js';
+import fs from 'fs';
 
 // ============================================================================
 // SERVER SETUP
@@ -27,6 +30,9 @@ const documents = new TextDocuments(TextDocument);
 
 // AST cache: uri → { ast, version }
 const astCache = new Map();
+
+// Scope cache: uri → FileIndex
+const scopeCache = new Map();
 
 connection.onInitialize((params) => {
   return {
@@ -41,6 +47,10 @@ connection.onInitialize((params) => {
       documentSymbolProvider: true,
       signatureHelpProvider: {
         triggerCharacters: ['(', ','],
+      },
+      referencesProvider: true,
+      renameProvider: {
+        prepareProvider: true,
       },
     },
   };
@@ -81,6 +91,13 @@ function validateDocument(doc) {
 
   // Cache the AST
   astCache.set(uri, { ast, version: doc.version });
+
+  // Build scope index for go-to-definition, find-all-references, rename
+  try {
+    buildScopeForDocument(uri, ast);
+  } catch (_e) {
+    // Scope indexer should never crash the LSP
+  }
 
   // Parser diagnostics (syntax errors, security warnings)
   for (const d of (ast.diagnostics || [])) {
@@ -180,6 +197,25 @@ function validateDocument(doc) {
 
     // Unreachable code after return
     checkUnreachable(fn.body, diagnostics);
+  }
+
+  // Phase 3: Type checking
+  try {
+    const { diagnostics: tcDiags } = typeCheck(ast);
+    for (const d of tcDiags) {
+      diagnostics.push({
+        severity: d.severity === 'error' ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning,
+        range: {
+          start: { line: (d.line || 1) - 1, character: (d.col || 1) - 1 },
+          end: { line: (d.line || 1) - 1, character: (d.col || 1) + 10 },
+        },
+        message: d.message,
+        source: 'braid-types',
+        code: d.code,
+      });
+    }
+  } catch (e) {
+    // Type checker should not crash the LSP
   }
 
   connection.sendDiagnostics({ uri, diagnostics });
@@ -516,10 +552,40 @@ connection.onCompletion((params) => {
 });
 
 // ============================================================================
-// GO TO DEFINITION
+// GO TO DEFINITION (scope-aware)
 // ============================================================================
 
 connection.onDefinition((params) => {
+  const uri = params.textDocument.uri;
+  const line = params.position.line;
+  const character = params.position.character;
+
+  // Try scope-aware definition first
+  const fileIndex = scopeCache.get(uri);
+  if (fileIndex) {
+    const hit = fileIndex.symbolAtPosition(line, character);
+    if (hit && hit.symbol) {
+      const symbol = hit.symbol;
+      // If this is an import with a known origin, jump to the origin
+      if (symbol.originSymbol) {
+        return {
+          uri: symbol.originSymbol.uri,
+          range: symbol.originSymbol.defRange,
+        };
+      }
+      // Otherwise jump to local definition
+      return {
+        uri: symbol.uri,
+        range: symbol.defRange,
+      };
+    }
+  }
+
+  // Fallback to old behavior if scope index unavailable
+  return fallbackDefinition(params);
+});
+
+function fallbackDefinition(params) {
   const uri = params.textDocument.uri;
   const cached = astCache.get(uri);
   if (!cached) return null;
@@ -536,7 +602,6 @@ connection.onDefinition((params) => {
   const word = getWordAt(lines[line], col);
   if (!word) return null;
 
-  // Find function or type declaration
   for (const item of (cached.ast.items || [])) {
     if ((item.type === 'FnDecl' || item.type === 'TypeDecl') && item.name === word) {
       return {
@@ -549,7 +614,6 @@ connection.onDefinition((params) => {
     }
   }
 
-  // Find local variable (let bindings in the current function)
   const currentFn = findFnAtLine(cached.ast, line + 1);
   if (currentFn) {
     const binding = findLetBinding(currentFn.body, word);
@@ -562,7 +626,6 @@ connection.onDefinition((params) => {
         },
       };
     }
-    // Check params
     const param = currentFn.params.find(p => p.name === word);
     if (param) {
       return {
@@ -576,7 +639,7 @@ connection.onDefinition((params) => {
   }
 
   return null;
-});
+}
 
 function findFnAtLine(ast, line) {
   // Simple: find the function whose body contains this line
@@ -722,6 +785,186 @@ connection.onSignatureHelp((params) => {
   }
 
   return null;
+});
+
+// ============================================================================
+// FIND ALL REFERENCES
+// ============================================================================
+
+connection.onReferences((params) => {
+  const uri = params.textDocument.uri;
+  const fileIndex = scopeCache.get(uri);
+  if (!fileIndex) return [];
+
+  const line = params.position.line;
+  const character = params.position.character;
+
+  const hit = fileIndex.symbolAtPosition(line, character);
+  if (!hit || !hit.symbol) return [];
+
+  let targetSymbol = hit.symbol;
+
+  // If this is an import, follow to the origin symbol for cross-file refs
+  if (targetSymbol.originSymbol) {
+    targetSymbol = targetSymbol.originSymbol;
+  }
+
+  const locations = [];
+
+  // Include declaration if requested
+  if (params.context?.includeDeclaration) {
+    locations.push({
+      uri: targetSymbol.uri,
+      range: targetSymbol.defRange,
+    });
+  }
+
+  // Collect references from all cached files
+  for (const [cachedUri, cachedIndex] of scopeCache) {
+    for (const ref of cachedIndex.references) {
+      if (ref.symbol === targetSymbol || ref.symbol.originSymbol === targetSymbol) {
+        locations.push({ uri: cachedUri, range: ref.range });
+      }
+    }
+  }
+
+  // Also include import definitions that point to this symbol
+  if (params.context?.includeDeclaration) {
+    for (const [cachedUri, cachedIndex] of scopeCache) {
+      for (const def of cachedIndex.definitions) {
+        if (def.originSymbol === targetSymbol && def !== targetSymbol) {
+          locations.push({ uri: cachedUri, range: def.defRange });
+        }
+      }
+    }
+  }
+
+  return locations;
+});
+
+// ============================================================================
+// RENAME
+// ============================================================================
+
+const STDLIB_NAMES = new Set([
+  'len', 'map', 'filter', 'reduce', 'find', 'some', 'every',
+  'includes', 'join', 'sort', 'reverse', 'flat', 'sum', 'avg',
+  'keys', 'values', 'entries', 'parseInt', 'parseFloat', 'toString',
+  'Ok', 'Err', 'Some', 'None', 'CRMError',
+  'http', 'clock', 'fs', 'rng',
+]);
+
+connection.onPrepareRename((params) => {
+  const uri = params.textDocument.uri;
+  const fileIndex = scopeCache.get(uri);
+  if (!fileIndex) return null;
+
+  const hit = fileIndex.symbolAtPosition(params.position.line, params.position.character);
+  if (!hit || !hit.symbol) return null;
+
+  const symbol = hit.symbol;
+
+  // Refuse to rename stdlib names
+  if (STDLIB_NAMES.has(symbol.name)) return null;
+
+  // Refuse to rename cross-file imports (would require modifying source file)
+  if (symbol.kind === 'import' && symbol.originSymbol) return null;
+
+  // Return the range for the rename placeholder
+  if (hit.isDef) {
+    return { range: symbol.defRange, placeholder: symbol.name };
+  }
+
+  // Find the matching reference entry
+  for (const ref of fileIndex.references) {
+    if (ref.symbol === symbol && containsPos(ref.range, params.position.line, params.position.character)) {
+      return { range: ref.range, placeholder: symbol.name };
+    }
+  }
+  return null;
+});
+
+connection.onRenameRequest((params) => {
+  const uri = params.textDocument.uri;
+  const fileIndex = scopeCache.get(uri);
+  if (!fileIndex) return null;
+
+  const hit = fileIndex.symbolAtPosition(params.position.line, params.position.character);
+  if (!hit || !hit.symbol) return null;
+
+  const symbol = hit.symbol;
+  const newName = params.newName;
+
+  // Same guards as prepareRename
+  if (STDLIB_NAMES.has(symbol.name)) return null;
+  if (symbol.kind === 'import' && symbol.originSymbol) return null;
+
+  const changes = {};
+  const edits = [];
+
+  // Definition
+  edits.push({ range: symbol.defRange, newText: newName });
+
+  // All references in this file
+  for (const ref of fileIndex.references) {
+    if (ref.symbol === symbol) {
+      edits.push({ range: ref.range, newText: newName });
+    }
+  }
+
+  changes[uri] = edits;
+  return { changes };
+});
+
+function containsPos(range, line, character) {
+  if (line < range.start.line || line > range.end.line) return false;
+  if (line === range.start.line && character < range.start.character) return false;
+  if (line === range.end.line && character >= range.end.character) return false;
+  return true;
+}
+
+// ============================================================================
+// SCOPE INDEX BUILDER
+// ============================================================================
+
+function buildScopeForDocument(uri, ast) {
+  const resolvingSet = new Set();
+  const resolveImportFn = makeImportResolver(uri, resolvingSet);
+  const fileIndex = buildFileIndex(ast, uri, resolveImportFn);
+  scopeCache.set(uri, fileIndex);
+  return fileIndex;
+}
+
+function makeImportResolver(originUri, resolvingSet) {
+  return function resolveImport(importPath, currentUri) {
+    const targetPath = resolveImportPath(importPath, currentUri);
+
+    // Guard against circular imports
+    if (resolvingSet.has(targetPath)) return null;
+    resolvingSet.add(targetPath);
+
+    // Check scope cache first
+    if (scopeCache.has(targetPath)) return scopeCache.get(targetPath);
+
+    // Try reading from disk
+    try {
+      const content = fs.readFileSync(targetPath, 'utf8');
+      const importedAst = parse(content, targetPath, { recover: true });
+      const importedIndex = buildFileIndex(importedAst, targetPath, null);
+      scopeCache.set(targetPath, importedIndex);
+      return importedIndex;
+    } catch (_e) {
+      return null; // file not found or parse error
+    }
+  };
+}
+
+// File watcher: invalidate caches when files change
+connection.onDidChangeWatchedFiles((params) => {
+  for (const change of params.changes) {
+    scopeCache.delete(change.uri);
+    astCache.delete(change.uri);
+  }
 });
 
 // ============================================================================
