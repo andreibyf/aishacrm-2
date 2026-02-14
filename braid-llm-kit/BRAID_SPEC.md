@@ -1,80 +1,110 @@
 # Braid Language Specification
 
-**Version:** 0.3.0-draft  
-**Status:** Evolving - Open for Community Contribution  
+**Version:** 0.5.0  
+**Status:** Active Development  
 **First Production App:** AiSHA CRM (AI Super Hi-performing Assistant)
 
 ---
 
 ## Overview
 
-Braid is an **AI-native Domain-Specific Language (DSL)** designed for defining type-safe, capability-controlled tools that Large Language Models (LLMs) can execute safely. It bridges the gap between human-readable code and machine-executable actions with first-class support for:
+Braid is a **security-first, target-agnostic DSL** for defining type-safe, capability-controlled tools that LLMs can execute safely. It compiles to multiple backends through an intermediate representation (IR).
 
-- **Type Safety** - Explicit types with Result/Option for error handling
-- **Effect Declarations** - Explicit side-effect tracking (`!net`, `!clock`, `!fs`)
-- **Capability Policies** - Fine-grained control over what tools can do
-- **Multi-Tenant Isolation** - Built-in tenant context for SaaS applications
-- **Audit Logging** - Every execution is traceable
+**Core guarantees:**
+
+- **Immutable bindings** — all `let` bindings are final; no variable reassignment
+- **Effect tracking** — every side effect (`!net`, `!clock`, `!fs`, `!rng`) must be declared
+- **Policy enforcement** — `@policy` annotations control what tools can do at compile time and runtime
+- **Sandbox isolation** — transpiled code blocks `eval`, `Function`, prototype pollution, and dangerous globals
+- **Multi-target compilation** — same `.braid` source compiles to JavaScript, Python, and future backends
+
+**Compilation pipeline:**
+
+```
+source.braid → parse() → AST → lower() → IR → emitJS()     → JavaScript
+                                             → emitPython()  → Python 3
+                                             → emitRust()    → Rust (future)
+```
+
+The direct path `AST → transpileToJS()` also exists for the AiSHA CRM integration.
 
 ---
 
 ## Table of Contents
 
-1. [Lexical Structure](#lexical-structure)
-2. [Types](#types)
-3. [Functions](#functions)
-4. [Effects](#effects)
-5. [Pattern Matching](#pattern-matching)
-6. [Expressions](#expressions)
-7. [Policies](#policies)
-8. [Standard Library Types](#standard-library-types)
-9. [Tool Registration](#tool-registration)
-10. [MCP Integration](#mcp-integration)
-11. [Best Practices](#best-practices)
-12. [Evolution Roadmap](#evolution-roadmap)
+1. [Lexical Structure](#1-lexical-structure)
+2. [Types](#2-types)
+3. [Functions](#3-functions)
+4. [Effects](#4-effects)
+5. [Pattern Matching](#5-pattern-matching)
+6. [Expressions](#6-expressions)
+7. [Control Flow](#7-control-flow)
+8. [Policies](#8-policies)
+9. [Standard Library](#9-standard-library)
+10. [Error Handling](#10-error-handling)
+11. [Security Model](#11-security-model)
+12. [Architecture](#12-architecture)
+13. [Tooling](#13-tooling)
+14. [Best Practices](#14-best-practices)
 
 ---
 
 ## 1. Lexical Structure
 
-### 1.1 Identifiers
+### 1.1 Keywords
 ```
-Ident = Letter { Letter | Digit | "_" }
-Letter = "A"…"Z" | "a"…"z"
-Digit = "0"…"9"
+fn let type import return if else match for in while
+break continue true false null
+Ok Err Some None
 ```
 
-### 1.2 Keywords
+### 1.2 Operators
 ```
-type enum trait impl fn let mut match return if else 
-true false Ok Err Some None
-import from as
+// Arithmetic & comparison
++  -  *  /  %  ==  !=  <  >  <=  >=
+
+// Logical
+&&  ||  !
+
+// Special
+|>    // pipe operator
+?.    // optional chaining
+...   // spread / rest
 ```
 
 ### 1.3 Comments
 ```braid
 // Single-line comment
 
-/* 
-   Multi-line comment
-   (planned - not yet implemented)
-*/
+/* Multi-line
+   block comment */
 ```
 
 ### 1.4 Literals
 ```braid
 // Strings
 "Hello, World"
-"Multi-part " + variable + " string"
+
+// Template strings (interpolation)
+`Hello, ${name}! You have ${count} items.`
 
 // Numbers
 42
 3.14
-1_000_000  // Underscores for readability (planned)
 
 // Booleans
 true
 false
+
+// Null
+null
+```
+
+### 1.5 Annotations
+```braid
+@policy(READ_ONLY)
+@audit
+@deprecated
 ```
 
 ---
@@ -82,122 +112,45 @@ false
 ## 2. Types
 
 ### 2.1 Primitive Types
-```braid
-String    // UTF-8 text
-Number    // Numeric value (integer or float)
-Boolean   // true or false
-JSONB     // Arbitrary JSON object
-```
+| Type | Description |
+|------|-------------|
+| `String` | UTF-8 text |
+| `Number` | Integer or float |
+| `Boolean` | `true` or `false` |
+| `Object` | Key-value map |
+| `Array` | Ordered collection |
 
-### 2.2 Type Aliases
+### 2.2 Algebraic Types
 ```braid
-type Email = String
-type TenantId = String
-type UserId = String
+type Result<T, E> = Ok<T> | Err<E>
+type Option<T> = Some<T> | None
 ```
 
 ### 2.3 Record Types
 ```braid
-type User = {
+type Account = {
   id: String,
   name: String,
-  email: Email,
-  created_at: String
-}
-
-type AccountMetadata = {
-  num_employees: Number,
-  notes: String
+  annual_revenue: Number,
+  industry: String
 }
 ```
 
-### 2.4 Algebraic Data Types
-
-#### Result Type (for error handling)
+### 2.4 Union Types
 ```braid
-type Result<T, E> = Ok<T> | Err<E>
-```
-
-#### Option Type (for nullable values)
-```braid
-type Option<T> = Some<T> | None
-```
-
-#### Union Types (enums)
-```braid
-enum Auth {
-  Anonymous,
-  Bearer(token: String),
-  ApiKey(key: String)
-}
-
-// Shorthand for string unions (planned)
-type Status = "new" | "active" | "closed"
-```
-
-### 2.5 Generic Types
-```braid
-// Arrays
-Array<Account>
-Array<String>
-
-// Generic result
-Result<Lead, CRMError>
-Result<Array<Activity>, NetworkError>
-```
-
-### 2.6 Error Types (Domain-Specific)
-
-Braid defines structured error variants for CRM operations. In practice, `.braid`
-files use two primary tags (`APIError` and `NetworkError`) that carry HTTP status
-codes. The backend `summarizeToolResult` function maps these status codes to the
-appropriate semantic error type for AI-friendly messages.
-
-```braid
-// Semantic error variants (used by summarizeToolResult, can be returned directly)
-type CRMError = 
+type CRMError =
   | NotFound { entity: String, id: String }
   | ValidationError { field: String, message: String }
   | PermissionDenied { operation: String, reason: String }
   | NetworkError { url: String, code: Number }
-  | DatabaseError { query: String, message: String }
-  | PolicyViolation { effect: String, policy: String }
-  // Catch-all HTTP error (primary pattern used in .braid files)
-  | APIError { url: String, code: Number, operation: String, entity?: String, id?: String, query?: String }
-```
-
-**Status code mapping in `summarizeToolResult`:**
-- `APIError` with `code: 400` → treated as ValidationError
-- `APIError` with `code: 401/403` → treated as PermissionDenied
-- `APIError` with `code: 404` → treated as NotFound
-- `APIError` with `code: 5xx` → treated as server error
-
-**Common pattern in .braid files:**
-```braid
-return match response {
-  Ok{value} => Ok(value.data),
-  Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_leads" }),
-  _ => Err({ tag: "NetworkError", url: url, code: 500 })
-};
 ```
 
 ---
 
 ## 3. Functions
 
-### 3.1 Function Declaration
+### 3.1 Pure Functions
 ```braid
-fn functionName(param1: Type1, param2: Type2) -> ReturnType {
-  // body
-}
-```
-
-### 3.2 Pure Functions (No Effects)
-```braid
-fn calculateTotal(items: Array<Item>) -> Number {
-  return items.reduce((sum, item) => sum + item.price, 0);
-}
-
 fn validateEmail(email: String) -> Boolean {
   let hasAt = includes(email, "@");
   let hasDot = includes(email, ".");
@@ -205,82 +158,83 @@ fn validateEmail(email: String) -> Boolean {
 }
 ```
 
-### 3.3 Effectful Functions
+### 3.2 Effectful Functions
 ```braid
-fn fetchAccount(id: String) -> Result<Account, CRMError> !net {
-  let url = "/api/v2/accounts/" + id;
-  let response = http.get(url);
-  
+@policy(READ_ONLY)
+fn searchAccounts(tenant: String, query: String) -> Result<Array, CRMError> !net {
+  let url = `/api/v2/accounts?tenant_id=${tenant}&q=${query}`;
+  let response = http.get(url, {});
+
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_account", entity: "Account", id: id }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "search_accounts"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 ```
 
-### 3.4 Multiple Effects
+### 3.3 Typed Parameters
 ```braid
-fn createActivityWithTimestamp(
-  subject: String,
-  tenant_id: String
-) -> Result<Activity, CRMError> !net, clock {
-  let timestamp = clock.now();
-  let payload = {
-    subject: subject,
-    tenant_id: tenant_id,
-    created_at: timestamp
-  };
-  
-  let response = http.post("/api/v2/activities", { body: payload });
-  return match response {
-    Ok{value} => Ok(value.data),
-    Err{error} => Err(NetworkError{ url: "/api/v2/activities", code: error.status }),
-    _ => Err(NetworkError{ url: "/api/v2/activities", code: 500 })
-  };
+fn createLead(
+  tenant: String,
+  first_name: String,
+  last_name: String,
+  email: String,
+  company: String
+) -> Result<Lead, CRMError> !net {
+  // Parameters are runtime-validated via checkType()
 }
 ```
+
+### 3.4 Immutability
+
+All bindings are immutable. There is no variable reassignment:
+
+```braid
+// ✅ Correct — new binding
+let x = 10;
+let y = x + 5;
+
+// ❌ Invalid — reassignment does not exist
+let x = 10;
+x = 15;  // parse error
+```
+
+This is by design. Braid functions are pipelines: bind inputs → call API → match result → return. Immutability guarantees that tenant IDs, policy objects, and security-critical values cannot be overwritten mid-execution.
 
 ---
 
 ## 4. Effects
 
-Effects declare what capabilities a function requires. They enable:
-- **Capability checking** at compile/lint time
-- **Policy enforcement** at runtime
-- **Audit logging** for security compliance
+Effects declare what capabilities a function requires. The transpiler performs static analysis (`detectUsedEffects`) to catch undeclared or unused effects.
 
 ### 4.1 Built-in Effects
 
-| Effect | Description | Example Usage |
-|--------|-------------|---------------|
-| `!net` | Network I/O (HTTP calls, API requests) | `http.get()`, `http.post()` |
-| `!clock` | Time access | `clock.now()` |
-| `!fs` | File system access | `fs.read()`, `fs.write()` |
-| `!db` | Direct database access (planned) | `db.query()` |
-| `!email` | Send emails (planned) | `email.send()` |
+| Effect | Namespace | Methods |
+|--------|-----------|---------|
+| `!net` | `http` | `get`, `post`, `put`, `delete`, `patch` |
+| `!clock` | `clock` | `now`, `sleep` |
+| `!fs` | `fs` | `read`, `write` |
+| `!rng` | `rng` | `random`, `uuid` |
 
-### 4.2 Effect Declaration Syntax
+### 4.2 Syntax
 ```braid
 // Single effect
-fn fetchData() -> Result<Data, Error> !net { ... }
+fn fetch() -> Result<Data, Error> !net { ... }
 
 // Multiple effects
-fn processWithTime() -> Result<Data, Error> !net, clock { ... }
+fn process() -> Result<Data, Error> !net, clock { ... }
 
-// No effects (pure function)
+// No effects = pure function
 fn calculate(x: Number) -> Number { ... }
 ```
 
-### 4.3 Effect Propagation (Planned)
-```braid
-// Caller must declare at least the effects of callees
-fn outerFunction() -> Result<Data, Error> !net, clock {
-  let data = fetchData();  // requires !net
-  let time = getTime();    // requires !clock
-  return process(data, time);
-}
-```
+### 4.3 Static Analysis
+
+The transpiler detects effect mismatches:
+
+- **BRD020** (error): Effect used in body but not declared in signature
+- **BRD021** (warning): Effect declared but never used
 
 ---
 
@@ -288,42 +242,32 @@ fn outerFunction() -> Result<Data, Error> !net, clock {
 
 ### 5.1 Basic Match
 ```braid
-fn greet(name: String) -> String {
-  match name {
-    "" => "Hello, stranger",
-    n => "Hello, " + n
-  }
+match value {
+  "active" => handleActive(),
+  "closed" => handleClosed(),
+  _ => handleDefault()
 }
 ```
 
-### 5.2 Result Pattern Matching
+### 5.2 Result Matching (primary pattern)
 ```braid
-fn handleResult(result: Result<Account, CRMError>) -> String {
-  match result {
-    Ok{value} => "Success: " + value.name,
-    Err{error} => "Error occurred",
-    _ => "Unknown state"
-  }
-}
+return match response {
+  Ok{value} => Ok(value.data),
+  Err{error} => CRMError.fromHTTP(url, error.status, "operation_name"),
+  _ => CRMError.network(url, 500, "unknown")
+};
 ```
 
-### 5.3 Enum Pattern Matching
+### 5.3 Match with Block Bodies
 ```braid
-fn authHeader(auth: Auth) -> String {
-  match auth {
-    Anonymous => "Authorization: none",
-    Bearer(t) => "Authorization: Bearer " + t,
-    ApiKey(k) => "X-API-Key: " + k
-  }
-}
-```
-
-### 5.4 Record Destructuring
-```braid
-fn formatUser(user: User) -> String {
-  match user {
-    { name: n, email: e } => n + " <" + e + ">"
-  }
+match response {
+  Ok{value} => {
+    let data = value.data;
+    let filtered = filter(data, isActive);
+    return Ok(filtered);
+  },
+  Err{error} => CRMError.fromHTTP(url, error.status, "op"),
+  _ => CRMError.network(url, 500, "unknown")
 }
 ```
 
@@ -331,358 +275,480 @@ fn formatUser(user: User) -> String {
 
 ## 6. Expressions
 
-### 6.1 Let Bindings
+### 6.1 Template Strings
 ```braid
-let x: Number = 42;
-let mut counter: Number = 0;  // Mutable (planned)
+let url = `/api/v2/leads?tenant_id=${tenant}&q=${query}`;
+let msg = `Found ${len(results)} results for ${query}`;
 ```
 
-### 6.2 Conditionals
+### 6.2 Optional Chaining
 ```braid
-fn checkStatus(status: String) -> String {
-  if status == "active" {
-    return "User is active";
-  } else {
-    return "User is inactive";
-  }
-}
+let status = lead?.status;
+let city = account?.address?.city;
+```
 
-// Early returns for error handling
-fn processResponse(response: Result) -> Result {
-  if response.tag == "Err" {
-    return Err({ message: "Failed" });
-  }
-  
-  let data = response.value.data;
+### 6.3 Pipe Operator
+```braid
+let result = data |> filter |> map |> len;
+// Equivalent to: len(map(filter(data)))
+```
+
+### 6.4 Spread Operator
+
+In arrays:
+```braid
+let combined = [...existing, newItem];
+```
+
+In objects:
+```braid
+let updated = { ...base, status: "active", tenant_id: tenant };
+```
+
+Rest parameters:
+```braid
+fn process(...args: Array) -> Result { ... }
+```
+
+### 6.5 Object and Array Literals
+```braid
+let payload = {
+  tenant_id: tenant,
+  name: name,
+  status: "new",
+  metadata: {}
+};
+
+let items = [1, 2, 3];
+let value = items[0];
+```
+
+---
+
+## 7. Control Flow
+
+### 7.1 If / Else-If / Else
+```braid
+if status == "active" {
   return Ok(data);
+} else if status == "pending" {
+  return Ok([]);
+} else {
+  return CRMError.notFound("Entity", id);
 }
+```
 
-// Complex conditions with member access
-fn validateLead(lead: Object) -> Boolean {
-  if lead.status == "qualified" && lead.score > 50 {
-    return true;
+### 7.2 For..In Loops
+```braid
+for lead in leads {
+  let status = lead?.status;
+  // process each lead
+}
+```
+
+### 7.3 While Loops
+```braid
+let index = 0;
+while index < len(items) {
+  let item = items[index];
+  // process item
+  let index = index + 1;
+}
+```
+
+### 7.4 Break and Continue
+```braid
+for item in items {
+  if item?.skip == true {
+    continue;
   }
-  return false;
+  if item?.done == true {
+    break;
+  }
 }
-```
-
-### 6.3 HTTP Expressions
-```braid
-// GET request
-let response = http.get(url);
-let response = http.get(url, { headers: headers });
-
-// POST request
-let response = http.post(url, { body: payload });
-let response = http.post(url, { body: payload, headers: headers });
-
-// PUT, DELETE, PATCH
-let response = http.put(url, { body: payload });
-let response = http.delete(url);
-let response = http.patch(url, { body: partial });
-```
-
-### 6.4 String Operations
-```braid
-let combined = "Hello, " + name + "!";
-let length = len(text);
-let hasValue = includes(text, "search");
-```
-
-### 6.5 Result Constructors
-```braid
-// Success
-Ok(accountData)
-Ok({ id: newId, name: name })
-
-// Error
-Err(ValidationError{ field: "email", message: "Invalid format" })
-Err(NetworkError{ url: requestUrl, code: 500 })
 ```
 
 ---
 
-## 7. Policies
+## 8. Policies
 
-Policies control what tools can do at runtime.
+### 8.1 Annotations
+Every effectful function should have a `@policy` annotation:
 
-### 7.1 Policy Structure
-```javascript
-// JavaScript representation
-const CRM_POLICIES = {
-  READ_ONLY: {
-    tenant_isolation: true,
-    allow_effects: ['net', 'clock'],
-    deny_effects: ['fs'],
-    max_execution_ms: 30000,
-    audit_log: true
-  },
-  
-  WRITE_OPERATIONS: {
-    tenant_isolation: true,
-    allow_effects: ['net', 'clock'],
-    deny_effects: ['fs'],
-    max_execution_ms: 60000,
-    audit_log: true,
-    require_user_id: true
-  },
-  
-  ADMIN_OPERATIONS: {
-    tenant_isolation: true,
-    allow_effects: ['net', 'clock', 'fs'],
-    max_execution_ms: 120000,
-    audit_log: true,
-    require_role: 'admin'
-  }
-};
-```
-
-### 7.2 Braid Policy Type (Planned)
 ```braid
-type Policy = {
-  allow_effects: Array<String>,
-  tenant_isolation: Boolean,
-  audit_log: Boolean,
-  max_execution_ms: Number
-}
-
-// Policy annotations (planned)
 @policy(READ_ONLY)
-fn listAccounts(tenant_id: String) -> Result<Array<Account>, CRMError> !net {
-  ...
+fn listAccounts(tenant: String) -> Result<Array, CRMError> !net { ... }
+
+@policy(WRITE_OPERATIONS)
+fn createLead(tenant: String, name: String) -> Result<Lead, CRMError> !net { ... }
+
+@policy(DELETE_OPERATIONS)
+fn deleteAccount(tenant: String, id: String) -> Result<Boolean, CRMError> !net { ... }
+
+@policy(ADMIN_OPERATIONS)
+fn purgeAllData(tenant: String) -> Result<Boolean, CRMError> !net { ... }
+```
+
+### 8.2 Valid Policies
+
+| Policy | Effects Allowed | Use Case |
+|--------|----------------|----------|
+| `READ_ONLY` | net, clock | List, search, get operations |
+| `WRITE_OPERATIONS` | net, clock | Create, update operations |
+| `DELETE_OPERATIONS` | net, clock | Soft-delete operations |
+| `ADMIN_OPERATIONS` | net, clock, fs | Bulk operations, system admin |
+| `SYSTEM` | net, clock, fs, rng | Internal system operations |
+
+### 8.3 Diagnostics
+
+- **BRD010** (warning): Effectful function without `@policy`
+- **BRD011** (error): Invalid policy name
+- **BRD030** (hint): Effectful function missing `tenant_id` as first parameter
+
+---
+
+## 9. Standard Library
+
+### 9.1 Collection Functions
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `len(x)` | `Array → Number` | Length of array or string |
+| `map(arr, fn)` | `Array, Fn → Array` | Transform each element |
+| `filter(arr, fn)` | `Array, Fn → Array` | Keep matching elements |
+| `reduce(arr, fn, init)` | `Array, Fn, T → T` | Fold to single value |
+| `find(arr, fn)` | `Array, Fn → Option` | First matching element |
+| `some(arr, fn)` | `Array, Fn → Boolean` | Any element matches |
+| `every(arr, fn)` | `Array, Fn → Boolean` | All elements match |
+| `includes(arr, val)` | `Array, T → Boolean` | Contains value |
+| `join(arr, sep)` | `Array, String → String` | Join with separator |
+| `sort(arr)` | `Array → Array` | Sort elements |
+| `reverse(arr)` | `Array → Array` | Reverse order |
+| `flat(arr)` | `Array → Array` | Flatten nested arrays |
+| `sum(arr)` | `Array<Number> → Number` | Sum all values |
+| `avg(arr)` | `Array<Number> → Number` | Average of values |
+
+### 9.2 Object Functions
+
+| Function | Description |
+|----------|-------------|
+| `keys(obj)` | Object keys as array |
+| `values(obj)` | Object values as array |
+| `entries(obj)` | Key-value pairs as array |
+
+### 9.3 Conversion Functions
+
+| Function | Description |
+|----------|-------------|
+| `parseInt(s)` | String to integer |
+| `parseFloat(s)` | String to float |
+| `toString(x)` | Any value to string |
+
+### 9.4 IO Namespaces
+
+```braid
+// Network (!net)
+http.get(url, options)
+http.post(url, options)
+http.put(url, options)
+http.delete(url, options)
+http.patch(url, options)
+
+// Time (!clock)
+clock.now()
+clock.sleep(ms)
+
+// Files (!fs)
+fs.read(path)
+fs.write(path, content)
+
+// Random (!rng)
+rng.random()
+rng.uuid()
+```
+
+---
+
+## 10. Error Handling
+
+### 10.1 CRMError Constructors
+
+The preferred error pattern uses `CRMError` constructors:
+
+```braid
+// HTTP error mapping (primary pattern)
+CRMError.fromHTTP(url, statusCode, operationName)
+
+// Specific constructors
+CRMError.notFound(entity, id)
+CRMError.validation(field, message)
+CRMError.forbidden(operation, reason)
+CRMError.network(url, code, context)
+```
+
+### 10.2 Standard Response Pattern
+
+Every effectful Braid function follows this pattern:
+
+```braid
+@policy(READ_ONLY)
+fn getAccount(tenant: String, id: String) -> Result<Account, CRMError> !net {
+  let url = `/api/v2/accounts/${id}?tenant_id=${tenant}`;
+  let response = http.get(url, {});
+
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => CRMError.fromHTTP(url, error.status, "get_account"),
+    _ => CRMError.network(url, 500, "unknown")
+  };
 }
 ```
 
----
+### 10.3 Runtime Error Codes
 
-## 8. Standard Library Types
-
-Located in `spec/types.braid`:
-
-### 8.1 Core Types
-```braid
-type Result<T, E> = Ok<T> | Err<E>
-type Option<T> = Some<T> | None
-```
-
-### 8.2 CRM Domain Types
-```braid
-type Account = { id, name, annual_revenue, industry, ... }
-type Lead = { id, first_name, last_name, email, status, ... }
-type Contact = { id, first_name, last_name, account_id, ... }
-type Opportunity = { id, name, amount, stage, probability, ... }
-type Activity = { id, type, subject, body, status, due_date, ... }
-```
-
-### 8.3 Error Types
-
-See [Section 2.6](#26-error-types-domain-specific) for the full type definition
-including the `APIError` catch-all variant used in production `.braid` files.
+| Code | Meaning |
+|------|---------|
+| `BRAID_TYPE` | Runtime type validation failed (`checkType()`) |
+| `BRAID_CAP` | Capability check failed (effect not allowed by policy) |
+| `BRAID_TIMEOUT` | Function exceeded `max_execution_ms` |
+| `BRAID_SANDBOX` | Sandbox blocked dangerous operation |
 
 ---
 
-## 9. Tool Registration
+## 11. Security Model
 
-### 9.1 AiSHA Integration Pattern
+### 11.1 Sandbox
+
+When sandbox mode is enabled (default in production, controlled by `BRAID_SANDBOX` env var), transpiled code:
+
+- Blocks property access to `__proto__`, `constructor`, `prototype` via `safeGet()`
+- Blocks global references to `eval`, `Function`, `process`, `require`, `fetch`, `setTimeout` via `guardGlobal()`
+- The sandbox module is auto-frozen to prevent runtime tampering
+
+### 11.2 Parser Security Warnings
+
+The parser emits **SEC001** warnings when source code contains suspicious identifiers:
+- `__proto__`, `constructor`, `prototype` in member expressions
+
+### 11.3 Capability Enforcement
+
+The runtime `cap()` function checks effects against the active policy before any IO operation:
+
 ```javascript
-// In braidIntegration-v2.js
-const TOOL_REGISTRY = {
-  search_leads: {
-    braidFile: 'leads.braid',
-    fnName: 'searchLeads',
-    description: 'Search for leads by name, company, or email',
-    paramOrder: ['query']
-  },
-  create_activity: {
-    braidFile: 'activities.braid',
-    fnName: 'createActivity',
-    description: 'Create a new activity (task, call, meeting, email)',
-    paramOrder: ['tenant_id', 'type', 'subject', 'due_date', 'due_time', ...]
-  }
-};
+// Emitted by transpiler for effectful functions
+cap(policy, "net");  // throws BRAID_CAP if policy denies !net
 ```
 
-### 9.2 Auto-Schema Generation
-Braid function signatures automatically generate OpenAI-compatible tool schemas:
+### 11.4 Type Validation
 
+The transpiler emits `checkType()` calls for every typed parameter:
+
+```javascript
+// For fn createLead(tenant: String, name: String)
+checkType(tenant, "String", "tenant");
+checkType(name, "String", "name");
+```
+
+---
+
+## 12. Architecture
+
+### 12.1 Core / Adapter Split
+
+```
+braid-llm-kit/
+├── core/                    ← Language core (target-agnostic)
+│   ├── braid-parse.js       Parser (758 lines, error recovery, source positions)
+│   ├── braid-transpile.js   Direct AST→JS transpiler (587 lines)
+│   ├── braid-ir.js          Intermediate representation (468 lines)
+│   ├── braid-emit-js.js     IR→JavaScript emitter (360 lines)
+│   ├── braid-emit-py.js     IR→Python 3 emitter (392 lines)
+│   ├── braid-rt.js          Runtime kernel (251 lines, zero app-specific code)
+│   ├── braid-sandbox.js     Security sandbox (142 lines)
+│   ├── braid-check.js       CLI validator (215 lines)
+│   ├── braid-lsp.js         Language Server Protocol (744 lines)
+│   ├── grammar.ebnf          Formal grammar (105 lines)
+│   ├── braid-core.test.js   Core tests (73 passing)
+│   ├── braid-ir.test.js     IR + emitter tests (47 passing)
+│   ├── e2e-v05.test.js      End-to-end tests (29 passing)
+│   └── package.json          @braid-lang/core v0.5.0
+│
+├── tools/                   ← AiSHA CRM adapter layer
+│   ├── braid-rt.js          Re-exports core + CRM policies, field permissions
+│   ├── braid-parse.js       Re-export shim → core/braid-parse.js
+│   ├── braid-transpile.js   Re-export shim → core/braid-transpile.js
+│   └── braid-adapter.js     Production adapter (transpile, cache, execute)
+│
+├── editor/vscode/           ← VS Code extension (v0.7.0)
+│   ├── extension-client.js  LSP client entry point
+│   ├── server/              LSP server + bundled core modules
+│   ├── syntaxes/            tmLanguage grammar
+│   └── snippets/            Code snippets
+│
+├── examples/assistant/      ← 20 production .braid files (119 functions)
+│   ├── accounts.braid
+│   ├── leads.braid
+│   ├── contacts.braid
+│   ├── opportunities.braid
+│   └── ...
+│
+└── spec/                    ← Type definitions and spec documents
+```
+
+### 12.2 Compilation Pipelines
+
+**Direct path** (AiSHA production):
+```
+.braid → parse() → AST → transpileToJS() → JavaScript → data URL → import()
+```
+
+**IR path** (multi-target):
+```
+.braid → parse() → AST → lower() → IR → emitJS()     → JavaScript
+                                       → emitPython()  → Python 3
+```
+
+### 12.3 IR Design
+
+The IR is a flat list of SSA-like instructions where every intermediate value gets a named temporary. This makes code generation trivial — each IR instruction maps 1:1 to a statement in the target language.
+
+```
+fn searchLeads(tenant: String, query: String) !net @policy(READ_ONLY)
+  let __t0 = template(`/api/v2/leads?tenant_id=`, tenant, `&q=`, query)
+  let __t1 = member(http, get)
+  let __t2 = call(__t1, __t0, {})
+  match __t2
+    Ok{value} => ...
+    Err{error} => ...
+```
+
+---
+
+## 13. Tooling
+
+### 13.1 VS Code Extension (v0.7.0)
+
+Install: `code --install-extension braid-language-0.7.0.vsix`
+
+Capabilities:
+- Syntax highlighting (tmLanguage)
+- Code snippets (40+ snippets for common patterns)
+- **LSP — real-time diagnostics** (parse errors, security warnings, policy validation, effect mismatches)
+- **Hover documentation** (function signatures, stdlib docs, IO namespace docs)
+- **Go-to-definition** (functions, types, variables)
+- **Auto-completion** (keywords, stdlib, IO methods, policies, effects, functions from current file)
+- **Signature help** (parameter hints for stdlib and user functions)
+- **Document symbols** (outline view of functions and types)
+
+### 13.2 CLI Tools
+
+```bash
+# Validate .braid files (3-phase: parse → structural → transpiler)
+node core/braid-check.js examples/assistant/leads.braid
+
+# Transpile to JavaScript
+node tools/braid-transpile.js --file input.braid --out output.js
+
+# Transpile with sandbox guards
+node tools/braid-transpile.js --file input.braid --out output.js --sandbox
+
+# Run tests (149 total)
+cd core && node --test braid-core.test.js braid-ir.test.js e2e-v05.test.js
+```
+
+### 13.3 Diagnostic Codes
+
+| Code | Severity | Meaning |
+|------|----------|---------|
+| BRD010 | warning | Effectful function missing `@policy` |
+| BRD011 | error | Invalid policy name |
+| BRD020 | error | Effect used but not declared |
+| BRD021 | warning | Effect declared but not used |
+| BRD030 | hint | Missing `tenant_id` as first parameter |
+| BRD040 | warning | Match expression without wildcard arm |
+| BRD050 | warning | Unreachable code after return |
+| BRD002 | warning | `null` literal — prefer `Option<T>` |
+| SEC001 | warning | Suspicious identifier (`__proto__`, `constructor`, `prototype`) |
+| TP001–TP003 | error | Transpiler errors |
+
+---
+
+## 14. Best Practices
+
+### 14.1 Always use @policy
 ```braid
-fn searchLeads(query: String) -> Result<Array<Lead>, CRMError> !net
+// ✅ Policy declared
+@policy(READ_ONLY)
+fn listLeads(tenant: String) -> Result<Array, CRMError> !net { ... }
+
+// ❌ Missing policy
+fn listLeads(tenant: String) -> Result<Array, CRMError> !net { ... }
 ```
-↓ Generates
-```json
-{
-  "name": "search_leads",
-  "description": "Search for leads",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "query": { "type": "string", "description": "Search query" }
-    },
-    "required": ["query"]
-  }
+
+### 14.2 Tenant-first parameters
+```braid
+// ✅ tenant_id is first parameter
+fn createLead(tenant: String, name: String) -> Result<Lead, CRMError> !net
+
+// ❌ tenant_id buried
+fn createLead(name: String, tenant: String) -> Result<Lead, CRMError> !net
+```
+
+### 14.3 Use CRMError constructors
+```braid
+// ✅ Structured error
+Err{error} => CRMError.fromHTTP(url, error.status, "create_lead"),
+
+// ❌ Raw object
+Err{error} => Err({ tag: "APIError", url: url, code: error.status }),
+```
+
+### 14.4 Declare all effects
+```braid
+// ✅ Effects match usage
+fn process() -> Result<Data, Error> !net, clock {
+  let time = clock.now();
+  let response = http.get(url, {});
+}
+
+// ❌ Missing clock effect
+fn process() -> Result<Data, Error> !net {
+  let time = clock.now();  // BRD020 error
 }
 ```
 
----
-
-## 10. MCP Integration
-
-Braid integrates with the Model Context Protocol (MCP) via `braid-mcp-node-server`.
-
-### 10.1 Request Envelope
-```typescript
-interface BraidRequestEnvelope {
-  requestId: string;
-  actor: { id: string, type: "user" | "agent" | "system" };
-  actions: BraidAction[];
-  createdAt: string;
-  client?: string;
-  channel?: string;
-  metadata?: Record<string, unknown>;
-}
-```
-
-### 10.2 Action Structure
-```typescript
-interface BraidAction {
-  id: string;
-  verb: "read" | "search" | "create" | "update" | "delete" | "run";
-  actor: BraidActor;
-  resource: { system: string, kind: string };
-  targetId?: string;
-  filters?: BraidFilter[];
-  payload?: Record<string, unknown>;
-}
-```
-
-### 10.3 Adapters
-The MCP server routes actions to system-specific adapters:
-- `CrmAdapter` - AiSHA CRM operations
-- `WebAdapter` - Web scraping/search
-- `GitHubAdapter` - Repository operations
-- `LlmAdapter` - AI model calls
-- `MemoryAdapter` - Context persistence
-
----
-
-## 11. Best Practices
-
-### 11.1 Always Use Result Types
+### 14.5 Prefer immutable data flow
 ```braid
-// ✅ Good - explicit error handling
-fn fetchAccount(id: String) -> Result<Account, CRMError> !net
+// ✅ New bindings, no mutation
+let base = { q: query, limit: 10 };
+let withStatus = { ...base, status: status };
 
-// ❌ Bad - implicit error handling
-fn fetchAccount(id: String) -> Account !net
-```
-
-### 11.2 Declare All Effects
-```braid
-// ✅ Good - effects are explicit
-fn createWithTimestamp() -> Result<Lead, CRMError> !net, clock
-
-// ❌ Bad - hidden effects
-fn createWithTimestamp() -> Result<Lead, CRMError>
-```
-
-### 11.3 Use Descriptive Error Types
-```braid
-// ✅ Good - specific error with context
-Err(NotFound{ entity: "Lead", id: leadId })
-
-// ❌ Bad - generic error
-Err("Something went wrong")
-```
-
-### 11.4 Tenant Isolation
-```braid
-// ✅ Good - tenant_id is first parameter
-fn listLeads(tenant_id: String, status: String) -> Result<Array<Lead>, CRMError>
-
-// ❌ Bad - tenant_id buried or missing
-fn listLeads(status: String) -> Result<Array<Lead>, CRMError>
+// ❌ Braid doesn't support reassignment
+let payload = { q: query };
+payload.status = status;  // parse error
 ```
 
 ---
 
-## 12. Evolution Roadmap
+## Appendix: Grammar (EBNF)
 
-### Phase 1: Current (v0.2.0) ✅
-- Basic type system
-- Result/Option types
-- Effect declarations
-- Pattern matching
-- HTTP operations
-- AiSHA CRM integration
-
-### Phase 2: Near-Term (v0.3.0)
-- [ ] Better error messages with line context
-- [ ] VS Code syntax highlighting extension
-- [ ] Auto-generate TOOL_REGISTRY from .braid files
-- [ ] If/else expressions (not just match)
-- [ ] String interpolation: `"Hello ${name}"`
-
-### Phase 3: Medium-Term (v0.4.0)
-- [ ] Language Server Protocol (LSP) implementation
-- [ ] Browser-based playground
-- [ ] Tool composition: `pipeline = searchLeads >> filterActive >> enrich`
-- [ ] Automatic retry with backoff: `!net(retry=3)`
-- [ ] Caching hints: `!net(cache=60s)`
-
-### Phase 4: Long-Term (v1.0.0)
-- [ ] Compile-time effect checking
-- [ ] Policy DSL: `policy ReadOnly { allow: [read], deny: [write] }`
-- [ ] Streaming support for real-time APIs
-- [ ] Multi-language codegen (TypeScript, Python, Go)
-- [ ] Community package registry
-
----
-
-## Appendix A: Grammar (EBNF)
+See `core/grammar.ebnf` for the complete formal grammar. Summary:
 
 ```ebnf
-Program     = { Item } ;
-Item        = TypeDecl | EnumDecl | TraitDecl | ImplDecl | FnDecl ;
-
-TypeDecl    = "type" Ident "=" TypeExpr ";" ;
-EnumDecl    = "enum" Ident "{" { Variant } "}" ;
-Variant     = Ident [ "(" TypeExpr { "," TypeExpr } ")" ] ;
-
-FnDecl      = FnSig Block ;
-FnSig       = "fn" Ident "(" [ Params ] ")" "->" TypeExpr [ "!" EffectList ] ;
-Params      = Param { "," Param } ;
-Param       = Ident ":" TypeExpr ;
-
-EffectList  = Ident { "," Ident } ;
-
-TypeExpr    = Ident
-            | "[" TypeExpr "]"                   (* slice *)
-            | Ident "[" TypeExpr { "," TypeExpr } "]"   (* generic *)
-            | "{" Field { "," Field } "}"        (* record *)
-            ;
-
+Program     = { Import | Annotation FnDecl | FnDecl | TypeDecl } ;
+Annotation  = "@" Ident "(" Args ")" ;
+FnDecl      = "fn" Ident "(" Params ")" "->" TypeExpr [ "!" Effects ] Block ;
+TypeDecl    = "type" Ident "=" Variants ;
+Import      = "import" "{" Idents "}" "from" StringLit ;
 Block       = "{" { Stmt } "}" ;
-Stmt        = Let | Expr ";" ;
-Let         = "let" [ "mut" ] Ident ":" TypeExpr "=" Expr ";" ;
-
-Expr        = Ident | Literal | Call | Match | Lambda | RecordLit
-            | "Ok" "(" Expr ")" | "Err" "(" Expr ")" ;
-
-Match       = "match" Expr "{" { MatchArm } "}" ;
-MatchArm    = Pattern "=>" Expr ;
-Pattern     = "_" | Literal | Ident | RecordPat ;
+Stmt        = LetStmt | ReturnStmt | IfStmt | ForStmt | WhileStmt
+            | BreakStmt | ContinueStmt | ExprStmt ;
+Expr        = PipeExpr ;
+PipeExpr    = OrExpr { "|>" OrExpr } ;
+Primary     = Ident | Number | String | Template | Bool | Null
+            | Array | Object | Match | Lambda | "(" Expr ")" ;
 ```
 
 ---
 
-## Appendix B: File Extensions
-
-| Extension | Purpose |
-|-----------|---------|
-| `.braid` | Braid source files |
-| `.braid.json` | Compiled tool schemas |
-| `.braid.d.ts` | TypeScript type declarations (planned) |
-
----
-
-*This specification is a living document. Contributions welcome!*
+*Braid v0.5.0 — 149 tests passing, 119 production functions, 20 .braid files*

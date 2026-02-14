@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.7.4] - 2026-02-14
+
+### Added
+- **Braid E2E test suite** — End-to-end v0.5 test (`e2e-v05.test.js`) with companion `.braid` fixture
+
+### Changed
+- **Braid adapter** — Updated `braid-adapter.js` with expanded functionality
+- **VS Code extension** — Updated `.vscodeignore` and server `package.json`
+
+---
+
 ## [4.7.3] - 2026-02-14
 
 ### Added

@@ -12,6 +12,10 @@ import { parse } from './braid-parse.js';
 import { transpileToJS } from './braid-transpile.js';
 import { CRM_POLICIES } from './braid-rt.js';
 
+// Sandbox mode: enabled by default in production, blocks eval/prototype pollution
+// in transpiled code. Disable with BRAID_SANDBOX=0 for debugging only.
+const SANDBOX_MODE = process.env.BRAID_SANDBOX !== '0';
+
 // Dev mode: check file mtime to invalidate stale compiled cache entries.
 // In production (NODE_ENV=production), skip mtime checks for performance.
 const DEV_MODE = process.env.NODE_ENV !== 'production';
@@ -113,12 +117,21 @@ export async function executeBraid(braidFilePath, functionName, policy, deps, ar
       const runtimePath = path.resolve(path.dirname(braidFilePath), '../../tools/braid-rt.js');
       const runtimeUrl = `file:///${runtimePath.replace(/\\/g, '/')}`;
       
-      const { code } = transpileToJS(ast, { 
+      const { code, diagnostics } = transpileToJS(ast, { 
         policy, 
         source: braidFilePath,
         typescript: false,
+        sandbox: SANDBOX_MODE,
         runtimeImport: runtimeUrl
       });
+
+      // Log transpiler diagnostics in dev mode
+      if (DEV_MODE && diagnostics?.length) {
+        for (const d of diagnostics) {
+          const level = d.severity === 'error' ? 'error' : 'warn';
+          console[level](`[Braid] ${d.code}: ${d.message} (${path.basename(braidFilePath)})`);
+        }
+      }
       // Removed debug-time compiled code preview logging
       
       // Dynamic import using data URL (Node.js 18+)

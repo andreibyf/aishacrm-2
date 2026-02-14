@@ -1,112 +1,62 @@
 # Braid Language Support for VS Code
 
-**Type-safe, capability-controlled language for AI tool definitions.**
+Syntax highlighting, code snippets, and Language Server Protocol (LSP) intelligence for the Braid DSL.
 
 ## Features
 
-### Syntax Highlighting
-- Keywords: `fn`, `type`, `enum`, `match`, `let`, `const`, `actor`, `spawn`, etc.
-- Types: `Result`, `Option`, `String`, `Number`, `Boolean`, and all CRM entity types
-- Effects: `!net`, `!clock`, `!fs`, `!db`, `!notify`, and compound effects like `!db.write`
-- CRM Types: `Account`, `Lead`, `Contact`, `Opportunity`, `Activity`, `Employee`, `BizDevSource`
-- Error Types: `NotFound`, `ValidationError`, `NetworkError`, `CRMError`, `APIError`
-- HTTP methods: `http.get`, `http.post`, `http.put`, `http.patch`, `http.delete`
-- Result constructors: `Ok`, `Err`
-- Doc comments: `///`
-- String interpolation: `${expr}` inside double-quoted strings
-- Capability types: `Http`, `Clock`, `Fs`, `Notify`, `Addr`
-
-### Document Formatting (NEW in v0.4.0)
-- **Format Document** (Shift+Alt+F) — auto-indents, normalizes spacing, cleans up whitespace
-- **Format Selection** — format only selected lines
-- **On-Type Formatting** — auto-dedent when typing `}`
-- Configurable indent size (default: 2 spaces)
-- Collapses multiple blank lines
-- Inserts blank line separators between top-level `fn` declarations
-- Trailing whitespace removal
-- String-aware (doesn't modify content inside string literals)
-
-### Snippets
-
-| Prefix | Description |
-|--------|-------------|
-| `fn` | Pure function |
-| `fnnet` | Function with network effect |
-| `fneffects` | Function with multiple effects |
-| `match` | Pattern match expression |
-| `matchres` | Match a Result type |
-| `type` | Type alias |
-| `typerec` | Record type definition |
-| `enum` | Enum type definition |
-| `let` | Let binding |
-| `httpget` | HTTP GET request |
-| `httppost` | HTTP POST request |
-| `ok` | Ok result constructor |
-| `err` | Err result constructor |
-| `crmtool` | Complete CRM tool template |
-| `searchtool` | Search tool template |
-| `validate` | Validation function template |
-
-### Language Configuration
-- Auto-closing pairs for `{}`, `[]`, `()`, `<>`, `""`
-- Bracket matching including angle brackets
-- Comment toggling (line `//` and block `/* */`)
-- Code folding via bracket matching and `// #region` markers
-- Smart indentation rules
-
-## Configuration
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `braid.format.indentSize` | `2` | Spaces per indent level |
-| `braid.format.insertFinalNewline` | `true` | Add newline at end of file |
-| `braid.format.maxLineLength` | `120` | Soft limit for formatting hints |
+- **Syntax highlighting** — keywords, types, effects, template strings, optional chaining, pipe operator
+- **40+ snippets** — `@policy`, `CRMError` constructors, tool templates, control flow patterns
+- **Real-time diagnostics** — parse errors, effect mismatches, security warnings, missing policies
+- **Hover documentation** — function signatures, stdlib reference, IO namespace docs
+- **Go-to-definition** — jump to function, type, and variable declarations
+- **Auto-completion** — keywords, stdlib functions, IO methods, policies, effects
+- **Signature help** — parameter hints for stdlib and user-defined functions
+- **Document symbols** — outline view of functions and types
 
 ## Installation
 
-### From VSIX
 ```bash
-code --install-extension braid-language-0.4.0.vsix
+code --install-extension braid-language-0.7.0.vsix
 ```
 
-### From Source (Development)
-```bash
-cd braid-llm-kit/editor/vscode
-npx @vscode/vsce package
-code --install-extension braid-language-0.4.0.vsix
-```
+## Snippets
 
-### Manual Installation
-1. Copy this folder to `~/.vscode/extensions/braid-language`
-2. Restart VS Code
+Type these prefixes and press Tab:
 
-## Example
+| Prefix | Expands to |
+|--------|-----------|
+| `fn` | Function with typed params |
+| `fnnet` | Effectful function with `!net` and `@policy` |
+| `match` | Match expression |
+| `matchblock` | Match with block bodies |
+| `errhttpfrom` | `CRMError.fromHTTP(...)` |
+| `errnotfound` | `CRMError.notFound(...)` |
+| `errval` | `CRMError.validation(...)` |
+| `crmread` | Full READ_ONLY tool template |
+| `crmwrite` | Full WRITE_OPERATIONS tool template |
+| `crmdelete` | Full DELETE_OPERATIONS tool template |
+| `crmsearch` | Search tool template |
+| `@policy` | `@policy(...)` annotation |
 
-```braid
-// Search leads by name or email
-import { Result, Lead, CRMError } from "../../spec/types.braid"
+## LSP Diagnostics
 
-fn searchLeads(query: String) -> Result<Array<Lead>, CRMError> !net {
-  let url = "/api/v2/leads/search?q=" + query;
-  let response = http.get(url);
-  
-  return match response {
-    Ok{value} => Ok(value.data),
-    Err{error} => Err(NetworkError{ url: url, code: error.status }),
-    _ => Err(NetworkError{ url: url, code: 500 })
-  };
-}
-```
+The language server catches issues as you type:
 
-## Language Reference
+- **BRD010** — Effectful function without `@policy`
+- **BRD011** — Invalid policy name
+- **BRD020** — Effect used but not declared in signature
+- **BRD021** — Effect declared but never used
+- **BRD030** — Missing `tenant_id` as first parameter
+- **BRD040** — Match without wildcard arm
+- **SEC001** — Suspicious `__proto__`/`constructor`/`prototype` access
 
-See [BRAID_SPEC.md](../../BRAID_SPEC.md) for the full language specification.
+## Requirements
 
-## Contributing
+- VS Code 1.86+
+- Node.js 18+ (for LSP server)
 
-Braid is an evolving language. Contributions welcome!
+## Version History
 
-- Report issues
-- Submit syntax improvements
-- Add new snippets
-- Improve documentation
+- **0.7.0** — LSP server (diagnostics, hover, completion, go-to-definition, signature help, symbols)
+- **0.6.0** — Updated snippets for CRMError.fromHTTP() pattern, @policy in all templates
+- **0.5.0** — Initial syntax highlighting and snippets

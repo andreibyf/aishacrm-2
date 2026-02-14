@@ -1,0 +1,128 @@
+// e2e-v05.braid — End-to-end test using all v0.4/v0.5 Braid features
+// Tests: for..in, while, template strings, optional chaining, pipe operator,
+//        spread, else-if, null literal, @policy, match with blocks, CRMError
+
+import { Result, Lead, CRMError } from "../../spec/types.braid"
+
+// --- Feature: @policy annotation + template strings + optional chaining ---
+@policy(READ_ONLY)
+fn searchLeadsAdvanced(
+  tenant: String,
+  query: String,
+  status: String,
+  limit: Number
+) -> Result<Array, CRMError> !net {
+
+  // Feature: template strings
+  let url = `/api/v2/leads?tenant_id=${tenant}&q=${query}&limit=${limit}`;
+
+  let response = http.get(url, {});
+
+  // Feature: match with block body
+  return match response {
+    Ok{value} => {
+      let leads = value.data;
+
+      // Feature: for..in loop
+      let filtered = [];
+      for lead in leads {
+        // Feature: optional chaining
+        let leadStatus = lead?.status;
+        
+        // Feature: else-if chain + spread in array
+        if status == null {
+          let filtered = [...filtered, lead];
+        } else if leadStatus == status {
+          let filtered = [...filtered, lead];
+        }
+      }
+
+      return Ok(filtered);
+    },
+    Err{error} => CRMError.fromHTTP(url, error.status, "search_leads_advanced"),
+    _ => CRMError.network(url, 500, "unknown")
+  };
+}
+
+// --- Feature: pipe operator ---
+@policy(READ_ONLY)
+fn getLeadNames(tenant: String) -> Result<Array, CRMError> !net {
+  let url = `/api/v2/leads?tenant_id=${tenant}`;
+  let response = http.get(url, {});
+
+  return match response {
+    Ok{value} => {
+      // Feature: pipe operator with map
+      let names = value.data |> len;
+      return Ok(names);
+    },
+    Err{error} => CRMError.fromHTTP(url, error.status, "get_lead_names"),
+    _ => CRMError.network(url, 500, "unknown")
+  };
+}
+
+// --- Feature: while loop + spread in objects ---
+@policy(WRITE_OPERATIONS)
+fn batchUpdateLeads(
+  tenant: String,
+  lead_ids: Array,
+  updates: Object
+) -> Result<Number, CRMError> !net {
+  let results = [];
+  let index = 0;
+
+  // Feature: while loop
+  while index < len(lead_ids) {
+    let id = lead_ids[index];
+    // Feature: template string in URL
+    let url = `/api/v2/leads/${id}`;
+    // Feature: spread in object literal
+    let body = { ...updates, tenant_id: tenant };
+
+    let response = http.put(url, { body: body });
+    
+    match response {
+      Ok{value} => {
+        let results = [...results, value];
+      },
+      Err{error} => {
+        // Feature: template string for logging
+        let msg = `Failed to update lead ${id}: status ${error.status}`;
+      },
+      _ => {
+        let msg = `Unknown error updating lead ${id}`;
+      }
+    };
+
+    let index = index + 1;
+  }
+
+  return Ok(len(results));
+}
+
+// --- Pure function (no effects) with new features ---
+fn buildSearchPayload(
+  query: String,
+  filters: Object,
+  limit: Number
+) -> Object {
+  // Feature: spread + null
+  let base = {
+    q: query,
+    limit: limit,
+    offset: 0
+  };
+
+  // Feature: optional chaining on filters
+  let status = filters?.status;
+  let source = filters?.source;
+
+  // Feature: else-if
+  if status != null {
+    let base = { ...base, status: status };
+  } else if source != null {
+    let base = { ...base, source: source };
+  }
+
+  return base;
+}

@@ -1,8 +1,10 @@
-# Braid v0.2.0 Production Guide
+# Braid Production Guide
 
-## Executive Summary
+> **Note:** This guide was written for v0.2.0. The current version is v0.5.0 with multi-target compilation, LSP, and significantly expanded language features. See [BRAID_SPEC.md](./BRAID_SPEC.md) and [README.md](./README.md) for the current state.
 
-Braid v0.2.0 is **production-ready** for AI-enabled CRM applications with:
+## Executive Summary (v0.2.0 Historical)
+
+Braid v0.2.0 was the first **production-ready** release for AI-enabled CRM applications with:
 - **Type Safety**: Union types, generics, Result<T,E>, no null errors
 - **Security**: Tenant isolation, audit logging, capability enforcement, timeout protection
 - **Performance**: Compilation caching, result caching, <50ms overhead

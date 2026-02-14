@@ -1,204 +1,260 @@
-# Braid Quick Reference Card
+# Braid Quick Reference (v0.5.0)
 
 ## Function Syntax
 
 ```braid
-// Pure function (no effects)
-fn functionName(param: Type) -> ReturnType {
-  // body
+// Pure function
+fn calculate(x: Number, y: Number) -> Number {
+  return x + y;
 }
 
-// Function with effects
-fn functionName(param: Type) -> Result<T, E> !net, clock {
-  // body
+// Effectful function with policy
+@policy(READ_ONLY)
+fn fetchData(tenant: String) -> Result<Array, CRMError> !net {
+  let response = http.get(`/api/v2/data?tenant_id=${tenant}`, {});
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => CRMError.fromHTTP(url, error.status, "fetch_data"),
+    _ => CRMError.network(url, 500, "unknown")
+  };
 }
 ```
 
 ## Types
 
-| Type | Example | Description |
-|------|---------|-------------|
-| `String` | `"hello"` | UTF-8 text |
-| `Number` | `42`, `3.14` | Numeric value |
-| `Boolean` | `true`, `false` | Boolean |
-| `Array<T>` | `Array<Lead>` | Array of T |
-| `Result<T, E>` | `Result<Lead, CRMError>` | Success or error |
-| `Option<T>` | `Option<String>` | Some value or None |
-| `JSONB` | Arbitrary JSON | JSON object |
+| Type | Example | Notes |
+|------|---------|-------|
+| `String` | `"hello"`, `` `hello ${name}` `` | Template strings supported |
+| `Number` | `42`, `3.14` | |
+| `Boolean` | `true`, `false` | |
+| `Array` | `[1, 2, 3]` | |
+| `Object` | `{ key: value }` | |
+| `null` | `null` | Prefer `Option<T>` |
+| `Result<T, E>` | `Ok(data)`, `Err(error)` | Primary error handling |
+| `Option<T>` | `Some(value)`, `None` | Optional values |
 
 ## Effects
 
-| Effect | Access | Example |
-|--------|--------|---------|
-| `!net` | HTTP/Network | `http.get(url)` |
-| `!clock` | Current time | `clock.now()` |
-| `!fs` | File system | `fs.read(path)` |
+| Effect | Namespace | Methods |
+|--------|-----------|---------|
+| `!net` | `http` | `get`, `post`, `put`, `delete`, `patch` |
+| `!clock` | `clock` | `now`, `sleep` |
+| `!fs` | `fs` | `read`, `write` |
+| `!rng` | `rng` | `random`, `uuid` |
 
-## HTTP Operations
+## Policies
 
 ```braid
-// GET
-let response = http.get(url);
-let response = http.get(url, { headers: { ... } });
+@policy(READ_ONLY)         // list, search, get
+@policy(WRITE_OPERATIONS)  // create, update
+@policy(DELETE_OPERATIONS)  // soft-delete
+@policy(ADMIN_OPERATIONS)  // bulk ops, system admin
+@policy(SYSTEM)            // internal system ops
+```
 
-// POST
-let response = http.post(url, { body: payload });
+## Error Constructors
 
-// PUT
-let response = http.put(url, { body: payload });
-
-// DELETE
-let response = http.delete(url);
-
-// PATCH
-let response = http.patch(url, { body: partial });
+```braid
+CRMError.fromHTTP(url, statusCode, operationName)  // primary pattern
+CRMError.notFound(entity, id)
+CRMError.validation(field, message)
+CRMError.forbidden(operation, reason)
+CRMError.network(url, code, context)
 ```
 
 ## Pattern Matching
 
 ```braid
-// Match expression
-match value {
-  pattern1 => result1,
-  pattern2 => result2,
-  _ => default
-}
+// Standard response pattern
+return match response {
+  Ok{value} => Ok(value.data),
+  Err{error} => CRMError.fromHTTP(url, error.status, "op_name"),
+  _ => CRMError.network(url, 500, "unknown")
+};
 
-// Match Result
+// Match with block body
 match response {
-  Ok{value} => handleSuccess(value),
-  Err{error} => handleError(error),
-  _ => handleUnknown()
+  Ok{value} => {
+    let filtered = filter(value.data, isActive);
+    return Ok(filtered);
+  },
+  Err{error} => CRMError.fromHTTP(url, error.status, "op"),
+  _ => CRMError.network(url, 500, "unknown")
 }
 ```
 
-## Result Constructors
+## Template Strings
 
 ```braid
-// Success
-Ok(value)
-Ok({ id: "123", name: "Test" })
-
-// Error
-Err(ErrorType{ field: value })
-Err(NotFound{ entity: "Lead", id: leadId })
-Err(NetworkError{ url: url, code: 500 })
+let url = `/api/v2/leads?tenant_id=${tenant}&q=${query}`;
+let msg = `Found ${len(results)} results`;
 ```
 
-## Error Types
+## Optional Chaining
 
 ```braid
-CRMError =
-  | NotFound { entity: String, id: String }
-  | ValidationError { field: String, message: String }
-  | PermissionDenied { operation: String, reason: String }
-  | NetworkError { url: String, code: Number }
-  | DatabaseError { query: String, message: String }
-  | PolicyViolation { effect: String, policy: String }
+let status = lead?.status;
+let city = account?.address?.city;
 ```
 
-## Type Definitions
+## Pipe Operator
 
 ```braid
-// Type alias
-type Email = String
+let result = data |> filter |> map |> len;
+```
 
-// Record type
-type User = {
-  id: String,
-  name: String,
-  email: Email
+## Spread
+
+```braid
+let combined = [...existing, newItem];
+let updated = { ...base, status: "active" };
+```
+
+## Control Flow
+
+```braid
+// If / else-if / else
+if status == "active" {
+  return Ok(data);
+} else if status == "pending" {
+  return Ok([]);
+} else {
+  return CRMError.notFound("Entity", id);
 }
 
-// Enum
-enum Status { New, Active, Closed }
-enum Auth { Anonymous, Bearer(token: String) }
+// For..in
+for lead in leads {
+  let name = lead?.name;
+}
 
-// Union error type
-type MyError =
-  | NotFound { id: String }
-  | Invalid { reason: String }
-```
-
-## Common Patterns
-
-### API Tool Template
-```braid
-fn toolName(tenant_id: String, param: Type) -> Result<T, CRMError> !net {
-  let url = "/api/v2/endpoint";
-  let payload = { tenant_id: tenant_id, param: param };
-  let response = http.post(url, { body: payload });
-  
-  return match response {
-    Ok{value} => Ok(value.data),
-    Err{error} => Err(NetworkError{ url: url, code: error.status }),
-    _ => Err(NetworkError{ url: url, code: 500 })
-  };
+// While
+let i = 0;
+while i < len(items) {
+  let item = items[i];
+  let i = i + 1;
 }
 ```
 
-### Search Tool Template
-```braid
-fn searchThing(query: String) -> Result<Array<T>, CRMError> !net {
-  let url = "/api/v2/things/search?q=" + query;
-  let response = http.get(url);
-  
-  return match response {
-    Ok{value} => Ok(value.data),
-    Err{error} => Err(NetworkError{ url: url, code: error.status }),
-    _ => Err(NetworkError{ url: url, code: 500 })
-  };
-}
-```
-
-### Validation (Pure)
-```braid
-fn validateEmail(email: String) -> Boolean {
-  let hasAt = includes(email, "@");
-  let hasDot = includes(email, ".");
-  return hasAt && hasDot;
-}
-```
-
-## Built-in Functions
+## Stdlib
 
 | Function | Description |
 |----------|-------------|
-| `len(string)` | String length |
-| `includes(string, search)` | Check if contains |
-| `clock.now()` | Current ISO timestamp |
+| `len(x)` | Length of array or string |
+| `map(arr, fn)` | Transform elements |
+| `filter(arr, fn)` | Keep matching elements |
+| `reduce(arr, fn, init)` | Fold to single value |
+| `find(arr, fn)` | First match |
+| `some(arr, fn)` | Any match? |
+| `every(arr, fn)` | All match? |
+| `includes(arr, val)` | Contains? |
+| `join(arr, sep)` | Join with separator |
+| `sort(arr)` | Sort |
+| `reverse(arr)` | Reverse |
+| `flat(arr)` | Flatten nested |
+| `sum(arr)` | Sum numbers |
+| `avg(arr)` | Average |
+| `keys(obj)` | Object keys |
+| `values(obj)` | Object values |
+| `entries(obj)` | Key-value pairs |
+| `parseInt(s)` | String → integer |
+| `parseFloat(s)` | String → float |
+| `toString(x)` | Any → string |
 
-## Policies (Runtime)
+## Immutability
 
-```javascript
-{
-  tenant_isolation: true,    // Enforce tenant context
-  allow_effects: ['net'],    // Allowed effects
-  deny_effects: ['fs'],      // Denied effects
-  max_execution_ms: 30000,   // Timeout
-  audit_log: true            // Log executions
+All bindings are immutable. No reassignment:
+
+```braid
+let x = 10;
+let y = x + 5;     // ✅ new binding
+
+let x = 10;
+x = 15;             // ❌ parse error — no reassignment
+```
+
+Use spread to create updated copies:
+```braid
+let base = { q: query, limit: 10 };
+let withStatus = { ...base, status: "active" };
+```
+
+## Tool Template
+
+```braid
+import { Result, Lead, CRMError } from "../../spec/types.braid"
+
+@policy(WRITE_OPERATIONS)
+fn createLead(
+  tenant: String,
+  first_name: String,
+  last_name: String,
+  email: String,
+  company: String
+) -> Result<Lead, CRMError> !net {
+  let url = "/api/v2/leads";
+  let body = {
+    tenant_id: tenant,
+    first_name: first_name,
+    last_name: last_name,
+    email: email,
+    company: company,
+    status: "new"
+  };
+
+  let response = http.post(url, { body: body });
+
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => CRMError.fromHTTP(url, error.status, "create_lead"),
+    _ => CRMError.network(url, 500, "unknown")
+  };
 }
 ```
 
 ## File Structure
 
 ```
-braid-llm-kit/
-├── spec/
-│   └── types.braid        # Standard library types
-├── examples/
-│   └── assistant/         # Production tool definitions
-│       ├── leads.braid
-│       ├── contacts.braid
-│       ├── accounts.braid
-│       └── activities.braid
-├── sdk/
-│   └── braid-sdk.js       # JavaScript SDK
-└── tools/
-    ├── braid-check        # Syntax checker
-    └── braid-fmt          # Formatter
+core/                        Language core
+├── braid-parse.js           Parser (758 lines)
+├── braid-transpile.js       AST → JS (587 lines)
+├── braid-ir.js              IR layer (468 lines)
+├── braid-emit-js.js         IR → JS (360 lines)
+├── braid-emit-py.js         IR → Python (392 lines)
+├── braid-rt.js              Runtime (251 lines)
+├── braid-sandbox.js         Sandbox (142 lines)
+├── braid-lsp.js             LSP server (744 lines)
+└── braid-check.js           CLI validator (215 lines)
+
+tools/                       AiSHA adapter
+├── braid-adapter.js         Production executor
+├── braid-rt.js              Core + CRM policies
+├── braid-parse.js           Re-export shim
+└── braid-transpile.js       Re-export shim
+
+examples/assistant/          20 .braid files, 119 functions
 ```
+
+## Tests
+
+```bash
+cd core
+node --test braid-core.test.js braid-ir.test.js e2e-v05.test.js
+# 149 tests, 0 failures
+```
+
+## Diagnostic Codes
+
+| Code | Meaning |
+|------|---------|
+| BRD010 | Missing `@policy` on effectful function |
+| BRD011 | Invalid policy name |
+| BRD020 | Effect used but not declared |
+| BRD021 | Effect declared but not used |
+| BRD030 | Missing `tenant_id` first param |
+| BRD040 | Match without wildcard arm |
+| BRD050 | Unreachable code after return |
+| SEC001 | `__proto__`/`constructor`/`prototype` access |
 
 ---
 
-*Full reference: [BRAID_SPEC.md](../BRAID_SPEC.md)*
+*Full spec: [BRAID_SPEC.md](../BRAID_SPEC.md)*
