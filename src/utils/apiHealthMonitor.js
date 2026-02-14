@@ -10,7 +10,7 @@ import { createHealthIssue, generateAPIFixSuggestion } from './githubIssueCreato
 class ApiHealthMonitor {
   constructor() {
     // Skip monitoring in E2E test mode to prevent noise
-    if (typeof window !== 'undefined' && localStorage.getItem('E2E_TEST_MODE') === 'true') {
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function' && localStorage.getItem('E2E_TEST_MODE') === 'true') {
       this.isE2EMode = true;
     } else {
       this.isE2EMode = false;

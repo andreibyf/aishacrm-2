@@ -11,14 +11,14 @@
   "Function with Net Effect": {
     "prefix": "fnnet",
     "body": [
-      "fn ${1:functionName}(${2:params}) -> Result<${3:T}, ${4:CRMError}> !net {",
+      "fn ${1:functionName}(${2:tenant: String}) -> Result<${3:T}, ${4:CRMError}> !net {",
       "  let url = \"${5:/api/v2/endpoint}\";",
-      "  let response = http.${6|get,post,put,delete|}(url${7:, { body: payload }});",
+      "  let response = http.${6|get,post,put,delete|}(url${7:, { params: { tenant_id: tenant } }});",
       "  ",
       "  return match response {",
       "    Ok{value} => Ok(value.data),",
-      "    Err{error} => Err(NetworkError{ url: url, code: error.status }),",
-      "    _ => Err(NetworkError{ url: url, code: 500 })",
+      "    Err{error} => Err({ tag: \"APIError\", url: url, code: error.status, operation: \"${8:operation_name}\" }),",
+      "    _ => Err({ tag: \"NetworkError\", url: url, code: 500 })",
       "  };",
       "}"
     ],
@@ -50,8 +50,8 @@
     "body": [
       "match ${1:response} {",
       "  Ok{value} => Ok(${2:value.data}),",
-      "  Err{error} => Err(${3:NetworkError}{ ${4:url: url, code: error.status} }),",
-      "  _ => Err(${5:NetworkError}{ ${6:url: url, code: 500} })",
+      "  Err{error} => Err({ tag: \"APIError\", url: ${3:url}, code: error.status, operation: \"${4:op}\" }),",
+      "  _ => Err({ tag: \"NetworkError\", url: ${3:url}, code: 500 })",
       "}"
     ],
     "description": "Pattern match a Result type"
@@ -138,9 +138,9 @@
   "Err Result": {
     "prefix": "err",
     "body": [
-      "Err(${1:ErrorType}{ ${2:field}: ${3:value} })"
+      "Err({ tag: \"${1|APIError,NetworkError,NotFound,ValidationError|}\", ${2:url: url, code: error.status, operation: \"op\"} })"
     ],
-    "description": "Err result constructor"
+    "description": "Err result constructor with tag"
   },
   "Import Types": {
     "prefix": "import",
@@ -153,14 +153,13 @@
     "prefix": "crmtool",
     "body": [
       "// ${1:Tool Description}",
-      "// Demonstrates: ${2:HTTP operations, error handling}",
       "",
       "import { Result, ${3:Lead}, CRMError } from \"../../spec/types.braid\"",
       "",
-      "fn ${4:toolName}(tenant_id: String, ${5:params}) -> Result<${6:Lead}, CRMError> !net {",
+      "fn ${4:toolName}(tenant: String, ${5:params}) -> Result<${6:Lead}, CRMError> !net {",
       "  let url = \"/api/v2/${7:leads}\";",
       "  let payload = {",
-      "    tenant_id: tenant_id,",
+      "    tenant_id: tenant,",
       "    $8",
       "  };",
       "  ",
@@ -168,8 +167,8 @@
       "  ",
       "  return match response {",
       "    Ok{value} => Ok(value.data),",
-      "    Err{error} => Err(NetworkError{ url: url, code: error.status }),",
-      "    _ => Err(NetworkError{ url: url, code: 500 })",
+      "    Err{error} => Err({ tag: \"APIError\", url: url, code: error.status, operation: \"${9:create_entity}\" }),",
+      "    _ => Err({ tag: \"NetworkError\", url: url, code: 500 })",
       "  };",
       "}"
     ],
@@ -178,18 +177,19 @@
   "Search Tool Template": {
     "prefix": "searchtool",
     "body": [
-      "fn ${1:search}${2:Leads}(query: String) -> Result<Array<${3:Lead}>, CRMError> !net {",
-      "  let url = \"/api/v2/${4:leads}/search?q=\" + query;",
-      "  let response = http.get(url);",
+      "fn ${1:search}${2:Leads}(tenant: String, query: String, limit: Number) -> Result<Array<${3:Lead}>, CRMError> !net {",
+      "  let url = \"/api/v2/${4:leads}\";",
+      "  let params = { tenant_id: tenant, q: query, limit: limit };",
+      "  let response = http.get(url, { params: params });",
       "  ",
       "  return match response {",
       "    Ok{value} => Ok(value.data),",
-      "    Err{error} => Err(NetworkError{ url: url, code: error.status }),",
-      "    _ => Err(NetworkError{ url: url, code: 500 })",
+      "    Err{error} => Err({ tag: \"APIError\", url: url, code: error.status, operation: \"${5:search_leads}\" }),",
+      "    _ => Err({ tag: \"NetworkError\", url: url, code: 500 })",
       "  };",
       "}"
     ],
-    "description": "Search tool template"
+    "description": "Search tool template with tenant and limit"
   },
   "Validation Function": {
     "prefix": "validate",

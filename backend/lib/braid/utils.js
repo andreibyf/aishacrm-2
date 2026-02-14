@@ -247,28 +247,10 @@ export async function loadToolSchema(braidPath, functionName) {
   }
 }
 
-/**
- * Normalize tool arguments for consistent processing
- * @param {Object} args - Raw tool arguments
- * @returns {Object} Normalized arguments
- */
-export function normalizeToolArgs(args = {}) {
-  const normalized = { ...args };
-  
-  // Ensure tenant_id is a UUID string
-  if (normalized.tenant_id && typeof normalized.tenant_id === 'object') {
-    normalized.tenant_id = normalized.tenant_id.toString();
-  }
-  
-  // Convert dates to ISO strings
-  for (const [key, value] of Object.entries(normalized)) {
-    if (value instanceof Date) {
-      normalized[key] = value.toISOString();
-    }
-  }
-  
-  return normalized;
-}
+// NOTE: normalizeToolArgs was removed from utils.js (2026-02-13)
+// The authoritative version lives in analysis.js with signature:
+//   normalizeToolArgs(toolName, rawArgs, tenantRecord)
+// See issues/2-braid-refactoring-issues.md Issue #1 and #2 for context.
 
 /**
  * Validate tool arguments for security and completeness

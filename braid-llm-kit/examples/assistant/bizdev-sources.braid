@@ -3,6 +3,7 @@
 
 import { Result, BizDevSource, CRMError } from "../../spec/types.braid"
 
+@policy(WRITE_OPERATIONS)
 fn createBizDevSource(
   tenant: String,
   source_name: String,
@@ -31,11 +32,12 @@ fn createBizDevSource(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.network(url, error.status, "unknown"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn updateBizDevSource(
   tenant: String,
   source_id: String,
@@ -47,11 +49,12 @@ fn updateBizDevSource(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.network(url, error.status, "unknown"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn getBizDevSourceDetails(
   tenant: String,
   source_id: String
@@ -63,11 +66,12 @@ fn getBizDevSourceDetails(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NotFound", message: "BizDev source not found" }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.notFound(null, null, "BizDev source not found" ),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn listBizDevSources(
   tenant: String,
   status: String,
@@ -87,11 +91,12 @@ fn listBizDevSources(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.network(url, error.status, "unknown"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn searchBizDevSources(
   tenant: String,
   query: String,
@@ -111,11 +116,12 @@ fn searchBizDevSources(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.network(url, error.status, "unknown"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn promoteBizDevSourceToLead(
   tenant: String,
   source_id: String,
@@ -130,11 +136,12 @@ fn promoteBizDevSourceToLead(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "PromotionError", source_id: source_id, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "promote"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn deleteBizDevSource(
   tenant: String,
   source_id: String
@@ -143,11 +150,12 @@ fn deleteBizDevSource(
   let response = http.delete(url, {});
   return match response {
     Ok{value} => Ok(true),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.network(url, error.status, "unknown"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn archiveBizDevSources(
   tenant: String,
   source_ids: Array
@@ -162,7 +170,7 @@ fn archiveBizDevSources(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.network(url, error.status, "unknown"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }

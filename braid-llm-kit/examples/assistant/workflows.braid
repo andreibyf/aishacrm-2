@@ -4,6 +4,7 @@
 import { Result, CRMError } from "../../spec/types.braid"
 
 // List all available workflow templates
+@policy(READ_ONLY)
 fn listWorkflowTemplates(
   tenant: String,
   category: String
@@ -19,12 +20,13 @@ fn listWorkflowTemplates(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.network(url, error.status, "unknown"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
 // Get detailed information about a specific template
+@policy(READ_ONLY)
 fn getWorkflowTemplate(
   tenant: String,
   template_id: String
@@ -36,12 +38,13 @@ fn getWorkflowTemplate(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.network(url, error.status, "unknown"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
 // Instantiate a workflow from a template with provided parameters
+@policy(READ_ONLY)
 fn instantiateWorkflowTemplate(
   tenant: String,
   template_id: String,
@@ -59,7 +62,7 @@ fn instantiateWorkflowTemplate(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.network(url, error.status, "unknown"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }

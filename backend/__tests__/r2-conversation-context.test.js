@@ -16,6 +16,7 @@
 
 const API_URL = process.env.BACKEND_URL || process.env.API_URL || 'http://localhost:3001';
 const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+const AUTH_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '';
 
 if (process.env.FAST_TESTS === 'true') {
   console.log('⏭️  Skipping R2 conversation context test (FAST_TESTS=true)');
@@ -48,6 +49,7 @@ async function sendChatMessage(message, conversationId, previousMessages = []) {
     headers: {
       'Content-Type': 'application/json',
       'x-tenant-id': TENANT_ID,
+      ...(AUTH_KEY ? { 'Authorization': `Bearer ${AUTH_KEY}`, 'apikey': AUTH_KEY } : {}),
     },
     body: JSON.stringify({
       messages,
@@ -70,7 +72,10 @@ async function getArtifacts(conversationId) {
   const res = await fetch(
     `${API_URL}/api/storage/artifacts?tenant_id=${TENANT_ID}&kind=tool_context_results&entity_id=${conversationId}`,
     {
-      headers: { 'x-tenant-id': TENANT_ID },
+      headers: {
+        'x-tenant-id': TENANT_ID,
+        ...(AUTH_KEY ? { 'Authorization': `Bearer ${AUTH_KEY}`, 'apikey': AUTH_KEY } : {}),
+      },
     }
   );
   
@@ -85,7 +90,10 @@ async function getArtifactPayload(artifactId) {
   const res = await fetch(
     `${API_URL}/api/storage/artifacts/${artifactId}?tenant_id=${TENANT_ID}`,
     {
-      headers: { 'x-tenant-id': TENANT_ID },
+      headers: {
+        'x-tenant-id': TENANT_ID,
+        ...(AUTH_KEY ? { 'Authorization': `Bearer ${AUTH_KEY}`, 'apikey': AUTH_KEY } : {}),
+      },
     }
   );
   

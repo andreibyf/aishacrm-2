@@ -6,6 +6,7 @@ import { Result, Document, CRMError } from "../../spec/types.braid"
 // Documents V2 API endpoints: /api/v2/documents
 // Supports: list, get, create, update, delete, analyze
 
+@policy(READ_ONLY)
 fn listDocuments(
   tenant: String,
   entity_type: String,
@@ -24,11 +25,12 @@ fn listDocuments(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "list_documents" }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "list_documents"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn getDocumentDetails(
   tenant: String,
   document_id: String
@@ -40,11 +42,12 @@ fn getDocumentDetails(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NotFound", entity: "Document", id: document_id }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.notFound("Document", document_id, "get"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn createDocument(
   tenant: String,
   name: String,
@@ -70,11 +73,12 @@ fn createDocument(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "create_document" }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "create_document"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn updateDocument(
   tenant: String,
   document_id: String,
@@ -86,11 +90,12 @@ fn updateDocument(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "update_document", entity: "Document", id: document_id }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "update_document"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn deleteDocument(
   tenant: String,
   document_id: String
@@ -102,11 +107,12 @@ fn deleteDocument(
   
   return match response {
     Ok{value} => Ok(true),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "delete_document", entity: "Document", id: document_id }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "delete_document"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn analyzeDocument(
   tenant: String,
   document_id: String,
@@ -123,11 +129,12 @@ fn analyzeDocument(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "analyze_document" }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "analyze_document"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn searchDocuments(
   tenant: String,
   query: String,
@@ -144,7 +151,7 @@ fn searchDocuments(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_documents", query: query }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "search_documents"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }

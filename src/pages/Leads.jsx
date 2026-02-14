@@ -516,6 +516,8 @@ export default function LeadsPage() {
 
       // Apply client-side pagination if age filtering was used
       let paginatedLeads = allFilteredLeads;
+      // Use real total from backend when available (attached as _total by entities.js)
+      const serverTotal = response._total;
       let estimatedTotal = allFilteredLeads.length;
       
       if (!useBackendPagination) {
@@ -526,8 +528,11 @@ export default function LeadsPage() {
         estimatedTotal = response.length >= fetchLimit && paginatedLeads.length === size 
           ? (page * size) + 1 // More pages might exist
           : skip + paginatedLeads.length; // Final page
+      } else if (typeof serverTotal === 'number') {
+        // Backend returned exact count via Supabase count: 'exact'
+        estimatedTotal = serverTotal;
       } else {
-        // Backend pagination: estimate based on current page results
+        // Fallback: estimate based on current page results
         estimatedTotal = paginatedLeads.length < size 
           ? (page - 1) * size + paginatedLeads.length 
           : page * size + 1;
@@ -550,11 +555,13 @@ export default function LeadsPage() {
       console.log(
         "[Leads] Fetched:",
         response?.length,
+        "Server total:",
+        serverTotal,
         "After age filter:",
         allFilteredLeads?.length,
         "Paginated:",
         paginatedLeads?.length,
-        "Estimated total:",
+        "Final total:",
         estimatedTotal,
       );
 
@@ -820,18 +827,17 @@ export default function LeadsPage() {
         }
 
         if (searchTerm) {
-          const searchRegex = { $regex: searchTerm, $options: "i" };
-          currentFilter = {
-            ...currentFilter,
+          const searchFilter = {
             $or: [
-              { first_name: searchRegex },
-              { last_name: searchRegex },
-              { email: searchRegex },
-              { phone: searchRegex },
-              { company: searchRegex },
-              { job_title: searchRegex },
+              { first_name: { $icontains: searchTerm } },
+              { last_name: { $icontains: searchTerm } },
+              { email: { $icontains: searchTerm } },
+              { phone: { $icontains: searchTerm } },
+              { company: { $icontains: searchTerm } },
+              { job_title: { $icontains: searchTerm } },
             ],
           };
+          currentFilter = { ...currentFilter, filter: JSON.stringify(searchFilter) };
         }
 
         if (selectedTags.length > 0) {
@@ -858,13 +864,15 @@ export default function LeadsPage() {
 
         // Delete in batches to avoid overwhelming the system
         const BATCH_SIZE = 50;
-        const tenantId = getTenantFilter().tenant_id || user.tenant_id;
-        if (!tenantId) {
-          throw new Error('Cannot delete: tenant_id is not available');
-        }
+        let successCount = 0;
+        let failCount = 0;
         for (let i = 0; i < allLeadsToDelete.length; i += BATCH_SIZE) {
           const batch = allLeadsToDelete.slice(i, i + BATCH_SIZE);
-          await Promise.all(batch.map((l) => Lead.delete(l.id, { tenant_id: tenantId })));
+          const results = await Promise.allSettled(batch.map((l) => Lead.delete(l.id)));
+          results.forEach((r) => {
+            if (r.status === 'fulfilled') successCount++;
+            else failCount++;
+          });
         }
 
         setSelectedLeads(new Set());
@@ -874,7 +882,8 @@ export default function LeadsPage() {
           loadLeads(1, pageSize),
           loadTotalStats(),
         ]);
-        toast.success(`${deleteCount} lead(s) deleted`);
+        if (successCount > 0) toast.success(`${successCount} lead(s) deleted`);
+        if (failCount > 0) toast.error(`${failCount} lead(s) failed to delete`);
       } catch (error) {
         console.error("Failed to delete leads:", error);
         toast.error("Failed to delete leads");
@@ -986,18 +995,17 @@ export default function LeadsPage() {
         }
 
         if (searchTerm) {
-          const searchRegex = { $regex: searchTerm, $options: "i" };
-          currentFilter = {
-            ...currentFilter,
+          const searchFilter = {
             $or: [
-              { first_name: searchRegex },
-              { last_name: searchRegex },
-              { email: searchRegex },
-              { phone: searchRegex },
-              { company: searchRegex },
-              { job_title: searchRegex },
+              { first_name: { $icontains: searchTerm } },
+              { last_name: { $icontains: searchTerm } },
+              { email: { $icontains: searchTerm } },
+              { phone: { $icontains: searchTerm } },
+              { company: { $icontains: searchTerm } },
+              { job_title: { $icontains: searchTerm } },
             ],
           };
+          currentFilter = { ...currentFilter, filter: JSON.stringify(searchFilter) };
         }
 
         if (selectedTags.length > 0) {
@@ -1024,11 +1032,17 @@ export default function LeadsPage() {
 
         // Update in batches
         const BATCH_SIZE = 50;
+        let successCount = 0;
+        let failCount = 0;
         for (let i = 0; i < allLeadsToUpdate.length; i += BATCH_SIZE) {
           const batch = allLeadsToUpdate.slice(i, i + BATCH_SIZE);
-          await Promise.all(
+          const results = await Promise.allSettled(
             batch.map((l) => Lead.update(l.id, { status: newStatus })),
           );
+          results.forEach((r) => {
+            if (r.status === 'fulfilled') successCount++;
+            else failCount++;
+          });
         }
 
         setSelectedLeads(new Set());
@@ -1038,7 +1052,8 @@ export default function LeadsPage() {
           loadLeads(currentPage, pageSize),
           loadTotalStats(),
         ]);
-        toast.success(`Updated ${updateCount} lead(s) to ${newStatus}`);
+        if (successCount > 0) toast.success(`Updated ${successCount} lead(s) to ${newStatus}`);
+        if (failCount > 0) toast.error(`${failCount} lead(s) failed to update`);
       } catch (error) {
         console.error("Failed to update leads:", error);
         toast.error("Failed to update leads");
@@ -1089,18 +1104,17 @@ export default function LeadsPage() {
         }
 
         if (searchTerm) {
-          const searchRegex = { $regex: searchTerm, $options: "i" };
-          currentFilter = {
-            ...currentFilter,
+          const searchFilter = {
             $or: [
-              { first_name: searchRegex },
-              { last_name: searchRegex },
-              { email: searchRegex },
-              { phone: searchRegex },
-              { company: searchRegex },
-              { job_title: searchRegex },
+              { first_name: { $icontains: searchTerm } },
+              { last_name: { $icontains: searchTerm } },
+              { email: { $icontains: searchTerm } },
+              { phone: { $icontains: searchTerm } },
+              { company: { $icontains: searchTerm } },
+              { job_title: { $icontains: searchTerm } },
             ],
           };
+          currentFilter = { ...currentFilter, filter: JSON.stringify(searchFilter) };
         }
 
         if (selectedTags.length > 0) {
@@ -1127,13 +1141,19 @@ export default function LeadsPage() {
 
         // Update in batches
         const BATCH_SIZE = 50;
+        let successCount = 0;
+        let failCount = 0;
         for (let i = 0; i < allLeadsToAssign.length; i += BATCH_SIZE) {
           const batch = allLeadsToAssign.slice(i, i + BATCH_SIZE);
-          await Promise.all(
+          const results = await Promise.allSettled(
             batch.map((l) =>
               Lead.update(l.id, { assigned_to: assignedTo || null })
             ),
           );
+          results.forEach((r) => {
+            if (r.status === 'fulfilled') successCount++;
+            else failCount++;
+          });
         }
 
         setSelectedLeads(new Set());
@@ -1143,7 +1163,8 @@ export default function LeadsPage() {
           loadLeads(currentPage, pageSize),
           loadTotalStats(),
         ]);
-        toast.success(`Assigned ${updateCount} lead(s)`);
+        if (successCount > 0) toast.success(`Assigned ${successCount} lead(s)`);
+        if (failCount > 0) toast.error(`${failCount} lead(s) failed to assign`);
       } catch (error) {
         console.error("Failed to assign leads:", error);
         toast.error("Failed to assign leads");

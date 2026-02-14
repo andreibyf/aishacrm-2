@@ -5,6 +5,7 @@ import { Result, CRMError } from "../../spec/types.braid"
 
 // Trigger a named workflow by name with context
 // This allows AiSHA to delegate to "Sales Manager Workflow" or "Customer Service Workflow"
+@policy(WRITE_OPERATIONS)
 fn triggerWorkflowByName(
   tenant: String,
   workflow_name: String,
@@ -26,12 +27,12 @@ fn triggerWorkflowByName(
     Ok{value} => {
       let workflows = value.data;
       if (workflows.length == 0) {
-        return Err({ tag: "NotFound", message: "Workflow not found: " + workflow_name });
+        return CRMError.notFound(null, null, "Workflow not found: " + workflow_name );
       }
       workflows[0]
     },
-    Err{error} => return Err({ tag: "NetworkError", url: searchUrl, code: error.status }),
-    _ => return Err({ tag: "NetworkError", url: searchUrl, code: 500 })
+    Err{error} => return CRMError.network(searchUrl, error.status, "unknown"),
+    _ => return CRMError.network(searchUrl, 500, "unknown")
   };
   
   // Now trigger the workflow with the provided context
@@ -62,12 +63,13 @@ fn triggerWorkflowByName(
       status: "started",
       message: "Workflow delegation successful. " + workflow.name + " is now handling this task."
     }),
-    Err{error} => Err({ tag: "NetworkError", url: executeUrl, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: executeUrl, code: 500 })
+    Err{error} => CRMError.network(executeUrl, error.status, "unknown"),
+    _ => CRMError.network(executeUrl, 500, "unknown")
   };
 }
 
 // Get status and progress of a workflow execution
+@policy(READ_ONLY)
 fn getWorkflowProgress(
   tenant: String,
   execution_id: String
@@ -86,12 +88,13 @@ fn getWorkflowProgress(
       execution_log: value.data.execution_log,
       current_node: value.data.current_node
     }),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.network(url, error.status, "unknown"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
 // List active workflow executions for a tenant (to check what's running)
+@policy(READ_ONLY)
 fn listActiveWorkflows(
   tenant: String,
   limit: Int
@@ -107,12 +110,13 @@ fn listActiveWorkflows(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.network(url, error.status, "unknown"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
 // Get notes/progress created by a workflow (to report status back)
+@policy(READ_ONLY)
 fn getWorkflowNotes(
   tenant: String,
   execution_id: String
@@ -127,7 +131,7 @@ fn getWorkflowNotes(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.network(url, error.status, "unknown"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }

@@ -3,6 +3,7 @@
 
 import { Result, CRMError } from "../../spec/types.braid"
 
+@policy(READ_ONLY)
 fn navigateTo(
   tenant: String,
   page: String,
@@ -23,6 +24,7 @@ fn navigateTo(
   });
 }
 
+@policy(READ_ONLY)
 fn getCurrentPage(
   tenant: String
 ) -> Result<Object, CRMError> {

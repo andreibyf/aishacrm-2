@@ -548,11 +548,19 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
       key !== "tenant_id" && Array.isArray(result.data[key])
     );
     if (entityKey && Array.isArray(result.data[entityKey])) {
-      // Only activities responses should return the full object with counts/total
+      // Activities: return full object (has counts sub-object)
       if (entityKey === 'activities' && (result.data.counts || typeof result.data.total === 'number')) {
         return result.data; // Preserve { activities: [...], counts, total, limit, offset }
       }
-      return result.data[entityKey]; // All other entities: return plain array
+      const arr = result.data[entityKey];
+      // Attach pagination metadata to the array so callers can access total count
+      // This is backward-compatible: arr still works as a normal array
+      if (typeof result.data.total === 'number') {
+        arr._total = result.data.total;
+        arr._limit = result.data.limit;
+        arr._offset = result.data.offset;
+      }
+      return arr;
     }
     // For single item operations without id (edge case handling)
     if (!Array.isArray(result.data)) {

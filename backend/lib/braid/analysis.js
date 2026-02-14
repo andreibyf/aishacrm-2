@@ -4,7 +4,15 @@
  */
 
 import { TOOL_REGISTRY } from './registry.js';
-import { TOOL_CHAINS } from './chains.js';
+// NOTE: TOOL_CHAINS loaded lazily in getToolImpactAnalysis() to break
+// circular dependency: execution.js → analysis.js → chains.js → execution.js
+import { parse as parseBraid } from '../../../braid-llm-kit/tools/braid-parse.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ASSISTANT_DIR = path.resolve(__dirname, '..', '..', '..', 'braid-llm-kit', 'examples', 'assistant');
 
 /**
  * Tool categories for grouping in visualizations
@@ -470,63 +478,85 @@ export const TOOL_GRAPH = {
 };
 
 /**
- * Parameter order for each Braid function (matches .braid file signatures)
- * CONVENTION: 
- * - First param: 'tenant' (not tenant_id)
- * - Entity IDs: '{entity}_id' (e.g., lead_id, account_id)
- * - Related entities: 'entity_type', 'entity_id' (for notes, activities, documents)
- * - Update objects: 'updates' (not content, changes, etc.)
- * - Search strings: 'query'
- * - Result limits: 'limit'
+ * Parameter order for each Braid function.
+ * 
+ * AUTO-GENERATED at module load time by parsing .braid files from
+ * braid-llm-kit/examples/assistant/. This eliminates the maintenance risk
+ * of a hand-maintained static map drifting out of sync with actual .braid
+ * function signatures (Issue #4 from braid-refactoring-issues.md).
+ * 
+ * Falls back to an empty map if parsing fails (with a loud warning).
+ * 
+ * To inspect the generated map, run:
+ *   node backend/scripts/generate-braid-param-order.js --check
  */
-const BRAID_PARAM_ORDER = {
-  // accounts.braid
-  createAccount: ['tenant', 'name', 'annual_revenue', 'industry', 'website', 'email', 'phone'],
-  updateAccount: ['tenant', 'account_id', 'updates'],
-  getAccountDetails: ['tenant', 'account_id'],
-  listAccounts: ['tenant', 'limit', 'offset'],
-  searchAccounts: ['tenant', 'query', 'limit'],
-  searchAccountsByStatus: ['tenant', 'status', 'limit'],
-  deleteAccount: ['tenant', 'account_id'],
+const BRAID_PARAM_ORDER = (() => {
+  const order = {};
+  try {
+    const braidFiles = fs.readdirSync(ASSISTANT_DIR)
+      .filter(f => f.endsWith('.braid'))
+      .sort();
 
-  // activities.braid
-  createActivity: ['tenant', 'subject', 'activity_type', 'due_date', 'due_time', 'assigned_to', 'entity_type', 'entity_id', 'body'],
-  updateActivity: ['tenant', 'activity_id', 'updates'],
-  markActivityComplete: ['tenant', 'activity_id'],
-  getUpcomingActivities: ['tenant', 'assigned_to', 'days'],
-  scheduleMeeting: ['tenant', 'subject', 'attendees', 'date_time', 'duration_minutes', 'assigned_to'],
-  deleteActivity: ['tenant', 'activity_id'],
-  listActivities: ['tenant', 'status', 'entity_type', 'entity_id', 'limit'],
-  getActivityDetails: ['tenant', 'activity_id'],
-  searchActivities: ['tenant', 'query', 'limit'],
+    let fnCount = 0;
+    for (const file of braidFiles) {
+      const filePath = path.join(ASSISTANT_DIR, file);
+      const source = fs.readFileSync(filePath, 'utf8');
+      try {
+        const ast = parseBraid(source, file);
+        for (const item of ast.items) {
+          if (item.type === 'FnDecl') {
+            order[item.name] = (item.params || []).map(p => p.name);
+            fnCount++;
+          }
+        }
+      } catch (parseErr) {
+        console.error(`[Braid] ⚠️  Failed to parse ${file}: ${parseErr.message}`);
+      }
+    }
 
-  // contacts.braid
-  createContact: ['tenant', 'first_name', 'last_name', 'email', 'phone', 'job_title', 'account_id', 'assigned_to'],
-  updateContact: ['tenant', 'contact_id', 'updates'],
-  listContactsForAccount: ['tenant', 'account_id', 'limit'],
-  searchContacts: ['tenant', 'query', 'limit'],
-  getContactByName: ['tenant', 'name'],
-  listAllContacts: ['tenant', 'limit'],
-  searchContactsByStatus: ['tenant', 'status', 'limit'],
-  deleteContact: ['tenant', 'contact_id'],
-  getContactDetails: ['tenant', 'contact_id'],
+    console.log(`[Braid] ✅ Auto-generated BRAID_PARAM_ORDER: ${fnCount} functions from ${braidFiles.length} .braid files`);
+  } catch (err) {
+    console.error(`[Braid] ❌ Failed to auto-generate BRAID_PARAM_ORDER: ${err.message}`);
+    console.error('[Braid]    Tool argument ordering may be incorrect. Check ASSISTANT_DIR path.');
+  }
+  return order;
+})();
 
-  // leads.braid
-  createLead: ['tenant', 'first_name', 'last_name', 'email', 'phone', 'company', 'status', 'source', 'assigned_to'],
-  deleteLead: ['tenant', 'lead_id'],
-  qualifyLead: ['tenant', 'lead_id'],
-  updateLead: ['tenant', 'lead_id', 'updates'],
-  convertLeadToAccount: ['tenant', 'lead_id'],
-  listLeads: ['tenant', 'status', 'account_id', 'limit'],
-  getLeadDetails: ['tenant', 'lead_id'],
-  searchLeads: ['tenant', 'query', 'limit'],
-  searchLeadsByStatus: ['tenant', 'status', 'limit'],
+/**
+ * Validate that all TOOL_REGISTRY functions have entries in BRAID_PARAM_ORDER.
+ * Call at startup to catch missing entries early.
+ * @returns {{ valid: boolean, missing: string[], extra: string[] }}
+ */
+export function validateParamOrderCoverage() {
+  const registryFunctions = new Set(
+    Object.values(TOOL_REGISTRY).map(config => config.function)
+  );
+  const paramOrderFunctions = new Set(Object.keys(BRAID_PARAM_ORDER));
 
-  // snapshot.braid
-  fetchSnapshot: ['tenant', 'scope', 'limit'],
+  const missing = [];
+  const extra = [];
 
-  // ... (additional param orders would be here)
-};
+  for (const fn of registryFunctions) {
+    if (!paramOrderFunctions.has(fn)) {
+      missing.push(fn);
+    }
+  }
+
+  for (const fn of paramOrderFunctions) {
+    if (!registryFunctions.has(fn)) {
+      extra.push(fn);
+    }
+  }
+
+  if (missing.length > 0) {
+    console.warn(`[Braid] ⚠️  BRAID_PARAM_ORDER missing entries for: ${missing.join(', ')}`);
+  }
+  if (extra.length > 0) {
+    console.warn(`[Braid] ⚠️  BRAID_PARAM_ORDER has extra entries not in TOOL_REGISTRY: ${extra.join(', ')}`);
+  }
+
+  return { valid: missing.length === 0, missing, extra };
+}
 
 /**
  * Convert object args to positional array based on Braid function signature
@@ -848,7 +878,7 @@ export function getToolsByCategory(category) {
  * @param {string} toolName - Tool to analyze
  * @returns {Object} Impact analysis
  */
-export function getToolImpactAnalysis(toolName) {
+export async function getToolImpactAnalysis(toolName) {
   const tool = TOOL_GRAPH[toolName];
   if (!tool) {
     return { error: `Unknown tool: ${toolName}` };
@@ -856,6 +886,9 @@ export function getToolImpactAnalysis(toolName) {
 
   const dependents = getToolDependents(toolName);
   const dependencies = getToolDependencies(toolName);
+
+  // Lazy import to break circular: execution → analysis → chains → execution
+  const { TOOL_CHAINS } = await import('./chains.js');
 
   // Find affected chains
   const affectedChains = [];

@@ -7,6 +7,7 @@ import { Result, Account, CRMError } from "../../spec/types.braid"
 // The backend interprets status codes to determine error type:
 // - 400 = ValidationError, 401/403 = PermissionDenied, 404 = NotFound, 5xx = NetworkError
 
+@policy(WRITE_OPERATIONS)
 fn createAccount(
   tenant: String,
   name: String,
@@ -32,11 +33,12 @@ fn createAccount(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "create_account" }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "create_account"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn updateAccount(
   tenant: String,
   account_id: String,
@@ -48,11 +50,12 @@ fn updateAccount(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "update_account", entity: "Account", id: account_id }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "update_account"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn getAccountDetails(
   tenant: String,
   account_id: String
@@ -64,11 +67,12 @@ fn getAccountDetails(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_account", entity: "Account", id: account_id }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "get_account"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn listAccounts(
   tenant: String,
   limit: Number,
@@ -86,11 +90,12 @@ fn listAccounts(
   // Note: Empty array is a VALID result (no accounts), not an error
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "list_accounts" }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "list_accounts"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn searchAccounts(
   tenant: String,
   query: String,
@@ -109,14 +114,15 @@ fn searchAccounts(
   // Note: Empty array is a VALID result (no matches found), not an error
   return match response {
     Ok{value} => Ok(value.data.accounts),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_accounts", query: query }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "search_accounts"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
 // Search accounts by status - returns full account details for accounts matching a specific status
 // Use this when user asks about accounts with a specific status (e.g. "active accounts", "inactive accounts")
 // Status values: active, inactive, prospect, churned
+@policy(READ_ONLY)
 fn searchAccountsByStatus(
   tenant: String,
   status: String,
@@ -134,11 +140,12 @@ fn searchAccountsByStatus(
   // Returns full account details including name, industry, revenue, etc.
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_accounts_by_status", status: status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "search_accounts_by_status"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn deleteAccount(
   tenant: String,
   account_id: String
@@ -149,7 +156,7 @@ fn deleteAccount(
   
   return match response {
     Ok{value} => Ok(true),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "delete_account", entity: "Account", id: account_id }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "delete_account"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }

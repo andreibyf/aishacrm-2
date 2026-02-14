@@ -27,6 +27,21 @@ vi.mock('@/lib/suggestionEngine', () => ({
   getSuggestions: vi.fn(() => [])
 }));
 
+vi.mock('@/api/conversations', () => ({
+  createConversation: vi.fn().mockResolvedValue({ id: 'mock-conv-id' }),
+  getConversation: vi.fn().mockResolvedValue({ id: 'mock-conv-id', messages: [] }),
+  addMessage: vi.fn().mockResolvedValue({}),
+  listConversations: vi.fn().mockResolvedValue([]),
+  deleteConversation: vi.fn().mockResolvedValue({}),
+  updateConversation: vi.fn().mockResolvedValue({}),
+  subscribeToConversation: vi.fn(() => () => {}),
+  submitFeedback: vi.fn().mockResolvedValue({}),
+}));
+
+vi.mock('@/components/shared/useUser.js', () => ({
+  useUser: vi.fn(() => ({ user: null, loading: false })),
+}));
+
 import { AiSidebarProvider, useAiSidebarState } from '../useAiSidebarState.jsx';
 import { processChatCommand } from '@/api/functions';
 import { addHistoryEntry, getSuggestions } from '@/lib/suggestionEngine';

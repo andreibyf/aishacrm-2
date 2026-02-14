@@ -6,6 +6,7 @@ import { Result, Contact, CRMError } from "../../spec/types.braid"
 // Error handling: HTTP errors return CRMError with APIError tag and status code.
 // The backend interprets status codes to determine error type.
 
+@policy(WRITE_OPERATIONS)
 fn createContact(
   tenant: String,
   first_name: String,
@@ -33,11 +34,12 @@ fn createContact(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "create_contact" }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "create_contact"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn updateContact(
   tenant: String,
   contact_id: String,
@@ -49,11 +51,12 @@ fn updateContact(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "update_contact", entity: "Contact", id: contact_id }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "update_contact"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn listContactsForAccount(
   tenant: String,
   account_id: String,
@@ -71,11 +74,12 @@ fn listContactsForAccount(
   // Note: Empty array is a VALID result (account has no contacts), not an error
   return match response {
     Ok{value} => Ok(value.data.contacts),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "list_contacts" }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "list_contacts"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn searchContacts(
   tenant: String,
   query: String,
@@ -97,13 +101,14 @@ fn searchContacts(
   // - If array.length === 0: No contacts match the search query.
   return match response {
     Ok{value} => Ok(value.data.contacts),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_contacts", query: query }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "search_contacts"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
 // Get a specific contact by name - searches for contact and returns full details
 // Use this when user asks for details about a specific contact by name
+@policy(READ_ONLY)
 fn getContactByName(
   tenant: String,
   name: String
@@ -121,13 +126,14 @@ fn getContactByName(
   // If no contact found, returns empty array - AI should inform user
   return match response {
     Ok{value} => Ok(value.data.contacts),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_contact_by_name", name: name }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "get_contact_by_name"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
 // List all contacts with full details - returns complete contact information
 // Use this when user asks about contacts without specifying an account
+@policy(READ_ONLY)
 fn listAllContacts(
   tenant: String,
   limit: Number
@@ -143,14 +149,15 @@ fn listAllContacts(
   // Returns full contact details including name, email, phone, job title, etc.
   return match response {
     Ok{value} => Ok(value.data.contacts),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "list_all_contacts" }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "list_all_contacts"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
 // Search contacts by status - returns full contact details for contacts matching a specific status
 // Use this when user asks about contacts with a specific status (e.g. "active contacts", "inactive contacts")
 // Status values: active, inactive, pending, archived
+@policy(READ_ONLY)
 fn searchContactsByStatus(
   tenant: String,
   status: String,
@@ -168,11 +175,12 @@ fn searchContactsByStatus(
   // Returns full contact details including name, email, phone, job title, etc.
   return match response {
     Ok{value} => Ok(value.data.contacts),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_contacts_by_status", status: status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "search_contacts_by_status"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn deleteContact(
   tenant: String,
   contact_id: String
@@ -181,11 +189,12 @@ fn deleteContact(
   let response = http.delete(url, {});
   return match response {
     Ok{value} => Ok(true),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "delete_contact", entity: "Contact", id: contact_id }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "delete_contact"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn getContactDetails(
   tenant: String,
   contact_id: String
@@ -197,7 +206,7 @@ fn getContactDetails(
   
   return match response {
     Ok{value} => Ok(value.data.contact),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_contact", entity: "Contact", id: contact_id }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "get_contact"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }

@@ -32,8 +32,9 @@ vi.mock('@/components/shared/useUser.js', () => ({
   useUser: vi.fn(),
 }));
 
-vi.mock('@/components/shared/EntityLabelsContext', () => ({
+vi.mock('@/components/shared/entityLabelsHooks', () => ({
   useEntityLabel: vi.fn(),
+  useEntityLabels: vi.fn(() => ({})),
 }));
 
 vi.mock('../shared/TimezoneContext', () => ({

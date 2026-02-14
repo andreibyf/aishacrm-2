@@ -1,7 +1,7 @@
 # Braid Language, SDK & Integration Architecture
 
-> **Version:** 2.0  
-> **Last Updated:** December 2025  
+> **Version:** 2.1  
+> **Last Updated:** February 2026  
 > **Purpose:** Comprehensive reference for Braid DSL in AiSHA CRM
 
 ---
@@ -97,26 +97,27 @@ Braid **IS**:
 
 ```braid
 // ✅ SAFE: Braid tool definition
-tool searchLeads(
-  tenant_id: uuid,           // Required, validated
-  status: enum<new|qualified|converted>,
-  created_after?: datetime,
-  limit?: int = 10           // Safe default
-) -> Lead[] {
-  SELECT * FROM leads
-  WHERE tenant_id = $tenant_id
-    AND status = $status
-    AND ($created_after IS NULL OR created_at > $created_after)
-  ORDER BY created_at DESC
-  LIMIT $limit;
+fn searchLeads(
+  tenant: String,              // Required, validated at runtime
+  status: String,              // Validated by backend API
+  limit: Number                // Safe default enforced by caller
+) -> Result<Array, CRMError> !net {
+  let url = "/api/v2/leads";
+  let params = { tenant_id: tenant, status: status, limit: limit };
+  let response = http.get(url, { params: params });
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_leads" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
 }
 ```
 
 **Guarantees:**
-- **Compile-time validation**: `status: "oppen"` → Error before execution
-- **Tenant isolation**: `tenant_id` is required parameter, enforced at query level
-- **Safe defaults**: `limit = 10` prevents unbounded queries
-- **Explicit types**: `datetime`, `uuid`, `enum` prevent type confusion
+- **Typed parameters**: Function signature enforces parameter names and types
+- **Tenant isolation**: `tenant` is always the first parameter, enforced by policy
+- **Effect tracking**: `!net` declares this function makes HTTP calls
+- **Structured errors**: `Result<T, CRMError>` forces error handling at every call site
 
 ---
 
@@ -130,21 +131,25 @@ tool searchLeads(
 
 ```braid
 // ❌ REJECTED DESIGN: Too much freedom
-tool executeQuery(sql: string) -> any[] {
-  // AI could pass: "DROP TABLE leads;"
-  EXECUTE $sql;
+fn executeQuery(sql: String) -> Result<Array, CRMError> !net {
+  // AI could pass any arbitrary SQL string
+  let response = http.post("/api/raw-query", { body: { sql: sql } });
+  return match response { Ok{value} => Ok(value.data), _ => Err({ tag: "NetworkError" }) };
 }
 
 // ✅ BRAID APPROACH: Constrained, safe operations
-tool searchLeads(
-  tenant_id: uuid,
-  status: enum<new|qualified|converted>,  // Limited options
-  limit: int = 10                          // Safe default
-) -> Lead[] {
-  SELECT * FROM leads
-  WHERE tenant_id = $tenant_id
-    AND status = $status
-  LIMIT $limit;
+fn searchLeads(
+  tenant: String,          // Required, enforced by policy
+  status: String,          // Validated by backend API
+  limit: Number            // Bounded default
+) -> Result<Array, CRMError> !net {
+  let url = "/api/v2/leads";
+  let response = http.get(url, { params: { tenant_id: tenant, status: status, limit: limit } });
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_leads" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
 }
 ```
 
@@ -159,18 +164,18 @@ Every parameter, type, and operation must be explicitly declared:
 
 ```braid
 // ✅ EXPLICIT: Clear contract
-tool createLead(
-  tenant_id: uuid,           // Required
-  first_name: string,        // Required
-  last_name: string,         // Required
-  email?: string,            // Explicitly optional
-  source: string = "manual" // Explicit default
-) -> Lead { ... }
+fn createLead(
+  tenant: String,            // Required
+  first_name: String,        // Required
+  last_name: String,         // Required
+  email: String,             // Each field named explicitly
+  source: String             // AI schema generated from signature
+) -> Result<Lead, CRMError> !net { ... }
 
 // ❌ IMPLICIT: Dangerous
-tool createLead(data: object) -> Lead {
+fn createLead(data: Object) -> Result<Lead, CRMError> !net {
   // What fields are in 'data'?
-  // What if AI passes { "DROP TABLE": "leads" }?
+  // AI can pass anything, no schema validation
 }
 ```
 
@@ -188,8 +193,8 @@ async function convertLeadToAccount(tenantId, leadId) {
 }
 
 // ❌ WRONG: Complex tool with multiple operations
-tool convertLeadToAccount(...) {
-  -- Multiple operations in one tool = hard to test, hard to debug
+fn convertLeadToAccount(...) -> Result<Object, CRMError> !net {
+  // Multiple operations in one tool = hard to test, hard to debug
 }
 ```
 
@@ -203,46 +208,46 @@ tool convertLeadToAccount(...) {
 Every tool should have safe defaults that prevent runaway operations:
 
 ```braid
-tool searchLeads(
-  tenant_id: uuid,
-  limit: int = 10,          // ✅ Bounded by default
-  offset: int = 0           // ✅ Sane starting point
-) -> Lead[] { ... }
+fn searchLeads(
+  tenant: String,
+  limit: Number              // ✅ Caller enforces bounded default
+) -> Result<Array, CRMError> !net { ... }
 
-// ❌ DANGEROUS: Unbounded query
-tool searchLeads(
-  tenant_id: uuid,
-  limit?: int,              // Optional = could fetch millions
-  offset?: int
-) -> Lead[] { ... }
+// ❌ DANGEROUS: No limit parameter at all
+fn searchLeads(
+  tenant: String
+  // No limit = backend returns everything = could be thousands of rows
+) -> Result<Array, CRMError> !net { ... }
 ```
 
 ### Architecture Decisions
 
-#### Decision 1: SQL Embedded in Braid Files
+#### Decision 1: HTTP API Layer Between Braid and Database
 
-**Alternative Considered:** Use ORM or query builder
+**Alternative Considered:** Embed SQL directly in .braid files
 
-**Why We Chose Raw SQL:**
-- **Performance:** No ORM overhead, direct index usage
-- **Transparency:** Exactly what executes is visible in .braid file
-- **PostgreSQL Features:** Access to window functions, CTEs, JSONB operators
-- **Debuggability:** Copy/paste SQL directly into psql for testing
+**Why We Chose HTTP API Calls:**
+- **Separation of concerns:** Braid defines *what* to do, backend routes define *how*
+- **RLS enforcement:** Backend routes use Supabase RLS, not Braid-level SQL
+- **Reusability:** Same API endpoints serve frontend, Braid tools, and external integrations
+- **Testability:** API routes are independently testable with standard HTTP testing tools
+- **Security:** Braid never sees raw SQL — it can only call pre-defined API endpoints
 
 ```braid
-// Direct SQL allows advanced PostgreSQL features
-tool getLeadConversionFunnel(tenant_id: uuid, days: int = 30) -> FunnelStats {
-  WITH funnel AS (
-    SELECT 
-      COUNT(*) FILTER (WHERE status = 'new') as new_count,
-      COUNT(*) FILTER (WHERE status = 'qualified') as qualified_count,
-      COUNT(*) FILTER (WHERE status = 'converted') as converted_count,
-      ROUND(100.0 * COUNT(*) FILTER (WHERE status = 'qualified') / NULLIF(COUNT(*), 0), 2) as qual_rate
-    FROM leads
-    WHERE tenant_id = $tenant_id
-      AND created_at > NOW() - INTERVAL '$days days'
-  )
-  SELECT * FROM funnel;
+// Braid calls the backend API, which handles SQL and RLS
+fn getLeadConversionReport(
+  tenant: String,
+  start_date: String,
+  end_date: String
+) -> Result<Object, CRMError> !net {
+  let url = "/api/v2/reports/lead-conversion";
+  let params = { tenant_id: tenant, start_date: start_date, end_date: end_date };
+  let response = http.get(url, { params: params });
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "lead_conversion_report" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
 }
 ```
 
@@ -272,17 +277,26 @@ tool getLeadConversionFunnel(tenant_id: uuid, days: int = 30) -> FunnelStats {
 **Philosophy:** Deletes are destructive and should require human approval
 
 ```braid
-// ✅ SAFE: Mark as deleted (soft delete)
-tool archiveLead(tenant_id: uuid, lead_id: uuid) -> void {
-  UPDATE leads
-  SET status = 'archived', archived_at = NOW()
-  WHERE tenant_id = $tenant_id AND id = $lead_id;
+// ✅ SAFE: Soft delete via status update
+fn archiveLead(tenant: String, lead_id: String) -> Result<Lead, CRMError> !net {
+  let url = "/api/v2/leads/" + lead_id;
+  let response = http.put(url, { body: { tenant_id: tenant, status: "archived" } });
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "archive_lead" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
 }
 
-// ⚠️ USE SPARINGLY: Hard delete (admin only)
-tool deleteLead(tenant_id: uuid, lead_id: uuid) -> void {
-  DELETE FROM leads
-  WHERE tenant_id = $tenant_id AND id = $lead_id;
+// ⚠️ USE SPARINGLY: Hard delete (admin only, requires confirmation)
+fn deleteLead(tenant: String, lead_id: String) -> Result<Boolean, CRMError> !net {
+  let url = "/api/v2/leads/" + lead_id;
+  let response = http.delete(url, {});
+  return match response {
+    Ok{value} => Ok(true),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "delete_lead" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
 }
 ```
 
@@ -297,83 +311,125 @@ tool deleteLead(tenant_id: uuid, lead_id: uuid) -> void {
 
 ### Syntax Overview
 
-Braid uses TypeScript-inspired syntax with SQL execution:
+Braid uses TypeScript-inspired syntax with `fn` declarations. Functions make HTTP calls
+to the CRM backend API rather than executing SQL directly — the backend routes handle
+database access with full RLS enforcement.
 
 ```braid
-tool toolName(
-  param1: type,
-  param2: type = default,
-  param3?: optional_type
-) -> ReturnType {
-  SQL_QUERY_HERE;
+import { Result, Lead, CRMError } from "../../spec/types.braid"
+
+fn functionName(
+  tenant: String,
+  param1: Type1,
+  param2: Type2
+) -> Result<ReturnType, CRMError> !net {
+  let url = "/api/v2/resource";
+  let response = http.get(url, { params: { tenant_id: tenant } });
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "op_name" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
 }
 ```
 
+> **Note:** Earlier versions of this document showed a `tool` keyword with embedded SQL
+> bodies and PostgreSQL types (`uuid`, `enum<a|b|c>`, `datetime`). That syntax was a
+> design proposal that was never implemented in the parser or transpiler. The actual
+> implementation uses `fn` declarations with HTTP calls, as shown above and in all
+> `.braid` files under `braid-llm-kit/examples/assistant/`. See `BRAID_SPEC.md` for
+> the authoritative language grammar.
+
 ### Supported Types
 
-| Braid Type | PostgreSQL Type | Example |
-|------------|-----------------|---------|
-| `uuid` | `UUID` | `"a11dfb63-4b18-4eb8-872e-747af2e37c46"` |
-| `string` | `TEXT` | `"John Doe"` |
-| `int` | `INTEGER` | `42` |
-| `float` | `NUMERIC` | `99.95` |
-| `bool` | `BOOLEAN` | `true` |
-| `datetime` | `TIMESTAMPTZ` | `"2025-12-01T10:30:00Z"` |
-| `date` | `DATE` | `"2025-12-01"` |
-| `json` | `JSONB` | `{"key": "value"}` |
-| `enum<A|B|C>` | Custom constraint | `"A"` (validated at compile-time) |
+| Braid Type | JavaScript Type | Usage |
+|------------|-----------------|-------|
+| `String` | `string` | Names, IDs, URLs, dates as ISO strings |
+| `Number` | `number` | Counts, amounts, limits |
+| `Boolean` | `boolean` | Flags (active_only, confirmed) |
+| `Object` | `object` | Freeform update payloads, metadata |
+| `Array` | `Array` | Lists of records |
+| `JSONB` | `object` | Structured metadata fields |
+| `Result<T, E>` | `{ tag: 'Ok', value: T } \| { tag: 'Err', error: E }` | All fallible operations |
+| `Option<T>` | `{ tag: 'Some', value: T } \| { tag: 'None' }` | Optional values |
 
-### Return Types
+### Effect Declarations
 
-| Return Type | Description | Example |
-|-------------|-------------|---------|
-| `Type` | Single object | `Lead` |
-| `Type[]` | Array of objects | `Lead[]` |
-| `void` | No return value (mutations) | `void` |
-| `{ count: int, data: Type[] }` | Paginated response | Object with metadata |
+Effects are declared on functions to track what side effects they perform.
+The runtime enforces these via `cap()` checks against the execution policy.
 
-### Parameter Modifiers
+| Effect | Meaning | Example |
+|--------|---------|---------|
+| `!net` | HTTP/network access | API calls to backend |
+| `!clock` | Time access | `clock.now()` for timestamps |
+| `!fs` | File system access | Document operations |
 
 ```braid
-tool example(
-  required: string,          // Required parameter
-  optional?: string,         // Optional parameter
-  withDefault: int = 10,     // Default value
-  constrained: enum<a|b|c>   // Enum constraint
-)
+// Pure function — no effects
+fn calculateScore(lead: Object) -> Number {
+  return lead.activity_count * 10;
+}
+
+// Network effect — makes HTTP calls
+fn searchLeads(tenant: String, query: String) -> Result<Array, CRMError> !net {
+  // ...
+}
+
+// Multiple effects
+fn createActivityNow(tenant: String) -> Result<Activity, CRMError> !net, clock {
+  let timestamp = clock.now();
+  // ...
+}
 ```
 
-### Example: Complete Tool Definition
+### Error Types
+
+The spec defines structured `CRMError` variants. In practice, `.braid` files
+currently return `APIError` (with HTTP status codes) and `NetworkError`. The
+backend `summarizeToolResult` function handles both patterns:
+
+| Error Tag | Fields | Produced By |
+|-----------|--------|-------------|
+| `APIError` | `url`, `code`, `operation`, `entity?`, `id?`, `query?` | All .braid HTTP error handlers |
+| `NetworkError` | `url`, `code` | Catch-all for unexpected failures |
+| `NotFound` | `entity`, `id` | Spec-defined (future use) |
+| `ValidationError` | `field`, `message` | Spec-defined (future use) |
+| `PermissionDenied` | `operation`, `reason` | Spec-defined (future use) |
+| `DatabaseError` | `query`, `message` | Spec-defined (future use) |
+| `PolicyViolation` | `effect`, `policy` | Runtime cap() enforcement |
+
+The `APIError` tag acts as a catch-all that maps HTTP status codes to the
+appropriate semantic error type at the backend layer:
+- `400` → ValidationError semantics
+- `401`/`403` → PermissionDenied semantics
+- `404` → NotFound semantics
+- `5xx` → NetworkError/DatabaseError semantics
+
+### Example: Complete Tool Definition (Actual Production Code)
 
 ```braid
-/**
- * Search for opportunities by stage and value
- * @param tenant_id - Tenant UUID (required)
- * @param stage - Pipeline stage (optional)
- * @param min_value - Minimum deal value (optional)
- * @param limit - Max results (default: 20)
- * @returns Array of opportunities
- */
-tool searchOpportunities(
-  tenant_id: uuid,
-  stage?: enum<discovery|proposal|negotiation|closed_won|closed_lost>,
-  min_value?: float,
-  limit: int = 20
-) -> Opportunity[] {
-  SELECT 
-    id,
-    name,
-    stage,
-    value,
-    close_date,
-    account_id,
-    created_at
-  FROM opportunities
-  WHERE tenant_id = $tenant_id
-    AND ($stage IS NULL OR stage = $stage)
-    AND ($min_value IS NULL OR value >= $min_value)
-  ORDER BY value DESC
-  LIMIT $limit;
+// From leads.braid
+import { Result, Lead, CRMError } from "../../spec/types.braid"
+
+fn searchLeads(
+  tenant: String,
+  query: String,
+  limit: Number
+) -> Result<Array, CRMError> !net {
+  let url = "/api/v2/leads";
+  let params = {
+    tenant_id: tenant,
+    limit: limit,
+    query: query
+  };
+
+  let response = http.get(url, { params: params });
+
+  return match response {
+    Ok{value} => Ok(value.data.leads),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_leads", query: query }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
 }
 ```
 
@@ -838,35 +894,30 @@ POST http://localhost:8000/tools/execute
 ❌ Don't create Braid tools for one-off reports
 
 ```braid
-// ❌ BAD: One-time query wrapped in Braid
-tool getRevenueByIndustryForQ4_2025(tenant_id: uuid) -> Report {
-  SELECT industry, SUM(revenue) FROM accounts
-  WHERE tenant_id = $tenant_id
-    AND created_at BETWEEN '2025-10-01' AND '2025-12-31'
-  GROUP BY industry;
+// ❌ BAD: One-time query wrapped in a Braid tool
+fn getRevenueByIndustryForQ4_2025(tenant: String) -> Result<Object, CRMError> !net {
+  let response = http.get("/api/v2/reports/revenue-by-industry", {
+    params: { tenant_id: tenant, start: "2025-10-01", end: "2025-12-31" }
+  });
+  // ...
 }
 ```
 
 ✅ **Use raw SQL or BI tool instead** for exploratory analysis
 
-**2. Complex Multi-Table Joins**
+**2. Complex Multi-Entity Queries**
 
-❌ Braid isn't an ORM replacement for complex data modeling
+❌ Don't create Braid tools that try to return everything about an entity at once
 
 ```braid
-// ❌ BAD: Complex join that should be a database view
-tool getAccountFullDetails(tenant_id: uuid, account_id: uuid) -> ComplexObject {
-  SELECT a.*, c.*, o.*, act.*, n.*
-  FROM accounts a
-  LEFT JOIN contacts c ON c.account_id = a.id
-  LEFT JOIN opportunities o ON o.account_id = a.id
-  LEFT JOIN activities act ON act.entity_id = a.id
-  LEFT JOIN notes n ON n.entity_id = a.id
-  WHERE a.tenant_id = $tenant_id AND a.id = $account_id;
+// ❌ BAD: One tool trying to aggregate 5 entity types
+fn getAccountFullDetails(tenant: String, account_id: String) -> Result<Object, CRMError> !net {
+  // Would need to call 5 separate API endpoints and merge results
+  // This is application-layer composition, not a single tool's job
 }
 ```
 
-✅ **Use separate tools** for accounts, contacts, opportunities and compose in application
+✅ **Use separate tools** for accounts, contacts, opportunities and compose in application code
 
 **3. Real-Time Streaming Data**
 
@@ -968,24 +1019,26 @@ async function transitionState({ tenant_id, entity_id, from, to, reason }) {
 **Every Braid tool enforces tenant isolation:**
 
 ```braid
-tool searchLeads(
-  tenant_id: uuid,  // ← REQUIRED parameter
-  ...
-) {
-  SELECT * FROM leads
-  WHERE tenant_id = $tenant_id  // ← ENFORCED in SQL
-  ...;
+fn searchLeads(
+  tenant: String,  // ← REQUIRED first parameter (convention)
+  query: String,
+  limit: Number
+) -> Result<Array, CRMError> !net {
+  let url = "/api/v2/leads";
+  let params = { tenant_id: tenant, query: query, limit: limit };  // ← tenant_id injected into every API call
+  let response = http.get(url, { params: params });
+  // ...
 }
 ```
 
 **What this prevents:**
-- ❌ Cross-tenant data leakage
-- ❌ Accidental global queries (`SELECT * FROM leads`)
-- ❌ Tenant ID injection attacks
+- ❌ Cross-tenant data leakage (tenant_id in every request)
+- ❌ Accidental unscoped queries (backend API enforces tenant_id)
+- ❌ Tenant ID spoofing (normalizeToolArgs overrides AI-provided tenant with authorized context)
 
 ### Row-Level Security (RLS) Integration
 
-Braid executes queries using service role with RLS bypass **BUT** still enforces tenant isolation via query parameters:
+Braid makes HTTP calls to the backend API, which uses Supabase service role. Tenant isolation is enforced at three layers:
 
 ```sql
 -- PostgreSQL RLS policy (redundant safety layer)
@@ -1786,36 +1839,39 @@ const result = await executeToolInProcess('searchLeads', {
 ### 2. Use Safe Defaults
 
 ```braid
-// ✅ CORRECT: Bounded query
-tool searchLeads(
-  tenant_id: uuid,
-  limit: int = 10  // Default prevents unbounded results
-) { ... }
+// ✅ CORRECT: Explicit limit parameter
+fn searchLeads(
+  tenant: String,
+  query: String,
+  limit: Number   // Caller must specify a bound
+) -> Result<Array, CRMError> !net { ... }
 
-// ❌ WRONG: Unbounded query
-tool searchLeads(
-  tenant_id: uuid,
-  limit?: int  // Optional limit = potential performance issue
-) { ... }
+// ❌ WRONG: No limit = potential performance issue
+fn searchLeads(
+  tenant: String,
+  query: String
+  // Missing limit parameter = backend returns all matches
+) -> Result<Array, CRMError> !net { ... }
 ```
 
 ### 3. Prefer Read-Only Tools
 
 ```braid
-// ✅ SAFE: Read-only tool
-tool getLeadStats(tenant_id: uuid) -> { total: int, qualified: int } {
-  SELECT 
-    COUNT(*) as total,
-    COUNT(*) FILTER (WHERE status = 'qualified') as qualified
-  FROM leads
-  WHERE tenant_id = $tenant_id;
+// ✅ SAFE: Read-only tool (READ_ONLY policy, cached)
+fn getHealthSummary(tenant: String) -> Result<Object, CRMError> !net {
+  let response = http.get("/api/v2/reports/health", { params: { tenant_id: tenant } });
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: "/api/v2/reports/health", code: error.status, operation: "health_summary" }),
+    _ => Err({ tag: "NetworkError", url: "/api/v2/reports/health", code: 500 })
+  };
 }
 
-// ⚠️ USE WITH CAUTION: Mutation tool
-tool updateLead(tenant_id: uuid, lead_id: uuid, status: string) -> void {
-  UPDATE leads
-  SET status = $status, updated_at = NOW()
-  WHERE tenant_id = $tenant_id AND id = $lead_id;
+// ⚠️ USE WITH CAUTION: Mutation tool (WRITE_OPERATIONS policy, audited)
+fn updateLead(tenant: String, lead_id: String, updates: Object) -> Result<Lead, CRMError> !net {
+  let url = "/api/v2/leads/" + lead_id;
+  let response = http.put(url, { body: updates });
+  // ...
 }
 ```
 
@@ -1896,13 +1952,16 @@ npm run braid:sync
 
 **Cause:** Typo in parameter value
 
-**Fix:** Check .braid file for valid enum values
+**Fix:** Check the .braid file function signature and the backend API route
+for accepted values. The backend validates parameters before executing queries.
 
 ```braid
-tool searchLeads(
-  status?: enum<new|qualified|converted>,  // Only these 3 values allowed
-  ...
-)
+// From leads.braid — status is a String, validated by the backend API
+fn searchLeadsByStatus(
+  tenant: String,
+  status: String,    // Backend accepts: new, qualified, converted, etc.
+  limit: Number
+) -> Result<Array, CRMError> !net { ... }
 ```
 
 #### 3. Tenant Isolation Failure
@@ -1911,12 +1970,12 @@ tool searchLeads(
 
 **Diagnosis:**
 ```sql
--- Check if tenant_id is actually being used
-SELECT * FROM leads WHERE id = 'some-lead-id';
--- Does this return leads from multiple tenants?
+-- Check if tenant_id is scoped correctly
+SELECT tenant_id, COUNT(*) FROM leads GROUP BY tenant_id;
 ```
 
-**Fix:** Ensure `WHERE tenant_id = $tenant_id` in every query
+**Fix:** Verify that `normalizeToolArgs` in `analysis.js` is injecting the correct
+tenant UUID, and that the backend route includes `tenant_id` in its WHERE clause
 
 #### 4. MCP Server Not Responding
 
@@ -2090,13 +2149,21 @@ ON leads (tenant_id, status, created_at);
 ### Braid Tool Syntax Cheat Sheet
 
 ```braid
-tool toolName(
-  required: type,
-  optional?: type,
-  withDefault: type = value,
-  constrained: enum<A|B|C>
-) -> ReturnType {
-  SQL_QUERY;
+import { Result, EntityType, CRMError } from "../../spec/types.braid"
+
+fn toolName(
+  tenant: String,
+  required: String,
+  optional: String,
+  limit: Number
+) -> Result<EntityType, CRMError> !net {
+  let url = "/api/v2/resource";
+  let response = http.get(url, { params: { tenant_id: tenant } });
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "op_name" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
 }
 ```
 
@@ -2104,12 +2171,13 @@ tool toolName(
 
 | Pattern | Example |
 |---------|---------|
-| UUID parameter | `tenant_id: uuid` |
-| Optional string | `search?: string` |
-| Enum constraint | `status: enum<open|closed>` |
-| Default integer | `limit: int = 10` |
-| Array return | `-> Lead[]` |
-| Void return | `-> void` |
+| Tenant parameter | `tenant: String` (always first param) |
+| Entity ID | `lead_id: String` |
+| Freeform updates | `updates: Object` |
+| Search term | `query: String` |
+| Result limit | `limit: Number` |
+| Result type | `-> Result<Lead, CRMError> !net` |
+| Pure function | `-> Number` (no effects) |
 
 ### Execution Commands
 

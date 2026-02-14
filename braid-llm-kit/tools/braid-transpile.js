@@ -9,6 +9,25 @@ import url from 'url';
 import process from 'node:process';
 import { parse } from './braid-parse.js';
 
+// --- Braid Type System: runtime type names → JS typeof mappings ---
+const BRAID_TYPE_MAP = {
+  String: 'string',
+  Number: 'number',
+  Boolean: 'boolean',
+  Bool: 'boolean',
+  // Complex types validated structurally, not via typeof
+  Array: null,
+  Object: null,
+  JSONB: null,
+  Void: null,
+};
+
+// --- Valid @policy names (must match CRM_POLICIES keys) ---
+const VALID_POLICIES = new Set([
+  'READ_ONLY', 'WRITE_OPERATIONS', 'DELETE_OPERATIONS',
+  'ADMIN_ONLY', 'SYSTEM_INTERNAL', 'AI_SUGGESTIONS', 'EXTERNAL_API'
+]);
+
 export function transpileToJS(ast, opts = {}) {
   const { pure=false, policy=null, source='stdin', typescript=false, runtimeImport=null } = opts;
   const out = [];
@@ -17,7 +36,7 @@ export function transpileToJS(ast, opts = {}) {
   out.push(`"use strict";`);
   // Support custom runtime import path for data URL modules
   const rtPath = runtimeImport || "./braid-rt.js";
-  out.push(`import { Ok, Err, IO, cap } from "${rtPath}";`);
+  out.push(`import { Ok, Err, IO, cap, checkType, CRMError } from "${rtPath}";`);
 
   // Emit type declarations as JSDoc/TypeScript
   for (const it of (ast.items||[])) {
@@ -66,18 +85,104 @@ function emitImport(imp, _ctx){
   return `import { ${imp.names.join(', ')} } from "${imp.path}";`;
 }
 
+// --- Static Effect Analysis (Issue #8 from braid-refactoring-issues.md) ---
+// Walks the AST body to detect actual IO usage and compares against declared effects.
+// Maps IO namespace roots to their corresponding effect names.
+const IO_EFFECT_MAP = {
+  http: 'net',
+  clock: 'clock',
+  fs: 'fs',
+  rng: 'rng'
+};
+
+function detectUsedEffects(node, found = new Set()) {
+  if (!node || typeof node !== 'object') return found;
+
+  // Detect member access on IO namespaces: http.get, clock.now, fs.read, etc.
+  if (node.type === 'MemberExpr' && node.obj?.type === 'Ident') {
+    const eff = IO_EFFECT_MAP[node.obj.name];
+    if (eff) found.add(eff);
+  }
+
+  // Detect direct calls to IO namespaces: http(...), clock(...) — unlikely but safe
+  if (node.type === 'CallExpr' && node.callee?.type === 'Ident') {
+    const eff = IO_EFFECT_MAP[node.callee.name];
+    if (eff) found.add(eff);
+  }
+
+  // Recurse into all child nodes
+  for (const key of Object.keys(node)) {
+    if (key === 'type') continue;
+    const child = node[key];
+    if (Array.isArray(child)) {
+      for (const item of child) {
+        if (item && typeof item === 'object') detectUsedEffects(item, found);
+      }
+    } else if (child && typeof child === 'object' && child.type) {
+      detectUsedEffects(child, found);
+    }
+  }
+  return found;
+}
+
 function emitFn(fn, ctx){
   const eff = new Set(fn.effects||[]);
   const isEff = eff.size>0;
   if (ctx.pure && isEff) ctx.diags.push({code:'TP001',message:`effectful function in --pure build: ${fn.name}`});
+
+  // --- @policy annotation validation ---
+  const policyAnnotation = (fn.annotations || []).find(a => a.name === 'policy');
+  if (policyAnnotation) {
+    const policyName = policyAnnotation.args?.[0];
+    if (!policyName || !VALID_POLICIES.has(policyName)) {
+      ctx.diags.push({
+        code: 'TP003',
+        message: `${fn.name}: @policy(${policyName || '?'}) is not a valid policy. Valid: ${[...VALID_POLICIES].join(', ')}`
+      });
+    }
+  }
+
+  // --- Static effect analysis: compare declared vs used ---
+  if (fn.body && fn.body.type === 'Block') {
+    const used = detectUsedEffects(fn.body);
+    for (const u of used) {
+      if (!eff.has(u)) {
+        ctx.diags.push({
+          code: 'TP002',
+          message: `${fn.name}: uses '${u}' effect (via ${Object.keys(IO_EFFECT_MAP).find(k=>IO_EFFECT_MAP[k]===u)}.* calls) but does not declare !${u}`
+        });
+      }
+    }
+    for (const d of eff) {
+      if (!used.has(d)) {
+        console.warn(`[Braid Transpiler] ${fn.name}: declares !${d} but no ${Object.keys(IO_EFFECT_MAP).find(k=>IO_EFFECT_MAP[k]===d)||d}.* usage detected in body (may be used indirectly)`);
+      }
+    }
+  }
+
   const asyncKw = isEff ? 'async ' : '';
   const params = (isEff?['policy','deps']:[]).concat(fn.params.map(p=>p.name));
 
   let prolog='';
+
+  // --- Runtime type validation for typed parameters ---
+  const typedParams = fn.params.filter(p => p.type);
+  if (typedParams.length > 0) {
+    for (const p of typedParams) {
+      const jsType = BRAID_TYPE_MAP[p.type.base];
+      if (jsType) {
+        // Primitive type: use typeof check
+        prolog += `  checkType("${fn.name}", "${p.name}", ${p.name}, "${jsType}");\n`;
+      } else if (p.type.base === 'Array') {
+        prolog += `  if (!Array.isArray(${p.name})) throw CRMError.validation("${fn.name}", "${p.name}", "expected Array, got " + typeof ${p.name});\n`;
+      }
+      // Object/JSONB/custom types: no typeof check (would need schema validation)
+    }
+  }
+
   if (isEff){
     for (const e of eff) prolog += `  cap(policy, "${e}");\n`;
     prolog += `  const io = IO(policy, deps);\n`;
-    // Provide convenient aliases for common IO namespaces
     prolog += `  const { http, clock, fs, rng } = io;\n`;
   }
 
@@ -175,14 +280,46 @@ function emitMatchExpr(node, ctx){
   const id="__t", t=emitExpr(node.target, ctx);
   let s = `(()=>{ const ${id}=(${t}); switch(${id}.tag){`;
   for (const arm of (node.arms||[])){
-    if (arm.pat==='_' ){ s += ` default: return ${emitExpr(arm.value, ctx)};`; continue; }
+    if (arm.pat==='_' ){ s += ` default: ${emitMatchArmValue(arm.value, ctx)}`; continue; }
     const tag = arm.pat.tag;
     s += ` case ${JSON.stringify(tag)}: {`;
     for (const b of (arm.pat.binds||[])) s += ` const ${b.name}=${id}.${b.name};`;
-    s += ` return ${emitExpr(arm.value, ctx)}; }`;
+    s += ` ${emitMatchArmValue(arm.value, ctx)} }`;
   }
   s += ` } })()`;
   return s;
+}
+
+// Emit match arm value — handles expressions, blocks, and return statements
+function emitMatchArmValue(value, ctx) {
+  if (!value) return 'return undefined;';
+  // Block body: { let x = ...; expr }
+  if (value.type === 'Block') {
+    const stmts = value.statements || [];
+    let code = '';
+    for (let i = 0; i < stmts.length; i++) {
+      const st = stmts[i];
+      if (i === stmts.length - 1 && st.type === 'ExprStmt') {
+        // Last expression in block is the return value
+        code += ` return ${emitExpr(st.expr, ctx)};`;
+      } else if (st.type === 'LetStmt') {
+        code += ` const ${st.name} = ${emitExpr(st.value, ctx)};`;
+      } else if (st.type === 'ReturnStmt') {
+        code += ` return ${emitExpr(st.value, ctx)};`;
+      } else if (st.type === 'IfStmt') {
+        code += ` ${emitIf(st, ctx)}`;
+      } else if (st.type === 'ExprStmt') {
+        code += ` ${emitExpr(st.expr, ctx)};`;
+      }
+    }
+    return code;
+  }
+  // Bare return statement in match arm: Err{error} => return Err(...)
+  if (value.type === 'ReturnStmt') {
+    return `return ${emitExpr(value.value, ctx)};`;
+  }
+  // Normal expression
+  return `return ${emitExpr(value, ctx)};`;
 }
 
 // Fallback for legacy raw blocks
@@ -216,6 +353,43 @@ function mainCLI(){
   if (outPath){ fs.writeFileSync(outPath,code,'utf8'); console.log(`✓ Transpiled ${inPath} → ${outPath}`); }
   else { process.stdout.write(code); }
 }
+/**
+ * Extract @policy annotations from a parsed AST.
+ * Returns a map of function name → policy name.
+ * Used by the registry to auto-derive policy from .braid files.
+ */
+export function extractPolicies(ast) {
+  const policies = {};
+  for (const item of (ast.items || [])) {
+    if (item.type !== 'FnDecl') continue;
+    const ann = (item.annotations || []).find(a => a.name === 'policy');
+    if (ann && ann.args?.[0]) {
+      policies[item.name] = ann.args[0];
+    }
+  }
+  return policies;
+}
+
+/**
+ * Extract typed parameter info from a parsed AST.
+ * Returns a map of function name → [{ name, type }] for schema generation.
+ */
+export function extractParamTypes(ast) {
+  const types = {};
+  for (const item of (ast.items || [])) {
+    if (item.type !== 'FnDecl') continue;
+    types[item.name] = item.params.map(p => ({
+      name: p.name,
+      type: p.type ? p.type.base : null,
+      typeArgs: p.type?.typeArgs || [],
+    }));
+  }
+  return types;
+}
+
+// Export static effect analysis for use by external tools (CLI checker, tests)
+export { detectUsedEffects, IO_EFFECT_MAP, BRAID_TYPE_MAP, VALID_POLICIES };
+
 // Guard against invocation contexts (e.g. `node -e`) where process.argv[1] may be undefined
 const arg1 = (process && process.argv && process.argv.length > 1) ? process.argv[1] : null;
 const isMain = arg1 && (import.meta.url === url.pathToFileURL(arg1).href);

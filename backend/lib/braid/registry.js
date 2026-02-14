@@ -752,3 +752,57 @@ export function summarizeToolResult(result, toolName) {
 }
 
 export const TOOLS_DIR_PATH = TOOLS_DIR;
+
+/**
+ * Validate that @policy annotations in .braid files match TOOL_REGISTRY.
+ * Call at startup to catch policy drift between .braid source and registry.
+ * @returns {{ valid: boolean, mismatches: Array, missing: Array }}
+ */
+export async function validateRegistryPolicies() {
+  const { parse } = await import('../../../braid-llm-kit/tools/braid-parse.js');
+  const { extractPolicies } = await import('../../../braid-llm-kit/tools/braid-transpile.js');
+  const fs = await import('fs');
+  
+  const mismatches = [];
+  const missing = [];
+  const seenFiles = new Set();
+  
+  // Build function→policy map from .braid files
+  const braidPolicies = {};
+  for (const [toolName, config] of Object.entries(TOOL_REGISTRY)) {
+    const braidFile = path.join(TOOLS_DIR, config.file);
+    if (!seenFiles.has(config.file)) {
+      seenFiles.add(config.file);
+      try {
+        const src = fs.readFileSync(braidFile, 'utf8');
+        const ast = parse(src, config.file);
+        const policies = extractPolicies(ast);
+        Object.assign(braidPolicies, policies);
+      } catch (e) {
+        console.warn(`[Registry] Could not parse ${config.file}: ${e.message}`);
+      }
+    }
+    
+    const fnName = config.function;
+    const braidPolicy = braidPolicies[fnName];
+    const registryPolicy = config.policy;
+    
+    if (!braidPolicy) {
+      missing.push({ toolName, fn: fnName, file: config.file, registryPolicy });
+    } else if (braidPolicy !== registryPolicy) {
+      mismatches.push({ toolName, fn: fnName, file: config.file, braidPolicy, registryPolicy });
+    }
+  }
+  
+  if (mismatches.length > 0) {
+    console.error('[Registry] Policy mismatches between .braid files and TOOL_REGISTRY:');
+    for (const m of mismatches) {
+      console.error(`  ${m.fn} in ${m.file}: @policy(${m.braidPolicy}) != registry policy '${m.registryPolicy}'`);
+    }
+  }
+  if (missing.length > 0) {
+    console.warn(`[Registry] ${missing.length} functions missing @policy annotation in .braid files`);
+  }
+  
+  return { valid: mismatches.length === 0, mismatches, missing };
+}

@@ -9,7 +9,7 @@ import { CRM_POLICIES } from './policies.js';
 import { TOOL_REGISTRY } from './registry.js';
 import { TOOL_CACHE_TTL, generateBraidCacheKey } from './registry.js';
 import { trackRealtimeMetrics, logAuditEntry, extractEntityType } from './metrics.js';
-import { createBackendDeps, filterSensitiveFields } from './utils.js';
+import { createBackendDeps, filterSensitiveFields, validateToolArgs, isValidUUID } from './utils.js';
 import { objectToPositionalArgs, normalizeToolArgs } from './analysis.js';
 import cacheManager from '../cacheManager.js';
 import path from 'path';
@@ -89,6 +89,27 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
       tag: 'Err',
       error: { type: 'UnknownTool', message: `Tool '${toolName}' not found in registry` }
     };
+  }
+
+  // === INPUT VALIDATION (Issue #6 from braid-refactoring-issues.md) ===
+  const tenantUuidCandidate = tenantRecord?.id || tenantRecord?.tenant_id || null;
+  const validation = validateToolArgs(toolName, args, {
+    tenantUuid: tenantUuidCandidate,
+    userId,
+    confirmDelete: args?.confirmed === true || args?.force === true
+  });
+  if (!validation.valid) {
+    console.warn('[Braid Validation] Tool args invalid', { toolName, errors: validation.errors });
+    return {
+      tag: 'Err',
+      error: {
+        type: 'ValidationError',
+        message: validation.errors.join('; ')
+      }
+    };
+  }
+  if (validation.warnings.length > 0) {
+    console.warn('[Braid Validation] Warnings:', { toolName, warnings: validation.warnings });
   }
   
   const braidPath = path.join(TOOLS_DIR, config.file);

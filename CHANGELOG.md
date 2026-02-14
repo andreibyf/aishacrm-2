@@ -7,6 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.7.0] - 2026-02-13
+
+### Added
+- **Contacts Select-All Infrastructure** — Full select-all support added to Contacts page
+  - Restored `selectAllMode` state getter (was destructured away)
+  - Added two-tier select-all banners (page-level + all-records)
+  - Added `toggleSelectAll`, `handleSelectAllRecords`, `handleClearSelection` functions
+  - All 3 bulk operations (delete, status, assign) now support `selectAllMode`
+  - Updated `BulkActionsMenu` props, header/row checkboxes, and card selection
+- **Workers Page Route** — Added missing `<Route path="/Workers">` in page index
+- **Test Report Generator** — `scripts/generate-test-report.cjs` for granular per-test reporting
+- **Comprehensive TEST_REPORT.md** — 2591-line report covering all 1420 backend + 286 frontend tests
+- **Braid DSL Enhancements**
+  - New test suites: `braid-adapter.test.js`, `braid-rt.test.js`, `braid-transpile.test.js`
+  - Braid parameter order generation script (`backend/scripts/generate-braid-param-order.js`)
+  - Braid transform application script (`scripts/apply-braid-transforms.mjs`)
+  - Braid policy sync script (`scripts/sync-braid-policies.mjs`)
+  - Updated BRAID_SPEC.md and BRAID_ARCHITECTURE.md documentation
+  - Updated all 18 `.braid` tool definition files
+  - Updated Braid VSCode extension, snippets, and package.json
+  - Updated Braid parser, transpiler, adapter, and runtime
+  - Updated Braid MCP server (executor, policy, CRM adapter, server entry)
+
+### Fixed
+- **Bulk Delete Partial Failures** — `Promise.all` → `Promise.allSettled` across all 3 entity pages
+  - Leads, Accounts, Contacts: One failed delete no longer kills the entire batch
+  - Added success/fail counting with separate toast notifications per operation
+  - Applied to bulk delete, bulk status update, and bulk assign (selectAllMode paths)
+- **Accounts Bulk Delete Survivors** — Records no longer reappear after deletion
+  - Replaced `cachedRequest` with fresh `Account.filter()` (was using stale cached data)
+  - Removed `setTimeout(500)` delayed reload (deleted records would reappear from stale server data)
+  - Replaced with synchronous `clearCacheByKey("Account")` + `await loadAccounts()`
+- **Accounts `$regex` Search Filter** — Backend V2 routes ignore `$regex` Mongo-style syntax
+  - Replaced with client-side `.includes()` filtering in bulk delete and bulk assign
+  - Matches the same pattern used in Leads and Contacts
+- **Leads Total Count** — "Select all 26 leads" showed wrong count (actual: 339)
+  - `callBackendAPI` in `entities.js` now preserves `_total`, `_limit`, `_offset` metadata on returned arrays for ALL entities
+  - Leads page uses real Supabase `count` instead of `page * pageSize + 1` heuristic
+- **Leads `$regex` in Bulk Operations** — Fixed 3 bulk ops (delete, status, assign) from `$regex` to `$icontains` with `filter: JSON.stringify()`
+- **Frontend Entrypoint Doppler** — Save/restore pattern for browser-facing URLs so Doppler doesn't overwrite Docker-provided env vars
+- **Backend Tests** — Fixed 28 test failures across 7 files (794→794 pass, 28→0 fail)
+  - `section-c-suggestion-queue.test.js`, `section-g-telemetry.test.js`, `r2-conversation-context.test.js`
+  - `activities.filters.test.js`, `leads.pagination.test.js`, `health.test.js`
+- **C.A.R.E. Tests** — Fixed 2 CJS→ESM test files, added test globs to `backend/package.json`
+  - `careWorkflowTriggerClient.test.js`, `isCareWorkflowTriggersEnabled.test.js`
+  - All 183 C.A.R.E. tests now included in test runs
+- **Frontend Tests** — Fixed 5 test files
+  - `package-validation.test.js`, `ActivityForm.test.jsx`, `useAiSidebarState.test.jsx`
+  - `test/setup.js` (test infrastructure), `apiHealthMonitor.js`
+- **Braid Parser/Runtime** — Fixed `braid-parse.test.js` and core modules
+
+### Changed
+- **Backend Braid modules** — Updated `analysis.js`, `execution.js`, `index.js`, `registry.js`, `utils.js`
+- **Braid issues tracker** — Updated `issues/2-braid-refactoring-issues.md`
+
+### Removed
+- **13 stale test report files** — Consolidated into single `TEST_REPORT.md`
+  - `braid-mcp-node-server/TEST_RESULTS.md`
+  - `docs/.archive-v1-deprecated/legacy-docs/TEST_COVERAGE_REPORT.md`
+  - `docs/TEST_ALIGNMENT_SECRETS_ANALYSIS.md`
+  - `docs/archive/API_TEST_REPORT.md`, `docs/archive/API_TEST_REPORT_FINAL.md`
+  - `docs/archive/reports/API_TEST_REPORT.md`, `docs/archive/reports/API_TEST_REPORT_FINAL.md`
+  - `docs/reports/TEST_RESULTS_FINAL_FIX_REPORT.md`, `docs/reports/TEST_RESULTS_TOKEN_OPTIMIZATION.md`, `docs/reports/TEST_VERIFICATION_REPORT.md`
+  - `docs/workflows/TEST_ALIGNMENT_REPORT.md`, `docs/workflows/TEST_ALIGNMENT_SECRETS.md`
+  - `scripts/TEST_ALIGNMENT_README.md`
+
+### Test Results
+- **Backend:** 1420 pass / 0 fail / 17 skip / 1 cancelled (includes 183 C.A.R.E.)
+- **Frontend:** 286 pass / 0 fail / 5 skip
+
+---
+
 ## [Unreleased]
 
 ### Added

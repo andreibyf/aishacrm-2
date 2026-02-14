@@ -5,6 +5,50 @@
 export const Ok = (v) => ({ tag: 'Ok', value: v });
 export const Err = (e) => ({ tag: 'Err', error: e });
 
+// --- Runtime type validation (emitted by transpiler for typed params) ---
+export function checkType(fnName, paramName, value, expected) {
+  if (value === null || value === undefined) {
+    throw Object.assign(
+      new Error(`[BRAID_TYPE] ${fnName}(): parameter '${paramName}' is ${value}, expected ${expected}`),
+      { code: 'BRAID_TYPE', fn: fnName, param: paramName, expected, actual: String(value) }
+    );
+  }
+  const actual = typeof value;
+  if (actual !== expected) {
+    throw Object.assign(
+      new Error(`[BRAID_TYPE] ${fnName}(): parameter '${paramName}' expected ${expected}, got ${actual}`),
+      { code: 'BRAID_TYPE', fn: fnName, param: paramName, expected, actual }
+    );
+  }
+}
+
+// --- Structured CRM error constructors (specific error reporting) ---
+export const CRMError = {
+  /** 404: entity not found */
+  notFound(entity, id, operation) {
+    return { tag: 'Err', error: { type: 'NotFound', entity, id, operation, code: 404 } };
+  },
+  /** 400: validation failure */
+  validation(fn, field, message) {
+    return { tag: 'Err', error: { type: 'ValidationError', fn, field, message, code: 400 } };
+  },
+  /** 401/403: permission denied */
+  forbidden(operation, role, required) {
+    return { tag: 'Err', error: { type: 'PermissionDenied', operation, role, required, code: 403 } };
+  },
+  /** 5xx: network/server error */
+  network(url, code, operation) {
+    return { tag: 'Err', error: { type: 'NetworkError', url, code: code || 500, operation } };
+  },
+  /** Generic API error with HTTP status mapping */
+  fromHTTP(url, status, operation) {
+    if (status === 404) return CRMError.notFound(null, null, operation);
+    if (status === 400) return CRMError.validation(operation, null, `HTTP ${status}`);
+    if (status === 401 || status === 403) return CRMError.forbidden(operation, null, null);
+    return CRMError.network(url, status, operation);
+  },
+};
+
 // Option type constructors
 export const Some = (v) => ({ tag: 'Some', value: v });
 export const None = { tag: 'None' };

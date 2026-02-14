@@ -6,14 +6,62 @@
 /* global Buffer, process */
 
 import fs from 'fs/promises';
+import fsSync from 'fs';
 import path from 'path';
 import { parse } from './braid-parse.js';
 import { transpileToJS } from './braid-transpile.js';
 import { CRM_POLICIES } from './braid-rt.js';
 
-// Result cache for compiled Braid functions (prevents re-transpilation)
-const compiledCache = new Map();
-const resultCache = new Map();
+// Dev mode: check file mtime to invalidate stale compiled cache entries.
+// In production (NODE_ENV=production), skip mtime checks for performance.
+const DEV_MODE = process.env.NODE_ENV !== 'production';
+
+// --- LRU Cache implementation (prevents unbounded memory growth) ---
+class LRUCache {
+  constructor(maxSize = 100) {
+    this.maxSize = maxSize;
+    this.cache = new Map();
+  }
+
+  get(key) {
+    if (!this.cache.has(key)) return undefined;
+    // Move to end (most recently used)
+    const value = this.cache.get(key);
+    this.cache.delete(key);
+    this.cache.set(key, value);
+    return value;
+  }
+
+  has(key) {
+    return this.cache.has(key);
+  }
+
+  set(key, value) {
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    } else if (this.cache.size >= this.maxSize) {
+      // Evict oldest (first entry)
+      const oldest = this.cache.keys().next().value;
+      this.cache.delete(oldest);
+    }
+    this.cache.set(key, value);
+  }
+
+  clear() {
+    this.cache.clear();
+  }
+
+  get size() {
+    return this.cache.size;
+  }
+}
+
+// Compiled module cache: bounded at 50 (one per .braid file, we have ~20)
+const compiledCache = new LRUCache(50);
+// Result cache: bounded at 500 entries to prevent memory leaks from
+// varying args (searches, different IDs). Each entry is a serialized
+// Result object, typically 1-50KB.
+const resultCache = new LRUCache(500);
 
 /**
  * Execute a Braid function with policy enforcement and tenant isolation
@@ -35,10 +83,28 @@ export async function executeBraid(braidFilePath, functionName, policy, deps, ar
       return resultCache.get(cacheKey);
     }
     
-    // 2. Load and transpile (with caching)
+    // 2. Load and transpile (with mtime-aware caching)
     let compiledModule;
-    if (compiledCache.has(braidFilePath)) {
-      compiledModule = compiledCache.get(braidFilePath);
+    const cached = compiledCache.get(braidFilePath);
+    let cacheValid = !!cached;
+
+    // In dev mode, check if the source file has been modified since caching
+    if (cacheValid && DEV_MODE) {
+      try {
+        const stat = fsSync.statSync(braidFilePath);
+        const currentMtime = stat.mtimeMs;
+        if (currentMtime > cached.mtimeMs) {
+          console.log(`[Braid] File changed, recompiling: ${path.basename(braidFilePath)}`);
+          cacheValid = false;
+        }
+      } catch {
+        // If stat fails, recompile to be safe
+        cacheValid = false;
+      }
+    }
+
+    if (cacheValid) {
+      compiledModule = cached.module;
     } else {
       const braidSource = await fs.readFile(braidFilePath, 'utf8');
       const ast = parse(braidSource, braidFilePath);
@@ -58,7 +124,10 @@ export async function executeBraid(braidFilePath, functionName, policy, deps, ar
       // Dynamic import using data URL (Node.js 18+)
       const dataUrl = `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
       compiledModule = await import(dataUrl);
-      compiledCache.set(braidFilePath, compiledModule);
+
+      // Store module with mtime for invalidation
+      const stat = fsSync.statSync(braidFilePath);
+      compiledCache.set(braidFilePath, { module: compiledModule, mtimeMs: stat.mtimeMs });
     }
     
     // 3. Execute with timeout

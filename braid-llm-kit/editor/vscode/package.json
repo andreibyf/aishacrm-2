@@ -2,7 +2,7 @@
   "name": "braid-language",
   "displayName": "Braid - AI-Native DSL",
   "description": "Syntax highlighting, formatting, snippets, and language support for Braid - the type-safe, capability-controlled language for AI tool definitions",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "publisher": "aisha-crm",
   "repository": {
     "type": "git",

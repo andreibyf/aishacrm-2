@@ -22,7 +22,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const LIB_PATH = path.join(__dirname, '../../lib');
 const ROUTES_PATH = path.join(__dirname, '../../routes');
 
-const BASE_URL = process.env.BACKEND_URL || 'http://127.0.0.1:4001';
+const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 const SHOULD_RUN = process.env.CI ? (process.env.CI_BACKEND_TESTS === 'true') : true;
 

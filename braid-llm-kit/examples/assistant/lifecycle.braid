@@ -3,6 +3,7 @@
 
 import { Result, CRMError } from "../../spec/types.braid"
 
+@policy(WRITE_OPERATIONS)
 fn advanceToLead(
   tenant: String,
   bizdev_source_id: String,
@@ -26,11 +27,12 @@ fn advanceToLead(
       lead_id: value.data.lead.id,
       lead_type: value.data.lead_type
     }),
-    Err{error} => Err({ tag: "PromotionError", code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "promote"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn advanceToQualified(
   tenant: String,
   lead_id: String,
@@ -54,11 +56,12 @@ fn advanceToQualified(
       lead_id: lead_id,
       ready_for_conversion: true
     }),
-    Err{error} => Err({ tag: "QualificationError", code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "qualify"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn advanceToAccount(
   tenant: String,
   lead_id: String,
@@ -94,11 +97,12 @@ fn advanceToAccount(
       opportunity_id: value.data.opportunity.id,
       opportunity_stage: "prospecting"
     }),
-    Err{error} => Err({ tag: "ConversionError", code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "convert"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn advanceOpportunityStage(
   tenant: String,
   opportunity_id: String,
@@ -128,11 +132,12 @@ fn advanceOpportunityStage(
       stage: new_stage,
       probability: probability
     }),
-    Err{error} => Err({ tag: "StageUpdateError", code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "advance_stage"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn fullLifecycleAdvance(
   tenant: String,
   bizdev_source_id: String,
@@ -152,7 +157,7 @@ fn fullLifecycleAdvance(
   
   // Check promotion result
   if promoteResponse.tag == "Err" {
-    return Err({ tag: "PromotionError", step: 1, code: promoteResponse.error.status });
+    return CRMError.fromHTTP(url, promoteResponse.error, "promote");
   }
   
   let leadId = promoteResponse.value.data.lead.id;
@@ -163,7 +168,7 @@ fn fullLifecycleAdvance(
   
   // Check qualification result
   if qualifyResponse.tag == "Err" {
-    return Err({ tag: "QualificationError", step: 2, code: qualifyResponse.error.status });
+    return CRMError.fromHTTP(url, qualifyResponse.error, "qualify");
   }
   
   // Step 3: Convert Lead to Contact + Account + Opportunity
@@ -188,7 +193,7 @@ fn fullLifecycleAdvance(
       account_id: value.data.account.id,
       opportunity_id: value.data.opportunity.id
     }),
-    Err{error} => Err({ tag: "ConversionError", step: 3, code: error.status }),
-    _ => Err({ tag: "NetworkError", step: 3, url: convertUrl, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "convert"),
+    _ => CRMError.network(convertUrl, 500, "convert")
   };
 }

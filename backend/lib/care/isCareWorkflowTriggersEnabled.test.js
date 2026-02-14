@@ -4,9 +4,9 @@
  * PR8: Workflow Webhook Trigger Integration
  */
 
-const { describe, it, before, after } = require('node:test');
-const assert = require('node:assert');
-const { isCareWorkflowTriggersEnabled } = require('./isCareWorkflowTriggersEnabled');
+import { describe, it, before, after } from 'node:test';
+import assert from 'node:assert';
+import { isCareWorkflowTriggersEnabled } from './isCareWorkflowTriggersEnabled.js';
 
 describe('isCareWorkflowTriggersEnabled', () => {
   let originalEnv;

@@ -147,7 +147,14 @@ Result<Array<Activity>, NetworkError>
 ```
 
 ### 2.6 Error Types (Domain-Specific)
+
+Braid defines structured error variants for CRM operations. In practice, `.braid`
+files use two primary tags (`APIError` and `NetworkError`) that carry HTTP status
+codes. The backend `summarizeToolResult` function maps these status codes to the
+appropriate semantic error type for AI-friendly messages.
+
 ```braid
+// Semantic error variants (used by summarizeToolResult, can be returned directly)
 type CRMError = 
   | NotFound { entity: String, id: String }
   | ValidationError { field: String, message: String }
@@ -155,6 +162,23 @@ type CRMError =
   | NetworkError { url: String, code: Number }
   | DatabaseError { query: String, message: String }
   | PolicyViolation { effect: String, policy: String }
+  // Catch-all HTTP error (primary pattern used in .braid files)
+  | APIError { url: String, code: Number, operation: String, entity?: String, id?: String, query?: String }
+```
+
+**Status code mapping in `summarizeToolResult`:**
+- `APIError` with `code: 400` → treated as ValidationError
+- `APIError` with `code: 401/403` → treated as PermissionDenied
+- `APIError` with `code: 404` → treated as NotFound
+- `APIError` with `code: 5xx` → treated as server error
+
+**Common pattern in .braid files:**
+```braid
+return match response {
+  Ok{value} => Ok(value.data),
+  Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_leads" }),
+  _ => Err({ tag: "NetworkError", url: url, code: 500 })
+};
 ```
 
 ---
@@ -189,8 +213,8 @@ fn fetchAccount(id: String) -> Result<Account, CRMError> !net {
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err(NetworkError{ url: url, code: error.status }),
-    _ => Err(NetworkError{ url: url, code: 500 })
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_account", entity: "Account", id: id }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
 ```
@@ -451,15 +475,9 @@ type Activity = { id, type, subject, body, status, due_date, ... }
 ```
 
 ### 8.3 Error Types
-```braid
-type CRMError = 
-  | NotFound { entity: String, id: String }
-  | ValidationError { field: String, message: String }
-  | PermissionDenied { operation: String, reason: String }
-  | NetworkError { url: String, code: Number }
-  | DatabaseError { query: String, message: String }
-  | PolicyViolation { effect: String, policy: String }
-```
+
+See [Section 2.6](#26-error-types-domain-specific) for the full type definition
+including the `APIError` catch-all variant used in production `.braid` files.
 
 ---
 

@@ -6,12 +6,22 @@ import { setTimeout as delay } from 'node:timers/promises';
 const SHOULD_RUN = process.env.CI ? (process.env.CI_BACKEND_TESTS === 'true') : true;
 
 // When BACKEND_URL is set, we test against an external server (e.g., Docker container)
-// Otherwise, start the server locally (which requires Redis to be available)
-const EXTERNAL_SERVER = !!process.env.BACKEND_URL;
+// Otherwise, try to detect if the server is already running before starting a new one.
+let EXTERNAL_SERVER = !!process.env.BACKEND_URL;
 let serverRef;
+
+const BASE = process.env.BACKEND_URL || 'http://localhost:3001';
 
 async function startServerOnce() {
   if (EXTERNAL_SERVER || serverRef) return serverRef;
+  // Probe the default URL first — if it's already listening, skip starting
+  try {
+    const probe = await fetch(`${BASE}/health`);
+    if (probe.ok) {
+      EXTERNAL_SERVER = true; // treat as external
+      return null;
+    }
+  } catch { /* not running yet */ }
   const mod = await import('../../server.js');
   serverRef = mod.server; // already listening on PORT env (default 3001)
   return serverRef;
@@ -34,8 +44,6 @@ async function waitForHealth(baseUrl, attempts = 15, intervalMs = 300) {
   }
   throw lastError || new Error('Health endpoint unreachable');
 }
-
-const BASE = process.env.BACKEND_URL || 'http://localhost:3001';
 
 // Integration test: ensure /health responds with expected shape
 // NOTE: This does not mock external services; relies on Supabase env if configured.

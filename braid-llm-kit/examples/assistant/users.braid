@@ -7,6 +7,7 @@ import { Result, User, CRMError } from "../../spec/types.braid"
 // Users API endpoints: /api/users
 // Supports: list, get, create, update, delete, profiles
 
+@policy(READ_ONLY)
 fn listUsers(
   tenant: String,
   role: String,
@@ -23,11 +24,12 @@ fn listUsers(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "list_users" }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "list_users"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn getUserDetails(
   tenant: String,
   user_id: String
@@ -39,11 +41,12 @@ fn getUserDetails(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NotFound", entity: "User", id: user_id }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.notFound("User", user_id, "get"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn getCurrentUserProfile(
   tenant: String
 ) -> Result<User, CRMError> !net {
@@ -54,11 +57,12 @@ fn getCurrentUserProfile(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_profile" }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "get_profile"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn getUserProfiles(
   tenant: String
 ) -> Result<Array, CRMError> !net {
@@ -69,11 +73,12 @@ fn getUserProfiles(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_user_profiles" }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "get_user_profiles"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn createUser(
   tenant: String,
   email: String,
@@ -97,11 +102,12 @@ fn createUser(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "create_user" }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "create_user"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn updateUser(
   tenant: String,
   user_id: String,
@@ -113,11 +119,12 @@ fn updateUser(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "update_user", entity: "User", id: user_id }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "update_user"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn deleteUser(
   tenant: String,
   user_id: String
@@ -129,11 +136,12 @@ fn deleteUser(
   
   return match response {
     Ok{value} => Ok(true),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "delete_user", entity: "User", id: user_id }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "delete_user"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn searchUsers(
   tenant: String,
   query: String,
@@ -150,11 +158,12 @@ fn searchUsers(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_users", query: query }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "search_users"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn inviteUser(
   tenant: String,
   user_id: String,
@@ -170,7 +179,7 @@ fn inviteUser(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "invite_user" }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "invite_user"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }

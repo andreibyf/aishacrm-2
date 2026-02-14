@@ -6,6 +6,7 @@ import { Result, Employee, CRMError } from "../../spec/types.braid"
 // Employees API endpoints: /api/employees
 // Supports: list, get, create, update, delete
 
+@policy(READ_ONLY)
 fn listEmployees(
   tenant: String,
   role: String,
@@ -24,11 +25,12 @@ fn listEmployees(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "list_employees" }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "list_employees"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn getEmployeeDetails(
   tenant: String,
   employee_id: String
@@ -40,11 +42,12 @@ fn getEmployeeDetails(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NotFound", entity: "Employee", id: employee_id }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.notFound("Employee", employee_id, "get"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn createEmployee(
   tenant: String,
   first_name: String,
@@ -70,11 +73,12 @@ fn createEmployee(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "create_employee" }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "create_employee"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn updateEmployee(
   tenant: String,
   employee_id: String,
@@ -86,11 +90,12 @@ fn updateEmployee(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "update_employee", entity: "Employee", id: employee_id }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "update_employee"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn deleteEmployee(
   tenant: String,
   employee_id: String
@@ -102,11 +107,12 @@ fn deleteEmployee(
   
   return match response {
     Ok{value} => Ok(true),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "delete_employee", entity: "Employee", id: employee_id }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "delete_employee"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn searchEmployees(
   tenant: String,
   query: String,
@@ -123,11 +129,12 @@ fn searchEmployees(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_employees", query: query }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "search_employees"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn getEmployeeAssignments(
   tenant: String,
   employee_id: String
@@ -147,7 +154,7 @@ fn getEmployeeAssignments(
       leads: value.data.assigned_leads,
       activities: value.data.assigned_activities
     }),
-    Err{error} => Err({ tag: "NotFound", entity: "Employee", id: employee_id }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.notFound("Employee", employee_id, "get"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }

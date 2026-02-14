@@ -9,6 +9,7 @@ import { GitHubAdapter } from "./braid/adapters/github";
 import { LlmAdapter } from "./braid/adapters/llm";
 import { MemoryAdapter } from "./braid/adapters/memory";
 import { BraidRequestEnvelope, BraidResponseEnvelope } from "./braid/types";
+import { CrmPolicies } from "./braid/policy";
 import { initMemory, isMemoryAvailable, getStatus as getMemoryStatus } from "./lib/memory";
 import { initQueue, initWorker, queueJob, getQueueStats, shutdownQueue } from "./lib/jobQueue";
 import { getErrorMessage } from "./lib/errorUtils";
@@ -63,6 +64,7 @@ registry.registerAdapter(LlmAdapter);
 registry.registerAdapter(MemoryAdapter);
 
 const executor = new BraidExecutor(registry, {
+  policies: CrmPolicies,
   logger: createConsoleLogger(),
 });
 

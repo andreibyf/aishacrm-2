@@ -681,66 +681,55 @@ export default function AccountsPage() {
       ) return;
 
       try {
-        let currentTenantFilter = getTenantFilter();
-        // The employee scope filter is already applied within getTenantFilter()
+        // Re-fetch all matching accounts (bypass cache to get fresh data)
+        const currentTenantFilter = { ...getTenantFilter(), limit: 10000 };
+        const sortString = sortDirection === "desc" ? `-${sortField}` : sortField;
+        const allAccounts = await Account.filter(currentTenantFilter, sortString);
 
-        if (typeFilter !== "all") {
-          currentTenantFilter = { ...currentTenantFilter, type: typeFilter };
-        }
-
+        // Apply client-side filters to match what the user sees
+        let filtered = allAccounts || [];
         if (searchTerm) {
-          const searchRegex = { $regex: searchTerm, $options: "i" };
-          currentTenantFilter = {
-            ...currentTenantFilter,
-            $or: [
-              { name: searchRegex },
-              { email: searchRegex },
-              { phone: searchRegex },
-              { website: searchRegex },
-              { city: searchRegex },
-            ],
-          };
+          const search = searchTerm.toLowerCase();
+          filtered = filtered.filter((a) =>
+            a.name?.toLowerCase().includes(search) ||
+            a.website?.toLowerCase().includes(search) ||
+            a.email?.toLowerCase().includes(search) ||
+            a.phone?.includes(searchTerm)
+          );
         }
-
+        if (typeFilter !== "all") {
+          filtered = filtered.filter((a) => a.type === typeFilter);
+        }
         if (selectedTags.length > 0) {
-          currentTenantFilter = {
-            ...currentTenantFilter,
-            tags: { $all: selectedTags },
-          };
+          filtered = filtered.filter((a) =>
+            Array.isArray(a.tags) && selectedTags.every((tag) => a.tags.includes(tag))
+          );
         }
 
-        const allAccountsToDelete = await cachedRequest("Account", "filter", {
-          filter: currentTenantFilter,
-          sort: "id",
-          limit: 10000,
-        }, () => Account.filter(currentTenantFilter, "id", 10000));
-        const deleteCount = allAccountsToDelete.length;
+        const deleteCount = filtered.length;
 
-        // Delete in batches to avoid overwhelming the system
+        // Delete in batches using allSettled to handle partial failures
         const BATCH_SIZE = 50;
-        for (let i = 0; i < allAccountsToDelete.length; i += BATCH_SIZE) {
-          const batch = allAccountsToDelete.slice(i, i + BATCH_SIZE);
-          await Promise.all(batch.map((a) => Account.delete(a.id)));
+        let successCount = 0;
+        let failCount = 0;
+        for (let i = 0; i < filtered.length; i += BATCH_SIZE) {
+          const batch = filtered.slice(i, i + BATCH_SIZE);
+          const results = await Promise.allSettled(batch.map((a) => Account.delete(a.id)));
+          results.forEach((r) => {
+            if (r.status === 'fulfilled') successCount++;
+            else failCount++;
+          });
         }
-
-        // Optimistically remove from UI immediately
-        const deletedIds = new Set(allAccountsToDelete.map(a => a.id));
-        setAccounts((prev) => prev.filter((a) => !deletedIds.has(a.id)));
-        setTotalItems((t) => Math.max(0, (t || 0) - deleteCount));
 
         setSelectedAccounts(new Set());
         setSelectAllMode(false);
-        
-        // Refresh in background to ensure sync
-        setTimeout(async () => {
-          clearCacheByKey("Account");
-          await Promise.all([
-            loadAccounts(),
-            loadTotalStats(),
-          ]);
-        }, 500);
-        
-        toast.success(`${deleteCount} account(s) deleted`);
+        clearCacheByKey("Account");
+        await Promise.all([
+          loadAccounts(),
+          loadTotalStats(),
+        ]);
+        if (successCount > 0) toast.success(`${successCount} account(s) deleted`);
+        if (failCount > 0) toast.error(`${failCount} account(s) failed to delete`);
       } catch (error) {
         console.error("Failed to delete accounts:", error);
         toast.error("Failed to delete accounts");
@@ -905,50 +894,48 @@ export default function AccountsPage() {
       ) return;
 
       try {
-        let currentTenantFilter = getTenantFilter();
-        // The employee scope filter is already applied within getTenantFilter()
+        // Re-fetch all matching accounts (bypass cache to get fresh data)
+        const currentTenantFilter = { ...getTenantFilter(), limit: 10000 };
+        const sortString = sortDirection === "desc" ? `-${sortField}` : sortField;
+        const allAccounts = await Account.filter(currentTenantFilter, sortString);
 
-        if (typeFilter !== "all") {
-          currentTenantFilter = { ...currentTenantFilter, type: typeFilter };
-        }
-
+        // Apply client-side filters to match what the user sees
+        let filtered = allAccounts || [];
         if (searchTerm) {
-          const searchRegex = { $regex: searchTerm, $options: "i" };
-          currentTenantFilter = {
-            ...currentTenantFilter,
-            $or: [
-              { name: searchRegex },
-              { email: searchRegex },
-              { phone: searchRegex },
-              { website: searchRegex },
-              { city: searchRegex },
-            ],
-          };
+          const search = searchTerm.toLowerCase();
+          filtered = filtered.filter((a) =>
+            a.name?.toLowerCase().includes(search) ||
+            a.website?.toLowerCase().includes(search) ||
+            a.email?.toLowerCase().includes(search) ||
+            a.phone?.includes(searchTerm)
+          );
         }
-
+        if (typeFilter !== "all") {
+          filtered = filtered.filter((a) => a.type === typeFilter);
+        }
         if (selectedTags.length > 0) {
-          currentTenantFilter = {
-            ...currentTenantFilter,
-            tags: { $all: selectedTags },
-          };
+          filtered = filtered.filter((a) =>
+            Array.isArray(a.tags) && selectedTags.every((tag) => a.tags.includes(tag))
+          );
         }
 
-        const allAccountsToAssign = await cachedRequest("Account", "filter", {
-          filter: currentTenantFilter,
-          sort: "id",
-          limit: 10000,
-        }, () => Account.filter(currentTenantFilter, "id", 10000));
-        const updateCount = allAccountsToAssign.length;
+        const updateCount = filtered.length;
 
-        // Update in batches
+        // Update in batches using allSettled to handle partial failures
         const BATCH_SIZE = 50;
-        for (let i = 0; i < allAccountsToAssign.length; i += BATCH_SIZE) {
-          const batch = allAccountsToAssign.slice(i, i + BATCH_SIZE);
-          await Promise.all(
+        let successCount = 0;
+        let failCount = 0;
+        for (let i = 0; i < filtered.length; i += BATCH_SIZE) {
+          const batch = filtered.slice(i, i + BATCH_SIZE);
+          const results = await Promise.allSettled(
             batch.map((a) =>
               Account.update(a.id, { assigned_to: assignedTo || null })
             ),
           );
+          results.forEach((r) => {
+            if (r.status === 'fulfilled') successCount++;
+            else failCount++;
+          });
         }
 
         setSelectedAccounts(new Set());
@@ -958,7 +945,8 @@ export default function AccountsPage() {
           loadAccounts(),
           loadTotalStats(),
         ]);
-        toast.success(`Assigned ${updateCount} account(s)`);
+        if (successCount > 0) toast.success(`Assigned ${successCount} account(s)`);
+        if (failCount > 0) toast.error(`${failCount} account(s) failed to assign`);
       } catch (error) {
         console.error("Failed to assign accounts:", error);
         toast.error("Failed to assign accounts");

@@ -356,6 +356,166 @@ describe('Braid Parser', () => {
       assert.strictEqual(stmts.length, 5); // let, if, let, if, return
     });
   });
+
+  // ======== NEW: @policy annotation tests ========
+  describe('@policy annotations', () => {
+    it('parses @policy annotation on function', () => {
+      const result = parse('@policy(WRITE_OPERATIONS)\nfn create(t: String) -> Result !net { return t; }');
+      assert.strictEqual(result.items[0].annotations.length, 1);
+      assert.strictEqual(result.items[0].annotations[0].name, 'policy');
+      assert.deepStrictEqual(result.items[0].annotations[0].args, ['WRITE_OPERATIONS']);
+    });
+
+    it('parses multiple annotations', () => {
+      const result = parse('@policy(READ_ONLY)\n@audit\nfn read(t: String) -> String { return t; }');
+      assert.strictEqual(result.items[0].annotations.length, 2);
+      assert.strictEqual(result.items[0].annotations[0].name, 'policy');
+      assert.strictEqual(result.items[0].annotations[1].name, 'audit');
+      assert.strictEqual(result.items[0].annotations[1].args, null);
+    });
+
+    it('preserves annotation on each function independently', () => {
+      const code = `
+        @policy(WRITE_OPERATIONS)
+        fn create(t: String) -> Result !net { return t; }
+        @policy(READ_ONLY)
+        fn read(t: String) -> Result !net { return t; }
+      `;
+      const result = parse(code);
+      assert.strictEqual(result.items[0].annotations[0].args[0], 'WRITE_OPERATIONS');
+      assert.strictEqual(result.items[1].annotations[0].args[0], 'READ_ONLY');
+    });
+
+    it('function without annotation has empty annotations array', () => {
+      const result = parse('fn test() -> String { return "hi"; }');
+      assert.deepStrictEqual(result.items[0].annotations, []);
+    });
+  });
+
+  // ======== NEW: Typed parameter tests ========
+  describe('typed parameters', () => {
+    it('captures simple parameter types', () => {
+      const result = parse('fn test(name: String, age: Number) -> Boolean { return true; }');
+      assert.strictEqual(result.items[0].params[0].type.base, 'String');
+      assert.strictEqual(result.items[0].params[1].type.base, 'Number');
+    });
+
+    it('captures generic parameter types', () => {
+      const result = parse('fn test(items: Array<Lead>) -> Result<Lead, CRMError> !net { return items; }');
+      assert.strictEqual(result.items[0].params[0].type.base, 'Array');
+      assert.strictEqual(result.items[0].params[0].type.typeArgs[0].base, 'Lead');
+    });
+
+    it('captures return type with generics', () => {
+      const result = parse('fn test() -> Result<Lead, CRMError> { return Ok(1); }');
+      assert.strictEqual(result.items[0].ret.base, 'Result');
+      assert.strictEqual(result.items[0].ret.typeArgs[0].base, 'Lead');
+      assert.strictEqual(result.items[0].ret.typeArgs[1].base, 'CRMError');
+    });
+
+    it('handles params without type annotations', () => {
+      const result = parse('fn test(x) -> String { return x; }');
+      assert.strictEqual(result.items[0].params[0].name, 'x');
+      assert.strictEqual(result.items[0].params[0].type, null);
+    });
+
+    it('captures let statement types', () => {
+      const result = parse('fn test() -> String { let x: Number = 42; return x; }');
+      assert.strictEqual(result.items[0].body.statements[0].letType.base, 'Number');
+    });
+  });
+
+  // ======== NEW: Match arm block bodies ========
+  describe('match arm block bodies', () => {
+    it('parses match arm with block body containing statements', () => {
+      const code = `
+        fn test() -> String {
+          return match x {
+            Ok{value} => {
+              let y = value.data;
+              y
+            },
+            Err{e} => "error"
+          };
+        }
+      `;
+      const result = parse(code);
+      const arm0 = result.items[0].body.statements[0].value.arms[0];
+      assert.strictEqual(arm0.value.type, 'Block');
+      assert.strictEqual(arm0.value.statements.length, 2);
+    });
+
+    it('parses match arm with return statement', () => {
+      const code = `
+        fn test() -> String {
+          return match x {
+            Ok{value} => value,
+            Err{error} => return "bail"
+          };
+        }
+      `;
+      const result = parse(code);
+      const arm1 = result.items[0].body.statements[0].value.arms[1];
+      assert.strictEqual(arm1.value.type, 'ReturnStmt');
+    });
+
+    it('parses block body with if statement', () => {
+      const code = `
+        fn test() -> Result {
+          return match x {
+            Ok{value} => {
+              let items = value.data;
+              if (items.length == 0) {
+                return "empty";
+              }
+              items
+            },
+            _ => "fallback"
+          };
+        }
+      `;
+      const result = parse(code);
+      const arm0 = result.items[0].body.statements[0].value.arms[0];
+      assert.strictEqual(arm0.value.type, 'Block');
+      assert.strictEqual(arm0.value.statements[1].type, 'IfStmt');
+    });
+  });
+
+  // ======== NEW: CRMError.fromHTTP as expression ========
+  describe('CRMError constructor calls', () => {
+    it('parses CRMError.fromHTTP as member call expression', () => {
+      const code = `
+        fn test() -> Result !net {
+          let r = http.get("/api");
+          return match r {
+            Ok{value} => Ok(value),
+            Err{error} => CRMError.fromHTTP(url, error.status, "test_op")
+          };
+        }
+      `;
+      const result = parse(code);
+      const arm1 = result.items[0].body.statements[1].value.arms[1];
+      assert.strictEqual(arm1.value.type, 'CallExpr');
+      assert.strictEqual(arm1.value.callee.type, 'MemberExpr');
+      assert.strictEqual(arm1.value.callee.obj.name, 'CRMError');
+      assert.strictEqual(arm1.value.callee.prop, 'fromHTTP');
+      assert.strictEqual(arm1.value.args.length, 3);
+    });
+
+    it('parses CRMError.network call', () => {
+      const code = `
+        fn test() -> Result !net {
+          return match r {
+            _ => CRMError.network(url, 500, "unknown")
+          };
+        }
+      `;
+      const result = parse(code);
+      const arm = result.items[0].body.statements[0].value.arms[0];
+      assert.strictEqual(arm.value.callee.obj.name, 'CRMError');
+      assert.strictEqual(arm.value.callee.prop, 'network');
+    });
+  });
 });
 
 console.log('All parser tests passed!');

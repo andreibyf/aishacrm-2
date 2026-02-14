@@ -97,13 +97,21 @@ export class BraidExecutor {
       const finalResult = await applyPoliciesAfter(rawResult, ctx, this.policies);
       return finalResult;
     } catch (err: any) {
-      ctx.error("Error executing action", { error: err?.message ?? String(err) });
+      ctx.error("Error executing action", {
+        error: err?.message ?? String(err),
+        errorCode: err?.errorCode,
+      });
       return {
         actionId: action.id,
         status: "error",
         resource: action.resource,
-        errorCode: "EXECUTION_ERROR",
+        errorCode: err?.errorCode || "EXECUTION_ERROR",
         errorMessage: err?.message ?? String(err),
+        details: err?.policy ? {
+          policy: err.policy,
+          requiredRoles: err.requiredRoles,
+          actorRoles: err.actorRoles,
+        } : undefined,
       };
     }
   }

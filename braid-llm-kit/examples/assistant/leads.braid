@@ -3,14 +3,8 @@
 
 import { Result, Lead, CRMError } from "../../spec/types.braid"
 
-// Error handling note: HTTP errors return CRMError with specific tags based on status code.
-// The backend summarizeToolResult function interprets these error codes to provide
-// appropriate user-facing messages.
-// - 400 = ValidationError
-// - 401/403 = PermissionDenied  
-// - 404 = NotFound
-// - 5xx = NetworkError
 
+@policy(WRITE_OPERATIONS)
 fn createLead(
   tenant: String,
   first_name: String,
@@ -37,11 +31,12 @@ fn createLead(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "create_lead" }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "create_lead"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn deleteLead(
   tenant: String,
   lead_id: String
@@ -50,11 +45,12 @@ fn deleteLead(
   let response = http.delete(url, {});
   return match response {
     Ok{value} => Ok(true),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "delete_lead", entity: "Lead", id: lead_id }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "delete_lead"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn qualifyLead(
   tenant: String,
   lead_id: String,
@@ -73,11 +69,12 @@ fn qualifyLead(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "qualify_lead", entity: "Lead", id: lead_id }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "qualify_lead"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn updateLead(
   tenant: String,
   lead_id: String,
@@ -89,11 +86,12 @@ fn updateLead(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "update_lead", entity: "Lead", id: lead_id }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "update_lead"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn convertLeadToAccount(
   tenant: String,
   lead_id: String,
@@ -106,11 +104,12 @@ fn convertLeadToAccount(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "convert_lead", entity: "Lead", id: lead_id }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "convert_lead"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn listLeads(
   tenant: String,
   status: String,
@@ -132,11 +131,12 @@ fn listLeads(
   // Note: Empty array is a VALID result (no matches), not an error
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "list_leads" }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "list_leads"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn getLeadDetails(
   tenant: String,
   lead_id: String
@@ -148,11 +148,12 @@ fn getLeadDetails(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_lead", entity: "Lead", id: lead_id }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "get_lead"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn searchLeads(
   tenant: String,
   query: String,
@@ -172,14 +173,15 @@ fn searchLeads(
   // The AI should NOT report "network error" for empty search results
   return match response {
     Ok{value} => Ok(value.data.leads),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_leads", query: query }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "search_leads"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
 // Search leads by status - returns full lead details for leads matching a specific status
 // Use this when user asks about leads with a specific status (e.g. "my warm leads", "new leads")
 // Status values: new, contacted, qualified, warm, hot, cold, lost, converted
+@policy(READ_ONLY)
 fn searchLeadsByStatus(
   tenant: String,
   status: String,
@@ -197,7 +199,7 @@ fn searchLeadsByStatus(
   // Returns full lead details including name, company, email, phone, etc.
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_leads_by_status", status: status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "search_leads_by_status"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }

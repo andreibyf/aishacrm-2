@@ -4,6 +4,7 @@
 
 import { Result, CRMError } from "../../spec/types.braid"
 
+@policy(READ_ONLY)
 fn suggestNextActions(
   tenant: String,
   entity_type: String,
@@ -26,17 +27,7 @@ fn suggestNextActions(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ 
-      tag: "APIError", 
-      operation: "suggest_next_actions",
-      entity: entity_type,
-      id: entity_id,
-      code: error.status 
-    }),
-    _ => Err({ 
-      tag: "NetworkError", 
-      url: url, 
-      code: 500 
-    })
+    Err{error} => CRMError.fromHTTP(url, error.status, "suggest_next_actions"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }

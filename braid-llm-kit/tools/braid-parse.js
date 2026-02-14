@@ -18,6 +18,8 @@ function tokenize(src){
     if (/[0-9]/.test(c)){ let s=""; while(i<src.length && /[0-9.]/.test(src[i])){ s+=src[i++]; col++; } push('number',s); continue; }
     if (id0(c)){ let s=""; while(i<src.length && idc(src[i])){ s+=src[i++]; col++; } push(KW.has(s)?'kw':'ident', s); continue; }
     const two=src.slice(i,i+2); if (TWO.has(two)){ push('op',two); i+=2; col+=2; continue; }
+    // @annotations (e.g., @policy)
+    if (c === '@') { i++; col++; let s = ''; while (i < src.length && idc(src[i])) { s += src[i++]; col++; } push('annotation', s); continue; }
     const singles="{}()[],;:+-*/%!<>=.&|"; if (singles.includes(c)){ push(c,c); i++; col++; continue; }
     fail(`bad char '${c}'`, {line,col});
   }
@@ -36,7 +38,25 @@ export function parse(src, filename="stdin"){
   return { type:'Program', items, filename };
 
   function parseItem(){
-    if (pk().type==='kw' && pk().value==='fn') return parseFnDecl();
+    // Collect annotations before declarations: @policy(WRITE_OPERATIONS)
+    const annotations = [];
+    while (pk().type === 'annotation') {
+      const name = t[p++].value;  // e.g., 'policy'
+      let args = null;
+      if (match('(', '(')) {
+        args = [];
+        if (pk().type !== ')') {
+          while (true) {
+            const tok = t[p++];
+            args.push(tok.value);
+            if (!match(',', ',')) break;
+          }
+        }
+        eat(')', ')');
+      }
+      annotations.push({ name, args });
+    }
+    if (pk().type==='kw' && pk().value==='fn') return parseFnDecl(annotations);
     if (pk().type==='kw' && pk().value==='type') return parseTypeDecl();
     if (pk().type==='kw' && pk().value==='import') return parseImport();
     fail(`unexpected token '${pk().value}'`, pk());
@@ -119,32 +139,32 @@ export function parse(src, filename="stdin"){
   }
 
   // fn name(params) -> Type [!effs] { block }
-  function parseFnDecl(){
+  function parseFnDecl(annotations = []){
     eat('kw','fn');
     const name = eat('ident').value;
     eat('(','(');
     const params = parseParams();
     eat(')',')');
     eat('op','->');
-    const ret = parseType();
+    const ret = parseTypeRef();
     let effects = [];
     if (match('!','!')) effects = parseEffects();
     const body = parseBlock();
-    return { type:'FnDecl', name, params, ret, effects, body };
+    return { type:'FnDecl', name, params, ret, effects, body, annotations };
   }
   function parseParams(){
     const ps=[]; if (pk().type===')') return ps;
     while(true){
       const nm = eat('ident').value;
-      if (match(':',':')) skipType();
-      ps.push({ name: nm });
+      let type = null;
+      if (match(':',':')) type = parseTypeRef();
+      ps.push({ name: nm, type });
       if (match(',',',')) continue;
       break;
     }
     return ps;
   }
   function parseEffects(){ const out=[]; while(true){ out.push(eat('ident').value); if(!match(',',',')) break; } return out; }
-  function parseType(){ const parts=[]; while (!['{','!','eof',')'].includes(pk().type)){ const tk=t[p++]; parts.push(tk.value ?? tk.type); } return { type:'Type', text: parts.join('').trim() }; }
 
   function parseBlock(){
     eat('{','{');
@@ -156,11 +176,11 @@ export function parse(src, filename="stdin"){
 
   function parseStmt(){
     const k=pk();
-    if (k.type==='kw' && k.value==='let'){ eat('kw','let'); const name=eat('ident').value; if(match(':',':')) skipType(); eat('=','='); const value=parseExpr(); eat(';',';'); return { type:'LetStmt', name, value }; }
+    if (k.type==='kw' && k.value==='let'){ eat('kw','let'); const name=eat('ident').value; let letType=null; if(match(':',':')) letType=parseTypeRef(); eat('=','='); const value=parseExpr(); eat(';',';'); return { type:'LetStmt', name, letType, value }; }
     if (k.type==='kw' && k.value==='return'){ eat('kw','return'); const value=parseExpr(); eat(';',';'); return { type:'ReturnStmt', value }; }
     if (k.type==='kw' && k.value==='if'){ eat('kw','if'); let cond=null; if (match('(','(')){ cond=parseExpr(); eat(')',')'); } else cond=parseExpr(); const then=parseBlock(); let els=null; if (pk().type==='kw' && pk().value==='else'){ eat('kw','else'); els=parseBlock(); } return { type:'IfStmt', cond, then, else: els }; }
     if (k.type==='kw' && k.value==='match'){ const expr=parseMatchExpr(); eat(';',';'); return { type:'ExprStmt', expr }; }
-    const expr=parseExpr(); eat(';',';'); return { type:'ExprStmt', expr };
+    const expr=parseExpr(); if (pk().type !== '}') eat(';',';'); else match(';',';'); return { type:'ExprStmt', expr };
   }
 
   // Pratt
@@ -222,18 +242,39 @@ export function parse(src, filename="stdin"){
     eat('{','{');
     const arms=[];
     while (pk().type!=='}'){
-      if (pk().type==='kw' && pk().value==='_'){ eat('kw','_'); eat('op','=>'); const value=parseExpr(); arms.push({ pat:'_', value }); }
+      let pat;
+      if (pk().type==='kw' && pk().value==='_'){ eat('kw','_'); pat='_'; }
       else {
         const tag = eat('ident').value;
         let binds=[];
         if (match('{','{')){ if (pk().type!=='}'){ while(true){ binds.push({ name: eat('ident').value }); if (match(',',',')) continue; break; } } eat('}','}'); }
-        eat('op','=>'); const value=parseExpr(); arms.push({ pat:{ tag, binds }, value });
+        pat = { tag, binds };
       }
+      eat('op','=>');
+      // Match arm value: block body { stmts } or expression
+      let value;
+      if (pk().type==='{' && isBlockBody()) {
+        value = parseBlock();
+      } else if (pk().type==='kw' && pk().value==='return') {
+        // Allow bare `return expr` in match arms
+        eat('kw','return'); value = { type:'ReturnStmt', value: parseExpr() };
+      } else {
+        value = parseExpr();
+      }
+      arms.push({ pat, value });
       if (match(',',',')) continue; else break;
     }
     eat('}','}');
     return { type:'MatchExpr', target, arms, unionName: null };
   }
+  // Lookahead: is { the start of a block body (with statements) vs an object literal?
+  function isBlockBody(){
+    // Save position, peek past {
+    const saved = p; p++;
+    const next = pk();
+    p = saved;
+    // Block body starts with let, return, if, match, or fn — object starts with ident : 
+    return next && next.type==='kw' && ['let','return','if','match'].includes(next.value);
+  }
 
-  function skipType(){ while (!['eof',',',')','=',';'].includes(pk().type)) { p++; } }
 }

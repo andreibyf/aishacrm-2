@@ -4,6 +4,7 @@
 import { Result, CRMError } from "../../spec/types.braid"
 
 // Initiate an outbound AI call to a contact or lead
+@policy(READ_ONLY)
 fn initiateCall(
   tenant: String,
   provider: String,
@@ -28,13 +29,14 @@ fn initiateCall(
   
   return match response {
     Ok{value} => Ok(value),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.network(url, error.status, "unknown"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
 // Initiate call to a specific contact by ID
 // Note: This function gets contact details first, then initiates the call
+@policy(READ_ONLY)
 fn callContact(
   tenant: String,
   contact_id: String,
@@ -56,12 +58,13 @@ fn callContact(
   
   return match call_response {
     Ok{value} => Ok(value),
-    Err{error} => Err({ tag: "NetworkError", url: call_url, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: call_url, code: 500 })
+    Err{error} => CRMError.network(call_url, error.status, "unknown"),
+    _ => CRMError.network(call_url, 500, "unknown")
   };
 }
 
 // Check if a calling provider is configured for the tenant
+@policy(READ_ONLY)
 fn checkCallingProvider(
   tenant: String,
   provider: String
@@ -73,12 +76,13 @@ fn checkCallingProvider(
   
   return match response {
     Ok{value} => Ok(value),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.network(url, error.status, "unknown"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
 // Get available AI agents for a provider
+@policy(READ_ONLY)
 fn getCallingAgents(
   tenant: String,
   provider: String
@@ -90,7 +94,7 @@ fn getCallingAgents(
   
   return match response {
     Ok{value} => Ok(value),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.network(url, error.status, "unknown"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }

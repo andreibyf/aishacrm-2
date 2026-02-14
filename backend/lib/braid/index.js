@@ -18,7 +18,7 @@
 
 import { executeBraidTool } from './execution.js';
 import { TOOL_REGISTRY, TOOL_DESCRIPTIONS } from './registry.js';
-import { TOOL_CATEGORIES, getToolDependencies } from './analysis.js';
+import { TOOL_CATEGORIES, getToolDependencies, validateParamOrderCoverage } from './analysis.js';
 import { executeToolChain, TOOL_CHAINS } from './chains.js';
 import { CRM_POLICIES } from './policies.js';
 import { trackRealtimeMetrics, getRealtimeMetrics } from './metrics.js';
@@ -68,6 +68,7 @@ export {
   detectCircularDependencies,
   getToolImpactAnalysis,
   getToolsByCategory,
+  validateParamOrderCoverage,
   TOOL_CATEGORIES,
   TOOL_GRAPH,
   objectToPositionalArgs
@@ -308,6 +309,12 @@ export async function initializeBraidSystem(initOptions = {}) {
       const circularDeps = detectCircularDependencies();
       if (circularDeps.length > 0) {
         console.warn('Circular dependencies detected:', circularDeps);
+      }
+
+      // Validate BRAID_PARAM_ORDER covers all registered tools
+      const paramCoverage = validateParamOrderCoverage();
+      if (!paramCoverage.valid) {
+        console.warn(`[Braid] ${paramCoverage.missing.length} tools missing from BRAID_PARAM_ORDER - args may be passed as object fallback`);
       }
     }
 

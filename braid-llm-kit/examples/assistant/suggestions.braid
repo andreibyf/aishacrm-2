@@ -3,6 +3,7 @@
 
 import { Result, CRMError } from "../../spec/types.braid"
 
+@policy(READ_ONLY)
 fn listSuggestions(
   tenant: String,
   status: String,
@@ -15,11 +16,12 @@ fn listSuggestions(
   
   return match response {
     Ok{value} => Ok(value.data.suggestions),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.network(url, error.status, "unknown"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn getSuggestionDetails(
   tenant: String,
   suggestion_id: String
@@ -30,11 +32,12 @@ fn getSuggestionDetails(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.network(url, error.status, "unknown"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn getSuggestionStats(
   tenant: String
 ) -> Result<SuggestionStats, CRMError> !net {
@@ -44,11 +47,12 @@ fn getSuggestionStats(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.network(url, error.status, "unknown"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn approveSuggestion(
   tenant: String,
   suggestion_id: String,
@@ -64,11 +68,12 @@ fn approveSuggestion(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "ApprovalError", code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "approve"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn rejectSuggestion(
   tenant: String,
   suggestion_id: String,
@@ -84,11 +89,12 @@ fn rejectSuggestion(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "RejectionError", code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "reject"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn applySuggestion(
   tenant: String,
   suggestion_id: String
@@ -102,11 +108,12 @@ fn applySuggestion(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "ApplyError", code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "apply"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn triggerSuggestionGeneration(
   tenant: String,
   trigger_id: String
@@ -121,7 +128,7 @@ fn triggerSuggestionGeneration(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "TriggerError", code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "trigger"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }

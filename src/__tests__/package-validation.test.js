@@ -13,7 +13,7 @@ describe('package.json validation', () => {
       'bull',           // Redis queue manager
       'pg',             // PostgreSQL driver
       'postgres',       // PostgreSQL client
-      'dotenv',         // Server-side env loading (Vite handles env differently)
+      // NOTE: dotenv is intentionally allowed in root devDeps — used by Playwright, scripts, orchestra
       'express',        // Web server framework
       'cors',           // CORS middleware
       'helmet',         // Security middleware

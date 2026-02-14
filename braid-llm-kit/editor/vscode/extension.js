@@ -265,6 +265,108 @@ class BraidFormatter {
   }
 }
 
+// ─── Hover Documentation Data ─────────────────────────────────────────────────
+
+const BRAID_HOVER_DOCS = {
+  // Keywords
+  'fn': {
+    signature: 'fn name(params) -> ReturnType !effects { body }',
+    description: 'Declares a Braid function. Pure functions have no effects. Effectful functions declare `!net`, `!clock`, `!fs` etc. and receive `policy` and `deps` at runtime.'
+  },
+  'let': {
+    signature: 'let name = expression;',
+    description: 'Immutable variable binding. All `let` bindings are immutable by default in Braid.'
+  },
+  'match': {
+    signature: 'match expr { Pattern => result, _ => fallback }',
+    description: 'Pattern matching expression. Used for destructuring `Result<T, E>` values (`Ok{value}`, `Err{error}`) and other tagged variants.',
+    example: 'match response {\n  Ok{value} => Ok(value.data),\n  Err{error} => Err({ tag: "APIError", code: error.status }),\n  _ => Err({ tag: "NetworkError", code: 500 })\n}'
+  },
+  'return': {
+    signature: 'return expression;',
+    description: 'Returns a value from the current function. Every code path must end with a return statement.'
+  },
+  'type': {
+    signature: 'type Name = Variant1 | Variant2 { field: Type }',
+    description: 'Declares a named type alias or union type. Used for defining CRM entity types and error variants.'
+  },
+  'import': {
+    signature: 'import { Type1, Type2 } from "path.braid"',
+    description: 'Imports type declarations from another `.braid` file. Type-only at the language level.'
+  },
+  // Effects
+  '!net': {
+    signature: '!net',
+    description: 'Network effect. Grants access to `http.get()`, `http.post()`, `http.put()`, `http.delete()`. Checked at runtime via `cap(policy, "net")`. The transpiler verifies this declaration matches actual `http.*` usage.'
+  },
+  '!clock': {
+    signature: '!clock',
+    description: 'Clock effect. Grants access to `clock.now()`, `clock.today()`, `clock.sleep()`.'
+  },
+  '!fs': {
+    signature: '!fs',
+    description: 'Filesystem effect. Grants access to `fs.read()`, `fs.write()`, `fs.open()`. Rarely used in CRM tools.'
+  },
+  // IO namespaces
+  'http': {
+    signature: 'http.get | http.post | http.put | http.delete',
+    description: 'HTTP client namespace. Available in functions declaring `!net`. IO wrapper enforces tenant isolation and timeouts. Options: `{ params: {...}, body: {...} }`.'
+  },
+  'http.get': {
+    signature: 'http.get(url: String, options?: { params: Object }) -> Response',
+    description: 'HTTP GET request. Tenant ID is auto-injected into params by the IO wrapper.',
+    example: 'let response = http.get("/api/v2/leads", { params: { status: "new" } });'
+  },
+  'http.post': {
+    signature: 'http.post(url: String, options?: { body: Object }) -> Response',
+    description: 'HTTP POST request. Used for creating entities.',
+    example: 'let response = http.post("/api/v2/leads", { body: { name: name } });'
+  },
+  'http.put': {
+    signature: 'http.put(url: String, options?: { body: Object }) -> Response',
+    description: 'HTTP PUT request. Used for updating entities.'
+  },
+  'http.delete': {
+    signature: 'http.delete(url: String, options?: Object) -> Response',
+    description: 'HTTP DELETE request. Requires admin role. Prefer soft-delete via status update.'
+  },
+  'clock': {
+    signature: 'clock.now() | clock.today() | clock.sleep(ms)',
+    description: 'Clock namespace. Available in functions declaring `!clock`. Returns ISO timestamps.'
+  },
+  'clock.now': {
+    signature: 'clock.now() -> String',
+    description: 'Returns the current ISO 8601 timestamp. Implementation injected via deps, mockable in tests.'
+  },
+  // Result types
+  'Ok': {
+    signature: 'Ok(value) -> Result<T, E>',
+    description: 'Success variant of the Result type.',
+    example: 'return Ok(value.data);'
+  },
+  'Err': {
+    signature: 'Err({ tag: "ErrorType", ...fields }) -> Result<T, E>',
+    description: 'Error variant. Production `.braid` files use `{ tag: "APIError", url, code, operation }`. Backend maps HTTP status codes to semantic types.',
+    example: 'Err({ tag: "APIError", url: url, code: 404, operation: "get_lead" })'
+  },
+  'Result': {
+    signature: 'Result<T, E>',
+    description: 'Tagged union: `Ok{value}` or `Err{error}`. All effectful Braid functions return `Result<T, CRMError>`.'
+  },
+  'CRMError': {
+    signature: 'type CRMError = APIError | NetworkError | NotFound | ValidationError | PermissionDenied',
+    description: 'Union error type. Production code uses `APIError` catch-all. Backend maps HTTP status codes: 400→Validation, 401/403→Permission, 404→NotFound.'
+  },
+  'cap': {
+    signature: 'cap(policy, effectName)',
+    description: 'Runtime capability check. Inserted by transpiler. Verifies active policy allows the declared effect. Throws `[BRAID_CAP]` if denied.'
+  },
+  'IO': {
+    signature: 'IO(policy, deps) -> { http, clock, fs, rng }',
+    description: 'IO wrapper constructor. Creates tenant-isolated, timeout-wrapped IO namespaces from injected dependencies.'
+  },
+};
+
 // ─── VS Code Integration ────────────────────────────────────────────────────────
 
 function activate(context) {
@@ -344,10 +446,113 @@ function activate(context) {
 
   context.subscriptions.push(formatterProvider, rangeFormatterProvider, onTypeFormatterProvider);
 
-  // Status bar item to show Braid is active
+  // ─── Hover Documentation Provider ──────────────────────────────────────────
+  const hoverProvider = vscode.languages.registerHoverProvider('braid', {
+    provideHover(document, position) {
+      const range = document.getWordRangeAtPosition(position, /[!]?[a-zA-Z_][a-zA-Z0-9_.!]*/)
+        || document.getWordRangeAtPosition(position);
+      if (!range) return null;
+      const word = document.getText(range);
+      const info = BRAID_HOVER_DOCS[word];
+      if (!info) return null;
+      const md = new vscode.MarkdownString();
+      md.appendCodeblock(info.signature || word, 'braid');
+      md.appendMarkdown(info.description);
+      if (info.example) {
+        md.appendMarkdown('\n\n**Example:**\n');
+        md.appendCodeblock(info.example, 'braid');
+      }
+      return new vscode.Hover(md, range);
+    }
+  });
+
+  context.subscriptions.push(hoverProvider);
+
+  // ─── Basic Diagnostics (Effect Checking) ──────────────────────────────────
+  const diagnosticCollection = vscode.languages.createDiagnosticCollection('braid');
+  context.subscriptions.push(diagnosticCollection);
+
+  const updateDiagnostics = (document) => {
+    if (document.languageId !== 'braid') return;
+    const text = document.getText();
+    const diagnostics = [];
+
+    // Simple regex-based effect checking (lightweight, no parser dependency)
+    // Matches: fn name(...) -> Type !effects {
+    const fnPattern = /^\s*fn\s+(\w+)\s*\([^)]*\)\s*->\s*[^{]+?(![\w,\s]+)?\s*\{/gm;
+    let fnMatch;
+    while ((fnMatch = fnPattern.exec(text)) !== null) {
+      const fnName = fnMatch[1];
+      const effectStr = fnMatch[2] || '';
+      const declaredEffects = effectStr.replace(/!/g, '').split(',').map(s => s.trim()).filter(Boolean);
+
+      // Find function body (simple brace counting)
+      const startIdx = fnMatch.index + fnMatch[0].length;
+      let depth = 1;
+      let endIdx = startIdx;
+      while (depth > 0 && endIdx < text.length) {
+        if (text[endIdx] === '{') depth++;
+        if (text[endIdx] === '}') depth--;
+        endIdx++;
+      }
+      const body = text.slice(startIdx, endIdx);
+
+      // Detect IO usage in body
+      const usesHttp = /\bhttp\.(get|post|put|delete|patch)\b/.test(body);
+      const usesClock = /\bclock\.(now|today|sleep)\b/.test(body);
+      const usesFs = /\bfs\.(read|write|open)\b/.test(body);
+
+      const usedEffects = [];
+      if (usesHttp) usedEffects.push({ name: 'net', ns: 'http' });
+      if (usesClock) usedEffects.push({ name: 'clock', ns: 'clock' });
+      if (usesFs) usedEffects.push({ name: 'fs', ns: 'fs' });
+
+      // Warn on undeclared effects
+      for (const { name, ns } of usedEffects) {
+        if (!declaredEffects.includes(name)) {
+          const pos = document.positionAt(fnMatch.index);
+          diagnostics.push(new vscode.Diagnostic(
+            new vscode.Range(pos, pos.translate(0, fnMatch[0].length)),
+            `'${fnName}' uses ${ns}.* but does not declare !${name}`,
+            vscode.DiagnosticSeverity.Error
+          ));
+        }
+      }
+
+      // Warn on declared but unused effects
+      for (const d of declaredEffects) {
+        const nsMap = { net: 'http', clock: 'clock', fs: 'fs' };
+        const ns = nsMap[d];
+        if (ns && !new RegExp(`\\b${ns}\\.[a-z]`).test(body)) {
+          const pos = document.positionAt(fnMatch.index);
+          diagnostics.push(new vscode.Diagnostic(
+            new vscode.Range(pos, pos.translate(0, fnMatch[0].length)),
+            `'${fnName}' declares !${d} but no ${ns}.* usage detected (may be indirect)`,
+            vscode.DiagnosticSeverity.Warning
+          ));
+        }
+      }
+    }
+
+    diagnosticCollection.set(document.uri, diagnostics);
+  };
+
+  // Run diagnostics on open/change/save
+  if (vscode.window.activeTextEditor?.document.languageId === 'braid') {
+    updateDiagnostics(vscode.window.activeTextEditor.document);
+  }
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeTextDocument(e => updateDiagnostics(e.document)),
+    vscode.workspace.onDidOpenTextDocument(updateDiagnostics),
+    vscode.window.onDidChangeActiveTextEditor(editor => {
+      if (editor) updateDiagnostics(editor.document);
+    })
+  );
+
+  // ─── Status Bar ────────────────────────────────────────────────────────────
   const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   statusBar.text = '$(symbol-misc) Braid';
-  statusBar.tooltip = 'Braid Language v0.4.0 — Format: Shift+Alt+F';
+  statusBar.tooltip = 'Braid Language v0.5.0 — Format: Shift+Alt+F';
   statusBar.command = 'editor.action.formatDocument';
 
   context.subscriptions.push(statusBar);
@@ -366,7 +571,7 @@ function activate(context) {
     statusBar.show();
   }
 
-  console.log('Braid Language Extension v0.4.0 activated');
+  console.log('Braid Language Extension v0.5.0 activated');
 }
 
 function deactivate() {}

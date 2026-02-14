@@ -4,9 +4,9 @@
  * PR8: Workflow Webhook Trigger Integration
  */
 
-const { describe, it, beforeEach, afterEach } = require('node:test');
-const assert = require('node:assert');
-const { triggerCareWorkflow, generateSignature } = require('./careWorkflowTriggerClient');
+import { describe, it, beforeEach, afterEach } from 'node:test';
+import assert from 'node:assert';
+import { triggerCareWorkflow, generateSignature } from './careWorkflowTriggerClient.js';
 
 describe('careWorkflowTriggerClient', () => {
   describe('generateSignature', () => {

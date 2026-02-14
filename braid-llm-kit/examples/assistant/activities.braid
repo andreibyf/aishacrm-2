@@ -6,6 +6,7 @@ import { Result, Activity, CRMError } from "../../spec/types.braid"
 // Error handling: HTTP errors return CRMError with APIError tag and status code.
 // The backend interprets status codes to determine error type.
 
+@policy(WRITE_OPERATIONS)
 fn createActivity(
   tenant: String,
   subject: String,
@@ -37,11 +38,12 @@ fn createActivity(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "create_activity" }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "create_activity"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn updateActivity(
   tenant: String,
   activity_id: String,
@@ -53,11 +55,12 @@ fn updateActivity(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "update_activity", entity: "Activity", id: activity_id }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "update_activity"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn markActivityComplete(
   tenant: String,
   activity_id: String
@@ -69,11 +72,12 @@ fn markActivityComplete(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "complete_activity", entity: "Activity", id: activity_id }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "complete_activity"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn getUpcomingActivities(
   tenant: String,
   assigned_to: String,
@@ -93,11 +97,12 @@ fn getUpcomingActivities(
   // Note: Empty array is a VALID result (no upcoming activities), not an error
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "list_activities" }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "list_activities"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn scheduleMeeting(
   tenant: String,
   subject: String,
@@ -123,11 +128,12 @@ fn scheduleMeeting(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "schedule_meeting" }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "schedule_meeting"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn deleteActivity(
   tenant: String,
   activity_id: String
@@ -136,11 +142,12 @@ fn deleteActivity(
   let response = http.delete(url, {});
   return match response {
     Ok{value} => Ok(true),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "delete_activity", entity: "Activity", id: activity_id }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "delete_activity"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn listActivities(
   tenant: String,
   status: String,
@@ -164,11 +171,12 @@ fn listActivities(
   // Note: Empty array is a VALID result (no activities match filter), not an error
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "list_activities" }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "list_activities"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn getActivityDetails(
   tenant: String,
   activity_id: String
@@ -180,11 +188,12 @@ fn getActivityDetails(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_activity", entity: "Activity", id: activity_id }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "get_activity"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn searchActivities(
   tenant: String,
   query: String,
@@ -203,7 +212,7 @@ fn searchActivities(
   // Note: Empty array is a VALID result (no matches found), not an error
   return match response {
     Ok{value} => Ok(value.data.activities),
-    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_activities", query: query }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.fromHTTP(url, error.status, "search_activities"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }

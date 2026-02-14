@@ -54,6 +54,23 @@ function getInternalServiceToken(tenantId?: string): string | null {
   return token;
 }
 
+/**
+ * Map HTTP status codes to structured CRM error codes.
+ * Aligned with CRMError types in braid-rt.js:
+ *   404 → NOT_FOUND, 400 → VALIDATION_ERROR,
+ *   401/403 → PERMISSION_DENIED, 5xx → NETWORK_ERROR
+ */
+function mapHttpStatusToErrorCode(status: number): string {
+  if (status === 404) return "NOT_FOUND";
+  if (status === 400) return "VALIDATION_ERROR";
+  if (status === 401 || status === 403) return "PERMISSION_DENIED";
+  if (status === 409) return "CONFLICT";
+  if (status === 422) return "VALIDATION_ERROR";
+  if (status === 429) return "RATE_LIMITED";
+  if (status >= 500) return "NETWORK_ERROR";
+  return `HTTP_${status}`;
+}
+
 type SupportedKind =
   | "accounts"
   | "leads"
@@ -250,11 +267,12 @@ async function callBackend(
         actionId: action.id,
         status: "error",
         resource: action.resource,
-        errorCode: `HTTP_${response.status}`,
+        errorCode: mapHttpStatusToErrorCode(response.status),
         errorMessage:
           (json as any)?.message ||
           (typeof json === "string" ? json : "Backend error"),
         details: {
+          httpStatus: response.status,
           response: json as any,
         },
       } as BraidActionResult;

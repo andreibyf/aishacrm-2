@@ -36,6 +36,7 @@ import {
   Search,
   Trash2,
   Upload,
+  X,
 } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
 import CsvExportButton from "../components/shared/CsvExportButton";
@@ -84,7 +85,7 @@ export default function ContactsPage() {
   const [editingContact, setEditingContact] = useState(null);
   const [viewMode, setViewMode] = useState("list");
   const [selectedContacts, setSelectedContacts] = useState(() => new Set());
-  const [, setSelectAllMode] = useState(false);
+  const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const { user } = useUser();
   const { selectedTenantId } = useTenant();
@@ -643,6 +644,70 @@ export default function ContactsPage() {
   };
 
   const handleBulkDelete = async () => {
+    if (selectAllMode) {
+      // Delete ALL contacts matching current filters
+      const confirmed = await confirm({
+        title: `Delete all ${contactsLabel.toLowerCase()}?`,
+        description: `Delete ALL ${totalItems} ${contactsLabel.toLowerCase()} matching current filters? This cannot be undone!`,
+        variant: "destructive",
+        confirmText: "Delete All",
+        cancelText: "Cancel",
+      });
+      if (!confirmed) return;
+
+      try {
+        // Re-fetch all matching contacts
+        const scopedFilter = getTenantFilter();
+        const filterWithLimit = { ...scopedFilter, limit: 10000 };
+        const sortString = sortDirection === "desc" ? `-${sortField}` : sortField;
+        const allContactsToDelete = await Contact.filter(filterWithLimit, sortString);
+
+        let filtered = allContactsToDelete || [];
+        if (searchTerm) {
+          const search = searchTerm.toLowerCase();
+          filtered = filtered.filter((c) =>
+            c.first_name?.toLowerCase().includes(search) ||
+            c.last_name?.toLowerCase().includes(search) ||
+            c.email?.toLowerCase().includes(search) ||
+            c.phone?.includes(searchTerm) ||
+            c.company?.toLowerCase().includes(search)
+          );
+        }
+        if (statusFilter !== "all") {
+          filtered = filtered.filter((c) => c.status === statusFilter);
+        }
+        if (selectedTags.length > 0) {
+          filtered = filtered.filter((c) =>
+            Array.isArray(c.tags) && selectedTags.every((tag) => c.tags.includes(tag))
+          );
+        }
+
+        const deleteCount = filtered.length;
+        const BATCH_SIZE = 50;
+        let successCount = 0;
+        let failCount = 0;
+        for (let i = 0; i < filtered.length; i += BATCH_SIZE) {
+          const batch = filtered.slice(i, i + BATCH_SIZE);
+          const results = await Promise.allSettled(batch.map((c) => Contact.delete(c.id)));
+          results.forEach((r) => {
+            if (r.status === 'fulfilled') successCount++;
+            else failCount++;
+          });
+        }
+
+        setSelectedContacts(new Set());
+        setSelectAllMode(false);
+        clearCacheByKey("Contact");
+        await Promise.all([loadContacts(), loadTotalStats()]);
+        if (successCount > 0) toast.success(`${successCount} contact(s) deleted`);
+        if (failCount > 0) toast.error(`${failCount} contact(s) failed to delete`);
+      } catch (error) {
+        console.error("Failed to bulk delete contacts:", error);
+        toast.error("Failed to delete contacts");
+      }
+      return;
+    }
+
     const count = selectedContacts.size;
     const confirmed = await confirm({
       title: `Delete ${count} contact${count !== 1 ? 's' : ''}?`,
@@ -709,7 +774,38 @@ export default function ContactsPage() {
   };
 
   const handleBulkStatusChange = async (newStatus) => {
-    const count = selectedContacts.size;
+    let contactIds;
+    if (selectAllMode) {
+      // Fetch all matching contacts
+      const scopedFilter = getTenantFilter();
+      const filterWithLimit = { ...scopedFilter, limit: 10000 };
+      const sortString = sortDirection === "desc" ? `-${sortField}` : sortField;
+      const allContacts = await Contact.filter(filterWithLimit, sortString);
+      let filtered = allContacts || [];
+      if (searchTerm) {
+        const search = searchTerm.toLowerCase();
+        filtered = filtered.filter((c) =>
+          c.first_name?.toLowerCase().includes(search) ||
+          c.last_name?.toLowerCase().includes(search) ||
+          c.email?.toLowerCase().includes(search) ||
+          c.phone?.includes(searchTerm) ||
+          c.company?.toLowerCase().includes(search)
+        );
+      }
+      if (statusFilter !== "all") {
+        filtered = filtered.filter((c) => c.status === statusFilter);
+      }
+      if (selectedTags.length > 0) {
+        filtered = filtered.filter((c) =>
+          Array.isArray(c.tags) && selectedTags.every((tag) => c.tags.includes(tag))
+        );
+      }
+      contactIds = filtered.map((c) => c.id);
+    } else {
+      contactIds = Array.from(selectedContacts);
+    }
+
+    const count = contactIds.length;
     logger.info("Attempting to bulk update contact status", "ContactsPage", {
       count,
       newStatus,
@@ -718,7 +814,6 @@ export default function ContactsPage() {
 
     let successCount = 0;
     let failCount = 0;
-    const contactIds = Array.from(selectedContacts);
 
     for (const id of contactIds) {
       try {
@@ -750,13 +845,44 @@ export default function ContactsPage() {
     }
 
     setSelectedContacts(new Set());
+    setSelectAllMode(false);
     clearCacheByKey("Contact");
     loadContacts();
     loadTotalStats();
   };
 
   const handleBulkAssign = async (assigneeId) => {
-    const count = selectedContacts.size;
+    let contactIds;
+    if (selectAllMode) {
+      const scopedFilter = getTenantFilter();
+      const filterWithLimit = { ...scopedFilter, limit: 10000 };
+      const sortString = sortDirection === "desc" ? `-${sortField}` : sortField;
+      const allContacts = await Contact.filter(filterWithLimit, sortString);
+      let filtered = allContacts || [];
+      if (searchTerm) {
+        const search = searchTerm.toLowerCase();
+        filtered = filtered.filter((c) =>
+          c.first_name?.toLowerCase().includes(search) ||
+          c.last_name?.toLowerCase().includes(search) ||
+          c.email?.toLowerCase().includes(search) ||
+          c.phone?.includes(searchTerm) ||
+          c.company?.toLowerCase().includes(search)
+        );
+      }
+      if (statusFilter !== "all") {
+        filtered = filtered.filter((c) => c.status === statusFilter);
+      }
+      if (selectedTags.length > 0) {
+        filtered = filtered.filter((c) =>
+          Array.isArray(c.tags) && selectedTags.every((tag) => c.tags.includes(tag))
+        );
+      }
+      contactIds = filtered.map((c) => c.id);
+    } else {
+      contactIds = Array.from(selectedContacts);
+    }
+
+    const count = contactIds.length;
     logger.info("Attempting to bulk assign contacts", "ContactsPage", {
       count,
       assigneeId,
@@ -765,7 +891,6 @@ export default function ContactsPage() {
 
     let successCount = 0;
     let failCount = 0;
-    const contactIds = Array.from(selectedContacts);
 
     for (const id of contactIds) {
       try {
@@ -797,6 +922,7 @@ export default function ContactsPage() {
     }
 
     setSelectedContacts(new Set());
+    setSelectAllMode(false);
     clearCacheByKey("Contact");
     loadContacts();
     loadTotalStats();
@@ -872,21 +998,35 @@ export default function ContactsPage() {
     });
   };
 
-  const handleSelectAll = (checked) => {
-    if (checked) {
-      setSelectedContacts(new Set(contacts.map((c) => c.id)));
-      setSelectAllMode(false);
-      logger.info("All contacts selected", "ContactsPage", {
-        count: contacts.length,
-        userId: user?.id || user?.email,
-      });
-    } else {
+  const toggleSelectAll = () => {
+    if (selectedContacts.size === contacts.length && contacts.length > 0) {
       setSelectedContacts(new Set());
       setSelectAllMode(false);
       logger.info("All contacts deselected", "ContactsPage", {
         userId: user?.id || user?.email,
       });
+    } else {
+      setSelectedContacts(new Set(contacts.map((c) => c.id)));
+      setSelectAllMode(false);
+      logger.info("All contacts on page selected", "ContactsPage", {
+        count: contacts.length,
+        userId: user?.id || user?.email,
+      });
     }
+  };
+
+  const handleSelectAllRecords = () => {
+    setSelectAllMode(true);
+    setSelectedContacts(new Set(contacts.map((c) => c.id)));
+    logger.info("All contacts across all pages selected", "ContactsPage", {
+      totalItems,
+      userId: user?.id || user?.email,
+    });
+  };
+
+  const handleClearSelection = () => {
+    setSelectedContacts(new Set());
+    setSelectAllMode(false);
   };
 
   const accountMap = useMemo(() => {
@@ -1209,31 +1349,78 @@ export default function ContactsPage() {
       </div>
 
       {/* Bulk Actions */}
-      {selectedContacts.size > 0 &&
+      {(selectedContacts.size > 0 || selectAllMode) &&
         (
           <div className="bg-blue-900/30 border border-blue-700/50 rounded-lg p-4 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Checkbox
-                checked={selectedContacts.size === contacts.length}
-                onCheckedChange={handleSelectAll}
+                checked={selectedContacts.size === contacts.length && !selectAllMode}
+                onCheckedChange={toggleSelectAll}
                 className="border-slate-600 data-[state=checked]:bg-blue-600"
               />
 
               <span className="text-slate-200 font-medium">
-                {selectedContacts.size}{" "}
-                contact{selectedContacts.size !== 1 ? "s" : ""} selected
+                {selectAllMode ? totalItems : selectedContacts.size}{" "}
+                contact{(selectAllMode ? totalItems : selectedContacts.size) !== 1 ? "s" : ""} selected
               </span>
             </div>
             <BulkActionsMenu
-              selectedCount={selectedContacts.size}
+              selectedCount={selectAllMode ? totalItems : selectedContacts.size}
               onBulkDelete={handleBulkDelete}
               onBulkStatusChange={handleBulkStatusChange}
               onBulkAssign={handleBulkAssign}
-              selectAllMode={false}
+              selectAllMode={selectAllMode}
               totalCount={totalItems}
             />
           </div>
         )}
+
+      {/* Select All Banner */}
+      {selectedContacts.size === contacts.length && contacts.length > 0 &&
+        !selectAllMode && totalItems > contacts.length && (
+        <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-blue-400" />
+            <span className="text-blue-200">
+              All {contacts.length} {contactsLabel.toLowerCase()} on this page are selected.
+            </span>
+            <Button
+              variant="link"
+              onClick={handleSelectAllRecords}
+              className="text-blue-400 hover:text-blue-300 p-0 h-auto"
+            >
+              Select all {totalItems} {contactsLabel.toLowerCase()} matching current filters
+            </Button>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleClearSelection}
+            className="text-slate-400 hover:text-slate-200"
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+      )}
+
+      {selectAllMode && (
+        <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-blue-400" />
+            <span className="text-blue-200 font-semibold">
+              All {totalItems} {contactsLabel.toLowerCase()} matching current filters are selected.
+            </span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleClearSelection}
+            className="text-slate-400 hover:text-slate-200"
+          >
+            Clear selection
+          </Button>
+        </div>
+      )}
 
       {/* Contacts List/Grid */}
       {viewMode === "list"
@@ -1246,8 +1433,8 @@ export default function ContactsPage() {
                     <th className="px-4 py-3 text-left">
                       <Checkbox
                         checked={selectedContacts.size === contacts.length &&
-                          contacts.length > 0}
-                        onCheckedChange={handleSelectAll}
+                          contacts.length > 0 && !selectAllMode}
+                        onCheckedChange={toggleSelectAll}
                         onClick={(e) => e.stopPropagation()}
                         className="border-slate-600 data-[state=checked]:bg-blue-600"
                       />
@@ -1299,7 +1486,7 @@ export default function ContactsPage() {
                       >
                         <td className="px-4 py-3">
                           <Checkbox
-                            checked={selectedContacts.has(contact.id)}
+                            checked={selectedContacts.has(contact.id) || selectAllMode}
                             onCheckedChange={(checked) =>
                               handleSelectContact(contact.id, checked)}
                             onClick={(e) => e.stopPropagation()}
@@ -1508,7 +1695,7 @@ export default function ContactsPage() {
                     onViewDetails={handleViewDetails}
                     onViewAccount={handleViewAccount}
                     onClick={() => handleViewDetails(contact)}
-                    isSelected={selectedContacts.has(contact.id)}
+                    isSelected={selectedContacts.has(contact.id) || selectAllMode}
                     onSelect={(checked) =>
                       handleSelectContact(contact.id, checked)}
                     user={user}

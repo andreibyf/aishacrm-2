@@ -3,6 +3,7 @@
 
 import { Result, Note, CRMError } from "../../spec/types.braid"
 
+@policy(WRITE_OPERATIONS)
 fn createNote(
   tenant: String,
   title: String,
@@ -25,11 +26,12 @@ fn createNote(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.network(url, error.status, "unknown"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn updateNote(
   tenant: String,
   note_id: String,
@@ -41,11 +43,12 @@ fn updateNote(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.network(url, error.status, "unknown"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn searchNotes(
   tenant: String,
   query: String,
@@ -62,11 +65,12 @@ fn searchNotes(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.network(url, error.status, "unknown"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn getNotesForRecord(
   tenant: String,
   entity_type: String,
@@ -83,11 +87,12 @@ fn getNotesForRecord(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.network(url, error.status, "unknown"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(READ_ONLY)
 fn getNoteDetails(
   tenant: String,
   note_id: String
@@ -101,11 +106,12 @@ fn getNoteDetails(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.network(url, error.status, "unknown"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }
 
+@policy(WRITE_OPERATIONS)
 fn deleteNote(
   tenant: String,
   note_id: String
@@ -116,7 +122,7 @@ fn deleteNote(
   
   return match response {
     Ok{value} => Ok(true),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
-    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+    Err{error} => CRMError.network(url, error.status, "unknown"),
+    _ => CRMError.network(url, 500, "unknown")
   };
 }

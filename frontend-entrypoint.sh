@@ -1,6 +1,17 @@
 #!/usr/bin/env sh
 set -e
 
+# Save Docker-provided env vars BEFORE Doppler can overwrite them.
+# These are set in docker-compose.yml and are correct for the deployment context
+# (e.g. localhost:4001 for local dev, prod URL for production).
+# Doppler may contain internal Docker network addresses (http://backend:4001)
+# which are unreachable from the browser.
+DOCKER_VITE_AISHACRM_BACKEND_URL="${VITE_AISHACRM_BACKEND_URL}"
+DOCKER_VITE_SUPABASE_URL="${VITE_SUPABASE_URL}"
+DOCKER_VITE_SUPABASE_ANON_KEY="${VITE_SUPABASE_ANON_KEY}"
+DOCKER_VITE_SUPABASE_PUBLISHABLE_KEY="${VITE_SUPABASE_PUBLISHABLE_KEY}"
+DOCKER_VITE_SYSTEM_TENANT_ID="${VITE_SYSTEM_TENANT_ID}"
+
 # Fetch secrets from Doppler if token is available
 if [ -n "$DOPPLER_TOKEN" ]; then
   echo "Fetching frontend secrets from Doppler..."
@@ -10,6 +21,25 @@ if [ -n "$DOPPLER_TOKEN" ]; then
   echo "Doppler secrets loaded successfully"
 else
   echo "WARNING: DOPPLER_TOKEN not set, using environment variables directly"
+fi
+
+# Restore Docker-provided overrides for browser-facing variables.
+# Docker compose values MUST win because the browser needs host-reachable URLs,
+# not Docker-internal network names like http://backend:4001.
+if [ -n "$DOCKER_VITE_AISHACRM_BACKEND_URL" ]; then
+  VITE_AISHACRM_BACKEND_URL="$DOCKER_VITE_AISHACRM_BACKEND_URL"
+fi
+if [ -n "$DOCKER_VITE_SUPABASE_URL" ]; then
+  VITE_SUPABASE_URL="$DOCKER_VITE_SUPABASE_URL"
+fi
+if [ -n "$DOCKER_VITE_SUPABASE_ANON_KEY" ]; then
+  VITE_SUPABASE_ANON_KEY="$DOCKER_VITE_SUPABASE_ANON_KEY"
+fi
+if [ -n "$DOCKER_VITE_SUPABASE_PUBLISHABLE_KEY" ]; then
+  VITE_SUPABASE_PUBLISHABLE_KEY="$DOCKER_VITE_SUPABASE_PUBLISHABLE_KEY"
+fi
+if [ -n "$DOCKER_VITE_SYSTEM_TENANT_ID" ]; then
+  VITE_SYSTEM_TENANT_ID="$DOCKER_VITE_SYSTEM_TENANT_ID"
 fi
 
 # CRITICAL: Always use version baked into Docker image (/app/VERSION) as source of truth
