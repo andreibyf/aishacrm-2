@@ -16,7 +16,9 @@
     "onLanguage:braid"
   ],
   "dependencies": {
-    "vscode-languageclient": "^9.0.1"
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.12"
   },
   "categories": [
     "Programming Languages",
@@ -36,8 +38,13 @@
     "languages": [
       {
         "id": "braid",
-        "extensions": [".braid"],
-        "aliases": ["Braid", "braid"],
+        "extensions": [
+          ".braid"
+        ],
+        "aliases": [
+          "Braid",
+          "braid"
+        ],
         "icon": {
           "light": "./icons/braid-light.png",
           "dark": "./icons/braid-dark.png"

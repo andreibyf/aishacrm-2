@@ -138,6 +138,7 @@ export default [
   // VS Code extension: CommonJS / Node.js context
   {
     files: ['braid-llm-kit/editor/vscode/**/*.js'],
+    ignores: ['braid-llm-kit/editor/vscode/server/**'],
     languageOptions: {
       ecmaVersion: 2020,
       globals: {
@@ -149,6 +150,27 @@ export default [
         __filename: 'readonly',
       },
       sourceType: 'commonjs',
+    },
+    plugins: {},
+    rules: {
+      ...js.configs.recommended.rules,
+      'no-undef': 'off',
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+    },
+  },
+  // VS Code extension LSP server: ESM / Node.js context
+  {
+    files: ['braid-llm-kit/editor/vscode/server/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2020,
+      globals: {
+        ...globals.node,
+        process: 'readonly',
+      },
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+      },
     },
     plugins: {},
     rules: {

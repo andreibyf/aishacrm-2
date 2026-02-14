@@ -371,12 +371,12 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
       assert.ok(result.hasCircular !== undefined || result.cycles, 'Should have cycle detection result');
     });
 
-    test('getToolImpactAnalysis returns analysis for valid tool', () => {
+    test('getToolImpactAnalysis returns analysis for valid tool', async () => {
       if (!braidModule?.getToolImpactAnalysis) {
         return;
       }
       
-      const analysis = braidModule.getToolImpactAnalysis('search_accounts');
+      const analysis = await braidModule.getToolImpactAnalysis('search_accounts');
       assert.ok(analysis.tool, 'Should have tool info');
       assert.ok(analysis.category, 'Should have category');
       assert.ok(analysis.dependencies !== undefined, 'Should have dependencies');

@@ -173,11 +173,11 @@ router.get('/tool/:toolName', (req, res) => {
  *   affectedChains: [{ name, displayName, stepIndex, totalSteps, isRequired }]
  * }
  */
-router.get('/tool/:toolName/impact', (req, res) => {
+router.get('/tool/:toolName/impact', async (req, res) => {
   try {
     const { toolName } = req.params;
 
-    const analysis = getToolImpactAnalysis(toolName);
+    const analysis = await getToolImpactAnalysis(toolName);
 
     if (analysis.error) {
       return res.status(404).json({ error: analysis.error });

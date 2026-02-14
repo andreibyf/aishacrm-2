@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.7.2] - 2026-02-14
+
+### Added
+- **Braid LSP Server** — Language Server Protocol implementation for Braid DSL (`braid-llm-kit/core/braid-lsp.js`) with VS Code extension client, providing real-time diagnostics, hover info, and completions
+- **VS Code extension LSP integration** — Added `extension-client.js` and bundled server files for LSP support
+
+### Changed
+- **Braid transpiler improvements** — Enhanced transpilation pipeline with expanded test coverage
+- **Braid core tests updated** — Refactored and extended test suite for transpiler changes
+
+---
+
 ## [4.7.1] - 2026-02-14
 
 ### Fixed

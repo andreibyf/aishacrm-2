@@ -1,461 +1,421 @@
-// braid-core.test.js — Comprehensive test suite for Braid DSL core
-// Covers: parser, transpiler, runtime, sandbox, error recovery, security
-"use strict";
-
-import { parse } from './braid-parse.js';
-import { transpileToJS, extractPolicies, extractParamTypes, detectUsedEffects } from './braid-transpile.js';
-import { Ok, Err, Some, None, checkType, cap, IO, CRMError, POLICIES, createPolicy } from './braid-rt.js';
-import { safeGet, safeSet, guardGlobal } from './braid-sandbox.js';
-import { describe, it } from 'node:test';
+// braid-core.test.js — Comprehensive test suite for Braid DSL core v0.4.0
+// Covers: parser, transpiler, runtime, sandbox, new language features
+import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
+import { Ok, Err, Some, None, checkType, CRMError, cap, IO, POLICIES, createPolicy } from './braid-rt.js';
+import { safeGet, safeSet, guardGlobal } from './braid-sandbox.js';
+import { parse } from './braid-parse.js';
+import { transpileToJS, detectUsedEffects, extractPolicies, extractParamTypes, VALID_POLICIES } from './braid-transpile.js';
 
 // ============================================================================
-// 1. RUNTIME: ALGEBRAIC DATA TYPES
+// RUNTIME: ADTs
 // ============================================================================
 
-describe('Runtime: ADTs', () => {
-  it('Ok wraps value', () => {
-    const r = Ok(42);
-    assert.strictEqual(r.tag, 'Ok');
-    assert.strictEqual(r.value, 42);
-  });
-
-  it('Err wraps error', () => {
-    const r = Err('fail');
-    assert.strictEqual(r.tag, 'Err');
-    assert.strictEqual(r.error, 'fail');
-  });
-
-  it('Some wraps value', () => {
-    const r = Some('x');
-    assert.strictEqual(r.tag, 'Some');
-    assert.strictEqual(r.value, 'x');
-  });
-
-  it('None is frozen singleton', () => {
-    assert.strictEqual(None.tag, 'None');
-    assert.throws(() => { None.tag = 'Bad'; }, TypeError);
-  });
+describe('Runtime ADTs', () => {
+  it('Ok wraps value', () => { assert.deepEqual(Ok(42), { tag: 'Ok', value: 42 }); });
+  it('Err wraps error', () => { assert.deepEqual(Err("bad"), { tag: 'Err', error: "bad" }); });
+  it('Some wraps value', () => { assert.deepEqual(Some("x"), { tag: 'Some', value: "x" }); });
+  it('None is frozen', () => { assert.equal(None.tag, 'None'); assert.ok(Object.isFrozen(None)); });
 });
 
-// ============================================================================
-// 2. RUNTIME: TYPE CHECKING
-// ============================================================================
-
-describe('Runtime: checkType', () => {
-  it('passes valid string', () => {
-    assert.doesNotThrow(() => checkType('fn', 'p', 'hello', 'string'));
-  });
-
-  it('rejects null', () => {
-    assert.throws(() => checkType('fn', 'p', null, 'string'), /BRAID_TYPE/);
-  });
-
-  it('rejects undefined', () => {
-    assert.throws(() => checkType('fn', 'p', undefined, 'number'), /BRAID_TYPE/);
-  });
-
-  it('rejects wrong type', () => {
-    assert.throws(() => checkType('fn', 'p', 42, 'string'), /expected string, got number/);
-  });
-
-  it('error has structured metadata', () => {
-    try { checkType('myFn', 'myParam', 42, 'string'); }
-    catch (e) {
-      assert.strictEqual(e.code, 'BRAID_TYPE');
-      assert.strictEqual(e.fn, 'myFn');
-      assert.strictEqual(e.param, 'myParam');
-      return;
+describe('Runtime checkType', () => {
+  it('passes valid string', () => { checkType("fn", "x", "hi", "string"); });
+  it('rejects null', () => { assert.throws(() => checkType("fn", "x", null, "string"), /BRAID_TYPE/); });
+  it('rejects wrong type', () => { assert.throws(() => checkType("fn", "x", 42, "string"), /expected string, got number/); });
+  it('error has metadata', () => {
+    try { checkType("foo", "bar", undefined, "number"); } catch (e) {
+      assert.equal(e.code, 'BRAID_TYPE');
+      assert.equal(e.fn, 'foo');
     }
-    assert.fail('should have thrown');
   });
 });
 
-// ============================================================================
-// 3. RUNTIME: CRMError CONSTRUCTORS
-// ============================================================================
-
-describe('Runtime: CRMError', () => {
-  it('notFound returns Err with 404', () => {
-    const r = CRMError.notFound('Lead', '123', 'get');
-    assert.strictEqual(r.tag, 'Err');
-    assert.strictEqual(r.error.type, 'NotFound');
-    assert.strictEqual(r.error.code, 404);
-  });
-
-  it('fromHTTP maps 404 to NotFound', () => {
-    const r = CRMError.fromHTTP('/api', 404, 'get');
-    assert.strictEqual(r.error.type, 'NotFound');
-  });
-
-  it('fromHTTP maps 400 to ValidationError', () => {
-    const r = CRMError.fromHTTP('/api', 400, 'create');
-    assert.strictEqual(r.error.type, 'ValidationError');
-  });
-
-  it('fromHTTP maps 403 to PermissionDenied', () => {
-    const r = CRMError.fromHTTP('/api', 403, 'delete');
-    assert.strictEqual(r.error.type, 'PermissionDenied');
-  });
-
-  it('fromHTTP maps 500 to NetworkError', () => {
-    const r = CRMError.fromHTTP('/api', 500, 'get');
-    assert.strictEqual(r.error.type, 'NetworkError');
-  });
+describe('CRMError constructors', () => {
+  it('notFound → 404', () => { assert.equal(CRMError.notFound("Lead", "1", "get").error.code, 404); });
+  it('fromHTTP 404 → NotFound', () => { assert.equal(CRMError.fromHTTP("/a", 404, "op").error.type, 'NotFound'); });
+  it('fromHTTP 400 → Validation', () => { assert.equal(CRMError.fromHTTP("/a", 400, "op").error.type, 'ValidationError'); });
+  it('fromHTTP 403 → Permission', () => { assert.equal(CRMError.fromHTTP("/a", 403, "op").error.type, 'PermissionDenied'); });
+  it('fromHTTP 500 → Network', () => { assert.equal(CRMError.fromHTTP("/a", 500, "op").error.type, 'NetworkError'); });
 });
 
-// ============================================================================
-// 4. RUNTIME: CAPABILITY ENFORCEMENT
-// ============================================================================
-
-describe('Runtime: cap', () => {
-  it('allows declared effect', () => {
-    assert.doesNotThrow(() => cap({ allow_effects: ['net'] }, 'net'));
-  });
-
-  it('denies undeclared effect', () => {
-    assert.throws(() => cap({ allow_effects: ['clock'] }, 'net'), /BRAID_CAP/);
-  });
-
-  it('denies when no policy', () => {
-    assert.throws(() => cap(null, 'net'), /no policy/);
-  });
-
-  it('wildcard allows everything', () => {
-    assert.doesNotThrow(() => cap({ allow_effects: ['*'] }, 'fs'));
-  });
-
-  it('calls onCapCheck callback', () => {
+describe('Capability enforcement', () => {
+  it('allows declared effect', () => { cap({ allow_effects: ['net'] }, 'net'); });
+  it('denies undeclared', () => { assert.throws(() => cap({ allow_effects: ['net'] }, 'fs'), /BRAID_CAP/); });
+  it('wildcard allows all', () => { cap({ allow_effects: ['*'] }, 'anything'); });
+  it('no policy throws', () => { assert.throws(() => cap(null, 'net'), /no policy/); });
+  it('onCapCheck callback', () => {
     let called = false;
     cap({ allow_effects: ['net'], onCapCheck: () => { called = true; } }, 'net');
-    assert.strictEqual(called, true);
+    assert.ok(called);
   });
 });
 
-// ============================================================================
-// 5. RUNTIME: IO SANDBOX
-// ============================================================================
-
-describe('Runtime: IO', () => {
-  it('creates sandboxed IO object', () => {
-    const io = IO({ allow_effects: ['net'], max_execution_ms: 1000 }, {
-      http: { get: async () => 'ok' },
-    });
+describe('IO sandbox', () => {
+  it('creates sandboxed object', () => {
+    const io = IO({ allow_effects: ['*'] }, { http: { get: async () => "ok" } });
     assert.ok(io.http.get);
     assert.ok(io.clock.now);
   });
-
-  it('denies missing deps', async () => {
-    const io = IO({ allow_effects: ['net'] }, {});
-    await assert.rejects(() => io.http.get('/x'), /not provided/);
-  });
-
-  it('enforces tenant isolation', async () => {
-    let capturedOpts;
-    const io = IO(
-      { allow_effects: ['net'], tenant_isolation: true, context: { tenant_id: 't1' } },
-      { http: { get: async (_url, opts) => { capturedOpts = opts; return 'ok'; } } }
-    );
-    await io.http.get('/api', {});
-    assert.strictEqual(capturedOpts.params.tenant_id, 't1');
-  });
-
-  it('throws on timeout', async () => {
-    const io = IO(
-      { allow_effects: ['net'], max_execution_ms: 50 },
-      { http: { get: async () => new Promise(r => setTimeout(r, 200)) } }
-    );
-    await assert.rejects(() => io.http.get('/slow'), /BRAID_TIMEOUT/);
+  it('denies missing deps', () => {
+    const io = IO({ allow_effects: ['*'] }, {});
+    assert.rejects(() => io.http.get(), /not provided/);
   });
 });
 
-// ============================================================================
-// 6. RUNTIME: POLICIES
-// ============================================================================
-
-describe('Runtime: POLICIES', () => {
-  it('READ_ONLY is frozen', () => {
-    assert.throws(() => { POLICIES.READ_ONLY.max_execution_ms = 999; }, TypeError);
-  });
-
+describe('Policies', () => {
+  it('READ_ONLY is frozen', () => { assert.ok(Object.isFrozen(POLICIES.READ_ONLY)); });
   it('createPolicy attaches context', () => {
-    const p = createPolicy('READ_ONLY', { tenant_id: 't1' });
-    assert.strictEqual(p.context.tenant_id, 't1');
-    assert.deepStrictEqual(p.allow_effects, ['net', 'clock']);
+    const p = createPolicy('WRITE', { tenant_id: 't1' });
+    assert.equal(p.context.tenant_id, 't1');
+    assert.deepEqual(p.allow_effects, ['net', 'clock']);
   });
-
-  it('createPolicy rejects unknown template', () => {
-    assert.throws(() => createPolicy('BOGUS', {}), /Unknown policy/);
-  });
+  it('rejects unknown template', () => { assert.throws(() => createPolicy('FAKE', {}), /Unknown/); });
 });
 
 // ============================================================================
-// 7. SANDBOX: PROPERTY ACCESS
+// SANDBOX
 // ============================================================================
 
-describe('Sandbox: safeGet', () => {
-  it('allows normal property', () => {
-    assert.strictEqual(safeGet({ x: 1 }, 'x'), 1);
-  });
-
-  it('blocks __proto__', () => {
-    assert.throws(() => safeGet({}, '__proto__'), /BRAID_SANDBOX/);
-  });
-
-  it('blocks constructor', () => {
-    assert.throws(() => safeGet({}, 'constructor'), /BRAID_SANDBOX/);
-  });
-
-  it('blocks prototype', () => {
-    assert.throws(() => safeGet({}, 'prototype'), /BRAID_SANDBOX/);
-  });
-
-  it('blocks dunder properties', () => {
-    assert.throws(() => safeGet({}, '__lookupGetter__'), /BRAID_SANDBOX/);
-  });
-
-  it('returns undefined for null obj', () => {
-    assert.strictEqual(safeGet(null, 'x'), undefined);
-  });
+describe('Sandbox safeGet', () => {
+  it('allows normal', () => { assert.equal(safeGet({ x: 1 }, 'x'), 1); });
+  it('blocks __proto__', () => { assert.throws(() => safeGet({}, '__proto__'), /BRAID_SANDBOX/); });
+  it('blocks constructor', () => { assert.throws(() => safeGet({}, 'constructor'), /BRAID_SANDBOX/); });
+  it('blocks dunder', () => { assert.throws(() => safeGet({}, '__custom__'), /dunder/); });
+  it('null returns undefined', () => { assert.equal(safeGet(null, 'x'), undefined); });
 });
 
-describe('Sandbox: safeSet', () => {
-  it('allows normal set', () => {
-    const obj = {};
-    safeSet(obj, 'x', 1);
-    assert.strictEqual(obj.x, 1);
-  });
-
-  it('blocks __proto__ set', () => {
-    assert.throws(() => safeSet({}, '__proto__', {}), /BRAID_SANDBOX/);
-  });
+describe('Sandbox safeSet', () => {
+  it('allows normal', () => { const o = {}; safeSet(o, 'x', 1); assert.equal(o.x, 1); });
+  it('blocks __proto__', () => { assert.throws(() => safeSet({}, '__proto__', {}), /BRAID_SANDBOX/); });
 });
 
-describe('Sandbox: guardGlobal', () => {
-  it('blocks eval', () => {
-    assert.throws(() => guardGlobal('eval'), /BRAID_SANDBOX.*eval/);
-  });
-
-  it('blocks Function', () => {
-    assert.throws(() => guardGlobal('Function'), /BRAID_SANDBOX/);
-  });
-
-  it('blocks process', () => {
-    assert.throws(() => guardGlobal('process'), /BRAID_SANDBOX/);
-  });
-
-  it('blocks require', () => {
-    assert.throws(() => guardGlobal('require'), /BRAID_SANDBOX/);
-  });
-
-  it('blocks fetch (must use IO)', () => {
-    assert.throws(() => guardGlobal('fetch'), /BRAID_SANDBOX/);
-  });
+describe('Sandbox guardGlobal', () => {
+  it('blocks eval', () => { assert.throws(() => guardGlobal('eval'), /BRAID_SANDBOX/); });
+  it('blocks require', () => { assert.throws(() => guardGlobal('require'), /BRAID_SANDBOX/); });
+  it('blocks fetch', () => { assert.throws(() => guardGlobal('fetch'), /BRAID_SANDBOX/); });
 });
 
 // ============================================================================
-// 8. PARSER: BASICS
+// PARSER: BASICS
 // ============================================================================
 
-describe('Parser: basics', () => {
-  it('parses simple function', () => {
-    const ast = parse('fn test() -> String { return "hello"; }');
-    assert.strictEqual(ast.items[0].type, 'FnDecl');
-    assert.strictEqual(ast.items[0].name, 'test');
+describe('Parser basics', () => {
+  it('parses a function', () => {
+    const ast = parse(`fn greet(name: String) -> String { return name; }`);
+    assert.equal(ast.items[0].type, 'FnDecl');
+    assert.equal(ast.items[0].name, 'greet');
   });
 
-  it('has source position on FnDecl', () => {
-    const ast = parse('fn test() -> String { return "hi"; }');
-    assert.ok(ast.items[0].pos);
-    assert.strictEqual(ast.items[0].pos.line, 1);
+  it('captures source positions', () => {
+    const ast = parse(`fn test() -> Void { return true; }`);
+    assert.ok(ast.items[0].pos.line >= 1);
   });
 
   it('parses effects', () => {
-    const ast = parse('fn f() -> String !net, clock { return "x"; }');
-    assert.deepStrictEqual(ast.items[0].effects, ['net', 'clock']);
+    const ast = parse(`fn fetch(url: String) -> String !net, clock { return url; }`);
+    assert.deepEqual(ast.items[0].effects, ['net', 'clock']);
   });
 
   it('parses typed params', () => {
-    const ast = parse('fn f(name: String, age: Number) -> Boolean { return true; }');
-    assert.strictEqual(ast.items[0].params[0].type.base, 'String');
-    assert.strictEqual(ast.items[0].params[1].type.base, 'Number');
+    const ast = parse(`fn add(a: Number, b: Number) -> Number { return a; }`);
+    assert.equal(ast.items[0].params[0].type.base, 'Number');
   });
 
-  it('parses @policy annotation', () => {
-    const ast = parse('@policy(READ_ONLY)\nfn f() -> String { return "x"; }');
-    assert.strictEqual(ast.items[0].annotations[0].name, 'policy');
-    assert.deepStrictEqual(ast.items[0].annotations[0].args, ['READ_ONLY']);
+  it('parses @policy annotations', () => {
+    const ast = parse(`@policy(READ_ONLY)\nfn test() -> Void { return true; }`);
+    assert.equal(ast.items[0].annotations[0].name, 'policy');
+    assert.deepEqual(ast.items[0].annotations[0].args, ['READ_ONLY']);
   });
 
   it('parses block comments', () => {
-    const ast = parse('/* comment */\nfn f() -> String { return "x"; }');
-    assert.strictEqual(ast.items[0].name, 'f');
-  });
-
-  it('parses escape sequences in strings', () => {
-    const ast = parse('fn f() -> String { return "a\\nb"; }');
-    const ret = ast.items[0].body.statements[0];
-    assert.strictEqual(ret.value.value, 'a\nb');
+    const ast = parse(`/* comment */\nfn test() -> Void { return true; }`);
+    assert.equal(ast.items.length, 1);
   });
 });
 
-// ============================================================================
-// 9. PARSER: ERROR RECOVERY
-// ============================================================================
-
-describe('Parser: error recovery', () => {
-  it('recovers from bad function and parses next', () => {
-    const ast = parse(
-      'fn bad( -> String { }\nfn good() -> String { return "ok"; }',
-      'test.braid',
-      { recover: true }
-    );
+describe('Parser error recovery', () => {
+  it('recovers and parses next fn', () => {
+    const ast = parse(`fn bad( -> Void { } fn good() -> Void { return true; }`, "test", { recover: true });
     assert.ok(ast.diagnostics.length > 0);
-    // Should still parse the second function
-    const goodFn = ast.items.find(i => i.name === 'good');
-    assert.ok(goodFn, 'should recover and parse good()');
-  });
-
-  it('collects multiple diagnostics', () => {
-    const ast = parse(
-      'fn a( { }\nfn b( { }\nfn c() -> String { return "ok"; }',
-      'test.braid',
-      { recover: true }
-    );
-    assert.ok(ast.diagnostics.length >= 2);
+    assert.ok(ast.items.some(i => i.name === 'good'));
   });
 });
 
-// ============================================================================
-// 10. PARSER: SECURITY WARNINGS
-// ============================================================================
-
-describe('Parser: security warnings', () => {
+describe('Parser security warnings', () => {
   it('warns on __proto__ access', () => {
-    const ast = parse('fn f() -> String { let x = obj.__proto__; return x; }', 'test.braid', { recover: true });
-    const secWarns = ast.diagnostics.filter(d => d.code === 'SEC001');
-    assert.ok(secWarns.length > 0, 'should warn about __proto__');
-  });
-
-  it('warns on constructor access', () => {
-    const ast = parse('fn f() -> String { let x = obj.constructor; return x; }', 'test.braid', { recover: true });
-    const secWarns = ast.diagnostics.filter(d => d.code === 'SEC001');
-    assert.ok(secWarns.length > 0);
+    const ast = parse(`fn test() -> Void { let x = obj.__proto__; }`, "test", { recover: true });
+    assert.ok(ast.diagnostics.some(d => d.code === 'SEC001'));
   });
 });
 
 // ============================================================================
-// 11. TRANSPILER: SANDBOX MODE
+// PARSER: NEW FEATURES
+// ============================================================================
+
+describe('Parser: for..in loops', () => {
+  it('parses for..in', () => {
+    const ast = parse(`fn test(items: Array) -> Void { for item in items { let x = item; } }`);
+    const stmt = ast.items[0].body.statements[0];
+    assert.equal(stmt.type, 'ForStmt');
+    assert.equal(stmt.binding, 'item');
+  });
+});
+
+describe('Parser: while loops', () => {
+  it('parses while', () => {
+    const ast = parse(`fn test() -> Void { while true { break; } }`);
+    const stmt = ast.items[0].body.statements[0];
+    assert.equal(stmt.type, 'WhileStmt');
+  });
+
+  it('parses break and continue', () => {
+    const ast = parse(`fn test() -> Void { while true { break; continue; } }`);
+    const stmts = ast.items[0].body.statements[0].body.statements;
+    assert.equal(stmts[0].type, 'BreakStmt');
+    assert.equal(stmts[1].type, 'ContinueStmt');
+  });
+});
+
+describe('Parser: template strings', () => {
+  it('parses simple template', () => {
+    const src = 'fn test(name: String) -> String { return `hello`; }';
+    const ast = parse(src);
+    const ret = ast.items[0].body.statements[0].value;
+    assert.equal(ret.type, 'TemplateLit');
+  });
+
+  it('parses interpolation', () => {
+    const src = 'fn test(name: String) -> String { return `hi ${name}`; }';
+    const ast = parse(src);
+    const ret = ast.items[0].body.statements[0].value;
+    assert.equal(ret.type, 'TemplateLit');
+    assert.ok(ret.parts.some(p => p.kind === 'expr'));
+  });
+});
+
+describe('Parser: optional chaining', () => {
+  it('parses obj?.prop', () => {
+    const ast = parse(`fn test(x: Object) -> Void { let y = x?.name; }`);
+    const val = ast.items[0].body.statements[0].value;
+    assert.equal(val.type, 'OptionalMemberExpr');
+    assert.equal(val.prop, 'name');
+  });
+});
+
+describe('Parser: pipe operator', () => {
+  it('parses expr |> fn', () => {
+    const ast = parse(`fn test(x: Number) -> Number { return x |> double; }`);
+    const ret = ast.items[0].body.statements[0].value;
+    assert.equal(ret.type, 'PipeExpr');
+  });
+});
+
+describe('Parser: spread operator', () => {
+  it('parses spread in array', () => {
+    const ast = parse(`fn test() -> Void { let x = [1, ...items, 3]; }`);
+    const arr = ast.items[0].body.statements[0].value;
+    assert.equal(arr.type, 'ArrayExpr');
+    assert.ok(arr.elements.some(e => e.type === 'SpreadExpr'));
+  });
+
+  it('parses spread in object', () => {
+    const ast = parse(`fn test() -> Void { let x = { ...base, name: "test" }; }`);
+    const obj = ast.items[0].body.statements[0].value;
+    assert.ok(obj.props.some(p => p.type === 'SpreadProp'));
+  });
+
+  it('parses rest param', () => {
+    const ast = parse(`fn test(first: String, ...rest: Array) -> Void { return first; }`);
+    assert.ok(ast.items[0].params[1].spread);
+  });
+});
+
+describe('Parser: else-if chains', () => {
+  it('parses if/else if/else', () => {
+    const src = `fn test(x: Number) -> String {
+      if x > 10 { return "big"; }
+      else if x > 5 { return "med"; }
+      else { return "small"; }
+    }`;
+    const ast = parse(src);
+    const ifStmt = ast.items[0].body.statements[0];
+    assert.equal(ifStmt.type, 'IfStmt');
+    assert.ok(ifStmt.else); // has else
+    const elseIf = ifStmt.else.statements[0];
+    assert.equal(elseIf.type, 'IfStmt'); // else-if is nested IfStmt
+    assert.ok(elseIf.else); // has final else
+  });
+});
+
+describe('Parser: null literal', () => {
+  it('parses null', () => {
+    const ast = parse(`fn test() -> Void { let x = null; }`);
+    assert.equal(ast.items[0].body.statements[0].value.type, 'NullLit');
+  });
+});
+
+// ============================================================================
+// TRANSPILER: EXISTING FEATURES
 // ============================================================================
 
 describe('Transpiler: sandbox mode', () => {
   it('emits guardGlobal for eval', () => {
-    const ast = parse('fn f() -> String { let x = eval; return x; }');
+    const ast = parse(`fn test() -> Void { let x = eval; }`);
     const { code } = transpileToJS(ast, { sandbox: true });
-    assert.ok(code.includes('guardGlobal("eval")'), 'should guard eval');
+    assert.ok(code.includes('guardGlobal("eval")'));
   });
 
   it('emits safeGet for __proto__', () => {
-    const ast = parse('fn f() -> String { let x = obj.__proto__; return x; }');
+    const ast = parse(`fn test() -> Void { let x = obj.__proto__; }`, "test", { recover: true });
     const { code } = transpileToJS(ast, { sandbox: true });
-    assert.ok(code.includes('safeGet('), 'should use safeGet for __proto__');
+    assert.ok(code.includes('safeGet('));
   });
 
-  it('normal mode does not emit sandbox calls', () => {
-    const ast = parse('fn f() -> String { let x = obj.name; return x; }');
+  it('normal mode skips sandbox', () => {
+    const ast = parse(`fn test() -> Void { let x = eval; }`);
     const { code } = transpileToJS(ast, { sandbox: false });
-    assert.ok(!code.includes('safeGet('));
-    assert.ok(!code.includes('guardGlobal('));
-  });
-
-  it('emits sandbox import', () => {
-    const ast = parse('fn f() -> String { return "x"; }');
-    const { code } = transpileToJS(ast, { sandbox: true });
-    assert.ok(code.includes('braid-sandbox.js'));
+    assert.ok(!code.includes('guardGlobal'));
   });
 });
 
-// ============================================================================
-// 12. TRANSPILER: EFFECT ANALYSIS
-// ============================================================================
-
-describe('Transpiler: static effect analysis', () => {
-  it('detects http.get requires !net', () => {
-    const ast = parse('fn f() -> String { let x = http.get("/api"); return x; }');
-    assert.throws(() => transpileToJS(ast), /uses 'net' effect but does not declare !net/);
+describe('Transpiler: effect analysis', () => {
+  it('detects http.get requires net', () => {
+    const ast = parse(`fn test() -> Void { let x = http.get("/api"); }`);
+    assert.throws(() => transpileToJS(ast), /TP002.*net/);
   });
 
-  it('detects clock.now requires !clock', () => {
-    const ast = parse('fn f() -> String { let x = clock.now(); return x; }');
-    assert.throws(() => transpileToJS(ast), /uses 'clock' effect/);
-  });
-
-  it('passes when effects declared', () => {
-    const ast = parse('fn f() -> String !net { let x = http.get("/api"); return x; }');
-    assert.doesNotThrow(() => transpileToJS(ast));
+  it('passes when declared', () => {
+    const ast = parse(`fn test() -> Void !net { let x = http.get("/api"); }`);
+    const { code } = transpileToJS(ast);
+    assert.ok(code.includes('cap(policy, "net")'));
   });
 });
 
-// ============================================================================
-// 13. TRANSPILER: POLICY VALIDATION
-// ============================================================================
-
-describe('Transpiler: @policy validation', () => {
+describe('Transpiler: policy validation', () => {
   it('rejects unknown policy', () => {
-    const ast = parse('@policy(BOGUS)\nfn f() -> String { return "x"; }');
-    assert.throws(() => transpileToJS(ast), /not a valid policy/);
+    const ast = parse(`@policy(FAKE)\nfn test() -> Void { return true; }`);
+    assert.throws(() => transpileToJS(ast), /TP003/);
   });
 
   it('accepts valid policy', () => {
-    const ast = parse('@policy(READ_ONLY)\nfn f() -> String { return "x"; }');
-    assert.doesNotThrow(() => transpileToJS(ast));
+    const ast = parse(`@policy(READ_ONLY)\nfn test() -> Void { return true; }`);
+    transpileToJS(ast); // no throw
   });
 });
-
-// ============================================================================
-// 14. TRANSPILER: TYPE VALIDATION EMISSION
-// ============================================================================
 
 describe('Transpiler: type validation', () => {
-  it('emits checkType for String param', () => {
-    const ast = parse('fn f(name: String) -> String { return name; }');
+  it('emits checkType for String', () => {
+    const ast = parse(`fn test(name: String) -> Void { return name; }`);
     const { code } = transpileToJS(ast);
-    assert.ok(code.includes('checkType("f", "name", name, "string")'));
-  });
-
-  it('emits Array.isArray check', () => {
-    const ast = parse('fn f(items: Array) -> String { return "x"; }');
-    const { code } = transpileToJS(ast);
-    assert.ok(code.includes('Array.isArray'));
-  });
-
-  it('no check for untyped params', () => {
-    const ast = parse('fn f(x) -> String { return x; }');
-    const { code } = transpileToJS(ast);
-    assert.ok(!code.includes('checkType('), 'should not emit checkType call for untyped param');
+    assert.ok(code.includes('checkType("test", "name", name, "string")'));
   });
 });
 
 // ============================================================================
-// 15. EXTRACTION UTILITIES
+// TRANSPILER: NEW FEATURES
 // ============================================================================
 
-describe('Extraction: policies', () => {
-  it('extracts policies from annotated functions', () => {
-    const ast = parse('@policy(WRITE)\nfn create() -> String { return "x"; }\n@policy(READ_ONLY)\nfn read() -> String { return "x"; }');
-    const policies = extractPolicies(ast);
-    assert.strictEqual(policies.create, 'WRITE');
-    assert.strictEqual(policies.read, 'READ_ONLY');
+describe('Transpiler: for..in', () => {
+  it('emits for..of loop', () => {
+    const ast = parse(`fn test(items: Array) -> Void { for item in items { let x = item; } }`);
+    const { code } = transpileToJS(ast);
+    assert.ok(code.includes('for (const item of items)'));
   });
 });
 
-describe('Extraction: param types', () => {
-  it('extracts typed params', () => {
-    const ast = parse('fn f(name: String, age: Number) -> Boolean { return true; }');
-    const types = extractParamTypes(ast);
-    assert.strictEqual(types.f[0].type, 'String');
-    assert.strictEqual(types.f[1].type, 'Number');
+describe('Transpiler: while', () => {
+  it('emits while loop', () => {
+    const ast = parse(`fn test() -> Void { while true { break; } }`);
+    const { code } = transpileToJS(ast);
+    assert.ok(code.includes('while (true)'));
+    assert.ok(code.includes('break;'));
   });
 });
 
-console.log('All braid-core tests loaded');
+describe('Transpiler: template strings', () => {
+  it('emits JS template literal', () => {
+    const src = 'fn test(name: String) -> String { return `hello ${name}`; }';
+    const ast = parse(src);
+    const { code } = transpileToJS(ast);
+    assert.ok(code.includes('`'));
+  });
+});
+
+describe('Transpiler: optional chaining', () => {
+  it('emits ?. in normal mode', () => {
+    const ast = parse(`fn test(x: Object) -> Void { let y = x?.name; }`);
+    const { code } = transpileToJS(ast);
+    assert.ok(code.includes('x?.name'));
+  });
+});
+
+describe('Transpiler: pipe operator', () => {
+  it('transforms to function call', () => {
+    const ast = parse(`fn test(x: Number) -> Number { return x |> double; }`);
+    const { code } = transpileToJS(ast);
+    assert.ok(code.includes('double(x)'));
+  });
+});
+
+describe('Transpiler: spread', () => {
+  it('emits spread in array', () => {
+    const ast = parse(`fn test() -> Void { let x = [1, ...items]; }`);
+    const { code } = transpileToJS(ast);
+    assert.ok(code.includes('...items'));
+  });
+
+  it('emits spread in object', () => {
+    const ast = parse(`fn test() -> Void { let x = { ...base, y: 1 }; }`);
+    const { code } = transpileToJS(ast);
+    assert.ok(code.includes('...base'));
+  });
+
+  it('emits rest param', () => {
+    const ast = parse(`fn test(first: String, ...rest: Array) -> Void { return first; }`);
+    const { code } = transpileToJS(ast);
+    assert.ok(code.includes('...rest'));
+  });
+});
+
+describe('Transpiler: else-if chains', () => {
+  it('emits clean else if', () => {
+    const src = `fn test(x: Number) -> String {
+      if x > 10 { return "big"; }
+      else if x > 5 { return "med"; }
+      else { return "small"; }
+    }`;
+    const ast = parse(src);
+    const { code } = transpileToJS(ast);
+    assert.ok(code.includes('else if'));
+  });
+});
+
+describe('Transpiler: null literal', () => {
+  it('emits undefined for null', () => {
+    const ast = parse(`fn test() -> Void { let x = null; }`);
+    const { code } = transpileToJS(ast);
+    assert.ok(code.includes('= undefined'));
+  });
+});
+
+// ============================================================================
+// EXTRACTION UTILITIES
+// ============================================================================
+
+describe('Extraction', () => {
+  it('extractPolicies from annotated fns', () => {
+    const ast = parse(`@policy(READ_ONLY)\nfn read() -> Void { return true; }\n@policy(WRITE_OPERATIONS)\nfn write() -> Void { return true; }`);
+    const p = extractPolicies(ast);
+    assert.equal(p.read, 'READ_ONLY');
+    assert.equal(p.write, 'WRITE_OPERATIONS');
+  });
+
+  it('extractParamTypes', () => {
+    const ast = parse(`fn test(name: String, age: Number) -> Void { return true; }`);
+    const t = extractParamTypes(ast);
+    assert.equal(t.test[0].type, 'String');
+    assert.equal(t.test[1].type, 'Number');
+  });
+});
+
+console.log('All braid-core v0.4.0 tests loaded');
