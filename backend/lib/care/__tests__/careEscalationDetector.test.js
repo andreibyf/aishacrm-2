@@ -310,6 +310,29 @@ describe('Care Escalation Detector', () => {
       assert.ok(result.reasons.includes(ESCALATION_REASONS.NEGATIVE_SENTIMENT));
       assert.equal(result.confidence, CONFIDENCE_LEVELS.HIGH);
     });
+    
+    test('pricing + negative sentiment (no objection) = medium confidence', () => {
+      const result = detectEscalation({
+        text: 'The cost is too high for what you offer.',
+        sentiment: 'negative',
+      });
+
+      assert.equal(result.escalate, true);
+      assert.ok(result.reasons.includes(ESCALATION_REASONS.PRICING_OR_CONTRACT));
+      assert.ok(result.reasons.includes(ESCALATION_REASONS.NEGATIVE_SENTIMENT));
+      // Pricing + sentiment without objection/compliance should be MEDIUM, not HIGH
+      assert.equal(result.confidence, CONFIDENCE_LEVELS.MEDIUM);
+    });
+    
+    test('pricing alone (1 match) = medium confidence', () => {
+      const result = detectEscalation({
+        text: 'Can you tell me about the pricing?',
+      });
+
+      assert.equal(result.escalate, true);
+      assert.ok(result.reasons.includes(ESCALATION_REASONS.PRICING_OR_CONTRACT));
+      assert.equal(result.confidence, CONFIDENCE_LEVELS.MEDIUM);
+    });
   });
 
   // ========================================

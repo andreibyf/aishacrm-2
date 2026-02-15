@@ -95,7 +95,8 @@ export function getDefaultCareState(entity_type) {
  * 6. any -> at_risk: silence >= AT_RISK_SILENCE_DAYS
  * 7. at_risk -> dormant: silence >= DORMANT_SILENCE_DAYS
  * 8. dormant -> reactivated: inbound after dormancy
- * 9. any -> lost: explicit rejection
+ * 9. reactivated -> engaged: bidirectional exchange (re-enters funnel)
+ * 10. any -> lost: explicit rejection
  * 
  * @param {Object} params - Parameters
  * @param {string} params.current_state - Current CareState
@@ -131,6 +132,24 @@ export function proposeTransition({ current_state, signals }) {
       reason: 'Customer re-engaged after dormancy',
       meta: { signal: 'last_inbound_at', last_inbound: enrichedSignals.last_inbound_at }
     };
+  }
+  
+  // 2b. Reactivated progression: reactivated -> engaged (bidirectional exchange)
+  if (current_state === 'reactivated' && enrichedSignals.has_bidirectional) {
+    return {
+      from_state: current_state,
+      to_state: 'engaged',
+      reason: 'Bidirectional conversation re-established after reactivation',
+      meta: { signal: 'has_bidirectional' }
+    };
+  }
+  
+  // 2c. Reactivated fallback: reactivated -> aware (no bidirectional yet, but still active)
+  // This allows reactivated entities to re-enter the funnel without getting stuck.
+  // Only fires if there's a recent inbound but no bidirectional — keeps them moving.
+  if (current_state === 'reactivated' && enrichedSignals.last_inbound_at && !enrichedSignals.has_bidirectional) {
+    // Don't transition immediately — let them sit in reactivated until silence or progress.
+    // Silence-based degradation (rule 3) handles reactivated → at_risk if they go quiet again.
   }
   
   // 3. Silence-based degradation

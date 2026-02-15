@@ -62,10 +62,18 @@ describe('validateCareState', () => {
 });
 
 describe('validateEntityType', () => {
-  test('should accept valid entity types', () => {
+  test('should accept valid state entity types', () => {
     assert.strictEqual(validateEntityType('lead'), 'lead');
     assert.strictEqual(validateEntityType('contact'), 'contact');
     assert.strictEqual(validateEntityType('account'), 'account');
+    assert.strictEqual(validateEntityType('opportunity'), 'opportunity');
+  });
+  
+  test('should reject activity (signal-only entity type, not state-bearing)', () => {
+    assert.throws(
+      () => validateEntityType('activity'),
+      /Invalid entity type/
+    );
   });
   
   test('should reject invalid entity type', () => {
@@ -241,7 +249,46 @@ describe('proposeTransition', () => {
     assert.ok(proposal.reason.includes('re-engaged'));
   });
   
-  // Rule 9: any -> lost (explicit rejection, highest priority)
+  // Rule 9: reactivated -> engaged (bidirectional exchange re-enters funnel)
+  test('should propose reactivated -> engaged when bidirectional exchange occurs', () => {
+    const proposal = proposeTransition({
+      current_state: 'reactivated',
+      signals: {
+        has_bidirectional: true,
+        last_inbound_at: new Date()
+      }
+    });
+    
+    assert.strictEqual(proposal.from_state, 'reactivated');
+    assert.strictEqual(proposal.to_state, 'engaged');
+    assert.ok(proposal.reason.includes('re-established'));
+  });
+  
+  // Reactivated -> at_risk (goes silent again after reactivation)
+  test('should propose reactivated -> at_risk when silence resumes', () => {
+    const proposal = proposeTransition({
+      current_state: 'reactivated',
+      signals: {
+        silence_days: 20
+      }
+    });
+    
+    assert.strictEqual(proposal.from_state, 'reactivated');
+    assert.strictEqual(proposal.to_state, 'at_risk');
+    assert.ok(proposal.reason.includes('No inbound'));
+  });
+  
+  // Reactivated with no new signals -> no transition (stays reactivated)
+  test('should return null for reactivated with no actionable signals', () => {
+    const proposal = proposeTransition({
+      current_state: 'reactivated',
+      signals: {}
+    });
+    
+    assert.strictEqual(proposal, null);
+  });
+  
+  // Rule 10: any -> lost (explicit rejection, highest priority)
   test('should propose any -> lost when explicit rejection detected', () => {
     const proposal = proposeTransition({
       current_state: 'engaged',

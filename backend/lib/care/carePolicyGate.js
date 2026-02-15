@@ -56,11 +56,14 @@ const ActionType = {
 
 /**
  * Hard prohibitions (never allowed, regardless of action_origin)
+ * 
+ * Impersonation patterns use word-boundary lookaheads to avoid false positives.
+ * E.g., "Regards, Caroline" must NOT match the "care" exclusion.
  */
 const HARD_PROHIBITIONS = [
-  // Impersonation
-  { pattern: /sign(ed)?\s+off\s+as\s+(?!.*ai|.*care|.*system)/i, reason: 'Impersonation attempt' },
-  { pattern: /regards,\s*(?!.*ai|.*care|.*system)/i, reason: 'Human impersonation in signature' },
+  // Impersonation — block human-style sign-offs unless explicitly AI/system identity
+  { pattern: /sign(ed)?\s+off\s+as\s+(?!.*\b(ai|aisha|care\s+system|system)\b)/i, reason: 'Impersonation attempt' },
+  { pattern: /regards,\s*(?!.*\b(ai|aisha|care\s+system|system)\b)/i, reason: 'Human impersonation in signature' },
   
   // Binding commitments
   { pattern: /\b(guarantee|promise|commit|pledge)\s+(to|that|we\s+will)/i, reason: 'Binding commitment' },

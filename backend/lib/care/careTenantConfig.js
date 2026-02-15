@@ -11,9 +11,38 @@
 import { getSupabaseClient } from '../supabase-db.js';
 import logger from '../logger.js';
 
-// Cache for tenant configs (TTL: 60 seconds)
-const configCache = new Map();
+// Cache for tenant configs (TTL: 60 seconds, max 500 entries)
 const CACHE_TTL_MS = 60000;
+const CACHE_MAX_SIZE = parseInt(process.env.CARE_CONFIG_CACHE_MAX_SIZE) || 500;
+
+/**
+ * Simple LRU-ish cache: Map maintains insertion order, so we evict oldest
+ * entries when the cache exceeds CACHE_MAX_SIZE. Combined with TTL expiry,
+ * this prevents unbounded growth in multi-tenant environments.
+ */
+const configCache = new Map();
+
+/**
+ * Set a cache entry, evicting oldest entries if over capacity.
+ * @param {string} key
+ * @param {Object} value
+ */
+function cacheSet(key, value) {
+  // Delete first so re-insertion moves to end (most recent)
+  configCache.delete(key);
+  configCache.set(key, value);
+  
+  // Evict oldest entries if over capacity
+  if (configCache.size > CACHE_MAX_SIZE) {
+    const keysToDelete = configCache.size - CACHE_MAX_SIZE;
+    let deleted = 0;
+    for (const k of configCache.keys()) {
+      if (deleted >= keysToDelete) break;
+      configCache.delete(k);
+      deleted++;
+    }
+  }
+}
 
 /**
  * Get CARE workflow configuration for a specific tenant
@@ -53,7 +82,7 @@ export async function getCareConfigForTenant(tenantId) {
       const fallback = getEnvFallbackConfig();
       
       // Cache the fallback
-      configCache.set(tenantId, {
+      cacheSet(tenantId, {
         config: fallback,
         timestamp: Date.now()
       });
@@ -84,7 +113,7 @@ export async function getCareConfigForTenant(tenantId) {
     };
 
     // Cache the config
-    configCache.set(tenantId, {
+    cacheSet(tenantId, {
       config,
       timestamp: Date.now()
     });

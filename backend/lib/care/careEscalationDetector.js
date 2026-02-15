@@ -62,84 +62,95 @@ export function detectEscalation(input = {}) {
 
   const { text, sentiment, channel, action_origin, meta = {} } = input;
   
-  // Initialize detection state
+  // =========================================================================
+  // PHASE 1: Collect all matches (no confidence logic yet)
+  // =========================================================================
   const reasons = [];
   const matchedPhrases = [];
-  let highestConfidence = CONFIDENCE_LEVELS.HIGH; // Start optimistic, downgrade if needed
+  
+  // Track which categories fired for confidence computation
+  let hasObjection = false;
+  let hasCompliance = false;
+  let hasPricing = false;
+  let hasFailSafe = false;
+  let hasNegativeSentiment = false;
+  let pricingMatchCount = 0;
 
-  // Rule 1: Check for objection phrases (HIGH confidence)
   if (text && typeof text === 'string') {
+    // Rule 1: Objection phrases
     const objectionCheck = containsAnyPhrase(text, OBJECTION_PHRASES);
     if (objectionCheck.matched) {
       reasons.push(ESCALATION_REASONS.OBJECTION);
       matchedPhrases.push(...objectionCheck.matches);
-      highestConfidence = CONFIDENCE_LEVELS.HIGH;
+      hasObjection = true;
     }
 
-    // Rule 2: Check for pricing/contract phrases (MEDIUM confidence)
+    // Rule 2: Pricing/contract phrases
     const pricingCheck = containsAnyPhrase(text, PRICING_CONTRACT_PHRASES);
     if (pricingCheck.matched) {
       reasons.push(ESCALATION_REASONS.PRICING_OR_CONTRACT);
       matchedPhrases.push(...pricingCheck.matches);
-      
-      // Multiple pricing hits → upgrade to HIGH
-      if (pricingCheck.matches.length > 2) {
-        highestConfidence = CONFIDENCE_LEVELS.HIGH;
-      } else if (highestConfidence === CONFIDENCE_LEVELS.HIGH && reasons.length === 1) {
-        // First reason is pricing only → MEDIUM
-        highestConfidence = CONFIDENCE_LEVELS.MEDIUM;
-      }
+      hasPricing = true;
+      pricingMatchCount = pricingCheck.matches.length;
     }
 
-    // Rule 3: Check for compliance-sensitive phrases (HIGH confidence)
+    // Rule 3: Compliance-sensitive phrases
     const complianceCheck = containsAnyPhrase(text, COMPLIANCE_SENSITIVE_PHRASES);
     if (complianceCheck.matched) {
       reasons.push(ESCALATION_REASONS.COMPLIANCE_SENSITIVE);
       matchedPhrases.push(...complianceCheck.matches);
-      highestConfidence = CONFIDENCE_LEVELS.HIGH;
+      hasCompliance = true;
     }
 
-    // Rule 5: Fail-safe check for high-risk ambiguous content
-    const highRiskCheck = containsAnyPhrase(text, HIGH_RISK_AMBIGUOUS_PHRASES);
-    if (highRiskCheck.matched && reasons.length === 0) {
-      // Only trigger fail-safe if no other reasons found
-      reasons.push(ESCALATION_REASONS.UNKNOWN_HIGH_RISK);
-      matchedPhrases.push(...highRiskCheck.matches);
-      highestConfidence = CONFIDENCE_LEVELS.LOW;
-    }
-  }
-
-  // Rule 4: Check sentiment (MEDIUM confidence)
-  if (sentiment !== undefined) {
-    const isNegative = 
-      sentiment === 'negative' ||
-      (typeof sentiment === 'number' && sentiment < -0.3); // Threshold for numeric sentiment
-    
-    if (isNegative) {
-      reasons.push(ESCALATION_REASONS.NEGATIVE_SENTIMENT);
-      
-      // If sentiment is the only trigger, set MEDIUM confidence
-      if (reasons.length === 1) {
-        highestConfidence = CONFIDENCE_LEVELS.MEDIUM;
+    // Rule 5: Fail-safe (only if no other text-based reasons found)
+    if (!hasObjection && !hasPricing && !hasCompliance) {
+      const highRiskCheck = containsAnyPhrase(text, HIGH_RISK_AMBIGUOUS_PHRASES);
+      if (highRiskCheck.matched) {
+        reasons.push(ESCALATION_REASONS.UNKNOWN_HIGH_RISK);
+        matchedPhrases.push(...highRiskCheck.matches);
+        hasFailSafe = true;
       }
     }
   }
 
-  // Determine final confidence based on reason combination
+  // Rule 4: Sentiment
+  if (sentiment !== undefined) {
+    const isNegative = 
+      sentiment === 'negative' ||
+      (typeof sentiment === 'number' && sentiment < -0.3);
+    
+    if (isNegative) {
+      reasons.push(ESCALATION_REASONS.NEGATIVE_SENTIMENT);
+      hasNegativeSentiment = true;
+    }
+  }
+
+  // =========================================================================
+  // PHASE 2: Compute confidence from collected results
+  // =========================================================================
   let finalConfidence;
+  
   if (reasons.length === 0) {
-    // No triggers → HIGH confidence in "no escalation"
+    // No triggers → HIGH confidence in "no escalation needed"
     finalConfidence = CONFIDENCE_LEVELS.HIGH;
-  } else if (reasons.includes(ESCALATION_REASONS.OBJECTION) || 
-             reasons.includes(ESCALATION_REASONS.COMPLIANCE_SENSITIVE)) {
-    // Objection or compliance → always HIGH
+  } else if (hasObjection || hasCompliance) {
+    // Objection or compliance → always HIGH (these are unambiguous)
     finalConfidence = CONFIDENCE_LEVELS.HIGH;
-  } else if (reasons.includes(ESCALATION_REASONS.UNKNOWN_HIGH_RISK) && reasons.length === 1) {
+  } else if (hasFailSafe && reasons.length === 1) {
     // Only fail-safe trigger → LOW
     finalConfidence = CONFIDENCE_LEVELS.LOW;
+  } else if (hasPricing && pricingMatchCount > 2) {
+    // Heavy pricing signal (3+ matches) → HIGH
+    finalConfidence = CONFIDENCE_LEVELS.HIGH;
+  } else if (hasPricing && !hasNegativeSentiment) {
+    // Pricing alone (1-2 matches) → MEDIUM
+    finalConfidence = CONFIDENCE_LEVELS.MEDIUM;
+  } else if (hasNegativeSentiment && !hasPricing) {
+    // Sentiment alone → MEDIUM
+    finalConfidence = CONFIDENCE_LEVELS.MEDIUM;
   } else {
-    // Pricing, sentiment, or combinations → use tracked confidence
-    finalConfidence = highestConfidence;
+    // Pricing + sentiment combined, or other combinations → MEDIUM
+    finalConfidence = CONFIDENCE_LEVELS.MEDIUM;
   }
 
   // Build metadata

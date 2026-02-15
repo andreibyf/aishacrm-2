@@ -202,8 +202,42 @@ describe('carePolicyGate', () => {
         text: 'Best regards, AI Care System'
       });
       
-      // Should NOT trigger impersonation (regex excludes ai|care|system)
+      // Should NOT trigger impersonation (regex excludes ai|care system|system)
       assert.equal(result.policy_gate_result, CarePolicyGateResult.ALLOWED);
+    });
+
+    it('should allow AiSHA signatures (not impersonation)', () => {
+      const result = evaluateCarePolicy({
+        action_origin: 'care_autonomous',
+        proposed_action_type: 'note',
+        text: 'Best regards, AiSHA'
+      });
+      
+      assert.equal(result.policy_gate_result, CarePolicyGateResult.ALLOWED);
+    });
+
+    it('should NOT false-positive on names containing "care" (e.g. Caroline)', () => {
+      const result = evaluateCarePolicy({
+        action_origin: 'care_autonomous',
+        proposed_action_type: 'note',
+        text: 'Best regards, Caroline'
+      });
+      
+      // "Caroline" contains "care" substring but is NOT an AI/system identity.
+      // This SHOULD be blocked as human impersonation.
+      assert.equal(result.policy_gate_result, CarePolicyGateResult.BLOCKED);
+      assert.ok(result.reasons[0].includes('impersonation'));
+    });
+
+    it('should block "Regards, Sarah" as human impersonation', () => {
+      const result = evaluateCarePolicy({
+        action_origin: 'user_directed',
+        proposed_action_type: 'message',
+        text: 'Thank you! Regards, Sarah'
+      });
+      
+      assert.equal(result.policy_gate_result, CarePolicyGateResult.BLOCKED);
+      assert.ok(result.reasons[0].includes('impersonation'));
     });
   });
 });

@@ -52,20 +52,42 @@ export const VALID_CARE_STATES = new Set([
 ]);
 
 /**
- * Entity types that can have C.A.R.E. state
- * @typedef {'lead'|'contact'|'account'} CareEntityType
+ * Entity types that can have C.A.R.E. relationship state.
+ * These are the "who" — the relationship anchor that state is keyed on.
+ * @typedef {'lead'|'contact'|'account'|'opportunity'} CareStateEntityType
  */
 
 /**
- * All valid entity types as a Set for O(1) validation
- * @type {Set<CareEntityType>}
+ * Entity types that can appear as signal sources (signal_entity_type).
+ * These are the "what happened" — the trigger source.
+ * Superset of state entity types.
+ * @typedef {'lead'|'contact'|'account'|'opportunity'|'activity'} CareSignalEntityType
+ */
+
+/**
+ * Entity types that can hold C.A.R.E. state (used by state engine & store).
+ * Includes opportunity because deal_decay/opportunity_hot track state on the deal itself.
+ * Does NOT include activity — activities are signal sources only.
+ * @type {Set<CareStateEntityType>}
  */
 export const VALID_ENTITY_TYPES = new Set([
   'lead',
   'contact',
   'account',
   'opportunity',
-  'activity'
+]);
+
+/**
+ * All entity types that can appear in C.A.R.E. events (state holders + signal sources).
+ * Use this for validating signal_entity_type fields in event payloads.
+ * @type {Set<CareSignalEntityType>}
+ */
+export const VALID_SIGNAL_ENTITY_TYPES = new Set([
+  'lead',
+  'contact',
+  'account',
+  'opportunity',
+  'activity',
 ]);
 
 /**
@@ -163,5 +185,6 @@ export const VALID_ENTITY_TYPES = new Set([
 
 export default {
   VALID_CARE_STATES,
-  VALID_ENTITY_TYPES
+  VALID_ENTITY_TYPES,
+  VALID_SIGNAL_ENTITY_TYPES,
 };

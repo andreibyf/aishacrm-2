@@ -9,7 +9,12 @@
  * - MUST NOT trigger external systems
  * - MAY log to existing application logger only
  * 
- * Purpose: Provide observability for C.A.R.E. decisions without side effects.
+ * Uses the same structured JSON format as careAuditEmitter for consistent
+ * log parsing and telemetry-sidecar harvesting. Shadow events are distinguished
+ * by the `is_shadow: true` flag and `type: 'care_shadow'` marker.
+ * 
+ * Grep pattern: grep '\[CARE_AUDIT\]' logs.txt  (catches both audit AND shadow)
+ * Shadow only:  grep '"is_shadow":true' logs.txt
  * 
  * @module careShadowLog
  */
@@ -42,7 +47,7 @@ import logger from '../logger.js';
  */
 export function logCareShadow(event) {
   if (!event || typeof event !== 'object') {
-    logger.warn('[CARE:Shadow] Invalid event object provided to logCareShadow');
+    logger.warn('[CARE_AUDIT] shadow_invalid: Invalid event object provided to logCareShadow');
     return;
   }
   
@@ -57,24 +62,28 @@ export function logCareShadow(event) {
   
   // Validate required fields
   if (!type) {
-    logger.warn('[CARE:Shadow] Event missing required "type" field');
+    logger.warn('[CARE_AUDIT] shadow_invalid: Event missing required "type" field');
     return;
   }
   
-  // Log to application logger with clear shadow prefix
-  logger.info({
-    message: '[CARE:Shadow] Would have executed action',
-    care_event_type: type,
-    tenant_id,
-    entity_type,
-    entity_id,
-    reason,
-    ...meta,
-    // Marker flags for filtering/querying
-    is_shadow_event: true,
-    is_autonomous_action: false,
-    timestamp: new Date().toISOString(),
-  });
+  // Emit structured JSON with same format as careAuditEmitter
+  // so telemetry-sidecar and grep patterns work uniformly.
+  const shadowEvent = {
+    ts: new Date().toISOString(),
+    tenant_id: tenant_id || null,
+    entity_type: entity_type || null,
+    entity_id: entity_id || null,
+    event_type: type,
+    reason: reason || null,
+    meta,
+    // Markers for filtering
+    type: 'care_shadow',
+    _telemetry: true,
+    is_shadow: true,
+  };
+  
+  const logLine = JSON.stringify(shadowEvent);
+  logger.info(`[CARE_AUDIT] ${logLine}`);
 }
 
 /**
@@ -84,7 +93,7 @@ export function logCareShadow(event) {
  */
 export function logCareShadowBatch(events) {
   if (!Array.isArray(events)) {
-    logger.warn('[CARE:Shadow] logCareShadowBatch expects an array');
+    logger.warn('[CARE_AUDIT] shadow_invalid: logCareShadowBatch expects an array');
     return;
   }
   

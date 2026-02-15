@@ -25,10 +25,16 @@
  */
 export const SIGNAL_THRESHOLDS = {
   /** Days of silence before marking at_risk */
-  AT_RISK_SILENCE_DAYS: parseInt(process.env.CARE_LEAD_STAGNANT_DAYS) || 14,
+  AT_RISK_SILENCE_DAYS: (() => {
+    const val = parseInt(process.env.CARE_LEAD_STAGNANT_DAYS);
+    return Number.isNaN(val) ? 14 : val;
+  })(),
   
   /** Days of silence before marking dormant */
-  DORMANT_SILENCE_DAYS: parseInt(process.env.CARE_DEAL_DECAY_DAYS) * 2 || 30,
+  DORMANT_SILENCE_DAYS: (() => {
+    const val = parseInt(process.env.CARE_DEAL_DECAY_DAYS);
+    return Number.isNaN(val) ? 30 : val * 2;
+  })(),
   
   /** Minimum bidirectional exchanges to consider engaged */
   MIN_BIDIRECTIONAL_EXCHANGES: 1
@@ -111,19 +117,62 @@ export function validateSignals(signals) {
 /**
  * Enrich signals with derived fields
  * 
- * Calculates silence_days if last_inbound_at is provided but silence_days is not.
- * This is a convenience helper for callers who track timestamps but not derived metrics.
+ * - Calculates silence_days from last_inbound_at if not provided
+ * - Overrides caller-provided silence_days when last_inbound_at proves it stale
+ *   (e.g., trigger worker computed silence_days=20 from a DB query, but a new
+ *   inbound arrived since then — last_inbound_at takes precedence)
+ * - Computes engagement_score as a composite signal for future ranking/prioritization
  * 
  * @param {CareSignals} signals - Raw signals
- * @returns {CareSignals} Enriched signals
+ * @returns {CareSignals} Enriched signals with derived fields
  */
 export function enrichSignals(signals) {
   const enriched = { ...signals };
   
-  // Calculate silence_days if not provided
-  if (signals.last_inbound_at && signals.silence_days === undefined) {
-    enriched.silence_days = calculateSilenceDays(signals.last_inbound_at);
+  // Recalculate silence_days from last_inbound_at — this is the source of truth.
+  // If caller passed both silence_days AND last_inbound_at, the computed value wins
+  // because the inbound timestamp is more authoritative than a pre-computed count.
+  if (signals.last_inbound_at) {
+    const computed = calculateSilenceDays(signals.last_inbound_at);
+    
+    if (signals.silence_days === undefined) {
+      // No caller-provided value — fill in
+      enriched.silence_days = computed;
+    } else if (computed < signals.silence_days) {
+      // Caller's silence_days is stale — a more recent inbound exists.
+      // Use the lower (more accurate) value to prevent false at_risk transitions.
+      enriched.silence_days = computed;
+      enriched.meta = {
+        ...(enriched.meta || {}),
+        silence_days_overridden: true,
+        silence_days_original: signals.silence_days,
+        silence_days_computed: computed,
+      };
+    }
+    // If computed >= caller's value, keep caller's (they may have a tighter window)
   }
+  
+  // Composite engagement score (0-10 scale, for future ranking)
+  let score = 0;
+  if (enriched.has_bidirectional) score += 3;
+  if (enriched.proposal_sent) score += 2;
+  if (enriched.commitment_recorded) score += 3;
+  if (enriched.meeting_completed) score += 1;
+  if (enriched.contract_signed) score += 1;
+  if (enriched.explicit_rejection) score -= 5;
+  if (enriched.negative_sentiment) score -= 2;
+  
+  // Silence penalty (diminishing)
+  const silence = enriched.silence_days || 0;
+  if (silence >= SIGNAL_THRESHOLDS.DORMANT_SILENCE_DAYS) {
+    score -= 3;
+  } else if (silence >= SIGNAL_THRESHOLDS.AT_RISK_SILENCE_DAYS) {
+    score -= 2;
+  } else if (silence >= 7) {
+    score -= 1;
+  }
+  
+  enriched.engagement_score = Math.max(-5, Math.min(10, score));
   
   return enriched;
 }
