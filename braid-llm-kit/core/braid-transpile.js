@@ -118,7 +118,7 @@ export function transpileToJS(ast, opts = {}) {
 
   if (sandbox) {
     const sbPath = runtimeImport
-      ? runtimeImport.replace('braid-rt.js', 'braid-sandbox.js')
+      ? runtimeImport.replace('braid-rt.js', 'braid-sandbox.js').replace('/tools/', '/core/')
       : './braid-sandbox.js';
     out.push(`import { safeGet, safeSet, guardGlobal } from "${sbPath}";`);
   }

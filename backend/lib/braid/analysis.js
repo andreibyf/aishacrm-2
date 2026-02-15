@@ -622,9 +622,16 @@ export function normalizeToolArgs(toolName, rawArgs, tenantRecord) {
     if (!Number.isNaN(n)) args.limit = n;
   }
   
-  // Normalize status: "all" means no filter (undefined)
-  if (args.status === 'all' || args.status === 'any' || args.status === '') {
-    args.status = undefined;
+  // ── Context translation: AI sentinel values → route-safe defaults ──
+  // The AI often sends "all", "any", "<UNKNOWN>", etc. for optional filters.
+  // Routes treat empty string as "no filter", so translate here to keep
+  // Braid type signatures strict (String, not String?).
+  const SENTINEL_VALUES = new Set(['all', 'any', '', 'undefined', 'none', '<UNKNOWN>', 'unknown', 'null']);
+
+  for (const field of ['status', 'account_id', 'entity_type', 'entity_id', 'related_to_type', 'related_to_id', 'related_id', 'source', 'assigned_to']) {
+    if (args[field] !== undefined && SENTINEL_VALUES.has(String(args[field]).toLowerCase())) {
+      args[field] = '';
+    }
   }
 
   // For update tools, inject tenant_id into the updates object

@@ -80,7 +80,7 @@ export function emitJS(ir, opts = {}) {
   out.push(`import { Ok, Err, IO, cap, checkType, CRMError } from "${runtimeImport}";`);
 
   if (sandbox) {
-    const sbPath = runtimeImport.replace('braid-rt.js', 'braid-sandbox.js');
+    const sbPath = runtimeImport.replace('braid-rt.js', 'braid-sandbox.js').replace('/tools/', '/core/');
     out.push(`import { safeGet, safeSet, guardGlobal } from "${sbPath}";`);
   }
 
