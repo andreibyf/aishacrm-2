@@ -1,0 +1,9 @@
+{
+  "name": "AiSHA Planning Mode (READ ONLY)",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,readonly,consistency=cached",
+  "workspaceFolder": "/workspace",
+  "mounts": ["type=tmpfs,target=/tmp"],
+  "remoteEnv": { "PLANNING_MODE": "true" },
+  "postStartCommand": "echo '🚧 PLANNING MODE – READ ONLY 🚧'"
+}
