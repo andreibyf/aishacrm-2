@@ -725,16 +725,35 @@ export function summarizeToolResult(result, toolName) {
       : firstItem.name || firstItem.title || firstItem.id || 'record';
 
     if (data.length === 1) {
-      return `${toolName} found 1 result: "${itemName}". Full details are available in the result data.`;
+      // CRITICAL: Include ID so the LLM can use it in follow-up tool calls (update, delete, etc.)
+      const details = [];
+      if (firstItem.id) details.push(`id: ${firstItem.id}`);
+      if (firstItem.company) details.push(`company: ${firstItem.company}`);
+      if (firstItem.status) details.push(`status: ${firstItem.status}`);
+      if (firstItem.email) details.push(`email: ${firstItem.email}`);
+      if (firstItem.phone || firstItem.phone_number)
+        details.push(`phone: ${firstItem.phone || firstItem.phone_number}`);
+      if (firstItem.stage) details.push(`stage: ${firstItem.stage}`);
+      if (firstItem.amount) details.push(`amount: ${firstItem.amount}`);
+      const detailStr = details.length > 0 ? ` (${details.join(', ')})` : '';
+      return `${toolName} found 1 result: "${itemName}"${detailStr}.`;
     }
 
-    // Multiple results
-    const preview = data.slice(0, 3).map(item => {
-      if (item.first_name && item.last_name) return `${item.first_name} ${item.last_name}`;
-      return item.name || item.title || item.id;
-    }).join(', ');
+    // Multiple results — CRITICAL: Include IDs so the LLM can reference them in follow-up calls
+    const preview = data
+      .slice(0, 5)
+      .map((item) => {
+        const name =
+          item.first_name && item.last_name
+            ? `${item.first_name} ${item.last_name}`
+            : item.name || item.title || item.id;
+        const id = item.id ? ` [id: ${item.id}]` : '';
+        const extra = item.status ? ` (${item.status})` : item.stage ? ` (${item.stage})` : '';
+        return `${name}${id}${extra}`;
+      })
+      .join('; ');
 
-    return `${toolName} found ${data.length} results. First ${Math.min(3, data.length)}: ${preview}${data.length > 3 ? ', ...' : ''}`;
+    return `${toolName} found ${data.length} results: ${preview}${data.length > 5 ? '; ...' : ''}`;
   }
 
   // Generic fallback
