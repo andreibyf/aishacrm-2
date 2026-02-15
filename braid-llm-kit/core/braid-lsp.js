@@ -34,6 +34,9 @@ const astCache = new Map();
 // Scope cache: uri → FileIndex
 const scopeCache = new Map();
 
+// Debounce timers: uri → timeout ID
+const debounceTimers = new Map();
+
 connection.onInitialize((params) => {
   return {
     capabilities: {
@@ -65,12 +68,29 @@ connection.onInitialized(() => {
 // ============================================================================
 
 documents.onDidChangeContent((change) => {
-  validateDocument(change.document);
+  const uri = change.document.uri;
+
+  // Debounce: wait 150ms after last keystroke before re-validating
+  if (debounceTimers.has(uri)) {
+    clearTimeout(debounceTimers.get(uri));
+  }
+  debounceTimers.set(uri, setTimeout(() => {
+    debounceTimers.delete(uri);
+    validateDocument(change.document);
+  }, 150));
 });
 
 function validateDocument(doc) {
   const text = doc.getText();
   const uri = doc.uri;
+  const version = doc.version;
+
+  // Incremental: skip full re-parse if version unchanged
+  const cached = astCache.get(uri);
+  if (cached && cached.version === version && cached.text === text) {
+    return; // Nothing changed
+  }
+
   const diagnostics = [];
 
   // Phase 1: Parse
@@ -89,8 +109,8 @@ function validateDocument(doc) {
     return;
   }
 
-  // Cache the AST
-  astCache.set(uri, { ast, version: doc.version });
+  // Cache the AST with text hash for incremental check
+  astCache.set(uri, { ast, version: doc.version, text });
 
   // Build scope index for go-to-definition, find-all-references, rename
   try {

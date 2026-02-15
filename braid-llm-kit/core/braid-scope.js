@@ -50,12 +50,20 @@ class FileIndex {
   }
 
   symbolAtPosition(line, character) {
+    let best = null;
+    let bestSize = Infinity;
     for (const entry of this.entries) {
       if (containsPosition(entry.range, line, character)) {
-        return { symbol: entry.symbol, isDef: entry.isDef };
+        // When ranges overlap, prefer the tightest (shortest) match
+        const size = (entry.range.end.line - entry.range.start.line) * 10000 +
+                     (entry.range.end.character - entry.range.start.character);
+        if (size < bestSize) {
+          best = { symbol: entry.symbol, isDef: entry.isDef };
+          bestSize = size;
+        }
       }
     }
-    return null;
+    return best;
   }
 }
 
@@ -318,8 +326,16 @@ function walkExpr(expr, scope, index, uri) {
       break;
     }
     case 'TemplateLit':
-      // Template interpolations are stored as raw strings, not parsed AST.
-      // References inside templates are not tracked in this version.
+      // Parse interpolation expressions and track references inside them.
+      // Template parts with kind === 'expr' store raw expression text.
+      // We re-parse each as a mini-expression to find identifier references.
+      if (expr.parts) {
+        for (const part of expr.parts) {
+          if (part.kind === 'expr' && part.value) {
+            walkTemplateExpr(part.value, scope, index, uri, expr.pos);
+          }
+        }
+      }
       break;
     case 'NumberLit':
     case 'StringLit':
@@ -329,6 +345,69 @@ function walkExpr(expr, scope, index, uri) {
     default:
       break;
   }
+}
+
+// ============================================================================
+// TEMPLATE EXPRESSION PARSING
+// ============================================================================
+
+// Tokenize a template interpolation expression into identifiers and operators.
+// This is intentionally lightweight — we only need to find identifier references,
+// not build a full AST. Handles: idents, dot access (a.b → only 'a'), optional
+// chaining (a?.b → only 'a'), function calls, indexing, and nested expressions.
+function walkTemplateExpr(exprText, scope, index, uri, fallbackPos) {
+  // Extract identifiers from the expression text.
+  // We tokenize simply: split on non-identifier characters, then resolve each
+  // token that looks like an identifier and isn't a property access target.
+  const tokens = tokenizeTemplateExpr(exprText);
+
+  for (const token of tokens) {
+    if (BUILTINS.has(token.name)) continue;
+    const sym = scope.resolve(token.name);
+    if (sym) {
+      // Use fallback position (the TemplateLit pos) since we don't have
+      // per-interpolation position data from the tokenizer.
+      const range = posToRange(fallbackPos, token.name);
+      sym.refs.push({ uri, range });
+      index.references.push({ name: token.name, uri, range, symbol: sym });
+    }
+  }
+}
+
+// Simple tokenizer for template interpolation expressions.
+// Returns array of { name: String } for each identifier that should be resolved.
+// Skips property names after . or ?. (only resolves the root object).
+function tokenizeTemplateExpr(exprText) {
+  const identifiers = [];
+  const IDENT_RE = /[a-zA-Z_$][a-zA-Z0-9_$]*/g;
+  // Keywords to skip
+  const KEYWORDS = new Set([
+    'true', 'false', 'null', 'undefined', 'typeof', 'instanceof',
+    'if', 'else', 'for', 'in', 'of', 'return', 'let', 'const', 'var',
+    'new', 'this', 'class', 'function', 'switch', 'case', 'break',
+  ]);
+
+  let match;
+  let lastIndex = 0;
+
+  while ((match = IDENT_RE.exec(exprText)) !== null) {
+    const name = match[0];
+    const idx = match.index;
+
+    // Skip keywords
+    if (KEYWORDS.has(name)) continue;
+
+    // Skip if preceded by . or ?. (it's a property access, not a reference)
+    const before = exprText.substring(lastIndex, idx).trimEnd();
+    if (before.endsWith('.') || before.endsWith('?.')) continue;
+
+    // Deduplicate
+    if (!identifiers.some(t => t.name === name)) {
+      identifiers.push({ name });
+    }
+  }
+
+  return identifiers;
 }
 
 // ============================================================================

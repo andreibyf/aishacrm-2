@@ -135,6 +135,26 @@ export default [
       ],
     },
   },
+  // Braid CLI tools: Node.js ESM scripts
+  {
+    files: ['braid-llm-kit/tools/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2020,
+      globals: {
+        ...globals.node,
+      },
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+      },
+    },
+    plugins: {},
+    rules: {
+      ...js.configs.recommended.rules,
+      'no-undef': 'off',
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+    },
+  },
   // VS Code extension: CommonJS / Node.js context
   {
     files: ['braid-llm-kit/editor/vscode/**/*.js'],

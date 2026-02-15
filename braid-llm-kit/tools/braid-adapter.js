@@ -2,9 +2,6 @@
 // Transpiles .braid files, enforces policies, handles errors, caches results
 "use strict";
 
-/* eslint-env node */
-/* global Buffer, process */
-
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';

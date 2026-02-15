@@ -574,6 +574,7 @@ braid-llm-kit/
 │   ├── e2e-v05.test.js      End-to-end tests (29 passing)
 │   ├── braid-integration.test.js  Integration tests (125 passing)
 │   ├── braid-scope.test.js  Scope tests (31 passing)
+│   ├── braid-lsp-integration.test.js  LSP integration tests (22 passing)
 │   └── package.json          @braid-lang/core v0.5.0
 │
 ├── tools/                   ← AiSHA CRM adapter layer
@@ -657,8 +658,8 @@ node tools/braid-transpile.js --file input.braid --out output.js
 # Transpile with sandbox guards
 node tools/braid-transpile.js --file input.braid --out output.js --sandbox
 
-# Run tests (305 total)
-cd core && node --test braid-core.test.js braid-ir.test.js e2e-v05.test.js braid-integration.test.js braid-scope.test.js
+# Run tests (330 total)
+cd core && node --test braid-core.test.js braid-ir.test.js e2e-v05.test.js braid-integration.test.js braid-scope.test.js braid-lsp-integration.test.js
 ```
 
 ### 13.3 Diagnostic Codes
@@ -756,4 +757,4 @@ Primary     = Ident | Number | String | Template | Bool | Null
 
 ---
 
-*Braid v0.5.0 — 305 tests passing, 119 production functions, 20 .braid files*
+*Braid v0.5.0 — 330 tests passing, 119 production functions, 20 .braid files*

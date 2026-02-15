@@ -12,6 +12,9 @@
     "vscode": "^1.86.0"
   },
   "main": "./extension-client.js",
+  "activationEvents": [
+    "onLanguage:braid"
+  ],
   "dependencies": {
     "vscode-languageclient": "^9.0.1",
     "vscode-languageserver": "^9.0.1",

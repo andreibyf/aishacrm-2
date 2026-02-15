@@ -4,9 +4,6 @@
  * Property-based testing for pure functions, effect mocking for !net,clock
  */
 
-/* eslint-env node */
-/* global Buffer, process */
-
 import { parse } from './braid-parse.js';
 import { transpileToJS } from './braid-transpile.js';
 import { CRM_POLICIES } from './braid-rt.js';

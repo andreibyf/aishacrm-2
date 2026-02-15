@@ -146,8 +146,8 @@ code --install-extension braid-language-0.7.0.vsix
 ```bash
 cd braid-llm-kit/core
 
-# All tests (305 passing)
-node --test braid-core.test.js braid-ir.test.js e2e-v05.test.js braid-integration.test.js braid-scope.test.js
+# All tests (330 passing)
+node --test braid-core.test.js braid-ir.test.js e2e-v05.test.js braid-integration.test.js braid-scope.test.js braid-lsp-integration.test.js
 
 # Core only (73 tests: parser, transpiler, runtime, sandbox)
 node --test braid-core.test.js
@@ -158,11 +158,14 @@ node --test braid-ir.test.js
 # End-to-end (29 tests: full pipeline with all v0.4/v0.5 features)
 node --test e2e-v05.test.js
 
-# Integration (125 tests: production files, LSP, adapter, error recovery)
+# Integration (128 tests: production files, LSP, adapter, error recovery)
 node --test braid-integration.test.js
 
 # Scope (31 tests: scope resolution, references, rename, imports)
 node --test braid-scope.test.js
+
+# LSP integration (22 tests: mock connection, cross-file, template refs, incremental)
+node --test braid-lsp-integration.test.js
 ```
 
 ## CLI Tools
@@ -211,4 +214,4 @@ See `core/grammar.ebnf` for the formal EBNF grammar.
 
 ---
 
-*305 tests, 119 production functions, 20 .braid files, 2 compilation targets*
+*330 tests, 119 production functions, 20 .braid files, 2 compilation targets*
