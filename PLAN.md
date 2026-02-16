@@ -1,163 +1,131 @@
-# PLAN
+PLAN
+Root Cause
+AI execution in AiSHA has no single document defining the lifecycle, telemetry schema, correlation model, or success/failure semantics. Observability data is produced by 8+ modules (activityLogger.js, metrics.js, performanceLogger.js, execution.js, etc.) but no contract standardizes what must be recorded, how executions are correlated, or what constitutes success. Without this contract, future C.A.R.E. orchestration cannot make deterministic decisions about provider routing, retries, or task scoring.
 
-## Root Cause
+Impacted Services
+None modified. This is a new read-only documentation file (docs/AI_RUNTIME_CONTRACT.md).
+No backend, frontend, database, or infrastructure changes.
+Contracts Affected
+None. No API routes, database schemas, middleware, RLS policies, or Braid tool definitions are altered.
+Ordered Steps
+Create docs/AI_RUNTIME_CONTRACT.md with exactly these 10 sections:
 
-Guardrail rules are scattered across `orchestra/CONVENTIONS.md`, `orchestra/ARCHITECTURE.md`, `CLAUDE.md`, inline middleware code, and tribal knowledge. AI executors must reconstruct constraints from 5+ sources before making changes. A single `docs/GUARDRAILS.md` consolidates the non-negotiable invariants into one authoritative, citable reference.
+Contract Purpose
 
-## Impacted Services
+Max 3-line preamble stating this file defines the canonical lifecycle, telemetry schema, correlation model, and success/failure semantics for every AI execution in AiSHA.
+Audience: AI orchestration (C.A.R.E.), observability consumers, and AI agent developers.
+This is a contract for observability and orchestration — not an implementation.
+AI Task Lifecycle
 
-- **None modified.** This is a new read-only documentation file (`docs/GUARDRAILS.md`).
-- No backend, frontend, database, or infrastructure changes.
+Define canonical state flow: REQUESTED → ROUTED → EXECUTING → TOOL_CALL → COMPLETED | FAILED
+REQUESTED: User message arrives at POST /api/ai/chat (see ai.js line 2678). Input validated, tenant resolved via getTenantIdFromRequest() + resolveTenantRecord() (see tenantContext.js). Security checked via validateUserTenantAccess().
+ROUTED: Provider selected via selectLLMConfigForTenant({ capability }) (see modelRouter.js). API key resolved via 5-layer cascade in resolveLLMApiKey() (see keyResolver.js). Intent classified via classifyIntent(). Tool subset focused via applyToolHardCap() (max 12 tools).
+EXECUTING: LLM called via generateChatCompletion() (see llmClient.js). Iteration loop runs up to maxIterations (default 5, configurable via ai_settings.max_iterations). Each iteration logged via logLLMActivity() with nodeId: "ai:chat:iter{i}" (see activityLogger.js).
+TOOL_CALL: Entered per tool call within an iteration. Tool executed via executeBraidTool() (see execution.js). Passes through access token validation → registry lookup → input validation → RBAC → rate limiting → cache check → JWT generation → execution → cache store → metrics → audit log.
+COMPLETED: Final assistant content produced. Response persisted to conversation_messages. Entity context extracted for frontend. Activity logged with status: "success".
+FAILED: Error at any stage. Activity logged with status: "error". Response returns { status: "error", message } with appropriate HTTP code (400/403/500/501).
+Task Identity & Correlation
 
-## Contracts Affected
+task_id: Not yet generated as a first-class field. Currently approximated by activityLogger entry id: "llm-<timestamp>-<random6>" (see activityLogger.js). Future: should be assigned at REQUESTED stage.
+request_id: Generated as "req_<timestamp>_<random9>" by generateRequestId() in utils.js (line ~46). Scoped to Braid tool execution context.
+tenant_id: UUID from req.tenant.id, injected by validateTenantAccess middleware (see validateTenant.js). Present in all telemetry: activity logs, Braid metrics, audit entries.
+user_id: Extracted from JWT via auth middleware. Present in Braid audit log entries and JWT tokens issued for tool execution.
+correlation_id: No explicit cross-service correlation ID exists today. The conversation_id (from request body) serves as the closest equivalent for multi-turn correlation. Braid requestId correlates within a single tool execution. Future: a correlation_id header should propagate across AI route → Braid → MCP.
+conversation_id: Optional UUID from request body. Links user messages, assistant responses, and tool context in conversation_messages table. Serves as the session-level correlation key.
+Required Telemetry Fields
 
-- **None.** No API routes, database schemas, middleware, RLS policies, or Braid tool definitions are altered.
-- `docs/SYSTEM_OVERVIEW.md` Documentation Index should reference the new file (separate follow-up).
+intent: Produced by classifyIntent() in ai.js. Includes { intent, entity, confidence }.
+provider: Selected by selectLLMConfigForTenant() (see modelRouter.js). Values: openai, anthropic, groq, local.
+model: Selected alongside provider. Logged in activity logger and chat response.
+latency_ms: durationMs field in activity logger entry (see activityLogger.js). Also executionTimeMs in Braid audit log (see metrics.js).
+token_usage: { prompt_tokens, completion_tokens, total_tokens } — normalized from LLM response. Anthropic adapter normalizes to this shape (see anthropicAdapter.js). Logged in activity logger usage field and returned in chat response.
+tool_calls[]: Array of { tool, args, result_preview, summary } — collected during iteration loop in ai.js. Also toolsCalled: string[] in activity logger.
+cache_hit: Boolean per tool call — tracked by Braid execution (see execution.js). Redis key pattern: braid:<tenantId>:<toolName>:<argsHash>. Aggregated in braid:metrics:<tenantId>:*:cache_hits (see metrics.js).
+retry_count: attempt and totalAttempts fields in activity logger. Retry logic via retryWithBackoff() in utils.js.
+final_state: status field in activity logger: "success", "error", or "failover".
+Success Criteria
 
-## Ordered Steps
+Pure LLM response: generateChatCompletion() returns { status: "success", content: string }. Activity logger records status: "success". Token usage is non-null. No tool calls required.
+Tool execution: executeBraidTool() returns { tag: "Ok", value: any }. Braid audit log records resultTag: "Ok". Metrics record success: true. Cache invalidation (for writes) completes without error.
+Multi-step AI flow: All iterations complete within maxIterations. Final assistant response contains non-empty content. If max iterations exhausted, a fallback summary request succeeds. All tool calls within the flow returned tag: "Ok". Chat response status: "success" with tool_interactions[] populated.
+Failure Classification
 
-1. **Create `docs/GUARDRAILS.md`** with exactly these 7 sections:
+provider_error: LLM API call fails. Detected in generateChatCompletion() (see llmClient.js). Activity logger records status: "error". Includes HTTP errors, rate limits, invalid responses from provider.
+tool_error: Braid tool execution fails. Detected in executeBraidTool() (see execution.js). Sub-types: UnknownTool, ExecutionError, NetworkError. Audit log records resultTag: "Err" with errorType and errorMessage.
+validation_error: Invalid input to AI chat endpoint or to Braid tool. Chat: missing messages array → 400. Braid: validateToolArgs() returns validation errors → { tag: "Err", error: { type: "ValidationError" } }.
+timeout: Braid execution exceeds 30s timeout (see withTimeout() in utils.js). Or LLM call exceeds provider SDK timeout.
+tenant_scope_violation: Cross-tenant access attempt detected by validateUserTenantAccess() (see tenantContext.js) → 403. Also detected by IDR (see intrusionDetection.js) — MAX_TENANT_VIOLATIONS_PER_HOUR: 5 → IP blocked for 5 min.
+auth_error: Missing/invalid access token for Braid execution → AuthorizationError. Or JWT validation failure in auth middleware.
+rate_limit_exceeded: Braid policy rate limits (per-tenant/user/tool-class, 60s window) → RateLimitExceeded with retryAfter: 60. Also global rate limiter: 120 req/min per IP (see middleware).
+permission_error: User role insufficient for requested Braid policy → InsufficientPermissions (see policies.js).
+Idempotency & Retry Safety
 
-   - **Execution Scope Rules**
-     - Default mode is BUGFIX-FIRST; no features unless `orchestra/PLAN.md` marks a task Active.
-     - AI agents may only modify files within the Active task's declared scope.
-     - Larger rewrites allowed only for: security, stability, performance, or race-condition resolution.
-     - Prefer minimal patches; no opportunistic refactors, mass renames, or file moves.
-     - Must add/update tests for every change; demonstrate the bug via failing test first.
+Safe to retry: READ_ONLY Braid tool calls (cached, no side effects). LLM completions with identical message context (stateless). Failed provider calls where no tool was executed.
+Conditionally safe: WRITE tool calls that failed before database commit (no partial state). Tool calls that returned RateLimitExceeded (after retryAfter window). Provider failover — retryWithBackoff() handles this (see utils.js).
+Never safe to auto-retry: DELETE operations (require confirmed: true; see policies.js). Tool calls that returned tag: "Ok" — re-execution would duplicate. Any operation that already modified database state. Multi-step chain executions (see chains.js) — partial completion may leave state.
+Current idempotency: Braid cache for READ_ONLY tools provides natural idempotency within TTL (10s–5min). No explicit idempotency keys exist for write operations.
+Provider Routing Observability
 
-   - **Multi-Tenancy Safety**
-     - Every table has `tenant_id UUID` with RLS policies; use `req.tenant.id` (UUID from `validateTenant` middleware).
-     - Never use deprecated `tenant_id_text` (slug-based).
-     - Non-superadmin users are locked to their own tenant; cross-tenant requests return 403.
-     - Superadmin write operations must specify a `tenant_id` (400 if missing).
-     - System tenant UUID: `a11dfb63-4b18-4eb8-872e-747af2e37c46`.
-     - IDR detects rapid tenant switching (≥5 distinct tenants) and cross-tenant access violations (5/hour → block).
+Failover events: Activity logger records status: "failover" with { attempt, totalAttempts, provider, model, error } (see activityLogger.js). Console tag: [AIEngine][LLM_CALL_FAILOVER].
+Per-tenant override: selectLLMConfigForTenant() checks LLM_PROVIDER__TENANT_<KEY> and MODEL_<CAPABILITY>__TENANT_<KEY> env vars (see modelRouter.js). Selected provider/model logged in activity entry.
+Latency-based routing: Not currently implemented. durationMs is recorded per call but not used for routing decisions. Future: activity stats (getLLMActivityStats()) could feed a latency-based selector.
+Key resolution path: resolveLLMApiKey() logs which layer provided the key via [AIEngine][KeyResolver] tag (see keyResolver.js). 5 layers: explicit → tenant_integrations → system_settings → legacy users → env vars.
+C.A.R.E. Readiness Signals
 
-   - **Data Access Rules**
-     - All queries must include `.eq('tenant_id', req.tenant.id)` — no cross-tenant queries.
-     - Redis Memory (port 6379, 256 MB LRU): ephemeral only — presence, sessions, real-time. Managed by `memoryClient.js`.
-     - Redis Cache (port 6380, 512 MB LRU): persistent — stats, aggregations, response caches. Managed by `cacheManager.js`.
-     - Never store persistent data in Memory Redis or ephemeral data in Cache Redis.
-     - Braid tool execution requires frozen `TOOL_ACCESS_TOKEN` with `{ verified: true, source: 'tenant-authorization' }`.
-     - Braid policy rate limits: READ 100/min, WRITE 50/min, DELETE 20/min (requires `confirmed: true`), ADMIN 30/min.
-     - Delete operations require `manager` role or above.
+Provider performance scoring: getLLMActivityStats() (see activityLogger.js) aggregates byProvider, byCapability, byStatus, avgDurationMs, requestsPerMinute, tokenUsage over rolling 500-entry buffer. These signals are sufficient for a scoring function but no scorer exists today.
+Task outcome scoring: Braid metrics (see metrics.js) track per-tenant and per-tool calls, errors, cache_hits at minute and hour granularity. Audit log entries (Supabase audit_logs table) record resultTag, errorType, executionTimeMs per tool invocation. Combined with chat response status, these provide task-level outcome data.
+Cost tracking hooks: Token usage (prompt_tokens, completion_tokens, total_tokens) is logged per iteration in activity logger and returned in chat response. [CostGuard] logs incomingMsgCount and incomingCharCount at request entry. No monetary cost calculation exists today — requires provider pricing tables.
+Minimum signals for automated decisions: provider + model per call, latency per call, token usage per call, success/failure per call, tool call count per request, cache hit ratio per tenant, error rate per provider (all currently produced).
+Definition of Done
 
-   - **Service Boundary Rules**
-     - Docker ports are deployment contracts — do not change: frontend 4000, backend 4001, Redis Memory 6379, Redis Cache 6380.
-     - Network: `aishanet` (Docker bridge). Local dev: frontend 5173, backend 3001.
-     - Middleware initialization order is fixed (12 global steps in `initMiddleware.js`); do not reorder or skip.
-     - `productionSafetyGuard` blocks all writes to production/cloud DBs unless explicitly bypassed via `ALLOW_PRODUCTION_WRITES` or token header.
-     - Rate limiter: 120 req/min per IP on `/api/*`; fail-open on internal errors.
-     - CORS: production requires `ALLOWED_ORIGINS` env var — missing → `process.exit(1)`.
-     - `trust proxy` set to 1 (single hop).
+ docs/AI_RUNTIME_CONTRACT.md exists and is under 180 lines.
+ All 10 section headings present: Contract Purpose, AI Task Lifecycle, Task Identity & Correlation, Required Telemetry Fields, Success Criteria, Failure Classification, Idempotency & Retry Safety, Provider Routing Observability, C.A.R.E. Readiness Signals, Definition of Done.
+ Every field and rule traces to a real source file with path reference.
+ No runtime, code, or infrastructure changes.
+ Consistent with GUARDRAILS.md (when created) in port numbers, rate limits, Redis separation, tenant isolation rules.
+Keep under 180 lines. Bullet lists exclusively; no prose paragraphs.
 
-   - **AI Pipeline Constraints**
-     - All AI tool calls are tenant-scoped; internal JWT issued per execution with 5-minute TTL.
-     - Braid tools execute in two modes: in-process (primary, `braidIntegration-v2.js`) and distributed MCP (`braid-mcp-node-server/`).
-     - LLM provider failover is automatic; per-tenant overrides via `LLM_PROVIDER__TENANT_<UUID>` env vars.
-     - Capability routing: `chat_tools`, `json_strict`, `brain_read_only`, `brain_plan_actions`.
-     - After modifying `.braid` files, always run `npm run braid:sync`.
-     - Braid effects system: each policy declares `allow_effects`; runtime checks before execution.
+No code changes. File is purely informational markdown.
 
-   - **Change Management Rules**
-     - Authority hierarchy: `PLAN.md` (what) → `CONVENTIONS.md` (how) → `ARCHITECTURE.md` + `interfaces.md` (boundaries).
-     - If `PLAN.md` has no Active task, AI modification is prohibited.
-     - No new architectural patterns without explicit user approval.
-     - No new dependencies without justification in the wave report.
-     - Backend agent: only `backend/` and shared libs. Frontend agent: only `src/`. Test agent: only `tests/` and test configs.
-     - Run `docker exec aishacrm-backend npm test` after every change.
+Source references. Every rule cites the canonical source file(s) in parentheses.
 
-   - **Prohibited Actions**
-     - Never bypass auth, rate limiting, IDR, or `productionSafetyGuard` middleware.
-     - Never disable or weaken RLS policies on production tables.
-     - Never hardcode tenant IDs (except system tenant UUID in infra config).
-     - Never mix Redis instance responsibilities (memory ↔ cache).
-     - Never change Docker port mappings without updating all docs and configs.
-     - Never perform cross-tenant queries or data access.
-     - Never push/tag without explicit user approval.
-     - Never modify files outside the Active task scope.
-     - When in doubt: **DO NOTHING and ask.**
-
-2. **Keep under 150 lines.** Use bullet lists exclusively; no prose paragraphs. Include a short preamble (2–3 lines) stating purpose and audience.
-3. **No code changes.** File is purely informational markdown.
-4. **Source references.** Each section should cite the canonical source file(s) in parentheses (e.g., `(see backend/middleware/validateTenant.js)`).
-
-## Tests
-
-- **No automated tests required.** This is a documentation-only change.
-- **Manual verification:** Confirm all referenced file paths exist (middleware files, Redis clients, Braid files, etc.).
-- **Content cross-check:** Verify key values (port numbers, rate limits, IDR thresholds, Braid policy limits) against actual source code.
-
-## Observability Checks
-
-- **N/A.** No runtime behavior changes. No metrics, logs, or health endpoints affected.
-
-## Risks
-
-- **Low.** Documentation-only addition with zero runtime impact.
-- **Staleness risk:** File may drift from actual thresholds. Mitigate by citing source files rather than duplicating exact values where possible.
-- **Overlap risk:** Content overlaps with `orchestra/CONVENTIONS.md`. Mitigate by keeping GUARDRAILS focused on hard invariants only; CONVENTIONS covers process/workflow.
-
-## Definition of Done
-
-- [ ] `docs/GUARDRAILS.md` exists and is under 150 lines.
-- [ ] All 7 section headings are present: Execution Scope Rules, Multi-Tenancy Safety, Data Access Rules, Service Boundary Rules, AI Pipeline Constraints, Change Management Rules, Prohibited Actions.
-- [ ] All referenced file paths are valid (spot-checked).
-- [ ] Key values (ports, rate limits, Redis config, Braid policies) match actual source code.
-- [ ] No existing files were modified (documentation-only addition).
-- [ ] Content contains no generic boilerplate — every rule traces to a real system invariant.
-# PLAN
-
-## Root Cause
-
-No single-page system overview exists. Onboarding developers and AI assistants must piece together architecture from 40+ docs, CLAUDE.md, and orchestra files. A concise `SYSTEM_OVERVIEW.md` reduces ramp-up time and acts as an index into deeper documentation.
-
-## Impacted Services
-
-- **None modified.** This is a new read-only documentation file (`docs/SYSTEM_OVERVIEW.md`).
-- No backend, frontend, database, or infrastructure changes.
-
-## Contracts Affected
-
-- **None.** No API routes, database schemas, middleware, RLS policies, or Braid tool definitions are altered.
-- CLAUDE.md documentation table should be updated to reference the new file (separate follow-up).
-
-## Ordered Steps
-
-1. **Create `docs/SYSTEM_OVERVIEW.md`** with these sections:
-   - **System Identity**: AiSHA CRM v3.0.x, multi-tenant AI-native Executive Assistant CRM.
-   - **Runtime Topology**: Docker services (frontend :4000, backend :4001, redis-memory :6379, redis-cache :6380, postgres optional), network `aishanet`.
-   - **Request Flow**: Client → frontend (React/Vite) → backend (Express) → middleware stack (authenticate → validateTenant → routerGuard → performanceLogger → intrusionDetection) → route handler → Supabase (RLS-enforced) → response.
-   - **AI Pipeline**: Chat request → intentRouter → intentClassifier → aiEngine (multi-provider failover: OpenAI/Anthropic/Groq/Local) → Braid tool execution (braidIntegration-v2.js) → Supabase query → response. Two modes: in-process (primary) and distributed MCP.
-   - **Multi-Tenancy Model**: UUID `tenant_id` on every table, RLS policies, `validateTenant` middleware, `req.tenant.id` convention. Never use `tenant_id_text`.
-   - **Data Layer**: Supabase PostgreSQL 15+, 50+ tables, dual Redis (memory for ephemeral/session, cache for persistent/aggregations), cacheManager.js.
-   - **Background Workers**: campaignWorker, aiTriggersWorker, cronExecutors, email worker, health monitor — all initialized in `server.js`.
-   - **Key Entry Points Table**: Map `backend/server.js`, `backend/startup/`, `backend/middleware/`, `backend/routes/`, `backend/lib/aiEngine/`, `backend/lib/braid/`, `src/main.jsx`, `braid-llm-kit/examples/assistant/`.
-   - **Documentation Index**: Link to each doc in `docs/` with one-line descriptions.
-2. **Keep under 200 lines.** Prefer tables and bullet lists over prose.
-3. **No code changes.** File is purely informational markdown.
-
-## Tests
-
-- **No automated tests required.** This is a documentation-only change.
-- **Manual verification:** Confirm all referenced file paths exist (`backend/server.js`, `backend/lib/braidIntegration-v2.js`, middleware files, etc.).
-- **Link check:** Verify all relative markdown links resolve correctly from `docs/`.
-
-## Observability Checks
-
-- **N/A.** No runtime behavior changes. No metrics, logs, or health endpoints affected.
-- Confirm `docs/SYSTEM_OVERVIEW.md` renders correctly in GitHub markdown preview.
-
-## Risks
-
-- **Low.** Documentation-only addition with zero runtime impact.
-- **Staleness risk:** File may drift from actual architecture over time. Mitigate by keeping it concise and linking to canonical sources rather than duplicating details.
-- **No merge conflicts expected** unless another branch adds the same file concurrently.
-
-## Definition of Done
-
-- [ ] `docs/SYSTEM_OVERVIEW.md` exists and is under 200 lines.
-- [ ] All referenced file paths are valid (spot-checked).
-- [ ] All section headings from Ordered Steps are present.
-- [ ] No existing files were modified.
-- [ ] Content is consistent with CLAUDE.md and `orchestra/ARCHITECTURE.md`.
+Tests
+No automated tests required. Documentation-only change.
+Manual verification: Confirm all referenced file paths exist:
+ai.js
+activityLogger.js
+modelRouter.js
+keyResolver.js
+llmClient.js
+anthropicAdapter.js
+tenantContext.js
+execution.js
+metrics.js
+policies.js
+utils.js
+chains.js
+requestContext.js
+tokenBudget.js
+memoryClient.js
+cacheManager.js
+errors.js
+logger.js
+validateTenant.js
+intrusionDetection.js
+productionSafetyGuard.js
+performanceLogger.js
+Content cross-check: Verify key values (rate limits, timeouts, buffer sizes, Redis key patterns) against actual source code.
+Observability Checks
+N/A. No runtime behavior changes. No metrics, logs, or health endpoints affected.
+Risks
+Low. Documentation-only addition with zero runtime impact.
+Staleness risk: File may drift from actual telemetry fields or rate limits. Mitigated by citing source files rather than hardcoding values.
+Missing correlation_id: The plan documents that no first-class correlation_id exists today — this is accurate and intentional (future enhancement).
+No SYSTEM_OVERVIEW.md or GUARDRAILS.md yet: These files are referenced as future cross-references. The contract stands independently.
+Definition of Done
+ docs/AI_RUNTIME_CONTRACT.md exists and is under 180 lines.
+ All 10 section headings are present.
+ All referenced file paths are valid (spot-checked above — all 22 confirmed).
+ Key values (rate limits, timeouts, buffer sizes, TTLs, Redis key patterns) match actual source code.
+ No existing files were modified (documentation-only addition).
+ Every rule traces to a real system component — no invented architecture.
