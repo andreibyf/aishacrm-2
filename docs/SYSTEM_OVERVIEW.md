@@ -152,7 +152,7 @@ BizDev Source → promote → Lead → qualify → Lead (qualified) → convert 
 | [WORKFLOW_FEATURES_IMPLEMENTATION.md](WORKFLOW_FEATURES_IMPLEMENTATION.md) | Workflow implementation details |
 | [Intel-iGPU-Local-AI-Development-Guide.md](Intel-iGPU-Local-AI-Development-Guide.md) | Local AI setup with Intel GPU |
 
-**Subdirectories:** `docs/archive/` (legacy), `docs/audits/`, `docs/backend/`, `docs/product/`, `docs/reports/`, `docs/workflows/`.
+**Subdirectories:** `docs/archive/` (legacy), `docs/audits/`, `docs/backend/`, `docs/product/`, `docs/reports/`.
 
 ## Orchestra Control Layer
 
