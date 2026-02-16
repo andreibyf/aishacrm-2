@@ -9,7 +9,7 @@
 ## AI Task Lifecycle
 
 - **REQUESTED**: User message arrives at `POST /api/ai/chat` (see `backend/routes/ai.js` line 2678). Input validated, tenant resolved via `getTenantIdFromRequest()` + `resolveTenantRecord()` (see `backend/lib/aiEngine/tenantContext.js`). Security checked via `validateUserTenantAccess()`.
-- **ROUTED**: Provider selected via `selectLLMConfigForTenant({ capability })` (see `backend/lib/aiEngine/modelRouter.js`). API key resolved via 5-layer cascade in `resolveLLMApiKey()` (see `backend/lib/aiEngine/keyResolver.js`). Intent classified via `classifyIntent()` (see `backend/lib/intentClassifier.js`). Tool subset focused via `applyToolHardCap()` (max 12 tools, see `backend/lib/entityLabelInjector.js`).
+- **ROUTED**: Provider selected via `selectLLMConfigForTenant({ capability })` (see `backend/lib/aiEngine/modelRouter.js`). API key resolved via 5-layer cascade in `resolveLLMApiKey()` (see `backend/lib/aiEngine/keyResolver.js`). Intent classified via `classifyIntent()`, `getIntentConfidence()`, and `extractEntityMentions()` (all in `backend/lib/intentClassifier.js`). Tool subset focused via `applyToolHardCap()` (max 12 tools, see `backend/lib/entityLabelInjector.js`).
 - **EXECUTING**: LLM called via `generateChatCompletion()` (see `backend/lib/aiEngine/llmClient.js`). Iteration loop runs up to `maxIterations` (default 5, configurable via `ai_settings.max_iterations`). Each iteration logged via `logLLMActivity()` (see `backend/lib/aiEngine/activityLogger.js`).
 - **TOOL_CALL**: Entered per tool call within an iteration. Tool executed via `executeBraidTool()` (see `backend/lib/braid/execution.js`). Passes through: access token validation → registry lookup → input validation → RBAC → rate limiting → cache check → JWT generation → execution → cache store → metrics → audit log.
 - **COMPLETED**: Final assistant content produced. Response persisted to `conversation_messages`. Activity logged with `status: "success"`.
@@ -26,7 +26,7 @@
 
 ## Required Telemetry Fields
 
-- **intent**: Produced by `classifyIntent()` (see `backend/lib/intentClassifier.js`). Shape: `{ intent, entity, confidence }`.
+- **intent**: Produced by `classifyIntent()`, `getIntentConfidence()`, and `extractEntityMentions()` (all in `backend/lib/intentClassifier.js`). Combined shape: `{ intent, entity, confidence }`.
 - **provider**: Selected by `selectLLMConfigForTenant()` (see `backend/lib/aiEngine/modelRouter.js`). Values: `openai`, `anthropic`, `groq`, `local`.
 - **model**: Selected alongside provider. Logged in activity logger and chat response.
 - **latency_ms**: `durationMs` in activity logger entry (see `backend/lib/aiEngine/activityLogger.js`). Also `executionTimeMs` in Braid audit log (see `backend/lib/braid/metrics.js`).
@@ -47,7 +47,7 @@
 - **provider_error**: LLM API call fails. Detected in `generateChatCompletion()` (see `backend/lib/aiEngine/llmClient.js`). Activity logger records `status: "error"`. Includes HTTP errors, rate limits, invalid responses from provider.
 - **tool_error**: Braid tool execution fails. Detected in `executeBraidTool()` (see `backend/lib/braid/execution.js`). Sub-types: `UnknownTool`, `ExecutionError`, `NetworkError`. Audit log records `resultTag: "Err"` with `errorType` and `errorMessage`.
 - **validation_error**: Invalid input to AI chat endpoint or Braid tool. Chat: missing `messages` array → 400. Braid: `validateToolArgs()` returns errors → `{ tag: "Err", error: { type: "ValidationError" } }` (see `backend/lib/braid/utils.js`).
-- **timeout**: Braid execution exceeds 30s timeout (see `withTimeout()` in `backend/lib/braid/utils.js`). Or LLM call exceeds provider SDK timeout.
+- **timeout**: Default 30s timeout applied in `backend/lib/braid/execution.js` and `braid-llm-kit/tools/braid-rt.js`. `withTimeout()` (see `backend/lib/braid/utils.js`) is a generic wrapper. Or LLM call exceeds provider SDK timeout.
 - **tenant_scope_violation**: Cross-tenant access attempt detected by `validateUserTenantAccess()` (see `backend/lib/aiEngine/tenantContext.js`) → 403. Also detected by IDR (see `backend/middleware/intrusionDetection.js`) — `MAX_TENANT_VIOLATIONS_PER_HOUR: 5` → IP blocked for 5 min.
 - **auth_error**: Missing/invalid access token for Braid execution → `AuthorizationError`. Or JWT validation failure in auth middleware.
 - **rate_limit_exceeded**: Braid policy rate limits per tenant/user/tool-class, 60s window → `RateLimitExceeded` with `retryAfter: 60` (see `backend/lib/braid/policies.js`). Also global rate limiter: 120 req/min per IP (see `backend/startup/initMiddleware.js`).
