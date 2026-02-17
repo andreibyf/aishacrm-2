@@ -2677,7 +2677,11 @@ ${toolContextSummary}`,
   // POST /api/ai/chat - AI chat completion
   router.post('/chat', async (req, res) => {
     logger.debug('=== CHAT REQUEST START === LLM_PROVIDER=' + process.env.LLM_PROVIDER);
+    // Hoist variables needed by error-path logLLMActivity in catch block
+    let chatStartTime, chatRequestId, tenantRecord, effectiveProvider, finalModel, finalUsage, classifiedIntent, conversationId;
     try {
+      chatStartTime = Date.now();
+      chatRequestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
       logger.debug('[DEBUG /api/ai/chat] req.body:', JSON.stringify(req.body, null, 2));
 
       const {
@@ -2685,9 +2689,10 @@ ${toolContextSummary}`,
         model = DEFAULT_CHAT_MODEL,
         temperature = 0.7,
         sessionEntities = null,
-        conversation_id: conversationId,
+        conversation_id: _conversationId,
         timezone = 'America/New_York',
       } = req.body || {};
+      conversationId = _conversationId;
 
       // Extract user identity for created_by fields
       const userFirstName = req.headers['x-user-first-name'] || req.user?.first_name || '';
@@ -2732,7 +2737,7 @@ ${toolContextSummary}`,
       }
 
       const tenantIdentifier = getTenantId(req);
-      const tenantRecord = await resolveTenantRecord(tenantIdentifier);
+      tenantRecord = await resolveTenantRecord(tenantIdentifier);
 
       logger.debug('[AI Chat] Tenant resolution:', {
         fromHeader: req.headers['x-tenant-id'],
@@ -3016,7 +3021,7 @@ ${toolContextSummary}`,
       });
 
       // Create provider-aware client (now supports anthropic via adapter)
-      const effectiveProvider = tenantModelConfig.provider;
+      effectiveProvider = tenantModelConfig.provider;
       const effectiveApiKey = apiKey;
 
       const client = createProviderClient(
@@ -3235,8 +3240,8 @@ ${conversationSummary}`;
 
       const toolInteractions = [];
       let finalContent = '';
-      let finalUsage = null;
-      let finalModel = tenantModelConfig.model; // Use tenant-aware model
+      finalUsage = null;
+      finalModel = tenantModelConfig.model; // Use tenant-aware model
       let loopMessages = [...convoMessages];
       let memoryText = ''; // Track memory for budget manager
 
@@ -3305,7 +3310,7 @@ ${conversationSummary}`;
 
       // INTENT ROUTING: Classify user's intent for deterministic tool routing
       const lastUserMessage = messages.filter((m) => m.role === 'user').slice(-1)[0]?.content || '';
-      const classifiedIntent = classifyIntent(lastUserMessage);
+      classifiedIntent = classifyIntent(lastUserMessage);
       const intentConfidence = classifiedIntent
         ? getIntentConfidence(lastUserMessage, classifiedIntent)
         : 0;
@@ -3936,6 +3941,23 @@ ${conversationSummary}`;
         }
       }
 
+      // ── Execution-record log (success path) ──
+      logLLMActivity({
+        tenantId: tenantRecord?.id,
+        capability: 'chat_tools',
+        provider: effectiveProvider,
+        model: finalModel,
+        nodeId: 'ai:chat:execution_record',
+        status: 'success',
+        durationMs: Date.now() - chatStartTime,
+        usage: finalUsage || null,
+        intent: classifiedIntent || null,
+        toolsCalled: safeToolInteractions.map(t => t.tool).filter(Boolean),
+        attempt: 0,
+        taskId: conversationId || null,
+        requestId: chatRequestId,
+      });
+
       return res.json({
         status: 'success',
         response: finalContent,
@@ -3963,6 +3985,23 @@ ${conversationSummary}`;
         },
       });
     } catch (error) {
+      // ── Execution-record log (error path) ──
+      logLLMActivity({
+        tenantId: tenantRecord?.id,
+        capability: 'chat_tools',
+        provider: effectiveProvider,
+        model: finalModel,
+        nodeId: 'ai:chat:execution_record',
+        status: 'error',
+        durationMs: chatStartTime ? Date.now() - chatStartTime : undefined,
+        usage: finalUsage || null,
+        intent: classifiedIntent || null,
+        toolsCalled: null,
+        attempt: 0,
+        taskId: conversationId || null,
+        requestId: chatRequestId || null,
+        error: error?.message || String(error),
+      });
       logger.error('[ai.chat] Error:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
