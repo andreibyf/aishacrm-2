@@ -47,6 +47,9 @@ export const CareAuditEventType = {
   
   /** Action skipped due to policy/conditions */
   ACTION_SKIPPED: 'action_skipped',
+  
+  /** Outcome classification for a trigger evaluation cycle */
+  ACTION_OUTCOME: 'action_outcome',
 };
 
 /**
