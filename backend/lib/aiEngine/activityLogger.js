@@ -34,6 +34,8 @@ export function getNodeId() {
  * @param {number} [entry.totalAttempts] - Total attempts in failover chain
  * @param {Array<string>} [entry.toolsCalled] - Array of tool names called during this request
  * @param {string} [entry.intent] - Classified intent code from intentClassifier (e.g., LEAD_CREATE, AI_SUGGEST_NEXT_ACTIONS)
+ * @param {string} [entry.taskId] - Unique task identifier assigned at REQUESTED stage
+ * @param {string} [entry.requestId] - Request-scoped correlation id ("req_<ts>_<rand9>")
  */
 export function logLLMActivity(entry) {
   const containerId = getNodeId();
@@ -55,6 +57,8 @@ export function logLLMActivity(entry) {
     totalAttempts: entry.totalAttempts || null,
     toolsCalled: entry.toolsCalled || null,
     intent: entry.intent || null,
+    taskId: entry.taskId || null,
+    requestId: entry.requestId || null,
   };
 
   activityLog.unshift(logEntry); // Add to front (newest first)
@@ -84,6 +88,8 @@ export function logLLMActivity(entry) {
     totalAttempts: logEntry.totalAttempts,
     usage: logEntry.usage,
     toolsCalled: logEntry.toolsCalled,
+    taskId: logEntry.taskId,
+    requestId: logEntry.requestId,
     error: logEntry.error,
   }));
 }

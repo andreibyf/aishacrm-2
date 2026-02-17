@@ -2679,6 +2679,7 @@ ${toolContextSummary}`,
     logger.debug('=== CHAT REQUEST START === LLM_PROVIDER=' + process.env.LLM_PROVIDER);
     try {
       const chatStartTime = Date.now();
+      const chatRequestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
       logger.debug('[DEBUG /api/ai/chat] req.body:', JSON.stringify(req.body, null, 2));
 
       const {
@@ -3950,6 +3951,8 @@ ${conversationSummary}`;
         intent: classifiedIntent || null,
         toolsCalled: safeToolInteractions?.map(t => t.tool).filter(Boolean) || null,
         attempt: 0,
+        taskId: conversationId || null,
+        requestId: chatRequestId,
       });
 
       return res.json({
@@ -3992,6 +3995,8 @@ ${conversationSummary}`;
         intent: typeof classifiedIntent !== 'undefined' ? classifiedIntent : null,
         toolsCalled: null,
         attempt: 0,
+        taskId: typeof conversationId !== 'undefined' ? conversationId : null,
+        requestId: typeof chatRequestId !== 'undefined' ? chatRequestId : null,
         error: error?.message || String(error),
       });
       logger.error('[ai.chat] Error:', error);
