@@ -3979,17 +3979,17 @@ ${conversationSummary}`;
         },
       });
     } catch (error) {
-      // ── Execution-record log (error path) ──
+      // Execution-record log (error path)
       logLLMActivity({
-        tenantId: typeof tenantRecord !== 'undefined' ? tenantRecord?.id : undefined,
+        tenantId: tenantRecord?.id,
         capability: 'chat_tools',
-        provider: typeof effectiveProvider !== 'undefined' ? effectiveProvider : undefined,
-        model: typeof finalModel !== 'undefined' ? finalModel : undefined,
+        provider: effectiveProvider,
+        model: finalModel,
         nodeId: 'ai:chat:execution_record',
         status: 'error',
-        durationMs: typeof chatStartTime !== 'undefined' ? Date.now() - chatStartTime : undefined,
-        usage: typeof finalUsage !== 'undefined' ? finalUsage : null,
-        intent: typeof classifiedIntent !== 'undefined' ? classifiedIntent : null,
+        durationMs: chatStartTime ? Date.now() - chatStartTime : undefined,
+        usage: finalUsage ?? null,
+        intent: classifiedIntent ?? null,
         toolsCalled: null,
         attempt: 0,
         error: error?.message || String(error),
