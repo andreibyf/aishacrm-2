@@ -172,19 +172,19 @@ async function fetchStatusCardConfig(pool, tenantId) {
 async function fetchModuleSettings(pool, tenantId) {
   try {
     const result = await pool.query(
-      `SELECT module_key, enabled, display_name, sort_order
+      `SELECT module_name, is_enabled, created_at
        FROM modulesettings
        WHERE tenant_id = $1
-       ORDER BY sort_order`,
+       ORDER BY module_name`,
       [tenantId]
     );
     
     const modules = {};
     for (const row of result.rows) {
-      modules[row.module_key] = {
-        enabled: row.enabled,
-        displayName: row.display_name,
-        sortOrder: row.sort_order
+      modules[row.module_name] = {
+        enabled: row.is_enabled,
+        displayName: row.module_name,
+        sortOrder: 0
       };
     }
     

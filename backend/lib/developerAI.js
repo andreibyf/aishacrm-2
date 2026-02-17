@@ -1440,14 +1440,38 @@ async function testAisha(args) {
 
     // Make internal API call using node-fetch or built-in fetch
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
+
+    // Generate an internal service JWT so the auth middleware populates req.user
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-tenant-id': testTenantId,
+      'x-user-role': 'superadmin',
+      'x-user-email': 'developer-ai@system.local',
+    };
+
+    // Prefer service role key (always works); fall back to signed internal JWT
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (serviceRoleKey) {
+      headers['Authorization'] = `Bearer ${serviceRoleKey}`;
+    } else {
+      try {
+        const jwtMod = await import('jsonwebtoken');
+        const jwtSign = jwtMod.default?.sign || jwtMod.sign;
+        const secret = process.env.JWT_SECRET || 'change-me-access';
+        const internalToken = jwtSign(
+          { sub: 'developer-ai', email: 'developer-ai@system.local', tenant_id: testTenantId, internal: true },
+          secret,
+          { algorithm: 'HS256', expiresIn: '5m' }
+        );
+        headers['Authorization'] = `Bearer ${internalToken}`;
+      } catch (jwtErr) {
+        console.warn('[Developer AI] Could not sign internal JWT:', jwtErr?.message);
+      }
+    }
+
     const response = await fetch(`${backendUrl}/api/ai/chat`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-tenant-id': testTenantId,
-        'x-user-role': 'superadmin', // Superadmin to bypass restrictions
-        'x-user-email': 'developer-ai@system.local',
-      },
+      headers,
       body: JSON.stringify({
         messages: [{ role: 'user', content: message }], // Fixed: send as messages array
         conversation_id: conversationIdToUse,
