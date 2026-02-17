@@ -27,6 +27,7 @@ import { proposeTransition } from './care/careStateEngine.js';
 import { emitCareAudit } from './care/careAuditEmitter.js';
 import { signalsFromTrigger, buildTriggerEscalationText } from './care/careTriggerSignalAdapter.js';
 import { CareAuditEventType, CarePolicyGateResult } from './care/careAuditTypes.js';
+import { OUTCOME_TYPES } from './care/careTypes.js';
 // PR7: State persistence and policy gate
 import { getCareState, upsertCareState, appendCareHistory } from './care/careStateStore.js';
 import { isCareAutonomyEnabled } from './care/isCareAutonomyEnabled.js';
@@ -1451,6 +1452,7 @@ async function detectHotOpportunities(tenantUuid) {
  */
 async function createSuggestionIfNew(tenantUuid, triggerData) {
   const { triggerId, recordType, recordId, context, priority = 'normal' } = triggerData;
+  let outcomeType = OUTCOME_TYPES.error; // default: catch-all
 
   try {
     // Check if there's already a pending OR recently rejected suggestion for this trigger+record
@@ -1474,7 +1476,8 @@ async function createSuggestionIfNew(tenantUuid, triggerData) {
     
     if (existing && existing.length > 0) {
       const existingStatus = existing[0].status;
-      logger.debug({ triggerId, recordId, existingStatus }, '[AiTriggersWorker] Skipping - existing suggestion');
+      outcomeType = OUTCOME_TYPES.duplicate_suppressed;
+      logger.debug({ triggerId, recordId, existingStatus, outcomeType }, '[AiTriggersWorker] Skipping - existing suggestion');
       return null;
     }
 
@@ -1482,7 +1485,8 @@ async function createSuggestionIfNew(tenantUuid, triggerData) {
     const suggestion = await generateAiSuggestion(tenantUuid, triggerId, recordType, recordId, context);
     
     if (!suggestion) {
-      logger.debug({ triggerId, recordId }, '[AiTriggersWorker] No suggestion generated');
+      outcomeType = OUTCOME_TYPES.generation_failed;
+      logger.debug({ triggerId, recordId, outcomeType }, '[AiTriggersWorker] No suggestion generated');
       return null;
     }
 
@@ -1504,7 +1508,8 @@ async function createSuggestionIfNew(tenantUuid, triggerData) {
         reasoning: suggestion.reasoning || '',
         priority,
         expires_at: expiresAt.toISOString(),
-        status: 'pending'
+        status: 'pending',
+        outcome_type: OUTCOME_TYPES.suggestion_created
       })
       .select('id')
       .single();
@@ -1512,15 +1517,18 @@ async function createSuggestionIfNew(tenantUuid, triggerData) {
     if (error) {
       // Check if it's a duplicate (constraint violation)
       if (error.code === '23505') {
-        logger.debug({ triggerId, recordId }, '[AiTriggersWorker] Suggestion already exists');
+        outcomeType = OUTCOME_TYPES.constraint_violation;
+        logger.debug({ triggerId, recordId, outcomeType }, '[AiTriggersWorker] Suggestion already exists');
         return null;
       }
-      logger.error({ err: error, triggerId, recordId }, '[AiTriggersWorker] Error inserting suggestion');
+      outcomeType = OUTCOME_TYPES.error;
+      logger.error({ err: error, triggerId, recordId, outcomeType }, '[AiTriggersWorker] Error inserting suggestion');
       return null;
     }
 
     if (data) {
-      logger.info({ suggestionId: data.id, triggerId, recordId }, '[AiTriggersWorker] Created suggestion');
+      outcomeType = OUTCOME_TYPES.suggestion_created;
+      logger.info({ suggestionId: data.id, triggerId, recordId, outcomeType }, '[AiTriggersWorker] Created suggestion');
       
       // Emit webhook for new suggestion
       await emitTenantWebhooks(tenantUuid, 'ai.suggestion.generated', {
@@ -1536,7 +1544,8 @@ async function createSuggestionIfNew(tenantUuid, triggerData) {
 
     return null;
   } catch (err) {
-    logger.error({ err, triggerId, recordId }, '[AiTriggersWorker] Error creating suggestion');
+    outcomeType = OUTCOME_TYPES.error;
+    logger.error({ err, triggerId, recordId, outcomeType }, '[AiTriggersWorker] Error creating suggestion');
     return null;
   }
 }
