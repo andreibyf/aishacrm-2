@@ -10,3 +10,10 @@ get_devcontainer() {
     --format '{{.Names}}' \
     | head -n1
 }
+
+get_backend_container() {
+  docker ps \
+    --filter "label=com.docker.compose.service=backend" \
+    --format '{{.Names}}' \
+    | head -n1
+}

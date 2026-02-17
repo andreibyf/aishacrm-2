@@ -39,7 +39,7 @@ fi
 echo "🧠 Backend changes detected"
 
 # Ensure backend container is running
-if ! docker compose ps backend | grep -q "running"; then
+if ! docker compose ps --status running --services | grep -q '^backend$'; then
   echo "❌ Backend container is not running"
   exit 1
 fi
