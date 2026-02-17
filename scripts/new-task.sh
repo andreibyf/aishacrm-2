@@ -1,16 +1,24 @@
 #!/usr/bin/env bash
-NAME=$(echo "$1" | tr ' ' '-' )
-FILE="tasks/$NAME.md"
+set -e
+source "$(git rev-parse --show-toplevel)/scripts/_task-lib.sh"
+
+mkdir -p "$TASK_DIR"
+
+RAW_NAME="$1"
+SLUG=$(echo "$RAW_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[: ]/-/g')
+FILE="$TASK_DIR/$SLUG.md"
 
 cat > "$FILE" <<EOT
 # Task
-$1
+$RAW_NAME
 
-## Source
+## Status
+PLANNED
 
-## Symptoms
-
-## Priority
+## Branch
+$SLUG
 EOT
 
-echo "Created $FILE"
+git checkout -b "$SLUG"
+
+echo "✅ Created $FILE"
