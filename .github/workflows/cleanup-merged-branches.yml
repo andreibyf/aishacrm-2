@@ -1,0 +1,75 @@
+name: Cleanup Merged Branches
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  delete-branch:
+    name: Delete merged branch
+    runs-on: ubuntu-latest
+    if: |
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !contains(fromJson('["main", "master", "develop"]'), github.event.pull_request.head.ref)
+    steps:
+      - name: Delete merged branch
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const branchName = pr.head.ref;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            
+            core.info(`PR #${pr.number} "${pr.title}" was merged`);
+            core.info(`Source branch: ${branchName}`);
+            core.info(`Target branch: ${pr.base.ref}`);
+            
+            // Double-check we're not deleting protected branches
+            const protectedBranches = ['main', 'master', 'develop'];
+            if (protectedBranches.includes(branchName)) {
+              core.warning(`⚠️ Branch "${branchName}" is protected and will not be deleted`);
+              return;
+            }
+            
+            try {
+              // Delete the branch
+              await github.rest.git.deleteRef({
+                owner: owner,
+                repo: repo,
+                ref: `heads/${branchName}`
+              });
+              
+              core.info(`✅ Successfully deleted branch: ${branchName}`);
+              
+              // Add a comment to the PR confirming deletion
+              await github.rest.issues.createComment({
+                owner: owner,
+                repo: repo,
+                issue_number: pr.number,
+                body: `🧹 Branch \`${branchName}\` has been automatically deleted after merge.`
+              });
+              
+              // Add summary
+              core.summary
+                .addHeading('🧹 Branch Cleanup Complete')
+                .addRaw(`Successfully deleted branch: **${branchName}**`, true)
+                .addRaw(`PR: #${pr.number} - ${pr.title}`, true)
+                .write();
+              
+            } catch (error) {
+              // Branch might already be deleted or user doesn't have permissions
+              if (error.status === 404) {
+                core.warning(`Branch "${branchName}" not found - may have been already deleted`);
+              } else if (error.status === 422) {
+                core.warning(`Cannot delete branch "${branchName}" - it may be the repository default branch`);
+              } else {
+                core.setFailed(`Failed to delete branch "${branchName}": ${error.message}`);
+                throw error;
+              }
+            }
