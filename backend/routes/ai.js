@@ -2678,6 +2678,7 @@ ${toolContextSummary}`,
   router.post('/chat', async (req, res) => {
     logger.debug('=== CHAT REQUEST START === LLM_PROVIDER=' + process.env.LLM_PROVIDER);
     try {
+      const chatStartTime = Date.now();
       logger.debug('[DEBUG /api/ai/chat] req.body:', JSON.stringify(req.body, null, 2));
 
       const {
@@ -3936,6 +3937,21 @@ ${conversationSummary}`;
         }
       }
 
+      // ── Execution-record log (success path) ──
+      logLLMActivity({
+        tenantId: tenantRecord?.id,
+        capability: 'chat_tools',
+        provider: effectiveProvider,
+        model: finalModel,
+        nodeId: 'ai:chat:execution_record',
+        status: 'success',
+        durationMs: Date.now() - chatStartTime,
+        usage: finalUsage || null,
+        intent: classifiedIntent || null,
+        toolsCalled: safeToolInteractions?.map(t => t.tool).filter(Boolean) || null,
+        attempt: 0,
+      });
+
       return res.json({
         status: 'success',
         response: finalContent,
@@ -3963,6 +3979,21 @@ ${conversationSummary}`;
         },
       });
     } catch (error) {
+      // ── Execution-record log (error path) ──
+      logLLMActivity({
+        tenantId: typeof tenantRecord !== 'undefined' ? tenantRecord?.id : undefined,
+        capability: 'chat_tools',
+        provider: typeof effectiveProvider !== 'undefined' ? effectiveProvider : undefined,
+        model: typeof finalModel !== 'undefined' ? finalModel : undefined,
+        nodeId: 'ai:chat:execution_record',
+        status: 'error',
+        durationMs: typeof chatStartTime !== 'undefined' ? Date.now() - chatStartTime : undefined,
+        usage: typeof finalUsage !== 'undefined' ? finalUsage : null,
+        intent: typeof classifiedIntent !== 'undefined' ? classifiedIntent : null,
+        toolsCalled: null,
+        attempt: 0,
+        error: error?.message || String(error),
+      });
       logger.error('[ai.chat] Error:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
