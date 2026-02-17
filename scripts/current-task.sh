@@ -42,12 +42,13 @@ else
 fi
 
 echo
-echo "🧪 Vitest status (affected tests, devcontainer)"
+echo "🧪 Backend contract status (authoritative)"
 
-if "$REPO_ROOT/scripts/runtime/test.sh" >/dev/null 2>&1; then
-  echo "✔ Tests passing"
+if "$REPO_ROOT/scripts/runtime/test.sh"; then
+  echo "✔ Backend runtime healthy"
 else
-  echo "❌ Tests failing"
+  echo "❌ Backend runtime failing"
+
 fi
 
 echo
@@ -58,8 +59,8 @@ case "$STATUS" in
     echo "→ Run: ./scripts/start-task.sh"
     ;;
   EXECUTING)
-    echo "→ Implement with Copilot"
-    echo "→ git push"
+    echo "→ Implement next plan step"
+    echo "→ Commit atomic change"
     ;;
   FAILED)
     echo "→ Run: ./scripts/retry-task.sh"
