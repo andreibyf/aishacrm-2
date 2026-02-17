@@ -1,3 +1,18 @@
+# Automatic Branch Cleanup Workflow
+#
+# Purpose: Automatically deletes feature branches after their pull requests are merged
+# Trigger: When a PR is closed and merged to any branch
+# Safety:  - Only deletes if PR was actually merged (not just closed)
+#          - Never deletes protected branches (main, master, develop)
+#          - Only deletes branches from same repo (not forks)
+#          - Handles errors gracefully (404, 422)
+# Output:  - Adds comment to PR confirming deletion
+#          - Logs all actions to workflow summary
+#
+# This complements the manual cleanup scripts:
+#   - scripts/maintenance/cleanup-branches.sh
+#   - scripts/maintenance/cleanup-branches.ps1
+
 name: Cleanup Merged Branches
 
 on:
@@ -5,8 +20,8 @@ on:
     types: [closed]
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: write       # Required to delete branches
+  pull-requests: write  # Required to add PR comments
 
 jobs:
   delete-branch:
