@@ -39,7 +39,7 @@ echo ""
 echo "▶ [3/4] Running frontend tests (Vitest)..."
 # Vitest may exit non-zero due to thread pool timeouts (known bug on Windows/high-thread systems)
 # even when all tests pass. Use JSON output to detect real test failures.
-VITEST_JSON=$(mktemp)
+VITEST_JSON=$(mktemp -t vitest.XXXXXX 2>/dev/null || mktemp 2>/dev/null || echo "/tmp/vitest-$$.json")
 trap 'rm -f "$VITEST_JSON"' EXIT
 set +e
 npx vitest run --reporter=verbose --reporter=json --outputFile="$VITEST_JSON" 2>&1

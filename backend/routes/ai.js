@@ -3310,7 +3310,7 @@ ${conversationSummary}`;
 
       // INTENT ROUTING: Classify user's intent for deterministic tool routing
       const lastUserMessage = messages.filter((m) => m.role === 'user').slice(-1)[0]?.content || '';
-      const classifiedIntent = classifyIntent(lastUserMessage);
+      classifiedIntent = classifyIntent(lastUserMessage);
       const intentConfidence = classifiedIntent
         ? getIntentConfidence(lastUserMessage, classifiedIntent)
         : 0;

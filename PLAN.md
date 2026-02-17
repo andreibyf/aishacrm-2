@@ -6,11 +6,14 @@ No single normalized AI execution record exists. The current `logLLMActivity` ca
 
 ## Impacted Services
 
-**One file modified:**
+**Files modified:**
 
-- **`backend/routes/ai.js`** — the `POST /api/ai/chat` handler (line 2678). A single `logLLMActivity()` call inserted **after** `safeToolInteractions` construction (line 3759) and **before** `return res.json(...)` (line 3939). Error-path equivalent in the `catch` block (line ~3965).
+- **`backend/routes/ai.js`** — the `POST /api/ai/chat` handler (lines 2680-4008). Single `logLLMActivity()` call inserted for success path (line ~3945) and error path (line ~3989).
+- **`backend/lib/aiEngine/activityLogger.js`** — updated schema to add `taskId` and `requestId` fields to the `logLLMActivity` function signature.
+- **`.husky/pre-push`** — added JSON reporter to Vitest to detect real test failures vs thread pool timeout false negatives.
+- **`PLAN.md`** — this file, documenting the execution plan.
 
-**No other files modified.** `logLLMActivity` in `backend/lib/aiEngine/activityLogger.js` already accepts arbitrary fields — no signature change needed.
+`logLLMActivity` in `backend/lib/aiEngine/activityLogger.js` already accepts arbitrary fields — field additions are backward-compatible.
 
 ## Contracts Affected
 
@@ -25,15 +28,15 @@ No single normalized AI execution record exists. The current `logLLMActivity` ca
    Insert `const chatStartTime = Date.now();` immediately after the `try {` on line 2680 of the `POST /api/ai/chat` handler. Captures full request latency (intent classification + context loading + all iterations + message persistence).
 
 2. **Construct the structured telemetry payload.**
-   After line 3759 (`const safeToolInteractions = ...`) and before line 3939 (`return res.json(...)`), build the contract-conforming object using variables already in scope:
+   After constructing `safeToolInteractions` and before `return res.json(...)`, build the contract-conforming object using variables already in scope:
 
    | Contract field | Source variable | Notes |
    |---|---|---|
    | `task_id` | `conversationId \|\| null` | Per contract §Task Identity: "conversation_id is the session-level correlation key" |
    | `request_id` | Generated inline: `"req_" + chatStartTime + "_" + Math.random().toString(36).slice(2,11)` | Matches `generateRequestId()` format without importing Braid utils |
-   | `tenant_id` | `tenantRecord?.id` | UUID, already validated non-null at line 2751 |
-   | `intent` | `classifiedIntent \|\| null` | From `classifyIntent()` at line 3308 |
-   | `provider` | `effectiveProvider` | From line 3019 |
+   | `tenant_id` | `tenantRecord?.id` | UUID, already validated non-null in tenant resolution section |
+   | `intent` | `classifiedIntent \|\| null` | From `classifyIntent()` in intent routing section |
+   | `provider` | `effectiveProvider` | Assigned in provider-aware client creation section |
    | `model` | `finalModel` | Tracks actual model used (may differ from requested) |
    | `latency_ms` | `Date.now() - chatStartTime` | Full request duration (via `durationMs` param) |
    | `token_usage` | `finalUsage \|\| null` | `{ prompt_tokens, completion_tokens, total_tokens }` — already normalized (via `usage` param) |
@@ -45,7 +48,7 @@ No single normalized AI execution record exists. The current `logLLMActivity` ca
    Call with constructed payload. Use `nodeId: "ai:chat:execution_record"` and `capability: "chat_tools"`. Structured JSON output appears in same console sink as existing activity logs, tagged `[AIEngine][LLM_CALL_SUCCESS]`.
 
 4. **Add error-path emission.**
-   In the `catch` block at line ~3965, emit equivalent record with `status: "error"` and `error: error.message`. Token usage and tool calls may be partial or null — guard with `|| null` and `|| []`.
+   In the `catch` block, emit equivalent record with `status: "error"` and `error: error.message`. Token usage and tool calls may be partial or null — guard with `|| null` and `|| []`.
 
 5. **Ensure no duplication.**
    - New call uses `nodeId: "ai:chat:execution_record"` — distinct from per-iteration `nodeId: "ai:chat:iter${i}"`.
