@@ -2678,6 +2678,7 @@ ${toolContextSummary}`,
   router.post('/chat', async (req, res) => {
     logger.debug('=== CHAT REQUEST START === LLM_PROVIDER=' + process.env.LLM_PROVIDER);
     try {
+      const chatStartTime = Date.now();
       logger.debug('[DEBUG /api/ai/chat] req.body:', JSON.stringify(req.body, null, 2));
 
       const {
@@ -3936,6 +3937,23 @@ ${conversationSummary}`;
         }
       }
 
+      // ── Structured AI execution record (one per request) ──────────────
+      logLLMActivity({
+        tenantId: tenantRecord?.id,
+        capability: 'chat_tools',
+        provider: effectiveProvider,
+        model: finalModel,
+        nodeId: 'ai:chat:execution_record',
+        status: 'success',
+        durationMs: Date.now() - chatStartTime,
+        usage: finalUsage || null,
+        intent: classifiedIntent || null,
+        toolsCalled: safeToolInteractions.length > 0
+          ? safeToolInteractions.map(t => t.tool).filter(Boolean)
+          : null,
+        attempt: 0,
+      });
+
       return res.json({
         status: 'success',
         response: finalContent,
@@ -3963,6 +3981,25 @@ ${conversationSummary}`;
         },
       });
     } catch (error) {
+      // ── Structured AI execution record (error path) ──────────────────
+      logLLMActivity({
+        tenantId: tenantRecord?.id || req.tenant?.id || 'unknown',
+        capability: 'chat_tools',
+        provider: typeof effectiveProvider !== 'undefined' ? effectiveProvider : 'unknown',
+        model: typeof finalModel !== 'undefined' ? finalModel : 'unknown',
+        nodeId: 'ai:chat:execution_record',
+        status: 'error',
+        durationMs: typeof chatStartTime !== 'undefined' ? Date.now() - chatStartTime : null,
+        usage: typeof finalUsage !== 'undefined' ? finalUsage || null : null,
+        error: error.message || String(error),
+        intent: typeof classifiedIntent !== 'undefined' ? classifiedIntent || null : null,
+        toolsCalled: typeof safeToolInteractions !== 'undefined' && Array.isArray(safeToolInteractions) && safeToolInteractions.length > 0
+          ? safeToolInteractions.map(t => t.tool).filter(Boolean)
+          : typeof toolInteractions !== 'undefined' && Array.isArray(toolInteractions) && toolInteractions.length > 0
+            ? toolInteractions.map(t => t.tool).filter(Boolean)
+            : null,
+        attempt: 0,
+      });
       logger.error('[ai.chat] Error:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
