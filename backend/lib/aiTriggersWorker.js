@@ -1501,6 +1501,15 @@ export async function createSuggestionIfNew(tenantUuid, triggerData, _deps = {})
       return null;
     }
 
+    // Confidence gate — suppress low-confidence suggestions before INSERT
+    const MIN_CONFIDENCE = 0.7;
+    const confidence = suggestion.confidence ?? 0;
+    if (confidence < MIN_CONFIDENCE) {
+      outcomeType = OUTCOME_TYPES.low_confidence;
+      _log.debug({ triggerId, recordId, confidence, MIN_CONFIDENCE, outcomeType }, '[AiTriggersWorker] Suggestion below confidence threshold');
+      return null;
+    }
+
     // Calculate expiry date
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + SUGGESTION_EXPIRY_DAYS);
