@@ -1539,9 +1539,11 @@ async function createSuggestionIfNew(tenantUuid, triggerData) {
         priority,
       }).catch(err => logger.error({ err }, '[AiTriggersWorker] Webhook emission failed'));
 
+      outcomeType = OUTCOME_TYPES.suggestion_created;
       return data.id;
     }
 
+    outcomeType = OUTCOME_TYPES.error;
     return null;
   } catch (err) {
     outcomeType = OUTCOME_TYPES.error;
