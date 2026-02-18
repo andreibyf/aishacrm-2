@@ -50,8 +50,10 @@ fi
 
 if [ -f "$PLAN_FILE" ]; then
 
-  IFS="|" read DONE TOTAL NEXT_NUM NEXT_TITLE < \
-    <("$REPO_ROOT/scripts/runtime/care-progress.sh" "$PLAN_FILE")
+  CARE_OUTPUT="$("$REPO_ROOT/scripts/runtime/care-progress.sh" "$PLAN_FILE" 2>/dev/null || true)"
+
+  IFS='|' read -r DONE TOTAL NEXT_NUM NEXT_TITLE <<< "$CARE_OUTPUT"
+
 
   echo
   echo "📋 CARE Progress"
