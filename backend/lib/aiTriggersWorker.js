@@ -1453,6 +1453,7 @@ async function detectHotOpportunities(tenantUuid) {
 async function createSuggestionIfNew(tenantUuid, triggerData) {
   const { triggerId, recordType, recordId, context, priority = 'normal' } = triggerData;
   let outcomeType = OUTCOME_TYPES.error; // default: catch-all
+  let suggestionId = null;
 
   try {
     // Check if there's already a pending OR recently rejected suggestion for this trigger+record
@@ -1527,6 +1528,7 @@ async function createSuggestionIfNew(tenantUuid, triggerData) {
     }
 
     if (data) {
+      suggestionId = data.id;
       outcomeType = OUTCOME_TYPES.suggestion_created;
       logger.info({ suggestionId: data.id, triggerId, recordId, outcomeType }, '[AiTriggersWorker] Created suggestion');
       
@@ -1549,6 +1551,28 @@ async function createSuggestionIfNew(tenantUuid, triggerData) {
     outcomeType = OUTCOME_TYPES.error;
     logger.error({ err, triggerId, recordId, outcomeType }, '[AiTriggersWorker] Error creating suggestion');
     return null;
+  } finally {
+    // Emit ACTION_OUTCOME audit for every trigger evaluation (fire-and-forget)
+    try {
+      emitCareAudit({
+        tenant_id: tenantUuid,
+        entity_type: 'ai_suggestion',
+        entity_id: suggestionId || recordId,
+        event_type: CareAuditEventType.ACTION_OUTCOME,
+        action_origin: 'care_autonomous',
+        reason: `Trigger evaluation outcome: ${outcomeType}`,
+        policy_gate_result: CarePolicyGateResult.ALLOWED,
+        meta: {
+          trigger_id: triggerId,
+          record_type: recordType,
+          record_id: recordId,
+          outcome_type: outcomeType,
+          suggestion_id: suggestionId,
+        },
+      });
+    } catch (auditErr) {
+      logger.error({ err: auditErr, triggerId, recordId, outcomeType }, '[AiTriggersWorker] ACTION_OUTCOME audit emission failed');
+    }
   }
 }
 
