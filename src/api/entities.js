@@ -456,7 +456,22 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
 
     // Report different error types to health monitor
     if (response.status === 404) {
-      apiHealthMonitor.reportMissingEndpoint(url, errorContext);
+      // Distinguish "resource not found" (valid endpoint, missing record) from
+      // "endpoint not found" (route doesn't exist). Backend resource-not-found
+      // responses return structured JSON with status/message fields, while
+      // Express route misses return plain text like "Cannot DELETE /api/...".
+      let isResourceNotFound = false;
+      try {
+        const parsed = JSON.parse(errorText);
+        if (parsed && (parsed.status === 'error' || parsed.message)) {
+          isResourceNotFound = true;
+        }
+      } catch {
+        // Not JSON — likely a genuine missing endpoint (Express default 404)
+      }
+      if (!isResourceNotFound) {
+        apiHealthMonitor.reportMissingEndpoint(url, errorContext);
+      }
     } else if (response.status === 401 || response.status === 403) {
       apiHealthMonitor.reportAuthError(url, response.status, errorContext);
      } else if (response.status === 400) {

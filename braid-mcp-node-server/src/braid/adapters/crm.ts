@@ -292,9 +292,9 @@ async function callBackend(
       if ((verb === "POST" || verb === "PUT" || verb === "DELETE") && !action.options?.dryRun) {
         const supa = getSupabaseClient();
 
-        // Extract table name from path (/api/{table}/...)
+        // Extract table name from path (/api/{table}/... or /api/v2/{table}/...)
         let tableName: string | null = null;
-        const m = path.match(/^\/api\/([^/?]+)/);
+        const m = path.match(/^\/api\/(?:v\d+\/)?([^/?]+)/);
         if (m && m[1]) tableName = m[1];
 
         const recordId = action.targetId ?? ((data && (data as any).id) || null);

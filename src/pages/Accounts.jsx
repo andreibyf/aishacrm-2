@@ -47,6 +47,7 @@ import { toast } from "sonner";
 import TagFilter from "../components/shared/TagFilter";
 import { useEmployeeScope } from "../components/shared/EmployeeScopeContext";
 import { useLoadingToast } from "@/hooks/useLoadingToast";
+import { useProgress } from "@/components/shared/ProgressOverlay";
 import RefreshButton from "../components/shared/RefreshButton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -67,6 +68,7 @@ export default function AccountsPage() {
   const { plural: accountsLabel, singular: accountLabel } = useEntityLabel('accounts');
   const { getCardLabel, isCardVisible } = useStatusCardPreferences();
   const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
+  const { startProgress, updateProgress, completeProgress } = useProgress();
   const [accounts, setAccounts] = useState([]);
   const [, setContacts] = useState([]);
   const [users, setUsers] = useState([]);
@@ -681,6 +683,7 @@ export default function AccountsPage() {
       ) return;
 
       try {
+        startProgress({ message: 'Fetching accounts to delete...' });
         // Re-fetch all matching accounts (bypass cache to get fresh data)
         const currentTenantFilter = { ...getTenantFilter(), limit: 10000 };
         const sortString = sortDirection === "desc" ? `-${sortField}` : sortField;
@@ -708,6 +711,8 @@ export default function AccountsPage() {
 
         const deleteCount = filtered.length;
 
+        updateProgress({ message: `Deleting ${deleteCount} accounts...`, total: deleteCount, current: 0 });
+
         // Delete in batches using allSettled to handle partial failures
         const BATCH_SIZE = 50;
         let successCount = 0;
@@ -719,8 +724,10 @@ export default function AccountsPage() {
             if (r.status === 'fulfilled') successCount++;
             else failCount++;
           });
+          updateProgress({ current: successCount + failCount, message: `Deleted ${successCount} of ${deleteCount} accounts...` });
         }
 
+        completeProgress();
         setSelectedAccounts(new Set());
         setSelectAllMode(false);
         clearCacheByKey("Account");
@@ -731,6 +738,7 @@ export default function AccountsPage() {
         if (successCount > 0) toast.success(`${successCount} account(s) deleted`);
         if (failCount > 0) toast.error(`${failCount} account(s) failed to delete`);
       } catch (error) {
+        completeProgress();
         console.error("Failed to delete accounts:", error);
         toast.error("Failed to delete accounts");
       }
@@ -753,21 +761,33 @@ export default function AccountsPage() {
           return;
         }
         
-        const results = await Promise.allSettled(
-          accountIds.map((id) => Account.delete(id)),
-        );
+        const selectedCount = accountIds.length;
+        startProgress({ message: `Deleting ${selectedCount} accounts...`, total: selectedCount, current: 0 });
         
-        const succeeded = results.filter(r => r.status === 'fulfilled').length;
-        const failed = results.filter(r => {
-          if (r.status === 'rejected') {
-            const is404 = r.reason?.response?.status === 404;
-            if (is404) return false; // Don't count 404s as failures
-            console.error('[Accounts] Delete failed:', r.reason);
-            return true;
-          }
-          return false;
-        }).length;
+        const BATCH_SIZE = 50;
+        let succeeded = 0;
+        let failed = 0;
         
+        for (let i = 0; i < accountIds.length; i += BATCH_SIZE) {
+          const batch = accountIds.slice(i, i + BATCH_SIZE);
+          const batchResults = await Promise.allSettled(
+            batch.map((id) => Account.delete(id)),
+          );
+          batchResults.forEach((r) => {
+            if (r.status === 'fulfilled') succeeded++;
+            else {
+              const is404 = r.reason?.response?.status === 404;
+              if (is404) succeeded++; // Count 404s as already deleted
+              else {
+                console.error('[Accounts] Delete failed:', r.reason);
+                failed++;
+              }
+            }
+          });
+          updateProgress({ current: succeeded + failed, message: `Deleted ${succeeded} of ${selectedCount} accounts...` });
+        }
+        
+        completeProgress();
         console.log('[Accounts] Bulk delete results:', { succeeded, failed });
         
         // Clear selection BEFORE reloading to prevent race condition
@@ -786,6 +806,7 @@ export default function AccountsPage() {
           toast.success(`${succeeded} account(s) deleted`);
         }
       } catch (error) {
+        completeProgress();
         console.error("Failed to delete accounts:", error);
         toast.error("Failed to delete accounts");
         setSelectedAccounts(new Set());

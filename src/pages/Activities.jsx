@@ -550,11 +550,19 @@ export default function ActivitiesPage() {
 
         const BATCH_SIZE = 50;
         let deletedCount = 0;
+        let failCount = 0;
         for (let i = 0; i < allActivities.length; i += BATCH_SIZE) {
           const batch = allActivities.slice(i, i + BATCH_SIZE);
-          await Promise.all(batch.map(a => Activity.delete(a.id)));
-          deletedCount += batch.length;
-          updateProgress({ current: deletedCount, message: `Deleted ${deletedCount} of ${deleteCount} activities...` });
+          const results = await Promise.allSettled(batch.map(a => Activity.delete(a.id)));
+          results.forEach((r) => {
+            if (r.status === 'fulfilled') deletedCount++;
+            else {
+              const is404 = r.reason?.message?.includes('404');
+              if (!is404) failCount++;
+              else deletedCount++;
+            }
+          });
+          updateProgress({ current: deletedCount + failCount, message: `Deleted ${deletedCount} of ${deleteCount} activities...` });
         }
 
         completeProgress();
@@ -574,7 +582,8 @@ export default function ActivitiesPage() {
           loadActivities(1, pageSize);
         }, 500);
         
-        toast.success(`${deleteCount} activity/activities deleted`);
+        if (deletedCount > 0) toast.success(`${deletedCount} activity/activities deleted`);
+        if (failCount > 0) toast.error(`${failCount} failed to delete`);
       } catch (error) {
         completeProgress();
         console.error("Failed to delete activities:", error);
@@ -595,12 +604,20 @@ export default function ActivitiesPage() {
         const selectedArray = [...selectedActivities];
         const BATCH_SIZE = 50;
         let deletedCount = 0;
+        let failCount = 0;
         
         for (let i = 0; i < selectedArray.length; i += BATCH_SIZE) {
           const batch = selectedArray.slice(i, i + BATCH_SIZE);
-          await Promise.all(batch.map(id => Activity.delete(id)));
-          deletedCount += batch.length;
-          updateProgress({ current: deletedCount, message: `Deleted ${deletedCount} of ${selectedCount} activities...` });
+          const results = await Promise.allSettled(batch.map(id => Activity.delete(id)));
+          results.forEach((r) => {
+            if (r.status === 'fulfilled') deletedCount++;
+            else {
+              const is404 = r.reason?.message?.includes('404');
+              if (!is404) failCount++;
+              else deletedCount++;
+            }
+          });
+          updateProgress({ current: deletedCount + failCount, message: `Deleted ${deletedCount} of ${selectedCount} activities...` });
         }
         
         completeProgress();
@@ -619,7 +636,8 @@ export default function ActivitiesPage() {
           loadActivities(currentPage, pageSize);
         }, 500);
         
-        toast.success(`${selectedActivities.size} activity/activities deleted`);
+        if (deletedCount > 0) toast.success(`${deletedCount} activity/activities deleted`);
+        if (failCount > 0) toast.error(`${failCount} failed to delete`);
       } catch (error) {
         completeProgress();
         console.error("Failed to delete activities:", error);
