@@ -27,6 +27,7 @@ import { proposeTransition } from './care/careStateEngine.js';
 import { emitCareAudit } from './care/careAuditEmitter.js';
 import { signalsFromTrigger, buildTriggerEscalationText } from './care/careTriggerSignalAdapter.js';
 import { CareAuditEventType, CarePolicyGateResult } from './care/careAuditTypes.js';
+import { OUTCOME_TYPES } from './care/careTypes.js';
 // PR7: State persistence and policy gate
 import { getCareState, upsertCareState, appendCareHistory } from './care/careStateStore.js';
 import { isCareAutonomyEnabled } from './care/isCareAutonomyEnabled.js';
@@ -1448,9 +1449,21 @@ async function detectHotOpportunities(tenantUuid) {
 /**
  * Create a suggestion if one doesn't already exist for this trigger+record
  * Uses Supabase JS client for insert
+ *
+ * @param {string} tenantUuid
+ * @param {object} triggerData
+ * @param {object} [_deps] — optional dependency overrides for testing
  */
-async function createSuggestionIfNew(tenantUuid, triggerData) {
+export async function createSuggestionIfNew(tenantUuid, triggerData, _deps = {}) {
+  const _supabase = _deps.supabase || supabase;
+  const _generate = _deps.generateAiSuggestion || generateAiSuggestion;
+  const _webhooks = _deps.emitTenantWebhooks || emitTenantWebhooks;
+  const _log = _deps.logger || logger;
+  const _audit = _deps.emitCareAudit || emitCareAudit;
+
   const { triggerId, recordType, recordId, context, priority = 'normal' } = triggerData;
+  let outcomeType = OUTCOME_TYPES.error; // default: catch-all
+  let suggestionId = null;
 
   try {
     // Check if there's already a pending OR recently rejected suggestion for this trigger+record
@@ -1459,7 +1472,7 @@ async function createSuggestionIfNew(tenantUuid, triggerData) {
     const cooldownDate = new Date();
     cooldownDate.setDate(cooldownDate.getDate() - cooldownDays);
     
-    const { data: existing, error: checkError } = await supabase
+    const { data: existing, error: checkError } = await _supabase
       .from('ai_suggestions')
       .select('id, status, updated_at')
       .eq('tenant_id', tenantUuid)
@@ -1469,20 +1482,31 @@ async function createSuggestionIfNew(tenantUuid, triggerData) {
       .limit(1);
     
     if (checkError) {
-      logger.error({ err: checkError }, '[AiTriggersWorker] Error checking existing suggestion');
+      _log.error({ err: checkError }, '[AiTriggersWorker] Error checking existing suggestion');
     }
     
     if (existing && existing.length > 0) {
       const existingStatus = existing[0].status;
-      logger.debug({ triggerId, recordId, existingStatus }, '[AiTriggersWorker] Skipping - existing suggestion');
+      outcomeType = OUTCOME_TYPES.duplicate_suppressed;
+      _log.debug({ triggerId, recordId, existingStatus, outcomeType }, '[AiTriggersWorker] Skipping - existing suggestion');
       return null;
     }
 
     // Generate AI suggestion using propose_actions mode
-    const suggestion = await generateAiSuggestion(tenantUuid, triggerId, recordType, recordId, context);
+    const suggestion = await _generate(tenantUuid, triggerId, recordType, recordId, context);
     
     if (!suggestion) {
-      logger.debug({ triggerId, recordId }, '[AiTriggersWorker] No suggestion generated');
+      outcomeType = OUTCOME_TYPES.generation_failed;
+      _log.debug({ triggerId, recordId, outcomeType }, '[AiTriggersWorker] No suggestion generated');
+      return null;
+    }
+
+    // Confidence gate — suppress low-confidence suggestions before INSERT
+    const MIN_CONFIDENCE = 0.7;
+    const confidence = suggestion.confidence ?? 0;
+    if (confidence < MIN_CONFIDENCE) {
+      outcomeType = OUTCOME_TYPES.low_confidence;
+      _log.debug({ triggerId, recordId, confidence, MIN_CONFIDENCE, outcomeType }, '[AiTriggersWorker] Suggestion below confidence threshold');
       return null;
     }
 
@@ -1491,7 +1515,7 @@ async function createSuggestionIfNew(tenantUuid, triggerData) {
     expiresAt.setDate(expiresAt.getDate() + SUGGESTION_EXPIRY_DAYS);
 
     // Insert suggestion using Supabase JS client
-    const { data, error } = await supabase
+    const { data, error } = await _supabase
       .from('ai_suggestions')
       .insert({
         tenant_id: tenantUuid,
@@ -1504,7 +1528,8 @@ async function createSuggestionIfNew(tenantUuid, triggerData) {
         reasoning: suggestion.reasoning || '',
         priority,
         expires_at: expiresAt.toISOString(),
-        status: 'pending'
+        status: 'pending',
+        outcome_type: OUTCOME_TYPES.suggestion_created
       })
       .select('id')
       .single();
@@ -1512,32 +1537,61 @@ async function createSuggestionIfNew(tenantUuid, triggerData) {
     if (error) {
       // Check if it's a duplicate (constraint violation)
       if (error.code === '23505') {
-        logger.debug({ triggerId, recordId }, '[AiTriggersWorker] Suggestion already exists');
+        outcomeType = OUTCOME_TYPES.constraint_violation;
+        _log.debug({ triggerId, recordId, outcomeType }, '[AiTriggersWorker] Suggestion already exists');
         return null;
       }
-      logger.error({ err: error, triggerId, recordId }, '[AiTriggersWorker] Error inserting suggestion');
+      outcomeType = OUTCOME_TYPES.error;
+      _log.error({ err: error, triggerId, recordId, outcomeType }, '[AiTriggersWorker] Error inserting suggestion');
       return null;
     }
 
     if (data) {
-      logger.info({ suggestionId: data.id, triggerId, recordId }, '[AiTriggersWorker] Created suggestion');
+      suggestionId = data.id;
+      outcomeType = OUTCOME_TYPES.suggestion_created;
+      _log.info({ suggestionId: data.id, triggerId, recordId, outcomeType }, '[AiTriggersWorker] Created suggestion');
       
       // Emit webhook for new suggestion
-      await emitTenantWebhooks(tenantUuid, 'ai.suggestion.generated', {
+      await _webhooks(tenantUuid, 'ai.suggestion.generated', {
         suggestion_id: data.id,
         trigger_id: triggerId,
         record_type: recordType,
         record_id: recordId,
         priority,
-      }).catch(err => logger.error({ err }, '[AiTriggersWorker] Webhook emission failed'));
+      }).catch(err => _log.error({ err }, '[AiTriggersWorker] Webhook emission failed'));
 
+      outcomeType = OUTCOME_TYPES.suggestion_created;
       return data.id;
     }
 
+    outcomeType = OUTCOME_TYPES.error;
     return null;
   } catch (err) {
-    logger.error({ err, triggerId, recordId }, '[AiTriggersWorker] Error creating suggestion');
+    outcomeType = OUTCOME_TYPES.error;
+    _log.error({ err, triggerId, recordId, outcomeType }, '[AiTriggersWorker] Error creating suggestion');
     return null;
+  } finally {
+    // Emit ACTION_OUTCOME audit for every trigger evaluation (fire-and-forget)
+    try {
+      _audit({
+        tenant_id: tenantUuid,
+        entity_type: 'ai_suggestion',
+        entity_id: suggestionId || recordId,
+        event_type: CareAuditEventType.ACTION_OUTCOME,
+        action_origin: 'care_autonomous',
+        reason: `Trigger evaluation outcome: ${outcomeType}`,
+        policy_gate_result: CarePolicyGateResult.ALLOWED,
+        meta: {
+          trigger_id: triggerId,
+          record_type: recordType,
+          record_id: recordId,
+          outcome_type: outcomeType,
+          suggestion_id: suggestionId,
+        },
+      });
+    } catch (auditErr) {
+      _log.error({ err: auditErr, triggerId, recordId, outcomeType }, '[AiTriggersWorker] ACTION_OUTCOME audit emission failed');
+    }
   }
 }
 

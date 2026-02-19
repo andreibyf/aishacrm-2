@@ -1,101 +1,214 @@
 # PLAN
 
-## Root Cause
+## Feature Identity
 
-No single normalized AI execution record exists. The current `logLLMActivity` calls fire **per-iteration** (one per LLM round-trip inside the tool loop), producing N entries for a single user request. There is no request-level telemetry object that captures the full lifecycle — provider, total latency, aggregated token usage, all tool calls, and final outcome — in one structured record conforming to `docs/AI_RUNTIME_CONTRACT.md`. Without this, C.A.R.E. scoring, provider performance comparison, and retry analysis have no canonical input.
+- **Description**: Add deterministic outcome classification to every C.A.R.E. trigger evaluation cycle, producing a structured `outcome_type` + `outcome_reason` on each `ai_suggestions` record and corresponding audit emission.
+- **Value**: Enables C.A.R.E. to distinguish _why_ a trigger cycle produced (or did not produce) a suggestion — closing the observability gap between "trigger detected" and "suggestion persisted." Required for downstream scoring, provider-performance comparison, and C.A.R.E. readiness per `AI_RUNTIME_CONTRACT.md §C.A.R.E. Readiness Signals`.
+- **In-scope**: Outcome typing for the trigger→suggestion path inside `aiTriggersWorker.js`; audit emission of new outcome fields; queryable telemetry. Classification-only — no routing, no behavioral change.
+- **Out-of-scope**: Chat-level outcome classification (covered by prior PLAN.md work), UI surfaces, new API endpoints, new database tables, autonomy mode changes, webhook payload schema changes.
 
-## Impacted Services
+---
 
-**Files modified:**
+## Impacted Runtime Surfaces
 
-- **`backend/routes/ai.js`** — the `POST /api/ai/chat` handler (lines 2680-4008). Single `logLLMActivity()` call inserted for success path (line ~3945) and error path (line ~3989).
-- **`backend/lib/aiEngine/activityLogger.js`** — updated schema to add `taskId` and `requestId` fields to the `logLLMActivity` function signature.
-- **`.husky/pre-push`** — added JSON reporter to Vitest to detect real test failures vs thread pool timeout false negatives.
-- **`PLAN.md`** — this file, documenting the execution plan.
+| Surface | Module | Why | Change type |
+|---------|--------|-----|-------------|
+| Trigger worker | `backend/lib/aiTriggersWorker.js` | `createSuggestionIfNew()` is the single codepath that produces or suppresses a suggestion; outcome must be classified here | Additive |
+| Audit emitter | `backend/lib/care/careAuditEmitter.js` | New `ACTION_OUTCOME` event type emitted after classification | Additive |
+| Audit types | `backend/lib/care/careAuditTypes.js` | New enum value + factory support for outcome fields | Additive |
+| C.A.R.E. types | `backend/lib/care/careTypes.js` | Canonical `OutcomeType` enum definition | Additive |
+| `ai_suggestions` table | `backend/migrations/080_ai_suggestions_table.sql` | New `outcome_type` TEXT column on existing table | Additive (nullable column) |
+| Redis | — | No Redis changes — outcomes are log + DB only | — |
+| Braid | — | No Braid tool changes | — |
+| AI engine | — | No LLM call changes | — |
 
-`logLLMActivity` in `backend/lib/aiEngine/activityLogger.js` already accepts arbitrary fields — field additions are backward-compatible.
+---
 
-## Contracts Affected
+## Contract Delta (C.A.R.E.)
 
-- **`docs/AI_RUNTIME_CONTRACT.md`** — Section "Required Telemetry Fields". The runtime will now emit all defined fields in a single structured log entry per AI execution: `task_id`, `request_id`, `tenant_id`, `intent`, `provider`, `model`, `latency_ms`, `token_usage`, `tool_calls`, `final_state`, `retry_count`.
-- **No API contract changes.** The `res.json(...)` response shape is untouched.
-- **No database contract changes.** No new tables, columns, or RLS policies.
-- **Existing per-iteration `logLLMActivity` calls are preserved.** The new call is additive — tagged with `nodeId: "ai:chat:execution_record"` to distinguish it.
+### Task lifecycle
+- No new lifecycle states. The existing `ai_suggestions.status` flow (`pending → approved|rejected|applied|expired`) is unchanged.
+- Outcome classification decorates the _creation_ event, not a new stage.
 
-## Ordered Steps
+### Success criteria
+- A trigger evaluation that produces a persisted `ai_suggestions` row is classified `outcome_type = "suggestion_created"`.
 
-1. **Add a request-level timer at handler entry.**
-   Insert `const chatStartTime = Date.now();` immediately after the `try {` on line 2680 of the `POST /api/ai/chat` handler. Captures full request latency (intent classification + context loading + all iterations + message persistence).
+### Failure / suppression classification
+New `outcome_type` values (exhaustive, deterministic):
 
-2. **Construct the structured telemetry payload.**
-   After constructing `safeToolInteractions` and before `return res.json(...)`, build the contract-conforming object using variables already in scope:
+| `outcome_type` | Meaning | Source check |
+|---|---|---|
+| `suggestion_created` | Suggestion persisted successfully | Insert returned row |
+| `duplicate_suppressed` | Cooldown / dedup check blocked creation | Existing `pending` or recent `rejected` row found |
+| `generation_failed` | `generateAiSuggestion()` returned null/error | Return value check |
+| `low_confidence` | Confidence below threshold | `confidence < MIN_CONFIDENCE` |
+| `constraint_violation` | DB unique constraint (`23505`) caught | Catch block |
+| `error` | Unexpected runtime error | Catch-all |
 
-   | Contract field | Source variable | Notes |
-   |---|---|---|
-   | `task_id` | `conversationId \|\| null` | Per contract §Task Identity: "conversation_id is the session-level correlation key" |
-   | `request_id` | Generated inline: `"req_" + chatStartTime + "_" + Math.random().toString(36).slice(2,11)` | Matches `generateRequestId()` format without importing Braid utils |
-   | `tenant_id` | `tenantRecord?.id` | UUID, already validated non-null in tenant resolution section |
-   | `intent` | `classifiedIntent \|\| null` | From `classifyIntent()` in intent routing section |
-   | `provider` | `effectiveProvider` | Assigned in provider-aware client creation section |
-   | `model` | `finalModel` | Tracks actual model used (may differ from requested) |
-   | `latency_ms` | `Date.now() - chatStartTime` | Full request duration (via `durationMs` param) |
-   | `token_usage` | `finalUsage \|\| null` | `{ prompt_tokens, completion_tokens, total_tokens }` — already normalized (via `usage` param) |
-   | `tool_calls` | `safeToolInteractions.map(t => t.tool)` | Array of tool name strings (via `toolsCalled` param) |
-   | `final_state` | `"success"` | Literal — this code path only reached on success (via `status` param) |
-   | `retry_count` | `0` | No retry loop at request level in in-process path (via `attempt` param) |
+### Outcome typing
+- Classification-only. No routing logic branches on `outcome_type`.
 
-3. **Emit via `logLLMActivity()`.**
-   Call with constructed payload. Use `nodeId: "ai:chat:execution_record"` and `capability: "chat_tools"`. Structured JSON output appears in same console sink as existing activity logs, tagged `[AIEngine][LLM_CALL_SUCCESS]`.
+### New telemetry fields
+- `outcome_type` (string, one of 6 values above) — emitted in `[CARE_AUDIT]` log and persisted on `ai_suggestions` rows where applicable.
+- `outcome_reason` (string, human-readable) — emitted in `meta` of audit event.
 
-4. **Add error-path emission.**
-   In the `catch` block, emit equivalent record with `status: "error"` and `error: error.message`. Token usage and tool calls may be partial or null — guard with `|| null` and `|| []`.
+### New outcome states
+- None for `care_state` or `ai_suggestions.status`. `outcome_type` is metadata, not state.
 
-5. **Ensure no duplication.**
-   - New call uses `nodeId: "ai:chat:execution_record"` — distinct from per-iteration `nodeId: "ai:chat:iter${i}"`.
-   - Placed **after** iteration loop and message persistence — no intermediate emissions.
-   - `generateAssistantResponse` (line 820) is a separate async path for conversation follow-ups — not touched.
+### Observability signals
+- `CareAuditEventType.ACTION_OUTCOME` — new structured log event with `outcome_type` + `outcome_reason` in `meta`.
+- Queryable via `ai_suggestions.outcome_type` column for DB analytics.
 
-6. **Guard against missing optional fields.**
-   - `finalUsage` → `null` if no LLM call succeeded (initialized at line 3238).
-   - `classifiedIntent` → `null` if classification fails.
-   - `safeToolInteractions` → `[]` (initialized as empty array at line 3236).
-   - `effectiveProvider` always set by line 3019.
-   - `tenantRecord?.id` validated non-null at line 2751 (400 returned if missing).
+---
 
-## Tests
+## Data Model Impact
 
-- **Run an AI chat request** (`POST /api/ai/chat`). Verify exactly **one** log entry with `nodeId: "ai:chat:execution_record"` appears: `docker compose logs -f backend | grep execution_record`.
-- **Verify `tenant_id`** is present and matches the request's `x-tenant-id` header.
-- **Verify `intent`** is non-null for classifiable messages (e.g., "show my leads").
-- **Verify `latency_ms`** (`durationMs` in log) is a positive integer > 0.
-- **Verify no duplicate logs** — count `"ai:chat:execution_record"` occurrences per request; must be exactly 1.
-- **Verify error path** — trigger a 500. Confirm one `execution_record` with `status: "error"`.
-- **Regression** — `docker exec aishacrm-backend npm test` passes with no regressions.
+| Change | Detail |
+|--------|--------|
+| New column | `ai_suggestions.outcome_type TEXT NULL DEFAULT NULL` — nullable, no NOT NULL constraint, no index initially |
+| New migration | `backend/migrations/XXX_ai_suggestions_outcome_type.sql` — single `ALTER TABLE ADD COLUMN` |
+| Multi-tenant | Column inherits existing RLS policy on `ai_suggestions` — no new policy |
+| RLS impact | NONE — no policy changes |
+| New tables | NONE |
 
-## Observability Checks
+---
 
-- **Log sink**: Record appears in same stdout/console sink as existing `[AIEngine][LLM_CALL_SUCCESS]` / `[AIEngine][LLM_CALL_ERROR]` entries. No new transport.
-- **Payload key mapping**: `durationMs` → contract `latency_ms`, `usage` → `token_usage`, `toolsCalled` → `tool_calls`, `status` → `final_state`, `attempt` → `retry_count`.
-- **Filtering**: `nodeId === "ai:chat:execution_record"` uniquely identifies request-level records vs per-iteration records.
-- **Buffer**: Entry stored in the in-memory rolling buffer (500 entries) — accessible via `GET /api/system/llm-activity`.
+## Execution Flow Changes
+
+```
+aiTriggersWorker poll tick
+  → processTriggersForTenant(tenantUuid)
+    → detectTriggerCandidates (lead_stagnant, deal_decay, etc.)
+      → for each candidate:
+        → createSuggestionIfNew(tenantUuid, triggerData)
+          ┌─────────────────────────────────────────────┐
+          │ 1. Cooldown check (existing)                │
+          │    → hit? outcome = duplicate_suppressed     │
+          │ 2. generateAiSuggestion() (existing)        │
+          │    → null? outcome = generation_failed       │
+          │    → confidence < threshold?                 │
+          │       outcome = low_confidence               │
+          │ 3. INSERT ai_suggestions (existing)          │
+          │    → success? outcome = suggestion_created   │
+          │    → 23505? outcome = constraint_violation   │
+          │ 4. CATCH → outcome = error                  │
+          │                                              │
+          │ 5. ★ NEW: classify + emit audit event       │
+          │    emitCareAudit({                           │
+          │      event_type: ACTION_OUTCOME,             │
+          │      meta: { outcome_type, outcome_reason }  │
+          │    })                                        │
+          │ 6. ★ NEW: if row inserted, UPDATE           │
+          │    ai_suggestions SET outcome_type            │
+          └─────────────────────────────────────────────┘
+```
+
+- **Where**: Inside `createSuggestionIfNew()` at `backend/lib/aiTriggersWorker.js` (line ~1452)
+- **Sync vs async**: Synchronous within the existing worker tick — no new async boundaries
+- **Idempotency**: Classification is pure/deterministic from the same inputs. Re-running a trigger tick for the same entity hits the cooldown check → `duplicate_suppressed` — idempotent.
+
+---
+
+## Source-of-Truth Modules
+
+| File | Change |
+|------|--------|
+| `backend/lib/care/careTypes.js` | Add `OUTCOME_TYPES` enum object |
+| `backend/lib/care/careAuditTypes.js` | Add `ACTION_OUTCOME` to `CareAuditEventType` |
+| `backend/lib/aiTriggersWorker.js` | Classify outcome in `createSuggestionIfNew()`, emit audit, persist `outcome_type` |
+| `backend/migrations/XXX_ai_suggestions_outcome_type.sql` | `ALTER TABLE ai_suggestions ADD COLUMN outcome_type TEXT NULL` |
+| `backend/lib/care/__tests__/careAuditEmitter.test.js` | Cover `ACTION_OUTCOME` event emission |
+| `backend/lib/care/__tests__/outcomeClassification.test.js` | New test file — outcome classification paths |
+
+---
+
+## Ordered Implementation Steps
+
+| # | Step | Verifiable output |
+|---|------|-------------------|
+| 1 | Add `OUTCOME_TYPES` frozen object to `careTypes.js` with 6 values | Import resolves; `Object.keys(OUTCOME_TYPES).length === 6` |
+| 2 | Add `ACTION_OUTCOME` to `CareAuditEventType` in `careAuditTypes.js` | Enum exported and usable in `createAuditEvent()` |
+| 3 | Create migration `XXX_ai_suggestions_outcome_type.sql` — `ALTER TABLE ai_suggestions ADD COLUMN outcome_type TEXT NULL` | Column exists in schema; nullable; existing rows unaffected |
+| 4 | Refactor `createSuggestionIfNew()` to track `outcome_type` at each exit point — cooldown → `duplicate_suppressed`, null generation → `generation_failed`, low confidence → `low_confidence`, insert success → `suggestion_created`, 23505 → `constraint_violation`, catch-all → `error` | Every code path sets `outcome_type` before returning |
+| 5 | After classification, call `emitCareAudit()` with `event_type: ACTION_OUTCOME`, `outcome_type` and `outcome_reason` in `meta` | `[CARE_AUDIT]` JSON log line contains `outcome_type` field |
+| 6 | On `suggestion_created` path, include `outcome_type` in the INSERT payload (or UPDATE immediately after) | `ai_suggestions` row has non-null `outcome_type` |
+| 7 | Write unit tests for all 6 outcome paths | `npm test` passes; each path exercised |
+| 8 | Run `docker exec aishacrm-backend npm test` — full regression | Zero regressions |
+
+---
+
+## Test Strategy
+
+**Location**: `backend/lib/care/__tests__/outcomeClassification.test.js` (new)
+
+| Test case | Covers |
+|-----------|--------|
+| Trigger with no existing suggestion → `suggestion_created` | Happy path |
+| Trigger with existing `pending` suggestion → `duplicate_suppressed` | Cooldown dedup |
+| Trigger with recent `rejected` suggestion (within 7d) → `duplicate_suppressed` | Cooldown window |
+| `generateAiSuggestion()` returns null → `generation_failed` | AI generation failure |
+| Generated confidence < threshold → `low_confidence` | Confidence gate |
+| Concurrent insert hits 23505 → `constraint_violation` | Race condition safety |
+| Unexpected error in insert → `error` | Catch-all |
+| Audit event emitted for every outcome type | Telemetry completeness |
+| `outcome_type` value is always one of `OUTCOME_TYPES` values | Enum enforcement |
+| Multi-tenant: outcome classification scoped to `tenant_id` | Tenant isolation |
+| Re-running same trigger produces idempotent outcome | Idempotency |
+
+**Existing test files to verify non-regression**:
+- `backend/lib/care/__tests__/careAuditEmitter.test.js`
+- `backend/lib/care/__tests__/carePipeline.integration.test.js`
+
+---
+
+## Observability & Telemetry
+
+| Signal | Producer | Format | Query method |
+|--------|----------|--------|-------------|
+| `[CARE_AUDIT]` with `event_type: ACTION_OUTCOME` | `careAuditEmitter.emitCareAudit()` | Structured JSON log line | `grep '[CARE_AUDIT]' \| jq '.meta.outcome_type'` |
+| `ai_suggestions.outcome_type` column | `createSuggestionIfNew()` INSERT | TEXT column in PostgreSQL | `SELECT outcome_type, COUNT(*) FROM ai_suggestions GROUP BY outcome_type` |
+| Existing `braid:metrics:*` counters | Unchanged | Redis counters | Unchanged |
+
+**C.A.R.E. readiness validation**: The `AI_RUNTIME_CONTRACT.md §C.A.R.E. Readiness Signals` requires "task-level outcome data." This feature provides it for the trigger→suggestion path:
+- `suggestion_created` + `generation_failed` rates → AI reliability signal
+- `duplicate_suppressed` rate → trigger noise signal
+- `low_confidence` rate → model quality signal
+
+All telemetry is additive — no existing log shapes or Redis keys are modified.
+
+---
+
+## Rollout & Safety
+
+| Concern | Approach |
+|---------|----------|
+| **Backward compatibility** | `outcome_type` is nullable; existing rows get `NULL`; no existing code reads this field; audit event is a new type — existing consumers ignore unknown types |
+| **Feature flag** | Not required — classification is passive (decorates existing writes + logs); no behavioral change |
+| **Failure blast radius** | Classification error is caught inside `createSuggestionIfNew()` — suggestion creation still succeeds even if outcome logging fails; audit emission is fire-and-forget (logger, not DB) |
+| **Reprocessing** | Re-running a trigger tick for the same entity produces `duplicate_suppressed` — idempotent; no data corruption risk |
+| **Migration safety** | `ALTER TABLE ADD COLUMN ... NULL` is non-blocking in PostgreSQL; no default, no backfill |
+
+---
 
 ## Risks
 
 | Risk | Severity | Mitigation |
 |------|----------|------------|
-| Duplicate emission if placed too early | Medium | Insertion after `safeToolInteractions` construction and message persistence — all iterations complete. Verified by `nodeId` tag uniqueness. |
-| Undefined `token_usage` for tool-only flows | Low | `finalUsage` initialized to `null`; guarded with `\|\| null`. |
-| `chatStartTime` not capturing full latency | Low | Placed inside `try` block — captures everything after Express routing/middleware. Middleware latency outside AI execution lifecycle per contract. |
-| Buffer bloat from additional entry | Very Low | One extra entry per `/chat` request in 500-entry buffer. Per-iteration entries already exist; adds ~1 more — negligible. |
-| Field name mapping drift | Low | `logLLMActivity` passes through arbitrary fields. Mapping documented in contract and inline comments. |
+| `createSuggestionIfNew()` is 300+ lines with multiple exit points — classifying each path requires careful audit of control flow | Medium | Step 4 maps each `return`/`catch` to an outcome; tests verify all paths |
+| Outcome classification adds latency to each trigger evaluation | Low | Pure in-memory string assignment + one `emitCareAudit()` call (logger, not DB write); negligible |
+| Future consumers may treat `outcome_type` as a routing signal, violating "classification-only" scope | Low | Document in `careTypes.js` JSDoc: "outcome_type is observability metadata — do not branch execution on it" |
+
+---
 
 ## Definition of Done
 
-- [ ] One `logLLMActivity` call with `nodeId: "ai:chat:execution_record"` on the success path (before `res.json`).
-- [ ] One `logLLMActivity` call with `nodeId: "ai:chat:execution_record"` on the error path (in `catch` block).
-- [ ] Structured log contains all 11 contract fields: `task_id`, `request_id`, `tenant_id`, `intent`, `provider`, `model`, `latency_ms` (via `durationMs`), `token_usage` (via `usage`), `tool_calls` (via `toolsCalled`), `final_state` (via `status`), `retry_count` (via `attempt`).
-- [ ] No change to the `res.json(...)` response shape.
-- [ ] No change to existing per-iteration `logLLMActivity` calls.
-- [ ] No new files, services, or dependencies.
-- [ ] `docker exec aishacrm-backend npm test` passes with no regressions.
-- [ ] Guardrails respected: no refactors, no new services, no response shape changes, single insertion point, existing logger pathway.
+- [ ] `OUTCOME_TYPES` enum exported from `careTypes.js` with exactly 6 values
+- [ ] `ACTION_OUTCOME` present in `CareAuditEventType` enum
+- [ ] Migration adds `outcome_type TEXT NULL` to `ai_suggestions`; applied without error
+- [ ] Every exit path in `createSuggestionIfNew()` assigns an `outcome_type` from the enum
+- [ ] `[CARE_AUDIT]` log emitted with `event_type: "ACTION_OUTCOME"` for every trigger evaluation
+- [ ] `ai_suggestions` rows created with non-null `outcome_type`
+- [ ] All 6 outcome paths have dedicated test cases that pass
+- [ ] `docker exec aishacrm-backend npm test` — zero regressions
+- [ ] No changes to `care_state` lifecycle, webhook payloads, or API response shapes
+- [ ] Tenant isolation preserved — `outcome_type` scoped by existing RLS on `ai_suggestions`

@@ -183,8 +183,35 @@ export const VALID_SIGNAL_ENTITY_TYPES = new Set([
  * @typedef {'allowed'|'escalated'|'blocked'} PolicyGateResult
  */
 
+/**
+ * Outcome classification for C.A.R.E. trigger evaluation cycles.
+ *
+ * Each trigger→suggestion evaluation produces exactly one outcome type,
+ * enabling observability into why a cycle produced (or suppressed) a suggestion.
+ *
+ * This is observability metadata — do not branch execution on outcome_type.
+ *
+ * @readonly
+ * @enum {string}
+ */
+export const OUTCOME_TYPES = Object.freeze({
+  /** Suggestion persisted successfully */
+  suggestion_created: 'suggestion_created',
+  /** Cooldown / dedup check blocked creation */
+  duplicate_suppressed: 'duplicate_suppressed',
+  /** generateAiSuggestion() returned null/error */
+  generation_failed: 'generation_failed',
+  /** Confidence below threshold */
+  low_confidence: 'low_confidence',
+  /** DB unique constraint (23505) caught */
+  constraint_violation: 'constraint_violation',
+  /** Unexpected runtime error */
+  error: 'error',
+});
+
 export default {
   VALID_CARE_STATES,
   VALID_ENTITY_TYPES,
   VALID_SIGNAL_ENTITY_TYPES,
+  OUTCOME_TYPES,
 };
