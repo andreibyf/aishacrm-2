@@ -16,6 +16,7 @@ export default function PasswordResetHandler({ children }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [bootstrapDone, setBootstrapDone] = useState(false);
 
   useEffect(() => {
     const sub = supabase.auth.onAuthStateChange((event) => {
@@ -46,32 +47,49 @@ export default function PasswordResetHandler({ children }) {
           if (error) {
             console.error('[PasswordResetHandler] setSession error:', error);
             setError('Invalid or expired reset link. Please request a new one.');
+            setBootstrapDone(true);
             return;
           }
           setIsRecoveryMode(true);
           // Clean hash to avoid re-processing
           window.history.replaceState({}, document.title, url.pathname + url.search);
+          setBootstrapDone(true);
           return;
         }
 
-        // Fallback: query-style code exchange
-        const hasQueryCode = url.searchParams.get('code');
-        if (hasQueryCode) {
+        // Fallback: query-style PKCE code exchange
+        const authCode = url.searchParams.get('code');
+        if (authCode) {
           console.log('[PasswordResetHandler] Query code detected. Exchanging...');
-          const { error } = await supabase.auth.exchangeCodeForSession(window.location.href);
+          const { error } = await supabase.auth.exchangeCodeForSession(authCode);
           if (error) {
             console.error('[PasswordResetHandler] exchange (query) error:', error);
             setError('Invalid or expired reset link. Please request a new one.');
+            setBootstrapDone(true);
             return;
           }
           setIsRecoveryMode(true);
           url.searchParams.delete('code');
           if (url.searchParams.has('type')) url.searchParams.delete('type');
-          window.history.replaceState({}, document.title, url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : ''));
+          window.history.replaceState(
+            {},
+            document.title,
+            url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : ''),
+          );
+          setBootstrapDone(true);
+          return;
         }
+
+        // No recovery tokens found in URL — link may be malformed or already consumed
+        console.warn('[PasswordResetHandler] No recovery tokens or code found in URL.');
+        setError(
+          'No recovery information found. The link may have expired or already been used. Please request a new password reset.',
+        );
       } catch (e) {
         console.error('[PasswordResetHandler] bootstrap error:', e);
         setError('Unexpected error handling reset link.');
+      } finally {
+        setBootstrapDone(true);
       }
     };
 
@@ -140,7 +158,10 @@ export default function PasswordResetHandler({ children }) {
                 )}
 
                 <div>
-                  <label htmlFor="newPassword" className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">
+                  <label
+                    htmlFor="newPassword"
+                    className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300"
+                  >
                     New Password
                   </label>
                   <Input
@@ -157,7 +178,10 @@ export default function PasswordResetHandler({ children }) {
                 </div>
 
                 <div>
-                  <label htmlFor="confirmPassword" className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">
+                  <label
+                    htmlFor="confirmPassword"
+                    className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300"
+                  >
                     Confirm Password
                   </label>
                   <Input
@@ -182,6 +206,34 @@ export default function PasswordResetHandler({ children }) {
                 </p>
               </form>
             )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Bootstrap finished but recovery mode was not activated — show error
+  if (bootstrapDone && error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900 px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-2xl">Password Reset</CardTitle>
+            <CardDescription>Unable to process your reset link</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col items-center gap-4 py-4">
+              <AlertCircle className="h-12 w-12 text-red-500" />
+              <p className="text-center text-sm text-red-700 dark:text-red-400">{error}</p>
+              <Button
+                className="mt-2 w-full"
+                onClick={() => {
+                  window.location.href = '/login';
+                }}
+              >
+                Back to Login
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
