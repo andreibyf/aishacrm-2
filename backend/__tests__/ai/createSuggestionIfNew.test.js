@@ -231,6 +231,112 @@ describe('createSuggestionIfNew', () => {
   });
 
   // --------------------------------------------------------------------------
+  // 2b. low_confidence
+  // --------------------------------------------------------------------------
+  describe('low_confidence', () => {
+    const LOW_CONFIDENCE_SUGGESTION = {
+      action: { tool_name: 'update_lead', tool_args: { status: 'contacted' } },
+      confidence: 0.2,
+      reasoning: 'test',
+    };
+
+    test('returns null when suggestion confidence is below MIN_CONFIDENCE', async () => {
+      const supabase = createMockSupabase({ selectData: [] });
+      const generate = mockGenerate(LOW_CONFIDENCE_SUGGESTION);
+
+      const result = await createSuggestionIfNew(TENANT_UUID, TRIGGER_DATA, {
+        supabase,
+        generateAiSuggestion: generate,
+        emitTenantWebhooks: webhooks,
+        logger: log,
+        emitCareAudit: audit,
+      });
+
+      assert.equal(result, null, 'should return null for low confidence');
+      assert.equal(generate.callCount(), 1, 'generateAiSuggestion called once');
+    });
+
+    test('does NOT insert into ai_suggestions', async () => {
+      const supabase = createMockSupabase({ selectData: [] });
+
+      await createSuggestionIfNew(TENANT_UUID, TRIGGER_DATA, {
+        supabase,
+        generateAiSuggestion: mockGenerate(LOW_CONFIDENCE_SUGGESTION),
+        emitTenantWebhooks: webhooks,
+        logger: log,
+        emitCareAudit: audit,
+      });
+
+      assert.equal(supabase._calls.insert.length, 0, 'should NOT insert on low confidence');
+    });
+
+    test('does NOT emit tenant webhook', async () => {
+      const supabase = createMockSupabase({ selectData: [] });
+
+      await createSuggestionIfNew(TENANT_UUID, TRIGGER_DATA, {
+        supabase,
+        generateAiSuggestion: mockGenerate(LOW_CONFIDENCE_SUGGESTION),
+        emitTenantWebhooks: webhooks,
+        logger: log,
+        emitCareAudit: audit,
+      });
+
+      assert.equal(webhooks.calls.length, 0, 'webhook NOT emitted on low confidence');
+    });
+
+    test('emits ACTION_OUTCOME audit with outcome_type low_confidence', async () => {
+      const supabase = createMockSupabase({ selectData: [] });
+
+      await createSuggestionIfNew(TENANT_UUID, TRIGGER_DATA, {
+        supabase,
+        generateAiSuggestion: mockGenerate(LOW_CONFIDENCE_SUGGESTION),
+        emitTenantWebhooks: webhooks,
+        logger: log,
+        emitCareAudit: audit,
+      });
+
+      assert.equal(audit.calls.length, 1, 'audit emitted exactly once');
+      assert.equal(audit.calls[0].event_type, CareAuditEventType.ACTION_OUTCOME);
+      assert.equal(audit.calls[0].meta.outcome_type, OUTCOME_TYPES.low_confidence);
+      assert.equal(audit.calls[0].tenant_id, TENANT_UUID);
+      assert.equal(audit.calls[0].meta.trigger_id, TRIGGER_DATA.triggerId);
+    });
+
+    test('returns null for confidence exactly 0', async () => {
+      const supabase = createMockSupabase({ selectData: [] });
+      const zeroConf = { ...LOW_CONFIDENCE_SUGGESTION, confidence: 0 };
+
+      const result = await createSuggestionIfNew(TENANT_UUID, TRIGGER_DATA, {
+        supabase,
+        generateAiSuggestion: mockGenerate(zeroConf),
+        emitTenantWebhooks: webhooks,
+        logger: log,
+        emitCareAudit: audit,
+      });
+
+      assert.equal(result, null);
+      assert.equal(audit.calls[0].meta.outcome_type, OUTCOME_TYPES.low_confidence);
+    });
+
+    test('returns null when confidence is undefined (defaults to 0)', async () => {
+      const supabase = createMockSupabase({ selectData: [] });
+      const noConf = { action: LOW_CONFIDENCE_SUGGESTION.action, reasoning: 'test' };
+
+      const result = await createSuggestionIfNew(TENANT_UUID, TRIGGER_DATA, {
+        supabase,
+        generateAiSuggestion: mockGenerate(noConf),
+        emitTenantWebhooks: webhooks,
+        logger: log,
+        emitCareAudit: audit,
+      });
+
+      assert.equal(result, null);
+      assert.equal(supabase._calls.insert.length, 0, 'no insert when confidence undefined');
+      assert.equal(audit.calls[0].meta.outcome_type, OUTCOME_TYPES.low_confidence);
+    });
+  });
+
+  // --------------------------------------------------------------------------
   // 3. suggestion_created
   // --------------------------------------------------------------------------
   describe('suggestion_created', () => {
@@ -297,14 +403,16 @@ describe('createSuggestionIfNew', () => {
       assert.deepEqual(payload.action, VALID_SUGGESTION.action);
     });
 
-    test('defaults confidence to 0.75 when suggestion omits it', async () => {
+    test('suggestion without confidence is suppressed by low_confidence gate', async () => {
+      // With the low_confidence gate, undefined confidence defaults to 0
+      // which is below MIN_CONFIDENCE (0.7), so the suggestion is suppressed.
       const supabase = createMockSupabase({
         selectData: [],
         insertData: { id: INSERTED_ID },
       });
       const noConfidence = { action: VALID_SUGGESTION.action };
 
-      await createSuggestionIfNew(TENANT_UUID, TRIGGER_DATA, {
+      const result = await createSuggestionIfNew(TENANT_UUID, TRIGGER_DATA, {
         supabase,
         generateAiSuggestion: mockGenerate(noConfidence),
         emitTenantWebhooks: webhooks,
@@ -312,8 +420,9 @@ describe('createSuggestionIfNew', () => {
         emitCareAudit: audit,
       });
 
-      assert.equal(supabase._calls.insert[0].confidence, 0.75);
-      assert.equal(supabase._calls.insert[0].reasoning, '');
+      assert.equal(result, null, 'should return null — low confidence');
+      assert.equal(supabase._calls.insert.length, 0, 'should NOT insert');
+      assert.equal(audit.calls[0].meta.outcome_type, OUTCOME_TYPES.low_confidence);
     });
 
     test('emits tenant webhook after successful insert', async () => {
@@ -596,6 +705,8 @@ describe('createSuggestionIfNew', () => {
         { selectData: [{ id: 'x', status: 'pending', updated_at: new Date().toISOString() }] },
         // generation_failed
         { selectData: [], generateReturn: null },
+        // low_confidence
+        { selectData: [], generateReturn: { action: { tool_name: 'x', tool_args: {} }, confidence: 0.2, reasoning: 'test' } },
         // suggestion_created
         { selectData: [], insertData: { id: INSERTED_ID } },
         // constraint_violation
@@ -632,6 +743,7 @@ describe('createSuggestionIfNew', () => {
       const configs = [
         { selectData: [{ id: 'x', status: 'pending', updated_at: new Date().toISOString() }] },
         { selectData: [], generateReturn: null },
+        { selectData: [], generateReturn: { action: { tool_name: 'x', tool_args: {} }, confidence: 0.2, reasoning: 'test' } },
         { selectData: [], insertData: { id: INSERTED_ID } },
         { selectData: [], insertError: { code: '23505', message: 'dup' } },
         { selectData: [], insertError: { code: '42P01', message: 'fail' } },
