@@ -1,0 +1,322 @@
+# Manual Stale Branch Cleanup Workflow
+#
+# Purpose: One-time cleanup of branches that were merged before the auto-delete
+#          workflow was implemented (PR #203, Feb 17, 2026)
+# Trigger: Manual via workflow_dispatch
+# Safety:  - Checks if branches are fully merged before deletion
+#          - Never deletes main or protected branches
+#          - Provides dry-run mode to preview deletions
+#          - Clear logging of all actions
+#
+# Usage:
+#   1. Go to Actions → Manual Stale Branch Cleanup
+#   2. Click "Run workflow"
+#   3. Choose dry_run: true to preview (recommended first)
+#   4. Choose dry_run: false to actually delete branches
+#
+# A branch is considered "merged" if:
+#   - Git merge-base shows it's an ancestor of main, OR
+#   - GitHub API compare shows status as "identical" or "behind"
+
+name: Manual Stale Branch Cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run mode (preview only, no deletions)'
+        required: true
+        type: boolean
+        default: true
+      target_branch:
+        description: 'Target branch to check merges against'
+        required: false
+        type: string
+        default: 'main'
+      skip_branches:
+        description: 'Additional branches to skip (comma-separated)'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: write  # Required to delete branches
+  actions: read    # Required to read workflow runs
+
+jobs:
+  cleanup-stale-branches:
+    name: Clean up stale merged branches
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for all branches
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      
+      - name: Identify and process merged branches
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const targetBranch = '${{ inputs.target_branch }}';
+            const dryRun = ${{ inputs.dry_run }};
+            const skipBranchesInput = '${{ inputs.skip_branches }}';
+            
+            // Protected branches that should never be deleted
+            const protectedBranches = new Set([
+              'main',
+              'master',
+              'develop',
+              'production',
+              'staging',
+              targetBranch
+            ]);
+            
+            // Add user-specified branches to skip
+            if (skipBranchesInput) {
+              skipBranchesInput.split(',').forEach(b => {
+                const trimmed = b.trim();
+                if (trimmed) protectedBranches.add(trimmed);
+              });
+            }
+            
+            core.info(`🎯 Target branch: ${targetBranch}`);
+            core.info(`🔒 Protected branches: ${Array.from(protectedBranches).join(', ')}`);
+            core.info(`🧪 Dry run mode: ${dryRun ? 'YES (preview only)' : 'NO (will delete)'}`);
+            core.info('');
+            
+            // Fetch all remote branches (with pagination support)
+            core.info('📋 Fetching all remote branches...');
+            const branches = await github.paginate(github.rest.repos.listBranches, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100
+            });
+            
+            core.info(`Found ${branches.length} total branches`);
+            core.info('');
+            
+            // Filter out protected branches
+            const candidateBranches = branches.filter(b => !protectedBranches.has(b.name));
+            core.info(`📊 Candidate branches (excluding protected): ${candidateBranches.length}`);
+            core.info('');
+            
+            // Check each branch to see if it's merged
+            const mergedBranches = [];
+            const unmergedBranches = [];
+            const errorBranches = [];
+            
+            for (const branch of candidateBranches) {
+              try {
+                // Use GitHub API to compare branch with target
+                const { data: comparison } = await github.rest.repos.compareCommitsWithBasehead({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  basehead: `${targetBranch}...${branch.name}`
+                });
+                
+                // A branch is merged if:
+                // - status is "identical" (exact same commits)
+                // - status is "behind" (target has all commits from branch)
+                const isMerged = comparison.status === 'identical' || comparison.status === 'behind';
+                
+                if (isMerged) {
+                  mergedBranches.push({
+                    name: branch.name,
+                    status: comparison.status,
+                    ahead: comparison.ahead_by,
+                    behind: comparison.behind_by
+                  });
+                  core.info(`✅ ${branch.name} - ${comparison.status} (${comparison.behind_by} behind, ${comparison.ahead_by} ahead)`);
+                } else {
+                  unmergedBranches.push({
+                    name: branch.name,
+                    status: comparison.status,
+                    ahead: comparison.ahead_by,
+                    behind: comparison.behind_by
+                  });
+                  core.info(`⏭️  ${branch.name} - ${comparison.status} (${comparison.behind_by} behind, ${comparison.ahead_by} ahead) - SKIPPING`);
+                }
+              } catch (error) {
+                errorBranches.push({ name: branch.name, error: error.message });
+                core.warning(`⚠️  ${branch.name} - Error: ${error.message}`);
+              }
+            }
+            
+            core.info('');
+            core.info('═══════════════════════════════════════════════');
+            core.info('📊 SUMMARY');
+            core.info('═══════════════════════════════════════════════');
+            core.info(`Total branches: ${branches.length}`);
+            core.info(`Protected (skipped): ${protectedBranches.size}`);
+            core.info(`Candidates checked: ${candidateBranches.length}`);
+            core.info(`✅ Merged: ${mergedBranches.length}`);
+            core.info(`⏭️  Unmerged (skipped): ${unmergedBranches.length}`);
+            core.info(`⚠️  Errors: ${errorBranches.length}`);
+            core.info('');
+            
+            // Delete merged branches (or preview in dry-run mode)
+            if (mergedBranches.length === 0) {
+              core.info('🎉 No merged branches to clean up!');
+            } else {
+              core.info('═══════════════════════════════════════════════');
+              if (dryRun) {
+                core.info('🧪 DRY RUN - Would delete these branches:');
+              } else {
+                core.info('🗑️  DELETING merged branches:');
+              }
+              core.info('═══════════════════════════════════════════════');
+              
+              const deletionResults = [];
+              
+              for (const branch of mergedBranches) {
+                if (dryRun) {
+                  core.info(`[DRY RUN] Would delete: ${branch.name}`);
+                  deletionResults.push({ name: branch.name, deleted: false, dryRun: true });
+                } else {
+                  try {
+                    await github.rest.git.deleteRef({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      ref: `heads/${branch.name}`
+                    });
+                    core.info(`✅ Deleted: ${branch.name}`);
+                    deletionResults.push({ name: branch.name, deleted: true, dryRun: false });
+                  } catch (error) {
+                    core.error(`❌ Failed to delete ${branch.name}: ${error.message}`);
+                    deletionResults.push({ 
+                      name: branch.name, 
+                      deleted: false, 
+                      dryRun: false, 
+                      error: error.message 
+                    });
+                  }
+                }
+              }
+              
+              core.info('');
+              core.info('═══════════════════════════════════════════════');
+              core.info('✨ CLEANUP COMPLETE');
+              core.info('═══════════════════════════════════════════════');
+              
+              if (dryRun) {
+                core.info('');
+                core.info('💡 This was a dry run. To actually delete these branches:');
+                core.info('   1. Go to Actions → Manual Stale Branch Cleanup');
+                core.info('   2. Click "Run workflow"');
+                core.info('   3. Set dry_run to false');
+                core.info('   4. Click "Run workflow" button');
+              } else {
+                const successCount = deletionResults.filter(r => r.deleted).length;
+                const failCount = deletionResults.filter(r => !r.deleted && !r.dryRun).length;
+                core.info(`✅ Successfully deleted: ${successCount} branches`);
+                if (failCount > 0) {
+                  core.warning(`⚠️  Failed to delete: ${failCount} branches`);
+                }
+              }
+              
+              // Create workflow summary
+              core.summary
+                .addHeading('🧹 Stale Branch Cleanup Report')
+                .addRaw('', true);
+              
+              if (dryRun) {
+                core.summary.addRaw('**Mode:** 🧪 Dry Run (Preview Only)', true);
+              } else {
+                core.summary.addRaw('**Mode:** 🗑️ Live Deletion', true);
+              }
+              
+              core.summary
+                .addRaw(`**Target Branch:** ${targetBranch}`, true)
+                .addRaw('', true)
+                .addHeading('Summary', 3)
+                .addRaw(`- Total branches: ${branches.length}`, true)
+                .addRaw(`- Protected (skipped): ${protectedBranches.size}`, true)
+                .addRaw(`- Candidates checked: ${candidateBranches.length}`, true)
+                .addRaw(`- ✅ Merged: ${mergedBranches.length}`, true)
+                .addRaw(`- ⏭️  Unmerged (skipped): ${unmergedBranches.length}`, true)
+                .addRaw(`- ⚠️  Errors: ${errorBranches.length}`, true)
+                .addRaw('', true);
+              
+              if (mergedBranches.length > 0) {
+                core.summary.addHeading('Merged Branches', 3);
+                
+                if (dryRun) {
+                  core.summary.addRaw('_These branches would be deleted in live mode:_', true);
+                } else {
+                  core.summary.addRaw('_Deletion results:_', true);
+                }
+                
+                core.summary.addRaw('', true);
+                
+                for (const result of deletionResults) {
+                  if (result.dryRun) {
+                    core.summary.addRaw(`- 🧪 [DRY RUN] ${result.name}`, true);
+                  } else if (result.deleted) {
+                    core.summary.addRaw(`- ✅ ${result.name}`, true);
+                  } else {
+                    core.summary.addRaw(`- ❌ ${result.name} - ${result.error}`, true);
+                  }
+                }
+                
+                core.summary.addRaw('', true);
+              }
+              
+              if (unmergedBranches.length > 0) {
+                core.summary
+                  .addHeading('Unmerged Branches (Skipped)', 3)
+                  .addRaw('_These branches have commits not in ' + targetBranch + ':_', true)
+                  .addRaw('', true);
+                
+                for (const branch of unmergedBranches) {
+                  core.summary.addRaw(
+                    `- ⏭️ ${branch.name} - ${branch.status} (${branch.ahead} ahead, ${branch.behind} behind)`,
+                    true
+                  );
+                }
+                
+                core.summary.addRaw('', true);
+              }
+              
+              if (errorBranches.length > 0) {
+                core.summary
+                  .addHeading('Errors', 3)
+                  .addRaw('_These branches could not be checked:_', true)
+                  .addRaw('', true);
+                
+                for (const branch of errorBranches) {
+                  core.summary.addRaw(`- ⚠️ ${branch.name} - ${branch.error}`, true);
+                }
+                
+                core.summary.addRaw('', true);
+              }
+              
+              if (dryRun) {
+                core.summary
+                  .addRaw('', true)
+                  .addHeading('Next Steps', 3)
+                  .addRaw('To actually delete these branches:', true)
+                  .addRaw('1. Go to **Actions** → **Manual Stale Branch Cleanup**', true)
+                  .addRaw('2. Click **Run workflow**', true)
+                  .addRaw('3. Set `dry_run` to **false**', true)
+                  .addRaw('4. Click **Run workflow** button', true);
+              }
+              
+              await core.summary.write();
+            }
+      
+      - name: Workflow complete
+        run: |
+          echo "✨ Cleanup workflow completed successfully!"
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "🧪 This was a DRY RUN - no branches were deleted"
+            echo "💡 Check the workflow summary above for details"
+          else
+            echo "🗑️ Branches have been deleted as shown in the summary"
+          fi
