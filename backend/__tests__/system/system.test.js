@@ -7,7 +7,7 @@ import assert from 'node:assert';
 import { initSupabaseForTests } from '../setup.js';
 
 let app;
-const testPort = 3101;
+let testPort;
 let server;
 
 async function request(method, path, body) {
@@ -30,26 +30,38 @@ describe('System Routes', { timeout: 15000 }, () => {
   before(async () => {
     // Initialize Supabase if credentials are available
     await initSupabaseForTests();
-    
-    const express = (await import('express')).default;
-    const createSystemRoutes = (await import('../../routes/system.js')).default;
+
+    // Guard stdout during dynamic imports to prevent V8 serialization
+    // protocol corruption in Node 20 test runner (nodejs/node#48103)
+    const origWrite = process.stdout.write;
+    process.stdout.write = () => true;
+    let express, createSystemRoutes;
+    try {
+      express = (await import('express')).default;
+      createSystemRoutes = (await import('../../routes/system.js')).default;
+    } finally {
+      process.stdout.write = origWrite;
+    }
 
     app = express();
     app.use(express.json());
     // no pgPool provided to exercise disconnected path
     app.use('/api/system', createSystemRoutes(null));
 
-    server = app.listen(testPort);
+    server = app.listen(0); // dynamic port avoids EADDRINUSE in parallel runs
     await new Promise((r) => {
       if (server.listening) return r();
       server.on('listening', r);
     });
+    testPort = server.address().port;
   });
 
   after(async () => {
     if (server) {
       if (typeof server.closeAllConnections === 'function') server.closeAllConnections();
       await new Promise((r) => server.close(() => r()));
+      // Let event loop drain to avoid stdout pipe contention
+      await new Promise((r) => setTimeout(r, 50));
     }
   });
 
@@ -77,31 +89,41 @@ describe('System Routes', { timeout: 15000 }, () => {
 
 describe('System Routes - logs with Supabase', { timeout: 15000 }, () => {
   let server2;
-  const port2 = 3112;
+  let port2;
   let supabaseInitialized = false;
 
   before(async () => {
     // Initialize Supabase if credentials are available
     supabaseInitialized = await initSupabaseForTests();
-    
-    const express = (await import('express')).default;
-    const createSystemRoutes = (await import('../../routes/system.js')).default;
+
+    // Guard stdout during dynamic imports (nodejs/node#48103)
+    const origWrite = process.stdout.write;
+    process.stdout.write = () => true;
+    let express, createSystemRoutes;
+    try {
+      express = (await import('express')).default;
+      createSystemRoutes = (await import('../../routes/system.js')).default;
+    } finally {
+      process.stdout.write = origWrite;
+    }
 
     app = express();
     app.use(express.json());
     app.use('/api/system', createSystemRoutes(null));
 
-    server2 = app.listen(port2);
+    server2 = app.listen(0); // dynamic port
     await new Promise((r) => {
       if (server2.listening) return r();
       server2.on('listening', r);
     });
+    port2 = server2.address().port;
   });
 
   after(async () => {
     if (server2) {
       if (typeof server2.closeAllConnections === 'function') server2.closeAllConnections();
       await new Promise((r) => server2.close(() => r()));
+      await new Promise((r) => setTimeout(r, 50));
     }
   });
 
@@ -109,7 +131,7 @@ describe('System Routes - logs with Supabase', { timeout: 15000 }, () => {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 4000);
     try {
-      const res = await fetch(`http://localhost:${port2}/api/system/logs`, { signal: controller.signal });
+      const res = await fetch(`http://localhost:${port2}/api/system/logs`, { signal: controller.signal, headers: { 'Content-Type': 'application/json' } });
       assert.strictEqual(res.status, 400);
       const json = await res.json();
       assert.strictEqual(json.status, 'error');
@@ -128,7 +150,7 @@ describe('System Routes - logs with Supabase', { timeout: 15000 }, () => {
     const timeout = setTimeout(() => controller.abort(), 4000);
     try {
       const url = `http://localhost:${port2}/api/system/logs?tenant_id=test-tenant&limit=1`;
-      const res = await fetch(url, { signal: controller.signal });
+      const res = await fetch(url, { signal: controller.signal, headers: { 'Content-Type': 'application/json' } });
       // Accept 200 (success) or 500 (network error in CI)
       assert.ok([200, 500].includes(res.status), `Expected 200 or 500, got ${res.status}`);
       if (res.status === 200) {
