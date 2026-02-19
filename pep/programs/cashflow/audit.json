@@ -1,0 +1,30 @@
+{
+  "version": "1.0.0",
+  "program_id": "cashflow-recurring-policy-v1",
+  "compiled_at": "2026-02-19T22:17:48.542Z",
+  "source_hash": "e04084350d1a1d1c87c23555b376d8a00aba84d29e8a2f192c5a103540a8ce30",
+  "risk_flags": [
+    {
+      "severity": "low",
+      "flag": "WRITE_CAPABILITY",
+      "detail": "Program creates new database records"
+    },
+    {
+      "severity": "info",
+      "flag": "NOTIFICATION_CAPABILITY",
+      "detail": "Program may send notifications on failure"
+    }
+  ],
+  "cost_estimate": {
+    "db_writes": 1,
+    "db_reads": 1,
+    "notifications": "0-1",
+    "llm_calls": 0
+  },
+  "policy_check": {
+    "passed": true,
+    "policies_applied": ["WRITE_OPERATIONS", "DataScope"]
+  },
+  "unresolved": [],
+  "warnings": []
+}

@@ -1,0 +1,123 @@
+// Executive Assistant Tools - Cash Flow Management
+// Create, read, update cash flow transactions with recurring transaction support
+
+import { Result, CashFlowTransaction, CRMError } from "../../spec/types.braid"
+
+// Error handling: HTTP errors return CRMError with APIError tag and status code.
+// The backend interprets status codes to determine error type:
+// - 400 = ValidationError, 401/403 = PermissionDenied, 404 = NotFound, 5xx = NetworkError
+
+@policy(READ_ONLY)
+fn listCashFlowTransactions(
+  tenant_id: String,
+  limit: Number,
+  offset: Number
+) -> Result<Array, CRMError> !net {
+  let url = "/api/cashflow";
+  let params = {
+    tenant_id: tenant_id,
+    limit: limit,
+    offset: offset
+  };
+
+  let response = http.get(url, { params: params });
+
+  // Note: Empty array is a VALID result (no transactions), not an error
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => CRMError.fromHTTP(url, error.status, "list_cashflow_transactions"),
+    _ => CRMError.network(url, 500, "unknown")
+  };
+}
+
+@policy(READ_ONLY)
+fn getCashFlowTransaction(
+  tenant_id: String,
+  transaction_id: String
+) -> Result<CashFlowTransaction, CRMError> !net {
+  let url = "/api/cashflow/" + transaction_id;
+  let params = { tenant_id: tenant_id };
+
+  let response = http.get(url, { params: params });
+
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => CRMError.fromHTTP(url, error.status, "get_cashflow_transaction"),
+    _ => CRMError.network(url, 500, "unknown")
+  };
+}
+
+@policy(WRITE_OPERATIONS)
+fn createCashFlowTransaction(
+  tenant_id: String,
+  transaction_type: String,
+  amount: Number,
+  transaction_date: String,
+  category: String,
+  description: String,
+  is_recurring: Boolean,
+  recurrence_pattern: String,
+  status: String,
+  entry_method: String
+) -> Result<CashFlowTransaction, CRMError> !net {
+  let url = "/api/cashflow";
+  let body = {
+    tenant_id: tenant_id,
+    transaction_type: transaction_type,
+    amount: amount,
+    transaction_date: transaction_date,
+    category: category,
+    description: description,
+    is_recurring: is_recurring,
+    recurrence_pattern: recurrence_pattern,
+    status: status,
+    entry_method: entry_method
+  };
+
+  let response = http.post(url, { body: body });
+
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => CRMError.fromHTTP(url, error.status, "create_cashflow_transaction"),
+    _ => CRMError.network(url, 500, "unknown")
+  };
+}
+
+@policy(WRITE_OPERATIONS)
+fn updateCashFlowTransaction(
+  tenant_id: String,
+  transaction_id: String,
+  updates: Object
+) -> Result<CashFlowTransaction, CRMError> !net {
+  let url = "/api/cashflow/" + transaction_id;
+
+  let response = http.put(url, { body: updates });
+
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => CRMError.fromHTTP(url, error.status, "update_cashflow_transaction"),
+    _ => CRMError.network(url, 500, "unknown")
+  };
+}
+
+@policy(READ_ONLY)
+fn getCashFlowSummary(
+  tenant_id: String,
+  start_date: String,
+  end_date: String
+) -> Result<Object, CRMError> !net {
+  let url = "/api/cashflow/summary";
+  let params = {
+    tenant_id: tenant_id,
+    start_date: start_date,
+    end_date: end_date
+  };
+
+  let response = http.get(url, { params: params });
+
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => CRMError.fromHTTP(url, error.status, "get_cashflow_summary"),
+    _ => CRMError.network(url, 500, "unknown")
+  };
+}

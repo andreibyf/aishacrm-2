@@ -83,6 +83,20 @@ type OpportunityMetadata = {
   source: String
 }
 
+type CashFlowTransaction = {
+  id: String,
+  tenant_id: String,
+  transaction_type: String,
+  amount: Number,
+  transaction_date: String,
+  category: String,
+  description: String,
+  is_recurring: Boolean,
+  recurrence_pattern: String,
+  status: String,
+  entry_method: String
+}
+
 type Activity = {
   id: String,
   type: String,

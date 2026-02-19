@@ -1,0 +1,34 @@
+{
+  "version": "1.0.0",
+  "program_id": "cashflow-recurring-policy-v1",
+  "steps": [
+    {
+      "order": 1,
+      "op": "load_entity",
+      "description": "Load the triggering CashFlowTransaction"
+    },
+    {
+      "order": 2,
+      "op": "check_condition",
+      "description": "Verify is_recurring is true"
+    },
+    {
+      "order": 3,
+      "op": "compute_next_date",
+      "description": "Calculate next transaction_date from recurrence_pattern"
+    },
+    {
+      "order": 4,
+      "op": "create_entity",
+      "description": "Create new CashFlowTransaction with entry_method=recurring_auto"
+    },
+    {
+      "order": 5,
+      "op": "on_failure",
+      "description": "Notify owner if creation failed"
+    }
+  ],
+  "estimated_steps": 5,
+  "reversible": false,
+  "requires_confirmation": false
+}

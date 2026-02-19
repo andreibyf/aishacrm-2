@@ -1,0 +1,31 @@
+{
+  "version": "1.0.0",
+  "program_id": "cashflow-recurring-policy-v1",
+  "intent": "AutomateRecurringTransaction",
+  "trigger": {
+    "entity": "CashFlowTransaction",
+    "event": "RecurringTransactionDue",
+    "condition": {
+      "field": "is_recurring",
+      "operator": "eq",
+      "value": true
+    }
+  },
+  "action": {
+    "capability": "persist_entity",
+    "operation": "create",
+    "entity": "CashFlowTransaction",
+    "derived_from": "trigger.entity",
+    "date_offset": {
+      "field": "recurrence_pattern",
+      "resolve": "compute_next_date"
+    }
+  },
+  "fallback": {
+    "condition": "action.failed",
+    "capability": "notify_role",
+    "target": "owner"
+  },
+  "policies": ["WRITE_OPERATIONS", "DataScope"],
+  "effects": ["!net", "!clock"]
+}

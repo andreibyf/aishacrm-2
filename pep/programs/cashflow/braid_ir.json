@@ -1,0 +1,65 @@
+{
+  "version": "1.0.0",
+  "program_id": "cashflow-recurring-policy-v1",
+  "instructions": [
+    {
+      "op": "load_entity",
+      "entity": "CashFlowTransaction",
+      "binding": "trigger.entity",
+      "assign": "__t0"
+    },
+    {
+      "op": "check_condition",
+      "field": "__t0.is_recurring",
+      "operator": "eq",
+      "value": true,
+      "assign": "__t1"
+    },
+    {
+      "op": "call_capability",
+      "capability": "compute_next_date",
+      "args": {
+        "pattern": "__t0.recurrence_pattern"
+      },
+      "assign": "__t2"
+    },
+    {
+      "op": "call_capability",
+      "capability": "persist_entity",
+      "operation": "create",
+      "entity": "CashFlowTransaction",
+      "derive_from": "__t0",
+      "overrides": {
+        "transaction_date": "__t2",
+        "entry_method": "recurring_auto"
+      },
+      "assign": "__t3"
+    },
+    {
+      "op": "match",
+      "input": "__t3",
+      "arms": [
+        {
+          "pattern": "Ok",
+          "assign": "__t4",
+          "instructions": []
+        },
+        {
+          "pattern": "Err",
+          "assign": "__t5",
+          "instructions": [
+            {
+              "op": "call_capability",
+              "capability": "notify_role",
+              "target": "owner",
+              "message": "Recurring transaction creation failed",
+              "assign": "__t6"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "effects": ["!net", "!clock"],
+  "policy": "WRITE_OPERATIONS"
+}
