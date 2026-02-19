@@ -1,0 +1,63 @@
+# PEP Capability Catalog
+# Maps abstract capability names to AiSHA CRM tool bindings.
+# Capabilities are platform-agnostic — bindings are AiSHA-specific.
+# Add new capabilities here when extending PEP to new domains.
+# Human-authored — YAML preferred over JSON for readability and comments.
+
+version: "1.0.0"
+capabilities:
+  - id: persist_entity
+    abstract: StoreRecord
+    description: Create or update a business entity record
+    bindings:
+      CashFlowTransaction:
+        create:
+          braid_tool: createCashFlowTransaction
+          http: POST /api/cashflow
+        update:
+          braid_tool: updateCashFlowTransaction
+          http: PUT /api/cashflow/:id
+    effects: ["!net"]
+    policy: WRITE_OPERATIONS
+
+  - id: read_entity
+    abstract: ReadRecord
+    description: Read or list business entity records
+    bindings:
+      CashFlowTransaction:
+        list:
+          braid_tool: listCashFlowTransactions
+          http: GET /api/cashflow
+        get:
+          braid_tool: getCashFlowTransaction
+          http: GET /api/cashflow/:id
+    effects: ["!net"]
+    policy: READ_ONLY
+
+  - id: notify_role
+    abstract: SendMessage
+    description: Notify a role or actor about an event
+    bindings:
+      owner:
+        braid_tool: notifyOwner
+        http: POST /api/notifications
+      manager:
+        braid_tool: notifyManager
+        http: POST /api/notifications
+    effects: ["!net"]
+    policy: WRITE_OPERATIONS
+
+  - id: compute_next_date
+    abstract: TimeCalculation
+    description: Calculate the next occurrence date from a recurrence pattern
+    bindings:
+      weekly:
+        duration: P7D   # ISO-8601: 7 days
+      monthly:
+        duration: P1M   # ISO-8601: 1 month
+      quarterly:
+        duration: P3M   # ISO-8601: 3 months
+      annually:
+        duration: P1Y   # ISO-8601: 1 year
+    effects: ["!clock"]
+    policy: READ_ONLY

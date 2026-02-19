@@ -27,6 +27,7 @@ import { emit } from './emitter.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { parse as parseYaml } from 'yaml';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -38,11 +39,9 @@ const CATALOGS_DIR = join(__dirname, '..', 'catalogs');
  * @returns {{ entity_catalog: object, capability_catalog: object }}
  */
 function loadDefaultCatalogs() {
-  const entity_catalog = JSON.parse(
-    readFileSync(join(CATALOGS_DIR, 'entity-catalog.json'), 'utf8'),
-  );
-  const capability_catalog = JSON.parse(
-    readFileSync(join(CATALOGS_DIR, 'capability-catalog.json'), 'utf8'),
+  const entity_catalog = parseYaml(readFileSync(join(CATALOGS_DIR, 'entity-catalog.yaml'), 'utf8'));
+  const capability_catalog = parseYaml(
+    readFileSync(join(CATALOGS_DIR, 'capability-catalog.yaml'), 'utf8'),
   );
   return { entity_catalog, capability_catalog };
 }

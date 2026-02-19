@@ -13,6 +13,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { parse as parseYaml } from 'yaml';
 
 import { parse } from '../compiler/parser.js';
 import {
@@ -30,11 +31,11 @@ import { validateCompiledProgram } from '../runtime/pepRuntime.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const entityCatalog = JSON.parse(
-  readFileSync(join(__dirname, '..', 'catalogs', 'entity-catalog.json'), 'utf8'),
+const entityCatalog = parseYaml(
+  readFileSync(join(__dirname, '..', 'catalogs', 'entity-catalog.yaml'), 'utf8'),
 );
-const capabilityCatalog = JSON.parse(
-  readFileSync(join(__dirname, '..', 'catalogs', 'capability-catalog.json'), 'utf8'),
+const capabilityCatalog = parseYaml(
+  readFileSync(join(__dirname, '..', 'catalogs', 'capability-catalog.yaml'), 'utf8'),
 );
 
 const FIRST_PROGRAM = `When a cash flow transaction is marked as recurring,

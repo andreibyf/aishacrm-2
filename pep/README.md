@@ -18,7 +18,7 @@ English source (the program)
 Controlled Business English (CBE) pattern — fails closed if no match
         │
         ▼  pep/compiler/resolver.js
-Resolved entities + capabilities (from JSON catalogs) — fails if unknown
+Resolved entities + capabilities (from YAML catalogs) — fails if unknown
         │
         ▼  pep/compiler/emitter.js
 semantic_frame.json + braid_ir.json + plan.json + audit.json
@@ -28,8 +28,14 @@ Braid execution under existing policy/sandbox (via backend/lib/braid/execution.j
 ```
 
 All three compiler phases are **deterministic and synchronous**. Resolution is
-rule-based matching against the JSON catalogs in `pep/catalogs/`. The compiled
+rule-based matching against the YAML catalogs in `pep/catalogs/`. The compiled
 artifacts are version-controlled in `pep/programs/<domain>/`.
+
+> **Format decision (Phase 1-A):** Catalogs are YAML; compiled artifacts are JSON.
+> YAML is the right format for human-authored config — it supports comments, has
+> cleaner syntax, and produces more readable Git diffs. The compiled artifacts
+> (`semantic_frame.json`, `braid_ir.json`, `plan.json`, `audit.json`) stay JSON
+> because they are machine-generated output, not hand-edited.
 
 ---
 
@@ -45,8 +51,8 @@ pep/
 │   └── emitter.js                     ← Emit semantic_frame, braid_ir, plan, audit
 │
 ├── catalogs/
-│   ├── entity-catalog.json            ← Domain entities mapped to AiSHA bindings
-│   └── capability-catalog.json        ← Abstract capabilities mapped to Braid tools
+│   ├── entity-catalog.yaml            ← Domain entities mapped to AiSHA bindings (YAML)
+│   └── capability-catalog.yaml        ← Abstract capabilities mapped to Braid tools (YAML)
 │
 ├── programs/
 │   └── cashflow/
@@ -119,42 +125,37 @@ node pep/programs/cashflow/generate.js
 
 ### Adding a New Entity
 
-Edit `pep/catalogs/entity-catalog.json` and add to the `entities` array:
+Edit `pep/catalogs/entity-catalog.yaml` and add to the `entities` list:
 
-```json
-{
-  "id": "YourEntity",
-  "description": "What this entity represents",
-  "aisha_binding": {
-    "table": "your_table",
-    "route": "/api/your-route"
-  },
-  "attributes": {
-    "field_name": { "type": "String", "required": true }
-  },
-  "events": {
-    "EntityCreated": "Fired when a new record is inserted"
-  }
-}
+```yaml
+- id: YourEntity
+  description: What this entity represents
+  aisha_binding:
+    table: your_table
+    route: /api/your-route
+  attributes:
+    field_name:
+      type: String
+      required: true
+  events:
+    EntityCreated: Fired when a new record is inserted
 ```
 
 ### Adding a New Capability
 
-Edit `pep/catalogs/capability-catalog.json` and add to the `capabilities` array:
+Edit `pep/catalogs/capability-catalog.yaml` and add to the `capabilities` list:
 
-```json
-{
-  "id": "your_capability",
-  "abstract": "AbstractName",
-  "description": "What this capability does",
-  "bindings": {
-    "YourEntity": {
-      "create": { "braid_tool": "createYourEntity", "http": "POST /api/your-route" }
-    }
-  },
-  "effects": ["!net"],
-  "policy": "WRITE_OPERATIONS"
-}
+```yaml
+- id: your_capability
+  abstract: AbstractName
+  description: What this capability does
+  bindings:
+    YourEntity:
+      create:
+        braid_tool: createYourEntity
+        http: POST /api/your-route
+  effects: ['!net']
+  policy: WRITE_OPERATIONS
 ```
 
 ---
@@ -193,7 +194,7 @@ Edit `pep/catalogs/capability-catalog.json` and add to the `capabilities` array:
 - The runtime **never calls the LLM** — execution is fully deterministic from the IR
 - Tenant isolation is enforced by the existing Braid policy layer, not by PEP programs
 - All artifacts are auditable and version-controlled
-- Phase 1 compiler is **pure Node.js with zero external dependencies**
+- Phase 1 compiler depends only on the `yaml` package (already installed in the repo) for catalog parsing
 
 ---
 

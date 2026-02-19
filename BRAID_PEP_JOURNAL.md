@@ -23,8 +23,8 @@ phase inherits.
 | Artifact                 | Location                                          | Description                                                                         |
 | ------------------------ | ------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | PEP compiler             | `pep/compiler/`                                   | Three-phase pipeline: parser → resolver → emitter                                   |
-| Entity catalog           | `pep/catalogs/entity-catalog.json`                | `CashFlowTransaction` entity with AiSHA binding                                     |
-| Capability catalog       | `pep/catalogs/capability-catalog.json`            | 4 capabilities: `persist_entity`, `read_entity`, `notify_role`, `compute_next_date` |
+| Entity catalog           | `pep/catalogs/entity-catalog.yaml`                | `CashFlowTransaction` entity with AiSHA binding (YAML)                              |
+| Capability catalog       | `pep/catalogs/capability-catalog.yaml`            | 4 capabilities: `persist_entity`, `read_entity`, `notify_role`, `compute_next_date` |
 | First PEP program        | `pep/programs/cashflow/source.pep.md`             | Recurring transaction policy in plain English                                       |
 | Compiled artifacts       | `pep/programs/cashflow/`                          | `semantic_frame.json`, `braid_ir.json`, `plan.json`, `audit.json`                   |
 | PEP runtime adapter      | `pep/runtime/pepRuntime.js`                       | Thin bridge to `backend/lib/braid/execution.js`                                     |
@@ -54,7 +54,7 @@ application concern. Future: `pep/` could become its own package.
 
 **2. Phase 1 compiler uses no LLM**
 
-All resolution is deterministic rule-based matching against JSON catalogs. The LLM
+All resolution is deterministic rule-based matching against YAML catalogs. The LLM
 is not involved in compilation at all in Phase 1. This was a deliberate choice:
 prove the pipeline shape works deterministically before introducing LLM-assisted
 parsing in Phase 2. Cost: zero inference per compile. Reliability: 100% reproducible.
@@ -102,6 +102,67 @@ type definition to `spec/types.braid`. Verified before merge approval.
 - No database migration
 
 These are all intentional. Phase 1 proves the pipeline shape. Phases 2+ wire it in.
+
+---
+
+## Phase 1-A — Catalog Migration from JSON to YAML
+
+**Branch:** `feature/pep-1a-yaml-catalogs`
+**Date:** February 2026
+**Auditor:** Claude (Anthropic)
+**Status:** ✅ Complete
+
+### What Changed
+
+| Before                               | After                             | Reason                                      |
+| ------------------------------------ | --------------------------------- | ------------------------------------------- |
+| `entity-catalog.json`                | `entity-catalog.yaml`             | Human-authored config belongs in YAML       |
+| `capability-catalog.json`            | `capability-catalog.yaml`         | Comments, cleaner diffs, better readability |
+| `JSON.parse()` in `index.js`         | `parseYaml()` from `yaml` package | Reads YAML catalogs                         |
+| `JSON.parse()` in `compiler.test.js` | `parseYaml()` from `yaml` package | Test catalog loading                        |
+
+### Format Decision and Rationale
+
+Catalogs are **human-authored configuration** — they are hand-edited every time a new
+domain entity or capability is added to PEP. YAML is the correct format for this use
+case because:
+
+1. **Comments** — YAML supports inline and block comments. JSON does not. Catalogs need
+   explanatory comments (e.g. ISO-8601 duration values like `P7D # 7 days`).
+2. **Readability** — YAML has cleaner syntax for nested structures. No braces, no quotes
+   on keys, no trailing commas to manage.
+3. **Git diffs** — YAML produces smaller, more readable diffs when fields are added or
+   changed. JSON diffs are noisier due to structural punctuation.
+4. **Convention** — Configuration-as-code tools (Kubernetes, GitHub Actions, Docker Compose)
+   universally use YAML for human-authored config. This aligns PEP catalogs with industry
+   convention.
+
+The **compiled artifacts** (`semantic_frame.json`, `braid_ir.json`, `plan.json`, `audit.json`)
+stay JSON. They are machine-generated output, never hand-edited, and consumed programmatically.
+JSON is the correct format for machine-generated data.
+
+### Dependency
+
+The `yaml` package (v2.8.2) was already installed in the repo as a `devDependency` in
+`backend/package.json`. No new packages were added.
+
+### Files Changed
+
+- `pep/catalogs/entity-catalog.yaml` — created (YAML conversion of JSON)
+- `pep/catalogs/capability-catalog.yaml` — created (YAML conversion of JSON)
+- `pep/catalogs/entity-catalog.json` — deleted
+- `pep/catalogs/capability-catalog.json` — deleted
+- `pep/compiler/index.js` — added `import { parse as parseYaml } from 'yaml'`; updated `loadDefaultCatalogs()`
+- `pep/tests/compiler.test.js` — added `import { parse as parseYaml } from 'yaml'`; updated catalog loading
+- `pep/README.md` — updated all catalog references from `.json` to `.yaml`; added format decision note
+- `BRAID_PEP_JOURNAL.md` — this entry
+
+### Verification
+
+- All 15 PEP tests pass (`node --test pep/tests/compiler.test.js`)
+- `node pep/programs/cashflow/generate.js` exits 0 — compiled artifacts regenerated successfully
+- No references to `.json` catalog files remain in `pep/`
+- YAML catalogs parse to identical JavaScript objects as the JSON originals
 
 ---
 
@@ -194,7 +255,7 @@ Add to `capability-catalog.json`:
 
 ## Rules for Future PEP Work
 
-1. **Every new entity requires three things**: entry in `entity-catalog.json`, type definition
+1. **Every new entity requires three things**: entry in `entity-catalog.yaml`, type definition
    in `braid-llm-kit/spec/types.braid`, and at minimum a `create`/`list` Braid tool in a
    `.braid` file.
 
