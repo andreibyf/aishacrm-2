@@ -4,5 +4,7 @@
 # Force LF for entrypoint scripts
 *entrypoint.sh text eol=lf
 
+# Force LF for git hooks (husky)
+.husky/* text eol=lf
+
 # Auto detect text files and normalize line endings to LF in the repository
-* text=auto

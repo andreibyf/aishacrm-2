@@ -1,39 +1,39 @@
 #!/bin/sh
 
 echo ""
-echo "╔══════════════════════════════════════════════╗"
-echo "║           PRE-COMMIT QUALITY GATE            ║"
-echo "╚══════════════════════════════════════════════╝"
+echo "========================================"
+echo "       PRE-COMMIT QUALITY GATE          "
+echo "========================================"
 echo ""
 
-# ── Step 1: ESLint ──────────────────────────────────────────────
-echo "🔍 Step 1/3: Running ESLint..."
-npm run lint -- --max-warnings 9999
+# Step 1: lint-staged (ESLint + Prettier on staged files only)
+echo "Step 1/2: Running lint-staged..."
+npx lint-staged
 if [ $? -ne 0 ]; then
   echo ""
-  echo "❌ ESLint failed — fix errors above before committing"
+  echo "FAIL: lint-staged failed - fix errors above before committing"
   exit 1
 fi
-echo "✅ ESLint passed"
+echo "OK: lint-staged passed"
 echo ""
 
-# ── Step 2: Braid core tests ───────────────────────────────────
-echo "🧪 Step 2/3: Running Braid core tests..."
+# Step 2: Braid core tests
+echo "Step 2/2: Running Braid core tests..."
 BRAID_CORE="braid-llm-kit/core"
 if [ -d "$BRAID_CORE" ] && ls "$BRAID_CORE"/*.test.js >/dev/null 2>&1; then
   node --test "$BRAID_CORE"/*.test.js
   if [ $? -ne 0 ]; then
     echo ""
-    echo "❌ Braid core tests failed — fix errors above before committing"
+    echo "FAIL: Braid core tests failed - fix errors above before committing"
     exit 1
   fi
-  echo "✅ Braid core tests passed"
+  echo "OK: Braid core tests passed"
 else
-  echo "⏭️  No Braid core test files found — skipping"
+  echo "SKIP: No Braid core test files found"
 fi
 echo ""
 
-echo "╔══════════════════════════════════════════════╗"
-echo "║        ✅ PRE-COMMIT CHECKS PASSED           ║"
-echo "╚══════════════════════════════════════════════╝"
+echo "========================================"
+echo "       PRE-COMMIT CHECKS PASSED         "
+echo "========================================"
 echo ""

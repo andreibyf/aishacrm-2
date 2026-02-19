@@ -233,8 +233,8 @@ class ApiHealthMonitor {
    * Analyze endpoint and determine fix strategy
    */
   analyzeEndpoint(endpoint) {
-    // Extract entity name from endpoint path
-    const match = endpoint.match(/\/api\/([^/?]+)/);
+    // Extract entity name from endpoint path, skipping version prefix (v2, v3, etc.)
+    const match = endpoint.match(/\/api\/(?:v\d+\/)?([^/?]+)/);
     if (!match) {
       return { canAutoFix: false, reason: 'Invalid endpoint format' };
     }

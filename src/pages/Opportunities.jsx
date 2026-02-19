@@ -45,6 +45,7 @@ import TagFilter from "../components/shared/TagFilter";
 import { useEmployeeScope } from "../components/shared/EmployeeScopeContext";
 import RefreshButton from "../components/shared/RefreshButton";
 import { useLoadingToast } from "@/hooks/useLoadingToast";
+import { useProgress } from "@/components/shared/ProgressOverlay";
 import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -118,6 +119,7 @@ export default function OpportunitiesPage() {
   const [showTestData] = useState(true); // Default to showing all data
 
   const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
+  const { startProgress, updateProgress, completeProgress } = useProgress();
 
   // Sort state
   const [sortField, setSortField] = useState("updated_at");
@@ -704,6 +706,7 @@ export default function OpportunitiesPage() {
       if (!confirmed) return;
 
       try {
+        startProgress({ message: 'Fetching opportunities to delete...' });
         let effectiveFilter = getTenantFilter();
 
         if (stageFilter !== "all") {
@@ -748,12 +751,26 @@ export default function OpportunitiesPage() {
         );
         const deleteCount = allOpportunitiesToDelete.length;
 
+        updateProgress({ message: `Deleting ${deleteCount} opportunities...`, total: deleteCount, current: 0 });
+
         const BATCH_SIZE = 50;
+        let successCount = 0;
+        let failCount = 0;
         for (let i = 0; i < allOpportunitiesToDelete.length; i += BATCH_SIZE) {
           const batch = allOpportunitiesToDelete.slice(i, i + BATCH_SIZE);
-          await Promise.all(batch.map((o) => Opportunity.delete(o.id)));
-          // removed delay(1000); // Add delay between batches
+          const results = await Promise.allSettled(batch.map((o) => Opportunity.delete(o.id)));
+          results.forEach((r) => {
+            if (r.status === 'fulfilled') successCount++;
+            else {
+              const is404 = r.reason?.message?.includes('404');
+              if (!is404) failCount++;
+              else successCount++;
+            }
+          });
+          updateProgress({ current: successCount + failCount, message: `Deleted ${successCount} of ${deleteCount} opportunities...` });
         }
+
+        completeProgress();
 
         // Optimistically remove from UI immediately
         const deletedIds = new Set(allOpportunitiesToDelete.map(o => o.id));
@@ -772,8 +789,10 @@ export default function OpportunitiesPage() {
           ]);
         }, 500);
         
-        toast.success(`${deleteCount} opportunity/opportunities deleted`);
+        toast.success(`${successCount} opportunity/opportunities deleted`);
+        if (failCount > 0) toast.error(`${failCount} failed to delete`);
       } catch (error) {
+        completeProgress();
         console.error("Failed to delete opportunities:", error);
         toast.error("Failed to delete opportunities");
       }
@@ -794,9 +813,31 @@ export default function OpportunitiesPage() {
       if (!confirmed) return;
 
       try {
-        await Promise.all(
-          [...selectedOpportunities].map((id) => Opportunity.delete(id)),
-        );
+        const selectedCount = selectedOpportunities.size;
+        startProgress({ message: `Deleting ${selectedCount} opportunities...`, total: selectedCount, current: 0 });
+        
+        const selectedArray = [...selectedOpportunities];
+        const BATCH_SIZE = 50;
+        let succeeded = 0;
+        let failed = 0;
+        
+        for (let i = 0; i < selectedArray.length; i += BATCH_SIZE) {
+          const batch = selectedArray.slice(i, i + BATCH_SIZE);
+          const batchResults = await Promise.allSettled(
+            batch.map((id) => Opportunity.delete(id)),
+          );
+          batchResults.forEach((r) => {
+            if (r.status === 'fulfilled') succeeded++;
+            else {
+              const is404 = r.reason?.message?.includes('404');
+              if (!is404) failed++;
+              else succeeded++;
+            }
+          });
+          updateProgress({ current: succeeded + failed, message: `Deleted ${succeeded} of ${selectedCount} opportunities...` });
+        }
+        
+        completeProgress();
         
         // Optimistically remove from UI immediately
         const deletedIds = new Set(selectedOpportunities);
@@ -815,9 +856,11 @@ export default function OpportunitiesPage() {
         }, 500);
         
         toast.success(
-          `${selectedOpportunities.size} opportunity/opportunities deleted`,
+          `${succeeded} opportunity/opportunities deleted`,
         );
+        if (failed > 0) toast.error(`${failed} failed to delete`);
       } catch (error) {
+        completeProgress();
         console.error("Failed to delete opportunities:", error);
         toast.error("Failed to delete opportunities");
       }

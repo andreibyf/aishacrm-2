@@ -49,6 +49,7 @@ import TagFilter from "../components/shared/TagFilter";
 import { useEmployeeScope } from "../components/shared/EmployeeScopeContext";
 import RefreshButton from "../components/shared/RefreshButton";
 import { useLoadingToast } from "@/hooks/useLoadingToast";
+import { useProgress } from "@/components/shared/ProgressOverlay";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -99,6 +100,7 @@ export default function ContactsPage() {
   // Added showTestData state to support the new getTenantFilter logic from the outline
   const [showTestData] = useState(true); // Default to showing all data
   const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
+  const { startProgress, updateProgress, completeProgress } = useProgress();
 
   // Sort state
   const [sortField, setSortField] = useState("created_at");
@@ -656,6 +658,7 @@ export default function ContactsPage() {
       if (!confirmed) return;
 
       try {
+        startProgress({ message: 'Fetching contacts to delete...' });
         // Re-fetch all matching contacts
         const scopedFilter = getTenantFilter();
         const filterWithLimit = { ...scopedFilter, limit: 10000 };
@@ -683,6 +686,9 @@ export default function ContactsPage() {
         }
 
         const deleteCount = filtered.length;
+
+        updateProgress({ message: `Deleting ${deleteCount} contacts...`, total: deleteCount, current: 0 });
+
         const BATCH_SIZE = 50;
         let successCount = 0;
         let failCount = 0;
@@ -693,8 +699,10 @@ export default function ContactsPage() {
             if (r.status === 'fulfilled') successCount++;
             else failCount++;
           });
+          updateProgress({ current: successCount + failCount, message: `Deleted ${successCount} of ${deleteCount} contacts...` });
         }
 
+        completeProgress();
         setSelectedContacts(new Set());
         setSelectAllMode(false);
         clearCacheByKey("Contact");
@@ -702,6 +710,7 @@ export default function ContactsPage() {
         if (successCount > 0) toast.success(`${successCount} contact(s) deleted`);
         if (failCount > 0) toast.error(`${failCount} contact(s) failed to delete`);
       } catch (error) {
+        completeProgress();
         console.error("Failed to bulk delete contacts:", error);
         toast.error("Failed to delete contacts");
       }
@@ -731,45 +740,66 @@ export default function ContactsPage() {
     });
 
     const contactIds = Array.from(selectedContacts);
-    const results = await Promise.allSettled(
-      contactIds.map((id) => Contact.delete(id))
-    );
-    
-    const successCount = results.filter(r => r.status === 'fulfilled').length;
-    const failCount = results.filter(r => {
-      if (r.status === 'rejected') {
-        const is404 = r.reason?.response?.status === 404;
-        if (is404) return false; // Don't count 404s as failures
-        return true;
+    startProgress({ message: `Deleting ${contactIds.length} contacts...`, total: contactIds.length });
+
+    try {
+      let successCount = 0;
+      let failCount = 0;
+      const BATCH_SIZE = 50;
+
+      for (let i = 0; i < contactIds.length; i += BATCH_SIZE) {
+        const batch = contactIds.slice(i, i + BATCH_SIZE);
+        const results = await Promise.allSettled(
+          batch.map((id) => Contact.delete(id))
+        );
+
+        results.forEach((r) => {
+          if (r.status === 'fulfilled') {
+            successCount++;
+          } else {
+            const is404 = r.reason?.response?.status === 404;
+            if (!is404) failCount++;
+          }
+        });
+
+        updateProgress({
+          current: Math.min(i + BATCH_SIZE, contactIds.length),
+          message: `Deleted ${successCount} of ${contactIds.length} contacts...`,
+        });
       }
-      return false;
-    }).length;
 
-    setSelectedContacts(new Set());
-    clearCacheByKey("Contact");
-    
-    // Reload data properly
-    await Promise.all([
-      loadContacts(),
-      loadTotalStats()
-    ]);
+      completeProgress();
 
-    if (successCount > 0) {
-      toast.success(`Successfully deleted ${successCount} contact${successCount !== 1 ? 's' : ''}`);
-      logger.info("Bulk contact deletion completed", "ContactsPage", {
-        successCount,
-        failCount,
-        userId: user?.id || user?.email,
-      });
-    }
+      setSelectedContacts(new Set());
+      clearCacheByKey("Contact");
+      
+      // Reload data properly
+      await Promise.all([
+        loadContacts(),
+        loadTotalStats()
+      ]);
 
-    if (failCount > 0) {
-      toast.error(`Failed to delete ${failCount} contact${failCount !== 1 ? 's' : ''}`);
-      logger.error("Some bulk deletions failed", "ContactsPage", {
-        successCount,
-        failCount,
-        userId: user?.id || user?.email,
-      });
+      if (successCount > 0) {
+        toast.success(`Successfully deleted ${successCount} contact${successCount !== 1 ? 's' : ''}`);
+        logger.info("Bulk contact deletion completed", "ContactsPage", {
+          successCount,
+          failCount,
+          userId: user?.id || user?.email,
+        });
+      }
+
+      if (failCount > 0) {
+        toast.error(`Failed to delete ${failCount} contact${failCount !== 1 ? 's' : ''}`);
+        logger.error("Some bulk deletions failed", "ContactsPage", {
+          successCount,
+          failCount,
+          userId: user?.id || user?.email,
+        });
+      }
+    } catch (error) {
+      completeProgress();
+      console.error("Failed to bulk delete contacts:", error);
+      toast.error("Failed to delete contacts");
     }
   };
 

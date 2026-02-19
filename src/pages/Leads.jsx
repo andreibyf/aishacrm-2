@@ -50,6 +50,7 @@ import TagFilter from "../components/shared/TagFilter";
 import { useEmployeeScope } from "../components/shared/EmployeeScopeContext";
 import RefreshButton from "../components/shared/RefreshButton";
 import { useLoadingToast } from "@/hooks/useLoadingToast";
+import { useProgress } from "@/components/shared/ProgressOverlay";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -96,6 +97,7 @@ export default function LeadsPage() {
   const [selectedTags, setSelectedTags] = useState([]);
   const [convertingLead, setConvertingLead] = useState(null);
   const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
+  const { startProgress, updateProgress, completeProgress } = useProgress();
   const [isConversionDialogOpen, setIsConversionDialogOpen] = useState(false);
   const [showTestData, setShowTestData] = useState(true); // Default to showing all data including test data
 
@@ -820,6 +822,7 @@ export default function LeadsPage() {
       if (!confirmed) return;
 
       try {
+        startProgress({ message: 'Fetching leads to delete...' });
         let currentFilter = getTenantFilter();
 
         if (statusFilter !== "all") {
@@ -862,6 +865,8 @@ export default function LeadsPage() {
         }
         const deleteCount = allLeadsToDelete.length;
 
+        updateProgress({ message: `Deleting ${deleteCount} leads...`, total: deleteCount, current: 0 });
+
         // Delete in batches to avoid overwhelming the system
         const BATCH_SIZE = 50;
         let successCount = 0;
@@ -871,10 +876,17 @@ export default function LeadsPage() {
           const results = await Promise.allSettled(batch.map((l) => Lead.delete(l.id)));
           results.forEach((r) => {
             if (r.status === 'fulfilled') successCount++;
-            else failCount++;
+            else {
+              // Don't count 404s (already deleted) as failures
+              const is404 = r.reason?.message?.includes('404');
+              if (!is404) failCount++;
+              else successCount++;
+            }
           });
+          updateProgress({ current: successCount + failCount, message: `Deleted ${successCount} of ${deleteCount} leads...` });
         }
 
+        completeProgress();
         setSelectedLeads(new Set());
         setSelectAllMode(false);
         clearCache("Lead"); clearCacheByKey("Lead");
@@ -885,6 +897,7 @@ export default function LeadsPage() {
         if (successCount > 0) toast.success(`${successCount} lead(s) deleted`);
         if (failCount > 0) toast.error(`${failCount} lead(s) failed to delete`);
       } catch (error) {
+        completeProgress();
         console.error("Failed to delete leads:", error);
         toast.error("Failed to delete leads");
       }
@@ -909,18 +922,30 @@ export default function LeadsPage() {
           throw new Error('Cannot delete: tenant_id is not available');
         }
         
-        // Delete leads individually and handle 404s gracefully
-        const deleteResults = await Promise.allSettled(
-          [...selectedLeads].map((id) => Lead.delete(id, { tenant_id: tenantId }))
-        );
+        const selectedCount = selectedLeads.size;
+        startProgress({ message: `Deleting ${selectedCount} leads...`, total: selectedCount, current: 0 });
         
-        const successCount = deleteResults.filter(r => r.status === 'fulfilled').length;
-        const notFoundCount = deleteResults.filter(r => 
-          r.status === 'rejected' && r.reason?.message?.includes('404')
-        ).length;
-        const failedCount = deleteResults.filter(r => 
-          r.status === 'rejected' && !r.reason?.message?.includes('404')
-        ).length;
+        // Delete leads in batches and handle 404s gracefully
+        const selectedArray = [...selectedLeads];
+        const BATCH_SIZE = 50;
+        let successCount = 0;
+        let notFoundCount = 0;
+        let failedCount = 0;
+        
+        for (let i = 0; i < selectedArray.length; i += BATCH_SIZE) {
+          const batch = selectedArray.slice(i, i + BATCH_SIZE);
+          const batchResults = await Promise.allSettled(
+            batch.map((id) => Lead.delete(id, { tenant_id: tenantId }))
+          );
+          batchResults.forEach((r) => {
+            if (r.status === 'fulfilled') successCount++;
+            else if (r.reason?.message?.includes('404')) notFoundCount++;
+            else failedCount++;
+          });
+          updateProgress({ current: successCount + notFoundCount + failedCount, message: `Deleted ${successCount} of ${selectedCount} leads...` });
+        }
+        
+        completeProgress();
         
         setSelectedLeads(new Set());
         clearCache("Lead"); clearCacheByKey("Lead");
@@ -964,6 +989,7 @@ export default function LeadsPage() {
           toast.success(`${successCount} lead(s) deleted`);
         }
       } catch (error) {
+        completeProgress();
         console.error("Failed to delete leads:", error);
         toast.error("Failed to delete leads");
         setSelectedLeads(new Set());

@@ -1,0 +1,6 @@
+# CODEOWNERS — require approval for protected paths
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# All backend test files require owner approval before merge
+backend/__tests__/                     @andreibyf
+backend/lib/**/__tests__/              @andreibyf
