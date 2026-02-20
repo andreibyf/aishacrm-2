@@ -74,7 +74,7 @@ services:
     container_name: aishacrm-ollama
     restart: unless-stopped
     entrypoint: >
-      sh -c "ollama serve & sleep 5 && ollama pull qwen2.5-coder:3b; wait"
+      sh -c "ollama serve & sleep 5 && ollama pull qwen2.5-coder:3b && wait"
     ports:
       - "11436:11434"
     volumes:
