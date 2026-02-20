@@ -5,7 +5,7 @@
  *
  * Usage:
  *   import { compile } from './index.js';
- *   const result = compile(englishSource, { entity_catalog, capability_catalog });
+ *   const result = await compile(englishSource, { entity_catalog, capability_catalog });
  *
  * Returns on success:
  *   { status: 'compiled', semantic_frame, braid_ir, plan, audit }
@@ -15,13 +15,14 @@
  *
  * The compiler NEVER executes capabilities.
  * The compiler ALWAYS fails closed on ambiguity.
- * Phase 1: no LLM calls — all resolution is deterministic rule-based matching.
+ * Phase 2: LLM parser by default; use context.useLegacyParser for deterministic regex.
  */
 
 /* global process */
 'use strict';
 
 import { parse } from './parser.js';
+import { parseLLM } from './llmParser.js';
 import { resolve } from './resolver.js';
 import { emit } from './emitter.js';
 import { readFileSync } from 'node:fs';
@@ -53,9 +54,10 @@ function loadDefaultCatalogs() {
  * @param {object} [context] - Optional context overrides
  * @param {object} [context.entity_catalog] - Override entity catalog
  * @param {object} [context.capability_catalog] - Override capability catalog
- * @returns {{ status: 'compiled', semantic_frame, braid_ir, plan, audit } | { status: 'clarification_required', reason, unresolved, partial_frame }}
+ * @param {boolean} [context.useLegacyParser] - Use Phase 1 regex parser instead of LLM
+ * @returns {Promise<{ status: 'compiled', semantic_frame, braid_ir, plan, audit } | { status: 'clarification_required', reason, unresolved, partial_frame }>}
  */
-function compile(englishSource, context = {}) {
+async function compile(englishSource, context = {}) {
   // Never throw — always return a result object
   try {
     // Load catalogs (from context or defaults)
@@ -70,7 +72,24 @@ function compile(englishSource, context = {}) {
     }
 
     // Phase 1: Parse — English → CBE pattern
-    const parsed = parse(englishSource);
+    let parsed;
+    if (context.useLegacyParser) {
+      // Legacy: deterministic regex parser (Phase 1)
+      parsed = parse(englishSource);
+    } else {
+      // Default: LLM-powered parser (Phase 2)
+      try {
+        parsed = await parseLLM(englishSource, { entity_catalog, capability_catalog });
+      } catch (_llmErr) {
+        return {
+          status: 'clarification_required',
+          reason: `LLM parser error: ${_llmErr.message}`,
+          unresolved: [],
+          partial_frame: null,
+        };
+      }
+    }
+
     if (!parsed.match) {
       return {
         status: 'clarification_required',
@@ -123,6 +142,7 @@ if (
 
   const sourcePath = args[sourceIdx + 1];
   const source = readFileSync(sourcePath, 'utf8');
-  const result = compile(source);
+  const useLegacy = args.includes('--legacy');
+  const result = await compile(source, { useLegacyParser: useLegacy });
   console.log(JSON.stringify(result, null, 2));
 }

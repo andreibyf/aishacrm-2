@@ -17,7 +17,7 @@ const source = readFileSync(sourcePath, 'utf8');
 
 console.log('Compiling:', sourcePath);
 
-const result = compile(source);
+const result = await compile(source, { useLegacyParser: true });
 
 if (result.status !== 'compiled') {
   console.error('Compilation failed:', JSON.stringify(result, null, 2));

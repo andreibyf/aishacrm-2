@@ -30,9 +30,7 @@
           "name": "comment.block.braid",
           "begin": "/\\*",
           "end": "\\*/",
-          "patterns": [
-            { "name": "comment.block.braid", "match": "." }
-          ]
+          "patterns": [{ "name": "comment.block.braid", "match": "." }]
         }
       ]
     },
@@ -51,8 +49,12 @@
               "name": "meta.template.expression.braid",
               "begin": "\\$\\{",
               "end": "\\}",
-              "beginCaptures": { "0": { "name": "punctuation.definition.template-expression.begin.braid" } },
-              "endCaptures": { "0": { "name": "punctuation.definition.template-expression.end.braid" } },
+              "beginCaptures": {
+                "0": { "name": "punctuation.definition.template-expression.begin.braid" }
+              },
+              "endCaptures": {
+                "0": { "name": "punctuation.definition.template-expression.end.braid" }
+              },
               "patterns": [
                 { "include": "#keywords" },
                 { "include": "#numbers" },
@@ -75,10 +77,7 @@
               "name": "variable.interpolation.braid",
               "begin": "\\$\\{",
               "end": "\\}",
-              "patterns": [
-                { "include": "#keywords" },
-                { "include": "#numbers" }
-              ]
+              "patterns": [{ "include": "#keywords" }, { "include": "#numbers" }]
             }
           ]
         }
@@ -123,6 +122,15 @@
     "types": {
       "patterns": [
         {
+          "comment": "Generic type e.g. Result<T, E>, Option<T>, Array<Account> — must be first to consume < before comparison operator rule sees it",
+          "name": "meta.type.generic.braid",
+          "match": "\\b([A-Z][a-zA-Z0-9_]*)(<[^>]*>)",
+          "captures": {
+            "1": { "name": "entity.name.type.braid" },
+            "2": { "name": "meta.type.parameters.braid" }
+          }
+        },
+        {
           "name": "support.type.primitive.braid",
           "match": "\\b(String|Number|Boolean|Bool|JSONB|Array|Object|Void|Int|i32|i64|u32|u64|f32|f64)\\b"
         },
@@ -132,7 +140,7 @@
         },
         {
           "name": "entity.name.type.crm.braid",
-          "match": "\\b(Account|Lead|Contact|Opportunity|Activity|Note|User|Tenant|Snapshot|Policy|Employee|BizDevSource|ConversionResult|Summary|Assignment|Document|Workflow|WorkflowStep)\\b"
+          "match": "\\b(Account|Lead|Contact|Opportunity|Activity|Note|User|Tenant|Snapshot|Policy|Employee|BizDevSource|ConversionResult|Summary|Assignment|Document|Workflow|WorkflowStep|CashFlowTransaction)\\b"
         },
         {
           "name": "entity.name.type.error.braid",
@@ -230,7 +238,7 @@
         },
         {
           "name": "keyword.operator.optional-chaining.braid",
-          "match": "\\?\\."  
+          "match": "\\?\\."
         },
         {
           "name": "keyword.operator.propagation.braid",
