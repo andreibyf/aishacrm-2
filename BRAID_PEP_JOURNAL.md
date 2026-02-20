@@ -486,3 +486,75 @@ After initial build, the container failed with `ERR_MODULE_NOT_FOUND` for `pepRu
 - No scheduling or recurring queries
 - No export of query results to CSV/PDF
 - No `GET /api/pep/saved-reports` endpoint
+
+---
+
+## Phase 4 — Persisted Saved Reports
+
+**Branch:** `feature/pep-phase4-saved-reports`  
+**Date:** February 2026  
+**Auditor:** Claude (Anthropic)  
+**Status:** 🚧 In Progress
+
+### What Was Built
+
+| Artifact             | Location                                 | Description                                                                         |
+| -------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------- |
+| DB migration         | Supabase `pep_saved_reports`             | Tenant-scoped table with RLS, unique report names per tenant                        |
+| Saved reports routes | `backend/routes/pep.js`                  | 4 new endpoints: GET, POST, DELETE, PATCH/run                                       |
+| Frontend update      | `src/components/reports/CustomQuery.jsx` | Replaced localStorage with API calls; shows `created_by`, `created_at`, `run_count` |
+
+### Table: `pep_saved_reports`
+
+| Column          | Type           | Notes                                            |
+| --------------- | -------------- | ------------------------------------------------ |
+| `id`            | uuid PK        | `gen_random_uuid()`                              |
+| `tenant_id`     | uuid NOT NULL  | FK → `tenant.id`, RLS enforced                   |
+| `report_name`   | text NOT NULL  | User label; unique per tenant                    |
+| `filename`      | text NOT NULL  | Auto-generated slug + date suffix                |
+| `plain_english` | text NOT NULL  | Original English query                           |
+| `compiled_ir`   | jsonb NOT NULL | Full IR from `/api/pep/compile` for re-execution |
+| `run_count`     | integer        | Incremented on each PATCH/run call               |
+| `last_run_at`   | timestamptz    | Updated on each run                              |
+| `created_by`    | text NOT NULL  | `req.user.email` at save time                    |
+| `created_at`    | timestamptz    | `now()`                                          |
+| `updated_at`    | timestamptz    | `now()`                                          |
+
+RLS: 4 tenant-scoped policies (SELECT, INSERT, UPDATE, DELETE).
+
+### New API Endpoints
+
+| Method   | Path                                    | Purpose                                            |
+| -------- | --------------------------------------- | -------------------------------------------------- |
+| `GET`    | `/api/pep/saved-reports?tenant_id=`     | List all saved reports for tenant, ordered by name |
+| `POST`   | `/api/pep/saved-reports`                | Save a new report; 409 on duplicate name           |
+| `DELETE` | `/api/pep/saved-reports/:id?tenant_id=` | Delete by id (tenant-scoped)                       |
+| `PATCH`  | `/api/pep/saved-reports/:id/run`        | Increment `run_count` + set `last_run_at`          |
+
+### Architectural Decisions Made
+
+**1. Tenant-shared, not user-private**  
+Saved reports are visible to all users within a tenant. This matches the spec: one user saves a report, the whole team can run it. RLS enforces tenant isolation; there is no user-level access control on saved reports.
+
+**2. IR stored at save time, not recompiled on load**  
+The compiled IR blob is stored in `compiled_ir` (jsonb). Loading and running a saved report calls `/api/pep/query` with the stored IR directly — no second LLM parse, no second compile. This means: (a) fast re-execution, (b) deterministic results regardless of catalog changes, (c) LLM unavailability doesn’t affect saved report execution.
+
+**3. Unique report name per tenant (DB constraint)**  
+A `UNIQUE INDEX` on `(tenant_id, report_name)` prevents duplicate names. The backend returns a 409 with a user-friendly message; the frontend surfaces it via toast.
+
+**4. `filename` is server-generated**  
+The client never sends a filename. The server generates it as `slugify(report_name)-YYYY-MM-DD`. This is informational/audit metadata; it is not used for routing or storage.
+
+**5. Run recording is fire-and-forget**  
+The `PATCH .../run` call in the frontend uses `.catch(() => {})`. A failed run count update never blocks the user or surfaces an error. It’s a soft metric, not a critical operation.
+
+**6. No new npm dependencies**  
+The slug helper is inlined in `pep.js` (3-line regex chain) rather than adding `slugify` as a new backend dependency.
+
+### What Phase 4 Does NOT Do
+
+- No rename of saved reports (delete and re-save to rename)
+- No export of saved reports to CSV/PDF
+- No sharing saved reports across tenants
+- No scheduling / recurring execution of saved reports
+- No permissions model within a tenant (any user can delete any tenant’s saved report)

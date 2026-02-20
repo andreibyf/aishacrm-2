@@ -1,10 +1,14 @@
 /**
- * PEP Phase 3 — Natural Language Report Query Routes
+ * PEP Routes — Natural Language Report Queries (Phase 3) + Saved Reports (Phase 4)
  *
- * POST /api/pep/compile  — compile a plain English query to query_entity IR + confirmation string
- * POST /api/pep/query    — execute a compiled query_entity IR and return results
+ * POST   /api/pep/compile                — compile plain English to query_entity IR
+ * POST   /api/pep/query                  — execute a compiled query_entity IR
+ * GET    /api/pep/saved-reports          — list all saved reports for tenant
+ * POST   /api/pep/saved-reports          — save a new report
+ * DELETE /api/pep/saved-reports/:id      — delete a saved report
+ * PATCH  /api/pep/saved-reports/:id/run  — record a run (increment count + timestamp)
  *
- * Read-only. Tenant isolation enforced on every query regardless of IR contents.
+ * Read-only query execution. Tenant isolation enforced on every operation.
  */
 
 import express from 'express';
@@ -18,6 +22,14 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
+// Inline slug helper — avoids adding a new dependency
+const slugify = (str) =>
+  str
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/[\s_-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -399,6 +411,165 @@ export default function createPepRoutes(_pgPool) {
       return res
         .status(500)
         .json({ status: 'error', message: 'Query execution failed: ' + err.message });
+    }
+  });
+
+  // ── GET /api/pep/saved-reports ──────────────────────────────────────────────
+  router.get('/saved-reports', async (req, res) => {
+    const tenantId = req.query.tenant_id;
+    if (!tenantId) {
+      return res
+        .status(400)
+        .json({ status: 'error', message: 'Missing required query param: tenant_id' });
+    }
+
+    const supabase = getSupabaseClient();
+    try {
+      const { data, error } = await supabase
+        .from('pep_saved_reports')
+        .select(
+          'id, report_name, filename, plain_english, compiled_ir, run_count, last_run_at, created_by, created_at',
+        )
+        .eq('tenant_id', tenantId)
+        .order('report_name', { ascending: true });
+
+      if (error) {
+        logger.warn({ err: error }, '[PEP] saved-reports GET error');
+        return res.status(500).json({ status: 'error', message: error.message });
+      }
+
+      return res.status(200).json({ status: 'success', data: data || [] });
+    } catch (err) {
+      logger.error({ err }, '[PEP] saved-reports GET exception');
+      return res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
+  // ── POST /api/pep/saved-reports ───────────────────────────────────────────────
+  router.post('/saved-reports', async (req, res) => {
+    const { tenant_id, report_name, plain_english, compiled_ir } = req.body;
+
+    if (!tenant_id || !report_name || !plain_english || !compiled_ir) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Missing required fields: tenant_id, report_name, plain_english, compiled_ir',
+      });
+    }
+
+    const created_by = req.user?.email || req.user?.id || 'unknown';
+    const dateSuffix = new Date().toISOString().split('T')[0];
+    const filename = `${slugify(report_name, { lower: true, strict: true })}-${dateSuffix}`;
+
+    const supabase = getSupabaseClient();
+    try {
+      const { data, error } = await supabase
+        .from('pep_saved_reports')
+        .insert({
+          tenant_id,
+          report_name: report_name.trim(),
+          filename,
+          plain_english,
+          compiled_ir,
+          created_by,
+        })
+        .select('id, report_name, filename, created_by, created_at')
+        .single();
+
+      if (error) {
+        // Unique constraint violation — report_name already exists for this tenant
+        if (error.code === '23505') {
+          return res.status(409).json({
+            status: 'error',
+            message: `A report named "${report_name}" already exists. Please choose a different name.`,
+          });
+        }
+        logger.warn({ err: error }, '[PEP] saved-reports POST error');
+        return res.status(500).json({ status: 'error', message: error.message });
+      }
+
+      return res.status(201).json({ status: 'success', data });
+    } catch (err) {
+      logger.error({ err }, '[PEP] saved-reports POST exception');
+      return res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
+  // ── DELETE /api/pep/saved-reports/:id ────────────────────────────────────────
+  router.delete('/saved-reports/:id', async (req, res) => {
+    const { id } = req.params;
+    const tenantId = req.query.tenant_id;
+
+    if (!tenantId) {
+      return res
+        .status(400)
+        .json({ status: 'error', message: 'Missing required query param: tenant_id' });
+    }
+
+    const supabase = getSupabaseClient();
+    try {
+      const { error } = await supabase
+        .from('pep_saved_reports')
+        .delete()
+        .eq('id', id)
+        .eq('tenant_id', tenantId); // tenant isolation: can only delete own tenant's reports
+
+      if (error) {
+        logger.warn({ err: error }, '[PEP] saved-reports DELETE error');
+        return res.status(500).json({ status: 'error', message: error.message });
+      }
+
+      return res.status(200).json({ status: 'success' });
+    } catch (err) {
+      logger.error({ err }, '[PEP] saved-reports DELETE exception');
+      return res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
+  // ── PATCH /api/pep/saved-reports/:id/run ─────────────────────────────────────
+  router.patch('/saved-reports/:id/run', async (req, res) => {
+    const { id } = req.params;
+    const { tenant_id } = req.body;
+
+    if (!tenant_id) {
+      return res
+        .status(400)
+        .json({ status: 'error', message: 'Missing required field: tenant_id' });
+    }
+
+    const supabase = getSupabaseClient();
+    try {
+      // Increment run_count and update last_run_at atomically via RPC would be ideal,
+      // but a read-then-write is fine here — report execution is not high-frequency
+      const { data: existing, error: fetchErr } = await supabase
+        .from('pep_saved_reports')
+        .select('run_count')
+        .eq('id', id)
+        .eq('tenant_id', tenant_id)
+        .single();
+
+      if (fetchErr || !existing) {
+        return res.status(404).json({ status: 'error', message: 'Saved report not found.' });
+      }
+
+      const { error: updateErr } = await supabase
+        .from('pep_saved_reports')
+        .update({
+          run_count: (existing.run_count || 0) + 1,
+          last_run_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .eq('tenant_id', tenant_id);
+
+      if (updateErr) {
+        logger.warn({ err: updateErr }, '[PEP] saved-reports PATCH/run error');
+        return res.status(500).json({ status: 'error', message: updateErr.message });
+      }
+
+      return res.status(200).json({ status: 'success' });
+    } catch (err) {
+      logger.error({ err }, '[PEP] saved-reports PATCH/run exception');
+      return res.status(500).json({ status: 'error', message: err.message });
     }
   });
 
