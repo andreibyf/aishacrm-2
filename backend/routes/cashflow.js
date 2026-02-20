@@ -108,7 +108,7 @@ export default function createCashFlowRoutes(_pgPool) {
         .order('transaction_date', { ascending: false });
 
       if (type) {
-        query = query.eq('type', type);
+        query = query.eq('transaction_type', type);
       }
 
       const { data, error, count } = await query.range(
@@ -155,15 +155,25 @@ export default function createCashFlowRoutes(_pgPool) {
   router.post('/', async (req, res) => {
     try {
       const c = req.body;
-      if (!c.tenant_id || !c.amount || !c.type || !c.transaction_date) {
+      // Accept transaction_type (Braid/PEP convention) or type (legacy)
+      const transactionType = c.transaction_type || c.type;
+      if (!c.tenant_id || !c.amount || !transactionType || !c.transaction_date) {
         return res.status(400).json({
           status: 'error',
-          message: 'tenant_id, amount, type, and transaction_date required',
+          message: 'tenant_id, amount, transaction_type, and transaction_date required',
         });
       }
 
       // Normalize tenant_id if UUID provided
       const resolvedTenantId = c.tenant_id;
+
+      // Recurring fields have no dedicated columns — persist in metadata JSONB
+      const metadata = {
+        ...(c.metadata || {}),
+        ...(c.is_recurring !== undefined && { is_recurring: c.is_recurring }),
+        ...(c.entry_method !== undefined && { entry_method: c.entry_method }),
+        ...(c.recurrence_pattern !== undefined && { recurrence_pattern: c.recurrence_pattern }),
+      };
 
       const { data, error } = await supabase
         .from('cash_flow')
@@ -171,11 +181,11 @@ export default function createCashFlowRoutes(_pgPool) {
           tenant_id: resolvedTenantId,
           transaction_date: c.transaction_date,
           amount: c.amount,
-          type: c.type,
+          transaction_type: transactionType,
           category: c.category || null,
           description: c.description || null,
           account_id: c.account_id || null,
-          metadata: c.metadata || {},
+          metadata,
         })
         .select()
         .single();
@@ -185,9 +195,11 @@ export default function createCashFlowRoutes(_pgPool) {
       res.status(201).json({ status: 'success', message: 'Created', data: { cashflow: data } });
 
       // After successful insert — fire PEP trigger (non-blocking)
+      // Enrich with metadata fields so is_recurring and entry_method are accessible
       // Guard: skip if this record was created by PEP itself to prevent infinite recursion
-      if (data.is_recurring && data.entry_method !== 'recurring_auto') {
-        firePepTrigger(data, req).catch((err) =>
+      const enrichedData = { ...data, ...data.metadata };
+      if (enrichedData.is_recurring && enrichedData.entry_method !== 'recurring_auto') {
+        firePepTrigger(enrichedData, req).catch((err) =>
           logger.warn('[PEP] Recurring trigger failed silently:', err.message),
         );
       }
@@ -208,7 +220,7 @@ export default function createCashFlowRoutes(_pgPool) {
       const allowed = [
         'transaction_date',
         'amount',
-        'type',
+        'transaction_type',
         'category',
         'description',
         'account_id',
@@ -275,7 +287,10 @@ export default function createCashFlowRoutes(_pgPool) {
       }
       // Normalize tenant id
 
-      let query = supabase.from('cash_flow').select('type, amount').eq('tenant_id', tenant_id);
+      let query = supabase
+        .from('cash_flow')
+        .select('transaction_type, amount')
+        .eq('tenant_id', tenant_id);
 
       if (start_date) {
         query = query.gte('transaction_date', start_date);
@@ -290,10 +305,10 @@ export default function createCashFlowRoutes(_pgPool) {
 
       // Client-side aggregation
       const income = (data || [])
-        .filter((r) => r.type === 'income')
+        .filter((r) => r.transaction_type === 'income')
         .reduce((sum, r) => sum + Number(r.amount), 0);
       const expenses = (data || [])
-        .filter((r) => r.type === 'expense')
+        .filter((r) => r.transaction_type === 'expense')
         .reduce((sum, r) => sum + Number(r.amount), 0);
       const net = income - expenses;
 
