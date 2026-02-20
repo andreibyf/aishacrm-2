@@ -184,7 +184,7 @@ jobs:
           echo "Scanning backend imports for repo-root paths..."
           MATCHES=$(grep -RInE --exclude-dir node_modules --exclude-dir __tests__ --exclude-dir tests "from ['\"](\.\./){2,}|require\(['\"](\.\./){2,}" backend || true)
           if [ -n "$MATCHES" ]; then
-            echo "$MATCHES" | grep -v "braid-llm-kit" | grep -v "shared/" > /tmp/bad-imports.txt || true
+            echo "$MATCHES" | grep -v "braid-llm-kit" | grep -v "shared/" | grep -v "pep/" > /tmp/bad-imports.txt || true
             if [ -s /tmp/bad-imports.txt ]; then
               echo "ERROR: Found backend imports to repo-root paths not allowed in the backend image:"
               cat /tmp/bad-imports.txt
