@@ -165,6 +165,14 @@ export default function createCashFlowRoutes(_pgPool) {
       // Normalize tenant_id if UUID provided
       const resolvedTenantId = c.tenant_id;
 
+      // Recurring fields have no dedicated columns — persist in metadata JSONB
+      const metadata = {
+        ...(c.metadata || {}),
+        ...(c.is_recurring !== undefined && { is_recurring: c.is_recurring }),
+        ...(c.entry_method !== undefined && { entry_method: c.entry_method }),
+        ...(c.recurrence_pattern !== undefined && { recurrence_pattern: c.recurrence_pattern }),
+      };
+
       const { data, error } = await supabase
         .from('cash_flow')
         .insert({
@@ -175,7 +183,7 @@ export default function createCashFlowRoutes(_pgPool) {
           category: c.category || null,
           description: c.description || null,
           account_id: c.account_id || null,
-          metadata: c.metadata || {},
+          metadata,
         })
         .select()
         .single();
@@ -185,9 +193,11 @@ export default function createCashFlowRoutes(_pgPool) {
       res.status(201).json({ status: 'success', message: 'Created', data: { cashflow: data } });
 
       // After successful insert — fire PEP trigger (non-blocking)
+      // Enrich with metadata fields so is_recurring and entry_method are accessible
       // Guard: skip if this record was created by PEP itself to prevent infinite recursion
-      if (data.is_recurring && data.entry_method !== 'recurring_auto') {
-        firePepTrigger(data, req).catch((err) =>
+      const enrichedData = { ...data, ...data.metadata };
+      if (enrichedData.is_recurring && enrichedData.entry_method !== 'recurring_auto') {
+        firePepTrigger(enrichedData, req).catch((err) =>
           logger.warn('[PEP] Recurring trigger failed silently:', err.message),
         );
       }
