@@ -33,7 +33,7 @@
 - `pep/compiler/emitter.js` — untouched
 - `pep/catalogs/` — untouched
 - `cashflow.braid` — untouched
-- `braid-llm-kit/` — untouched
+- `braid-llm-kit/` — only VSCode extension files updated (unrelated grammar fix); assistant tools and core untouched
 - All existing backend routes other than the additive hook in `cashflow.js`
 - All existing frontend code
 
@@ -67,7 +67,7 @@ ollama:
   container_name: aishacrm-ollama
   restart: unless-stopped
   ports:
-    - '11434:11434'
+    - '11436:11434'
   volumes:
     - ollama_data:/root/.ollama
   healthcheck:
@@ -108,6 +108,7 @@ Add the following environment variable to the `backend` service `environment` bl
 
 ```yaml
 - LOCAL_LLM_BASE_URL=http://ollama:11434/v1
+- LOCAL_LLM_API_KEY=${LOCAL_LLM_API_KEY:-ollama} # required by llmClient.js; any non-empty value works for Ollama
 - PEP_LLM_PROVIDER=local
 - PEP_LLM_MODEL=qwen2.5-coder:3b
 ```
@@ -125,7 +126,7 @@ command only needs to be run once.
 ### Verifiable Output for Step 0
 
 ```bash
-curl http://localhost:11434/api/tags
+curl http://localhost:11436/api/tags
 # Should list qwen2.5-coder:3b in the response
 ```
 
@@ -313,7 +314,7 @@ so the `check_condition` and subsequent instructions operate on real data.
 
 | #   | Step                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Verifiable Output                                                                                                   |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| 0   | Update `docker-compose.yml` — add `ollama` service, `ollama_data` volume, env vars (`LOCAL_LLM_BASE_URL`, `PEP_LLM_PROVIDER`, `PEP_LLM_MODEL`) to backend service. Run `docker compose up ollama -d` then `docker exec aishacrm-ollama ollama pull qwen2.5-coder:3b`                                                                                                                                                                                                    | `curl http://localhost:11434/api/tags` lists `qwen2.5-coder:3b`                                                     |
+| 0   | Update `docker-compose.yml` — add `ollama` service, `ollama_data` volume, env vars (`LOCAL_LLM_BASE_URL`, `LOCAL_LLM_API_KEY`, `PEP_LLM_PROVIDER`, `PEP_LLM_MODEL`) to backend service. Run `docker compose up ollama -d` then `docker exec aishacrm-ollama ollama pull qwen2.5-coder:3b`                                                                                                                                                                               | `curl http://localhost:11436/api/tags` lists `qwen2.5-coder:3b`                                                     |
 | 1   | Create `pep/compiler/llmParser.js` — async `parseLLM(englishSource, catalogs)` that calls `generateChatCompletion` with `provider: process.env.PEP_LLM_PROVIDER \|\| "local"`, `model: process.env.PEP_LLM_MODEL \|\| "qwen2.5-coder:3b"`, `baseUrl: process.env.LOCAL_LLM_BASE_URL \|\| "http://ollama:11434/v1"`, `temperature: 0`, structured system prompt with catalog summaries injected. Returns CBE pattern object or `{ match: false, reason }`. Never throws. | File exists; exports `parseLLM`                                                                                     |
 | 2   | Update `pep/compiler/index.js` — make `compile()` async; import and use `parseLLM` by default; add `context.useLegacyParser` flag that falls back to synchronous `parse()` from `parser.js`                                                                                                                                                                                                                                                                             | `await compile(source, { useLegacyParser: true })` returns same result as Phase 1                                   |
 | 3   | Update `pep/programs/cashflow/generate.js` — add `await` before `compile()`                                                                                                                                                                                                                                                                                                                                                                                             | `node pep/programs/cashflow/generate.js` exits 0                                                                    |
@@ -407,8 +408,8 @@ All 8 tests mock `generateChatCompletion` using `node:test` mock utilities. No r
 ## Definition of Done
 
 - [ ] `docker-compose.yml` has `ollama` service on `aishanet` network with `ollama_data` volume
-- [ ] `qwen2.5-coder:3b` pulled and available: `curl http://localhost:11434/api/tags` confirms
-- [ ] Backend service has `LOCAL_LLM_BASE_URL`, `PEP_LLM_PROVIDER`, `PEP_LLM_MODEL` env vars
+- [ ] `qwen2.5-coder:3b` pulled and available: `curl http://localhost:11436/api/tags` confirms
+- [ ] Backend service has `LOCAL_LLM_BASE_URL`, `LOCAL_LLM_API_KEY`, `PEP_LLM_PROVIDER`, `PEP_LLM_MODEL` env vars
 - [ ] `pep/compiler/llmParser.js` exists and exports `parseLLM`
 - [ ] `compile()` in `index.js` is async and uses `parseLLM` by default
 - [ ] `context.useLegacyParser: true` falls back to synchronous `parser.js`

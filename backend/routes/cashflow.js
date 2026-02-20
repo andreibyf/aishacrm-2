@@ -155,15 +155,25 @@ export default function createCashFlowRoutes(_pgPool) {
   router.post('/', async (req, res) => {
     try {
       const c = req.body;
-      if (!c.tenant_id || !c.amount || !c.type || !c.transaction_date) {
+      // Accept transaction_type as alias for type (Braid tool compatibility)
+      const type = c.type || c.transaction_type;
+      if (!c.tenant_id || !c.amount || !type || !c.transaction_date) {
         return res.status(400).json({
           status: 'error',
-          message: 'tenant_id, amount, type, and transaction_date required',
+          message: 'tenant_id, amount, type (or transaction_type), and transaction_date required',
         });
       }
 
       // Normalize tenant_id if UUID provided
       const resolvedTenantId = c.tenant_id;
+
+      // Persist recurring-related fields in metadata JSONB (no dedicated DB columns)
+      const metadata = {
+        ...(c.metadata || {}),
+        ...(c.is_recurring !== undefined && { is_recurring: c.is_recurring }),
+        ...(c.entry_method && { entry_method: c.entry_method }),
+        ...(c.recurrence_pattern && { recurrence_pattern: c.recurrence_pattern }),
+      };
 
       const { data, error } = await supabase
         .from('cash_flow')
@@ -171,11 +181,11 @@ export default function createCashFlowRoutes(_pgPool) {
           tenant_id: resolvedTenantId,
           transaction_date: c.transaction_date,
           amount: c.amount,
-          type: c.type,
+          type,
           category: c.category || null,
           description: c.description || null,
           account_id: c.account_id || null,
-          metadata: c.metadata || {},
+          metadata,
         })
         .select()
         .single();
@@ -185,9 +195,11 @@ export default function createCashFlowRoutes(_pgPool) {
       res.status(201).json({ status: 'success', message: 'Created', data: { cashflow: data } });
 
       // After successful insert — fire PEP trigger (non-blocking)
+      // Merge metadata fields so PEP runtime can access is_recurring, entry_method, recurrence_pattern
+      const enrichedData = { ...data, ...data.metadata };
       // Guard: skip if this record was created by PEP itself to prevent infinite recursion
-      if (data.is_recurring && data.entry_method !== 'recurring_auto') {
-        firePepTrigger(data, req).catch((err) =>
+      if (enrichedData.is_recurring && enrichedData.entry_method !== 'recurring_auto') {
+        firePepTrigger(enrichedData, req).catch((err) =>
           logger.warn('[PEP] Recurring trigger failed silently:', err.message),
         );
       }
