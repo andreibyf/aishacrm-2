@@ -156,12 +156,10 @@ export default function createCashFlowRoutes(_pgPool) {
     try {
       const c = req.body;
       if (!c.tenant_id || !c.amount || !c.type || !c.transaction_date) {
-        return res
-          .status(400)
-          .json({
-            status: 'error',
-            message: 'tenant_id, amount, type, and transaction_date required',
-          });
+        return res.status(400).json({
+          status: 'error',
+          message: 'tenant_id, amount, type, and transaction_date required',
+        });
       }
 
       // Normalize tenant_id if UUID provided
@@ -187,7 +185,8 @@ export default function createCashFlowRoutes(_pgPool) {
       res.status(201).json({ status: 'success', message: 'Created', data: { cashflow: data } });
 
       // After successful insert — fire PEP trigger (non-blocking)
-      if (data.is_recurring) {
+      // Guard: skip if this record was created by PEP itself to prevent infinite recursion
+      if (data.is_recurring && data.entry_method !== 'recurring_auto') {
         firePepTrigger(data, req).catch((err) =>
           logger.warn('[PEP] Recurring trigger failed silently:', err.message),
         );

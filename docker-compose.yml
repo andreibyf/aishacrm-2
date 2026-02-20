@@ -149,6 +149,7 @@ services:
       #   CARE_AUTONOMY_ENABLED, CARE_SHADOW_MODE
       # PEP LLM Parser (Ollama)
       - LOCAL_LLM_BASE_URL=http://ollama:11434/v1
+      - LOCAL_LLM_API_KEY=${LOCAL_LLM_API_KEY:-ollama}
       - PEP_LLM_PROVIDER=local
       - PEP_LLM_MODEL=qwen2.5-coder:3b
       # Telemetry
