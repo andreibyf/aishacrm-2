@@ -56,12 +56,22 @@ RUN echo "Cache bust value: ${CACHE_BUST}" > /tmp/cache-bust.txt
 # Copy braid-llm-kit to /app for route imports (../../braid-llm-kit from /app/routes/)
 COPY braid-llm-kit ./braid-llm-kit
 
+# Copy PEP compiler — lands at /app/pep/ inside the container
+COPY pep ./pep
+# Also copy to root /pep for ../../pep imports from /app/routes/
+COPY pep /pep
+
+# Symlink /backend → /app so pepRuntime's ../../backend/lib/... resolves correctly
+RUN ln -s /app /backend
+
 # Copy braid-llm-kit to root level for lib/braid imports (../../../braid-llm-kit from /app/lib/braid/)
 COPY braid-llm-kit /braid-llm-kit
 
 # Verify braid-llm-kit was copied correctly in both locations
 RUN ls -la ./braid-llm-kit/sdk/index.js || { echo "ERROR: /app/braid-llm-kit/sdk/index.js not found!"; exit 1; }
 RUN ls -la /braid-llm-kit/sdk/index.js || { echo "ERROR: /braid-llm-kit/sdk/index.js not found!"; exit 1; }
+# Verify PEP runtime is reachable
+RUN ls -la /pep/runtime/pepRuntime.js || { echo "ERROR: /pep/runtime/pepRuntime.js not found!"; exit 1; }
 
 # Verify shared contracts exist for agent registry imports
 RUN ls -la /shared/contracts/agents.js || { echo "ERROR: /shared/contracts/agents.js not found!"; exit 1; }

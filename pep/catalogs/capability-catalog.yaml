@@ -61,3 +61,37 @@ capabilities:
         duration: P1Y   # ISO-8601: 1 year
     effects: ["!clock"]
     policy: READ_ONLY
+
+  # ── Phase 3 ──────────────────────────────────────────────────────────────────
+
+  - id: query_entity
+    abstract: QueryRecords
+    description: Execute a read-only filtered query against a CRM entity or view
+    bindings:
+      Lead:
+        http: POST /api/pep/query
+      Contact:
+        http: POST /api/pep/query
+      Opportunity:
+        http: POST /api/pep/query
+      Account:
+        http: POST /api/pep/query
+      Activity:
+        http: POST /api/pep/query
+      BizDevSource:
+        http: POST /api/pep/query
+      v_crm_records:
+        http: POST /api/pep/query
+      v_account_related_people:
+        http: POST /api/pep/query
+      lead_detail_full:
+        http: POST /api/pep/query
+      v_activity_stream:
+        http: POST /api/pep/query
+      v_opportunity_pipeline_by_stage:
+        http: POST /api/pep/query
+    effects: ["!net"]
+    policy: READ_ONLY
+    output:
+      assign: results
+      shape: "{ rows: array, count: number, target: string, executed_at: string }"

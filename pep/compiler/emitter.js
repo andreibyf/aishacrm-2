@@ -258,4 +258,145 @@ function emit(resolved, sourceText) {
   };
 }
 
-export { emit, emitSemanticFrame, emitBraidIR, emitPlan, emitAudit, sha256 };
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 3 — Query emitter
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Emit a query_entity IR node from a resolved query frame.
+ *
+ * @param {object} resolvedQuery - Output of resolveQuery() with resolved === true
+ * @param {string} sourceText - Original English source
+ * @returns {object} braid_ir for a query program
+ */
+function emitQuery(resolvedQuery, sourceText) {
+  const programId = `query-${resolvedQuery.target.toLowerCase()}-${Date.now()}`;
+
+  const braidIr = {
+    version: '1.0.0',
+    program_id: programId,
+    instructions: [
+      {
+        op: 'query_entity',
+        target: resolvedQuery.target,
+        target_kind: resolvedQuery.target_kind,
+        table: resolvedQuery.table,
+        route: resolvedQuery.route || null,
+        filters: resolvedQuery.filters.map((f) => ({
+          field: f.field,
+          operator: f.operator,
+          value: f.value,
+        })),
+        sort: resolvedQuery.sort || null,
+        limit: resolvedQuery.limit,
+        assign: 'results',
+      },
+    ],
+    effects: [],
+    policy: 'READ_ONLY',
+  };
+
+  const semanticFrame = {
+    version: '1.0.0',
+    program_id: programId,
+    intent: 'QueryEntity',
+    target: resolvedQuery.target,
+    target_kind: resolvedQuery.target_kind,
+    filter_count: resolvedQuery.filters.length,
+    has_sort: resolvedQuery.sort != null,
+    limit: resolvedQuery.limit,
+    policies: ['READ_ONLY', 'DataScope'],
+    effects: [],
+  };
+
+  const plan = {
+    version: '1.0.0',
+    program_id: programId,
+    steps: [
+      {
+        order: 1,
+        op: 'query_entity',
+        description: `Query ${resolvedQuery.target} with ${resolvedQuery.filters.length} filter(s)`,
+      },
+    ],
+    estimated_steps: 1,
+    reversible: true,
+    requires_confirmation: false,
+  };
+
+  const audit = {
+    version: '1.0.0',
+    program_id: programId,
+    compiled_at: new Date().toISOString(),
+    source_hash: sha256(sourceText),
+    risk_flags: [],
+    cost_estimate: {
+      db_writes: 0,
+      db_reads: 1,
+      notifications: '0',
+      llm_calls: 0,
+    },
+    policy_check: {
+      passed: true,
+      policies_applied: ['READ_ONLY', 'DataScope'],
+    },
+    unresolved: [],
+    warnings: [],
+  };
+
+  return { semantic_frame: semanticFrame, braid_ir: braidIr, plan, audit };
+}
+
+/**
+ * Build a human-readable confirmation string from a resolved query frame.
+ * Called at compile time — date tokens are left as-is (resolved at query time).
+ *
+ * @param {object} resolvedQuery - Output of resolveQuery()
+ * @returns {string}
+ */
+function buildConfirmationString(resolvedQuery) {
+  const parts = [];
+
+  const filterDescs = resolvedQuery.filters.map((f) => {
+    if (f.operator === 'is_null') return `${f.field} is empty`;
+    if (f.operator === 'is_not_null') return `${f.field} is not empty`;
+    if (f.operator === 'in')
+      return `${f.field} in [${Array.isArray(f.value) ? f.value.join(', ') : f.value}]`;
+    if (f.operator === 'contains') return `${f.field} contains "${f.value}"`;
+    // Format employee token
+    const val =
+      typeof f.value === 'string' && f.value.startsWith('{{resolve_employee:')
+        ? f.value.replace(/{{resolve_employee:\s*(.+?)}}/, '$1')
+        : f.value;
+    // Format date token
+    const displayVal =
+      typeof val === 'string' && val.startsWith('{{date:')
+        ? val.replace(/{{date:\s*(.+?)}}/, '$1').replace(/_/g, ' ')
+        : val;
+    const opLabel =
+      { eq: '=', neq: '≠', gt: '>', gte: '≥', lt: '<', lte: '≤' }[f.operator] || f.operator;
+    return `${f.field} ${opLabel} ${displayVal}`;
+  });
+
+  parts.push(`Showing ${resolvedQuery.target}`);
+  if (filterDescs.length > 0) {
+    parts.push(`where ${filterDescs.join(', ')}`);
+  }
+  if (resolvedQuery.sort) {
+    parts.push(`sorted by ${resolvedQuery.sort.field} ${resolvedQuery.sort.direction}`);
+  }
+  parts.push(`(limit ${resolvedQuery.limit})`);
+
+  return parts.join(' ');
+}
+
+export {
+  emit,
+  emitSemanticFrame,
+  emitBraidIR,
+  emitPlan,
+  emitAudit,
+  sha256,
+  emitQuery,
+  buildConfirmationString,
+};
