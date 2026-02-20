@@ -177,5 +177,14 @@
   },
   "npm.packageManager": "npm",
   "explorer.confirmDelete": false,
-  "explorer.confirmDragAndDrop": false
+  "explorer.confirmDragAndDrop": false,
+  "yaml.schemas": {
+    "file:///c%3A/Users/andre/.vscode/extensions/continue.continue-1.2.14-win32-x64/config-yaml-schema.json": [
+      ".continue/**/*.yaml"
+    ],
+    "file:///c%3A/Users/andre/.vscode/extensions/continue.continue-1.2.16-win32-x64/config-yaml-schema.json": [
+      ".continue/**/*.yaml"
+    ],
+    "file:///c:/Users/andre/.vscode/extensions/continue.continue-1.2.16-win32-x64/config-yaml-schema.json": "file:///c%3A/Users/andre/Documents/GitHub/aishacrm-2/.continue/config.yaml"
+  }
 }
