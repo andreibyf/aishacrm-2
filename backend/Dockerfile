@@ -50,9 +50,12 @@ COPY shared /shared
 # Copy PEP runtime to root level for cashflow route imports (../../pep from /app/routes/)
 COPY pep /pep
 
+# Also copy PEP to /app/pep for local imports within the backend
+COPY pep ./pep
+
 # Symlink /backend → /app so pepRuntime.js can resolve ../../backend/lib/braid/execution.js
 # (pepRuntime.js sits at /pep/runtime/ and uses a relative import to backend)
-RUN ln -s /app /backend
+RUN ln -sf /app /backend
 
 # Cache-busting mechanism for braid-llm-kit
 # This ARG will be set to the git commit SHA during GitHub Actions build
@@ -63,37 +66,18 @@ RUN echo "Cache bust value: ${CACHE_BUST}" > /tmp/cache-bust.txt
 # Copy braid-llm-kit to /app for route imports (../../braid-llm-kit from /app/routes/)
 COPY braid-llm-kit ./braid-llm-kit
 
-# Copy PEP compiler — lands at /app/pep/ inside the container
-COPY pep ./pep
-# Also copy to root /pep for ../../pep imports from /app/routes/
-COPY pep /pep
-
-# Symlink /backend → /app so pepRuntime's ../../backend/lib/... resolves correctly
-RUN ln -s /app /backend
-
 # Copy braid-llm-kit to root level for lib/braid imports (../../../braid-llm-kit from /app/lib/braid/)
 COPY braid-llm-kit /braid-llm-kit
-
-# Copy PEP runtime to root level for route imports (../../pep from /app/routes/)
-COPY pep /pep
 
 # Verify braid-llm-kit was copied correctly in both locations
 RUN ls -la ./braid-llm-kit/sdk/index.js || { echo "ERROR: /app/braid-llm-kit/sdk/index.js not found!"; exit 1; }
 RUN ls -la /braid-llm-kit/sdk/index.js || { echo "ERROR: /braid-llm-kit/sdk/index.js not found!"; exit 1; }
+
 # Verify PEP runtime is reachable
 RUN ls -la /pep/runtime/pepRuntime.js || { echo "ERROR: /pep/runtime/pepRuntime.js not found!"; exit 1; }
 
-# Verify PEP runtime exists
-RUN ls -la /pep/runtime/pepRuntime.js || { echo "ERROR: /pep/runtime/pepRuntime.js not found!"; exit 1; }
-
-# Symlink /backend → /app so that pep/runtime imports (../../backend/lib/...) resolve correctly
-RUN ln -s /app /backend
-
 # Verify shared contracts exist for agent registry imports
 RUN ls -la /shared/contracts/agents.js || { echo "ERROR: /shared/contracts/agents.js not found!"; exit 1; }
-
-# Verify PEP runtime exists for cashflow route imports
-RUN ls -la /pep/runtime/pepRuntime.js || { echo "ERROR: /pep/runtime/pepRuntime.js not found!"; exit 1; }
 
 # Copy entrypoint script and make it executable
 COPY backend/docker-entrypoint.sh ./entrypoint.sh
