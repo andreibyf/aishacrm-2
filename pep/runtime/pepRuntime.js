@@ -97,6 +97,7 @@ export function validateCompiledProgram(compiledProgram) {
  * @param {string} runtimeContext.tenant_id - UUID of the tenant
  * @param {string} runtimeContext.actor - User or system actor executing the program
  * @param {string} [runtimeContext.policy] - Override policy (defaults to IR policy)
+ * @param {object} [runtimeContext.trigger_record] - The record that triggered execution (seeds load_entity)
  * @returns {Promise<{ success: boolean, result: object, audit_trail: object[] }>}
  */
 export async function executePepProgram(compiledProgram, runtimeContext) {
@@ -138,8 +139,16 @@ export async function executePepProgram(compiledProgram, runtimeContext) {
       try {
         switch (instruction.op) {
           case 'load_entity': {
-            // Load entity is resolved from context — placeholder for trigger data
-            results[instruction.assign] = { _entity: instruction.entity, _loaded: true };
+            // Seed from trigger_record when present (live execution), otherwise placeholder
+            if (runtimeContext.trigger_record) {
+              results[instruction.assign] = {
+                ...runtimeContext.trigger_record,
+                _entity: instruction.entity,
+                _loaded: true,
+              };
+            } else {
+              results[instruction.assign] = { _entity: instruction.entity, _loaded: true };
+            }
             stepAudit.status = 'ok';
             break;
           }

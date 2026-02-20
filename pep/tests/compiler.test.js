@@ -152,10 +152,11 @@ describe('PEP Compiler', () => {
   // ---------------------------------------------------------------------------
   // Test 9: Full compile of first PEP program
   // ---------------------------------------------------------------------------
-  it('Test 9: full compile returns { status: "compiled" } with all four artifacts', () => {
-    const result = compile(FIRST_PROGRAM, {
+  it('Test 9: full compile returns { status: "compiled" } with all four artifacts', async () => {
+    const result = await compile(FIRST_PROGRAM, {
       entity_catalog: entityCatalog,
       capability_catalog: capabilityCatalog,
+      useLegacyParser: true,
     });
     assert.equal(result.status, 'compiled');
     assert.ok(result.semantic_frame, 'Should have semantic_frame');
@@ -167,13 +168,14 @@ describe('PEP Compiler', () => {
   // ---------------------------------------------------------------------------
   // Test 10: Compile with missing capability — clarification_required
   // ---------------------------------------------------------------------------
-  it('Test 10: compile with "send an invoice" returns clarification_required — never throws', () => {
+  it('Test 10: compile with "send an invoice" returns clarification_required — never throws', async () => {
     const badSource = `When a cash flow transaction is marked as recurring,
 automatically send an invoice based on the recurrence pattern.
 If creation fails, notify the owner.`;
-    const result = compile(badSource, {
+    const result = await compile(badSource, {
       entity_catalog: entityCatalog,
       capability_catalog: capabilityCatalog,
+      useLegacyParser: true,
     });
     assert.equal(result.status, 'clarification_required');
     assert.ok(result.reason, 'Should have a reason');
@@ -189,10 +191,11 @@ describe('PEP Runtime Validation', () => {
   // ---------------------------------------------------------------------------
   // Test 11: validateCompiledProgram on valid compiled output
   // ---------------------------------------------------------------------------
-  it('Test 11: validateCompiledProgram returns { valid: true } for compiled cashflow', () => {
-    const compiled = compile(FIRST_PROGRAM, {
+  it('Test 11: validateCompiledProgram returns { valid: true } for compiled cashflow', async () => {
+    const compiled = await compile(FIRST_PROGRAM, {
       entity_catalog: entityCatalog,
       capability_catalog: capabilityCatalog,
+      useLegacyParser: true,
     });
     const validation = validateCompiledProgram(compiled);
     assert.equal(validation.valid, true);

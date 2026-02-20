@@ -68,6 +68,31 @@ services:
     networks:
       - aishanet
 
+  # Ollama — local LLM server for PEP compiler parser
+  ollama:
+    image: ollama/ollama:latest
+    container_name: aishacrm-ollama
+    restart: unless-stopped
+    entrypoint: >
+      sh -c "ollama serve & sleep 5 && ollama pull qwen2.5-coder:3b && fg %1"
+    ports:
+      - "11436:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+    networks:
+      - aishanet
+
   # Backend API (mirrors production layout, local build)
   backend:
     build:
@@ -82,6 +107,8 @@ services:
       redis-memory:
         condition: service_healthy
       redis-cache:
+        condition: service_healthy
+      ollama:
         condition: service_healthy
     ports:
       - "4001:3001"  # Host:Container - prod port 4001 maps to dev port 3001
@@ -120,6 +147,11 @@ services:
       #   AI_TRIGGERS_WORKER_ENABLED, AI_TRIGGERS_WORKER_INTERVAL_MS
       #   CARE_STATE_WRITE_ENABLED, CARE_WORKFLOW_TRIGGERS_ENABLED
       #   CARE_AUTONOMY_ENABLED, CARE_SHADOW_MODE
+      # PEP LLM Parser (Ollama)
+      - LOCAL_LLM_BASE_URL=http://ollama:11434/v1
+      - LOCAL_LLM_API_KEY=${LOCAL_LLM_API_KEY:-ollama}
+      - PEP_LLM_PROVIDER=local
+      - PEP_LLM_MODEL=qwen2.5-coder:3b
       # Telemetry
       - TELEMETRY_ENABLED=true
       - TELEMETRY_LOG_PATH=/telemetry/telemetry.ndjson
@@ -269,6 +301,8 @@ volumes:
   redis_memory_data:
     driver: local
   redis_cache_data:
+    driver: local
+  ollama_data:
     driver: local
   aisha_telemetry:
     external: true

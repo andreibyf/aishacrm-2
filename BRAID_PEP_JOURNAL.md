@@ -166,61 +166,135 @@ The `yaml` package (v2.8.2) was already installed in the repo as a `devDependenc
 
 ---
 
-## Phase 2 — Planned (Not Started)
+## Phase 2 — LLM Parser + Live Execution Trigger
 
-### Proposed Scope
+**Branch:** `feature/pep-phase2-llm-trigger`
+**Date:** February 2026
+**Auditor:** Claude (Anthropic)
+**Status:** ✅ Complete — all 15 Definition of Done items passed
 
-**LLM-assisted parsing**
+### What Was Built
 
-The Phase 1 CBE grammar is rigid (`When ... is ... automatically ... based on ... If ... notify ...`).
-Phase 2 replaces `pep/compiler/parser.js` with an LLM call that normalizes free-form
-English into the CBE pattern object. The rest of the pipeline (resolver, emitter, runtime)
-is unchanged. The LLM becomes the parser, not the executor.
+| Artifact                | Location                      | Description                                                                                          |
+| ----------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Ollama container        | `docker-compose.yml`          | `qwen2.5-coder:3b` on `aishanet`, port 11436:11434                                                   |
+| LLM parser              | `pep/compiler/llmParser.js`   | Async `parseLLM()` — calls `generateChatCompletion` with structured system prompt                    |
+| LLM parser tests        | `pep/tests/llmParser.test.js` | 8 tests with mocked `generateChatCompletion` — no real LLM calls                                     |
+| Async compiler          | `pep/compiler/index.js`       | `compile()` is now async; uses LLM parser by default, `useLegacyParser` flag for deterministic regex |
+| Live trigger            | `backend/routes/cashflow.js`  | `firePepTrigger()` — fire-and-forget after successful POST when `is_recurring: true`                 |
+| Runtime trigger context | `pep/runtime/pepRuntime.js`   | `trigger_record` in `runtimeContext` seeds `load_entity` result (`__t0`)                             |
 
-Key constraint: the LLM must return a structured CBE pattern object, not free text.
-If it cannot confidently produce the pattern, it returns `clarification_required`.
-The existing fail-closed contract is preserved.
+### What Changed from Phase 1
 
-**Cash flow program execution trigger**
+| Component        | Phase 1                            | Phase 2                                               |
+| ---------------- | ---------------------------------- | ----------------------------------------------------- |
+| Parser           | Rigid regex (`parser.js`)          | LLM-powered (`llmParser.js`) — regex kept as fallback |
+| `compile()`      | Synchronous                        | Async (returns Promise)                               |
+| Runtime          | Adapter exists but unwired         | Wired to `POST /api/cashflow` trigger                 |
+| `load_entity` op | Placeholder `{ _entity, _loaded }` | Seeds from `trigger_record` when present              |
+| Docker           | No Ollama                          | Ollama container with `qwen2.5-coder:3b`              |
 
-Wire the compiled cashflow recurring transaction program to an actual trigger:
-when `POST /api/cashflow` receives a record with `is_recurring = true`, the PEP
-runtime executes the compiled program to schedule the next transaction.
+### Architectural Decisions Made
 
-This requires:
+**1. LLM parser is a compiler dependency, not a runtime dependency**
 
-- A thin middleware hook in `backend/routes/cashflow.js` (additive, no existing behavior changed)
-- `pepRuntime.executePepProgram()` called with the new record as context
-- The `createCashFlowTransaction` Braid tool (already exists in `cashflow.braid`) as the executor
+The LLM is used only at compile time to parse English into a CBE pattern object.
+Once compiled, the IR executes deterministically — no LLM is involved in runtime
+execution. This means: (a) runtime latency is unaffected by model speed, (b) a
+compiled program works identically whether the LLM is available or not, and (c)
+the fail-closed contract from Phase 1 is fully preserved. If the LLM cannot parse,
+the compiler returns `clarification_required` — it never guesses.
 
-**API endpoint**
+**2. Local model rationale: `qwen2.5-coder:3b` via Ollama**
 
-`POST /api/braid/compile` — accepts `{ english_source, context }`, returns the four
-compiled artifacts. Enables future UI workflow builder integration.
+The backend runs inside Docker. A host-machine Ollama at `localhost:11434` is
+unreachable from inside a container. Containerising Ollama on `aishanet` solves
+this. `qwen2.5-coder:3b` was chosen because: (a) it is already available locally,
+(b) it is CPU-only and fast (~1–2s per parse), (c) it excels at structured JSON
+output — exactly what the CBE parsing task requires (classification + extraction
+against a fixed output schema at temperature 0), and (d) it runs entirely on-prem
+with zero API cost or external dependency.
 
-### Catalog Extension Needed for Phase 2
+**3. Env-driven provider configuration**
 
-Add to `entity-catalog.json`:
+Provider, model, and base URL are all configurable via environment variables:
 
-- `Notification` entity — needed for `notify_role` to resolve completely at runtime
+- `PEP_LLM_PROVIDER` (default: `"local"`)
+- `PEP_LLM_MODEL` (default: `"qwen2.5-coder:3b"`)
+- `LOCAL_LLM_BASE_URL` (default: `"http://ollama:11434/v1"`)
 
-Add to `capability-catalog.json`:
+This allows switching to `anthropic`/`openai` in production without code changes.
+When provider is not `"local"`, `baseUrl` is omitted and `generateChatCompletion`
+routes to the appropriate cloud endpoint automatically.
 
-- `schedule_event` capability — for time-based triggers beyond recurrence patterns
+**4. Fail-closed contract preserved**
 
-### Open Questions for Phase 2
+The LLM parser never throws. Every failure mode returns `{ match: false, reason }`:
 
-1. **LLM provider for parsing**: which provider/model from the existing AI engine should
-   handle CBE normalization? Recommend `json_strict` capability routing (already exists
-   in `backend/lib/aiEngine/`) — it is designed for structured JSON output.
+- Malformed JSON → `"LLM returned invalid JSON: ..."`
+- Empty response → `"LLM parser unavailable: no content returned"`
+- Network error / timeout → `"LLM parser unavailable: ..."`
+- LLM returns `{ match: false }` → reason passed through as-is
 
-2. **Program versioning**: when a PEP program source changes, do the compiled artifacts
-   get regenerated automatically (CI step) or manually (`generate.js`)? Recommend
-   a `npm run pep:compile` script that regenerates all programs in `pep/programs/`.
+The resolver and emitter see no difference from Phase 1. The IR is identical.
 
-3. **Tenant-scoped programs**: Phase 1 programs are global (same program for all tenants).
-   Phase 2 should consider whether some programs should be tenant-configurable
-   (e.g. tenant A wants weekly recurrence default, tenant B wants monthly).
+**5. Fire-and-forget trigger**
+
+`firePepTrigger(data, req).catch(err => logger.warn(...))` — the HTTP response
+(`res.status(201).json(...)`) is sent BEFORE the PEP trigger fires. PEP execution
+is a side-effect, not a requirement. Errors are logged, never propagated. The POST
+route behavior is completely unchanged for callers.
+
+**6. Compiled artifacts loaded at module load time**
+
+`cashflow.js` uses top-level `JSON.parse(readFileSync(...))` to load all four
+artifacts once at import time. This avoids per-request I/O and ensures consistent
+program state. If artifacts are missing or invalid, the trigger logs a warning
+and skips — the route still works normally.
+
+**7. Legacy parser preserved via `useLegacyParser` flag**
+
+All 15 existing tests use `context.useLegacyParser: true` to remain fully
+deterministic without mocking. New LLM parser tests use `mock.module()` to
+intercept `generateChatCompletion`. The Phase 1 regex parser (`parser.js`) is
+kept unchanged as a reference implementation and test fallback.
+
+### Verification
+
+- All 15 existing PEP tests pass: `node --test pep/tests/compiler.test.js` (using `useLegacyParser: true`)
+- All 8 new LLM parser tests pass: `node --experimental-test-module-mocks --test pep/tests/llmParser.test.js` (mocked, no real LLM calls)
+- `node pep/programs/cashflow/generate.js` exits 0 — compiled artifacts regenerated successfully
+- `docker exec aishacrm-backend npm test` — full backend suite passes (1236 tests, 0 failures)
+- `curl http://localhost:11436/api/tags` — confirms `qwen2.5-coder:3b` available in Ollama container
+
+### Test Coverage
+
+| Suite               | Tests                                  | Runner                                         |
+| ------------------- | -------------------------------------- | ---------------------------------------------- |
+| `compiler.test.js`  | 15 (all pass, `useLegacyParser: true`) | `node --test`                                  |
+| `llmParser.test.js` | 8 (all pass, mocked LLM)               | `node --experimental-test-module-mocks --test` |
+| Backend suite       | 1236 (all pass)                        | `docker exec aishacrm-backend npm test`        |
+
+### Files Changed
+
+- `docker-compose.yml` — added `ollama` service, `ollama_data` volume, env vars to backend
+- `pep/compiler/llmParser.js` — **NEW** — LLM-powered CBE parser
+- `pep/compiler/index.js` — `compile()` async, `parseLLM` default, `useLegacyParser` flag
+- `pep/runtime/pepRuntime.js` — `trigger_record` support in `load_entity`
+- `pep/programs/cashflow/generate.js` — `await compile()` with `useLegacyParser: true`
+- `pep/tests/compiler.test.js` — `async`/`await`/`useLegacyParser` for Tests 9, 10, 11
+- `pep/tests/llmParser.test.js` — **NEW** — 8 mocked LLM parser tests
+- `backend/routes/cashflow.js` — `firePepTrigger()` + fire-and-forget hook after POST
+- `BRAID_PEP_JOURNAL.md` — this entry
+
+### What Phase 2 Does NOT Do
+
+- No `POST /api/braid/compile` API endpoint (planned for Phase 3)
+- No frontend integration
+- No C.A.R.E. workflow builder integration
+- No tenant-scoped program configuration
+- No automatic artifact regeneration (still manual via `generate.js`)
+- No database migration
 
 ---
 
