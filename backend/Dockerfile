@@ -59,9 +59,18 @@ COPY braid-llm-kit ./braid-llm-kit
 # Copy braid-llm-kit to root level for lib/braid imports (../../../braid-llm-kit from /app/lib/braid/)
 COPY braid-llm-kit /braid-llm-kit
 
+# Copy PEP runtime to root level for route imports (../../pep from /app/routes/)
+COPY pep /pep
+
 # Verify braid-llm-kit was copied correctly in both locations
 RUN ls -la ./braid-llm-kit/sdk/index.js || { echo "ERROR: /app/braid-llm-kit/sdk/index.js not found!"; exit 1; }
 RUN ls -la /braid-llm-kit/sdk/index.js || { echo "ERROR: /braid-llm-kit/sdk/index.js not found!"; exit 1; }
+
+# Verify PEP runtime exists
+RUN ls -la /pep/runtime/pepRuntime.js || { echo "ERROR: /pep/runtime/pepRuntime.js not found!"; exit 1; }
+
+# Symlink /backend → /app so that pep/runtime imports (../../backend/lib/...) resolve correctly
+RUN ln -s /app /backend
 
 # Verify shared contracts exist for agent registry imports
 RUN ls -la /shared/contracts/agents.js || { echo "ERROR: /shared/contracts/agents.js not found!"; exit 1; }
