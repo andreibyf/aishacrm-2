@@ -98,10 +98,10 @@ Return { "match": false, "reason": "..." } if:
  * @param {{ entity_catalog: object, capability_catalog: object }} catalogs
  * @returns {Promise<{ match: boolean, trigger?, action?, fallback?, raw?, reason? }>}
  */
-export async function parseLLM(englishSource, catalogs) {
+export async function parseLLM(englishSource, catalogs, systemPrompt = null) {
   try {
     const summaries = buildCatalogSummaries(catalogs);
-    const systemPrompt = buildSystemPrompt(summaries);
+    const resolvedSystemPrompt = systemPrompt || buildSystemPrompt(summaries);
 
     const provider = process.env.PEP_LLM_PROVIDER || 'local';
     const model = process.env.PEP_LLM_MODEL || 'qwen2.5-coder:3b';
@@ -110,7 +110,7 @@ export async function parseLLM(englishSource, catalogs) {
       provider,
       model,
       messages: [
-        { role: 'system', content: systemPrompt },
+        { role: 'system', content: resolvedSystemPrompt },
         { role: 'user', content: englishSource },
       ],
       temperature: 0,
@@ -156,11 +156,25 @@ export async function parseLLM(englishSource, catalogs) {
     }
 
     if (parsed.match === true && parsed.trigger && parsed.action) {
+      // Phase 2 CBE shape
       return {
         match: true,
         trigger: parsed.trigger,
         action: parsed.action,
         fallback: parsed.fallback || null,
+        raw: englishSource,
+      };
+    }
+
+    if (parsed.match === true && parsed.target) {
+      // Phase 3 query shape
+      return {
+        match: true,
+        target: parsed.target,
+        target_kind: parsed.target_kind || 'entity',
+        filters: parsed.filters || [],
+        sort: parsed.sort || null,
+        limit: parsed.limit || null,
         raw: englishSource,
       };
     }

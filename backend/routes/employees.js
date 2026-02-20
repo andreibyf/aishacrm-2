@@ -18,7 +18,7 @@ export default function createEmployeeRoutes(_pgPool) {
     return message.includes('duplicate key') || message.includes('already exists');
   };
 
-  const normalizeEmail = (value) => (typeof value === 'string' ? value.trim() : '');
+  const normalizeEmail = (value) => (typeof value === 'string' ? value.toLowerCase().trim() : '');
 
   const respondWithDuplicateEmail = (res) =>
     res.status(409).json({
@@ -120,7 +120,7 @@ export default function createEmployeeRoutes(_pgPool) {
         const { data, error } = await supabase
           .from('employees')
           .select('*')
-          .eq('email', email)
+          .eq('email', String(email).toLowerCase().trim())
           .order('created_at', { ascending: false })
           .limit(1);
 
@@ -161,7 +161,7 @@ export default function createEmployeeRoutes(_pgPool) {
         status: 'success',
         data: {
           employees,
-          total: typeof count === 'number' ? count : (data ? data.length : 0),
+          total: typeof count === 'number' ? count : data ? data.length : 0,
           limit: lim,
           offset: off,
         },
@@ -230,7 +230,8 @@ export default function createEmployeeRoutes(_pgPool) {
         .eq('id', id)
         .single();
 
-      if (error && error.code !== 'PGRST116') { // PGRST116 is No rows
+      if (error && error.code !== 'PGRST116') {
+        // PGRST116 is No rows
         throw new Error(error.message);
       }
 
@@ -305,14 +306,27 @@ export default function createEmployeeRoutes(_pgPool) {
   router.post('/', async (req, res) => {
     try {
       logger.debug('[EmployeeRoutes] POST body', req.body);
-      const { tenant_id, first_name, last_name, email, role, status, phone, department, metadata, ...additionalFields } = req.body;
+      const {
+        tenant_id,
+        first_name,
+        last_name,
+        email,
+        role,
+        status,
+        phone,
+        department,
+        metadata,
+        ...additionalFields
+      } = req.body;
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
-      
+
       if (!first_name || !last_name) {
-        return res.status(400).json({ status: 'error', message: 'first_name and last_name are required' });
+        return res
+          .status(400)
+          .json({ status: 'error', message: 'first_name and last_name are required' });
       }
 
       // HARD BLOCK: prevent creation of test-pattern emails to avoid E2E pollution
@@ -331,7 +345,7 @@ export default function createEmployeeRoutes(_pgPool) {
           });
         }
       }
-      
+
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
@@ -351,7 +365,7 @@ export default function createEmployeeRoutes(_pgPool) {
         tenant_id,
         first_name,
         last_name,
-        email: email || null,
+        email: email ? String(email).toLowerCase().trim() : null,
         role: role || null,
         status: status || 'active',
         metadata: combinedMetadata,
@@ -377,7 +391,8 @@ export default function createEmployeeRoutes(_pgPool) {
       // If CRM access requested and email provided, send Supabase Auth invite + create users record
       let invitation_sent = false;
       let invitation_error = null;
-      const hasCrmAccess = combinedMetadata.has_crm_access === true || req.body.has_crm_access === true;
+      const hasCrmAccess =
+        combinedMetadata.has_crm_access === true || req.body.has_crm_access === true;
       const crmRole = combinedMetadata.crm_user_employee_role || role || 'employee';
 
       if (hasCrmAccess && email) {
@@ -388,17 +403,14 @@ export default function createEmployeeRoutes(_pgPool) {
             logger.debug(`[EmployeeRoutes] Auth user already exists for ${email}, skipping invite`);
             invitation_sent = true; // Already has auth access
           } else {
-            const { user: authUser, error: authError } = await inviteUserByEmail(
-              email,
-              {
-                first_name,
-                last_name,
-                role: crmRole,
-                tenant_id,
-                display_name: `${first_name} ${last_name || ''}`.trim(),
-                employee_id: data.id,
-              }
-            );
+            const { user: authUser, error: authError } = await inviteUserByEmail(email, {
+              first_name,
+              last_name,
+              role: crmRole,
+              tenant_id,
+              display_name: `${first_name} ${last_name || ''}`.trim(),
+              employee_id: data.id,
+            });
             if (authError) {
               logger.error('[EmployeeRoutes] Auth invite failed:', authError);
               invitation_error = authError.message;
@@ -414,6 +426,20 @@ export default function createEmployeeRoutes(_pgPool) {
 
         // Also ensure a users table record exists so employee appears in User Management
         try {
+          // Resolve tenant_uuid from tenant table for RLS compatibility
+          let resolvedTenantUuid = null;
+          try {
+            const { data: tenantRow } = await supabase
+              .from('tenant')
+              .select('id')
+              .eq('tenant_id', tenant_id)
+              .limit(1)
+              .maybeSingle();
+            resolvedTenantUuid = tenantRow?.id || tenant_id; // fallback: tenant_id IS the UUID
+          } catch {
+            resolvedTenantUuid = tenant_id;
+          }
+
           const { data: existingUser } = await supabase
             .from('users')
             .select('id')
@@ -422,35 +448,40 @@ export default function createEmployeeRoutes(_pgPool) {
             .maybeSingle();
 
           if (!existingUser) {
-            const { error: userInsertErr } = await supabase
-              .from('users')
-              .insert({
-                email: email.toLowerCase(),
-                first_name,
-                last_name,
-                role: crmRole,
-                tenant_id,
-                status: 'active',
-                metadata: {
-                  crm_access: true,
-                  is_active: true,
-                  display_name: `${first_name} ${last_name || ''}`.trim(),
-                  employee_role: crmRole,
-                  employee_id: data.id,
-                  requested_access: 'read_write',
-                  created_via: 'employee_form',
-                },
-              });
+            const { error: userInsertErr } = await supabase.from('users').insert({
+              email: email.toLowerCase(),
+              first_name,
+              last_name,
+              role: crmRole,
+              tenant_id,
+              tenant_uuid: resolvedTenantUuid,
+              status: 'active',
+              metadata: {
+                crm_access: true,
+                is_active: true,
+                display_name: `${first_name} ${last_name || ''}`.trim(),
+                employee_role: crmRole,
+                employee_id: data.id,
+                requested_access: 'read_write',
+                created_via: 'employee_form',
+              },
+            });
             if (userInsertErr) {
               logger.error('[EmployeeRoutes] Failed to create users record:', userInsertErr);
             } else {
               logger.info(`[EmployeeRoutes] Users record created for ${email}`);
             }
           } else {
-            // Reactivate existing user record if it was deactivated
+            // Reactivate existing user record and sync names/tenant_uuid
             const { error: userUpdateErr } = await supabase
               .from('users')
-              .update({ status: 'active', updated_at: new Date().toISOString() })
+              .update({
+                status: 'active',
+                first_name,
+                last_name,
+                tenant_uuid: resolvedTenantUuid,
+                updated_at: new Date().toISOString(),
+              })
               .eq('id', existingUser.id);
             if (userUpdateErr) {
               logger.warn('[EmployeeRoutes] Failed to reactivate users record:', userUpdateErr);
@@ -545,7 +576,17 @@ export default function createEmployeeRoutes(_pgPool) {
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id, first_name, last_name, email, role, phone, department, metadata, ...otherFields } = req.body;
+      const {
+        tenant_id,
+        first_name,
+        last_name,
+        email,
+        role,
+        phone,
+        department,
+        metadata,
+        ...otherFields
+      } = req.body;
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -586,7 +627,7 @@ export default function createEmployeeRoutes(_pgPool) {
       const updateData = {
         ...(first_name !== undefined && { first_name }),
         ...(last_name !== undefined && { last_name }),
-        ...(email !== undefined && { email }),
+        ...(email !== undefined && { email: String(email).toLowerCase().trim() }),
         ...(role !== undefined && { role }),
         metadata: updatedMetadata,
         updated_at: new Date().toISOString(),
@@ -626,20 +667,19 @@ export default function createEmployeeRoutes(_pgPool) {
         try {
           const { user: existingAuth } = await getAuthUserByEmail(employeeEmail);
           if (existingAuth) {
-            logger.debug(`[EmployeeRoutes] Auth user already exists for ${employeeEmail}, skipping invite`);
+            logger.debug(
+              `[EmployeeRoutes] Auth user already exists for ${employeeEmail}, skipping invite`,
+            );
             invitation_sent = true;
           } else {
-            const { user: authUser, error: authError } = await inviteUserByEmail(
-              employeeEmail,
-              {
-                first_name: data.first_name,
-                last_name: data.last_name,
-                role: crmRole,
-                tenant_id,
-                display_name: `${data.first_name} ${data.last_name || ''}`.trim(),
-                employee_id: data.id,
-              }
-            );
+            const { user: authUser, error: authError } = await inviteUserByEmail(employeeEmail, {
+              first_name: data.first_name,
+              last_name: data.last_name,
+              role: crmRole,
+              tenant_id,
+              display_name: `${data.first_name} ${data.last_name || ''}`.trim(),
+              employee_id: data.id,
+            });
             if (authError) {
               logger.error('[EmployeeRoutes] Auth invite on CRM access toggle failed:', authError);
               invitation_error = authError.message;
@@ -655,6 +695,20 @@ export default function createEmployeeRoutes(_pgPool) {
 
         // Ensure users table record exists (for User Management visibility)
         try {
+          // Resolve tenant_uuid from tenant table for RLS compatibility
+          let resolvedTenantUuid = null;
+          try {
+            const { data: tenantRow } = await supabase
+              .from('tenant')
+              .select('id')
+              .eq('tenant_id', tenant_id)
+              .limit(1)
+              .maybeSingle();
+            resolvedTenantUuid = tenantRow?.id || tenant_id;
+          } catch {
+            resolvedTenantUuid = tenant_id;
+          }
+
           const { data: existingUser } = await supabase
             .from('users')
             .select('id')
@@ -663,35 +717,43 @@ export default function createEmployeeRoutes(_pgPool) {
             .maybeSingle();
 
           if (!existingUser) {
-            const { error: userInsertErr } = await supabase
-              .from('users')
-              .insert({
-                email: employeeEmail.toLowerCase(),
-                first_name: data.first_name,
-                last_name: data.last_name,
-                role: crmRole,
-                tenant_id,
-                status: 'active',
-                metadata: {
-                  crm_access: true,
-                  is_active: true,
-                  display_name: `${data.first_name} ${data.last_name || ''}`.trim(),
-                  employee_role: crmRole,
-                  employee_id: data.id,
-                  requested_access: 'read_write',
-                  created_via: 'employee_crm_toggle',
-                },
-              });
+            const { error: userInsertErr } = await supabase.from('users').insert({
+              email: employeeEmail.toLowerCase(),
+              first_name: data.first_name,
+              last_name: data.last_name,
+              role: crmRole,
+              tenant_id,
+              tenant_uuid: resolvedTenantUuid,
+              status: 'active',
+              metadata: {
+                crm_access: true,
+                is_active: true,
+                display_name: `${data.first_name} ${data.last_name || ''}`.trim(),
+                employee_role: crmRole,
+                employee_id: data.id,
+                requested_access: 'read_write',
+                created_via: 'employee_crm_toggle',
+              },
+            });
             if (userInsertErr) {
-              logger.error('[EmployeeRoutes] Failed to create users record on toggle:', userInsertErr);
+              logger.error(
+                '[EmployeeRoutes] Failed to create users record on toggle:',
+                userInsertErr,
+              );
             } else {
               logger.info(`[EmployeeRoutes] Users record created for ${employeeEmail}`);
             }
           } else {
-            // Reactivate existing user record
+            // Reactivate existing user record and sync names/tenant_uuid
             await supabase
               .from('users')
-              .update({ status: 'active', updated_at: new Date().toISOString() })
+              .update({
+                status: 'active',
+                first_name: data.first_name,
+                last_name: data.last_name,
+                tenant_uuid: resolvedTenantUuid,
+                updated_at: new Date().toISOString(),
+              })
               .eq('id', existingUser.id);
             logger.info(`[EmployeeRoutes] Reactivated users record for ${employeeEmail}`);
           }
@@ -713,7 +775,9 @@ export default function createEmployeeRoutes(_pgPool) {
               .from('users')
               .update({ status: 'inactive', updated_at: new Date().toISOString() })
               .eq('id', existingUser.id);
-            logger.info(`[EmployeeRoutes] CRM access removed, deactivated users record for ${employeeEmail}`);
+            logger.info(
+              `[EmployeeRoutes] CRM access removed, deactivated users record for ${employeeEmail}`,
+            );
           }
         } catch (userSyncErr) {
           logger.error('[EmployeeRoutes] Users table sync error on toggle-off:', userSyncErr);

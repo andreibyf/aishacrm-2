@@ -3,7 +3,7 @@
  * Handles user authentication operations with Supabase Auth
  */
 
-import { getSupabaseAdmin } from "./supabaseFactory.js";
+import { getSupabaseAdmin } from './supabaseFactory.js';
 import logger from './logger.js';
 
 let supabaseAdmin = null;
@@ -16,7 +16,9 @@ export function initSupabaseAuth() {
   try {
     supabaseAdmin = getSupabaseAdmin({ throwOnMissing: false });
     if (!supabaseAdmin) {
-      logger.warn('⚠ Supabase Auth not configured - set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
+      logger.warn(
+        '⚠ Supabase Auth not configured - set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY',
+      );
       return null;
     }
     logger.info('✓ Supabase Auth initialized');
@@ -36,28 +38,28 @@ export function initSupabaseAuth() {
  */
 export async function createAuthUser(email, password, metadata = {}) {
   if (!supabaseAdmin) {
-    throw new Error("Supabase Auth not initialized");
+    throw new Error('Supabase Auth not initialized');
   }
 
+  const normalizedEmail = String(email).toLowerCase().trim();
   try {
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
-      email,
+      email: normalizedEmail,
       password,
       email_confirm: true, // Auto-confirm email
       user_metadata: {
         ...metadata,
         password_change_required: true,
-        password_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000)
-          .toISOString(), // 24 hours from now
+        password_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours from now
       },
     });
 
     if (error) {
-      logger.error({ err: error, email }, '[Supabase Auth] Error creating user');
+      logger.error({ err: error, email: normalizedEmail }, '[Supabase Auth] Error creating user');
       return { user: null, error };
     }
 
-    logger.info({ email }, '✓ Created auth user');
+    logger.info({ email: normalizedEmail }, '✓ Created auth user');
     return { user: data.user, error: null };
   } catch (error) {
     logger.error({ err: error, email }, '[Supabase Auth] Exception creating user');
@@ -73,16 +75,13 @@ export async function createAuthUser(email, password, metadata = {}) {
  */
 export async function updateAuthUserPassword(userId, newPassword) {
   if (!supabaseAdmin) {
-    throw new Error("Supabase Auth not initialized");
+    throw new Error('Supabase Auth not initialized');
   }
 
   try {
-    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(
-      userId,
-      {
-        password: newPassword,
-      },
-    );
+    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+      password: newPassword,
+    });
 
     if (error) {
       logger.error({ err: error, userId }, '[Supabase Auth] Error updating password');
@@ -105,9 +104,10 @@ export async function updateAuthUserPassword(userId, newPassword) {
  */
 export async function sendPasswordResetEmail(email, redirectTo) {
   if (!supabaseAdmin) {
-    throw new Error("Supabase Auth not initialized");
+    throw new Error('Supabase Auth not initialized');
   }
 
+  const normalizedEmail = String(email).toLowerCase().trim();
   try {
     // Redirect to dedicated reset route so UI immediately presents password form.
     // FRONTEND_URL is REQUIRED in production - no localhost fallback.
@@ -121,22 +121,24 @@ export async function sendPasswordResetEmail(email, redirectTo) {
       resetRedirectUrl = 'http://localhost:4000/auth/reset';
       logger.warn('⚠️  FRONTEND_URL not set, using dev default: http://localhost:4000/auth/reset');
     } else {
-      throw new Error('FRONTEND_URL environment variable is required for password reset in production');
+      throw new Error(
+        'FRONTEND_URL environment variable is required for password reset in production',
+      );
     }
 
-    const { data, error } = await supabaseAdmin.auth.resetPasswordForEmail(
-      email,
-      {
-        redirectTo: resetRedirectUrl,
-      },
-    );
+    const { data, error } = await supabaseAdmin.auth.resetPasswordForEmail(normalizedEmail, {
+      redirectTo: resetRedirectUrl,
+    });
 
     if (error) {
-      logger.error({ err: error, email }, '[Supabase Auth] Error sending reset email');
+      logger.error(
+        { err: error, email: normalizedEmail },
+        '[Supabase Auth] Error sending reset email',
+      );
       return { data: null, error };
     }
 
-    logger.info({ email }, '✓ Sent password reset email');
+    logger.info({ email: normalizedEmail }, '✓ Sent password reset email');
     return { data, error: null };
   } catch (error) {
     logger.error({ err: error, email }, '[Supabase Auth] Exception sending reset email');
@@ -152,9 +154,10 @@ export async function sendPasswordResetEmail(email, redirectTo) {
  */
 export async function inviteUserByEmail(email, metadata = {}, redirectUrl = null) {
   if (!supabaseAdmin) {
-    throw new Error("Supabase Auth not initialized");
+    throw new Error('Supabase Auth not initialized');
   }
 
+  const normalizedEmail = String(email).toLowerCase().trim();
   try {
     // Use same logic as password reset for consistency
     let inviteRedirectTo;
@@ -164,27 +167,29 @@ export async function inviteUserByEmail(email, metadata = {}, redirectUrl = null
       inviteRedirectTo = 'http://localhost:4000/accept-invite';
       logger.warn('⚠️  FRONTEND_URL not set, using dev default: http://localhost:4000');
     } else {
-      throw new Error('FRONTEND_URL environment variable is required for user invitations in production');
+      throw new Error(
+        'FRONTEND_URL environment variable is required for user invitations in production',
+      );
     }
 
     const finalRedirectTo = redirectUrl || inviteRedirectTo;
-    const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(
-      email,
-      {
-        data: {
-          ...metadata,
-          password_change_required: true,
-        },
-        redirectTo: finalRedirectTo,
+    const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(normalizedEmail, {
+      data: {
+        ...metadata,
+        password_change_required: true,
       },
-    );
+      redirectTo: finalRedirectTo,
+    });
 
     if (error) {
-      logger.error({ err: error, email }, '[Supabase Auth] Error inviting user');
+      logger.error({ err: error, email: normalizedEmail }, '[Supabase Auth] Error inviting user');
       return { user: null, error };
     }
 
-    logger.info({ email, authUserId: data.user?.id }, '✓ User created and invitation queued');
+    logger.info(
+      { email: normalizedEmail, authUserId: data.user?.id },
+      '✓ User created and invitation queued',
+    );
     logger.info('  → Email will be sent via configured SMTP');
     logger.info('  → Check Supabase Dashboard → Auth → Logs to verify delivery');
     return { user: data.user, error: null };
@@ -201,7 +206,7 @@ export async function inviteUserByEmail(email, metadata = {}, redirectUrl = null
  */
 export async function deleteAuthUser(userId) {
   if (!supabaseAdmin) {
-    throw new Error("Supabase Auth not initialized");
+    throw new Error('Supabase Auth not initialized');
   }
 
   try {
@@ -222,23 +227,31 @@ export async function deleteAuthUser(userId) {
 
 /**
  * Get auth user by email
+ * Uses Supabase admin filter instead of fetching all users (O(1) vs O(n))
  * @param {string} email - User email
  * @returns {Promise<{user, error}>}
  */
 export async function getAuthUserByEmail(email) {
   if (!supabaseAdmin) {
-    throw new Error("Supabase Auth not initialized");
+    throw new Error('Supabase Auth not initialized');
   }
 
+  const normalizedEmail = String(email).toLowerCase().trim();
   try {
-    const { data, error } = await supabaseAdmin.auth.admin.listUsers();
+    // Use filter parameter instead of listing ALL users and scanning
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({
+      filter: normalizedEmail,
+      page: 1,
+      perPage: 1,
+    });
 
     if (error) {
-      logger.error({ err: error, email }, '[Supabase Auth] Error listing users');
+      logger.error({ err: error, email }, '[Supabase Auth] Error looking up user by email');
       return { user: null, error };
     }
 
-    const user = data.users.find((u) => u.email === email);
+    // listUsers with filter returns partial matches; verify exact email (case-insensitive)
+    const user = (data.users || []).find((u) => u.email?.toLowerCase() === normalizedEmail);
     return { user: user || null, error: null };
   } catch (error) {
     logger.error({ err: error, email }, '[Supabase Auth] Exception getting user');
@@ -254,16 +267,13 @@ export async function getAuthUserByEmail(email) {
  */
 export async function updateAuthUserMetadata(userId, metadata) {
   if (!supabaseAdmin) {
-    throw new Error("Supabase Auth not initialized");
+    throw new Error('Supabase Auth not initialized');
   }
 
   try {
-    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(
-      userId,
-      {
-        user_metadata: metadata,
-      },
-    );
+    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+      user_metadata: metadata,
+    });
 
     if (error) {
       logger.error({ err: error, userId }, '[Supabase Auth] Error updating metadata');
@@ -285,16 +295,13 @@ export async function updateAuthUserMetadata(userId, metadata) {
  */
 export async function confirmUserEmail(userId) {
   if (!supabaseAdmin) {
-    throw new Error("Supabase Auth not initialized");
+    throw new Error('Supabase Auth not initialized');
   }
 
   try {
-    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(
-      userId,
-      {
-        email_confirm: true,
-      },
-    );
+    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+      email_confirm: true,
+    });
 
     if (error) {
       logger.error({ err: error, userId }, '[Supabase Auth] Error confirming email');
@@ -317,10 +324,10 @@ export async function confirmUserEmail(userId) {
  */
 export async function generateRecoveryLink(email, redirectTo) {
   if (!supabaseAdmin) {
-    throw new Error("Supabase Auth not initialized");
+    throw new Error('Supabase Auth not initialized');
   }
   if (!email) {
-    return { link: null, error: { message: "email is required" } };
+    return { link: null, error: { message: 'email is required' } };
   }
   try {
     let resetRedirectUrl;
@@ -330,15 +337,19 @@ export async function generateRecoveryLink(email, redirectTo) {
       resetRedirectUrl = `${process.env.FRONTEND_URL}/auth/reset`;
     } else if (process.env.NODE_ENV === 'development') {
       resetRedirectUrl = 'http://localhost:4000/auth/reset';
-      logger.warn('⚠️  FRONTEND_URL not set; using dev default recovery redirect http://localhost:4000/auth/reset');
+      logger.warn(
+        '⚠️  FRONTEND_URL not set; using dev default recovery redirect http://localhost:4000/auth/reset',
+      );
     } else {
-      throw new Error("FRONTEND_URL environment variable is required for recovery link generation in production");
+      throw new Error(
+        'FRONTEND_URL environment variable is required for recovery link generation in production',
+      );
     }
 
     const { data, error } = await supabaseAdmin.auth.admin.generateLink({
-      type: "recovery",
+      type: 'recovery',
       email,
-      options: { redirectTo: resetRedirectUrl }
+      options: { redirectTo: resetRedirectUrl },
     });
     if (error) {
       logger.error({ err: error, email }, '[Supabase Auth] generateLink error');
@@ -346,7 +357,7 @@ export async function generateRecoveryLink(email, redirectTo) {
     }
     const link = data?.properties?.action_link || null;
     if (!link) {
-      return { link: null, error: { message: "Recovery link not returned by Supabase" } };
+      return { link: null, error: { message: 'Recovery link not returned by Supabase' } };
     }
     return { link, error: null };
   } catch (e) {

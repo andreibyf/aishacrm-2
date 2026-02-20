@@ -350,3 +350,139 @@ kept unchanged as a reference implementation and test fallback.
 
 6. **Audit before merge**: every PEP phase must pass a full Definition of Done audit
    before merging to main. The audit is recorded in this journal.
+
+---
+
+## Phase 3 — Natural Language Report Queries
+
+**Branch:** `feature/pep-phase3-report-queries`  
+**Date:** February 2026  
+**Auditor:** Claude (Anthropic)  
+**Status:** ✅ Implementation complete — tests pending first run
+
+### What Was Built
+
+| Artifact                       | Location                                 | Description                                                         |
+| ------------------------------ | ---------------------------------------- | ------------------------------------------------------------------- |
+| Phase 3 entity catalog         | `pep/catalogs/entity-catalog.yaml`       | 6 queryable entities with full field/operator definitions           |
+| Views catalog                  | `pep/catalogs/entity-catalog.yaml`       | 5 queryable views under `views:` key                                |
+| `query_entity` capability      | `pep/catalogs/capability-catalog.yaml`   | New READ_ONLY capability with bindings for all 11 targets           |
+| `resolveQuery()`               | `pep/compiler/resolver.js`               | Validates target, fields, operators against catalog                 |
+| `findQueryTarget()`            | `pep/compiler/resolver.js`               | Finds entity/view by name — entities require `fields` array         |
+| `emitQuery()`                  | `pep/compiler/emitter.js`                | Emits `query_entity` IR node with all four artifacts                |
+| `buildConfirmationString()`    | `pep/compiler/emitter.js`                | Human-readable description of the compiled query                    |
+| Phase 3 system prompt          | `backend/routes/pep.js`                  | Query-oriented LLM prompt with full entity/view/field vocabulary    |
+| `POST /api/pep/compile`        | `backend/routes/pep.js`                  | Parses English query → IR + confirmation string                     |
+| `POST /api/pep/query`          | `backend/routes/pep.js`                  | Executes compiled IR against Supabase, returns rows                 |
+| Route registration             | `backend/server.js`                      | `/api/pep` mounted with `authenticateRequest`                       |
+| `query_entity` runtime handler | `pep/runtime/pepRuntime.js`              | Deferred handler — execution goes through `/api/pep/query` directly |
+| `CustomQuery.jsx`              | `src/components/reports/CustomQuery.jsx` | Frontend query UI: input → confirm → results table + save           |
+| Custom Query tab               | `src/pages/Reports.jsx`                  | "Custom Query" tab added with Sparkles icon                         |
+| 10 compiler tests              | `pep/tests/queryCompiler.test.js`        | All test `resolveQuery` / `emitQuery` / `buildConfirmationString`   |
+| `parseLLM` Phase 3 shape       | `pep/compiler/llmParser.js`              | Added query-shape response branch (`target` + `filters`)            |
+
+### Queryable Surfaces
+
+**Entities** (6) — routed through existing backend routes or Supabase direct:
+
+| Entity         | Table            | Key filterable fields                                                            |
+| -------------- | ---------------- | -------------------------------------------------------------------------------- |
+| `Lead`         | `leads`          | status, source, score, assigned_to, city, country, created_date, estimated_value |
+| `Contact`      | `contacts`       | status, lead_source, city, country, assigned_to, created_date, job_title         |
+| `Opportunity`  | `opportunities`  | stage, amount, probability, close_date, assigned_to, ai_health                   |
+| `Account`      | `accounts`       | type, industry, city, country, assigned_to, annual_revenue, health_status        |
+| `Activity`     | `activities`     | type, status, priority, due_date, outcome, sentiment, assigned_to                |
+| `BizDevSource` | `bizdev_sources` | source_type, status, industry, city, revenue_generated                           |
+
+**Views** (5) — queried directly via Supabase client (no join logic needed):
+
+| View                              | Description                                                                    |
+| --------------------------------- | ------------------------------------------------------------------------------ |
+| `v_crm_records`                   | Unified leads/contacts/opportunities/accounts with `record_type` discriminator |
+| `v_account_related_people`        | Contacts and leads under their parent account                                  |
+| `lead_detail_full`                | Leads with `account_name` pre-resolved                                         |
+| `v_activity_stream`               | Activities with `related_name` pre-resolved                                    |
+| `v_opportunity_pipeline_by_stage` | Pre-aggregated pipeline counts by stage                                        |
+
+### Architectural Decisions
+
+**1. Entities require a `fields` array to be queryable**  
+`CashFlowTransaction` has `attributes` but no `fields` — it is a Phase 1 trigger entity, not a
+queryable entity. `findQueryTarget()` uses the presence of a `fields` array (not a `queryable: true`
+flag) to distinguish them. Clean separation with zero additional catalog overhead.
+
+**2. Two separate system prompts for the LLM parser**  
+Phase 2 uses a CBE trigger→action prompt. Phase 3 uses a query-oriented prompt with entity/view
+vocabulary and date token syntax. `parseLLM()` accepts an optional third argument `systemPrompt`.
+When provided, it overrides the default Phase 2 CBE prompt. Phase 2 behavior is fully preserved.
+
+**3. Date tokens resolve at query time, not compile time**  
+A saved report with `start_of_month` always means the current month when re-run. Compile time
+bakes the query structure; execution time bakes the date values. This is the correct semantic.
+
+**4. Employee name resolution is hard-fail**  
+`{{resolve_employee: James}}` resolves to a UUID at query time via the `employees` table.
+If zero or multiple matches are found, the query returns a 400 error with a clear message.
+Silently dropping the filter would return unfiltered results — worse than useless.
+
+**5. Tenant isolation is double-enforced**  
+`resolveQuery()` rejects explicit `tenant_id` filters (error 400). The `/api/pep/query`
+endpoint injects `tenant_id` unconditionally as the first Supabase filter. Both layers enforce
+isolation independently. There is no code path through Phase 3 that returns cross-tenant data.
+
+**6. Read-only contract enforced at the endpoint boundary**  
+`/api/pep/query` rejects any IR node whose `op` is not `query_entity`. No write operations
+are reachable through any Phase 3 code path regardless of what IR is posted.
+
+**7. localStorage for Phase 3 saved reports**  
+Reports are stored in `localStorage` under `pep_saved_reports_<tenant_id>`. Database
+persistence is deferred to Phase 4. The key is tenant-scoped to prevent cross-tenant bleed
+in multi-tenant browser sessions. Cap at 20 saved reports.
+
+**8. Phase 3 query programs pass `validateCompiledProgram()`**  
+Query programs are single-instruction programs (`query_entity` op). The validator now
+early-returns for this case, bypassing the multi-instruction cashflow-specific checks that
+would otherwise fail. Both program shapes are valid.
+
+### Files Changed
+
+- `pep/catalogs/entity-catalog.yaml` — added 6 queryable entities + 5 views
+- `pep/catalogs/capability-catalog.yaml` — added `query_entity` capability
+- `pep/compiler/resolver.js` — fixed `findQueryTarget()` (was checking `.queryable` flag that doesn't exist)
+- `pep/compiler/llmParser.js` — added Phase 3 query-shape response branch
+- `pep/runtime/pepRuntime.js` — added `query_entity` case + early-return for query program validation
+- `backend/routes/pep.js` — **NEW** — compile + query endpoints
+- `backend/server.js` — import + mount `/api/pep`
+- `src/components/reports/CustomQuery.jsx` — **NEW** — query UI
+- `src/pages/Reports.jsx` — import `CustomQuery`, add `Sparkles` icon, add tab
+
+### Tests
+
+| Suite                   | Tests                                                          | Runner                                        |
+| ----------------------- | -------------------------------------------------------------- | --------------------------------------------- |
+| `queryCompiler.test.js` | 10 (all target resolveQuery/emitQuery/buildConfirmationString) | `node --test pep/tests/queryCompiler.test.js` |
+
+Run tests with:
+
+```bash
+node --test pep/tests/queryCompiler.test.js
+```
+
+### Docker Build Fix (post-implementation)
+
+After initial build, the container failed with `ERR_MODULE_NOT_FOUND` for `pepRuntime.js`. Two issues were found and fixed by VS Code Copilot:
+
+1. `pep/` was not in the Docker build context at all — fixed by adding `COPY pep ./pep` and `COPY pep /pep` to the Dockerfile.
+2. `pepRuntime.js` imports `../../backend/lib/braid/execution.js`. In the container, `backend/` source lives at `/app/` not `/backend/`, so the path resolved to `/backend/lib/...` which didn't exist and had no `node_modules`. Fixed with a single symlink: `RUN ln -s /app /backend`. This mirrors the pattern already used for `braid-llm-kit` and keeps `node_modules` resolution inside `/app`.
+
+**Rule for future PEP work:** any file in `pep/` that imports from `backend/` will work in Docker only because of the `/backend → /app` symlink. Do not remove that symlink. Do not change the import path in `pepRuntime.js`.
+
+### What Phase 3 Does NOT Do
+
+- No database persistence for saved reports (localStorage only — Phase 4)
+- No aggregations or GROUP BY (pre-aggregated views handle the main use cases)
+- No cross-entity joins beyond what views provide
+- No JSONB/array field filtering (`metadata`, `tags`)
+- No scheduling or recurring queries
+- No export of query results to CSV/PDF
+- No `GET /api/pep/saved-reports` endpoint

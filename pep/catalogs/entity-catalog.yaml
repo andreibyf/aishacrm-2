@@ -50,3 +50,329 @@ entities:
       TransactionCreated: Fired when a new cash_flow record is inserted
       TransactionUpdated: Fired when a cash_flow record is updated
       RecurringTransactionDue: Fired when is_recurring=true and next date has been reached
+
+  # ── Phase 3 queryable entities ───────────────────────────────────────────────
+
+  - id: Lead
+    description: A sales lead or prospect record
+    aisha_binding:
+      table: leads
+      route: /api/v2/leads
+    fields:
+      - name: status
+        type: string
+        operators: [eq, neq, in, is_null, is_not_null]
+      - name: source
+        type: string
+        operators: [eq, neq, in, contains]
+      - name: score
+        type: number
+        operators: [eq, neq, gt, gte, lt, lte]
+      - name: assigned_to
+        type: uuid
+        operators: [eq, neq, is_null, is_not_null]
+      - name: city
+        type: string
+        operators: [eq, neq, contains]
+      - name: country
+        type: string
+        operators: [eq, neq, contains]
+      - name: created_date
+        type: date
+        operators: [eq, gt, gte, lt, lte]
+      - name: last_contacted
+        type: date
+        operators: [eq, gt, gte, lt, lte, is_null, is_not_null]
+      - name: qualification_status
+        type: string
+        operators: [eq, neq, in, is_null, is_not_null]
+      - name: estimated_value
+        type: number
+        operators: [eq, neq, gt, gte, lt, lte, is_null, is_not_null]
+      - name: lead_type
+        type: string
+        operators: [eq, neq, in]
+      - name: tags
+        type: string
+        operators: [contains]
+
+  - id: Contact
+    description: A contact person record linked to an account
+    aisha_binding:
+      table: contacts
+      route: /api/v2/contacts
+    fields:
+      - name: status
+        type: string
+        operators: [eq, neq, in, is_null, is_not_null]
+      - name: lead_source
+        type: string
+        operators: [eq, neq, in, contains]
+      - name: city
+        type: string
+        operators: [eq, neq, contains]
+      - name: country
+        type: string
+        operators: [eq, neq, contains]
+      - name: assigned_to
+        type: uuid
+        operators: [eq, neq, is_null, is_not_null]
+      - name: created_date
+        type: date
+        operators: [eq, gt, gte, lt, lte]
+      - name: last_contacted
+        type: date
+        operators: [eq, gt, gte, lt, lte, is_null, is_not_null]
+      - name: job_title
+        type: string
+        operators: [eq, neq, contains, is_null, is_not_null]
+      - name: worker_role
+        type: string
+        operators: [eq, neq, in, is_null, is_not_null]
+
+  - id: Opportunity
+    description: A sales opportunity or deal in the pipeline
+    aisha_binding:
+      table: opportunities
+      route: /api/v2/opportunities
+    fields:
+      - name: stage
+        type: string
+        operators: [eq, neq, in, is_null, is_not_null]
+      - name: amount
+        type: number
+        operators: [eq, neq, gt, gte, lt, lte, is_null, is_not_null]
+      - name: probability
+        type: number
+        operators: [eq, neq, gt, gte, lt, lte]
+      - name: close_date
+        type: date
+        operators: [eq, gt, gte, lt, lte, is_null, is_not_null]
+      - name: assigned_to
+        type: uuid
+        operators: [eq, neq, is_null, is_not_null]
+      - name: lead_source
+        type: string
+        operators: [eq, neq, in, contains]
+      - name: ai_health
+        type: string
+        operators: [eq, neq, in, is_null, is_not_null]
+      - name: last_activity_date
+        type: date
+        operators: [eq, gt, gte, lt, lte, is_null, is_not_null]
+
+  - id: Account
+    description: A company or organization account record
+    aisha_binding:
+      table: accounts
+      route: /api/v2/accounts
+    fields:
+      - name: type
+        type: string
+        operators: [eq, neq, in, is_null, is_not_null]
+      - name: industry
+        type: string
+        operators: [eq, neq, in, contains, is_null, is_not_null]
+      - name: city
+        type: string
+        operators: [eq, neq, contains]
+      - name: country
+        type: string
+        operators: [eq, neq, contains]
+      - name: assigned_to
+        type: uuid
+        operators: [eq, neq, is_null, is_not_null]
+      - name: annual_revenue
+        type: number
+        operators: [eq, neq, gt, gte, lt, lte, is_null, is_not_null]
+      - name: employee_count
+        type: number
+        operators: [eq, neq, gt, gte, lt, lte, is_null, is_not_null]
+      - name: health_status
+        type: string
+        operators: [eq, neq, in, is_null, is_not_null]
+      - name: last_activity_date
+        type: date
+        operators: [eq, gt, gte, lt, lte, is_null, is_not_null]
+      - name: is_placeholder
+        type: boolean
+        operators: [eq]
+
+  - id: Activity
+    description: A CRM activity such as a call, email, meeting, or task
+    aisha_binding:
+      table: activities
+      route: /api/v2/activities
+    fields:
+      - name: type
+        type: string
+        operators: [eq, neq, in]
+      - name: status
+        type: string
+        operators: [eq, neq, in, is_null, is_not_null]
+      - name: priority
+        type: string
+        operators: [eq, neq, in, is_null, is_not_null]
+      - name: due_date
+        type: date
+        operators: [eq, gt, gte, lt, lte, is_null, is_not_null]
+      - name: outcome
+        type: string
+        operators: [eq, neq, in, contains, is_null, is_not_null]
+      - name: sentiment
+        type: string
+        operators: [eq, neq, in, is_null, is_not_null]
+      - name: assigned_to
+        type: uuid
+        operators: [eq, neq, is_null, is_not_null]
+      - name: related_to
+        type: string
+        operators: [eq, neq, in]
+      - name: created_date
+        type: date
+        operators: [eq, gt, gte, lt, lte]
+
+  - id: BizDevSource
+    description: A business development source record tracking lead generation channels
+    aisha_binding:
+      table: bizdev_sources
+      route: /api/bizdevsources
+    fields:
+      - name: source_type
+        type: string
+        operators: [eq, neq, in, contains]
+      - name: status
+        type: string
+        operators: [eq, neq, in]
+      - name: priority
+        type: string
+        operators: [eq, neq, in]
+      - name: industry
+        type: string
+        operators: [eq, neq, in, contains, is_null, is_not_null]
+      - name: city
+        type: string
+        operators: [eq, neq, contains]
+      - name: country
+        type: string
+        operators: [eq, neq, contains]
+      - name: leads_generated
+        type: number
+        operators: [eq, neq, gt, gte, lt, lte]
+      - name: revenue_generated
+        type: number
+        operators: [eq, neq, gt, gte, lt, lte]
+      - name: created_date
+        type: date
+        operators: [eq, gt, gte, lt, lte]
+
+# ── Phase 3 queryable views ───────────────────────────────────────────────────
+# Views are pre-joined surfaces. Queried directly via Supabase client (no backend route).
+
+views:
+  - id: v_crm_records
+    description: Unified view of leads, contacts, opportunities, and accounts with record_type discriminator
+    columns:
+      - name: record_type
+        type: string
+        operators: [eq, neq, in]
+      - name: title
+        type: string
+        operators: [contains, eq]
+      - name: email
+        type: string
+        operators: [contains, eq, is_null, is_not_null]
+      - name: status
+        type: string
+        operators: [eq, neq, in, is_null, is_not_null]
+      - name: assigned_to
+        type: uuid
+        operators: [eq, neq, is_null, is_not_null]
+      - name: updated_at
+        type: date
+        operators: [eq, gt, gte, lt, lte]
+
+  - id: v_account_related_people
+    description: Contacts and leads unified under their parent account
+    columns:
+      - name: account_id
+        type: uuid
+        operators: [eq]
+      - name: person_type
+        type: string
+        operators: [eq, neq, in]
+      - name: first_name
+        type: string
+        operators: [contains, eq]
+      - name: last_name
+        type: string
+        operators: [contains, eq]
+      - name: email
+        type: string
+        operators: [contains, eq, is_null, is_not_null]
+      - name: status
+        type: string
+        operators: [eq, neq, in, is_null, is_not_null]
+
+  - id: lead_detail_full
+    description: Leads with account name pre-resolved (no join required)
+    columns:
+      - name: status
+        type: string
+        operators: [eq, neq, in, is_null, is_not_null]
+      - name: source
+        type: string
+        operators: [eq, neq, in, contains]
+      - name: score
+        type: number
+        operators: [eq, neq, gt, gte, lt, lte]
+      - name: assigned_to
+        type: uuid
+        operators: [eq, neq, is_null, is_not_null]
+      - name: account_name
+        type: string
+        operators: [contains, eq, is_null, is_not_null]
+      - name: created_date
+        type: date
+        operators: [eq, gt, gte, lt, lte]
+      - name: estimated_value
+        type: number
+        operators: [eq, neq, gt, gte, lt, lte, is_null, is_not_null]
+
+  - id: v_activity_stream
+    description: Activities with related entity context pre-resolved
+    columns:
+      - name: type
+        type: string
+        operators: [eq, neq, in]
+      - name: subject
+        type: string
+        operators: [contains, eq, is_null, is_not_null]
+      - name: status
+        type: string
+        operators: [eq, neq, in, is_null, is_not_null]
+      - name: priority
+        type: string
+        operators: [eq, neq, in, is_null, is_not_null]
+      - name: assigned_to
+        type: uuid
+        operators: [eq, neq, is_null, is_not_null]
+      - name: related_to
+        type: string
+        operators: [eq, neq, in]
+      - name: related_name
+        type: string
+        operators: [contains, eq, is_null, is_not_null]
+      - name: due_date
+        type: date
+        operators: [eq, gt, gte, lt, lte, is_null, is_not_null]
+
+  - id: v_opportunity_pipeline_by_stage
+    description: Pre-aggregated opportunity pipeline counts grouped by stage
+    columns:
+      - name: stage
+        type: string
+        operators: [eq, neq, in]
+      - name: count
+        type: number
+        operators: [eq, gt, gte, lt, lte]

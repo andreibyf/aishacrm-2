@@ -395,6 +395,196 @@ function resolve(pattern, entityCatalog, capabilityCatalog) {
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 3 — Query resolver
+// ─────────────────────────────────────────────────────────────────────────────
+
+const VALID_OPERATORS = new Set([
+  'eq',
+  'neq',
+  'gt',
+  'gte',
+  'lt',
+  'lte',
+  'contains',
+  'in',
+  'is_null',
+  'is_not_null',
+]);
+
+const DATE_TOKENS = new Set([
+  'today',
+  'start_of_month',
+  'end_of_month',
+  'start_of_quarter',
+  'end_of_quarter',
+  'start_of_year',
+]);
+
+// last_N_days is a pattern token, checked separately
+function isValidDateToken(value) {
+  if (typeof value !== 'string') return false;
+  if (DATE_TOKENS.has(value)) return true;
+  if (/^last_\d+_days$/.test(value)) return true;
+  return false;
+}
+
+/**
+ * Find a queryable entity or view by name (case-insensitive).
+ * Phase 3 entities are those that have a `fields` array.
+ * All views in the catalog are queryable.
+ *
+ * @param {string} targetName
+ * @param {object} entityCatalog
+ * @returns {{ kind: 'entity'|'view', target: object }|null}
+ */
+function findQueryTarget(targetName, entityCatalog) {
+  const normInput = targetName.toLowerCase();
+
+  // Check entities — only those with a `fields` array (Phase 3 queryable entities)
+  for (const entity of entityCatalog.entities || []) {
+    if (!Array.isArray(entity.fields)) continue; // skip non-queryable entities (e.g. CashFlowTransaction)
+    if (entity.id.toLowerCase() === normInput) {
+      return { kind: 'entity', target: entity };
+    }
+    // Also match by table name
+    const table = (entity.aisha_binding?.table || '').toLowerCase();
+    if (table === normInput) {
+      return { kind: 'entity', target: entity };
+    }
+  }
+
+  // Check views
+  for (const view of entityCatalog.views || []) {
+    if (view.id.toLowerCase() === normInput) {
+      return { kind: 'view', target: view };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Resolve a query frame from an LLM-parsed query result against the entity catalog.
+ *
+ * @param {object} queryFrame - { target, target_kind, filters, sort, limit }
+ * @param {object} entityCatalog - Loaded entity-catalog.yaml
+ * @returns {{ resolved: true, ... } | { resolved: false, reason: string }}
+ */
+function resolveQuery(queryFrame, entityCatalog) {
+  if (!queryFrame || !queryFrame.target) {
+    return { resolved: false, reason: 'Query frame missing target entity or view name.' };
+  }
+
+  // Find the target
+  const found = findQueryTarget(queryFrame.target, entityCatalog);
+  if (!found) {
+    const entityIds = (entityCatalog.entities || [])
+      .filter((e) => Array.isArray(e.fields))
+      .map((e) => e.id);
+    const viewIds = (entityCatalog.views || []).map((v) => v.id);
+    return {
+      resolved: false,
+      reason:
+        `Target '${queryFrame.target}' not found in queryable entities or views. ` +
+        `Available entities: ${entityIds.join(', ')}. ` +
+        `Available views: ${viewIds.join(', ')}.`,
+    };
+  }
+
+  const { kind, target } = found;
+
+  // Get the valid field/column list
+  const validFields = new Map();
+  const fieldList = kind === 'entity' ? target.fields || [] : target.columns || [];
+  for (const f of fieldList) {
+    validFields.set(f.name.toLowerCase(), f);
+  }
+
+  // Validate filters
+  const resolvedFilters = [];
+  for (const filter of queryFrame.filters || []) {
+    const fieldName = filter.field?.toLowerCase();
+    if (!fieldName) {
+      return { resolved: false, reason: `Filter is missing a field name.` };
+    }
+
+    // tenant_id is always injected server-side — reject explicit tenant_id filters
+    if (fieldName === 'tenant_id') {
+      return {
+        resolved: false,
+        reason: `Filter on 'tenant_id' is not allowed. Tenant isolation is enforced automatically.`,
+      };
+    }
+
+    const fieldDef = validFields.get(fieldName);
+    if (!fieldDef) {
+      return {
+        resolved: false,
+        reason:
+          `Field '${filter.field}' does not exist on ${kind} '${target.id}'. ` +
+          `Valid fields: ${Array.from(validFields.keys()).join(', ')}.`,
+      };
+    }
+
+    // Validate operator
+    const op = filter.operator?.toLowerCase();
+    if (!op || !VALID_OPERATORS.has(op)) {
+      return {
+        resolved: false,
+        reason: `Operator '${filter.operator}' is not valid. Valid operators: ${Array.from(VALID_OPERATORS).join(', ')}.`,
+      };
+    }
+
+    // Validate operator is permitted for this field
+    const allowedOps = (fieldDef.operators || []).map((o) => o.toLowerCase());
+    if (allowedOps.length > 0 && !allowedOps.includes(op)) {
+      return {
+        resolved: false,
+        reason: `Operator '${op}' is not permitted for field '${fieldDef.name}'. Allowed: ${allowedOps.join(', ')}.`,
+      };
+    }
+
+    resolvedFilters.push({
+      field: fieldDef.name, // canonical casing from catalog
+      operator: op,
+      value: filter.value ?? null,
+      _fieldDef: fieldDef,
+    });
+  }
+
+  // Validate sort field if present
+  let resolvedSort = null;
+  if (queryFrame.sort?.field) {
+    const sortFieldName = queryFrame.sort.field.toLowerCase();
+    if (!validFields.has(sortFieldName)) {
+      return {
+        resolved: false,
+        reason: `Sort field '${queryFrame.sort.field}' does not exist on ${kind} '${target.id}'.`,
+      };
+    }
+    resolvedSort = {
+      field: validFields.get(sortFieldName).name,
+      direction: queryFrame.sort.direction === 'asc' ? 'asc' : 'desc',
+    };
+  }
+
+  // Validate limit
+  const limit =
+    queryFrame.limit != null ? Math.min(Math.max(1, Number(queryFrame.limit)), 500) : 100;
+
+  return {
+    resolved: true,
+    target: target.id,
+    target_kind: kind,
+    table: kind === 'entity' ? target.aisha_binding?.table : target.id,
+    route: kind === 'entity' ? target.aisha_binding?.route : null,
+    filters: resolvedFilters,
+    sort: resolvedSort,
+    limit,
+  };
+}
+
 export {
   resolve,
   resolveEntity,
@@ -403,4 +593,6 @@ export {
   resolveTimeExpressions,
   resolveSingleDuration,
   normalizeForMatch,
+  resolveQuery,
+  findQueryTarget,
 };

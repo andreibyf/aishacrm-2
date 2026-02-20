@@ -23,8 +23,8 @@
 
 import { parse } from './parser.js';
 import { parseLLM } from './llmParser.js';
-import { resolve } from './resolver.js';
-import { emit } from './emitter.js';
+import { resolve, resolveQuery } from './resolver.js';
+import { emit, emitQuery, buildConfirmationString } from './emitter.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -71,15 +71,20 @@ async function compile(englishSource, context = {}) {
       capability_catalog = context.capability_catalog || defaults.capability_catalog;
     }
 
-    // Phase 1: Parse — English → CBE pattern
+    // Phase 1: Parse — English → CBE pattern or query frame
     let parsed;
     if (context.useLegacyParser) {
       // Legacy: deterministic regex parser (Phase 1)
       parsed = parse(englishSource);
     } else {
-      // Default: LLM-powered parser (Phase 2)
+      // Default: LLM-powered parser (Phase 2 / Phase 3)
+      // context.querySystemPrompt overrides to use the Phase 3 query prompt
       try {
-        parsed = await parseLLM(englishSource, { entity_catalog, capability_catalog });
+        parsed = await parseLLM(
+          englishSource,
+          { entity_catalog, capability_catalog },
+          context.querySystemPrompt || null,
+        );
       } catch (_llmErr) {
         return {
           status: 'clarification_required',
@@ -99,13 +104,37 @@ async function compile(englishSource, context = {}) {
       };
     }
 
+    // Phase 3 query path: parsed result has 'target' key (no trigger/action)
+    if (parsed.target) {
+      const resolvedQ = resolveQuery(parsed, entity_catalog);
+      if (!resolvedQ.resolved) {
+        return {
+          status: 'clarification_required',
+          reason: resolvedQ.reason,
+          unresolved: [],
+          partial_frame: null,
+        };
+      }
+      const queryArtifacts = emitQuery(resolvedQ, englishSource);
+      return {
+        status: 'compiled',
+        query_mode: true,
+        confirmation: buildConfirmationString(resolvedQ),
+        semantic_frame: queryArtifacts.semantic_frame,
+        braid_ir: queryArtifacts.braid_ir,
+        plan: queryArtifacts.plan,
+        audit: queryArtifacts.audit,
+      };
+    }
+
+    // Phase 1/2 CBE trigger-action path
     // Phase 2: Resolve — CBE pattern → annotated pattern with catalog bindings
     const resolved = resolve(parsed, entity_catalog, capability_catalog);
     if (resolved.status === 'clarification_required') {
       return resolved;
     }
 
-    // Phase 3: Emit — resolved pattern → four artifacts
+    // Phase 2: Emit — resolved pattern → four artifacts
     const artifacts = emit(resolved, englishSource);
 
     return {

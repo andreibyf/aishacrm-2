@@ -13,6 +13,7 @@ import {
   Brain,
   Download,
   ChevronDown,
+  Sparkles,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -68,6 +69,7 @@ const ForecastingDashboard = lazy(() => import('../components/reports/Forecastin
 
 import AIMarketInsights from '../components/reports/AIMarketInsights';
 import DataQualityReport from '../components/reports/DataQualityReport';
+import CustomQuery from '../components/reports/CustomQuery';
 import { exportReportToCSV } from '@/api/functions';
 import { getBackendUrl } from '@/api/backendUrl';
 
@@ -461,6 +463,13 @@ export default function ReportsPage() {
       icon: Database,
       iconColor: 'text-cyan-400',
       component: <DataQualityReport tenantFilter={currentScopedFilter} />,
+    },
+    {
+      id: 'custom-query',
+      label: 'Custom Query',
+      icon: Sparkles,
+      iconColor: 'text-violet-400',
+      component: <CustomQuery tenantFilter={currentScopedFilter} />,
     },
   ];
 

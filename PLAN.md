@@ -424,7 +424,7 @@ All 8 tests mock `generateChatCompletion` using `node:test` mock utilities. No r
 
 ---
 
-## Notes for Copilot
+## Notes for Copilot (Phase 2)
 
 1. **`compile()` must stay fail-closed**: wrap the `parseLLM` call in try/catch inside
    `index.js`. If `parseLLM` throws for any reason, return `{ status: "clarification_required" }`.
@@ -459,3 +459,485 @@ All 8 tests mock `generateChatCompletion` using `node:test` mock utilities. No r
    the model to already be pulled. If the container starts before the model is pulled,
    the healthcheck will fail until the pull completes. This is expected on first boot.
    Pull the model immediately after `docker compose up ollama -d`.
+
+---
+
+# PEP Phase 3 — Natural Language Report Queries
+
+## Feature Identity
+
+- **Name**: PEP Phase 3 — Natural Language Report Queries
+- **Description**: Allow business users to query CRM data in plain English. The user types a
+  sentence describing what they want to see. PEP compiles it to a structured `query_entity` IR
+  node, executes it against the database, and returns results rendered in the Reports UI.
+  Read-only. Single-entity or single-view per query. No scheduling, no endpoints yet.
+- **Value**: Eliminates the IT bottleneck for ad-hoc reporting. Any user can get exactly the
+  data slice they need without knowing SQL, without waiting for a developer, and without
+  exporting to Excel.
+
+---
+
+## Scope Boundaries
+
+### In scope
+
+- Natural language → structured query → results in the Reports UI
+- Six queryable entities: `leads`, `contacts`, `opportunities`, `accounts`,
+  `bizdev_sources`, `activities`
+- Five queryable views: `v_crm_records`, `v_account_related_people`, `lead_detail_full`,
+  `v_activity_stream`, `v_opportunity_pipeline_by_stage`
+- Filter operators: equals, not equals, greater than, less than, contains, in list,
+  is null, is not null, date relative (e.g. last 30 days, this quarter, this year)
+- Sort by any filterable field, ascending or descending
+- Limit (default 100, max 500)
+- `assigned_to` resolved by employee name → UUID lookup
+- Results rendered as a table in a new "Custom Query" tab in the Reports page
+- Query definition storable as a named saved report (name + compiled IR, persisted per tenant)
+- "What the system understood" confirmation strip shown before results render
+
+### Explicitly out of scope for Phase 3
+
+- Scheduled execution (Phase 4)
+- API endpoint exposure (Phase 4)
+- Cross-entity joins beyond what the existing views already provide
+- Aggregations and grouping (COUNT, SUM, GROUP BY) — views handle the pre-aggregated cases
+- Write operations of any kind
+- JSONB field querying (metadata, tags, activity_metadata)
+- Pagination beyond the limit parameter
+
+---
+
+## What Changes and What Stays the Same
+
+### Changes
+
+- `pep/catalogs/entity-catalog.yaml` — extend with six entities and five views
+- `pep/catalogs/capability-catalog.yaml` — add `query_entity` capability
+- `pep/compiler/index.js` — handle `query_entity` IR node type in emitter
+- `pep/compiler/emitter.js` — emit `query_entity` IR from resolved semantic frame
+- `pep/compiler/resolver.js` — resolve query targets, filter fields, operators
+- `pep/runtime/pepRuntime.js` — execute `query_entity` nodes via new query endpoint
+- `backend/routes/pep.js` — new file: `POST /api/pep/compile` and `POST /api/pep/query`
+- `backend/routes/index.js` — register `/api/pep` route
+- `src/pages/Reports.jsx` — add "Custom Query" tab
+- `src/components/reports/CustomQuery.jsx` — new component: query input, confirmation
+  strip, results table, save report button
+- `BRAID_PEP_JOURNAL.md` — Phase 3 entry
+
+### Does NOT Change
+
+- `pep/compiler/parser.js` — untouched (legacy fallback)
+- `pep/compiler/llmParser.js` — untouched (Phase 2 parser used as-is)
+- `pep/programs/cashflow/` — untouched
+- `backend/routes/cashflow.js` — untouched
+- All existing report tabs (Overview, Sales Analytics, Lead Analytics, etc.)
+- All existing entity API routes
+- Supabase schema — no migrations required (read-only, uses existing tables and views)
+
+---
+
+## Data Model: Queryable Surfaces
+
+The catalog declares two categories of queryable surface: **entities** (direct table
+access via existing backend routes) and **views** (pre-joined surfaces requiring the
+new generic query endpoint).
+
+### Entities
+
+| Entity         | Backend Route               | Key Filterable Fields                                                                                                        |
+| -------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `Lead`         | `GET /api/v2/leads`         | status, source, score, assigned_to, city, country, created_date, last_contacted, qualification_status, estimated_value, tags |
+| `Contact`      | `GET /api/v2/contacts`      | status, lead_source, city, country, assigned_to, created_date, last_contacted, job_title, tags                               |
+| `Opportunity`  | `GET /api/v2/opportunities` | stage, amount, probability, close_date, assigned_to, lead_source, ai_health, last_activity_date, score                       |
+| `Account`      | `GET /api/v2/accounts`      | type, industry, city, country, assigned_to, annual_revenue, employee_count, health_status, last_activity_date, score         |
+| `Activity`     | `GET /api/v2/activities`    | type, status, priority, due_date, outcome, sentiment, assigned_to, related_to, created_date                                  |
+| `BizDevSource` | `GET /api/bizdevsources`    | source_type, status, priority, industry, city, country, leads_generated, revenue_generated, created_date                     |
+
+### Views
+
+Views do not have dedicated backend routes. They are queried via the new
+`POST /api/pep/query` endpoint which executes a parameterised Supabase select
+directly against the view name.
+
+| View                              | Description                                         | Key Columns                                                                      |
+| --------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `v_crm_records`                   | Unified leads + contacts + opportunities + accounts | record_type, title, email, status, assigned_to, updated_at                       |
+| `v_account_related_people`        | Contacts and leads under an account                 | account_id, person_type, first_name, last_name, email, status                    |
+| `lead_detail_full`                | Leads with account name pre-resolved                | all lead fields + account_name                                                   |
+| `v_activity_stream`               | Activities with related context                     | type, subject, status, priority, assigned_to, related_to, related_name, due_date |
+| `v_opportunity_pipeline_by_stage` | Pre-aggregated pipeline counts                      | stage, count (tenant-scoped)                                                     |
+
+### Relationships (UUID keys)
+
+The following FK relationships exist in the schema. The LLM system prompt must
+include these so it can correctly identify when a view is more appropriate than
+a direct entity query.
+
+```
+bizdev_sources.account_id      → accounts.id
+bizdev_sources.lead_ids (jsonb) → leads.id (array)
+leads.account_id               → accounts.id
+contacts.account_id            → accounts.id
+opportunities.account_id       → accounts.id
+opportunities.contact_id       → contacts.id
+opportunities.lead_id          → leads.id
+activities.related_id          → polymorphic (related_to indicates entity type)
+all entities.assigned_to       → employees.id
+```
+
+---
+
+## IR Extension: `query_entity` Node
+
+A new IR node type added alongside the existing `load_entity`, `check_condition`,
+`persist_entity`, `notify_role` node types.
+
+```yaml
+# Example compiled IR for: "show me all open leads assigned to James created this month"
+program: open_leads_james_this_month
+trigger: on_demand
+actions:
+  - type: query_entity
+    target: Lead # entity name or view name
+    target_kind: entity # "entity" | "view"
+    filters:
+      - field: status
+        operator: eq
+        value: open
+      - field: assigned_to
+        operator: eq
+        value: '{{resolve_employee: James}}'
+      - field: created_date
+        operator: gte
+        value: '{{date: start_of_month}}'
+    sort:
+      field: created_date
+      direction: desc
+    limit: 100
+    assign: results
+fallback:
+  notify: 'Query failed to execute'
+```
+
+### Filter Operators
+
+| Operator      | Meaning               | Example                         |
+| ------------- | --------------------- | ------------------------------- |
+| `eq`          | equals                | status eq 'open'                |
+| `neq`         | not equals            | stage neq 'closed_lost'         |
+| `gt`          | greater than          | amount gt 10000                 |
+| `gte`         | greater than or equal | created_date gte start_of_month |
+| `lt`          | less than             | score lt 50                     |
+| `lte`         | less than or equal    | close_date lte end_of_quarter   |
+| `contains`    | text contains (ilike) | company contains 'tech'         |
+| `in`          | in list               | status in ['new','contacted']   |
+| `is_null`     | field is null         | last_contacted is_null          |
+| `is_not_null` | field is not null     | close_date is_not_null          |
+
+### Date Relative Values
+
+The following template tokens are resolved at runtime to actual dates:
+
+| Token                        | Resolves To                                         |
+| ---------------------------- | --------------------------------------------------- |
+| `{{date: today}}`            | Current date                                        |
+| `{{date: start_of_month}}`   | First day of current month                          |
+| `{{date: end_of_month}}`     | Last day of current month                           |
+| `{{date: start_of_quarter}}` | First day of current quarter                        |
+| `{{date: end_of_quarter}}`   | Last day of current quarter                         |
+| `{{date: start_of_year}}`    | First day of current year                           |
+| `{{date: last_N_days}}`      | today minus N days (N extracted from user sentence) |
+
+### Employee Name Resolution
+
+`{{resolve_employee: <name>}}` tokens are resolved at runtime by the query endpoint.
+The runtime calls `GET /api/employees?tenant_id=<id>&search=<name>` and substitutes
+the matched employee UUID. If no match is found the query returns an error with
+`reason: "Could not resolve employee name: <name>"`.
+
+---
+
+## New Backend: `backend/routes/pep.js`
+
+Two endpoints:
+
+### `POST /api/pep/compile`
+
+Accepts a plain English query sentence and tenant context. Returns a compiled
+`query_entity` IR node and a human-readable confirmation string.
+
+**Request:**
+
+```json
+{
+  "source": "show me all open leads assigned to James created this month",
+  "tenant_id": "<uuid>"
+}
+```
+
+**Response (success):**
+
+```json
+{
+  "status": "success",
+  "data": {
+    "ir": { ...query_entity IR node... },
+    "confirmation": "Showing Leads where status = open, assigned to James, created in December 2025, sorted by created date descending",
+    "target": "Lead",
+    "target_kind": "entity"
+  }
+}
+```
+
+**Response (parse failure):**
+
+```json
+{
+  "status": "clarification_required",
+  "reason": "Could not identify a queryable entity in your request"
+}
+```
+
+### `POST /api/pep/query`
+
+Accepts a compiled `query_entity` IR node and tenant context. Executes against
+the database and returns results.
+
+**Request:**
+
+```json
+{
+  "ir": { ...query_entity IR node... },
+  "tenant_id": "<uuid>"
+}
+```
+
+**Response:**
+
+```json
+{
+  "status": "success",
+  "data": {
+    "rows": [...],
+    "count": 42,
+    "target": "Lead",
+    "executed_at": "2026-02-20T14:00:00Z"
+  }
+}
+```
+
+For `target_kind: entity` — routes through existing entity backend endpoints.
+For `target_kind: view` — executes directly via Supabase client with parameterised
+filters. `tenant_id` is always injected as a mandatory filter regardless of what
+the IR specifies, enforcing tenant isolation.
+
+---
+
+## LLM System Prompt for Phase 3 Parser
+
+The Phase 3 LLM parser uses the same `parseLLM` infrastructure from Phase 2 but
+with a different system prompt — one oriented to query extraction rather than
+trigger-action extraction.
+
+```
+You are a strict query parser for a CRM reporting system.
+
+Your task: parse a plain English report request into a structured JSON query object.
+
+OUTPUT RULES:
+- Return ONLY valid JSON. No markdown, no explanation, no preamble.
+- If you cannot confidently parse the input, return: { "match": false, "reason": "<why>" }
+- Never invent entities, fields, or operators not listed below.
+
+OUTPUT SHAPE (on success):
+{
+  "match": true,
+  "target": "<entity or view name>",
+  "target_kind": "entity" | "view",
+  "filters": [
+    { "field": "<field>", "operator": "<operator>", "value": "<value>" }
+  ],
+  "sort": { "field": "<field>", "direction": "asc" | "desc" } | null,
+  "limit": <number> | null
+}
+
+VALID ENTITIES AND FIELDS:
+{entity_field_summary}
+
+VALID VIEWS:
+{view_summary}
+
+VALID OPERATORS: eq, neq, gt, gte, lt, lte, contains, in, is_null, is_not_null
+
+DATE RELATIVE TOKENS (use these for date values):
+today, start_of_month, end_of_month, start_of_quarter, end_of_quarter, start_of_year, last_N_days
+
+EMPLOYEE NAMES: if a filter references a person's name for assigned_to,
+use value format: "{{resolve_employee: <name>}}"
+
+ENTITY RELATIONSHIPS:
+{relationship_summary}
+
+Return { "match": false, "reason": "..." } if:
+- No entity or view can be identified
+- A requested field does not exist on the identified entity
+- The request is ambiguous between two entities
+```
+
+---
+
+## New Frontend: `src/components/reports/CustomQuery.jsx`
+
+### User Flow
+
+1. User types a plain English query into a text input and presses Enter or clicks Run
+2. Frontend calls `POST /api/pep/compile` with the sentence
+3. If `status: clarification_required` — show inline error asking user to rephrase
+4. If `status: success` — show confirmation strip: "Showing [entity] where [conditions]"
+5. User clicks Confirm (or results render automatically with a Cancel option)
+6. Frontend calls `POST /api/pep/query` with the compiled IR
+7. Results render as a sortable table
+8. User can click "Save Report" — prompts for a name, stores `{ name, ir, confirmation }` in
+   `localStorage` under `pep_saved_reports_<tenant_id>` (Phase 3 uses localStorage;
+   database persistence is Phase 4)
+
+### Component Structure
+
+```
+CustomQuery
+├── QueryInput          — text input + Run button
+├── ConfirmationStrip   — "Showing X where Y" + Confirm/Cancel
+├── ResultsTable        — sortable columns, row count, loading state
+└── SaveReportBar       — name input + Save button (shown after results render)
+```
+
+### Reports.jsx Change
+
+Add one new tab entry to `reportTabs`:
+
+```javascript
+{
+  id: "custom-query",
+  label: "Custom Query",
+  icon: Sparkles,
+  iconColor: "text-violet-400",
+  component: <CustomQuery tenantFilter={currentScopedFilter} />
+}
+```
+
+---
+
+## New Files
+
+| File                                     | Description                                                 |
+| ---------------------------------------- | ----------------------------------------------------------- |
+| `backend/routes/pep.js`                  | `POST /api/pep/compile` and `POST /api/pep/query` endpoints |
+| `src/components/reports/CustomQuery.jsx` | Custom query UI component                                   |
+| `pep/tests/queryCompiler.test.js`        | Tests for Phase 3 query compilation                         |
+
+## Modified Files
+
+| File                                   | Change                                                          |
+| -------------------------------------- | --------------------------------------------------------------- |
+| `pep/catalogs/entity-catalog.yaml`     | Add six entities and five views with full field vocabulary      |
+| `pep/catalogs/capability-catalog.yaml` | Add `query_entity` capability                                   |
+| `pep/compiler/emitter.js`              | Emit `query_entity` IR node type                                |
+| `pep/compiler/resolver.js`             | Resolve query targets, fields, operators, date tokens           |
+| `pep/compiler/index.js`                | Route `query_entity` parse results through resolver and emitter |
+| `pep/runtime/pepRuntime.js`            | Execute `query_entity` nodes via query endpoint                 |
+| `backend/routes/index.js`              | Register `pep` router at `/api/pep`                             |
+| `src/pages/Reports.jsx`                | Add Custom Query tab                                            |
+| `BRAID_PEP_JOURNAL.md`                 | Phase 3 entry                                                   |
+
+---
+
+## Ordered Implementation Steps
+
+| #   | Step                                                                                                                                                                                                                                                                                                                                                                                 | Verifiable Output                                                                                                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Extend `pep/catalogs/entity-catalog.yaml` with six entity entries (Lead, Contact, Opportunity, Account, Activity, BizDevSource) each with full field list, field types, and valid operators per field                                                                                                                                                                                | YAML valid; each entity has `fields` array with `name`, `type`, `operators` keys                                                                                  |
+| 2   | Extend `pep/catalogs/capability-catalog.yaml` with `query_entity` capability entry including description and output contract                                                                                                                                                                                                                                                         | YAML valid; `query_entity` entry present                                                                                                                          |
+| 3   | Add five view entries to entity catalog under a `views` key: `v_crm_records`, `v_account_related_people`, `lead_detail_full`, `v_activity_stream`, `v_opportunity_pipeline_by_stage`, each with column list                                                                                                                                                                          | YAML valid; views section present                                                                                                                                 |
+| 4   | Update `pep/compiler/resolver.js` — add `resolveQuery()` function that validates target name against catalog, validates each filter field against entity/view column list, validates operators, returns resolved IR or error                                                                                                                                                         | `resolveQuery({ target: 'Lead', filters: [{field:'status', operator:'eq', value:'open'}] })` returns resolved IR                                                  |
+| 5   | Update `pep/compiler/emitter.js` — add `emitQuery()` that takes resolved query frame and produces `query_entity` IR node YAML/JSON                                                                                                                                                                                                                                                   | Emitted IR contains `type: query_entity`, `target`, `filters`, `sort`, `limit`, `assign` keys                                                                     |
+| 6   | Update `pep/compiler/index.js` — detect query intent in parsed result (presence of `target` key vs `trigger` key), route to `resolveQuery` + `emitQuery` path                                                                                                                                                                                                                        | `await compile('show me open leads')` returns `{ status: 'compiled', braid_ir: { type: 'query_entity', ... } }`                                                   |
+| 7   | Create `pep/tests/queryCompiler.test.js` — 10 tests covering: valid entity query, valid view query, unknown entity rejection, unknown field rejection, invalid operator rejection, employee name token present, date token present, missing target rejection, sort emitted correctly, limit emitted correctly                                                                        | All 10 tests pass: `node --test pep/tests/queryCompiler.test.js`                                                                                                  |
+| 8   | Create `backend/routes/pep.js` — `POST /api/pep/compile`: calls `compile()` with phase 3 query system prompt, returns IR + confirmation string. `POST /api/pep/query`: resolves employee name tokens, resolves date tokens, executes query against entity route or Supabase view, returns rows + count. Both endpoints require `tenant_id`. Tenant isolation enforced on all queries | `curl -X POST /api/pep/compile -d '{"source":"show me open leads","tenant_id":"..."}' ` returns `{ status: "success", data: { ir: {...}, confirmation: "..." } }` |
+| 9   | Register `pep` router in `backend/routes/index.js`                                                                                                                                                                                                                                                                                                                                   | `POST /api/pep/compile` returns 200, not 404                                                                                                                      |
+| 10  | Update `pep/runtime/pepRuntime.js` — add handler for `query_entity` node type: resolves tokens, calls query endpoint, stores result in `results[instruction.assign]`                                                                                                                                                                                                                 | Existing runtime tests still pass                                                                                                                                 |
+| 11  | Create `src/components/reports/CustomQuery.jsx` — QueryInput, ConfirmationStrip, ResultsTable, SaveReportBar sub-components. Calls `/api/pep/compile` then `/api/pep/query`. Saved reports stored in localStorage                                                                                                                                                                    | Component renders without errors; query flow completes end to end in browser                                                                                      |
+| 12  | Update `src/pages/Reports.jsx` — add Custom Query tab with Sparkles icon                                                                                                                                                                                                                                                                                                             | New tab visible in Reports page                                                                                                                                   |
+| 13  | End-to-end test in browser: type "show me all open leads assigned to me", confirm results render, save report                                                                                                                                                                                                                                                                        | Results table populated; saved report appears on next load                                                                                                        |
+| 14  | Update `BRAID_PEP_JOURNAL.md` with Phase 3 entry                                                                                                                                                                                                                                                                                                                                     | Journal updated                                                                                                                                                   |
+
+---
+
+## Definition of Done
+
+- [ ] `entity-catalog.yaml` has entries for Lead, Contact, Opportunity, Account, Activity, BizDevSource with full field vocabulary
+- [ ] `entity-catalog.yaml` has entries for all five views with column lists
+- [ ] `capability-catalog.yaml` has `query_entity` entry
+- [ ] `resolver.js` has `resolveQuery()` that validates targets and fields against catalog
+- [ ] `emitter.js` has `emitQuery()` that produces valid `query_entity` IR
+- [ ] `compile()` correctly routes query intent through the query compilation path
+- [ ] All 10 query compiler tests pass
+- [ ] All existing Phase 2 tests still pass (compiler.test.js, llmParser.test.js)
+- [ ] `POST /api/pep/compile` returns IR + confirmation string for valid query sentences
+- [ ] `POST /api/pep/compile` returns `clarification_required` for unparseable sentences
+- [ ] `POST /api/pep/query` executes entity queries via existing backend routes
+- [ ] `POST /api/pep/query` executes view queries via Supabase direct with tenant isolation
+- [ ] `{{resolve_employee: <name>}}` tokens resolved correctly at query time
+- [ ] `{{date: <token>}}` tokens resolved to actual dates at query time
+- [ ] `tenant_id` injected on every query regardless of IR contents
+- [ ] CustomQuery component renders in Reports page as new tab
+- [ ] Confirmation strip shows human-readable interpretation before results render
+- [ ] Results table renders rows with column headers
+- [ ] Save report stores IR + name in localStorage
+- [ ] No write operations reachable through any Phase 3 code path
+- [ ] `BRAID_PEP_JOURNAL.md` updated
+
+---
+
+## Notes for Copilot (Phase 3)
+
+1. **Read-only contract is absolute**: `POST /api/pep/query` must only execute SELECT operations.
+   Validate this at the route level — reject any IR node whose `type` is not `query_entity`.
+   Never pass user-supplied SQL or filter values directly to Supabase without parameterisation.
+
+2. **Tenant isolation on every query**: before executing any query (entity or view), inject
+   `tenant_id = req.body.tenant_id` as a mandatory filter. This cannot be overridden by the
+   IR. If `tenant_id` is missing from the request, return 400.
+
+3. **Views use Supabase client directly**: for `target_kind: view`, use the Supabase JS client
+   with `.from(viewName).select('*').eq('tenant_id', tenantId)` and append each resolved filter
+   using the appropriate Supabase filter method. Do not construct raw SQL strings.
+
+4. **Entity queries route through existing backends**: for `target_kind: entity`, translate the
+   IR filters to query parameters and call the existing entity backend route internally (or call
+   the entity's Supabase table directly — whichever is simpler to implement consistently).
+   Do not duplicate entity route logic.
+
+5. **Employee name resolution is best-effort**: if `{{resolve_employee: <name>}}` cannot be
+   resolved to a UUID, return a clear error to the frontend with `reason: "Could not find
+employee: <name>"`. Do not silently drop the filter or return unfiltered results.
+
+6. **Date token resolution is server-side**: resolve `{{date: <token>}}` tokens in the
+   query endpoint, not the compile endpoint. This ensures a saved report IR always uses
+   relative tokens and resolves to the correct date when re-run.
+
+7. **Confirmation string is compile-time**: generate the human-readable confirmation string
+   in `POST /api/pep/compile`, not `POST /api/pep/query`. It reflects what the system
+   understood from the sentence, before execution.
+
+8. **Phase 3 parser uses a different system prompt**: the Phase 3 LLM call still uses
+   `parseLLM` from `llmParser.js` but passes a different `systemPrompt` argument (the
+   query-oriented prompt defined above). `parseLLM` must accept an optional `systemPrompt`
+   parameter to support this without modifying Phase 2 behaviour.
+
+9. **No JSONB field filtering in Phase 3**: do not expose `metadata`, `tags`,
+   `activity_metadata`, or any JSONB column as a filterable field in the catalog.
+   These are Phase 4 scope.
+
+10. **localStorage for saved reports is intentional for Phase 3**: database persistence
+    of saved report definitions is Phase 4. localStorage keyed by
+    `pep_saved_reports_<tenant_id>` is sufficient for the Phase 3 proof of concept.

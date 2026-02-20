@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getBackendUrl } from '@/api/backendUrl';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,7 +9,7 @@ import { AlertCircle, CheckCircle2, UserPlus } from 'lucide-react';
 /**
  * AcceptInvite - Handles Supabase invitation links.
  * When a user clicks an invite link from their email, they land here to set their password.
- * 
+ *
  * Supabase invite links include:
  * - type=invite in the hash
  * - access_token and refresh_token for authentication
@@ -36,16 +37,22 @@ export default function AcceptInvite() {
         console.log('[AcceptInvite] type:', type, 'has tokens:', !!access_token);
 
         // Handle invite links with direct tokens
-        if ((type === 'invite' || type === 'signup' || type === 'magiclink') && access_token && refresh_token) {
+        if (
+          (type === 'invite' || type === 'signup' || type === 'magiclink') &&
+          access_token &&
+          refresh_token
+        ) {
           console.log('[AcceptInvite] Using setSession with bearer tokens...');
           const { data, error: sessionError } = await supabase.auth.setSession({
             access_token,
             refresh_token,
           });
-          
+
           if (sessionError) {
             console.error('[AcceptInvite] setSession error:', sessionError);
-            setError('Invalid or expired invitation link. Please contact your administrator for a new invite.');
+            setError(
+              'Invalid or expired invitation link. Please contact your administrator for a new invite.',
+            );
             setLoading(false);
             return;
           }
@@ -66,11 +73,15 @@ export default function AcceptInvite() {
         const hasQueryCode = url.searchParams.get('code');
         if (hasQueryCode) {
           console.log('[AcceptInvite] Query code detected. Exchanging...');
-          const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(window.location.href);
-          
+          const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(
+            window.location.href,
+          );
+
           if (exchangeError) {
             console.error('[AcceptInvite] exchange error:', exchangeError);
-            setError('Invalid or expired invitation link. Please contact your administrator for a new invite.');
+            setError(
+              'Invalid or expired invitation link. Please contact your administrator for a new invite.',
+            );
             setLoading(false);
             return;
           }
@@ -135,6 +146,33 @@ export default function AcceptInvite() {
       if (updateError) throw updateError;
 
       console.log('[AcceptInvite] Password set successfully');
+
+      // Sync invite acceptance to backend (public.users + employees)
+      // This must happen BEFORE signOut while we still have a valid session
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData?.session?.access_token;
+        if (accessToken) {
+          const backendUrl = getBackendUrl();
+          const syncRes = await fetch(`${backendUrl}/api/auth/invite-accepted`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ access_token: accessToken }),
+          });
+          if (syncRes.ok) {
+            console.log('[AcceptInvite] Backend sync successful');
+          } else {
+            const syncBody = await syncRes.json().catch(() => ({}));
+            console.warn('[AcceptInvite] Backend sync returned:', syncRes.status, syncBody);
+          }
+        } else {
+          console.warn('[AcceptInvite] No session access_token available for backend sync');
+        }
+      } catch (syncErr) {
+        // Non-fatal: password is already set in auth.users; backend sync is best-effort
+        console.warn('[AcceptInvite] Backend sync failed (non-fatal):', syncErr);
+      }
+
       setSuccess(true);
 
       // Sign out and redirect to login
@@ -179,7 +217,7 @@ export default function AcceptInvite() {
               <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
               <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
             </div>
-            <Button onClick={() => window.location.href = '/login'} className="w-full">
+            <Button onClick={() => (window.location.href = '/login')} className="w-full">
               Go to Login
             </Button>
           </CardContent>
@@ -201,7 +239,9 @@ export default function AcceptInvite() {
               <div>
                 <CardTitle className="text-2xl">Welcome to AiSHA CRM</CardTitle>
                 <CardDescription>
-                  {userEmail ? `Create a password for ${userEmail}` : 'Create your password to get started'}
+                  {userEmail
+                    ? `Create a password for ${userEmail}`
+                    : 'Create your password to get started'}
                 </CardDescription>
               </div>
             </div>
@@ -211,7 +251,9 @@ export default function AcceptInvite() {
               <div className="flex flex-col items-center gap-4 py-6">
                 <CheckCircle2 className="h-12 w-12 text-green-500" />
                 <p className="text-center text-slate-700 dark:text-slate-300">
-                  Account activated successfully!<br />Redirecting to login...
+                  Account activated successfully!
+                  <br />
+                  Redirecting to login...
                 </p>
               </div>
             ) : (
@@ -224,7 +266,10 @@ export default function AcceptInvite() {
                 )}
 
                 <div>
-                  <label htmlFor="newPassword" className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">
+                  <label
+                    htmlFor="newPassword"
+                    className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300"
+                  >
                     Create Password
                   </label>
                   <Input
@@ -242,7 +287,10 @@ export default function AcceptInvite() {
                 </div>
 
                 <div>
-                  <label htmlFor="confirmPassword" className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">
+                  <label
+                    htmlFor="confirmPassword"
+                    className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300"
+                  >
                     Confirm Password
                   </label>
                   <Input

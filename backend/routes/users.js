@@ -3,8 +3,8 @@
  * User authentication and management with full CRUD
  */
 
-import express from "express";
-import jwt from "jsonwebtoken";
+import express from 'express';
+import jwt from 'jsonwebtoken';
 import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 import {
   confirmUserEmail,
@@ -15,8 +15,8 @@ import {
   updateAuthUserMetadata,
   updateAuthUserPassword,
   generateRecoveryLink,
-} from "../lib/supabaseAuth.js";
-import { createAuditLog, getUserEmailFromRequest, getClientIP } from "../lib/auditLogger.js";
+} from '../lib/supabaseAuth.js';
+import { createAuditLog, getUserEmailFromRequest, getClientIP } from '../lib/auditLogger.js';
 import logger from '../lib/logger.js';
 
 export default function createUserRoutes(_pgPool, _supabaseAuth) {
@@ -63,7 +63,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
   // Use stricter limits for sensitive auth endpoints to satisfy CodeQL
   const routeBuckets = new Map(); // key: routeId|ip -> { count, ts }
   const DEFAULT_WINDOW_MS = parseInt(process.env.ROUTE_RATE_WINDOW_MS || '60000', 10);
-  function createRouteLimiter({ windowMs = DEFAULT_WINDOW_MS, max = 10, id = "default" } = {}) {
+  function createRouteLimiter({ windowMs = DEFAULT_WINDOW_MS, max = 10, id = 'default' } = {}) {
     return function routeLimiter(req, res, next) {
       try {
         // Allow OPTIONS preflight freely
@@ -118,16 +118,30 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
     if (rec.count > max) {
       const retry = Math.ceil((rec.resetAt - now) / 1000);
-      const err = new Error('Too many password reset attempts for this email. Please try again later.');
+      const err = new Error(
+        'Too many password reset attempts for this email. Please try again later.',
+      );
       err.retryAfter = retry;
       throw err;
     }
   }
 
   // Tuned limiters for specific endpoints
-  const authLimiter = createRouteLimiter({ id: 'auth', windowMs: DEFAULT_WINDOW_MS, max: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '5', 10) });
-  const passwordLimiter = createRouteLimiter({ id: 'password', windowMs: DEFAULT_WINDOW_MS, max: parseInt(process.env.PASSWORD_RATE_LIMIT_MAX || '5', 10) });
-  const mutateLimiter = createRouteLimiter({ id: 'user-mutate', windowMs: DEFAULT_WINDOW_MS, max: parseInt(process.env.USER_MUTATE_RATE_LIMIT_MAX || '30', 10) });
+  const authLimiter = createRouteLimiter({
+    id: 'auth',
+    windowMs: DEFAULT_WINDOW_MS,
+    max: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '5', 10),
+  });
+  const passwordLimiter = createRouteLimiter({
+    id: 'password',
+    windowMs: DEFAULT_WINDOW_MS,
+    max: parseInt(process.env.PASSWORD_RATE_LIMIT_MAX || '5', 10),
+  });
+  const mutateLimiter = createRouteLimiter({
+    id: 'user-mutate',
+    windowMs: DEFAULT_WINDOW_MS,
+    max: parseInt(process.env.USER_MUTATE_RATE_LIMIT_MAX || '30', 10),
+  });
 
   // Helper: selectively expand metadata to reduce duplication.
   // Previously we spread ALL metadata keys to top-level which caused large duplication
@@ -151,7 +165,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       'permissions',
       'navigation_permissions',
       'password_change_required',
-      'password_expires_at'
+      'password_expires_at',
     ];
     const promoted = {};
     for (const k of promoteKeys) {
@@ -173,10 +187,10 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
   // GET /api/users - List users (combines global users + tenant employees)
   // Supports lookup by email without tenant filter
-  router.get("/", cacheList('users', 180), async (req, res) => {
+  router.get('/', cacheList('users', 180), async (req, res) => {
     try {
       // Normalize email param case-insensitively and support alternate casing
-      const rawEmailKey = Object.keys(req.query).find(k => k.toLowerCase() === 'email');
+      const rawEmailKey = Object.keys(req.query).find((k) => k.toLowerCase() === 'email');
       const email = rawEmailKey ? (req.query[rawEmailKey] || '').trim() : '';
       const { tenant_id, limit = 50, offset = 0, strict_email, debug } = req.query;
 
@@ -192,24 +206,32 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         const normalizedEmail = (email || '').trim();
         const { data: usersByEmail, error: ue } = await supabase
           .from('users')
-          .select('id, tenant_id, email, first_name, last_name, role, metadata, created_at, updated_at')
+          .select(
+            'id, tenant_id, email, first_name, last_name, role, metadata, created_at, updated_at',
+          )
           .ilike('email', normalizedEmail);
         if (ue) logger.warn('[Users.get] usersByEmail error:', ue);
 
         const { data: employeesByEmail, error: ee } = await supabase
           .from('employees')
-          .select('id, tenant_id, email, first_name, last_name, role, status, metadata, created_at, updated_at')
+          .select(
+            'id, tenant_id, email, first_name, last_name, role, status, metadata, created_at, updated_at',
+          )
           .ilike('email', normalizedEmail);
         if (ee) logger.warn('[Users.get] employeesByEmail error:', ee);
 
         // Annotate user_type and expand metadata
-        const u1 = (usersByEmail || []).map(u => expandUserMetadata({ ...u, status: 'active', user_type: 'global' }));
-        const u2 = (employeesByEmail || []).map(u => expandUserMetadata({ ...u, user_type: 'employee' }));
+        const u1 = (usersByEmail || []).map((u) =>
+          expandUserMetadata({ ...u, status: 'active', user_type: 'global' }),
+        );
+        const u2 = (employeesByEmail || []).map((u) =>
+          expandUserMetadata({ ...u, user_type: 'employee' }),
+        );
         allUsers = [...u1, ...u2];
 
         // Post-filter safeguard: ensure only exact matches remain (defensive)
         const beforeFilterCount = allUsers.length;
-        allUsers = allUsers.filter(u => (u.email || '').toLowerCase() === email.toLowerCase());
+        allUsers = allUsers.filter((u) => (u.email || '').toLowerCase() === email.toLowerCase());
         const afterFilterCount = allUsers.length;
 
         // HARD suppression of test-pattern emails when not in E2E mode and strict_email requested
@@ -219,12 +241,13 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           /@playwright\.test$/i,
           /@example\.com$/i,
         ];
-  const suppressedTestUsers = [];
-  // Server-side E2E detection via header or env only (no window/localStorage on server)
-  const isE2EMode = (req.headers['x-e2e-test-mode'] === 'true') || (process.env.E2E_TEST_MODE === 'true');
+        const suppressedTestUsers = [];
+        // Server-side E2E detection via header or env only (no window/localStorage on server)
+        const isE2EMode =
+          req.headers['x-e2e-test-mode'] === 'true' || process.env.E2E_TEST_MODE === 'true';
         if (!isE2EMode) {
-          allUsers = allUsers.filter(u => {
-            const isTest = testEmailPatterns.some(re => re.test(u.email || ''));
+          allUsers = allUsers.filter((u) => {
+            const isTest = testEmailPatterns.some((re) => re.test(u.email || ''));
             if (isTest) suppressedTestUsers.push(u);
             return !isTest;
           });
@@ -233,7 +256,11 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         if (strict_email && parseInt(strict_email) === 1) {
           // If any pre-filter rows existed that didn't match, log warning; enforce strictness
           if (beforeFilterCount !== afterFilterCount) {
-            logger.warn('[Users.get] strict_email mismatch: non-matching rows suppressed', { email, beforeFilterCount, afterFilterCount });
+            logger.warn('[Users.get] strict_email mismatch: non-matching rows suppressed', {
+              email,
+              beforeFilterCount,
+              afterFilterCount,
+            });
           }
         }
 
@@ -242,25 +269,36 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
         const durationMs = Date.now() - t0;
         if (debug === '1') {
-          logger.debug('[Users.get] DEBUG email lookup', { email, durationMs, returned: allUsers.length, suppressedTestUsers: suppressedTestUsers.length });
+          logger.debug('[Users.get] DEBUG email lookup', {
+            email,
+            durationMs,
+            returned: allUsers.length,
+            suppressedTestUsers: suppressedTestUsers.length,
+          });
         }
 
         return res.json({
-          status: "success",
+          status: 'success',
           data: {
             users: allUsers,
             total: allUsers.length,
             limit: parseInt(limit),
             offset: parseInt(offset),
-            debug: debug === '1' ? {
-              email,
-              strict: !!strict_email,
-              beforeFilterCount,
-              afterFilterCount,
-              suppressedTestUsersCount: suppressedTestUsers.length,
-              suppressedTestUsers: debug === '1' ? suppressedTestUsers.map(u => ({ id: u.id, email: u.email })) : undefined,
-              durationMs,
-            } : undefined,
+            debug:
+              debug === '1'
+                ? {
+                    email,
+                    strict: !!strict_email,
+                    beforeFilterCount,
+                    afterFilterCount,
+                    suppressedTestUsersCount: suppressedTestUsers.length,
+                    suppressedTestUsers:
+                      debug === '1'
+                        ? suppressedTestUsers.map((u) => ({ id: u.id, email: u.email }))
+                        : undefined,
+                    durationMs,
+                  }
+                : undefined,
           },
         });
       }
@@ -275,24 +313,36 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         const [adminsRes, employeesRes] = await Promise.all([
           supabase
             .from('users')
-            .select('id, tenant_id, email, first_name, last_name, role, metadata, created_at, updated_at', { count: 'exact' })
+            .select(
+              'id, tenant_id, email, first_name, last_name, role, metadata, created_at, updated_at',
+              { count: 'exact' },
+            )
             .eq('tenant_id', tenant_id)
             .order('created_at', { ascending: false })
             .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1),
           supabase
             .from('employees')
-            .select('id, tenant_id, email, first_name, last_name, role, status, metadata, created_at, updated_at', { count: 'exact' })
+            .select(
+              'id, tenant_id, email, first_name, last_name, role, status, metadata, created_at, updated_at',
+              { count: 'exact' },
+            )
             .eq('tenant_id', tenant_id)
             .order('created_at', { ascending: false })
             .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1),
         ]);
 
-        const admins = (adminsRes.data || []).map(r => expandUserMetadata({ ...r, status: 'active', user_type: 'admin' }));
-        const employees = (employeesRes.data || []).map(r => expandUserMetadata({ ...r, user_type: 'employee' }));
-        allUsers = [...admins, ...employees].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        const admins = (adminsRes.data || []).map((r) =>
+          expandUserMetadata({ ...r, status: 'active', user_type: 'admin' }),
+        );
+        const employees = (employeesRes.data || []).map((r) =>
+          expandUserMetadata({ ...r, user_type: 'employee' }),
+        );
+        allUsers = [...admins, ...employees].sort(
+          (a, b) => new Date(b.created_at) - new Date(a.created_at),
+        );
 
         res.json({
-          status: "success",
+          status: 'success',
           data: {
             users: allUsers,
             total: (adminsRes.count || 0) + (employeesRes.count || 0),
@@ -309,29 +359,39 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
         const { data: globalUsers, error: guErr } = await supabase
           .from('users')
-          .select('id, tenant_id, email, first_name, last_name, role, metadata, created_at, updated_at')
+          .select(
+            'id, tenant_id, email, first_name, last_name, role, metadata, created_at, updated_at',
+          )
           .in('role', ['superadmin', 'admin'])
           .order('created_at', { ascending: false });
         if (guErr) logger.warn('[Users.get] global users error:', guErr);
 
         const { data: employeesRows, error: empErr } = await supabase
           .from('employees')
-          .select('id, tenant_id, email, first_name, last_name, role, status, metadata, created_at, updated_at')
+          .select(
+            'id, tenant_id, email, first_name, last_name, role, status, metadata, created_at, updated_at',
+          )
           .order('created_at', { ascending: false })
           .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
         if (empErr) logger.warn('[Users.get] employees list error:', empErr);
 
-        const adminsWithType = (globalUsers || []).map(r => expandUserMetadata({ ...r, status: 'active', user_type: r.tenant_id ? 'admin' : 'global' }));
-        const employeesWithType = (employeesRows || []).map(r => expandUserMetadata({ ...r, user_type: 'employee' }));
+        const adminsWithType = (globalUsers || []).map((r) =>
+          expandUserMetadata({
+            ...r,
+            status: 'active',
+            user_type: r.tenant_id ? 'admin' : 'global',
+          }),
+        );
+        const employeesWithType = (employeesRows || []).map((r) =>
+          expandUserMetadata({ ...r, user_type: 'employee' }),
+        );
         allUsers = [...adminsWithType, ...employeesWithType];
 
         // Sort by created_at desc
-        allUsers.sort((a, b) =>
-          new Date(b.created_at) - new Date(a.created_at)
-        );
+        allUsers.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
         res.json({
-          status: "success",
+          status: 'success',
           data: {
             users: allUsers,
             total: (globalUsers?.length || 0) + (employeesRows?.length || 0),
@@ -341,8 +401,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         });
       }
     } catch (error) {
-      logger.error("Error listing users:", error);
-      res.status(500).json({ status: "error", message: error.message });
+      logger.error('Error listing users:', error);
+      res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
@@ -372,7 +432,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
    *       200:
    *         description: List of user profiles
    */
-  router.get("/profiles", async (req, res) => {
+  router.get('/profiles', async (req, res) => {
     try {
       const { tenant_id, limit = 100, offset = 0 } = req.query;
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
@@ -397,7 +457,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       }
 
       // Transform to include computed fields
-      const transformedProfiles = (profiles || []).map(p => ({
+      const transformedProfiles = (profiles || []).map((p) => ({
         // User (login account) fields
         id: p.user_id,
         user_id: p.user_id,
@@ -405,7 +465,10 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         first_name: p.first_name,
         last_name: p.last_name,
         full_name: [p.first_name, p.last_name].filter(Boolean).join(' ') || p.email,
-        display_name: p.user_metadata?.display_name || [p.first_name, p.last_name].filter(Boolean).join(' ') || p.email,
+        display_name:
+          p.user_metadata?.display_name ||
+          [p.first_name, p.last_name].filter(Boolean).join(' ') ||
+          p.email,
         role: p.auth_role,
         tenant_id: p.tenant_id,
         status: p.status || 'active',
@@ -428,7 +491,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         manager_employee_id: p.manager_employee_id,
         // Computed
         has_employee_record: !!p.employee_id,
-        user_type: p.auth_role === 'superadmin' ? 'global' : (p.auth_role === 'admin' ? 'admin' : 'user'),
+        user_type:
+          p.auth_role === 'superadmin' ? 'global' : p.auth_role === 'admin' ? 'admin' : 'user',
       }));
 
       res.json({
@@ -478,13 +542,13 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
    *             schema:
    *               $ref: '#/components/schemas/Error'
    */
-  router.post("/sync-from-auth", async (req, res) => {
+  router.post('/sync-from-auth', async (req, res) => {
     try {
-      const email = (req.body?.email || req.query?.email || "").trim();
+      const email = (req.body?.email || req.query?.email || '').trim();
       if (!email) {
         return res.status(400).json({
-          status: "error",
-          message: "email is required",
+          status: 'error',
+          message: 'email is required',
         });
       }
 
@@ -499,8 +563,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
       if ((uRows && uRows.length > 0) || (eRows && eRows.length > 0)) {
         return res.json({
-          status: "success",
-          message: "User already exists in CRM",
+          status: 'success',
+          message: 'User already exists in CRM',
           data: {
             users: uRows || [],
             employees: eRows || [],
@@ -509,72 +573,77 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       }
 
       // Fetch from Supabase Auth
-      const { user: authUser, error: authErr } = await getAuthUserByEmail(
-        email,
-      );
+      const { user: authUser, error: authErr } = await getAuthUserByEmail(normalizedEmail);
       if (authErr) {
         return res.status(500).json({
-          status: "error",
+          status: 'error',
           message: `Auth lookup failed: ${authErr.message}`,
         });
       }
       if (!authUser) {
         return res.status(404).json({
-          status: "error",
-          message: "Auth user not found",
+          status: 'error',
+          message: 'Auth user not found',
         });
       }
 
       const meta = authUser.user_metadata || {};
-      const role = (meta.role || "employee").toLowerCase();
+      const role = (meta.role || 'employee').toLowerCase();
       // Normalize tenant_id coming from metadata
       const rawTenant = meta.tenant_id;
       const normalizedTenantId =
-        (rawTenant === "" || rawTenant === "no-client" ||
-            rawTenant === "none" || rawTenant === "null" ||
-            rawTenant === undefined)
+        rawTenant === '' ||
+        rawTenant === 'no-client' ||
+        rawTenant === 'none' ||
+        rawTenant === 'null' ||
+        rawTenant === undefined
           ? null
           : rawTenant;
 
-      const first_name = meta.first_name || authUser.email?.split("@")[0] || "";
-      const last_name = meta.last_name || "";
-      const display_name = meta.display_name ||
-        `${first_name} ${last_name}`.trim();
+      const first_name = meta.first_name || authUser.email?.split('@')[0] || '';
+      const last_name = meta.last_name || '';
+      const display_name = meta.display_name || `${first_name} ${last_name}`.trim();
 
       // Decide target table
       let createdRow = null;
-      if (role === "superadmin" && !normalizedTenantId) {
+      if (role === 'superadmin' && !normalizedTenantId) {
         const nowIso = new Date().toISOString();
         const { data, error } = await supabase
           .from('users')
-          .insert([{
-            email,
-            first_name,
-            last_name,
-            role: 'superadmin',
-            metadata: { display_name, ...meta },
-            created_at: nowIso,
-            updated_at: nowIso,
-          }])
+          .insert([
+            {
+              email: normalizedEmail,
+              first_name,
+              last_name,
+              role: 'superadmin',
+              metadata: { display_name, ...meta },
+              created_at: nowIso,
+              updated_at: nowIso,
+            },
+          ])
           .select('id, email, first_name, last_name, role, metadata, created_at, updated_at')
           .single();
         if (error) throw new Error(error.message);
         createdRow = { table: 'users', record: data };
-      } else if (role === "admin" && normalizedTenantId) {
+      } else if (role === 'admin' && normalizedTenantId) {
         const nowIso = new Date().toISOString();
         const { data, error } = await supabase
           .from('users')
-          .insert([{
-            email,
-            first_name,
-            last_name,
-            role: 'admin',
-            tenant_id: normalizedTenantId,
-            metadata: { display_name, ...meta },
-            created_at: nowIso,
-            updated_at: nowIso,
-          }])
-          .select('id, email, first_name, last_name, role, tenant_id, metadata, created_at, updated_at')
+          .insert([
+            {
+              email: normalizedEmail,
+              first_name,
+              last_name,
+              role: 'admin',
+              tenant_id: normalizedTenantId,
+              metadata: { display_name, ...meta },
+              created_at: nowIso,
+              updated_at: nowIso,
+            },
+          ])
+          .select(
+            'id, email, first_name, last_name, role, tenant_id, metadata, created_at, updated_at',
+          )
           .single();
         if (error) throw new Error(error.message);
         createdRow = { table: 'users', record: data };
@@ -582,38 +651,42 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         // Default to employee in a tenant
         if (!normalizedTenantId) {
           return res.status(400).json({
-            status: "error",
-            message: "tenant_id metadata is required for non-admin users",
+            status: 'error',
+            message: 'tenant_id metadata is required for non-admin users',
           });
         }
         const nowIso = new Date().toISOString();
         const { data, error } = await supabase
           .from('employees')
-          .insert([{
-            tenant_id: normalizedTenantId,
-            email,
-            first_name,
-            last_name,
-            role,
-            status: 'active',
-            metadata: { display_name, ...meta },
-            created_at: nowIso,
-            updated_at: nowIso,
-          }])
-          .select('id, tenant_id, email, first_name, last_name, role, status, metadata, created_at, updated_at')
+          .insert([
+            {
+              tenant_id: normalizedTenantId,
+              email: normalizedEmail,
+              first_name,
+              last_name,
+              role,
+              status: 'active',
+              metadata: { display_name, ...meta },
+              created_at: nowIso,
+              updated_at: nowIso,
+            },
+          ])
+          .select(
+            'id, tenant_id, email, first_name, last_name, role, status, metadata, created_at, updated_at',
+          )
           .single();
         if (error) throw new Error(error.message);
         createdRow = { table: 'employees', record: data };
       }
 
       return res.json({
-        status: "success",
-        message: "CRM user record created from auth metadata",
+        status: 'success',
+        message: 'CRM user record created from auth metadata',
         data: createdRow,
       });
     } catch (error) {
-      logger.error("Error syncing from auth:", error);
-      res.status(500).json({ status: "error", message: error.message });
+      logger.error('Error syncing from auth:', error);
+      res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
@@ -647,7 +720,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
    *             schema:
    *               $ref: '#/components/schemas/Error'
    */
-  router.get("/:id", async (req, res) => {
+  router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query;
@@ -657,7 +730,9 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       const supabase = getSupabaseClient();
       let empQuery = supabase
         .from('employees')
-        .select('id, tenant_id, email, first_name, last_name, role, status, metadata, created_at, updated_at')
+        .select(
+          'id, tenant_id, email, first_name, last_name, role, status, metadata, created_at, updated_at',
+        )
         .eq('id', id)
         .limit(1);
       if (tenant_id !== undefined && tenant_id !== 'null') {
@@ -669,8 +744,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
       if (resultRows.length === 0) {
         return res.status(404).json({
-          status: "error",
-          message: "User not found",
+          status: 'error',
+          message: 'User not found',
         });
       }
 
@@ -678,24 +753,24 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       const user = expandUserMetadata(resultRows[0]);
 
       res.json({
-        status: "success",
+        status: 'success',
         data: { user },
       });
     } catch (error) {
-      logger.error("Error getting user:", error);
-      res.status(500).json({ status: "error", message: error.message });
+      logger.error('Error getting user:', error);
+      res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
   // POST /api/users/login - User login (basic implementation)
-  router.post("/login", authLimiter, async (req, res) => {
+  router.post('/login', authLimiter, async (req, res) => {
     try {
       const { email, password: _password } = req.body;
 
       if (!email) {
         return res.status(400).json({
-          status: "error",
-          message: "email is required",
+          status: 'error',
+          message: 'email is required',
         });
       }
 
@@ -723,8 +798,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
       if (foundArr.length === 0) {
         return res.status(401).json({
-          status: "error",
-          message: "Invalid credentials",
+          status: 'error',
+          message: 'Invalid credentials',
         });
       }
 
@@ -737,19 +812,18 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         const accountStatus = (meta.account_status || '').toLowerCase();
         const rowStatus = (found.status || '').toLowerCase();
 
-        const isDisabled = accountStatus === 'inactive'
-          || flatIsActive === false
-          || rowStatus === 'inactive';
+        const isDisabled =
+          accountStatus === 'inactive' || flatIsActive === false || rowStatus === 'inactive';
 
         if (isDisabled) {
           return res.status(403).json({
-            status: "error",
-            message: "Account is disabled. Contact an administrator.",
-            code: "ACCOUNT_DISABLED",
+            status: 'error',
+            message: 'Account is disabled. Contact an administrator.',
+            code: 'ACCOUNT_DISABLED',
           });
         }
       } catch (e) {
-        logger.warn("[Login] Failed to evaluate disabled state:", e.message);
+        logger.warn('[Login] Failed to evaluate disabled state:', e.message);
       }
 
       // On successful lookup, mark account active + online and record last_login
@@ -763,32 +837,31 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           live_status: 'online',
           last_login: nowIso,
         };
-        const payload = tableName === 'users'
-          ? { metadata: merged, updated_at: nowIso }
-          : { status: 'active', metadata: merged, updated_at: nowIso };
-        const { error: updErr } = await supabase
-          .from(tableName)
-          .update(payload)
-          .eq('id', found.id);
+        const payload =
+          tableName === 'users'
+            ? { metadata: merged, updated_at: nowIso }
+            : { status: 'active', metadata: merged, updated_at: nowIso };
+        const { error: updErr } = await supabase.from(tableName).update(payload).eq('id', found.id);
         if (updErr) throw updErr;
       } catch (e) {
-        logger.warn("[Login] Failed to update live/account status:", e.message);
+        logger.warn('[Login] Failed to update live/account status:', e.message);
         // Continue login even if status update fails
       }
 
       // Re-fetch the user to include updated metadata
       const { data: refreshedRows } = await supabase
         .from(tableName)
-        .select(tableName === 'users'
-          ? 'id, tenant_id, email, first_name, last_name, role, metadata'
-          : 'id, tenant_id, email, first_name, last_name, role, status, metadata')
+        .select(
+          tableName === 'users'
+            ? 'id, tenant_id, email, first_name, last_name, role, metadata'
+            : 'id, tenant_id, email, first_name, last_name, role, status, metadata',
+        )
         .eq('id', found.id)
         .limit(1);
       const user = expandUserMetadata((refreshedRows && refreshedRows[0]) || found);
 
       // Generate JWT token
-      const JWT_SECRET = process.env.JWT_SECRET ||
-        "your-secret-key-change-in-production";
+      const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
       const token = jwt.sign(
         {
           user_id: user.id,
@@ -797,20 +870,20 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           tenant_id: user.tenant_id,
         },
         JWT_SECRET,
-        { expiresIn: "7d" }, // Token expires in 7 days
+        { expiresIn: '7d' }, // Token expires in 7 days
       );
 
       res.json({
-        status: "success",
-        message: "Login successful",
+        status: 'success',
+        message: 'Login successful',
         data: {
           user,
           token,
         },
       });
     } catch (error) {
-      logger.error("Error logging in:", error);
-      res.status(500).json({ status: "error", message: error.message });
+      logger.error('Error logging in:', error);
+      res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
@@ -847,24 +920,22 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
    *             schema:
    *               $ref: '#/components/schemas/Error'
    */
-  router.post("/heartbeat", async (req, res) => {
+  router.post('/heartbeat', async (req, res) => {
     try {
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
-      const authHeader = req.headers?.authorization || "";
-      const bearer = authHeader.startsWith("Bearer ")
-        ? authHeader.substring(7)
-        : null;
+      const authHeader = req.headers?.authorization || '';
+      const bearer = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null;
 
       let userId = null;
-      let email = (req.body?.email || req.query?.email || "").trim();
+      let email = (req.body?.email || req.query?.email || '').trim();
 
       // Prefer JWT if provided
       if (bearer) {
         try {
           const decoded = jwt.verify(
             bearer,
-            process.env.JWT_SECRET || "your-secret-key-change-in-production",
+            process.env.JWT_SECRET || 'your-secret-key-change-in-production',
           );
           userId = decoded?.user_id || null;
         } catch {
@@ -874,8 +945,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
       if (!userId && !email) {
         return res.status(400).json({
-          status: "error",
-          message: "Provide Authorization bearer token or email",
+          status: 'error',
+          message: 'Provide Authorization bearer token or email',
         });
       }
 
@@ -895,11 +966,21 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       if (!target && email) {
         // Exact match email lookup (emails are stored in lowercase)
         const normalizedEmail = email.toLowerCase().trim();
-        const userByEmail = await supabase.from('users').select('id').eq('email', normalizedEmail).limit(1).maybeSingle();
+        const userByEmail = await supabase
+          .from('users')
+          .select('id')
+          .eq('email', normalizedEmail)
+          .limit(1)
+          .maybeSingle();
         if (userByEmail.data?.id) {
           target = { table: 'users', id: userByEmail.data.id };
         } else {
-          const empByEmail = await supabase.from('employees').select('id, tenant_id').eq('email', normalizedEmail).limit(1).maybeSingle();
+          const empByEmail = await supabase
+            .from('employees')
+            .select('id, tenant_id')
+            .eq('email', normalizedEmail)
+            .limit(1)
+            .maybeSingle();
           if (empByEmail.data?.id) target = { table: 'employees', id: empByEmail.data.id };
         }
       }
@@ -911,31 +992,71 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
             const { user: authUser } = await getAuthUserByEmail(email);
             if (authUser) {
               const meta = authUser.user_metadata || {};
-              const role = (meta.role || "employee").toLowerCase();
+              const role = (meta.role || 'employee').toLowerCase();
               const rawTenant = meta.tenant_id;
-              const normalizedTenantId = (rawTenant === "" || rawTenant === "no-client" || rawTenant === "none" || rawTenant === "null" || rawTenant === undefined) ? null : rawTenant;
-              const first_name = meta.first_name || authUser.email?.split("@")[0] || "";
-              const last_name = meta.last_name || "";
+              const normalizedTenantId =
+                rawTenant === '' ||
+                rawTenant === 'no-client' ||
+                rawTenant === 'none' ||
+                rawTenant === 'null' ||
+                rawTenant === undefined
+                  ? null
+                  : rawTenant;
+              const first_name = meta.first_name || authUser.email?.split('@')[0] || '';
+              const last_name = meta.last_name || '';
               const display_name = meta.display_name || `${first_name} ${last_name}`.trim();
 
               if (role === 'superadmin' && !normalizedTenantId) {
                 const { data, error } = await supabase
                   .from('users')
-                  .insert([{ email, first_name, last_name, role: 'superadmin', metadata: { display_name, ...meta }, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }])
+                  .insert([
+                    {
+                      email: normalizedEmail,
+                      first_name,
+                      last_name,
+                      role: 'superadmin',
+                      metadata: { display_name, ...meta },
+                      created_at: new Date().toISOString(),
+                      updated_at: new Date().toISOString(),
+                    },
+                  ])
                   .select('id')
                   .single();
                 if (!error && data?.id) target = { table: 'users', id: data.id };
               } else if (role === 'admin' && normalizedTenantId) {
                 const { data, error } = await supabase
                   .from('users')
-                  .insert([{ email, first_name, last_name, role: 'admin', tenant_id: normalizedTenantId, metadata: { display_name, ...meta }, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }])
+                  .insert([
+                    {
+                      email: normalizedEmail,
+                      first_name,
+                      last_name,
+                      role: 'admin',
+                      tenant_id: normalizedTenantId,
+                      metadata: { display_name, ...meta },
+                      created_at: new Date().toISOString(),
+                      updated_at: new Date().toISOString(),
+                    },
+                  ])
                   .select('id')
                   .single();
                 if (!error && data?.id) target = { table: 'users', id: data.id };
               } else if (normalizedTenantId) {
                 const { data, error } = await supabase
                   .from('employees')
-                  .insert([{ tenant_id: normalizedTenantId, email, first_name, last_name, role, status: 'active', metadata: { display_name, ...meta }, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }])
+                  .insert([
+                    {
+                      tenant_id: normalizedTenantId,
+                      email: normalizedEmail,
+                      first_name,
+                      last_name,
+                      role,
+                      status: 'active',
+                      metadata: { display_name, ...meta },
+                      created_at: new Date().toISOString(),
+                      updated_at: new Date().toISOString(),
+                    },
+                  ])
                   .select('id')
                   .single();
                 if (!error && data?.id) target = { table: 'employees', id: data.id };
@@ -947,7 +1068,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         }
 
         if (!target) {
-          return res.status(404).json({ status: "error", message: "User not found" });
+          return res.status(404).json({ status: 'error', message: 'User not found' });
         }
       }
 
@@ -975,7 +1096,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       if (updErr) throw new Error(updErr.message);
 
       return res.json({
-        status: "success",
+        status: 'success',
         data: {
           id: target.id,
           table: target.table,
@@ -983,8 +1104,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         },
       });
     } catch (error) {
-      logger.error("Error in heartbeat:", error);
-      res.status(500).json({ status: "error", message: error.message });
+      logger.error('Error in heartbeat:', error);
+      res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
@@ -995,14 +1116,14 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       status: 'success',
       data: {
         online: true,
-        ts: new Date().toISOString()
-      }
+        ts: new Date().toISOString(),
+      },
     });
   });
 
   // POST /api/users/invite - Create new user AND send invitation in one step
   // This is a convenience endpoint that combines user creation with invitation
-  router.post("/invite", mutateLimiter, invalidateCache('users'), async (req, res) => {
+  router.post('/invite', mutateLimiter, invalidateCache('users'), async (req, res) => {
     try {
       const {
         email,
@@ -1025,7 +1146,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       // Normalize email
       const normalizedEmail = email ? email.toLowerCase().trim() : email;
 
-      logger.debug("[POST /api/users/invite] Creating and inviting user:", {
+      logger.debug('[POST /api/users/invite] Creating and inviting user:', {
         email: normalizedEmail,
         full_name,
         role,
@@ -1034,8 +1155,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
       if (!normalizedEmail || !first_name) {
         return res.status(400).json({
-          status: "error",
-          message: "email and full_name are required",
+          status: 'error',
+          message: 'email and full_name are required',
           success: false,
         });
       }
@@ -1043,35 +1164,42 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       // Check for duplicates using Supabase
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
-      
+
       const { data: existingUsers } = await supabase
         .from('users')
         .select('id, email')
         .eq('email', normalizedEmail);
-      
+
       const { data: existingEmployees } = await supabase
         .from('employees')
         .select('id, email')
         .eq('email', normalizedEmail);
 
-      if ((existingUsers && existingUsers.length > 0) || (existingEmployees && existingEmployees.length > 0)) {
+      if (
+        (existingUsers && existingUsers.length > 0) ||
+        (existingEmployees && existingEmployees.length > 0)
+      ) {
         return res.status(409).json({
-          status: "error",
-          message: "An account with this email already exists",
+          status: 'error',
+          message: 'An account with this email already exists',
           success: false,
         });
       }
 
       // Normalize tenant_id
-      const normalizedTenantId = (tenant_id === "" || tenant_id === "no-client" || tenant_id === undefined || tenant_id === null)
-        ? null
-        : tenant_id;
+      const normalizedTenantId =
+        tenant_id === '' ||
+        tenant_id === 'no-client' ||
+        tenant_id === undefined ||
+        tenant_id === null
+          ? null
+          : tenant_id;
 
       // Validate admin must have tenant
-      if (role === "admin" && !normalizedTenantId) {
+      if (role === 'admin' && !normalizedTenantId) {
         return res.status(400).json({
-          status: "error",
-          message: "Admin users must be assigned to a tenant",
+          status: 'error',
+          message: 'Admin users must be assigned to a tenant',
           success: false,
         });
       }
@@ -1079,16 +1207,16 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       // Build metadata
       const metadata = {
         crm_access: crm_access !== false,
-        requested_access: requested_access || "read_write",
+        requested_access: requested_access || 'read_write',
         can_use_softphone: can_use_softphone || false,
         phone: phone || null,
         permissions: permissions || {},
       };
 
-      const isGlobalUser = role === "superadmin" && !normalizedTenantId;
+      const isGlobalUser = role === 'superadmin' && !normalizedTenantId;
       let createdUser = null;
 
-      if (isGlobalUser || (role === "admin" && normalizedTenantId)) {
+      if (isGlobalUser || (role === 'admin' && normalizedTenantId)) {
         // Insert into users table using Supabase
         const { data: insertedUser, error: insertError } = await supabase
           .from('users')
@@ -1102,13 +1230,13 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           })
           .select('id, email, first_name, last_name, role, tenant_id, metadata')
           .single();
-        
+
         if (insertError) {
-          logger.error("[POST /api/users/invite] Users insert error:", insertError);
+          logger.error('[POST /api/users/invite] Users insert error:', insertError);
           return res.status(500).json({
-            status: "error",
+            status: 'error',
             success: false,
-            message: insertError.message || "Failed to create user record",
+            message: insertError.message || 'Failed to create user record',
           });
         }
         createdUser = insertedUser;
@@ -1127,19 +1255,22 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           })
           .select('id, email, first_name, last_name, role, tenant_id, metadata')
           .single();
-        
+
         if (insertError) {
-          logger.error("[POST /api/users/invite] Employees insert error:", insertError);
+          logger.error('[POST /api/users/invite] Employees insert error:', insertError);
           return res.status(500).json({
-            status: "error",
+            status: 'error',
             success: false,
-            message: insertError.message || "Failed to create employee record",
+            message: insertError.message || 'Failed to create employee record',
           });
         }
         createdUser = insertedEmployee;
       }
 
-      logger.debug("[POST /api/users/invite] User created:", { id: createdUser.id, email: createdUser.email });
+      logger.debug('[POST /api/users/invite] User created:', {
+        id: createdUser.id,
+        email: createdUser.email,
+      });
 
       // Now send the invitation via Supabase Auth
       const { data: authData, error: authError } = await inviteUserByEmail(
@@ -1151,14 +1282,14 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           tenant_id: normalizedTenantId,
           display_name: full_name || first_name,
         },
-        redirect_url
+        redirect_url,
       );
 
       if (authError) {
-        logger.error("[POST /api/users/invite] Supabase Auth invitation error:", authError);
+        logger.error('[POST /api/users/invite] Supabase Auth invitation error:', authError);
         // User was created but invitation failed - report as partial failure
         return res.status(207).json({
-          status: "partial",
+          status: 'partial',
           success: true,
           message: `User record created but invitation email failed: ${authError.message}. Use 'Resend Invite' to retry.`,
           data: {
@@ -1169,10 +1300,13 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         });
       }
 
-      logger.info("[POST /api/users/invite] User created and invited successfully:", normalizedEmail);
+      logger.info(
+        '[POST /api/users/invite] User created and invited successfully:',
+        normalizedEmail,
+      );
 
       return res.status(201).json({
-        status: "success",
+        status: 'success',
         success: true,
         message: `User created and invitation sent to ${normalizedEmail}`,
         data: {
@@ -1181,19 +1315,18 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           auth_user: authData,
         },
       });
-
     } catch (error) {
-      logger.error("[POST /api/users/invite] Error:", error);
+      logger.error('[POST /api/users/invite] Error:', error);
       return res.status(500).json({
-        status: "error",
+        status: 'error',
         success: false,
-        message: error.message || "Failed to create user",
+        message: error.message || 'Failed to create user',
       });
     }
   });
 
   // POST /api/users - Create new user (global admin or tenant employee)
-  router.post("/", mutateLimiter, invalidateCache('users'), async (req, res) => {
+  router.post('/', mutateLimiter, invalidateCache('users'), async (req, res) => {
     try {
       const {
         email,
@@ -1215,21 +1348,21 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         /@playwright\.test$/i,
         /@example\.com$/i, // Block all example.com emails (test domain)
       ];
-      
-      if (testEmailPatterns.some(pattern => pattern.test(email))) {
+
+      if (testEmailPatterns.some((pattern) => pattern.test(email))) {
         logger.warn(`[POST /api/users] BLOCKED test email pattern: ${email}`);
         return res.status(403).json({
-          status: "error",
-          message: "Test email patterns are not allowed in production database",
-          code: "TEST_EMAIL_BLOCKED",
-          hint: "E2E tests should use mock users exclusively without creating real database records"
+          status: 'error',
+          message: 'Test email patterns are not allowed in production database',
+          code: 'TEST_EMAIL_BLOCKED',
+          hint: 'E2E tests should use mock users exclusively without creating real database records',
         });
       }
 
       // 🔒 CRITICAL: Normalize email to lowercase for consistent storage and lookups
       const normalizedEmail = email ? email.toLowerCase().trim() : email;
 
-      logger.debug("[POST /api/users] Creating user:", {
+      logger.debug('[POST /api/users] Creating user:', {
         email: normalizedEmail,
         first_name,
         last_name,
@@ -1239,8 +1372,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
       if (!normalizedEmail || !first_name) {
         return res.status(400).json({
-          status: "error",
-          message: "email and first_name are required",
+          status: 'error',
+          message: 'email and first_name are required',
         });
       }
 
@@ -1248,59 +1381,69 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       // BYPASS ADAPTER: Use direct Supabase client to avoid wildcard issues with .eq()
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
-      
-      logger.debug("[POST /api/users] Running direct Supabase duplicate check for:", normalizedEmail);
-      
+
+      logger.debug(
+        '[POST /api/users] Running direct Supabase duplicate check for:',
+        normalizedEmail,
+      );
+
       const { data: existingUsers, error: usersError } = await supabase
         .from('users')
         .select('id, email, role')
         .eq('email', normalizedEmail);
-      
+
       const { data: existingEmployees, error: employeesError } = await supabase
         .from('employees')
         .select('id, email, tenant_id')
         .eq('email', normalizedEmail);
-      
-      if (usersError) logger.error("[POST /api/users] Users query error:", usersError);
-      if (employeesError) logger.error("[POST /api/users] Employees query error:", employeesError);
-      
+
+      if (usersError) logger.error('[POST /api/users] Users query error:', usersError);
+      if (employeesError) logger.error('[POST /api/users] Employees query error:', employeesError);
+
       const existingInUsers = { rows: existingUsers || [], rowCount: existingUsers?.length || 0 };
-      const existingInEmployees = { rows: existingEmployees || [], rowCount: existingEmployees?.length || 0 };
+      const existingInEmployees = {
+        rows: existingEmployees || [],
+        rowCount: existingEmployees?.length || 0,
+      };
 
       logger.debug(`[POST /api/users] Duplicate check for ${normalizedEmail}:`, {
         usersCount: existingInUsers.rows.length,
         employeesCount: existingInEmployees.rows.length,
         usersRows: existingInUsers.rows,
-        employeesRows: existingInEmployees.rows
+        employeesRows: existingInEmployees.rows,
       });
 
-      logger.debug(`[POST /api/users] Checking if condition: usersLength=${existingInUsers.rows.length}, employeesLength=${existingInEmployees.rows.length}`);
+      logger.debug(
+        `[POST /api/users] Checking if condition: usersLength=${existingInUsers.rows.length}, employeesLength=${existingInEmployees.rows.length}`,
+      );
 
       if (existingInUsers.rows.length > 0 || existingInEmployees.rows.length > 0) {
         logger.error(`[POST /api/users] ⚠️ ENTERING DUPLICATE BLOCK - THIS SHOULD NOT HAPPEN!`);
         const existingRecord = existingInUsers.rows[0] || existingInEmployees.rows[0];
         logger.warn(`[POST /api/users] Duplicate email rejected: ${normalizedEmail}`);
         return res.status(409).json({
-          status: "error",
-          message: "An account with this email already exists",
-          code: "DUPLICATE_EMAIL",
-          hint: "Email addresses must be unique across all users and employees",
+          status: 'error',
+          message: 'An account with this email already exists',
+          code: 'DUPLICATE_EMAIL',
+          hint: 'Email addresses must be unique across all users and employees',
           existing: {
             id: existingRecord.id,
             email: existingRecord.email,
-            table: existingInUsers.rows.length > 0 ? "users" : "employees",
+            table: existingInUsers.rows.length > 0 ? 'users' : 'employees',
           },
         });
       }
 
-      logger.debug(`[POST /api/users] No duplicates found, continuing... Role: ${role}, Tenant: ${tenant_id}`);
+      logger.debug(
+        `[POST /api/users] No duplicates found, continuing... Role: ${role}, Tenant: ${tenant_id}`,
+      );
 
       // ⚠️ CRITICAL: Admin role MUST be assigned to a tenant (not global)
-      if (role === "admin" && !tenant_id) {
+      if (role === 'admin' && !tenant_id) {
         return res.status(400).json({
-          status: "error",
+          status: 'error',
           message:
-            "Admin users must be assigned to a tenant. Only superadmins can be global users.",
+            'Admin users must be assigned to a tenant. Only superadmins can be global users.',
         });
       }
 
@@ -1312,16 +1455,15 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
       // Normalize tenant_id: convert empty string, 'no-client', or undefined to null
       const normalizedTenantId =
-        (tenant_id === "" || tenant_id === "no-client" ||
-            tenant_id === undefined)
-          ? null
-          : tenant_id;
+        tenant_id === '' || tenant_id === 'no-client' || tenant_id === undefined ? null : tenant_id;
 
       // Only superadmin can be global (no tenant_id)
-      const isGlobalUser = role === "superadmin" && !normalizedTenantId;
+      const isGlobalUser = role === 'superadmin' && !normalizedTenantId;
       let authUserId = null;
 
-      logger.debug(`[POST /api/users] Role branching - isGlobalUser: ${isGlobalUser}, role: ${role}, normalizedTenantId: ${normalizedTenantId}`);
+      logger.debug(
+        `[POST /api/users] Role branching - isGlobalUser: ${isGlobalUser}, role: ${role}, normalizedTenantId: ${normalizedTenantId}`,
+      );
 
       if (isGlobalUser) {
         // Create global superadmin in users table (no tenant_id)
@@ -1336,8 +1478,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
         if (existingUser && existingUser.length > 0) {
           return res.status(409).json({
-            status: "error",
-            message: "User already exists",
+            status: 'error',
+            message: 'User already exists',
           });
         }
 
@@ -1377,17 +1519,18 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         }
 
         res.json({
-          status: "success",
-          message: "User created successfully. Use the 'Send Invitation' button to send login credentials.",
+          status: 'success',
+          message:
+            "User created successfully. Use the 'Send Invitation' button to send login credentials.",
           data: {
             user,
             auth: {
               created: false,
-              note: "Invitation not sent yet. Use /api/users/:id/invite to send invitation email.",
+              note: 'Invitation not sent yet. Use /api/users/:id/invite to send invitation email.',
             },
           },
         });
-  } else if (role === "admin" && normalizedTenantId) {
+      } else if (role === 'admin' && normalizedTenantId) {
         // Create tenant-scoped admin in users table WITH tenant_id
         // NOTE: Global email uniqueness already checked above
         // BYPASS ADAPTER: Use direct Supabase to avoid wildcard bug
@@ -1403,8 +1546,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         if (existingUser && existingUser.length > 0) {
           logger.warn(`[POST /api/users] DUPLICATE FOUND in users table for ${normalizedEmail}`);
           return res.status(409).json({
-            status: "error",
-            message: "User already exists",
+            status: 'error',
+            message: 'User already exists',
           });
         }
         logger.debug(`[POST /api/users] No duplicate found, proceeding to create auth user`);
@@ -1413,9 +1556,9 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         const authMetadata = {
           first_name,
           last_name,
-          role: "admin",
+          role: 'admin',
           tenant_id: normalizedTenantId,
-          display_name: `${first_name} ${last_name || ""}`.trim(),
+          display_name: `${first_name} ${last_name || ''}`.trim(),
         };
 
         const { user: authUser, error: authError } = await inviteUserByEmail(
@@ -1424,9 +1567,9 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         );
 
         if (authError) {
-          logger.error("[User Creation] Supabase Auth error:", authError);
+          logger.error('[User Creation] Supabase Auth error:', authError);
           return res.status(500).json({
-            status: "error",
+            status: 'error',
             message: `Failed to invite user: ${authError.message}`,
           });
         }
@@ -1437,14 +1580,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           `INSERT INTO users (email, first_name, last_name, role, tenant_id, tenant_uuid, metadata, created_at, updated_at)
            VALUES ($1, $2, $3, $4, $5, (SELECT id FROM tenant WHERE tenant_id = $5 LIMIT 1), $6, NOW(), NOW())
            RETURNING id, email, first_name, last_name, role, tenant_id, tenant_uuid, metadata, created_at, updated_at`,
-          [
-            normalizedEmail,
-            first_name,
-            last_name,
-            "admin",
-            normalizedTenantId,
-            combinedMetadata,
-          ],
+          [normalizedEmail, first_name, last_name, 'admin', normalizedTenantId, combinedMetadata],
         );
 
         const user = expandUserMetadata(result.rows[0]);
@@ -1474,16 +1610,15 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         }
 
         res.json({
-          status: "success",
-          message: "Tenant admin created. Invitation email queued.",
+          status: 'success',
+          message: 'Tenant admin created. Invitation email queued.',
           data: {
             user,
             auth: {
               created: !!authUserId,
               invitation_queued: true,
               email_address: normalizedEmail,
-              note:
-                "Check Supabase Dashboard → Auth → Logs to verify email delivery",
+              note: 'Check Supabase Dashboard → Auth → Logs to verify email delivery',
             },
           },
         });
@@ -1491,8 +1626,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         // Create manager/employee in employees table (tenant-assigned user)
         if (!normalizedTenantId) {
           return res.status(400).json({
-            status: "error",
-            message: "tenant_id is required for non-admin users",
+            status: 'error',
+            message: 'tenant_id is required for non-admin users',
           });
         }
 
@@ -1509,8 +1644,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
         if (existingEmployee && existingEmployee.length > 0) {
           return res.status(409).json({
-            status: "error",
-            message: "Employee already exists for this tenant",
+            status: 'error',
+            message: 'Employee already exists for this tenant',
           });
         }
 
@@ -1518,9 +1653,9 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         const authMetadata = {
           first_name,
           last_name,
-          role: role || "employee",
+          role: role || 'employee',
           tenant_id: normalizedTenantId,
-          display_name: `${first_name} ${last_name || ""}`.trim(),
+          display_name: `${first_name} ${last_name || ''}`.trim(),
         };
 
         const { user: authUser, error: authError } = await inviteUserByEmail(
@@ -1529,9 +1664,9 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         );
 
         if (authError) {
-          logger.error("[User Creation] Supabase Auth error:", authError);
+          logger.error('[User Creation] Supabase Auth error:', authError);
           return res.status(500).json({
-            status: "error",
+            status: 'error',
             message: `Failed to invite user: ${authError.message}`,
           });
         }
@@ -1547,8 +1682,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
             normalizedEmail,
             first_name,
             last_name,
-            role || "employee",
-            status || "active",
+            role || 'employee',
+            status || 'active',
             combinedMetadata,
           ],
         );
@@ -1581,35 +1716,34 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         }
 
         res.json({
-          status: "success",
-          message: "Employee created. Invitation email queued.",
+          status: 'success',
+          message: 'Employee created. Invitation email queued.',
           data: {
             user,
             auth: {
               created: !!authUserId,
               invitation_queued: true,
               email_address: email,
-              note:
-                "Check Supabase Dashboard → Auth → Logs to verify email delivery",
+              note: 'Check Supabase Dashboard → Auth → Logs to verify email delivery',
             },
           },
         });
       }
     } catch (error) {
-      logger.error("[POST /api/users] EXCEPTION caught:", error);
-      logger.error("[POST /api/users] Error stack:", error.stack);
-      logger.error("[POST /api/users] Error details:", {
+      logger.error('[POST /api/users] EXCEPTION caught:', error);
+      logger.error('[POST /api/users] Error stack:', error.stack);
+      logger.error('[POST /api/users] Error details:', {
         name: error.name,
         message: error.message,
         code: error.code,
-        status: error.status
+        status: error.status,
       });
-      res.status(500).json({ status: "error", message: error.message });
+      res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
   // POST /api/users/register - User registration (legacy endpoint)
-  router.post("/register", authLimiter, async (req, res) => {
+  router.post('/register', authLimiter, async (req, res) => {
     try {
       const {
         tenant_id,
@@ -1617,29 +1751,30 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         password: _password,
         first_name,
         last_name,
-        role = "user",
+        role = 'user',
       } = req.body;
 
       if (!tenant_id || !email) {
         return res.status(400).json({
-          status: "error",
-          message: "tenant_id and email are required",
+          status: 'error',
+          message: 'tenant_id and email are required',
         });
       }
 
       // Check if user already exists
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
+      const normalizedEmail = String(email).toLowerCase().trim();
       const { data: existingUser, error: euErr } = await supabase
         .from('users')
         .select('id')
-        .eq('email', email);
+        .eq('email', normalizedEmail);
       if (euErr) logger.warn('[register] existing user check error:', euErr);
 
       if (existingUser && existingUser.length > 0) {
         return res.status(409).json({
-          status: "error",
-          message: "User already exists",
+          status: 'error',
+          message: 'User already exists',
         });
       }
 
@@ -1647,63 +1782,75 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       const nowIso = new Date().toISOString();
       const { data: regRow, error: regErr } = await supabase
         .from('users')
-        .insert([{ tenant_id, email, first_name, last_name, role, status: 'active', created_at: nowIso, updated_at: nowIso }])
+        .insert([
+          {
+            tenant_id,
+            email: normalizedEmail,
+            first_name,
+            last_name,
+            role,
+            status: 'active',
+            created_at: nowIso,
+            updated_at: nowIso,
+          },
+        ])
         .select('id, tenant_id, email, first_name, last_name, role, status')
         .single();
       if (regErr) throw new Error(regErr.message);
 
       res.json({
-        status: "success",
-        message: "Registration successful",
+        status: 'success',
+        message: 'Registration successful',
         data: { user: regRow },
       });
     } catch (error) {
-      logger.error("Error registering user:", error);
-      res.status(500).json({ status: "error", message: error.message });
+      logger.error('Error registering user:', error);
+      res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
   // GET /api/users/profile - Get user profile (requires auth in production)
-  router.get("/profile", async (req, res) => {
+  router.get('/profile', async (req, res) => {
     try {
       const { email, tenant_id } = req.query;
 
       if (!email || !tenant_id) {
         return res.status(400).json({
-          status: "error",
-          message: "email and tenant_id are required",
+          status: 'error',
+          message: 'email and tenant_id are required',
         });
       }
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
+      const normalizedEmail = String(email).toLowerCase().trim();
       const { data: profRows, error: profErr } = await supabase
         .from('users')
         .select('id, tenant_id, email, first_name, last_name, role, status, metadata, created_at')
-        .eq('email', email)
+        .eq('email', normalizedEmail)
         .eq('tenant_id', tenant_id)
         .limit(1);
       if (profErr) throw new Error(profErr.message);
 
       if (!profRows || profRows.length === 0) {
         return res.status(404).json({
-          status: "error",
-          message: "User not found",
+          status: 'error',
+          message: 'User not found',
         });
       }
 
       res.json({
-        status: "success",
+        status: 'success',
         data: { user: profRows[0] },
       });
     } catch (error) {
-      logger.error("Error getting profile:", error);
-      res.status(500).json({ status: "error", message: error.message });
+      logger.error('Error getting profile:', error);
+      res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
   // PUT /api/users/:id - Update user (supports users and employees tables)
-  router.put("/:id", mutateLimiter, invalidateCache('users'), async (req, res) => {
+  router.put('/:id', mutateLimiter, invalidateCache('users'), async (req, res) => {
     try {
       const { id } = req.params;
       const {
@@ -1733,15 +1880,15 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       // First, try to find user in users table (superadmin/admin), then employees table
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
-      
+
       let currentUser = await supabase
         .from('users')
         .select('metadata, tenant_id, email, role')
         .eq('id', id)
         .single();
-      
+
       let tableName = 'users';
-      
+
       if (currentUser.error) {
         // Try employees table
         currentUser = await supabase
@@ -1749,33 +1896,39 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           .select('metadata, tenant_id, email, role')
           .eq('id', id)
           .single();
-        
+
         tableName = 'employees';
       }
 
       if (currentUser.error || !currentUser.data) {
         return res.status(404).json({
-          status: "error",
-          message: "User not found",
+          status: 'error',
+          message: 'User not found',
         });
       }
-      
+
       const userData = currentUser.data;
 
       // 🔒 IMMUTABLE PROTECTION: Block ANY changes to protected superadmin accounts
-      if (IMMUTABLE_SUPERADMINS.some(email => email.toLowerCase() === (userData.email || '').toLowerCase())) {
-        logger.warn(`[PUT /api/users/:id] BLOCKED attempt to modify immutable superadmin: ${userData.email}`);
+      if (
+        IMMUTABLE_SUPERADMINS.some(
+          (email) => email.toLowerCase() === (userData.email || '').toLowerCase(),
+        )
+      ) {
+        logger.warn(
+          `[PUT /api/users/:id] BLOCKED attempt to modify immutable superadmin: ${userData.email}`,
+        );
         return res.status(403).json({
-          status: "error",
-          message: "This superadmin account is immutable and cannot be modified via API",
-          code: "IMMUTABLE_ACCOUNT",
-          hint: "Protected superadmin accounts can only be modified directly in Supabase Auth dashboard",
+          status: 'error',
+          message: 'This superadmin account is immutable and cannot be modified via API',
+          code: 'IMMUTABLE_ACCOUNT',
+          hint: 'Protected superadmin accounts can only be modified directly in Supabase Auth dashboard',
           protected_email: userData.email,
         });
       }
 
       // Handle password update if provided
-      if (new_password && new_password.trim() !== "") {
+      if (new_password && new_password.trim() !== '') {
         const userEmail = userData.email;
 
         // Get auth user by email
@@ -1783,18 +1936,12 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
         if (authUser) {
           // Update password in Supabase Auth
-          const { error: passwordError } = await updateAuthUserPassword(
-            authUser.id,
-            new_password,
-          );
+          const { error: passwordError } = await updateAuthUserPassword(authUser.id, new_password);
 
           if (passwordError) {
-            logger.error(
-              "[User Update] Password update error:",
-              passwordError,
-            );
+            logger.error('[User Update] Password update error:', passwordError);
             return res.status(500).json({
-              status: "error",
+              status: 'error',
               message: `Failed to update password: ${passwordError.message}`,
             });
           }
@@ -1802,10 +1949,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           // Confirm email after password change
           const { error: confirmError } = await confirmUserEmail(authUser.id);
           if (confirmError) {
-            logger.warn(
-              "[User Update] Could not confirm email:",
-              confirmError,
-            );
+            logger.warn('[User Update] Could not confirm email:', confirmError);
           }
 
           logger.debug(`✓ Password updated for user: ${userEmail}`);
@@ -1814,16 +1958,16 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
       // Merge metadata - preserve existing metadata and add/update new fields
       const currentMetadata = userData.metadata || {};
-      
+
       // AUTO-SYNC: Derive display_name from first/last name if not explicitly provided
       let derivedDisplayName = display_name;
       if (display_name === undefined && (first_name !== undefined || last_name !== undefined)) {
         // If first/last are being updated but display_name isn't, auto-compute it
-        const newFirst = first_name !== undefined ? first_name : (currentMetadata.first_name || '');
-        const newLast = last_name !== undefined ? last_name : (currentMetadata.last_name || '');
+        const newFirst = first_name !== undefined ? first_name : currentMetadata.first_name || '';
+        const newLast = last_name !== undefined ? last_name : currentMetadata.last_name || '';
         derivedDisplayName = `${newFirst} ${newLast}`.trim() || undefined;
       }
-      
+
       const updatedMetadata = {
         ...currentMetadata,
         ...(metadata || {}),
@@ -1838,7 +1982,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
       // SECURITY: Remove password from metadata if it exists (should never be stored)
       delete updatedMetadata.password;
-      if (new_password && new_password.trim() !== "") {
+      if (new_password && new_password.trim() !== '') {
         // Password was just changed - clear any legacy password storage
         delete updatedMetadata.password;
       }
@@ -1846,46 +1990,49 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       // Normalize tenant_id inputs (treat various sentinels as null)
       const normalizeTenant = (val) => {
         if (
-          val === "" || val === "no-client" || val === "none" ||
-          val === "null" || val === undefined
-        ) return null;
+          val === '' ||
+          val === 'no-client' ||
+          val === 'none' ||
+          val === 'null' ||
+          val === undefined
+        )
+          return null;
         return val;
       };
-      const finalTenantId = tenant_id !== undefined
-        ? normalizeTenant(tenant_id)
-        : userData.tenant_id;
+      const finalTenantId =
+        tenant_id !== undefined ? normalizeTenant(tenant_id) : userData.tenant_id;
 
       // Use Supabase client directly to avoid SQL parser limitations
       const updateData = {
         ...(first_name !== undefined && { first_name }),
         ...(last_name !== undefined && { last_name }),
         ...(role !== undefined && { role }),
-        ...(tableName === "employees" && status !== undefined && { status }),
+        ...(tableName === 'employees' && status !== undefined && { status }),
         tenant_id: finalTenantId,
         metadata: updatedMetadata,
         updated_at: new Date().toISOString(),
       };
-      
+
       const { data, error } = await supabase
         .from(tableName)
         .update(updateData)
         .eq('id', id)
         .select()
         .single();
-      
+
       if (error) {
         logger.error(`[User Update] Supabase error:`, error);
         return res.status(500).json({
-          status: "error",
-          message: "Failed to update user",
+          status: 'error',
+          message: 'Failed to update user',
           error: error.message,
         });
       }
-      
+
       if (!data) {
         return res.status(404).json({
-          status: "error",
-          message: "User not found",
+          status: 'error',
+          message: 'User not found',
         });
       }
 
@@ -1914,15 +2061,24 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       // Keep Supabase Auth metadata in sync for name fields to avoid UI mismatches
       try {
         const userEmail = userData?.email;
-        if (userEmail && (first_name !== undefined || last_name !== undefined || display_name !== undefined)) {
+        if (
+          userEmail &&
+          (first_name !== undefined || last_name !== undefined || display_name !== undefined)
+        ) {
           const { user: authUser } = await getAuthUserByEmail(userEmail);
           if (authUser?.id) {
             const currentAuthMeta = authUser.user_metadata || {};
-            const nextFirst = (first_name !== undefined) ? first_name : (currentAuthMeta.first_name || undefined);
-            const nextLast = (last_name !== undefined) ? last_name : (currentAuthMeta.last_name || undefined);
-            const nextDisplay = (display_name !== undefined)
-              ? display_name
-              : (currentAuthMeta.display_name || (typeof nextFirst === 'string' || typeof nextLast === 'string' ? `${nextFirst || ''} ${nextLast || ''}`.trim() : undefined));
+            const nextFirst =
+              first_name !== undefined ? first_name : currentAuthMeta.first_name || undefined;
+            const nextLast =
+              last_name !== undefined ? last_name : currentAuthMeta.last_name || undefined;
+            const nextDisplay =
+              display_name !== undefined
+                ? display_name
+                : currentAuthMeta.display_name ||
+                  (typeof nextFirst === 'string' || typeof nextLast === 'string'
+                    ? `${nextFirst || ''} ${nextLast || ''}`.trim()
+                    : undefined);
 
             const authUpdate = {
               ...currentAuthMeta,
@@ -1930,14 +2086,14 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
               ...(nextLast !== undefined && { last_name: nextLast }),
               ...(nextDisplay !== undefined && { display_name: nextDisplay }),
               // Maintain full_name for legacy consumers
-              ...(nextFirst !== undefined || nextLast !== undefined || nextDisplay !== undefined)
+              ...(nextFirst !== undefined || nextLast !== undefined || nextDisplay !== undefined
                 ? { full_name: nextDisplay || `${nextFirst || ''} ${nextLast || ''}`.trim() }
-                : {},
+                : {}),
             };
 
             const { error: metaErr } = await updateAuthUserMetadata(authUser.id, authUpdate);
             if (metaErr) {
-              logger.warn("[User Update] Could not sync auth metadata:", metaErr);
+              logger.warn('[User Update] Could not sync auth metadata:', metaErr);
             } else {
               if (process.env.NODE_ENV !== 'test') {
                 logger.debug(`✓ Synced auth metadata for ${userEmail}`);
@@ -1946,22 +2102,22 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           }
         }
       } catch (e) {
-        logger.warn("[User Update] Auth metadata sync skipped:", e?.message || e);
+        logger.warn('[User Update] Auth metadata sync skipped:', e?.message || e);
       }
 
       res.json({
-        status: "success",
-        message: "User updated",
+        status: 'success',
+        message: 'User updated',
         data: { user: updatedUser },
       });
     } catch (error) {
-      logger.error("Error updating user:", error);
-      res.status(500).json({ status: "error", message: error.message });
+      logger.error('Error updating user:', error);
+      res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
   // DELETE /api/users/:id - Delete user (checks both users and employees tables)
-  router.delete("/:id", mutateLimiter, invalidateCache('users'), async (req, res) => {
+  router.delete('/:id', mutateLimiter, invalidateCache('users'), async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query;
@@ -1973,21 +2129,31 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
       // Try to find user in users table first (for SuperAdmins/Admins)
       logger.debug(`[DELETE /api/users/:id] About to query users table with id=`, id);
-      
+
       // DIAGNOSTIC: Use Supabase client instead of pgPool to verify data
       const { data: usersData, error: usersError } = await supabase
         .from('users')
         .select('id, email, role, tenant_id')
         .eq('id', id);
-      
+
       if (usersError) {
         logger.error(`[DELETE /api/users/:id] Supabase query error:`, usersError);
       }
-      logger.debug(`[DELETE /api/users/:id] Supabase returned`, usersData?.length || 0, `rows:`, usersData);
-      
+      logger.debug(
+        `[DELETE /api/users/:id] Supabase returned`,
+        usersData?.length || 0,
+        `rows:`,
+        usersData,
+      );
+
       let userResult = { rows: usersData || [], rowCount: usersData?.length || 0 };
-      logger.debug(`[DELETE /api/users/:id] users query returned`, userResult.rows.length, `rows:`, userResult.rows);
-      let tableName = "users";
+      logger.debug(
+        `[DELETE /api/users/:id] users query returned`,
+        userResult.rows.length,
+        `rows:`,
+        userResult.rows,
+      );
+      let tableName = 'users';
 
       // If not found in users table, check employees table
       if (userResult.rows.length === 0) {
@@ -1997,26 +2163,42 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           .from('employees')
           .select('id, email, tenant_id')
           .eq('id', id);
-        
+
         if (empError) {
           logger.error(`[DELETE /api/users/:id] Employees query error:`, empError);
         }
-        logger.debug(`[DELETE /api/users/:id] Employees Supabase returned`, empData?.length || 0, `rows`);
-        
+        logger.debug(
+          `[DELETE /api/users/:id] Employees Supabase returned`,
+          empData?.length || 0,
+          `rows`,
+        );
+
         userResult = { rows: empData || [], rowCount: empData?.length || 0 };
-        tableName = "employees";
+        tableName = 'employees';
       }
-      logger.debug(`[DELETE /api/users/:id] Located table=`, tableName, ` rows=`, userResult.rows.length, ` email=`, userResult.rows[0]?.email);
+      logger.debug(
+        `[DELETE /api/users/:id] Located table=`,
+        tableName,
+        ` rows=`,
+        userResult.rows.length,
+        ` email=`,
+        userResult.rows[0]?.email,
+      );
 
       if (userResult.rows.length === 0) {
         return res.status(404).json({
-          status: "error",
-          message: "User not found in users or employees table",
+          status: 'error',
+          message: 'User not found in users or employees table',
         });
       }
 
       const userEmail = userResult.rows[0].email;
-      logger.debug(`[DELETE /api/users/:id] Row to delete:`, { id: userResult.rows[0].id, email: userEmail, tenant_id: userResult.rows[0].tenant_id, tableName });
+      logger.debug(`[DELETE /api/users/:id] Row to delete:`, {
+        id: userResult.rows[0].id,
+        email: userEmail,
+        tenant_id: userResult.rows[0].tenant_id,
+        tableName,
+      });
 
       // 🔒 CRITICAL: Define immutable superadmin accounts that cannot be deleted via API
       const IMMUTABLE_SUPERADMINS = [
@@ -2025,19 +2207,25 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       ];
 
       // 🔒 IMMUTABLE PROTECTION: Block deletion of protected superadmin accounts
-      if (IMMUTABLE_SUPERADMINS.some(email => email.toLowerCase() === (userEmail || '').toLowerCase())) {
-        logger.warn(`[DELETE /api/users/:id] BLOCKED attempt to delete immutable superadmin: ${userEmail}`);
+      if (
+        IMMUTABLE_SUPERADMINS.some(
+          (email) => email.toLowerCase() === (userEmail || '').toLowerCase(),
+        )
+      ) {
+        logger.warn(
+          `[DELETE /api/users/:id] BLOCKED attempt to delete immutable superadmin: ${userEmail}`,
+        );
         return res.status(403).json({
-          status: "error",
-          message: "This superadmin account is immutable and cannot be deleted",
-          code: "IMMUTABLE_ACCOUNT",
-          hint: "Protected superadmin accounts can only be removed directly in Supabase Auth dashboard",
+          status: 'error',
+          message: 'This superadmin account is immutable and cannot be deleted',
+          code: 'IMMUTABLE_ACCOUNT',
+          hint: 'Protected superadmin accounts can only be removed directly in Supabase Auth dashboard',
           protected_email: userEmail,
         });
       }
 
       // Stopper: prevent deleting the last remaining superadmin
-      if (tableName === "users" && (userResult.rows[0].role || "").toLowerCase() === "superadmin") {
+      if (tableName === 'users' && (userResult.rows[0].role || '').toLowerCase() === 'superadmin') {
         const { count: remaining } = await supabase
           .from('users')
           .select('id', { count: 'exact', head: true })
@@ -2045,9 +2233,9 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           .neq('id', id);
         if (remaining <= 0) {
           return res.status(403).json({
-            status: "error",
-            code: "LAST_SUPERADMIN",
-            message: "Cannot delete the last remaining superadmin.",
+            status: 'error',
+            code: 'LAST_SUPERADMIN',
+            message: 'Cannot delete the last remaining superadmin.',
           });
         }
       }
@@ -2063,10 +2251,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           logger.debug(`[DELETE /api/users/:id] No auth user found for`, userEmail);
         }
       } catch (authError) {
-        logger.warn(
-          `⚠ Could not delete auth user ${userEmail}:`,
-          authError.message,
-        );
+        logger.warn(`⚠ Could not delete auth user ${userEmail}:`, authError.message);
         // Continue with database deletion even if auth deletion fails
       }
 
@@ -2095,9 +2280,9 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       // Ensure we actually deleted a row; otherwise report 404 to the client
       if (!deletedRow) {
         return res.status(404).json({
-          status: "error",
-          message: "User not found or already deleted",
-          code: "DELETE_NOT_FOUND"
+          status: 'error',
+          message: 'User not found or already deleted',
+          code: 'DELETE_NOT_FOUND',
         });
       }
 
@@ -2111,10 +2296,10 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           action: 'delete',
           entity_type: 'user',
           entity_id: id,
-          changes: { 
+          changes: {
             deleted_email: userEmail,
             deleted_from_table: tableName,
-            role: userResult.rows[0].role 
+            role: userResult.rows[0].role,
           },
           ip_address: getClientIP(req),
           user_agent: req.headers['user-agent'],
@@ -2124,25 +2309,25 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       }
 
       res.json({
-        status: "success",
-        message: "User deleted",
+        status: 'success',
+        message: 'User deleted',
         data: { user: deletedRow },
       });
     } catch (error) {
-      logger.error("Error deleting user:", error);
-      res.status(500).json({ status: "error", message: error.message });
+      logger.error('Error deleting user:', error);
+      res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
   // POST /api/users/reset-password - Send password reset email
-  router.post("/reset-password", passwordLimiter, async (req, res) => {
+  router.post('/reset-password', passwordLimiter, async (req, res) => {
     try {
       const { email } = req.body;
 
       if (!email) {
         return res.status(400).json({
-          status: "error",
-          message: "email is required",
+          status: 'error',
+          message: 'email is required',
         });
       }
 
@@ -2151,7 +2336,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       try {
         throttleEmail(email);
       } catch (e) {
-        return res.status(429)
+        return res
+          .status(429)
           .set('Retry-After', String(e.retryAfter ?? 60))
           .json({
             status: 'error',
@@ -2162,91 +2348,80 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       const { data, error } = await sendPasswordResetEmail(email);
 
       if (error) {
-        logger.error("[Password Reset] Error:", error);
+        logger.error('[Password Reset] Error:', error);
         return res.status(500).json({
-          status: "error",
-          message: error.message || "Failed to send reset email",
+          status: 'error',
+          message: error.message || 'Failed to send reset email',
         });
       }
 
       res.json({
-        status: "success",
-        message: "Password reset email sent",
+        status: 'success',
+        message: 'Password reset email sent',
         data,
       });
     } catch (error) {
-      logger.error("Error sending password reset:", error);
-      res.status(500).json({ status: "error", message: error.message });
+      logger.error('Error sending password reset:', error);
+      res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
   // POST /api/users/generate-recovery-link - Dev diagnostic: generate recovery link without email delivery
-  router.post("/generate-recovery-link", passwordLimiter, async (req, res) => {
+  router.post('/generate-recovery-link', passwordLimiter, async (req, res) => {
     try {
-      if (process.env.NODE_ENV === "production") {
-        return res
-          .status(403)
-          .json({ status: "error", message: "Not available in production" });
+      if (process.env.NODE_ENV === 'production') {
+        return res.status(403).json({ status: 'error', message: 'Not available in production' });
       }
       const { email, redirectTo } = req.body || {};
       if (!email) {
-        return res
-          .status(400)
-          .json({ status: "error", message: "email is required" });
+        return res.status(400).json({ status: 'error', message: 'email is required' });
       }
       const { link, error } = await generateRecoveryLink(email, redirectTo);
       if (error) {
         return res.status(500).json({
-          status: "error",
-          message: error.message || "Failed to generate recovery link",
+          status: 'error',
+          message: error.message || 'Failed to generate recovery link',
         });
       }
-      return res.json({ status: "success", link });
+      return res.json({ status: 'success', link });
     } catch (e) {
-      logger.error("[RecoveryLink] Error generating recovery link:", e);
+      logger.error('[RecoveryLink] Error generating recovery link:', e);
       return res.status(500).json({
-        status: "error",
-        message: e.message || "Internal error",
+        status: 'error',
+        message: e.message || 'Internal error',
       });
     }
   });
 
   // POST /api/users/admin-password-reset - Direct password reset (for dev/admin use)
-  router.post("/admin-password-reset", passwordLimiter, async (req, res) => {
+  router.post('/admin-password-reset', passwordLimiter, async (req, res) => {
     try {
       const { email, password } = req.body;
 
       if (!email || !password) {
         return res.status(400).json({
-          status: "error",
-          message: "email and password are required",
+          status: 'error',
+          message: 'email and password are required',
         });
       }
 
       // Get auth user by email
-      const { user: authUser, error: getUserError } = await getAuthUserByEmail(
-        email,
-      );
+      const { user: authUser, error: getUserError } = await getAuthUserByEmail(email);
 
       if (getUserError || !authUser) {
         return res.status(404).json({
-          status: "error",
-          message: `User not found: ${
-            getUserError?.message || "No auth user with this email"
-          }`,
+          status: 'error',
+          message: `User not found: ${getUserError?.message || 'No auth user with this email'}`,
         });
       }
 
       // Update password AND confirm email
-      const { error: updateError } = await updateAuthUserPassword(
-        authUser.id,
-        password,
-      );
+      const { error: updateError } = await updateAuthUserPassword(authUser.id, password);
 
       if (updateError) {
-        logger.error("[Admin Password Reset] Error:", updateError);
+        logger.error('[Admin Password Reset] Error:', updateError);
         return res.status(500).json({
-          status: "error",
+          status: 'error',
           message: `Failed to update password: ${updateError.message}`,
         });
       }
@@ -2255,10 +2430,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       const { error: confirmError } = await confirmUserEmail(authUser.id);
 
       if (confirmError) {
-        logger.warn(
-          "[Admin Password Reset] Could not confirm email:",
-          confirmError,
-        );
+        logger.warn('[Admin Password Reset] Could not confirm email:', confirmError);
         // Don't fail - password was updated successfully
       }
 
@@ -2270,41 +2442,33 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         password_expires_at: null,
       };
 
-      const { error: metadataError } = await updateAuthUserMetadata(
-        authUser.id,
-        updatedMetadata,
-      );
+      const { error: metadataError } = await updateAuthUserMetadata(authUser.id, updatedMetadata);
 
       if (metadataError) {
-        logger.warn(
-          "[Admin Password Reset] Could not clear expiration metadata:",
-          metadataError,
-        );
+        logger.warn('[Admin Password Reset] Could not clear expiration metadata:', metadataError);
         // Don't fail the request - password was updated successfully
       }
 
-      logger.debug(
-        `✓ Password reset for: ${email} (email confirmed, expiration cleared)`,
-      );
+      logger.debug(`✓ Password reset for: ${email} (email confirmed, expiration cleared)`);
 
       res.json({
-        status: "success",
-        message: "Password updated, email confirmed, and expiration cleared",
+        status: 'success',
+        message: 'Password updated, email confirmed, and expiration cleared',
         data: { email, userId: authUser.id },
       });
     } catch (error) {
-      logger.error("Error in admin password reset:", error);
-      res.status(500).json({ status: "error", message: error.message });
+      logger.error('Error in admin password reset:', error);
+      res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
-  // POST /api/users/:id/invite - Send Supabase Auth invitation to existing user
-  router.post("/:id/invite", mutateLimiter, async (req, res) => {
+  // Shared invite/resend handler - used by both /:id/invite and /:id/resend-invite
+  async function handleSendInvite(req, res) {
     try {
       const { id } = req.params;
       const { redirect_url } = req.body;
 
-      logger.debug(`[POST /api/users/${id}/invite] Sending invitation for user ID: ${id}`);
+      logger.debug(`[User Invite] Sending invitation for user ID: ${id}`);
 
       // Fetch user from database using Supabase
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
@@ -2315,12 +2479,12 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         .eq('id', id)
         .limit(1);
       if (userErr) logger.warn('[User Invite] users select error:', userErr);
-      
+
       const userFound = userRows && userRows.length > 0;
-      logger.debug(`[POST /api/users/${id}/invite] Query result:`, {
+      logger.debug(`[User Invite] Query result:`, {
         found: userFound,
         email: userFound ? userRows[0]?.email : undefined,
-        name: userFound ? `${userRows[0]?.first_name} ${userRows[0]?.last_name}` : undefined
+        name: userFound ? `${userRows[0]?.first_name} ${userRows[0]?.last_name}` : undefined,
       });
 
       if (!userFound) {
@@ -2334,8 +2498,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
         if (!employeeRows || employeeRows.length === 0) {
           return res.status(404).json({
-            status: "error",
-            message: "User not found",
+            status: 'error',
+            message: 'User not found',
           });
         }
 
@@ -2344,25 +2508,27 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         // Check if user already exists in Supabase Auth
         const authResult = await getAuthUserByEmail(employee.email);
         const existingAuthUser = authResult?.user;
-        
+
         if (existingAuthUser) {
           // User already exists in Auth - send password reset instead
-          logger.debug(`[User Invite] User ${employee.email} already registered, sending password reset`);
-          
+          logger.debug(
+            `[User Invite] User ${employee.email} already registered, sending password reset`,
+          );
+
           const { error: resetError } = await sendPasswordResetEmail(employee.email);
-          
+
           if (resetError) {
-            logger.error("[User Invite] Password reset error:", resetError);
+            logger.error('[User Invite] Password reset error:', resetError);
             return res.status(500).json({
-              status: "error",
+              status: 'error',
               message: `Failed to send password reset: ${resetError.message}`,
             });
           }
-          
+
           return res.json({
-            status: "success",
+            status: 'success',
             message: `Password reset email sent to ${employee.email}`,
-            data: { email: employee.email, type: "password_reset" },
+            data: { email: employee.email, type: 'password_reset' },
           });
         }
 
@@ -2372,23 +2538,23 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           {
             first_name: employee.first_name,
             last_name: employee.last_name,
-            role: employee.role || "employee",
+            role: employee.role || 'employee',
             tenant_id: employee.tenant_id,
-            display_name: `${employee.first_name} ${employee.last_name || ""}`.trim(),
+            display_name: `${employee.first_name} ${employee.last_name || ''}`.trim(),
           },
-          redirect_url
+          redirect_url,
         );
 
         if (error) {
-          logger.error("[User Invite] Supabase Auth error:", error);
+          logger.error('[User Invite] Supabase Auth error:', error);
           return res.status(500).json({
-            status: "error",
+            status: 'error',
             message: `Failed to send invitation: ${error.message}`,
           });
         }
 
         return res.json({
-          status: "success",
+          status: 'success',
           message: `Invitation sent to ${employee.email}`,
           data: { email: employee.email, auth_user: data },
         });
@@ -2399,31 +2565,31 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       // Check if user already exists in Supabase Auth
       logger.debug(`[User Invite] Checking if ${user.email} exists in Supabase Auth...`);
       const authResult = await getAuthUserByEmail(user.email);
-      logger.debug(`[User Invite] Auth check result:`, { 
+      logger.debug(`[User Invite] Auth check result:`, {
         user: authResult?.user ? 'found' : 'not found',
         email: authResult?.user?.email,
-        error: authResult?.error 
+        error: authResult?.error,
       });
       const existingAuthUser = authResult?.user;
-      
+
       if (existingAuthUser) {
         // User already exists in Auth - send password reset instead
         logger.debug(`[User Invite] User ${user.email} already registered, sending password reset`);
-        
+
         const { error: resetError } = await sendPasswordResetEmail(user.email);
-        
+
         if (resetError) {
-          logger.error("[User Invite] Password reset error:", resetError);
+          logger.error('[User Invite] Password reset error:', resetError);
           return res.status(500).json({
-            status: "error",
+            status: 'error',
             message: `Failed to send password reset: ${resetError.message}`,
           });
         }
-        
+
         return res.json({
-          status: "success",
+          status: 'success',
           message: `Password reset email sent to ${user.email}`,
-          data: { email: user.email, type: "password_reset" },
+          data: { email: user.email, type: 'password_reset' },
         });
       }
 
@@ -2435,197 +2601,38 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           last_name: user.last_name,
           role: user.role,
           tenant_id: user.tenant_id,
-          display_name: `${user.first_name} ${user.last_name || ""}`.trim(),
+          display_name: `${user.first_name} ${user.last_name || ''}`.trim(),
         },
-        redirect_url
+        redirect_url,
       );
 
       if (error) {
-        logger.error("[User Invite] Supabase Auth error:", error);
+        logger.error('[User Invite] Supabase Auth error:', error);
         return res.status(500).json({
-          status: "error",
+          status: 'error',
           message: `Failed to send invitation: ${error.message}`,
         });
       }
 
       res.json({
-        status: "success",
+        status: 'success',
         message: `Invitation sent to ${user.email}`,
         data: { email: user.email, auth_user: data },
       });
     } catch (error) {
-      logger.error("[POST /api/users/:id/invite] Error:", error);
+      logger.error('[User Invite] Error:', error);
       res.status(500).json({
-        status: "error",
+        status: 'error',
         message: error.message,
       });
     }
-  });
+  }
+
+  // POST /api/users/:id/invite - Send Supabase Auth invitation to existing user
+  router.post('/:id/invite', mutateLimiter, handleSendInvite);
 
   // POST /api/users/:id/resend-invite - Alias for backward compatibility
-  // Frontend components may call /resend-invite instead of /invite
-  router.post("/:id/resend-invite", mutateLimiter, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { redirect_url } = req.body;
-
-      logger.debug(`[POST /api/users/${id}/resend-invite] Forwarding to /invite endpoint`);
-
-      // Fetch user from database using Supabase
-      const { getSupabaseClient } = await import('../lib/supabase-db.js');
-      const supabase = getSupabaseClient();
-      const { data: userRows, error: userErr } = await supabase
-        .from('users')
-        .select('id, email, first_name, last_name, role, tenant_id, metadata')
-        .eq('id', id)
-        .limit(1);
-      if (userErr) logger.warn('[User Resend-Invite] users select error:', userErr);
-      
-      const userFound = userRows && userRows.length > 0;
-      logger.debug(`[POST /api/users/${id}/resend-invite] Query result:`, {
-        found: userFound,
-        email: userFound ? userRows[0]?.email : undefined,
-        name: userFound ? `${userRows[0]?.first_name} ${userRows[0]?.last_name}` : undefined
-      });
-
-      if (!userFound) {
-        // Try employees table
-        const { data: employeeRows, error: empErr } = await supabase
-          .from('employees')
-          .select('id, email, first_name, last_name, role, tenant_id, metadata')
-          .eq('id', id)
-          .limit(1);
-        if (empErr) logger.warn('[User Resend-Invite] employees select error:', empErr);
-
-        if (!employeeRows || employeeRows.length === 0) {
-          return res.status(404).json({
-            status: "error",
-            message: "User not found",
-          });
-        }
-
-        const employee = employeeRows[0];
-
-        // Check if user already exists in Supabase Auth
-        const authResult = await getAuthUserByEmail(employee.email);
-        const existingAuthUser = authResult?.user;
-        
-        if (existingAuthUser) {
-          // User already exists in Auth - send password reset instead
-          logger.debug(`[User Resend-Invite] User ${employee.email} already registered, sending password reset`);
-          
-          const { error: resetError } = await sendPasswordResetEmail(employee.email);
-          
-          if (resetError) {
-            logger.error("[User Resend-Invite] Password reset error:", resetError);
-            return res.status(500).json({
-              status: "error",
-              message: `Failed to send password reset: ${resetError.message}`,
-            });
-          }
-          
-          return res.json({
-            status: "success",
-            message: `Password reset email sent to ${employee.email}`,
-            data: { email: employee.email, type: "password_reset" },
-          });
-        }
-
-        // User doesn't exist in Auth - send invitation
-        const { data, error } = await inviteUserByEmail(
-          employee.email,
-          {
-            first_name: employee.first_name,
-            last_name: employee.last_name,
-            role: employee.role || "employee",
-            tenant_id: employee.tenant_id,
-            display_name: `${employee.first_name} ${employee.last_name || ""}`.trim(),
-          },
-          redirect_url
-        );
-
-        if (error) {
-          logger.error("[User Resend-Invite] Supabase Auth error:", error);
-          return res.status(500).json({
-            status: "error",
-            message: `Failed to send invitation: ${error.message}`,
-          });
-        }
-
-        return res.json({
-          status: "success",
-          message: `Invitation sent to ${employee.email}`,
-          data: { email: employee.email, auth_user: data },
-        });
-      }
-
-      const user = userRows[0];
-
-      // Check if user already exists in Supabase Auth
-      logger.debug(`[User Resend-Invite] Checking if ${user.email} exists in Supabase Auth...`);
-      const authResult = await getAuthUserByEmail(user.email);
-      logger.debug(`[User Resend-Invite] Auth check result:`, { 
-        user: authResult?.user ? 'found' : 'not found',
-        email: authResult?.user?.email,
-        error: authResult?.error 
-      });
-      const existingAuthUser = authResult?.user;
-      
-      if (existingAuthUser) {
-        // User already exists in Auth - send password reset instead
-        logger.debug(`[User Resend-Invite] User ${user.email} already registered, sending password reset`);
-        
-        const { error: resetError } = await sendPasswordResetEmail(user.email);
-        
-        if (resetError) {
-          logger.error("[User Resend-Invite] Password reset error:", resetError);
-          return res.status(500).json({
-            status: "error",
-            message: `Failed to send password reset: ${resetError.message}`,
-          });
-        }
-        
-        return res.json({
-          status: "success",
-          message: `Password reset email sent to ${user.email}`,
-          data: { email: user.email, type: "password_reset" },
-        });
-      }
-
-      // User doesn't exist in Auth - send invitation
-      const { data, error } = await inviteUserByEmail(
-        user.email,
-        {
-          first_name: user.first_name,
-          last_name: user.last_name,
-          role: user.role,
-          tenant_id: user.tenant_id,
-          display_name: `${user.first_name} ${user.last_name || ""}`.trim(),
-        },
-        redirect_url
-      );
-
-      if (error) {
-        logger.error("[User Resend-Invite] Supabase Auth error:", error);
-        return res.status(500).json({
-          status: "error",
-          message: `Failed to send invitation: ${error.message}`,
-        });
-      }
-
-      res.json({
-        status: "success",
-        message: `Invitation sent to ${user.email}`,
-        data: { email: user.email, auth_user: data },
-      });
-    } catch (error) {
-      logger.error("[POST /api/users/:id/resend-invite] Error:", error);
-      res.status(500).json({
-        status: "error",
-        message: error.message,
-      });
-    }
-  });
+  router.post('/:id/resend-invite', mutateLimiter, handleSendInvite);
 
   return router;
 }
