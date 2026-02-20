@@ -443,6 +443,8 @@ jobs:
           key: ${{ steps.doppler-deploy.outputs.PROD_VPS_SSH_KEY }}
           port: ${{ steps.doppler-deploy.outputs.PROD_VPS_PORT || 22 }}
           envs: VERSION_TAG,MCP_GITHUB_TOKEN,DOPPLER_TOKEN
+          command_timeout: 20m
+          timeout: 25m
           script: |
             set -e  # Exit on any error
             cd /opt/aishacrm
