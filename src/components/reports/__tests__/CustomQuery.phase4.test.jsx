@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import CustomQuery from '../CustomQuery.jsx';
 
 // ─── Module mocks ─────────────────────────────────────────────────────────────
@@ -424,7 +424,10 @@ describe('CustomQuery — Phase 4 Saved Reports', () => {
 
     await waitFor(() => expect(screen.getByText('Open Leads')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole('button', { name: /^Run$/ }));
+    // There are two "Run" buttons (saved report + main query bar) — scope to the saved reports panel
+    const savedReportsPanel = screen.getByText('Open Leads').closest('.space-y-2');
+    const runBtn = within(savedReportsPanel).getByRole('button', { name: /^Run$/ });
+    fireEvent.click(runBtn);
 
     await waitFor(() => {
       const patchCall = globalThis.fetch.mock.calls.find(
