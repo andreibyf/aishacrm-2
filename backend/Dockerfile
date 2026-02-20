@@ -47,6 +47,13 @@ COPY --from=build /app ./
 # Copy shared contracts (repo root) for runtime imports
 COPY shared /shared
 
+# Copy PEP runtime to root level for cashflow route imports (../../pep from /app/routes/)
+COPY pep /pep
+
+# Symlink /backend → /app so pepRuntime.js can resolve ../../backend/lib/braid/execution.js
+# (pepRuntime.js sits at /pep/runtime/ and uses a relative import to backend)
+RUN ln -s /app /backend
+
 # Cache-busting mechanism for braid-llm-kit
 # This ARG will be set to the git commit SHA during GitHub Actions build
 # Changing this value will invalidate Docker cache from this point forward
@@ -65,6 +72,9 @@ RUN ls -la /braid-llm-kit/sdk/index.js || { echo "ERROR: /braid-llm-kit/sdk/inde
 
 # Verify shared contracts exist for agent registry imports
 RUN ls -la /shared/contracts/agents.js || { echo "ERROR: /shared/contracts/agents.js not found!"; exit 1; }
+
+# Verify PEP runtime exists for cashflow route imports
+RUN ls -la /pep/runtime/pepRuntime.js || { echo "ERROR: /pep/runtime/pepRuntime.js not found!"; exit 1; }
 
 # Copy entrypoint script and make it executable
 COPY backend/docker-entrypoint.sh ./entrypoint.sh

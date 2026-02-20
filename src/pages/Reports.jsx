@@ -1,27 +1,43 @@
-import { lazy, useState, useEffect, useMemo } from "react";
+import { lazy, useState, useEffect, useMemo } from 'react';
 import {
-  BarChart3, Building2, CheckSquare, Database, DollarSign,
-  FileDigit, FileSpreadsheet, Loader2, Target, TrendingUp, Brain,
-  Download, ChevronDown
-} from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
+  BarChart3,
+  Building2,
+  CheckSquare,
+  Database,
+  DollarSign,
+  FileDigit,
+  FileSpreadsheet,
+  Loader2,
+  Target,
+  TrendingUp,
+  Brain,
+  Download,
+  ChevronDown,
+} from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { useUser } from "@/components/shared/useUser.js";
-import { Lead } from "@/api/entities";
-import { Contact } from "@/api/entities";
-import { Opportunity } from "@/api/entities";
-import { Activity } from "@/api/entities";
-import { Tenant } from "@/api/entities";
+} from '@/components/ui/dropdown-menu';
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from '@/components/ui/select';
+import { useUser } from '@/components/shared/useUser.js';
+import { Lead } from '@/api/entities';
+import { Contact } from '@/api/entities';
+import { Opportunity } from '@/api/entities';
+import { Activity } from '@/api/entities';
+import { Tenant } from '@/api/entities';
 
 // DEBUG: Check imports in Reports.jsx
-console.log("Reports.jsx IMPORT CHECK:", {
+console.log('Reports.jsx IMPORT CHECK:', {
   Lead: typeof Lead,
   Contact: typeof Contact,
   Opportunity: typeof Opportunity,
@@ -31,30 +47,32 @@ console.log("Reports.jsx IMPORT CHECK:", {
   LeadKeys: Lead ? Object.keys(Lead).join(', ') : 'null',
 });
 if (typeof Lead?.filter !== 'function') {
-  alert(`Reports.jsx: Lead.filter is ${typeof Lead?.filter}. Lead = ${JSON.stringify(Object.keys(Lead || {}))}`);
+  alert(
+    `Reports.jsx: Lead.filter is ${typeof Lead?.filter}. Lead = ${JSON.stringify(Object.keys(Lead || {}))}`,
+  );
 }
 
-import { useTenant } from "../components/shared/tenantContext";
-import { useEmployeeScope } from "../components/shared/EmployeeScopeContext";
-import { useApiManager } from "../components/shared/ApiManager";
-import { toast } from "react-hot-toast";
+import { useTenant } from '../components/shared/tenantContext';
+import { useEmployeeScope } from '../components/shared/EmployeeScopeContext';
+import { useApiManager } from '../components/shared/ApiManager';
+import { toast } from 'react-hot-toast';
 
 // Lazy load chart-heavy components to reduce entry bundle size
 // These components use Recharts (~385KB) which gets split into separate chunk
-const OverviewStats = lazy(() => import("../components/reports/OverviewStats"));
-const SalesAnalytics = lazy(() => import("../components/reports/SalesAnalytics"));
-const LeadAnalytics = lazy(() => import("../components/reports/LeadAnalytics"));
-const ProductivityAnalytics = lazy(() => import("../components/reports/ProductivityAnalytics"));
-const HistoricalTrends = lazy(() => import("../components/reports/HistoricalTrends"));
-const ForecastingDashboard = lazy(() => import("../components/reports/ForecastingDashboard"));
+const OverviewStats = lazy(() => import('../components/reports/OverviewStats'));
+const SalesAnalytics = lazy(() => import('../components/reports/SalesAnalytics'));
+const LeadAnalytics = lazy(() => import('../components/reports/LeadAnalytics'));
+const ProductivityAnalytics = lazy(() => import('../components/reports/ProductivityAnalytics'));
+const HistoricalTrends = lazy(() => import('../components/reports/HistoricalTrends'));
+const ForecastingDashboard = lazy(() => import('../components/reports/ForecastingDashboard'));
 
-import AIMarketInsights from "../components/reports/AIMarketInsights";
-import DataQualityReport from "../components/reports/DataQualityReport";
-import { exportReportToCSV } from "@/api/functions";
-import { getBackendUrl } from "@/api/backendUrl";
+import AIMarketInsights from '../components/reports/AIMarketInsights';
+import DataQualityReport from '../components/reports/DataQualityReport';
+import { exportReportToCSV } from '@/api/functions';
+import { getBackendUrl } from '@/api/backendUrl';
 
 export default function ReportsPage() {
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState('overview');
   const { user: currentUser, loading: userLoading } = useUser();
   const [loadingStats, setLoadingStats] = useState(false);
   const [stats, setStats] = useState(null);
@@ -69,14 +87,11 @@ export default function ReportsPage() {
   useEffect(() => {
     const loadTenantData = async () => {
       if (!currentUser) return;
-      
+
       if (currentUser.role === 'superadmin' && selectedTenantId) {
         try {
-          const tenant = await cachedRequest(
-            'Tenant',
-            'get',
-            { id: selectedTenantId },
-            () => Tenant.get(selectedTenantId)
+          const tenant = await cachedRequest('Tenant', 'get', { id: selectedTenantId }, () =>
+            Tenant.get(selectedTenantId),
           );
           setCurrentTenantData(tenant);
         } catch (error) {
@@ -85,11 +100,8 @@ export default function ReportsPage() {
         }
       } else if (currentUser.tenant_id) {
         try {
-          const tenant = await cachedRequest(
-            'Tenant',
-            'get',
-            { id: currentUser.tenant_id },
-            () => Tenant.get(currentUser.tenant_id)
+          const tenant = await cachedRequest('Tenant', 'get', { id: currentUser.tenant_id }, () =>
+            Tenant.get(currentUser.tenant_id),
           );
           setCurrentTenantData(tenant);
         } catch (error) {
@@ -117,7 +129,10 @@ export default function ReportsPage() {
     }
 
     // Guard: For superadmin/admin without a selected tenant, do not load data
-    if ((currentUser.role === 'superadmin' || currentUser.role === 'admin') && !baseFilter.tenant_id) {
+    if (
+      (currentUser.role === 'superadmin' || currentUser.role === 'admin') &&
+      !baseFilter.tenant_id
+    ) {
       return {};
     }
 
@@ -145,10 +160,18 @@ export default function ReportsPage() {
       setLoadingStats(true);
       try {
         const [leads, contacts, opportunities, activities] = await Promise.all([
-          cachedRequest('Lead', 'filter', { filter: currentScopedFilter }, () => Lead.filter(currentScopedFilter)),
-          cachedRequest('Contact', 'filter', { filter: currentScopedFilter }, () => Contact.filter(currentScopedFilter)),
-          cachedRequest('Opportunity', 'filter', { filter: currentScopedFilter }, () => Opportunity.filter(currentScopedFilter)),
-          cachedRequest('Activity', 'filter', { filter: currentScopedFilter }, () => Activity.filter(currentScopedFilter)),
+          cachedRequest('Lead', 'filter', { filter: currentScopedFilter }, () =>
+            Lead.filter(currentScopedFilter),
+          ),
+          cachedRequest('Contact', 'filter', { filter: currentScopedFilter }, () =>
+            Contact.filter(currentScopedFilter),
+          ),
+          cachedRequest('Opportunity', 'filter', { filter: currentScopedFilter }, () =>
+            Opportunity.filter(currentScopedFilter),
+          ),
+          cachedRequest('Activity', 'filter', { filter: currentScopedFilter }, () =>
+            Activity.filter(currentScopedFilter),
+          ),
         ]);
 
         // UNWRAP: cachedRequest may return pagination objects like { activities: [], total, limit, offset }
@@ -156,9 +179,13 @@ export default function ReportsPage() {
         const unwrapResult = (result, entityName) => {
           if (Array.isArray(result)) return result;
           // Check if it's a pagination object with the entity name as a property
-          const lowerEntityName = entityName.toLowerCase() + 's'; // "activity" -> "activities"
-          if (result && typeof result === 'object' && Array.isArray(result[lowerEntityName])) {
-            return result[lowerEntityName];
+          const lowerEntityName = entityName.toLowerCase();
+          // Handle irregular plurals (activity -> activities) and regular (lead -> leads)
+          const pluralName = lowerEntityName.endsWith('y')
+            ? lowerEntityName.slice(0, -1) + 'ies'
+            : lowerEntityName + 's';
+          if (result && typeof result === 'object' && Array.isArray(result[pluralName])) {
+            return result[pluralName];
           }
           // Only warn if unwrapping failed - if we reach here, result is not an array and not a valid pagination object
           console.warn(`Reports.jsx: Failed to unwrap ${entityName}, got:`, typeof result, result);
@@ -179,15 +206,17 @@ export default function ReportsPage() {
         const startOfPreviousMonth = new Date(currentYear, currentMonth - 1, 1);
         const endOfPreviousMonth = new Date(currentYear, currentMonth, 0, 23, 59, 59, 999);
 
-        const activitiesThisMonth = safeActivities.filter(a => {
-          const createdDate = new Date(a.created_date);
-          return createdDate >= startOfCurrentMonth && createdDate <= endOfCurrentMonth;
-        }).length || 0;
+        const activitiesThisMonth =
+          safeActivities.filter((a) => {
+            const createdDate = new Date(a.created_date);
+            return createdDate >= startOfCurrentMonth && createdDate <= endOfCurrentMonth;
+          }).length || 0;
 
-        const activitiesLastMonth = safeActivities.filter(a => {
-          const createdDate = new Date(a.created_date);
-          return createdDate >= startOfPreviousMonth && createdDate <= endOfPreviousMonth;
-        }).length || 0;
+        const activitiesLastMonth =
+          safeActivities.filter((a) => {
+            const createdDate = new Date(a.created_date);
+            return createdDate >= startOfPreviousMonth && createdDate <= endOfPreviousMonth;
+          }).length || 0;
 
         const totalLeads = safeLeads.length || 0;
         const totalContacts = safeContacts.length || 0;
@@ -200,7 +229,6 @@ export default function ReportsPage() {
           activitiesThisMonth,
           activitiesLastMonth,
         });
-
       } catch (error) {
         console.error('Failed to load overview stats:', error);
         toast.error('Failed to load overview data');
@@ -253,19 +281,19 @@ export default function ReportsPage() {
     try {
       if (format === 'pdf') {
         const BACKEND_URL = getBackendUrl();
-        
+
         // Special handling for AI Insights - use POST with insights data
         if (activeTab === 'insights') {
           // Try to get insights data from the component's data attribute
           const insightsElement = document.querySelector('[data-ai-insights]');
           const insightsData = insightsElement?.getAttribute('data-ai-insights');
-          
+
           if (!insightsData || insightsData === 'null') {
             toast.error('Please generate insights first before exporting');
             setIsExporting(false);
             return;
           }
-          
+
           try {
             const insights = JSON.parse(insightsData);
             const response = await fetch(`${BACKEND_URL}/api/reports/export-insights-pdf`, {
@@ -277,15 +305,15 @@ export default function ReportsPage() {
                 industry: currentTenantData?.industry || 'Not specified',
                 business_model: currentTenantData?.business_model || 'B2B',
                 geographic_focus: currentTenantData?.geographic_focus || 'North America',
-                insights
-              })
+                insights,
+              }),
             });
-            
+
             if (!response.ok) {
               const errorData = await response.json();
               throw new Error(errorData.message || 'Failed to generate PDF');
             }
-            
+
             // Download the PDF
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
@@ -296,7 +324,7 @@ export default function ReportsPage() {
             link.click();
             document.body.removeChild(link);
             window.URL.revokeObjectURL(url);
-            
+
             toast.success('AI Insights PDF downloaded successfully!');
             setIsExporting(false);
             return;
@@ -307,16 +335,16 @@ export default function ReportsPage() {
             return;
           }
         }
-        
+
         // Standard PDF export for other report types
         const params = new URLSearchParams();
         if (currentScopedFilter?.tenant_id) {
           params.append('tenant_id', currentScopedFilter.tenant_id);
         }
         params.append('report_type', activeTab);
-        
+
         const url = `${BACKEND_URL}/api/reports/export-pdf?${params.toString()}`;
-        
+
         // Open in new tab to download
         const link = document.createElement('a');
         link.href = url;
@@ -325,7 +353,7 @@ export default function ReportsPage() {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        
+
         toast.success('PDF report is being generated...');
         setIsExporting(false);
         return;
@@ -334,7 +362,10 @@ export default function ReportsPage() {
       // For CSV export
       let response;
       if (format === 'csv') {
-        response = await exportReportToCSV({ reportType: activeTab, tenantFilter: currentScopedFilter });
+        response = await exportReportToCSV({
+          reportType: activeTab,
+          tenantFilter: currentScopedFilter,
+        });
       }
 
       if (response && response.data) {
@@ -347,8 +378,7 @@ export default function ReportsPage() {
         let fileName = `${activeTab}_report.${format}`;
         if (contentDisposition) {
           const fileNameMatch = contentDisposition.match(/filename="?(.+)"?/);
-          if (fileNameMatch && fileNameMatch.length === 2)
-            fileName = fileNameMatch[1];
+          if (fileNameMatch && fileNameMatch.length === 2) fileName = fileNameMatch[1];
         }
 
         a.download = fileName;
@@ -360,10 +390,11 @@ export default function ReportsPage() {
         console.error('Export failed with API error:', response.error);
         toast.error(`Export failed: ${response.error}`);
       } else {
-        const errorData = response?.data ? JSON.parse(new TextDecoder().decode(response.data)) : { error: "Unknown export error" };
-        throw new Error(errorData.error || "Export failed, no data received.");
+        const errorData = response?.data
+          ? JSON.parse(new TextDecoder().decode(response.data))
+          : { error: 'Unknown export error' };
+        throw new Error(errorData.error || 'Export failed, no data received.');
       }
-
     } catch (error) {
       console.error(`Error exporting to ${format}:`, error);
       toast.error(`Failed to export report: ${error.message}`);
@@ -374,23 +405,63 @@ export default function ReportsPage() {
 
   const reportTabs = [
     {
-      id: "overview",
-      label: "Overview",
+      id: 'overview',
+      label: 'Overview',
       icon: TrendingUp,
-      iconColor: "text-purple-400",
+      iconColor: 'text-purple-400',
       component: (
         <>
-          <OverviewStats tenantFilter={currentScopedFilter} stats={stats} loadingStats={loadingStats} />
+          <OverviewStats
+            tenantFilter={currentScopedFilter}
+            stats={stats}
+            loadingStats={loadingStats}
+          />
           <HistoricalTrends tenantFilter={currentScopedFilter} />
         </>
       ),
     },
-    { id: "sales", label: "Sales Analytics", icon: DollarSign, iconColor: "text-green-500", component: <SalesAnalytics tenantFilter={currentScopedFilter} /> },
-    { id: "leads", label: "Lead Analytics", icon: TrendingUp, iconColor: "text-yellow-400", component: <LeadAnalytics tenantFilter={currentScopedFilter} /> },
-    { id: "productivity", label: "Productivity", icon: CheckSquare, iconColor: "text-orange-500", component: <ProductivityAnalytics tenantFilter={currentScopedFilter} /> },
-    { id: "forecasting", label: "Forecasting", icon: Target, iconColor: "text-amber-500", component: <ForecastingDashboard tenantFilter={currentScopedFilter} /> },
-    { id: "insights", label: "AI Insights", icon: Brain, iconColor: "text-pink-500", component: <AIMarketInsights tenant={currentTenantData} /> },
-    { id: "data-quality", label: "Data Quality", icon: Database, iconColor: "text-cyan-400", component: <DataQualityReport tenantFilter={currentScopedFilter} /> },
+    {
+      id: 'sales',
+      label: 'Sales Analytics',
+      icon: DollarSign,
+      iconColor: 'text-green-500',
+      component: <SalesAnalytics tenantFilter={currentScopedFilter} />,
+    },
+    {
+      id: 'leads',
+      label: 'Lead Analytics',
+      icon: TrendingUp,
+      iconColor: 'text-yellow-400',
+      component: <LeadAnalytics tenantFilter={currentScopedFilter} />,
+    },
+    {
+      id: 'productivity',
+      label: 'Productivity',
+      icon: CheckSquare,
+      iconColor: 'text-orange-500',
+      component: <ProductivityAnalytics tenantFilter={currentScopedFilter} />,
+    },
+    {
+      id: 'forecasting',
+      label: 'Forecasting',
+      icon: Target,
+      iconColor: 'text-amber-500',
+      component: <ForecastingDashboard tenantFilter={currentScopedFilter} />,
+    },
+    {
+      id: 'insights',
+      label: 'AI Insights',
+      icon: Brain,
+      iconColor: 'text-pink-500',
+      component: <AIMarketInsights tenant={currentTenantData} />,
+    },
+    {
+      id: 'data-quality',
+      label: 'Data Quality',
+      icon: Database,
+      iconColor: 'text-cyan-400',
+      component: <DataQualityReport tenantFilter={currentScopedFilter} />,
+    },
   ];
 
   return (
@@ -411,7 +482,11 @@ export default function ReportsPage() {
         <div className="flex-shrink-0 w-full sm:w-auto mt-4 lg:mt-0">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" disabled={isExporting} className="w-full sm:w-auto bg-slate-700 hover:bg-slate-600 text-slate-200 border-slate-600">
+              <Button
+                variant="outline"
+                disabled={isExporting}
+                className="w-full sm:w-auto bg-slate-700 hover:bg-slate-600 text-slate-200 border-slate-600"
+              >
                 {isExporting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -428,12 +503,21 @@ export default function ReportsPage() {
                 )}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-slate-800 border-slate-700 text-slate-200">
-              <DropdownMenuItem onClick={() => handleExport('pdf')} className="hover:bg-slate-700 focus:bg-slate-700">
+            <DropdownMenuContent
+              align="end"
+              className="bg-slate-800 border-slate-700 text-slate-200"
+            >
+              <DropdownMenuItem
+                onClick={() => handleExport('pdf')}
+                className="hover:bg-slate-700 focus:bg-slate-700"
+              >
                 <FileDigit className="mr-2 h-4 w-4 text-red-400" />
                 <span>Export as PDF</span>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleExport('csv')} className="hover:bg-slate-700 focus:bg-slate-700">
+              <DropdownMenuItem
+                onClick={() => handleExport('csv')}
+                className="hover:bg-slate-700 focus:bg-slate-700"
+              >
                 <FileSpreadsheet className="mr-2 h-4 w-4 text-green-400" />
                 <span>Export as CSV</span>
               </DropdownMenuItem>
@@ -448,19 +532,25 @@ export default function ReportsPage() {
             <SelectTrigger className="w-full bg-slate-800 border-slate-700 text-slate-200">
               <SelectValue>
                 {(() => {
-                  const currentReport = reportTabs.find(tab => tab.id === activeTab);
+                  const currentReport = reportTabs.find((tab) => tab.id === activeTab);
                   return currentReport ? (
                     <div className="flex items-center gap-2">
                       <currentReport.icon className={`w-4 h-4 ${currentReport.iconColor}`} />
                       <span className="truncate">{currentReport.label}</span>
                     </div>
-                  ) : 'Select a report...';
+                  ) : (
+                    'Select a report...'
+                  );
                 })()}
               </SelectValue>
             </SelectTrigger>
             <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
               {reportTabs.map((report) => (
-                <SelectItem key={report.id} value={report.id} className="hover:bg-slate-700 focus:bg-slate-700">
+                <SelectItem
+                  key={report.id}
+                  value={report.id}
+                  className="hover:bg-slate-700 focus:bg-slate-700"
+                >
                   <div className="flex items-center gap-2">
                     <report.icon className={`w-4 h-4 ${report.iconColor}`} />
                     <span>{report.label}</span>
@@ -479,7 +569,9 @@ export default function ReportsPage() {
                 value={report.id}
                 className="flex items-center gap-2 px-3 lg:px-4 py-2 rounded-lg border border-slate-600 bg-slate-700 hover:bg-slate-600 data-[state=active]:bg-purple-600 data-[state=active]:border-purple-500 data-[state=active]:text-white text-slate-300 text-xs lg:text-sm font-medium transition-all duration-200"
               >
-                <report.icon className={`w-4 h-4 ${activeTab === report.id ? 'text-white' : report.iconColor}`} />
+                <report.icon
+                  className={`w-4 h-4 ${activeTab === report.id ? 'text-white' : report.iconColor}`}
+                />
                 <span className="hidden sm:inline">{report.label}</span>
               </TabsTrigger>
             ))}
@@ -495,9 +587,7 @@ export default function ReportsPage() {
                   {report.label}
                 </h2>
               </div>
-              <div className="space-y-4">
-                {activeTab === report.id ? report.component : null}
-              </div>
+              <div className="space-y-4">{activeTab === report.id ? report.component : null}</div>
             </TabsContent>
           ))}
         </div>
