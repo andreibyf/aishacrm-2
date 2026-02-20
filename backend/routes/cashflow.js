@@ -108,7 +108,7 @@ export default function createCashFlowRoutes(_pgPool) {
         .order('transaction_date', { ascending: false });
 
       if (type) {
-        query = query.eq('type', type);
+        query = query.eq('transaction_type', type);
       }
 
       const { data, error, count } = await query.range(
@@ -155,10 +155,12 @@ export default function createCashFlowRoutes(_pgPool) {
   router.post('/', async (req, res) => {
     try {
       const c = req.body;
-      if (!c.tenant_id || !c.amount || !c.type || !c.transaction_date) {
+      // Accept transaction_type (Braid/PEP convention) or type (legacy)
+      const transactionType = c.transaction_type || c.type;
+      if (!c.tenant_id || !c.amount || !transactionType || !c.transaction_date) {
         return res.status(400).json({
           status: 'error',
-          message: 'tenant_id, amount, type, and transaction_date required',
+          message: 'tenant_id, amount, transaction_type, and transaction_date required',
         });
       }
 
@@ -179,7 +181,7 @@ export default function createCashFlowRoutes(_pgPool) {
           tenant_id: resolvedTenantId,
           transaction_date: c.transaction_date,
           amount: c.amount,
-          type: c.type,
+          transaction_type: transactionType,
           category: c.category || null,
           description: c.description || null,
           account_id: c.account_id || null,
@@ -218,7 +220,7 @@ export default function createCashFlowRoutes(_pgPool) {
       const allowed = [
         'transaction_date',
         'amount',
-        'type',
+        'transaction_type',
         'category',
         'description',
         'account_id',
@@ -285,7 +287,10 @@ export default function createCashFlowRoutes(_pgPool) {
       }
       // Normalize tenant id
 
-      let query = supabase.from('cash_flow').select('type, amount').eq('tenant_id', tenant_id);
+      let query = supabase
+        .from('cash_flow')
+        .select('transaction_type, amount')
+        .eq('tenant_id', tenant_id);
 
       if (start_date) {
         query = query.gte('transaction_date', start_date);
@@ -300,10 +305,10 @@ export default function createCashFlowRoutes(_pgPool) {
 
       // Client-side aggregation
       const income = (data || [])
-        .filter((r) => r.type === 'income')
+        .filter((r) => r.transaction_type === 'income')
         .reduce((sum, r) => sum + Number(r.amount), 0);
       const expenses = (data || [])
-        .filter((r) => r.type === 'expense')
+        .filter((r) => r.transaction_type === 'expense')
         .reduce((sum, r) => sum + Number(r.amount), 0);
       const net = income - expenses;
 
