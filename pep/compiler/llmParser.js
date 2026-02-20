@@ -77,7 +77,7 @@ OUTPUT SHAPE (on success):
   }
 }
 
-If there is no fallback clause, set "fallback" to null.
+If there is no fallback clause in the input, either omit the "fallback" key entirely or set it to null.
 
 VALID ENTITIES:
 ${summaries.entity_summary}
