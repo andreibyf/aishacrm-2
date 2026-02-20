@@ -20,6 +20,8 @@
 'use strict';
 
 // Import from existing Braid execution engine — do not copy or reimplement
+// In Docker, /backend is a symlink to /app (set in Dockerfile), so this path
+// resolves correctly in both local dev and the container.
 import { executeBraidTool, TOOL_ACCESS_TOKEN } from '../../backend/lib/braid/execution.js';
 
 /**
@@ -58,6 +60,15 @@ export function validateCompiledProgram(compiledProgram) {
     }
     if (!Array.isArray(ir.instructions) || ir.instructions.length === 0) {
       errors.push('braid_ir must have at least one instruction');
+    }
+    // query_entity programs are valid single-instruction programs
+    const isQueryProgram =
+      Array.isArray(ir.instructions) &&
+      ir.instructions.length === 1 &&
+      ir.instructions[0]?.op === 'query_entity';
+    if (isQueryProgram) {
+      // Skip cashflow-specific instruction op validation for query programs
+      return { valid: errors.length === 0, errors };
     }
     if (ir.instructions) {
       for (let i = 0; i < ir.instructions.length; i++) {
@@ -215,6 +226,22 @@ export async function executePepProgram(compiledProgram, runtimeContext) {
             } else {
               stepAudit.status = 'no_match';
             }
+            break;
+          }
+
+          case 'query_entity': {
+            // Query execution is handled externally (via /api/pep/query).
+            // When the runtime encounters a query_entity node, call the query endpoint.
+            // For now, store a placeholder — Phase 3 programs are executed via the frontend
+            // hitting /api/pep/query directly rather than through executePepProgram.
+            results[instruction.assign] = {
+              _op: 'query_entity',
+              _target: instruction.target,
+              _deferred: true,
+              _note: 'Query executed via /api/pep/query endpoint',
+            };
+            stepAudit.status = 'ok';
+            stepAudit.note = 'query_entity deferred to /api/pep/query';
             break;
           }
 
