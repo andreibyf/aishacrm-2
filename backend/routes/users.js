@@ -1939,10 +1939,14 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           const { error: passwordError } = await updateAuthUserPassword(authUser.id, new_password);
 
           if (passwordError) {
-            logger.error('[User Update] Password update error:', passwordError);
+            // Redact sensitive error details from logs
+            logger.error('[User Update] Password update error:', {
+              code: passwordError.code,
+              message: '[REDACTED]',
+            });
             return res.status(500).json({
               status: 'error',
-              message: `Failed to update password: ${passwordError.message}`,
+              message: 'Failed to update password. Please contact support.',
             });
           }
 
@@ -2419,10 +2423,13 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       const { error: updateError } = await updateAuthUserPassword(authUser.id, password);
 
       if (updateError) {
-        logger.error('[Admin Password Reset] Error:', updateError);
+        logger.error('[Admin Password Reset] Error:', {
+          code: updateError.code,
+          message: '[REDACTED]',
+        });
         return res.status(500).json({
           status: 'error',
-          message: `Failed to update password: ${updateError.message}`,
+          message: 'Failed to update password. Please contact support.',
         });
       }
 
@@ -2518,10 +2525,13 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           const { error: resetError } = await sendPasswordResetEmail(employee.email);
 
           if (resetError) {
-            logger.error('[User Invite] Password reset error:', resetError);
+            logger.error('[User Invite] Password reset error:', {
+              code: resetError.code,
+              message: '[REDACTED]',
+            });
             return res.status(500).json({
               status: 'error',
-              message: `Failed to send password reset: ${resetError.message}`,
+              message: 'Failed to send password reset email. Please contact support.',
             });
           }
 
@@ -2579,10 +2589,13 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         const { error: resetError } = await sendPasswordResetEmail(user.email);
 
         if (resetError) {
-          logger.error('[User Invite] Password reset error:', resetError);
+          logger.error('[User Invite] Password reset error:', {
+            code: resetError.code,
+            message: '[REDACTED]',
+          });
           return res.status(500).json({
             status: 'error',
-            message: `Failed to send password reset: ${resetError.message}`,
+            message: 'Failed to send password reset email. Please contact support.',
           });
         }
 

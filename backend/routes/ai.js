@@ -12,22 +12,51 @@ import multer from 'multer';
 import OpenAI from 'openai';
 import { buildSystemPrompt, getOpenAIClient } from '../lib/aiProvider.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
-import { summarizeToolResult, getBraidSystemPrompt, generateToolSchemas, executeBraidTool, TOOL_ACCESS_TOKEN } from '../lib/braidIntegration-v2.js';
+import {
+  summarizeToolResult,
+  getBraidSystemPrompt,
+  generateToolSchemas,
+  executeBraidTool,
+  TOOL_ACCESS_TOKEN,
+} from '../lib/braidIntegration-v2.js';
 import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
 import { runTask } from '../lib/aiBrain.js';
 import createAiRealtimeRoutes from './aiRealtime.js';
 import { routeChat } from '../flows/index.js';
-import { resolveLLMApiKey, pickModel, getTenantIdFromRequest, selectLLMConfigForTenant } from '../lib/aiEngine/index.js';
+import {
+  resolveLLMApiKey,
+  pickModel,
+  getTenantIdFromRequest,
+  selectLLMConfigForTenant,
+} from '../lib/aiEngine/index.js';
 import { logLLMActivity } from '../lib/aiEngine/activityLogger.js';
-import { enhanceSystemPromptSmart, fetchEntityLabels, updateToolSchemasWithLabels, applyToolHardCap } from '../lib/entityLabelInjector.js';
+import {
+  enhanceSystemPromptSmart,
+  fetchEntityLabels,
+  updateToolSchemasWithLabels,
+  applyToolHardCap,
+} from '../lib/entityLabelInjector.js';
 import { CORE_TOOLS } from '../lib/aiBudgetConfig.js';
-import { buildTenantContextDictionary, generateContextDictionaryPrompt } from '../lib/tenantContextDictionary.js';
+import {
+  buildTenantContextDictionary,
+  generateContextDictionaryPrompt,
+} from '../lib/tenantContextDictionary.js';
 import { developerChat, isSuperadmin } from '../lib/developerAI.js';
-import { classifyIntent, extractEntityMentions, getIntentConfidence } from '../lib/intentClassifier.js';
-import { routeIntentToTool, getToolsForIntent, shouldForceToolChoice, getRelevantToolsForIntent } from '../lib/intentRouter.js';
+import {
+  classifyIntent,
+  extractEntityMentions,
+  getIntentConfidence,
+} from '../lib/intentClassifier.js';
+import {
+  routeIntentToTool,
+  getToolsForIntent,
+  shouldForceToolChoice,
+  getRelevantToolsForIntent,
+} from '../lib/intentRouter.js';
 import { buildStatusLabelMap, normalizeToolArgs } from '../lib/statusCardLabelResolver.js';
 import logger from '../lib/logger.js';
 import { buildTenantKey, putObject } from '../lib/r2.js';
+import { setCorsHeaders } from '../lib/cors.js';
 // Phase 7 RAG helpers
 import {
   queryMemory,
@@ -300,17 +329,32 @@ export default function createAIRoutes(pgPool) {
   router.get('/assistants', async (req, res) => {
     try {
       const { tenant_id } = req.query;
-      
+
       res.json({
         status: 'success',
         data: {
           assistants: [
-            { id: 'executive-assistant', name: 'Executive Assistant', model: DEFAULT_CHAT_MODEL, active: true },
-            { id: 'sales-assistant', name: 'Sales Assistant', model: DEFAULT_CHAT_MODEL, active: true },
-            { id: 'support-assistant', name: 'Support Assistant', model: DEFAULT_CHAT_MODEL, active: false }
+            {
+              id: 'executive-assistant',
+              name: 'Executive Assistant',
+              model: DEFAULT_CHAT_MODEL,
+              active: true,
+            },
+            {
+              id: 'sales-assistant',
+              name: 'Sales Assistant',
+              model: DEFAULT_CHAT_MODEL,
+              active: true,
+            },
+            {
+              id: 'support-assistant',
+              name: 'Support Assistant',
+              model: DEFAULT_CHAT_MODEL,
+              active: false,
+            },
           ],
-          tenant_id
-        }
+          tenant_id,
+        },
       });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
@@ -390,7 +434,7 @@ export default function createAIRoutes(pgPool) {
         logger.warn('[AI][TTS] ElevenLabs configuration missing');
         return res.status(503).json({
           status: 'error',
-          message: 'TTS service not configured (missing API key or Voice ID)'
+          message: 'TTS service not configured (missing API key or Voice ID)',
         });
       }
       const content = (text || '').toString().slice(0, 4000);
@@ -451,7 +495,9 @@ export default function createAIRoutes(pgPool) {
       }
 
       if (audioBuffer.length > MAX_STT_AUDIO_BYTES) {
-        return res.status(400).json({ status: 'error', message: 'Audio exceeds maximum allowed size' });
+        return res
+          .status(400)
+          .json({ status: 'error', message: 'Audio exceeds maximum allowed size' });
       }
 
       const tenantIdentifier = getTenantIdFromRequest(req) || req.body?.tenant_id;
@@ -464,17 +510,21 @@ export default function createAIRoutes(pgPool) {
       });
 
       if (!apiKey) {
-        return res.status(400).json({ status: 'error', message: 'OpenAI API key not configured for this tenant' });
+        return res
+          .status(400)
+          .json({ status: 'error', message: 'OpenAI API key not configured for this tenant' });
       }
 
       const client = getOpenAIClient(apiKey);
       if (!client) {
-        return res.status(500).json({ status: 'error', message: 'Unable to initialize speech model client' });
+        return res
+          .status(500)
+          .json({ status: 'error', message: 'Unable to initialize speech model client' });
       }
 
       const safeMime = mimeType || 'audio/webm';
       const safeName = fileName || 'speech.webm';
-      
+
       // Log audio details for debugging
       logger.debug('[AI][STT] Processing audio:', {
         size: audioBuffer.length,
@@ -484,8 +534,8 @@ export default function createAIRoutes(pgPool) {
 
       // Create a File-like object that OpenAI SDK can handle
       // OpenAI SDK accepts: File, Blob, or a readable stream with name property
-      const audioFile = await import('openai').then(({ toFile }) => 
-        toFile(audioBuffer, safeName, { type: safeMime })
+      const audioFile = await import('openai').then(({ toFile }) =>
+        toFile(audioBuffer, safeName, { type: safeMime }),
       );
 
       const transcription = await client.audio.transcriptions.create({
@@ -503,7 +553,9 @@ export default function createAIRoutes(pgPool) {
       });
     } catch (err) {
       logger.error('[AI][STT] Transcription failed:', err?.message || err);
-      return res.status(500).json({ status: 'error', message: 'Unable to transcribe audio right now' });
+      return res
+        .status(500)
+        .json({ status: 'error', message: 'Unable to transcribe audio right now' });
     }
   });
 
@@ -584,7 +636,7 @@ export default function createAIRoutes(pgPool) {
   /**
    * Extract entity context from tool interactions for conversation metadata.
    * Parses tool arguments and results to find entity IDs (lead_id, contact_id, etc.)
-   * 
+   *
    * @param {Array} toolInteractions - Array of executed tool objects with name, arguments, and result_preview
    * @returns {Object} Entity context with top-level ID fields (lead_id, contact_id, account_id, opportunity_id, activity_id)
    */
@@ -599,7 +651,7 @@ export default function createAIRoutes(pgPool) {
     for (const tool of toolInteractions) {
       const toolName = tool.name || '';
       const args = tool.arguments || {};
-      
+
       // Extract from tool arguments (e.g., get_lead_details with lead_id arg)
       for (const entityType of entityTypes) {
         if (args[entityType] && !entityContext[entityType]) {
@@ -630,10 +682,13 @@ export default function createAIRoutes(pgPool) {
           const resultStr = tool.full_result || tool.result_preview || '';
           // Pattern matching for UUIDs in results - look for entity_id fields
           // UUID format: 8-4-4-4-12 hex characters with dashes
-          const uuidPattern = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
+          const uuidPattern =
+            '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
           for (const entityType of entityTypes) {
             if (!entityContext[entityType]) {
-              const match = resultStr.match(new RegExp(`"${entityType}"\\s*:\\s*"(${uuidPattern})"`, 'i'));
+              const match = resultStr.match(
+                new RegExp(`"${entityType}"\\s*:\\s*"(${uuidPattern})"`, 'i'),
+              );
               if (match && match[1]) {
                 entityContext[entityType] = match[1];
               }
@@ -656,106 +711,148 @@ export default function createAIRoutes(pgPool) {
     return cleanedContext;
   };
 
+  // --- R2 AI Artifact Offload (keep Postgres metadata small) ---
+  const ARTIFACT_META_THRESHOLD_BYTES = Number(
+    process.env.AI_ARTIFACT_META_THRESHOLD_BYTES || 8000,
+  );
 
-// --- R2 AI Artifact Offload (keep Postgres metadata small) ---
-const ARTIFACT_META_THRESHOLD_BYTES = Number(process.env.AI_ARTIFACT_META_THRESHOLD_BYTES || 8000);
+  const writeArtifactRef = async ({
+    tenantId,
+    kind,
+    entityType = null,
+    entityId = null,
+    payload,
+  }) => {
+    const contentType = 'application/json';
+    const body = Buffer.from(JSON.stringify(payload), 'utf-8');
+    const r2Key = buildTenantKey({ tenantId, kind, ext: 'json' });
+    const uploaded = await putObject({ key: r2Key, body, contentType });
 
-const writeArtifactRef = async ({ tenantId, kind, entityType = null, entityId = null, payload }) => {
-  const contentType = 'application/json';
-  const body = Buffer.from(JSON.stringify(payload), 'utf-8');
-  const r2Key = buildTenantKey({ tenantId, kind, ext: 'json' });
-  const uploaded = await putObject({ key: r2Key, body, contentType });
+    // Use Supabase client for database insert (not pgPool)
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('artifact_refs')
+      .insert({
+        tenant_id: tenantId,
+        kind,
+        entity_type: entityType,
+        entity_id: entityId,
+        r2_key: uploaded.key,
+        content_type: uploaded.contentType,
+        size_bytes: uploaded.sizeBytes,
+        sha256: uploaded.sha256,
+      })
+      .select(
+        'id, tenant_id, kind, entity_type, entity_id, r2_key, content_type, size_bytes, sha256, created_at',
+      )
+      .single();
 
-  // Use Supabase client for database insert (not pgPool)
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
-    .from('artifact_refs')
-    .insert({
-      tenant_id: tenantId,
-      kind,
-      entity_type: entityType,
-      entity_id: entityId,
-      r2_key: uploaded.key,
-      content_type: uploaded.contentType,
-      size_bytes: uploaded.sizeBytes,
-      sha256: uploaded.sha256,
-    })
-    .select('id, tenant_id, kind, entity_type, entity_id, r2_key, content_type, size_bytes, sha256, created_at')
-    .single();
+    if (error) {
+      logger.error('[AI][Artifacts] Failed to insert artifact_ref:', error.message);
+      throw error;
+    }
+    return data;
+  };
 
-  if (error) {
-    logger.error('[AI][Artifacts] Failed to insert artifact_ref:', error.message);
-    throw error;
-  }
-  return data;
-};
+  const maybeOffloadMetadata = async ({
+    tenantId,
+    metadata,
+    kind,
+    entityType = null,
+    entityId = null,
+  }) => {
+    if (!tenantId || !metadata || typeof metadata !== 'object') return metadata;
 
-const maybeOffloadMetadata = async ({ tenantId, metadata, kind, entityType = null, entityId = null }) => {
-  if (!tenantId || !metadata || typeof metadata !== 'object') return metadata;
+    // Offload known heavy fields first
+    if (metadata.tool_interactions) {
+      try {
+        const ref = await writeArtifactRef({
+          tenantId,
+          kind: `${kind || 'ai_message'}_tool_interactions`,
+          entityType,
+          entityId,
+          payload: metadata.tool_interactions,
+        });
+        if (ref) {
+          metadata.tool_interactions_ref = ref.id;
+          metadata.tool_interactions_count = Array.isArray(metadata.tool_interactions)
+            ? metadata.tool_interactions.length
+            : null;
+          delete metadata.tool_interactions;
+        }
+      } catch (e) {
+        logger.warn(
+          '[AI][Artifacts] Failed to offload tool_interactions (continuing):',
+          e?.message || e,
+        );
+      }
+    }
 
-  // Offload known heavy fields first
-  if (metadata.tool_interactions) {
+    // If still too large, offload the remaining metadata payload
     try {
-      const ref = await writeArtifactRef({
-        tenantId,
-        kind: `${kind || 'ai_message'}_tool_interactions`,
-        entityType,
-        entityId,
-        payload: metadata.tool_interactions,
-      });
-      if (ref) {
-        metadata.tool_interactions_ref = ref.id;
-        metadata.tool_interactions_count = Array.isArray(metadata.tool_interactions) ? metadata.tool_interactions.length : null;
-        delete metadata.tool_interactions;
+      const sizeBytes = Buffer.byteLength(JSON.stringify(metadata), 'utf-8');
+      if (sizeBytes > ARTIFACT_META_THRESHOLD_BYTES) {
+        const ref = await writeArtifactRef({
+          tenantId,
+          kind: `${kind || 'ai_message'}_metadata`,
+          entityType,
+          entityId,
+          payload: metadata,
+        });
+        if (ref) {
+          // Keep only a minimal envelope + pointer
+          const keep = {
+            tenant_id: tenantId,
+            model: metadata.model || null,
+            iterations: metadata.iterations ?? null,
+            reason: metadata.reason || null,
+            usage: metadata.usage || null,
+            artifact_metadata_ref: ref.id,
+            artifact_metadata_kind: ref.kind,
+          };
+          // Preserve extracted entity IDs if present
+          for (const k of [
+            'lead_id',
+            'contact_id',
+            'account_id',
+            'opportunity_id',
+            'activity_id',
+            'project_id',
+            'site_id',
+          ]) {
+            if (metadata[k]) keep[k] = metadata[k];
+          }
+          return keep;
+        }
       }
     } catch (e) {
-      logger.warn('[AI][Artifacts] Failed to offload tool_interactions (continuing):', e?.message || e);
+      logger.warn(
+        '[AI][Artifacts] Failed to evaluate/offload metadata (continuing):',
+        e?.message || e,
+      );
     }
-  }
 
-  // If still too large, offload the remaining metadata payload
-  try {
-    const sizeBytes = Buffer.byteLength(JSON.stringify(metadata), 'utf-8');
-    if (sizeBytes > ARTIFACT_META_THRESHOLD_BYTES) {
-      const ref = await writeArtifactRef({
-        tenantId,
-        kind: `${kind || 'ai_message'}_metadata`,
-        entityType,
-        entityId,
-        payload: metadata,
-      });
-      if (ref) {
-        // Keep only a minimal envelope + pointer
-        const keep = {
-          tenant_id: tenantId,
-          model: metadata.model || null,
-          iterations: metadata.iterations ?? null,
-          reason: metadata.reason || null,
-          usage: metadata.usage || null,
-          artifact_metadata_ref: ref.id,
-          artifact_metadata_kind: ref.kind,
-        };
-        // Preserve extracted entity IDs if present
-        for (const k of ['lead_id','contact_id','account_id','opportunity_id','activity_id','project_id','site_id']) {
-          if (metadata[k]) keep[k] = metadata[k];
-        }
-        return keep;
-      }
-    }
-  } catch (e) {
-    logger.warn('[AI][Artifacts] Failed to evaluate/offload metadata (continuing):', e?.message || e);
-  }
-
-  return metadata;
-};
+    return metadata;
+  };
   const insertAssistantMessage = async (conversationId, content, metadata = {}) => {
     try {
       const supabase = getSupabaseClient();
       const tenantId = metadata?.tenant_id || null;
-      const safeMetadata = await maybeOffloadMetadata({ tenantId, metadata: { ...metadata }, kind: 'assistant_message', entityType: 'conversation', entityId: conversationId });
+      const safeMetadata = await maybeOffloadMetadata({
+        tenantId,
+        metadata: { ...metadata },
+        kind: 'assistant_message',
+        entityType: 'conversation',
+        entityId: conversationId,
+      });
       const { data: inserted, error } = await supabase
         .from('conversation_messages')
-        .insert({ conversation_id: conversationId, role: 'assistant', content, metadata: safeMetadata })
+        .insert({
+          conversation_id: conversationId,
+          role: 'assistant',
+          content,
+          metadata: safeMetadata,
+        })
         .select()
         .single();
       if (error) throw error;
@@ -767,33 +864,40 @@ const maybeOffloadMetadata = async ({ tenantId, metadata, kind, entityType = nul
 
       const message = inserted;
       broadcastMessage(conversationId, message);
-      
+
       // AI CONVERSATION SUMMARY UPDATE (async, non-blocking)
       import('../lib/aiMemory/conversationSummary.js')
         .then(({ updateConversationSummary }) => {
           return updateConversationSummary({
             conversationId,
             tenantId,
-            assistantMessage: content
+            assistantMessage: content,
           });
         })
-        .catch(err => {
+        .catch((err) => {
           logger.error('[CONVERSATION_SUMMARY] Update failed (non-blocking):', err.message);
         });
-      
+
       return message;
     } catch (error) {
       logger.error('[AI Routes] insertAssistantMessage error:', {
         conversationId,
         contentLength: content?.length,
         metadataSize: JSON.stringify(metadata).length,
-        error: error.message
+        error: error.message,
       });
       throw error;
     }
   };
 
-  const executeToolCall = async ({ toolName, args, tenantRecord, userEmail = null, userName = null, accessToken = null }) => {
+  const executeToolCall = async ({
+    toolName,
+    args,
+    tenantRecord,
+    userEmail = null,
+    userName = null,
+    accessToken = null,
+  }) => {
     // Handle suggest_next_actions directly (not a Braid tool)
     if (toolName === 'suggest_next_actions') {
       const { suggestNextActions } = await import('../lib/suggestNextActions.js');
@@ -801,20 +905,26 @@ const maybeOffloadMetadata = async ({ tenantId, metadata, kind, entityType = nul
         entity_type: args?.entity_type,
         entity_id: args?.entity_id,
         tenant_id: tenantRecord?.id || tenantRecord?.tenant_id,
-        limit: args?.limit || 3
+        limit: args?.limit || 3,
       });
     }
-    
+
     // Build dynamic access token with user info for Braid execution
     const dynamicAccessToken = {
       ...accessToken,
       user_email: userEmail,
       user_name: userName,
     };
-    
+
     // Route execution through Braid SDK tool registry
     // SECURITY: accessToken must be provided after tenant authorization passes
-    return await executeBraidTool(toolName, args || {}, tenantRecord, userEmail, dynamicAccessToken);
+    return await executeBraidTool(
+      toolName,
+      args || {},
+      tenantRecord,
+      userEmail,
+      dynamicAccessToken,
+    );
   };
 
   const generateAssistantResponse = async ({
@@ -2200,12 +2310,10 @@ ${toolContextSummary}`,
       if (title !== undefined) updateData.title = title;
       if (topic !== undefined) updateData.topic = topic;
       if (!('title' in updateData) && !('topic' in updateData)) {
-        return res
-          .status(400)
-          .json({
-            status: 'error',
-            message: 'No valid fields to update (title or topic required)',
-          });
+        return res.status(400).json({
+          status: 'error',
+          message: 'No valid fields to update (title or topic required)',
+        });
       }
       updateData.updated_date = new Date().toISOString();
 
@@ -2678,7 +2786,14 @@ ${toolContextSummary}`,
   router.post('/chat', async (req, res) => {
     logger.debug('=== CHAT REQUEST START === LLM_PROVIDER=' + process.env.LLM_PROVIDER);
     // Hoist variables needed by error-path logLLMActivity in catch block
-    let chatStartTime, chatRequestId, tenantRecord, effectiveProvider, finalModel, finalUsage, classifiedIntent, conversationId;
+    let chatStartTime,
+      chatRequestId,
+      tenantRecord,
+      effectiveProvider,
+      finalModel,
+      finalUsage,
+      classifiedIntent,
+      conversationId;
     try {
       chatStartTime = Date.now();
       chatRequestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
@@ -3089,12 +3204,10 @@ ${toolContextSummary}`,
       );
 
       if (!client) {
-        return res
-          .status(501)
-          .json({
-            status: 'error',
-            message: `API key not configured for provider ${effectiveProvider}`,
-          });
+        return res.status(501).json({
+          status: 'error',
+          message: `API key not configured for provider ${effectiveProvider}`,
+        });
       }
 
       const tenantName = tenantRecord?.name || tenantRecord?.tenant_id || 'CRM Tenant';
@@ -3952,7 +4065,7 @@ ${conversationSummary}`;
         durationMs: Date.now() - chatStartTime,
         usage: finalUsage || null,
         intent: classifiedIntent || null,
-        toolsCalled: safeToolInteractions.map(t => t.tool).filter(Boolean),
+        toolsCalled: safeToolInteractions.map((t) => t.tool).filter(Boolean),
         attempt: 0,
         taskId: conversationId || null,
         requestId: chatRequestId,
@@ -4014,7 +4127,11 @@ ${conversationSummary}`;
 
       res.json({
         status: 'success',
-        data: { summary: 'Summary not yet implemented', original_length: text?.length || 0, max_length },
+        data: {
+          summary: 'Summary not yet implemented',
+          original_length: text?.length || 0,
+          max_length,
+        },
       });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
@@ -4050,64 +4167,72 @@ ${conversationSummary}`;
       const { tenant, tenant_id, entity_type, entity_id, limit = 3 } = req.body;
       const effectiveTenantId = tenant_id || tenant;
 
-      logger.debug('[suggest-next-actions] Parsed:', { effectiveTenantId, entity_type, entity_id, limit });
-      
+      logger.debug('[suggest-next-actions] Parsed:', {
+        effectiveTenantId,
+        entity_type,
+        entity_id,
+        limit,
+      });
+
       // Validation
       if (!effectiveTenantId || !entity_type || !entity_id) {
-        logger.debug('[suggest_next_actions] Validation FAILED:', { effectiveTenantId, entity_type, entity_id });
+        logger.debug('[suggest_next_actions] Validation FAILED:', {
+          effectiveTenantId,
+          entity_type,
+          entity_id,
+        });
         return res.status(400).json({
-          error: 'Missing required fields: tenant_id, entity_type, entity_id'
+          error: 'Missing required fields: tenant_id, entity_type, entity_id',
         });
       }
-      
+
       // Validate entity type
       const validTypes = ['lead', 'contact', 'account', 'opportunity'];
       if (!validTypes.includes(entity_type)) {
         return res.status(400).json({
-          error: `Invalid entity_type. Must be one of: ${validTypes.join(', ')}`
+          error: `Invalid entity_type. Must be one of: ${validTypes.join(', ')}`,
         });
       }
-      
+
       // Validate limit
       if (limit < 1 || limit > 10) {
         return res.status(400).json({
-          error: 'Limit must be between 1 and 10'
+          error: 'Limit must be between 1 and 10',
         });
       }
-      
+
       // Import and call suggest next actions
       const { suggestNextActions } = await import('../lib/suggestNextActions.js');
       const result = await suggestNextActions({
         entity_type,
         entity_id,
         tenant_id: effectiveTenantId,
-        limit
+        limit,
       });
-      
+
       // Check for errors
       if (result.error) {
         if (result.error.includes('not found') || result.error.includes('access denied')) {
           return res.status(404).json({
             error: result.error,
-            data: null
+            data: null,
           });
         }
         return res.status(500).json({
           error: result.error,
-          data: null
+          data: null,
         });
       }
-      
+
       // Success
       res.json({
-        data: result
+        data: result,
       });
-      
     } catch (error) {
       logger.error('[Suggest Next Actions API] Error:', error);
       res.status(500).json({
         error: error.message || 'Internal server error',
-        data: null
+        data: null,
       });
     }
   });
@@ -4120,10 +4245,23 @@ ${conversationSummary}`;
   // Safety: Destructive tools (delete_*, bulk operations) are blocked.
   // ============================================================================
   const BLOCKED_REALTIME_TOOLS = [
-    'delete_account', 'delete_lead', 'delete_contact', 'delete_opportunity',
-    'delete_activity', 'delete_note', 'delete_task', 'delete_document',
-    'bulk_delete', 'archive_all', 'reset_data', 'drop_table', 'truncate',
-    'execute_sql', 'run_migration', 'delete_tenant', 'delete_user'
+    'delete_account',
+    'delete_lead',
+    'delete_contact',
+    'delete_opportunity',
+    'delete_activity',
+    'delete_note',
+    'delete_task',
+    'delete_document',
+    'bulk_delete',
+    'archive_all',
+    'reset_data',
+    'drop_table',
+    'truncate',
+    'execute_sql',
+    'run_migration',
+    'delete_tenant',
+    'delete_user',
   ];
 
   router.post('/realtime-tools/execute', async (req, res) => {
@@ -4147,12 +4285,12 @@ ${conversationSummary}`;
       if (tool_name.startsWith('delete_') || BLOCKED_REALTIME_TOOLS.includes(tool_name)) {
         logger.warn(`[AI][Realtime] Blocked destructive tool: ${tool_name}`, {
           user: req.user?.email,
-          tenant_id
+          tenant_id,
         });
         return res.status(403).json({
           status: 'error',
           message: `Tool "${tool_name}" is blocked for safety. Realtime Voice cannot execute destructive operations.`,
-          call_id
+          call_id,
         });
       }
 
@@ -4165,14 +4303,14 @@ ${conversationSummary}`;
       const tenantRecord = {
         id: resolvedTenant.uuid,
         tenant_id: resolvedTenant.slug,
-        name: resolvedTenant.slug
+        name: resolvedTenant.slug,
       };
 
       logger.debug(`[AI][Realtime] Executing tool: ${tool_name}`, {
         user: req.user?.email,
         tenant: tenantRecord.id,
         args: Object.keys(tool_args),
-        call_id
+        call_id,
       });
 
       // Handle suggest_next_actions directly (not a Braid tool)
@@ -4182,23 +4320,29 @@ ${conversationSummary}`;
           entity_type: tool_args?.entity_type,
           entity_id: tool_args?.entity_id,
           tenant_id: tenantRecord.id,
-          limit: tool_args?.limit || 3
+          limit: tool_args?.limit || 3,
         });
-        
+
         const duration = Date.now() - startTime;
-        
+
         return res.json({
           status: 'success',
           call_id,
           tool_name,
           data: suggestions,
-          duration_ms: duration
+          duration_ms: duration,
         });
       }
 
       // Execute the tool via Braid
       // SECURITY: Pass the access token - only available after authorization validated above
-      const toolResult = await executeBraidTool(tool_name, tool_args, tenantRecord, req.user?.email, TOOL_ACCESS_TOKEN);
+      const toolResult = await executeBraidTool(
+        tool_name,
+        tool_args,
+        tenantRecord,
+        req.user?.email,
+        TOOL_ACCESS_TOKEN,
+      );
 
       const duration = Date.now() - startTime;
       logger.debug(`[AI][Realtime] Tool ${tool_name} completed in ${duration}ms`);
@@ -4228,7 +4372,10 @@ ${conversationSummary}`;
 
       // Debug: Log the summary counts
       if (unwrappedResult?.summary) {
-        logger.debug(`[AI][Realtime] Tool ${tool_name} summary:`, JSON.stringify(unwrappedResult.summary));
+        logger.debug(
+          `[AI][Realtime] Tool ${tool_name} summary:`,
+          JSON.stringify(unwrappedResult.summary),
+        );
       }
 
       // For snapshot tool, return a simplified response that's easy for the AI to read
@@ -4246,14 +4393,14 @@ ${conversationSummary}`;
               contacts: summary.contacts_count,
               accounts: summary.accounts_count,
               opportunities: summary.opportunities_count,
-              activities: summary.activities_count
+              activities: summary.activities_count,
             },
             totals: {
               revenue: summary.total_revenue,
-              forecast: summary.total_forecast
-            }
+              forecast: summary.total_forecast,
+            },
           },
-          duration_ms: duration
+          duration_ms: duration,
         });
       }
 
@@ -4262,9 +4409,8 @@ ${conversationSummary}`;
         call_id,
         tool_name,
         data: unwrappedResult,
-        duration_ms: duration
+        duration_ms: duration,
       });
-
     } catch (error) {
       const duration = Date.now() - startTime;
       logger.error('[AI][Realtime] Tool execution failed:', error);
@@ -4284,7 +4430,7 @@ ${conversationSummary}`;
       return res.status(500).json({
         status: 'error',
         message: error?.message || 'Tool execution failed',
-        call_id: req.body?.call_id
+        call_id: req.body?.call_id,
       });
     }
   });
@@ -4293,36 +4439,36 @@ ${conversationSummary}`;
    * GET /api/ai/context-dictionary
    * Returns the tenant context dictionary for AI session initialization.
    * This provides AI with tenant-specific terminology, workflows, and configurations.
-   * 
+   *
    * Query params:
    * - tenant_id: Tenant UUID or slug (required)
    * - format: 'json' (default) or 'prompt' (returns AI-ready system prompt injection)
-   * 
+   *
    * @example GET /api/ai/context-dictionary?tenant_id=abc123&format=json
    */
   router.get('/context-dictionary', async (req, res) => {
     const startedAt = Date.now();
     try {
       const { tenant_id, format = 'json' } = req.query;
-      
+
       if (!tenant_id) {
         return res.status(400).json({
           status: 'error',
-          message: 'tenant_id query parameter is required'
+          message: 'tenant_id query parameter is required',
         });
       }
-      
+
       // Build the context dictionary
       const dictionary = await buildTenantContextDictionary(pgPool, tenant_id);
-      
+
       if (dictionary.error) {
         return res.status(404).json({
           status: 'error',
           message: dictionary.error,
-          durationMs: Date.now() - startedAt
+          durationMs: Date.now() - startedAt,
         });
       }
-      
+
       // Return based on requested format
       if (format === 'prompt') {
         const promptInjection = generateContextDictionaryPrompt(dictionary);
@@ -4330,24 +4476,23 @@ ${conversationSummary}`;
           status: 'success',
           data: {
             promptInjection,
-            dictionary
+            dictionary,
           },
-          durationMs: Date.now() - startedAt
+          durationMs: Date.now() - startedAt,
         });
       }
-      
+
       res.json({
         status: 'success',
         data: dictionary,
-        durationMs: Date.now() - startedAt
+        durationMs: Date.now() - startedAt,
       });
-      
     } catch (error) {
       logger.error('[AI Context Dictionary] Error:', error);
       res.status(500).json({
         status: 'error',
         message: error.message,
-        durationMs: Date.now() - startedAt
+        durationMs: Date.now() - startedAt,
       });
     }
   });
@@ -4432,7 +4577,12 @@ ${conversationSummary}`;
 
       // SECURITY: Superadmin-only access
       if (!isSuperadmin(user)) {
-        logger.warn('[Developer AI] Access denied - user is not superadmin:', user?.email, 'role:', user?.role);
+        logger.warn(
+          '[Developer AI] Access denied - user is not superadmin:',
+          user?.email,
+          'role:',
+          user?.role,
+        );
         return res.status(403).json({
           status: 'error',
           message: 'Developer AI is restricted to superadmin users only',
@@ -4454,7 +4604,12 @@ ${conversationSummary}`;
         });
       }
 
-      logger.debug('[Developer AI] Request from superadmin:', user?.email, 'messages:', messages.length);
+      logger.debug(
+        '[Developer AI] Request from superadmin:',
+        user?.email,
+        'messages:',
+        messages.length,
+      );
 
       const result = await developerChat(messages, user?.id);
 
@@ -4467,7 +4622,6 @@ ${conversationSummary}`;
         usage: result.usage,
         durationMs: Date.now() - startedAt,
       });
-
     } catch (error) {
       logger.error('[Developer AI] Error:', error);
       res.status(500).json({
@@ -4561,11 +4715,11 @@ ${conversationSummary}`;
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
-      
-      // CORS: When using credentials, must specify exact origin (not wildcard)
-      const origin = req.headers.origin || 'https://app.aishacrm.com';
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+      // CORS: Use secure origin whitelist for credentials transfer
+      if (req.headers.origin) {
+        setCorsHeaders(req.headers.origin, res, true);
+      }
 
       logger.debug('[Developer AI Stream] Starting for:', user?.email);
 
@@ -4599,28 +4753,31 @@ ${conversationSummary}`;
       }
 
       // Send final response
-      res.write(`data: ${JSON.stringify({
-        type: 'response',
-        response: result.response,
-        model: result.model,
-        usage: result.usage,
-        durationMs: Date.now() - startedAt,
-      })}\n\n`);
+      res.write(
+        `data: ${JSON.stringify({
+          type: 'response',
+          response: result.response,
+          model: result.model,
+          usage: result.usage,
+          durationMs: Date.now() - startedAt,
+        })}\n\n`,
+      );
 
       // Send done signal
       res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
       res.end();
 
       logger.debug('[Developer AI Stream] Completed in', Date.now() - startedAt, 'ms');
-
     } catch (error) {
       logger.error('[Developer AI Stream] Error:', error);
       try {
-        res.write(`data: ${JSON.stringify({
-          type: 'error',
-          message: error.message,
-          durationMs: Date.now() - startedAt,
-        })}\n\n`);
+        res.write(
+          `data: ${JSON.stringify({
+            type: 'error',
+            message: error.message,
+            durationMs: Date.now() - startedAt,
+          })}\n\n`,
+        );
         res.end();
       } catch (writeErr) {
         // Connection already closed
@@ -4677,7 +4834,11 @@ ${conversationSummary}`;
 
     try {
       // Import action functions dynamically to avoid circular deps
-      const { executeApprovedAction, getPendingAction, isSuperadmin: checkSuperadmin } = await import('../lib/developerAI.js');
+      const {
+        executeApprovedAction,
+        getPendingAction,
+        isSuperadmin: checkSuperadmin,
+      } = await import('../lib/developerAI.js');
 
       // Get user from request
       let user = req.user;
@@ -4709,7 +4870,13 @@ ${conversationSummary}`;
         });
       }
 
-      logger.debug('[Developer AI] Approving action:', actionId, pendingAction.type, 'by', user?.email);
+      logger.debug(
+        '[Developer AI] Approving action:',
+        actionId,
+        pendingAction.type,
+        'by',
+        user?.email,
+      );
 
       const result = await executeApprovedAction(actionId);
 
@@ -4720,7 +4887,6 @@ ${conversationSummary}`;
         ...result,
         durationMs: Date.now() - startedAt,
       });
-
     } catch (error) {
       logger.error('[Developer AI Approve] Error:', error);
       res.status(500).json({
@@ -4776,7 +4942,11 @@ ${conversationSummary}`;
 
     try {
       // Import action functions dynamically
-      const { rejectAction, getPendingAction, isSuperadmin: checkSuperadmin } = await import('../lib/developerAI.js');
+      const {
+        rejectAction,
+        getPendingAction,
+        isSuperadmin: checkSuperadmin,
+      } = await import('../lib/developerAI.js');
 
       // Get user from request
       let user = req.user;
@@ -4808,7 +4978,13 @@ ${conversationSummary}`;
         });
       }
 
-      logger.debug('[Developer AI] Rejecting action:', actionId, pendingAction.type, 'by', user?.email);
+      logger.debug(
+        '[Developer AI] Rejecting action:',
+        actionId,
+        pendingAction.type,
+        'by',
+        user?.email,
+      );
 
       const result = rejectAction(actionId);
 
@@ -4817,7 +4993,6 @@ ${conversationSummary}`;
         ...result,
         durationMs: Date.now() - startedAt,
       });
-
     } catch (error) {
       logger.error('[Developer AI Reject] Error:', error);
       res.status(500).json({
@@ -4881,7 +5056,12 @@ Instructions: ${prompt}`;
 
       const draft = completion.choices?.[0]?.message?.content?.trim() || '';
 
-      logger.debug('[generate-email-draft] Generated draft for:', recipientEmail, 'length:', draft.length);
+      logger.debug(
+        '[generate-email-draft] Generated draft for:',
+        recipientEmail,
+        'length:',
+        draft.length,
+      );
 
       res.json({
         status: 'success',
@@ -4892,7 +5072,6 @@ Instructions: ${prompt}`;
         },
         durationMs: Date.now() - startedAt,
       });
-
     } catch (error) {
       logger.error('[generate-email-draft] Error:', error);
       res.status(500).json({

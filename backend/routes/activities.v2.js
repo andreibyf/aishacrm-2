@@ -4,6 +4,7 @@ import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildActivityAiContext } from '../lib/aiContextEnricher.js';
 import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
+import { setCorsHeaders } from '../lib/cors.js';
 
 /**
  * Look up the name and email for a related entity (lead, contact, account, opportunity)
@@ -14,30 +15,34 @@ import logger from '../lib/logger.js';
  */
 async function lookupRelatedEntity(supabase, relatedTo, relatedId) {
   if (!relatedTo || !relatedId) return { name: null, email: null };
-  
+
   // B2B CRM: Different entities have different columns
   const entityConfig = {
     lead: { table: 'leads', select: 'company, first_name, last_name, email' },
     contact: { table: 'contacts', select: 'company, first_name, last_name, email' },
     account: { table: 'accounts', select: 'name, email, phone' },
-    opportunity: { table: 'opportunities', select: 'name' }
+    opportunity: { table: 'opportunities', select: 'name' },
   };
-  
+
   const config = entityConfig[relatedTo];
   if (!config) return { name: null, email: null };
-  
+
   try {
     const { data, error } = await supabase
       .from(config.table)
       .select(config.select)
       .eq('id', relatedId)
       .single();
-    
+
     if (error || !data) {
-      logger.warn('[Activities] lookupRelatedEntity failed:', { relatedTo, relatedId, error: error?.message });
+      logger.warn('[Activities] lookupRelatedEntity failed:', {
+        relatedTo,
+        relatedId,
+        error: error?.message,
+      });
       return { name: null, email: null };
     }
-    
+
     // Build name based on entity type (B2B: show company + contact for leads)
     let name = null;
     if (relatedTo === 'lead') {
@@ -56,7 +61,7 @@ async function lookupRelatedEntity(supabase, relatedTo, relatedId) {
       // Accounts, Opportunities: just name field
       name = data.name || null;
     }
-    
+
     return { name, email: data.email || null };
   } catch (err) {
     logger.warn('[Activities] Failed to lookup related entity:', err.message);
@@ -72,8 +77,8 @@ function normalizeOffsetNotation(value) {
 }
 
 function normalizeDueDateTimeFields(rawDueDate, rawDueTime) {
-  let dueDate = typeof rawDueDate === 'string' ? rawDueDate.trim() : rawDueDate ?? null;
-  let dueTime = typeof rawDueTime === 'string' ? rawDueTime.trim() : rawDueTime ?? null;
+  let dueDate = typeof rawDueDate === 'string' ? rawDueDate.trim() : (rawDueDate ?? null);
+  let dueTime = typeof rawDueTime === 'string' ? rawDueTime.trim() : (rawDueTime ?? null);
   let originalIso = null;
 
   if (!dueDate) {
@@ -85,7 +90,7 @@ function normalizeDueDateTimeFields(rawDueDate, rawDueTime) {
   if (typeof dueDate === 'string' && ISO_WITH_OFFSET_REGEX.test(dueDate)) {
     // Input like "2025-11-20T14:45:00-05:00" — save full ISO for conversion, extract parts for fallback
     const fullIsoString = normalizeOffsetNotation(dueDate.replace(/\s+/g, ''));
-    
+
     if (!dueTime) {
       const localTimeMatch = dueDate.match(/T(\d{2}):(\d{2})/);
       if (localTimeMatch) {
@@ -164,9 +169,10 @@ export default function createActivityV2Routes(_pgPool) {
     const is_test_data =
       typeof rest.is_test_data === 'boolean'
         ? rest.is_test_data
-        : (typeof metadataObj.is_test_data === 'boolean' ? metadataObj.is_test_data : false);
-    const duration_minutes =
-      rest.duration_minutes ?? metadataObj.duration_minutes ?? null;
+        : typeof metadataObj.is_test_data === 'boolean'
+          ? metadataObj.is_test_data
+          : false;
+    const duration_minutes = rest.duration_minutes ?? metadataObj.duration_minutes ?? null;
     const tags = Array.isArray(rest.tags)
       ? rest.tags
       : Array.isArray(metadataObj.tags)
@@ -194,10 +200,10 @@ export default function createActivityV2Routes(_pgPool) {
    */
   async function resolveAssignedTo(assignedTo, tenantId, supabase) {
     if (!assignedTo) return null;
-    
+
     // If it's already a valid UUID, return it directly
     if (UUID_REGEX.test(assignedTo)) return assignedTo;
-    
+
     // If it looks like an email, try to look up the user/employee
     if (assignedTo.includes('@')) {
       // Try employees table first (for CRM-specific employee records)
@@ -208,9 +214,9 @@ export default function createActivityV2Routes(_pgPool) {
         .eq('email', assignedTo)
         .limit(1)
         .maybeSingle();
-      
+
       if (employee?.id) return employee.id;
-      
+
       // Fallback: try users table
       const { data: user } = await supabase
         .from('users')
@@ -218,10 +224,10 @@ export default function createActivityV2Routes(_pgPool) {
         .eq('email', assignedTo)
         .limit(1)
         .maybeSingle();
-      
+
       if (user?.id) return user.id;
     }
-    
+
     return null; // Not resolvable
   }
 
@@ -242,7 +248,7 @@ export default function createActivityV2Routes(_pgPool) {
         .from('activities')
         .update({
           status: 'overdue',
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         })
         .in('status', ['scheduled', 'planned', 'in_progress'])
         .not('due_date', 'is', null)
@@ -261,7 +267,10 @@ export default function createActivityV2Routes(_pgPool) {
         invalidateCache(`activities_${tenant_id}`);
       }
 
-      logger.info(`[Activities] Marked ${data?.length || 0} activities as overdue`, { tenant_id, today });
+      logger.info(`[Activities] Marked ${data?.length || 0} activities as overdue`, {
+        tenant_id,
+        today,
+      });
 
       res.json({
         status: 'success',
@@ -269,8 +278,8 @@ export default function createActivityV2Routes(_pgPool) {
         data: {
           updated_count: data?.length || 0,
           today,
-          activities: (data || []).slice(0, 10)
-        }
+          activities: (data || []).slice(0, 10),
+        },
       });
     } catch (error) {
       logger.error('[Activities] Error marking overdue:', error);
@@ -306,13 +315,24 @@ export default function createActivityV2Routes(_pgPool) {
 
       let q = supabase
         .from('activities')
-        .select('*, employee:employees!activities_assigned_to_fkey(id, first_name, last_name, email)', { count: 'exact' })
+        .select(
+          '*, employee:employees!activities_assigned_to_fkey(id, first_name, last_name, email)',
+          { count: 'exact' },
+        )
         .eq('tenant_id', tenant_id)
         .order(sortField, { ascending: sortAscending })
         .range(offset, offset + limit - 1);
 
       // Handle direct query parameters (compatibility with generic frontend filters)
-      const { type, status, related_id, related_to_type, related_to_id, assigned_to, is_test_data } = req.query;
+      const {
+        type,
+        status,
+        related_id,
+        related_to_type,
+        related_to_id,
+        assigned_to,
+        is_test_data,
+      } = req.query;
 
       if (type) q = q.eq('type', type);
       // status handled below
@@ -320,7 +340,7 @@ export default function createActivityV2Routes(_pgPool) {
       // Support filtering by related entity type (lead, contact, account, opportunity) and ID
       if (related_to_type) q = q.eq('related_to', related_to_type);
       if (related_to_id) q = q.eq('related_id', related_to_id);
-      
+
       // Resolve assigned_to (supports both UUID and email)
       if (assigned_to) {
         const resolvedAssignee = await resolveAssignedTo(assigned_to, tenant_id, supabase);
@@ -339,7 +359,9 @@ export default function createActivityV2Routes(_pgPool) {
         const likePattern = `%${searchTerm}%`;
         logger.debug('[Activities V2] Applying text search:', { searchTerm, likePattern });
         // Search across subject, body (description), and related_name with case-insensitive ILIKE
-        q = q.or(`subject.ilike.${likePattern},body.ilike.${likePattern},related_name.ilike.${likePattern}`);
+        q = q.or(
+          `subject.ilike.${likePattern},body.ilike.${likePattern},related_name.ilike.${likePattern}`,
+        );
       }
 
       // Handle is_test_data filter
@@ -375,11 +397,9 @@ export default function createActivityV2Routes(_pgPool) {
         // Just check for status='overdue' in DB
         q = q.eq('status', 'overdue');
       } else if (normalizedStatus === 'scheduled') {
-        q = q.eq('status', 'scheduled')
-          .or(`due_date.gte.${todayStr},due_date.is.null`);
+        q = q.eq('status', 'scheduled').or(`due_date.gte.${todayStr},due_date.is.null`);
       } else if (normalizedStatus === 'in_progress') {
-        q = q.eq('status', 'in_progress')
-          .or(`due_date.gte.${todayStr},due_date.is.null`);
+        q = q.eq('status', 'in_progress').or(`due_date.gte.${todayStr},due_date.is.null`);
       } else if (normalizedStatus && normalizedStatus !== 'all') {
         q = q.eq('status', normalizedStatus);
       }
@@ -396,61 +416,71 @@ export default function createActivityV2Routes(_pgPool) {
         }
         if (parsed && typeof parsed === 'object') {
           // Handle assigned_to filter from filter object (supports UUID or email)
-          if (parsed.assigned_to !== undefined && parsed.assigned_to !== null && parsed.assigned_to !== '') {
+          if (
+            parsed.assigned_to !== undefined &&
+            parsed.assigned_to !== null &&
+            parsed.assigned_to !== ''
+          ) {
             logger.debug('[Activities V2] Applying assigned_to filter:', parsed.assigned_to);
-            const resolvedFilterAssignee = await resolveAssignedTo(parsed.assigned_to, tenant_id, supabase);
+            const resolvedFilterAssignee = await resolveAssignedTo(
+              parsed.assigned_to,
+              tenant_id,
+              supabase,
+            );
             if (resolvedFilterAssignee) {
               q = q.eq('assigned_to', resolvedFilterAssignee);
             } else {
-              logger.warn(`[Activities V2] Could not resolve filter assigned_to: ${parsed.assigned_to}`);
+              logger.warn(
+                `[Activities V2] Could not resolve filter assigned_to: ${parsed.assigned_to}`,
+              );
             }
           }
 
           // Handle $or filters (unassigned, search with $regex, etc.)
           if (parsed.$or && Array.isArray(parsed.$or)) {
             // Check if this is an unassigned filter
-            const isUnassignedFilter = parsed.$or.some(cond =>
-              cond.assigned_to === null || cond.assigned_to === ''
+            const isUnassignedFilter = parsed.$or.some(
+              (cond) => cond.assigned_to === null || cond.assigned_to === '',
             );
 
             if (isUnassignedFilter) {
               logger.debug('[Activities V2] Applying unassigned filter');
               q = q.or('assigned_to.is.null,assigned_to.eq.');
             }
-            
+
             // Check if this is a search filter with $regex (MongoDB-style from frontend)
             // Convert MongoDB $regex to Supabase ILIKE for PostgreSQL compatibility
-            const hasRegexConditions = parsed.$or.some(cond => {
-              return Object.values(cond).some(val => 
-                val && typeof val === 'object' && val.$regex
+            const hasRegexConditions = parsed.$or.some((cond) => {
+              return Object.values(cond).some(
+                (val) => val && typeof val === 'object' && val.$regex,
               );
             });
-            
+
             if (hasRegexConditions && !isUnassignedFilter) {
               logger.debug('[Activities V2] Applying search filter with $regex translation');
-              
+
               // Build OR conditions for Supabase
               const orConditions = [];
-              
+
               for (const condition of parsed.$or) {
                 for (const [field, value] of Object.entries(condition)) {
                   if (value && typeof value === 'object' && value.$regex) {
                     // Extract regex pattern and convert to ILIKE pattern
                     const pattern = value.$regex;
                     const likePattern = `%${pattern}%`;
-                    
+
                     // Map frontend field names to database columns
                     let dbField = field;
                     if (field === 'description') {
                       dbField = 'body'; // 'description' is stored as 'body' in DB
                     }
-                    
+
                     // Build Supabase ILIKE condition
                     orConditions.push(`${dbField}.ilike.${likePattern}`);
                   }
                 }
               }
-              
+
               if (orConditions.length > 0) {
                 // Apply all OR conditions at once using Supabase's .or() method
                 const orQuery = orConditions.join(',');
@@ -470,11 +500,12 @@ export default function createActivityV2Routes(_pgPool) {
       const { data, error, count } = await q;
       if (error) throw new Error(error.message);
 
-      const activities = (data || []).map(activity => {
+      const activities = (data || []).map((activity) => {
         const expanded = expandMetadata(activity);
         // Add denormalized names from FK joins
         if (activity.employee) {
-          expanded.assigned_to_name = `${activity.employee.first_name || ''} ${activity.employee.last_name || ''}`.trim();
+          expanded.assigned_to_name =
+            `${activity.employee.first_name || ''} ${activity.employee.last_name || ''}`.trim();
           expanded.assigned_to_email = activity.employee.email;
         }
         delete expanded.employee;
@@ -498,27 +529,36 @@ export default function createActivityV2Routes(_pgPool) {
               if (a.due_time) {
                 const [h, m, s] = a.due_time.split(':');
                 const date = new Date(a.due_date);
-                date.setHours(parseInt(h, 10) || 0, parseInt(m, 10) || 0, parseInt(s || '0', 10) || 0, 0);
+                date.setHours(
+                  parseInt(h, 10) || 0,
+                  parseInt(m, 10) || 0,
+                  parseInt(s || '0', 10) || 0,
+                  0,
+                );
                 return date;
               }
               const date = new Date(a.due_date);
               date.setHours(23, 59, 59, 999);
               return date;
-            } catch { return new Date(a.due_date); }
+            } catch {
+              return new Date(a.due_date);
+            }
           };
 
           counts = {
             total: allData.length,
-            scheduled: allData.filter(a => a.status === 'scheduled').length,
-            in_progress: allData.filter(a => a.status === 'in_progress' || a.status === 'in-progress').length,
-            overdue: allData.filter(a => {
+            scheduled: allData.filter((a) => a.status === 'scheduled').length,
+            in_progress: allData.filter(
+              (a) => a.status === 'in_progress' || a.status === 'in-progress',
+            ).length,
+            overdue: allData.filter((a) => {
               if (a.status === 'completed' || a.status === 'cancelled') return false;
               const due = buildDueDateTime(a);
               if (!due) return false;
               return due < now;
             }).length,
-            completed: allData.filter(a => a.status === 'completed').length,
-            cancelled: allData.filter(a => a.status === 'cancelled').length,
+            completed: allData.filter((a) => a.status === 'completed').length,
+            cancelled: allData.filter((a) => a.status === 'cancelled').length,
           };
         }
       }
@@ -535,11 +575,9 @@ export default function createActivityV2Routes(_pgPool) {
       });
     } catch (error) {
       logger.error('Error in v2 activities list:', error);
-      // Ensure CORS headers are present in error responses
+      // Ensure CORS headers are present in error responses (using secure origin whitelist)
       if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
-        res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
-        res.setHeader('Vary', 'Origin');
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        setCorsHeaders(req.headers.origin, res, true);
       }
       res.status(500).json({ status: 'error', message: error.message });
     }
@@ -548,8 +586,23 @@ export default function createActivityV2Routes(_pgPool) {
   router.post('/', invalidateCache('activities'), async (req, res) => {
     try {
       logger.debug('[Activities v2 POST] Raw body:', JSON.stringify(req.body));
-      const { tenant_id, metadata, description, body, duration_minutes, duration, tags, activity_type, assigned_to, status, ...payload } = req.body || {};
-      logger.debug('[Activities v2 POST] Destructured payload:', JSON.stringify({ tenant_id, activity_type, status, payload }));
+      const {
+        tenant_id,
+        metadata,
+        description,
+        body,
+        duration_minutes,
+        duration,
+        tags,
+        activity_type,
+        assigned_to,
+        status,
+        ...payload
+      } = req.body || {};
+      logger.debug(
+        '[Activities v2 POST] Destructured payload:',
+        JSON.stringify({ tenant_id, activity_type, status, payload }),
+      );
       // Accept either duration_minutes or duration (legacy) - prefer duration_minutes
       const durationValue = duration_minutes ?? duration ?? undefined;
       if (!tenant_id) {
@@ -573,7 +626,7 @@ export default function createActivityV2Routes(_pgPool) {
       // Map activity_type to type (Braid SDK uses activity_type, DB column is 'type')
       // Default to 'task' if not provided - type is a required NOT NULL column
       const activityType = activity_type ?? payload.type ?? 'task';
-      
+
       // Normalize status: 'planned' → 'scheduled' (AI may use 'planned')
       // Default to 'scheduled' if activity has a due_date
       let normalizedStatus = status ?? payload.status;
@@ -586,22 +639,26 @@ export default function createActivityV2Routes(_pgPool) {
       }
       // Final fallback to 'scheduled'
       normalizedStatus = normalizedStatus || 'scheduled';
-      
+
       // Sanitize UUID fields: must be valid UUID or null (AI may pass strings like "Unassigned" or "budget_meeting")
       const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const validAssignedTo = assigned_to && UUID_REGEX.test(assigned_to) ? assigned_to : null;
-      
+
       // Sanitize related_id: must be valid UUID or null
       const rawRelatedId = payload.related_id;
       const validRelatedId = rawRelatedId && UUID_REGEX.test(rawRelatedId) ? rawRelatedId : null;
-      
+
       // Lookup related entity name/email if related_to and related_id are provided
       // Only valid entity types should be looked up
       const VALID_ENTITY_TYPES = ['lead', 'contact', 'account', 'opportunity'];
       const relatedTo = VALID_ENTITY_TYPES.includes(payload.related_to) ? payload.related_to : null;
       const relatedId = validRelatedId;
-      const { name: relatedName, email: relatedEmail } = await lookupRelatedEntity(supabase, relatedTo, relatedId);
-      
+      const { name: relatedName, email: relatedEmail } = await lookupRelatedEntity(
+        supabase,
+        relatedTo,
+        relatedId,
+      );
+
       let metadataPayload;
       if (metadata && typeof metadata === 'object') {
         metadataPayload = { ...metadata };
@@ -617,7 +674,9 @@ export default function createActivityV2Routes(_pgPool) {
         metadataPayload.original_due_datetime = originalDueDateTime;
         const offsetMatch = originalDueDateTime.match(/([-+]\d{2}:?\d{2}|Z)$/);
         if (offsetMatch && offsetMatch[1] !== 'Z') {
-          metadataPayload.original_timezone_offset = normalizeOffsetNotation(offsetMatch[1].replace(':', ''));
+          metadataPayload.original_timezone_offset = normalizeOffsetNotation(
+            offsetMatch[1].replace(':', ''),
+          );
         } else if (offsetMatch) {
           metadataPayload.original_timezone_offset = 'Z';
         }
@@ -630,13 +689,13 @@ export default function createActivityV2Routes(_pgPool) {
       const insertPayload = {
         tenant_id,
         ...payload,
-        status: normalizedStatus,  // Use normalized status (planned → scheduled)
+        status: normalizedStatus, // Use normalized status (planned → scheduled)
         assigned_to: validAssignedTo,
-        related_to: relatedTo,   // Use sanitized related_to
-        related_id: relatedId,   // Use sanitized related_id (valid UUID or null)
+        related_to: relatedTo, // Use sanitized related_to
+        related_id: relatedId, // Use sanitized related_id (valid UUID or null)
         ...(relatedName ? { related_name: relatedName } : {}),
         ...(relatedEmail ? { related_email: relatedEmail } : {}),
-        type: activityType,      // Always set type - required NOT NULL column
+        type: activityType, // Always set type - required NOT NULL column
         ...(durationValue !== undefined ? { duration_minutes: durationValue } : {}),
         ...(Array.isArray(tags) ? { tags } : {}),
         body: bodyText,
@@ -653,18 +712,17 @@ export default function createActivityV2Routes(_pgPool) {
 
       const created = expandMetadata(data);
       const aiContext = await buildActivityAiContext(created, {});
-      
+
       res.status(201).json({
         status: 'success',
         data: { activity: created, aiContext },
       });
     } catch (error) {
-      logger.error('Error in v2 activity create:', error);      // Ensure CORS headers are present in error responses
+      logger.error('Error in v2 activity create:', error); // Ensure CORS headers are present in error responses (using secure origin whitelist)
       if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
-        res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
-        res.setHeader('Vary', 'Origin');
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
-      }      res.status(500).json({ status: 'error', message: error.message });
+        setCorsHeaders(req.headers.origin, res, true);
+      }
+      res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
@@ -681,19 +739,19 @@ export default function createActivityV2Routes(_pgPool) {
       }
 
       const {
-        q,                    // Search term
-        fields = ['subject', 'body', 'related_name'],  // Fields to search (valid columns only)
-        limit = 50,           // Max results
-        offset = 0,           // Pagination offset
-        status,               // Filter by status
-        type,                 // Filter by activity type
-        assigned_to,          // Filter by assigned user
-        related_to,           // Filter by related entity type
-        related_id,           // Filter by related entity ID
-        date_from,            // Filter by date range start
-        date_to,              // Filter by date range end
+        q, // Search term
+        fields = ['subject', 'body', 'related_name'], // Fields to search (valid columns only)
+        limit = 50, // Max results
+        offset = 0, // Pagination offset
+        status, // Filter by status
+        type, // Filter by activity type
+        assigned_to, // Filter by assigned user
+        related_to, // Filter by related entity type
+        related_id, // Filter by related entity ID
+        date_from, // Filter by date range start
+        date_to, // Filter by date range end
         sort_by = 'due_date', // Sort field
-        sort_order = 'desc'   // Sort direction
+        sort_order = 'desc', // Sort direction
       } = req.body;
 
       const supabase = getSupabaseClient();
@@ -706,17 +764,21 @@ export default function createActivityV2Routes(_pgPool) {
       if (q && q.trim()) {
         const searchTerm = q.trim();
         const likePattern = `%${searchTerm}%`;
-        
+
         // Build OR condition for specified fields (only valid activity columns)
         const searchConditions = fields
-          .filter(f => ['subject', 'body', 'related_name'].includes(f))
-          .map(f => `${f}.ilike.${likePattern}`)
+          .filter((f) => ['subject', 'body', 'related_name'].includes(f))
+          .map((f) => `${f}.ilike.${likePattern}`)
           .join(',');
-        
+
         if (searchConditions) {
           query = query.or(searchConditions);
         }
-        logger.debug('[Activities V2 Search] Text search:', { searchTerm, fields, searchConditions });
+        logger.debug('[Activities V2 Search] Text search:', {
+          searchTerm,
+          fields,
+          searchConditions,
+        });
       }
 
       // Apply filters
@@ -753,16 +815,14 @@ export default function createActivityV2Routes(_pgPool) {
             total: count || 0,
             limit: safeLimit,
             offset: safeOffset,
-            hasMore: (safeOffset + activities.length) < (count || 0)
-          }
-        }
+            hasMore: safeOffset + activities.length < (count || 0),
+          },
+        },
       });
     } catch (error) {
       logger.error('Error in v2 activity search:', error);
       if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
-        res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
-        res.setHeader('Vary', 'Origin');
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        setCorsHeaders(req.headers.origin, res, true);
       }
       res.status(500).json({ status: 'error', message: error.message });
     }
@@ -792,22 +852,30 @@ export default function createActivityV2Routes(_pgPool) {
 
       const activity = expandMetadata(data);
       const aiContext = await buildActivityAiContext(activity, {});
-      
+
       res.json({ status: 'success', data: { activity, aiContext } });
     } catch (error) {
-      logger.error('Error in v2 activity get:', error);      // Ensure CORS headers are present in error responses
+      logger.error('Error in v2 activity get:', error); // Ensure CORS headers are present in error responses (using secure origin whitelist)
       if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
-        res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
-        res.setHeader('Vary', 'Origin');
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
-      }      res.status(500).json({ status: 'error', message: error.message });
+        setCorsHeaders(req.headers.origin, res, true);
+      }
+      res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
   router.put('/:id', invalidateCache('activities'), async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id, metadata, description, body, duration_minutes, duration, tags, ...payload } = req.body || {};
+      const {
+        tenant_id,
+        metadata,
+        description,
+        body,
+        duration_minutes,
+        duration,
+        tags,
+        ...payload
+      } = req.body || {};
       // Accept either duration_minutes or duration (legacy) - prefer duration_minutes
       const durationValue = duration_minutes ?? duration ?? undefined;
       if (!tenant_id) {
@@ -861,7 +929,8 @@ export default function createActivityV2Routes(_pgPool) {
       }
       if (fetchErr) throw new Error(fetchErr.message);
 
-      const existingMeta = current?.metadata && typeof current.metadata === 'object' ? current.metadata : {};
+      const existingMeta =
+        current?.metadata && typeof current.metadata === 'object' ? current.metadata : {};
       const mergedMeta = {
         ...existingMeta,
         ...(metadata && typeof metadata === 'object' ? metadata : {}),
@@ -874,7 +943,9 @@ export default function createActivityV2Routes(_pgPool) {
         mergedMeta.original_due_datetime = originalDueDateTime;
         const offsetMatch = originalDueDateTime.match(/([-+]\d{2}:?\d{2}|Z)$/);
         if (offsetMatch && offsetMatch[1] !== 'Z') {
-          mergedMeta.original_timezone_offset = normalizeOffsetNotation(offsetMatch[1].replace(':', ''));
+          mergedMeta.original_timezone_offset = normalizeOffsetNotation(
+            offsetMatch[1].replace(':', ''),
+          );
         } else if (offsetMatch) {
           mergedMeta.original_timezone_offset = 'Z';
         }
@@ -901,11 +972,9 @@ export default function createActivityV2Routes(_pgPool) {
       res.json({ status: 'success', data: { activity: updated } });
     } catch (error) {
       logger.error('Error in v2 activity update:', error);
-      // Ensure CORS headers are present in error responses
+      // Ensure CORS headers are present in error responses (using secure origin whitelist)
       if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
-        res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
-        res.setHeader('Vary', 'Origin');
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        setCorsHeaders(req.headers.origin, res, true);
       }
       res.status(500).json({ status: 'error', message: error.message });
     }
@@ -943,7 +1012,7 @@ export default function createActivityV2Routes(_pgPool) {
         logger.warn('[Activities V2 DELETE] Tenant mismatch:', {
           id,
           requested: tenant_id,
-          actual: existing.tenant_id
+          actual: existing.tenant_id,
         });
         return res.status(404).json({ status: 'error', message: 'Activity not found' });
       }
@@ -960,7 +1029,7 @@ export default function createActivityV2Routes(_pgPool) {
         logger.error('[Activities V2 DELETE] Delete error:', error);
         throw new Error(error.message);
       }
-      
+
       if (!data) {
         logger.warn('[Activities V2 DELETE] Delete returned no data:', { id, tenant_id });
         return res.status(404).json({ status: 'error', message: 'Activity not found' });
@@ -969,11 +1038,9 @@ export default function createActivityV2Routes(_pgPool) {
       res.json({ status: 'success', message: 'Activity deleted successfully' });
     } catch (error) {
       logger.error('Error in v2 activity delete:', error);
-      // Ensure CORS headers are present in error responses
+      // Ensure CORS headers are present in error responses (using secure origin whitelist)
       if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
-        res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
-        res.setHeader('Vary', 'Origin');
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        setCorsHeaders(req.headers.origin, res, true);
       }
       res.status(500).json({ status: 'error', message: error.message });
     }
