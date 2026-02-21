@@ -257,7 +257,7 @@ export async function executeBraidTool(
     try {
       const cachedResult = await cacheManager.get(cacheKey);
       if (cachedResult !== null) {
-        console.log(`[Braid Tool] Cache HIT for ${toolName}`, {
+        console.log('[Braid Tool] Cache HIT for %s', toolName, {
           cacheKey: cacheKey.substring(0, 60),
         });
 
@@ -282,7 +282,7 @@ export async function executeBraidTool(
 
         return cachedResult;
       }
-      console.log(`[Braid Tool] Cache MISS for ${toolName}`, {
+      console.log('[Braid Tool] Cache MISS for %s', toolName, {
         cacheKey: cacheKey.substring(0, 60),
       });
     } catch (cacheErr) {
