@@ -406,6 +406,14 @@ router.post('/assign-copilot', async (req, res) => {
       });
     }
 
+    const issueId = Number(issueNumber);
+    if (!Number.isInteger(issueId) || issueId <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid issueNumber; must be a positive integer',
+      });
+    }
+
     // Add comment requesting Copilot review
     const commentBody = `🤖 **GitHub Copilot Review Requested**
 
@@ -420,7 +428,7 @@ ${additionalContext ? `\n**Additional Context:**\n${additionalContext}` : ''}
 ---
 *This is an automated request from the AishaCRM health monitoring system.*`;
 
-    const apiUrl = `${GITHUB_API_BASE}/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/issues/${issueNumber}/comments`;
+    const apiUrl = `${GITHUB_API_BASE}/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/issues/${issueId}/comments`;
 
     // Validate URL to prevent SSRF (only allow GitHub API domain)
     const validation = validateUrlAgainstWhitelist(apiUrl, ['api.github.com']);
