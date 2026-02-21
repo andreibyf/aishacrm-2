@@ -359,9 +359,9 @@ export default function DocumentManagement() {
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-12">
                       <FileText className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold text-slate-300 mb-2">
+                      <h2 className="text-lg font-semibold text-slate-300 mb-2">
                         No Documents Found
-                      </h3>
+                      </h2>
                       <p className="text-slate-500">
                         Try adjusting your search filters or upload documents through Document
                         Processing.
@@ -477,7 +477,7 @@ export default function DocumentManagement() {
               ) : deletionHistory.length === 0 ? (
                 <div className="text-center py-12">
                   <History className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-slate-300 mb-2">No Deletion Records</h3>
+                  <h2 className="text-lg font-semibold text-slate-300 mb-2">No Deletion Records</h2>
                   <p className="text-slate-500">No documents have been deleted yet.</p>
                 </div>
               ) : (

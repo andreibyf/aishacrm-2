@@ -1724,9 +1724,9 @@ export default function ContactsPage() {
       {!loading && contacts.length === 0 && (
         <div className="bg-slate-800 border border-slate-700 rounded-lg p-12 text-center">
           <AlertCircle className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-slate-300 mb-2">
+          <h2 className="text-xl font-semibold text-slate-300 mb-2">
             No {contactsLabel.toLowerCase()} found
-          </h3>
+          </h2>
           <p className="text-slate-500 mb-6">
             {searchTerm || statusFilter !== 'all' || selectedTags.length > 0
               ? 'Try adjusting your filters'

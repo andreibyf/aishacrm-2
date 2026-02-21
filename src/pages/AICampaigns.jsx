@@ -398,7 +398,7 @@ export default function AICampaigns() {
             ) : totalItems === 0 ? (
               <div className="text-center py-12">
                 <Bot className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-slate-400 mb-2">No campaigns found</h3>
+                <h2 className="text-lg font-semibold text-slate-400 mb-2">No campaigns found</h2>
                 <p className="text-slate-500 mb-4">
                   {searchTerm || statusFilter !== 'all'
                     ? 'Try adjusting your search or filters'

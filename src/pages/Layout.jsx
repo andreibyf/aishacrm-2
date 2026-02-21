@@ -2698,7 +2698,11 @@ function Layout({ children, currentPageName }) {
           </button>
         </div>
       </div>
-      <nav className="flex-1 px-4 py-1 overflow-y-auto" data-testid="main-navigation">
+      <nav
+        className="flex-1 px-4 py-1 overflow-y-auto"
+        data-testid="main-navigation"
+        aria-label="Main navigation"
+      >
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}

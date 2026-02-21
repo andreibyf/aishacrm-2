@@ -1,10 +1,10 @@
-import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 // Tabs are not used here
-import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   BarChart3,
   Book,
@@ -26,20 +26,20 @@ import {
   Users,
   Wrench,
   Zap,
-} from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import UserContext from "@/components/shared/UserContext";
-import { useContext } from "react";
-import { getBackendUrl } from "@/api/backendUrl";
+} from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import UserContext from '@/components/shared/UserContext';
+import { useContext } from 'react';
+import { getBackendUrl } from '@/api/backendUrl';
 
 export default function DocumentationPage() {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [activeSection, setActiveSection] = useState("overview");
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeSection, setActiveSection] = useState('overview');
   const { currentUser } = useContext(UserContext);
-  
+
   const isAdmin = currentUser?.role === 'admin';
   const isSuperadmin = currentUser?.role === 'superadmin';
-  
+
   const handleDownloadPDF = async () => {
     // Prefer backend-generated PDF from our markdown-based User Guide
     const backendUrl = getBackendUrl().replace(/\/$/, '');
@@ -57,7 +57,10 @@ export default function DocumentationPage() {
       try {
         // Use HEAD where possible; some CDNs may block HEAD so allow GET with no-cors fallback
         const res = await fetch(url, { method: 'HEAD' });
-        if (res.ok) { urlToDownload = url; break; }
+        if (res.ok) {
+          urlToDownload = url;
+          break;
+        }
       } catch {
         // ignore and try next
       }
@@ -83,10 +86,10 @@ export default function DocumentationPage() {
 
   const documentationSections = [
     {
-      id: "user-guide",
-      title: "User Guide",
+      id: 'user-guide',
+      title: 'User Guide',
       icon: Book,
-      color: "text-blue-500",
+      color: 'text-blue-500',
       content: `
 # Comprehensive User Guide
 
@@ -202,10 +205,10 @@ Use the search function above to find specific topics quickly. The User Guide in
       `,
     },
     {
-      id: "tenant-admin",
-      title: "Tenant Administration",
+      id: 'tenant-admin',
+      title: 'Tenant Administration',
       icon: Shield,
-      color: "text-amber-500",
+      color: 'text-amber-500',
       content: `
 # Tenant Administration
 
@@ -525,10 +528,10 @@ As admin, you can:
       `,
     },
     {
-      id: "overview",
-      title: "Overview",
+      id: 'overview',
+      title: 'Overview',
       icon: Info,
-      color: "text-purple-400",
+      color: 'text-purple-400',
       content: `
 # Welcome to Ai-SHA CRM v3.0
 
@@ -620,10 +623,10 @@ As admin, you can:
       `,
     },
     {
-      id: "contacts",
-      title: "Contacts",
+      id: 'contacts',
+      title: 'Contacts',
       icon: Users,
-      color: "text-blue-400",
+      color: 'text-blue-400',
       content: `
 # Contact Management
 
@@ -752,10 +755,10 @@ The Contacts module is fully responsive:
       `,
     },
     {
-      id: "accounts",
-      title: "Accounts",
+      id: 'accounts',
+      title: 'Accounts',
       icon: Building2,
-      color: "text-emerald-400",
+      color: 'text-emerald-400',
       content: `
 # Account Management
 
@@ -973,10 +976,10 @@ Access account reports via **Reports** module:
       `,
     },
     {
-      id: "leads",
-      title: "Leads",
+      id: 'leads',
+      title: 'Leads',
       icon: Star,
-      color: "text-yellow-400",
+      color: 'text-yellow-400',
       content: `
 # Lead Management
 
@@ -1197,10 +1200,10 @@ Track leads through stages:
       `,
     },
     {
-      id: "opportunities",
-      title: "Opportunities",
+      id: 'opportunities',
+      title: 'Opportunities',
       icon: Target,
-      color: "text-orange-400",
+      color: 'text-orange-400',
       content: `
 # Sales Pipeline Management
 
@@ -1391,10 +1394,10 @@ Access opportunity reports via **Reports** module:
       `,
     },
     {
-      id: "activities",
-      title: "Activities",
+      id: 'activities',
+      title: 'Activities',
       icon: Calendar,
-      color: "text-indigo-400",
+      color: 'text-indigo-400',
       content: `
 # Activity Tracking & Task Management
 
@@ -1476,10 +1479,10 @@ Configure automated emails with:
       `,
     },
     {
-      id: "bizdev",
-      title: "BizDev Sources",
+      id: 'bizdev',
+      title: 'BizDev Sources',
       icon: Database,
-      color: "text-cyan-400",
+      color: 'text-cyan-400',
       content: `
 # Business Development Sources
 
@@ -1614,10 +1617,10 @@ For industries requiring specific certifications or licenses, track their status
       `,
     },
     {
-      id: "workflows",
-      title: "Workflows & Automation",
+      id: 'workflows',
+      title: 'Workflows & Automation',
       icon: Zap,
-      color: "text-yellow-400",
+      color: 'text-yellow-400',
       content: `
 # Workflows & Automation
 
@@ -1874,10 +1877,10 @@ Popular templates updated monthly based on user feedback and industry best pract
       `,
     },
     {
-      id: "cashflow",
-      title: "Cash Flow",
+      id: 'cashflow',
+      title: 'Cash Flow',
       icon: DollarSign,
-      color: "text-green-400",
+      color: 'text-green-400',
       content: `
 # Cash Flow Management
 
@@ -1962,10 +1965,10 @@ Set up repeating transactions:
       `,
     },
     {
-      id: "documents",
-      title: "Document Processing",
+      id: 'documents',
+      title: 'Document Processing',
       icon: FileText,
-      color: "text-pink-400",
+      color: 'text-pink-400',
       content: `
 # Document Processing & Management
 
@@ -2045,10 +2048,10 @@ AI suggests appropriate tax categories:
       `,
     },
     {
-      id: "reports",
-      title: "Reports & Analytics",
+      id: 'reports',
+      title: 'Reports & Analytics',
       icon: BarChart3,
-      color: "text-purple-400",
+      color: 'text-purple-400',
       content: `
 # Reports & Analytics
 
@@ -2144,10 +2147,10 @@ All reports support:
       `,
     },
     {
-      id: "employees",
-      title: "Employee Management",
+      id: 'employees',
+      title: 'Employee Management',
       icon: Briefcase,
-      color: "text-amber-400",
+      color: 'text-amber-400',
       content: `
 # Employee Management
 
@@ -2247,10 +2250,10 @@ Control which modules each user can access:
       `,
     },
     {
-      id: "ai",
-      title: "AI Features",
+      id: 'ai',
+      title: 'AI Features',
       icon: Brain,
-      color: "text-pink-400",
+      color: 'text-pink-400',
       content: `
 # AI-Powered Features
 
@@ -2388,10 +2391,10 @@ From receipts:
       `,
     },
     {
-      id: "integrations",
-      title: "Integrations",
+      id: 'integrations',
+      title: 'Integrations',
       icon: Puzzle,
-      color: "text-blue-400",
+      color: 'text-blue-400',
       content: `
 # Integrations & Automation
 
@@ -2535,10 +2538,10 @@ Notify Customer Success Team
       `,
     },
     {
-      id: "calendar",
-      title: "Calendar",
+      id: 'calendar',
+      title: 'Calendar',
       icon: Calendar,
-      color: "text-teal-400",
+      color: 'text-teal-400',
       content: `
 # Calendar Management
 
@@ -2650,10 +2653,10 @@ Activities color-coded by:
       `,
     },
     {
-      id: "utilities",
-      title: "Utilities & Tools",
+      id: 'utilities',
+      title: 'Utilities & Tools',
       icon: Wrench,
-      color: "text-slate-400",
+      color: 'text-slate-400',
       content: `
 # Utilities & Data Tools
 
@@ -2816,10 +2819,10 @@ Configure retention policies:
       `,
     },
     {
-      id: "settings",
-      title: "User Settings",
+      id: 'settings',
+      title: 'User Settings',
       icon: Settings,
-      color: "text-gray-400",
+      color: 'text-gray-400',
       content: `
 # User Settings & Preferences
 
@@ -3013,7 +3016,7 @@ If you're integrating with external tools:
               <Download className="w-4 h-4 mr-2" />
               Download PDF Guide
             </Button>
-            
+
             {/* Version Badge */}
             <Badge variant="outline" className="text-xs">
               v3.0 - Updated {new Date().toLocaleDateString()}
@@ -3047,14 +3050,12 @@ If you're integrating with external tools:
                 onClick={() => setActiveSection(section.id)}
                 className={`p-4 rounded-lg border-2 transition-all text-left ${
                   activeSection === section.id
-                    ? "bg-slate-700 border-purple-500"
-                    : "bg-slate-800 border-slate-700 hover:border-slate-600"
+                    ? 'bg-slate-700 border-purple-500'
+                    : 'bg-slate-800 border-slate-700 hover:border-slate-600'
                 }`}
               >
                 <IconComponent className={`w-6 h-6 ${section.color} mb-2`} />
-                <p className="text-sm font-medium text-slate-200">
-                  {section.title}
-                </p>
+                <p className="text-sm font-medium text-slate-200">{section.title}</p>
               </button>
             );
           })}
@@ -3071,7 +3072,7 @@ If you're integrating with external tools:
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
-                <nav className="space-y-1">
+                <nav className="space-y-1" aria-label="Documentation sections">
                   {filteredSections.map((section) => {
                     const IconComponent = section.icon;
                     return (
@@ -3080,14 +3081,12 @@ If you're integrating with external tools:
                         onClick={() => setActiveSection(section.id)}
                         className={`w-full px-4 py-3 flex items-center gap-3 transition-colors text-left ${
                           activeSection === section.id
-                            ? "bg-purple-600 text-white"
-                            : "text-slate-300 hover:bg-slate-700"
+                            ? 'bg-purple-600 text-white'
+                            : 'text-slate-300 hover:bg-slate-700'
                         }`}
                       >
                         <IconComponent className="w-5 h-5 flex-shrink-0" />
-                        <span className="text-sm font-medium truncate">
-                          {section.title}
-                        </span>
+                        <span className="text-sm font-medium truncate">{section.title}</span>
                       </button>
                     );
                   })}
@@ -3100,95 +3099,79 @@ If you're integrating with external tools:
           <div className="lg:col-span-3">
             <Card className="bg-slate-800 border-slate-700">
               <CardContent className="p-6 sm:p-8">
-                {filteredSections.length === 0
-                  ? (
-                    <div className="text-center py-12">
-                      <Search className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-                      <p className="text-slate-400">
-                        No documentation found matching your search.
-                      </p>
-                    </div>
-                  )
-                  : (
-                    <div className="prose prose-slate prose-invert max-w-none">
-                      <ReactMarkdown
-                        components={{
-                          h1: ({ children }) => (
-                            <h1 className="text-3xl font-bold text-slate-100 mb-4">
+                {filteredSections.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Search className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+                    <p className="text-slate-400">No documentation found matching your search.</p>
+                  </div>
+                ) : (
+                  <div className="prose prose-slate prose-invert max-w-none">
+                    <ReactMarkdown
+                      components={{
+                        h1: ({ children }) => (
+                          <h1 className="text-3xl font-bold text-slate-100 mb-4">{children}</h1>
+                        ),
+                        h2: ({ children }) => (
+                          <h2 className="text-2xl font-semibold text-slate-200 mt-8 mb-4">
+                            {children}
+                          </h2>
+                        ),
+                        h3: ({ children }) => (
+                          <h3 className="text-xl font-semibold text-slate-200 mt-6 mb-3">
+                            {children}
+                          </h3>
+                        ),
+                        h4: ({ children }) => (
+                          <h4 className="text-lg font-semibold text-slate-300 mt-4 mb-2">
+                            {children}
+                          </h4>
+                        ),
+                        p: ({ children }) => (
+                          <p className="text-slate-300 leading-relaxed mb-4">{children}</p>
+                        ),
+                        ul: ({ children }) => (
+                          <ul className="list-disc list-inside text-slate-300 space-y-2 mb-4">
+                            {children}
+                          </ul>
+                        ),
+                        ol: ({ children }) => (
+                          <ol className="list-decimal list-inside text-slate-300 space-y-2 mb-4">
+                            {children}
+                          </ol>
+                        ),
+                        li: ({ children }) => <li className="text-slate-300">{children}</li>,
+                        code: ({ inline, children }) =>
+                          inline ? (
+                            <code className="bg-slate-700 px-2 py-1 rounded text-purple-400 text-sm">
                               {children}
-                            </h1>
-                          ),
-                          h2: ({ children }) => (
-                            <h2 className="text-2xl font-semibold text-slate-200 mt-8 mb-4">
+                            </code>
+                          ) : (
+                            <code className="block bg-slate-900 p-4 rounded-lg text-slate-300 text-sm overflow-x-auto mb-4">
                               {children}
-                            </h2>
+                            </code>
                           ),
-                          h3: ({ children }) => (
-                            <h3 className="text-xl font-semibold text-slate-200 mt-6 mb-3">
-                              {children}
-                            </h3>
-                          ),
-                          h4: ({ children }) => (
-                            <h4 className="text-lg font-semibold text-slate-300 mt-4 mb-2">
-                              {children}
-                            </h4>
-                          ),
-                          p: ({ children }) => (
-                            <p className="text-slate-300 leading-relaxed mb-4">
-                              {children}
-                            </p>
-                          ),
-                          ul: ({ children }) => (
-                            <ul className="list-disc list-inside text-slate-300 space-y-2 mb-4">
-                              {children}
-                            </ul>
-                          ),
-                          ol: ({ children }) => (
-                            <ol className="list-decimal list-inside text-slate-300 space-y-2 mb-4">
-                              {children}
-                            </ol>
-                          ),
-                          li: ({ children }) => (
-                            <li className="text-slate-300">{children}</li>
-                          ),
-                          code: ({ inline, children }) => (
-                            inline
-                              ? (
-                                <code className="bg-slate-700 px-2 py-1 rounded text-purple-400 text-sm">
-                                  {children}
-                                </code>
-                              )
-                              : (
-                                <code className="block bg-slate-900 p-4 rounded-lg text-slate-300 text-sm overflow-x-auto mb-4">
-                                  {children}
-                                </code>
-                              )
-                          ),
-                          blockquote: ({ children }) => (
-                            <blockquote className="border-l-4 border-purple-500 pl-4 italic text-slate-400 my-4">
-                              {children}
-                            </blockquote>
-                          ),
-                          strong: ({ children }) => (
-                            <strong className="font-semibold text-slate-100">
-                              {children}
-                            </strong>
-                          ),
-                          a: ({ href, children }) => (
-                            <a
-                              href={href}
-                              className="text-purple-400 hover:text-purple-300 underline"
-                            >
-                              {children}
-                            </a>
-                          ),
-                        }}
-                      >
-                        {filteredSections.find((s) => s.id === activeSection)
-                          ?.content || ""}
-                      </ReactMarkdown>
-                    </div>
-                  )}
+                        blockquote: ({ children }) => (
+                          <blockquote className="border-l-4 border-purple-500 pl-4 italic text-slate-400 my-4">
+                            {children}
+                          </blockquote>
+                        ),
+                        strong: ({ children }) => (
+                          <strong className="font-semibold text-slate-100">{children}</strong>
+                        ),
+                        a: ({ href, children }) => (
+                          <a
+                            href={href}
+                            className="text-purple-400 hover:text-purple-300 underline"
+                          >
+                            {children}
+                          </a>
+                        ),
+                      }}
+                    >
+                      {filteredSections.find((s) => s.id === activeSection)?.content || ''}
+                    </ReactMarkdown>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -3196,9 +3179,8 @@ If you're integrating with external tools:
             <Alert className="mt-6 bg-blue-900/20 border-blue-700/50">
               <Info className="h-4 w-4 text-blue-400" />
               <AlertDescription className="text-blue-300">
-                <strong>Need more help?</strong>{" "}
-                Contact support at support@ai-sha.com or use the AI Agent for
-                instant assistance.
+                <strong>Need more help?</strong> Contact support at support@ai-sha.com or use the AI
+                Agent for instant assistance.
               </AlertDescription>
             </Alert>
 
@@ -3207,9 +3189,10 @@ If you're integrating with external tools:
               <Alert className="mt-4 bg-amber-900/20 border-amber-700/50">
                 <Shield className="h-4 w-4 text-amber-400" />
                 <AlertDescription className="text-amber-300">
-                  <strong>Tenant Administrators:</strong>{" "}
-                  See the <strong>&ldquo;Tenant Administration&rdquo;</strong> section above for managing users, 
-                  permissions, and tenant settings. For complete admin documentation, download the Administrator Guide PDF.
+                  <strong>Tenant Administrators:</strong> See the{' '}
+                  <strong>&ldquo;Tenant Administration&rdquo;</strong> section above for managing
+                  users, permissions, and tenant settings. For complete admin documentation,
+                  download the Administrator Guide PDF.
                 </AlertDescription>
               </Alert>
             )}
@@ -3219,9 +3202,9 @@ If you're integrating with external tools:
               <Alert className="mt-4 bg-purple-900/20 border-purple-700/50">
                 <Settings className="h-4 w-4 text-purple-400" />
                 <AlertDescription className="text-purple-300">
-                  <strong>System Administrators:</strong>{" "}
-                  For system configuration, deployment, database management, and advanced settings, 
-                  download the complete <strong>System Administrator Guide PDF</strong>.
+                  <strong>System Administrators:</strong> For system configuration, deployment,
+                  database management, and advanced settings, download the complete{' '}
+                  <strong>System Administrator Guide PDF</strong>.
                 </AlertDescription>
               </Alert>
             )}
