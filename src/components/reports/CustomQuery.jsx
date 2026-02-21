@@ -419,11 +419,7 @@ export default function CustomQuery({ tenantFilter }) {
       body: JSON.stringify({ tenant_id: tenantId }),
     }).catch((err) => {
       // Non-critical: don't block user flow, but log for debugging / observability
-      console.error(
-        'Failed to record run for saved report:',
-        report.id,
-        err
-      );
+      console.error('Failed to record run for saved report:', report.id, err);
     });
   };
 
