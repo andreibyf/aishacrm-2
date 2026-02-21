@@ -428,15 +428,30 @@ export default function Employees() {
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <Table>
+              <caption className="sr-only">
+                List of employees with their contact information and access status
+              </caption>
               <TableHeader>
                 <TableRow className="border-slate-700 hover:bg-slate-700/50">
-                  <TableHead className="text-slate-300">Name</TableHead>
-                  <TableHead className="hidden md:table-cell text-slate-300">Email</TableHead>
-                  <TableHead className="hidden lg:table-cell text-slate-300">Phone</TableHead>
-                  <TableHead className="text-slate-300">Department</TableHead>
-                  <TableHead className="hidden xl:table-cell text-slate-300">Job Title</TableHead>
-                  <TableHead className="text-slate-300">Access</TableHead>
-                  <TableHead></TableHead>
+                  <TableHead className="text-slate-300" scope="col">
+                    Name
+                  </TableHead>
+                  <TableHead className="hidden md:table-cell text-slate-300" scope="col">
+                    Email
+                  </TableHead>
+                  <TableHead className="hidden lg:table-cell text-slate-300" scope="col">
+                    Phone
+                  </TableHead>
+                  <TableHead className="text-slate-300" scope="col">
+                    Department
+                  </TableHead>
+                  <TableHead className="hidden xl:table-cell text-slate-300" scope="col">
+                    Job Title
+                  </TableHead>
+                  <TableHead className="text-slate-300" scope="col">
+                    Access
+                  </TableHead>
+                  <TableHead scope="col"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

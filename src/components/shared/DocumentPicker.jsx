@@ -1,10 +1,24 @@
 import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { DocumentationFile } from "@/api/entities";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, FileText, Check } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { DocumentationFile } from '@/api/entities';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Loader2, FileText, Check } from 'lucide-react';
 import { getTenantFilter } from './tenantUtils';
 import { useTenant } from './tenantContext';
 import { useUser } from '@/components/shared/useUser.js';
@@ -26,7 +40,7 @@ export default function DocumentPicker({ open, onOpenChange, onSelect, selectedD
           setDocuments(docs);
           setLocalSelection(selectedDocs);
         } catch (error) {
-          console.error("Failed to load documents:", error);
+          console.error('Failed to load documents:', error);
         } finally {
           setLoading(false);
         }
@@ -36,10 +50,8 @@ export default function DocumentPicker({ open, onOpenChange, onSelect, selectedD
   }, [open, selectedTenantId, selectedDocs, currentUser]);
 
   const handleSelect = (doc) => {
-    setLocalSelection(prev => 
-      prev.some(d => d.id === doc.id)
-        ? prev.filter(d => d.id !== doc.id)
-        : [...prev, doc]
+    setLocalSelection((prev) =>
+      prev.some((d) => d.id === doc.id) ? prev.filter((d) => d.id !== doc.id) : [...prev, doc],
     );
   };
 
@@ -53,7 +65,9 @@ export default function DocumentPicker({ open, onOpenChange, onSelect, selectedD
       <DialogContent className="max-w-2xl bg-slate-800 border-slate-700 text-slate-200">
         <DialogHeader>
           <DialogTitle>Attach Document from CRM</DialogTitle>
-          <DialogDescription>Select one or more documents to attach to your email.</DialogDescription>
+          <DialogDescription>
+            Select one or more documents to attach to your email.
+          </DialogDescription>
         </DialogHeader>
         <div className="max-h-[60vh] overflow-y-auto my-4">
           {loading ? (
@@ -62,19 +76,20 @@ export default function DocumentPicker({ open, onOpenChange, onSelect, selectedD
             </div>
           ) : (
             <Table>
+              <caption className="sr-only">List of documents for selection</caption>
               <TableHeader>
                 <TableRow className="border-b-slate-700">
-                  <TableHead className="w-12"></TableHead>
-                  <TableHead>Document Title</TableHead>
-                  <TableHead>Category</TableHead>
+                  <TableHead className="w-12" scope="col"></TableHead>
+                  <TableHead scope="col">Document Title</TableHead>
+                  <TableHead scope="col">Category</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {documents.map(doc => (
+                {documents.map((doc) => (
                   <TableRow key={doc.id} className="hover:bg-slate-700/50">
                     <TableCell>
                       <Checkbox
-                        checked={localSelection.some(d => d.id === doc.id)}
+                        checked={localSelection.some((d) => d.id === doc.id)}
                         onCheckedChange={() => handleSelect(doc)}
                         className="border-slate-600 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
                       />
@@ -96,8 +111,18 @@ export default function DocumentPicker({ open, onOpenChange, onSelect, selectedD
           )}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">Cancel</Button>
-          <Button onClick={handleConfirm} className="bg-blue-600 hover:bg-blue-700 text-white" disabled={localSelection.length === 0}>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirm}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+            disabled={localSelection.length === 0}
+          >
             <Check className="w-4 h-4 mr-2" />
             Attach Selected ({localSelection.length})
           </Button>

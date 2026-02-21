@@ -1,12 +1,24 @@
-
 import { useState, useEffect } from 'react';
 import { AuditLog, BACKEND_URL } from '@/api/entities';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Search, Calendar, Shield, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -35,19 +47,20 @@ export default function AuditLogPage() {
     let filtered = auditLogs;
 
     if (searchTerm) {
-      filtered = filtered.filter(log => 
-        log.user_email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        log.entity_type?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        log.action?.toLowerCase().includes(searchTerm.toLowerCase())
+      filtered = filtered.filter(
+        (log) =>
+          log.user_email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          log.entity_type?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          log.action?.toLowerCase().includes(searchTerm.toLowerCase()),
       );
     }
 
     if (actionFilter && actionFilter !== 'all') {
-      filtered = filtered.filter(log => log.action === actionFilter);
+      filtered = filtered.filter((log) => log.action === actionFilter);
     }
 
     if (entityFilter && entityFilter !== 'all') {
-      filtered = filtered.filter(log => log.entity_type === entityFilter);
+      filtered = filtered.filter((log) => log.entity_type === entityFilter);
     }
 
     setFilteredLogs(filtered);
@@ -57,10 +70,10 @@ export default function AuditLogPage() {
     setLoading(true);
     try {
       const logs = await AuditLog.list({}, '-created_at', 100); // Get last 100 entries, sorted by created_at descending
-      
+
       console.log('[AuditLog] Loaded user:', currentUser?.email);
       console.log('[AuditLog] Loaded logs:', logs?.length || 0, 'entries');
-      
+
       setAuditLogs(Array.isArray(logs) ? logs : []);
     } catch (error) {
       console.error('[AuditLog] Error loading audit logs:', error);
@@ -73,19 +86,22 @@ export default function AuditLogPage() {
 
   const handleClearLogs = async () => {
     try {
-      const tenantId = currentUser?.tenant_id || import.meta.env.VITE_SYSTEM_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
-      
+      const tenantId =
+        currentUser?.tenant_id ||
+        import.meta.env.VITE_SYSTEM_TENANT_ID ||
+        'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+
       if (import.meta.env.DEV) {
         console.log('Clearing audit logs for tenant:', tenantId);
       }
-      
+
       // Call the backend DELETE endpoint
-  const url = `${BACKEND_URL}/api/audit-logs?tenant_id=${tenantId}`;
-      
+      const url = `${BACKEND_URL}/api/audit-logs?tenant_id=${tenantId}`;
+
       if (import.meta.env.DEV) {
         console.log('DELETE URL:', url);
       }
-      
+
       const response = await fetch(url, {
         method: 'DELETE',
         headers: {
@@ -106,14 +122,14 @@ export default function AuditLogPage() {
       }
 
       const result = await response.json();
-      
+
       if (import.meta.env.DEV) {
         console.log('Clear result:', result);
       }
-      
+
       const deletedCount = result.data?.deleted_count || 0;
       toast.success(`Cleared ${deletedCount} audit log(s)`);
-      
+
       // Reload the data
       await loadData();
     } catch (error) {
@@ -124,12 +140,18 @@ export default function AuditLogPage() {
 
   const getActionBadgeColor = (action) => {
     switch (action) {
-      case 'create': return 'bg-green-700 text-green-100'; // Dark theme colors
-      case 'update': return 'bg-blue-700 text-blue-100';
-      case 'delete': return 'bg-red-700 text-red-100';
-      case 'login': return 'bg-purple-700 text-purple-100';
-      case 'logout': return 'bg-gray-700 text-gray-100';
-      default: return 'bg-slate-700 text-slate-100';
+      case 'create':
+        return 'bg-green-700 text-green-100'; // Dark theme colors
+      case 'update':
+        return 'bg-blue-700 text-blue-100';
+      case 'delete':
+        return 'bg-red-700 text-red-100';
+      case 'login':
+        return 'bg-purple-700 text-purple-100';
+      case 'logout':
+        return 'bg-gray-700 text-gray-100';
+      default:
+        return 'bg-slate-700 text-slate-100';
     }
   };
 
@@ -152,23 +174,25 @@ export default function AuditLogPage() {
             <Shield className="w-8 h-8 text-blue-400" />
             Audit Log
           </h1>
-          <p className="text-slate-400 mt-1">
-            Track all system changes and user activities
-          </p>
+          <p className="text-slate-400 mt-1">Track all system changes and user activities</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={loadData} className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
+          <Button
+            variant="outline"
+            onClick={loadData}
+            className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
+          >
             <Calendar className="w-4 h-4 mr-2" />
             Refresh
           </Button>
-          <Button 
-            variant="destructive" 
+          <Button
+            variant="destructive"
             onClick={() => {
               if (import.meta.env.DEV) {
                 console.log('Clear All Logs button clicked');
               }
               setShowClearDialog(true);
-            }} 
+            }}
             className="bg-red-900/20 border-red-700 text-red-300 hover:bg-red-900/40"
             disabled={auditLogs.length === 0}
           >
@@ -204,12 +228,24 @@ export default function AuditLogPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-700">
-                  <SelectItem value="all" className="text-slate-200 hover:bg-slate-700">All Actions</SelectItem>
-                  <SelectItem value="create" className="text-slate-200 hover:bg-slate-700">Create</SelectItem>
-                  <SelectItem value="update" className="text-slate-200 hover:bg-slate-700">Update</SelectItem>
-                  <SelectItem value="delete" className="text-slate-200 hover:bg-slate-700">Delete</SelectItem>
-                  <SelectItem value="login" className="text-slate-200 hover:bg-slate-700">Login</SelectItem>
-                  <SelectItem value="logout" className="text-slate-200 hover:bg-slate-700">Logout</SelectItem>
+                  <SelectItem value="all" className="text-slate-200 hover:bg-slate-700">
+                    All Actions
+                  </SelectItem>
+                  <SelectItem value="create" className="text-slate-200 hover:bg-slate-700">
+                    Create
+                  </SelectItem>
+                  <SelectItem value="update" className="text-slate-200 hover:bg-slate-700">
+                    Update
+                  </SelectItem>
+                  <SelectItem value="delete" className="text-slate-200 hover:bg-slate-700">
+                    Delete
+                  </SelectItem>
+                  <SelectItem value="login" className="text-slate-200 hover:bg-slate-700">
+                    Login
+                  </SelectItem>
+                  <SelectItem value="logout" className="text-slate-200 hover:bg-slate-700">
+                    Logout
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -220,12 +256,24 @@ export default function AuditLogPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-700">
-                  <SelectItem value="all" className="text-slate-200 hover:bg-slate-700">All Entities</SelectItem>
-                  <SelectItem value="Lead" className="text-slate-200 hover:bg-slate-700">Leads</SelectItem>
-                  <SelectItem value="Contact" className="text-slate-200 hover:bg-slate-700">Contacts</SelectItem>
-                  <SelectItem value="Account" className="text-slate-200 hover:bg-slate-700">Customers</SelectItem>
-                  <SelectItem value="Opportunity" className="text-slate-200 hover:bg-slate-700">Opportunities</SelectItem>
-                  <SelectItem value="Activity" className="text-slate-200 hover:bg-slate-700">Activities</SelectItem>
+                  <SelectItem value="all" className="text-slate-200 hover:bg-slate-700">
+                    All Entities
+                  </SelectItem>
+                  <SelectItem value="Lead" className="text-slate-200 hover:bg-slate-700">
+                    Leads
+                  </SelectItem>
+                  <SelectItem value="Contact" className="text-slate-200 hover:bg-slate-700">
+                    Contacts
+                  </SelectItem>
+                  <SelectItem value="Account" className="text-slate-200 hover:bg-slate-700">
+                    Customers
+                  </SelectItem>
+                  <SelectItem value="Opportunity" className="text-slate-200 hover:bg-slate-700">
+                    Opportunities
+                  </SelectItem>
+                  <SelectItem value="Activity" className="text-slate-200 hover:bg-slate-700">
+                    Activities
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -236,7 +284,9 @@ export default function AuditLogPage() {
       {/* Audit Log Table */}
       <Card className="shadow-lg border-0 bg-slate-800 border-slate-700">
         <CardHeader>
-          <CardTitle className="text-slate-100">Activity Log ({filteredLogs.length} entries)</CardTitle>
+          <CardTitle className="text-slate-100">
+            Activity Log ({filteredLogs.length} entries)
+          </CardTitle>
           <CardDescription className="text-slate-400">
             Recent system activities and changes
           </CardDescription>
@@ -251,27 +301,48 @@ export default function AuditLogPage() {
           ) : (
             <div className="overflow-x-auto">
               <Table>
+                <caption className="sr-only">Audit log of system actions and changes</caption>
                 <TableHeader>
                   <TableRow className="border-b border-slate-700">
-                    <TableHead className="text-slate-300">Date & Time</TableHead>
-                    <TableHead className="text-slate-300">User</TableHead>
-                    <TableHead className="text-slate-300">Action</TableHead>
-                    <TableHead className="text-slate-300">Entity</TableHead>
-                    <TableHead className="text-slate-300">Description</TableHead>
-                    <TableHead className="text-slate-300">Changes</TableHead>
+                    <TableHead className="text-slate-300" scope="col">
+                      Date & Time
+                    </TableHead>
+                    <TableHead className="text-slate-300" scope="col">
+                      User
+                    </TableHead>
+                    <TableHead className="text-slate-300" scope="col">
+                      Action
+                    </TableHead>
+                    <TableHead className="text-slate-300" scope="col">
+                      Entity
+                    </TableHead>
+                    <TableHead className="text-slate-300" scope="col">
+                      Description
+                    </TableHead>
+                    <TableHead className="text-slate-300" scope="col">
+                      Changes
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredLogs.map((log) => (
-                    <TableRow key={log.id} className="border-b border-slate-800 hover:bg-slate-700/50">
+                    <TableRow
+                      key={log.id}
+                      className="border-b border-slate-800 hover:bg-slate-700/50"
+                    >
                       <TableCell className="font-mono text-sm text-slate-200">
-                        {log.created_at ? format(new Date(log.created_at), 'MMM d, yyyy HH:mm:ss') : 'N/A'}
+                        {log.created_at
+                          ? format(new Date(log.created_at), 'MMM d, yyyy HH:mm:ss')
+                          : 'N/A'}
                       </TableCell>
                       <TableCell>
                         <div>
                           <div className="font-medium text-slate-200">{log.user_email}</div>
                           {log.user_role && (
-                            <Badge variant="outline" className="text-xs border-slate-600 text-slate-300">
+                            <Badge
+                              variant="outline"
+                              className="text-xs border-slate-600 text-slate-300"
+                            >
                               {log.user_role}
                             </Badge>
                           )}
@@ -284,7 +355,9 @@ export default function AuditLogPage() {
                       </TableCell>
                       <TableCell>
                         <div>
-                          <div className="font-medium text-slate-200">{log.entity_type || 'System'}</div>
+                          <div className="font-medium text-slate-200">
+                            {log.entity_type || 'System'}
+                          </div>
                           {log.entity_id && (
                             <div className="text-xs text-slate-400 font-mono">
                               ID: {log.entity_id.substring(0, 8)}...
