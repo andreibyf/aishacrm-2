@@ -61,8 +61,8 @@ export function validateUrl(urlString, options = {}) {
       };
     }
 
-    // Extract hostname
-    const hostname = url.hostname.toLowerCase();
+    // Extract hostname - strip brackets from IPv6 addresses (e.g. [::1] → ::1)
+    const hostname = url.hostname.toLowerCase().replace(/^\[(.+)\]$/, '$1');
 
     // Check for localhost/internal IPs
     const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
