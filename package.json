@@ -142,7 +142,8 @@
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
     "vite": "^6.1.0",
-    "vitest": "4.0.8"
+    "vitest": "4.0.8",
+    "@tailwindcss/postcss": "^4.2.0"
   },
   "lint-staged": {
     "*.{js,jsx,json,css,md}": [
