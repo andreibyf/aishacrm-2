@@ -1,10 +1,10 @@
-import { logDev } from "@/utils/devLogger";
-import React, { useRef, useState, useCallback } from "react";
-import { Link, useNavigate } from "react-router-dom"; // Import useNavigate
-import { createPageUrl } from "@/utils";
-import PasswordChangeModal from "@/components/auth/PasswordChangeModal";
-import EnvironmentBanner from "@/components/shared/EnvironmentBanner";
-import { getBackendUrl } from "@/api/backendUrl";
+import { logDev } from '@/utils/devLogger';
+import React, { useRef, useState, useCallback } from 'react';
+import { Link, useNavigate } from 'react-router-dom'; // Import useNavigate
+import { createPageUrl } from '@/utils';
+import PasswordChangeModal from '@/components/auth/PasswordChangeModal';
+import EnvironmentBanner from '@/components/shared/EnvironmentBanner';
+import { getBackendUrl } from '@/api/backendUrl';
 import {
   DndContext,
   closestCenter,
@@ -12,17 +12,17 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
-} from "@dnd-kit/core";
+} from '@dnd-kit/core';
 import {
   arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { SortableNavItem } from "@/components/shared/SortableNavItem";
-import { usePrimaryNavOrder, useSecondaryNavOrder } from "@/hooks/useNavOrder";
-import { EntityLabelsProvider } from "@/components/shared/EntityLabelsContext";
-import { useEntityLabels } from "@/components/shared/entityLabelsHooks";
+} from '@dnd-kit/sortable';
+import { SortableNavItem } from '@/components/shared/SortableNavItem';
+import { usePrimaryNavOrder, useSecondaryNavOrder } from '@/hooks/useNavOrder';
+import { EntityLabelsProvider } from '@/components/shared/EntityLabelsContext';
+import { useEntityLabels } from '@/components/shared/entityLabelsHooks';
 import {
   BarChart3,
   BookOpen, // NEW: Added for Documentation
@@ -54,8 +54,8 @@ import {
   Users, // Changed Employees icon to Users
   Wrench,
   Zap, // NEW: Added for Workflows
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -63,100 +63,92 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { User } from "@/api/entities";
-import { Tenant } from "@/api/entities";
-import { ModuleSettings } from "@/api/entities";
-import { Employee } from "@/api/entities";
-import { supabase } from "@/lib/supabase";
-import NotificationPanel from "../components/notifications/NotificationPanel";
-import { TenantProvider, useTenant } from "../components/shared/tenantContext";
-import { ProgressProvider } from "../components/shared/ProgressOverlay";
-import { isValidId } from "../components/shared/tenantUtils";
-import { ApiProvider, useApiManager } from "../components/shared/ApiManager";
-import { TimezoneProvider } from "../components/shared/TimezoneContext";
-import TenantSwitcher from "../components/shared/TenantSwitcher";
-import SystemStatusIndicator from "../components/shared/SystemStatusIndicator";
-import Clock from "../components/shared/Clock";
-import { useUser } from "@/components/shared/useUser.js";
-import RouteGuard from "../components/shared/RouteGuard";
-import { getOrCreateUserApiKey } from "@/api/functions";
-import { createAuditLog } from "@/api/functions";
-import { MCPManager } from "../components/shared/MCPClient";
-import GlobalDetailViewer from "../components/shared/GlobalDetailViewer";
-import { getTenantBrandingFast } from "@/api/entities";
-import { getDashboardBundleFast } from "@/api/dashboard";
-import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
-import EmployeeScopeFilter from "../components/shared/EmployeeScopeFilter";
-import { EmployeeScopeProvider } from "../components/shared/EmployeeScopeContext";
-import FooterBrand from "../components/shared/FooterBrand";
-import {
-  initAgentSdkGuard,
-  resetAgentSdkGuard,
-} from "@/components/ai/agentSdkGuard";
-import { clearChat } from "../components/ai/chatUtils";
-import AiSidebar from "@/components/ai/AiSidebar";
-import AiAssistantLauncher from "@/components/ai/AiAssistantLauncher.jsx";
-import { AiSidebarProvider, useAiSidebarState } from "@/components/ai/useAiSidebarState.jsx";
-import SuggestionBadge from "@/components/ai/SuggestionBadge";
-import AiShaActionHandler from "@/components/ai/AiShaActionHandler";
-import CronHeartbeat from "../components/shared/CronHeartbeat";
-import UserPresenceHeartbeat from "../components/shared/UserPresenceHeartbeat";
-import GlobalDomPatches from "../components/shared/GlobalDomPatches";
-import PortalRootManager from "../components/shared/PortalRootManager";
-import ModalHost from "../components/shared/ModalHost";
-import { ErrorLogProvider } from "../components/shared/ErrorLogger";
-import { LoggerProvider } from "../components/shared/Logger";
+} from '@/components/ui/dropdown-menu';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { User } from '@/api/entities';
+import { Tenant } from '@/api/entities';
+import { ModuleSettings } from '@/api/entities';
+import { Employee } from '@/api/entities';
+import { supabase } from '@/lib/supabase';
+import NotificationPanel from '../components/notifications/NotificationPanel';
+import { TenantProvider, useTenant } from '../components/shared/tenantContext';
+import { ProgressProvider } from '../components/shared/ProgressOverlay';
+import { isValidId } from '../components/shared/tenantUtils';
+import { ApiProvider, useApiManager } from '../components/shared/ApiManager';
+import { TimezoneProvider } from '../components/shared/TimezoneContext';
+import TenantSwitcher from '../components/shared/TenantSwitcher';
+import SystemStatusIndicator from '../components/shared/SystemStatusIndicator';
+import Clock from '../components/shared/Clock';
+import { useUser } from '@/components/shared/useUser.js';
+import RouteGuard from '../components/shared/RouteGuard';
+import { getOrCreateUserApiKey } from '@/api/functions';
+import { createAuditLog } from '@/api/functions';
+import { MCPManager } from '../components/shared/MCPClient';
+import GlobalDetailViewer from '../components/shared/GlobalDetailViewer';
+import { getTenantBrandingFast } from '@/api/entities';
+import { getDashboardBundleFast } from '@/api/dashboard';
+import { useAuthCookiesReady } from '@/components/shared/useAuthCookiesReady';
+import EmployeeScopeFilter from '../components/shared/EmployeeScopeFilter';
+import { EmployeeScopeProvider } from '../components/shared/EmployeeScopeContext';
+import FooterBrand from '../components/shared/FooterBrand';
+import { initAgentSdkGuard, resetAgentSdkGuard } from '@/components/ai/agentSdkGuard';
+import { clearChat } from '../components/ai/chatUtils';
+import AiSidebar from '@/components/ai/AiSidebar';
+import AiAssistantLauncher from '@/components/ai/AiAssistantLauncher.jsx';
+import { AiSidebarProvider, useAiSidebarState } from '@/components/ai/useAiSidebarState.jsx';
+import SuggestionBadge from '@/components/ai/SuggestionBadge';
+import AiShaActionHandler from '@/components/ai/AiShaActionHandler';
+import CronHeartbeat from '../components/shared/CronHeartbeat';
+import UserPresenceHeartbeat from '../components/shared/UserPresenceHeartbeat';
+import GlobalDomPatches from '../components/shared/GlobalDomPatches';
+import PortalRootManager from '../components/shared/PortalRootManager';
+import ModalHost from '../components/shared/ModalHost';
+import { ErrorLogProvider } from '../components/shared/ErrorLogger';
+import { LoggerProvider } from '../components/shared/Logger';
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ApiOptimizerProvider } from "../components/shared/ApiOptimizer";
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ApiOptimizerProvider } from '../components/shared/ApiOptimizer';
 
 const navItems = [
-  { href: "Dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { href: "Contacts", icon: Users, label: "Contacts" },
-  { href: "Accounts", icon: Building2, label: "Accounts" },
-  { href: "Leads", icon: Target, label: "Leads" }, // Changed icon to Target
-  { href: "Opportunities", icon: TrendingUp, label: "Opportunities" }, // Changed icon to TrendingUp
-  { href: "Activities", icon: CheckSquare, label: "Activities" },
-  { href: "Calendar", icon: Calendar, label: "Calendar" },
-  { href: "ConstructionProjects", icon: Kanban, label: "Project Management" }, // Project management module
-  { href: "Workers", icon: Users, label: "Workers" }, // Contractors/temp labor management
-  { href: "BizDevSources", icon: Database, label: "BizDev Sources" }, // Business development sources
-  { href: "CashFlow", icon: DollarSign, label: "Cash Flow" },
-  { href: "DocumentProcessing", icon: FileText, label: "Document Processing" },
+  { href: 'Dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { href: 'Contacts', icon: Users, label: 'Contacts' },
+  { href: 'Accounts', icon: Building2, label: 'Accounts' },
+  { href: 'Leads', icon: Target, label: 'Leads' }, // Changed icon to Target
+  { href: 'Opportunities', icon: TrendingUp, label: 'Opportunities' }, // Changed icon to TrendingUp
+  { href: 'Activities', icon: CheckSquare, label: 'Activities' },
+  { href: 'Calendar', icon: Calendar, label: 'Calendar' },
+  { href: 'ConstructionProjects', icon: Kanban, label: 'Project Management' }, // Project management module
+  { href: 'Workers', icon: Users, label: 'Workers' }, // Contractors/temp labor management
+  { href: 'BizDevSources', icon: Database, label: 'BizDev Sources' }, // Business development sources
+  { href: 'CashFlow', icon: DollarSign, label: 'Cash Flow' },
+  { href: 'DocumentProcessing', icon: FileText, label: 'Document Processing' },
   {
-    href: "DocumentManagement",
+    href: 'DocumentManagement',
     icon: FolderOpen,
-    label: "Document Management",
+    label: 'Document Management',
   },
-  { href: "AICampaigns", icon: Megaphone, label: "AI Campaigns" }, // Changed icon to Megaphone
-  { href: "Employees", icon: Users, label: "Employees" }, // Changed icon to Users
-  { href: "Reports", icon: BarChart3, label: "Reports" },
-  { href: "Integrations", icon: Plug, label: "Integrations" }, // Changed icon to Plug
-  { href: "Workflows", icon: Zap, label: "Workflows" }, // NEW: Added Workflows
-  { href: "PaymentPortal", icon: CreditCard, label: "Payment Portal" },
-  { href: "Utilities", icon: Wrench, label: "Utilities" },
-  { href: "ClientOnboarding", icon: UserPlus, label: "Client Onboarding" }, // Changed icon to UserPlus
+  { href: 'AICampaigns', icon: Megaphone, label: 'AI Campaigns' }, // Changed icon to Megaphone
+  { href: 'Employees', icon: Users, label: 'Employees' }, // Changed icon to Users
+  { href: 'Reports', icon: BarChart3, label: 'Reports' },
+  { href: 'Integrations', icon: Plug, label: 'Integrations' }, // Changed icon to Plug
+  { href: 'Workflows', icon: Zap, label: 'Workflows' }, // NEW: Added Workflows
+  { href: 'PaymentPortal', icon: CreditCard, label: 'Payment Portal' },
+  { href: 'Utilities', icon: Wrench, label: 'Utilities' },
+  { href: 'ClientOnboarding', icon: UserPlus, label: 'Client Onboarding' }, // Changed icon to UserPlus
 ];
 
 const secondaryNavItems = [
-  { href: "Documentation", icon: BookOpen, label: "Documentation" }, // Changed icon to BookOpen
+  { href: 'Documentation', icon: BookOpen, label: 'Documentation' }, // Changed icon to BookOpen
   {
-    href: "DeveloperAI",
+    href: 'DeveloperAI',
     icon: Bot,
-    label: "Developer AI",
+    label: 'Developer AI',
   },
   {
-    href: "ClientRequirements",
+    href: 'ClientRequirements',
     icon: ClipboardCheck,
-    label: "Client Requirements",
+    label: 'Client Requirements',
   }, // NEW: Added Client Requirements
 ];
 
@@ -165,9 +157,9 @@ const secondaryNavItems = [
  */
 function isSuperAdmin(user) {
   if (!user) return false;
-  return user.is_superadmin === true ||
-    user.access_level === "superadmin" ||
-    user.role === "superadmin";
+  return (
+    user.is_superadmin === true || user.access_level === 'superadmin' || user.role === 'superadmin'
+  );
 }
 
 /**
@@ -181,7 +173,7 @@ function isAdminOrSuperAdmin(user) {
 function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
   if (!user) return false;
 
-  logDev("[hasPageAccess] Called with:", {
+  logDev('[hasPageAccess] Called with:', {
     pageName,
     userEmail: user.email,
     userRole: user.role,
@@ -195,11 +187,16 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
     return true;
   }
 
-  const superadminOnlyPages = new Set(["Tenants"]);
+  const superadminOnlyPages = new Set(['Tenants']);
   if (superadminOnlyPages.has(pageName) && user.role !== 'superadmin') return false;
 
   const pagesAllowedWithoutCRM = new Set([
-    "Documentation","DeveloperAI","Settings","AuditLog","UnitTests","ClientRequirements",
+    'Documentation',
+    'DeveloperAI',
+    'Settings',
+    'AuditLog',
+    'UnitTests',
+    'ClientRequirements',
   ]);
   if (user.crm_access === false) return pagesAllowedWithoutCRM.has(pageName);
 
@@ -241,7 +238,7 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
 
   const requiredModuleId = moduleMapping[pageName];
   if (requiredModuleId && moduleSettings.length > 0) {
-    const moduleSetting = moduleSettings.find(m => m.module_name === requiredModuleId);
+    const moduleSetting = moduleSettings.find((m) => m.module_name === requiredModuleId);
     if (moduleSetting && moduleSetting.is_enabled === false) return false;
   }
 
@@ -258,7 +255,10 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
         pageName,
       });
     }
-    const hasCustomPermission = Object.prototype.hasOwnProperty.call(user.navigation_permissions, pageName);
+    const hasCustomPermission = Object.prototype.hasOwnProperty.call(
+      user.navigation_permissions,
+      pageName,
+    );
     if (hasCustomPermission) {
       const explicit = user.navigation_permissions[pageName];
       logDev(`[hasPageAccess] Explicit permission for ${pageName}:`, explicit);
@@ -267,9 +267,16 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
     }
   }
 
-  if ((user.role === 'admin' || user.role === 'superadmin') && (
-      pageName === 'Documentation' || pageName === 'AuditLog' || pageName === 'Tenants' ||
-    pageName === 'UnitTests' || pageName === 'ClientRequirements' || pageName === 'ConstructionProjects')) return true;
+  if (
+    (user.role === 'admin' || user.role === 'superadmin') &&
+    (pageName === 'Documentation' ||
+      pageName === 'AuditLog' ||
+      pageName === 'Tenants' ||
+      pageName === 'UnitTests' ||
+      pageName === 'ClientRequirements' ||
+      pageName === 'ConstructionProjects')
+  )
+    return true;
   if (user.role === 'superadmin' && pageName === 'DeveloperAI') return true;
   if ((user.role === 'superadmin' || user.role === 'admin') && !selectedTenantId) return true;
 
@@ -283,20 +290,18 @@ function getDefaultNavigationPermissions(role) {
     ...navItems.map((item) => item.href),
     ...secondaryNavItems.map((item) => item.href),
     // Add other system/hidden pages that might need default permissions
-    "DuplicateContacts",
-    "DuplicateAccounts",
-    "DuplicateLeads",
-    "Tenants",
-    "AuditLog",
-    "UnitTests",
-    "ClientOnboarding",
-    "ClientRequirements", // NEW: Added ClientRequirements
+    'DuplicateContacts',
+    'DuplicateAccounts',
+    'DuplicateLeads',
+    'Tenants',
+    'AuditLog',
+    'UnitTests',
+    'ClientOnboarding',
+    'ClientRequirements', // NEW: Added ClientRequirements
   ];
 
   // Initialize all permissions to false for safety
-  const basePermissions = Object.fromEntries(
-    allPageHrefs.map((href) => [href, false]),
-  );
+  const basePermissions = Object.fromEntries(allPageHrefs.map((href) => [href, false]));
 
   const defaults = {
     superadmin: {
@@ -420,8 +425,7 @@ function getDefaultNavigationPermissions(role) {
   // (CRM access check is done in hasPageAccess first)
   rolePermissions.Settings = true; // Always allow Settings for profile access
   rolePermissions.Documentation = rolePermissions.Documentation || true;
-  rolePermissions.ClientRequirements = rolePermissions.ClientRequirements ||
-    false; // NEW: Explicitly manage ClientRequirements access
+  rolePermissions.ClientRequirements = rolePermissions.ClientRequirements || false; // NEW: Explicitly manage ClientRequirements access
 
   return rolePermissions;
 }
@@ -431,14 +435,14 @@ const UserNav = ({ user, handleLogout, createPageUrl }) => {
     if (user?.display_name) return user.display_name;
     if (user?.full_name) return user.full_name;
     if (user?.first_name || user?.last_name) {
-      const fn = `${user.first_name || ""} ${user.last_name || ""}`.trim();
+      const fn = `${user.first_name || ''} ${user.last_name || ''}`.trim();
       if (fn) return fn;
     }
     if (user?.email) {
-      const emailName = user.email.split("@")[0];
+      const emailName = user.email.split('@')[0];
       return emailName.charAt(0).toUpperCase() + emailName.slice(1);
     }
-    return "User";
+    return 'User';
   };
 
   const displayName = getUserDisplayName();
@@ -448,42 +452,28 @@ const UserNav = ({ user, handleLogout, createPageUrl }) => {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          className="flex items-center gap-2 p-1.5 hover:bg-slate-700"
-        >
+        <Button variant="ghost" className="flex items-center gap-2 p-1.5 hover:bg-slate-700">
           <div className="w-8 h-8 bg-slate-200 rounded-full flex items-center justify-center">
             <span className="text-sm font-medium text-slate-600">
-              {displayName?.charAt(0)?.toUpperCase() || "A"}
+              {displayName?.charAt(0)?.toUpperCase() || 'A'}
             </span>
           </div>
-          <span className="text-sm font-semibold leading-6 text-slate-200">
-            {displayName}
-          </span>
+          <span className="text-sm font-semibold leading-6 text-slate-200">{displayName}</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="end"
-        className="bg-slate-800 border-slate-700"
-      >
-        <DropdownMenuLabel className="text-slate-200">
-          My Account
-        </DropdownMenuLabel>
+      <DropdownMenuContent align="end" className="bg-slate-800 border-slate-700">
+        <DropdownMenuLabel className="text-slate-200">My Account</DropdownMenuLabel>
         <DropdownMenuSeparator className="border-slate-700" />
         <DropdownMenuItem asChild>
           <Link
-            to={createPageUrl("Settings")}
+            to={createPageUrl('Settings')}
             className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
           >
             <Settings className="mr-2 h-4 w-4" />
             Settings
           </Link>
         </DropdownMenuItem>
-        {isAdmin && (
-          <>
-            
-          </>
-        )}
+        {isAdmin && <></>}
         <DropdownMenuSeparator className="border-slate-700" />
         <DropdownMenuItem
           onClick={handleLogout}
@@ -498,11 +488,11 @@ const UserNav = ({ user, handleLogout, createPageUrl }) => {
 };
 
 const SvgDefs = () => (
-  <svg width="0" height="0" style={{ position: "absolute" }}>
+  <svg width="0" height="0" style={{ position: 'absolute' }}>
     <defs>
       <linearGradient id="ai-icon-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" style={{ stopColor: "var(--primary-color)" }} />
-        <stop offset="100%" style={{ stopColor: "var(--accent-color)" }} />
+        <stop offset="0%" style={{ stopColor: 'var(--primary-color)' }} />
+        <stop offset="100%" style={{ stopColor: 'var(--accent-color)' }} />
       </linearGradient>
     </defs>
   </svg>
@@ -511,13 +501,14 @@ const SvgDefs = () => (
 // Add a global flag to prevent multiple cleanup attempts
 let globalTenantCleanupDone = false;
 
-function Layout({ children, currentPageName }) { // Renamed from AppLayout to Layout
+function Layout({ children, currentPageName }) {
+  // Renamed from AppLayout to Layout
   // Source user from global UserContext to avoid duplicate fetches/logs
   const { user, loading: userLoading, reloadUser } = useUser();
   // Ensure we know when auth cookies are available for backend calls
   const { authCookiesReady } = useAuthCookiesReady();
   const [userError, setUserError] = React.useState(null);
-  
+
   // Proactive token refresh management (auto-refreshes before expiry)
   // TEMPORARILY DISABLED - debugging initialization issue
   // const handleSessionExpired = React.useCallback(() => {
@@ -525,7 +516,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   //   localStorage.clear();
   //   navigate('/?session_expired=true');
   // }, [navigate]);
-  
+
   // const { isRefreshing } = useTokenRefresh({
   //   enabled: !!user && authCookiesReady, // Only run when user is logged in
   //   onSessionExpired: handleSessionExpired
@@ -558,32 +549,27 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   const { cachedRequest, clearCache } = useApiManager();
 
   // NEW: lazy-mount flags to reduce initial rate-limit bursts
-  const [showNotificationsWidget, setShowNotificationsWidget] = React.useState(
-    false,
-  );
+  const [showNotificationsWidget, setShowNotificationsWidget] = React.useState(false);
   const [showFooterBrand, setShowFooterBrand] = React.useState(false);
 
   // THEME: add theme state with persistence
-  const [theme, setTheme] = React.useState("dark"); // Default to dark if nothing saved
+  const [theme, setTheme] = React.useState('dark'); // Default to dark if nothing saved
   React.useEffect(() => {
-    const saved = localStorage.getItem("app_theme");
-    if (saved === "light" || saved === "dark") {
+    const saved = localStorage.getItem('app_theme');
+    if (saved === 'light' || saved === 'dark') {
       setTheme(saved);
-    } else if (
-      window.matchMedia &&
-      window.matchMedia("(prefers-color-scheme: light)").matches
-    ) {
+    } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
       // Optional: Detect system preference if no explicit setting is found
-      setTheme("light");
+      setTheme('light');
     }
   }, []);
   const toggleTheme = () => {
-    const next = theme === "dark" ? "light" : "dark";
+    const next = theme === 'dark' ? 'light' : 'dark';
     setTheme(next);
     try {
-      localStorage.setItem("app_theme", next);
+      localStorage.setItem('app_theme', next);
     } catch (e) {
-      console.warn("Storage access failed to save theme:", e);
+      console.warn('Storage access failed to save theme:', e);
     }
   };
 
@@ -597,20 +583,20 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
 
   // NEW: ensure theme class is also applied to document.body so Radix Portals inherit light styles
   React.useEffect(() => {
-    const cls = theme === "light" ? "theme-light" : "theme-dark";
-    document.body.classList.remove("theme-light", "theme-dark");
+    const cls = theme === 'light' ? 'theme-light' : 'theme-dark';
+    document.body.classList.remove('theme-light', 'theme-dark');
     document.body.classList.add(cls);
 
     // NEW: sync shadcn/ui dark mode by toggling the 'dark' class on <html>
     const rootEl = document.documentElement;
-    if (theme === "dark") {
-      rootEl.classList.add("dark");
+    if (theme === 'dark') {
+      rootEl.classList.add('dark');
     } else {
-      rootEl.classList.remove("dark");
+      rootEl.classList.remove('dark');
     }
 
     return () => {
-      document.body.classList.remove("theme-light", "theme-dark");
+      document.body.classList.remove('theme-light', 'theme-dark');
     };
   }, [theme]);
 
@@ -656,16 +642,11 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         // No UI selection - check user's assigned tenant_id
         if (user?.tenant_id) {
           // Super Admin or Admin has an assigned tenant - default to it
-          logDev(
-            "[Layout] Admin defaulting to assigned tenant:",
-            user.tenant_id,
-          );
+          logDev('[Layout] Admin defaulting to assigned tenant:', user.tenant_id);
           nextTenantId = user.tenant_id;
         } else if (superAdmin) {
           // Super Admin with NO assigned tenant = global access to ALL tenants
-          logDev(
-            "[Layout] SuperAdmin global access - viewing ALL tenants",
-          );
+          logDev('[Layout] SuperAdmin global access - viewing ALL tenants');
           return null; // null = "all tenants" for superadmins without tenant assignment
         }
       }
@@ -675,12 +656,12 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     }
 
     // Use shared validation function
-    const validTenantId = nextTenantId && typeof nextTenantId === "string" &&
-        isValidId(nextTenantId)
-      ? nextTenantId
-      : null;
+    const validTenantId =
+      nextTenantId && typeof nextTenantId === 'string' && isValidId(nextTenantId)
+        ? nextTenantId
+        : null;
     if (validTenantId) {
-      logDev("[Layout] Filtering data for tenant:", validTenantId);
+      logDev('[Layout] Filtering data for tenant:', validTenantId);
     }
     return validTenantId;
   }, [user, selectedTenantId]);
@@ -702,13 +683,15 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     if (!Array.isArray(moduleSettings) || moduleSettings.length === 0) {
       return true;
     }
-    const moduleName = "Realtime Voice";
+    const moduleName = 'Realtime Voice';
     const matchingEntries = moduleSettings.filter((setting) => setting.module_name === moduleName);
     if (matchingEntries.length === 0) {
       return true;
     }
     if (effectiveModuleTenantId) {
-      const tenantMatch = matchingEntries.find((setting) => setting.tenant_id === effectiveModuleTenantId);
+      const tenantMatch = matchingEntries.find(
+        (setting) => setting.tenant_id === effectiveModuleTenantId,
+      );
       if (tenantMatch) {
         return tenantMatch.is_enabled !== false;
       }
@@ -726,14 +709,11 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     globalTenantCleanupDone = true;
 
     try {
-      const savedTenantId = localStorage.getItem("selected_tenant_id");
-      if (
-        savedTenantId && savedTenantId !== "null" &&
-        savedTenantId !== "undefined"
-      ) {
+      const savedTenantId = localStorage.getItem('selected_tenant_id');
+      if (savedTenantId && savedTenantId !== 'null' && savedTenantId !== 'undefined') {
         // Check if it's the problematic tenant
-        if (savedTenantId === "68b85abfff6be8dc8573e116") {
-          localStorage.removeItem("selected_tenant_id");
+        if (savedTenantId === '68b85abfff6be8dc8573e116') {
+          localStorage.removeItem('selected_tenant_id');
           if (setSelectedTenantId) {
             setSelectedTenantId(null);
           }
@@ -741,7 +721,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         }
       }
     } catch (e) {
-      console.warn("Storage access failed during tenant cleanup:", e);
+      console.warn('Storage access failed during tenant cleanup:', e);
     }
   }, [setSelectedTenantId]);
 
@@ -752,7 +732,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     // 2. No tenant is currently selected in context
     // 3. User is not a global super admin (tenant_id=null for global access)
     if (user?.tenant_id && selectedTenantId === null && setSelectedTenantId) {
-      logDev("[Layout] Auto-selecting tenant from user profile:", user.tenant_id);
+      logDev('[Layout] Auto-selecting tenant from user profile:', user.tenant_id);
       setSelectedTenantId(user.tenant_id);
     }
   }, [user?.tenant_id, selectedTenantId, setSelectedTenantId]);
@@ -767,22 +747,22 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   // NEW: Preconnect/dns-prefetch hints for performance-critical origins
   React.useEffect(() => {
     const origins = [
-      "https://m.stripe.com",
+      'https://m.stripe.com',
       // Note: Removed Base44 and external Supabase URLs - using local assets now
     ];
     const ensureLink = (rel, href, crossOrigin) => {
-      const id = `hint-${rel}-${btoa(href).replace(/=/g, "")}`;
+      const id = `hint-${rel}-${btoa(href).replace(/=/g, '')}`;
       if (document.getElementById(id)) return;
-      const link = document.createElement("link");
+      const link = document.createElement('link');
       link.id = id;
       link.rel = rel;
       link.href = href;
-      if (crossOrigin) link.crossOrigin = "anonymous";
+      if (crossOrigin) link.crossOrigin = 'anonymous';
       document.head.appendChild(link);
     };
     origins.forEach((o) => {
-      ensureLink("preconnect", o, true);
-      ensureLink("dns-prefetch", o);
+      ensureLink('preconnect', o, true);
+      ensureLink('dns-prefetch', o);
     });
   }, []);
 
@@ -797,16 +777,16 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   React.useEffect(() => {
     const setLazy = (img) => {
       if (!img) return;
-      const already = img.getAttribute("loading");
-      if (!already) img.setAttribute("loading", "lazy");
+      const already = img.getAttribute('loading');
+      if (!already) img.setAttribute('loading', 'lazy');
     };
-    document.querySelectorAll("img").forEach(setLazy);
+    document.querySelectorAll('img').forEach(setLazy);
     const mo = new MutationObserver((mutations) => {
       for (const m of mutations) {
         m.addedNodes?.forEach((n) => {
           if (n && n.nodeType === 1) {
-            if (n.tagName === "IMG") setLazy(n);
-            n.querySelectorAll?.("img")?.forEach(setLazy);
+            if (n.tagName === 'IMG') setLazy(n);
+            n.querySelectorAll?.('img')?.forEach(setLazy);
           }
         });
       }
@@ -819,34 +799,28 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   React.useEffect(() => {
     const handler = (event) => {
       const err = event?.reason || event;
-      const msg = (err && (err.message || err.toString())) || "";
+      const msg = (err && (err.message || err.toString())) || '';
       // Suppress noisy Axios "Network Error" crashes; log instead
-      if (typeof msg === "string" && /network error/i.test(msg)) {
-        console.warn(
-          "Network error suppressed:",
-          err?.message || "Connection issue",
-        );
+      if (typeof msg === 'string' && /network error/i.test(msg)) {
+        console.warn('Network error suppressed:', err?.message || 'Connection issue');
         event.preventDefault?.();
         // Prevent subsequent default handling of the rejection
         event.stopImmediatePropagation?.();
       }
     };
     const onError = (e) => {
-      const msg = (e?.error && e.error.message) || e?.message || "";
-      if (typeof msg === "string" && /network error/i.test(msg)) {
-        console.warn(
-          "Network error suppressed:",
-          e.error?.message || e.message,
-        );
+      const msg = (e?.error && e.error.message) || e?.message || '';
+      if (typeof msg === 'string' && /network error/i.test(msg)) {
+        console.warn('Network error suppressed:', e.error?.message || e.message);
         e.preventDefault?.();
         e.stopImmediatePropagation?.();
       }
     };
-    window.addEventListener("unhandledrejection", handler);
-    window.addEventListener("error", onError);
+    window.addEventListener('unhandledrejection', handler);
+    window.addEventListener('error', onError);
     return () => {
-      window.removeEventListener("unhandledrejection", handler);
-      window.removeEventListener("error", onError);
+      window.removeEventListener('unhandledrejection', handler);
+      window.removeEventListener('error', onError);
     };
   }, []);
 
@@ -878,32 +852,27 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     };
 
     // ChatWindow now dispatches this event for navigation
-    window.addEventListener(
-      "navigate-from-command-palette",
-      handleCommandPaletteNavigation,
-    );
-    window.addEventListener("view-record-details", handleViewDetails);
+    window.addEventListener('navigate-from-command-palette', handleCommandPaletteNavigation);
+    window.addEventListener('view-record-details', handleViewDetails);
 
     return () => {
-      window.removeEventListener(
-        "navigate-from-command-palette",
-        handleCommandPaletteNavigation,
-      );
-      window.removeEventListener("view-record-details", handleViewDetails);
+      window.removeEventListener('navigate-from-command-palette', handleCommandPaletteNavigation);
+      window.removeEventListener('view-record-details', handleViewDetails);
     };
   }, [navigate]);
 
   // NEW: Keyboard shortcut: Ctrl+Shift+K to clear chat quickly
   React.useEffect(() => {
     const onKeyDown = (e) => {
-      const key = e.key?.toLowerCase?.() || "";
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === "k") { // Cmd+Shift+K for Mac, Ctrl+Shift+K for others
+      const key = e.key?.toLowerCase?.() || '';
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'k') {
+        // Cmd+Shift+K for Mac, Ctrl+Shift+K for others
         e.preventDefault();
         clearChat({ reload: true, confirmFirst: true });
       }
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
   // UNUSED: handleElevenLabsMessage - ChatWindow component is commented out
@@ -938,55 +907,69 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
 
   // Navigation order management with drag-and-drop (tenant-scoped + database persistence)
   const [isDragMode, setIsDragMode] = useState(false);
-  
-  // Create save callbacks for navigation order persistence to database
-  const saveNavOrderToDatabase = useCallback(async (orderArray) => {
-    if (!user) return;
-    try {
-      await User.updateMyUserData({
-        permissions: {
-          ...user.permissions,
-          navigation_order: orderArray,
-        },
-      });
-      console.log("[Layout] Navigation order saved to database:", orderArray);
-      reloadUser?.();
-    } catch (error) {
-      console.error("[Layout] Failed to save navigation order to database:", error);
-    }
-  }, [user, reloadUser]);
 
-  const saveSecondaryNavOrderToDatabase = useCallback(async (orderArray) => {
-    if (!user) return;
-    try {
-      await User.updateMyUserData({
-        permissions: {
-          ...user.permissions,
-          secondary_navigation_order: orderArray,
-        },
-      });
-      console.log("[Layout] Secondary navigation order saved to database:", orderArray);
-      reloadUser?.();
-    } catch (error) {
-      console.error("[Layout] Failed to save secondary navigation order to database:", error);
-    }
-  }, [user, reloadUser]);
+  // Create save callbacks for navigation order persistence to database
+  const saveNavOrderToDatabase = useCallback(
+    async (orderArray) => {
+      if (!user) return;
+      try {
+        await User.updateMyUserData({
+          permissions: {
+            ...user.permissions,
+            navigation_order: orderArray,
+          },
+        });
+        console.log('[Layout] Navigation order saved to database:', orderArray);
+        reloadUser?.();
+      } catch (error) {
+        console.error('[Layout] Failed to save navigation order to database:', error);
+      }
+    },
+    [user, reloadUser],
+  );
+
+  const saveSecondaryNavOrderToDatabase = useCallback(
+    async (orderArray) => {
+      if (!user) return;
+      try {
+        await User.updateMyUserData({
+          permissions: {
+            ...user.permissions,
+            secondary_navigation_order: orderArray,
+          },
+        });
+        console.log('[Layout] Secondary navigation order saved to database:', orderArray);
+        reloadUser?.();
+      } catch (error) {
+        console.error('[Layout] Failed to save secondary navigation order to database:', error);
+      }
+    },
+    [user, reloadUser],
+  );
 
   // Navigation order hooks with database persistence
-  const { orderedItems: orderedNavItems, setOrder: setNavOrder, resetOrder: resetNavOrder, hasCustomOrder: hasCustomNavOrder } = usePrimaryNavOrder(
-    navItems, 
-    effectiveTenantId,
-    { user, saveToDatabase: saveNavOrderToDatabase }
-  );
-  const { orderedItems: orderedSecondaryItems, setOrder: setSecondaryOrder, resetOrder: resetSecondaryOrder, hasCustomOrder: hasCustomSecondaryOrder } = useSecondaryNavOrder(
-    secondaryNavItems, 
-    effectiveTenantId,
-    { user, saveToDatabase: saveSecondaryNavOrderToDatabase }
-  );
+  const {
+    orderedItems: orderedNavItems,
+    setOrder: setNavOrder,
+    resetOrder: resetNavOrder,
+    hasCustomOrder: hasCustomNavOrder,
+  } = usePrimaryNavOrder(navItems, effectiveTenantId, {
+    user,
+    saveToDatabase: saveNavOrderToDatabase,
+  });
+  const {
+    orderedItems: orderedSecondaryItems,
+    setOrder: setSecondaryOrder,
+    resetOrder: resetSecondaryOrder,
+    hasCustomOrder: hasCustomSecondaryOrder,
+  } = useSecondaryNavOrder(secondaryNavItems, effectiveTenantId, {
+    user,
+    saveToDatabase: saveSecondaryNavOrderToDatabase,
+  });
 
   // Debug navigation order persistence
   React.useEffect(() => {
-    console.log("[Layout] effectiveTenantId changed:", effectiveTenantId, "user:", user?.email);
+    console.log('[Layout] effectiveTenantId changed:', effectiveTenantId, 'user:', user?.email);
   }, [effectiveTenantId, user?.email]);
 
   // DnD sensors
@@ -998,34 +981,40 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
-    })
+    }),
   );
 
   // Handle drag end for primary nav
-  const handleNavDragEnd = useCallback((event) => {
-    const { active, over } = event;
-    if (active.id !== over?.id) {
-      const oldIndex = orderedNavItems.findIndex((item) => item.href === active.id);
-      const newIndex = orderedNavItems.findIndex((item) => item.href === over?.id);
-      if (oldIndex !== -1 && newIndex !== -1) {
-        const newOrder = arrayMove(orderedNavItems, oldIndex, newIndex);
-        setNavOrder(newOrder);
+  const handleNavDragEnd = useCallback(
+    (event) => {
+      const { active, over } = event;
+      if (active.id !== over?.id) {
+        const oldIndex = orderedNavItems.findIndex((item) => item.href === active.id);
+        const newIndex = orderedNavItems.findIndex((item) => item.href === over?.id);
+        if (oldIndex !== -1 && newIndex !== -1) {
+          const newOrder = arrayMove(orderedNavItems, oldIndex, newIndex);
+          setNavOrder(newOrder);
+        }
       }
-    }
-  }, [orderedNavItems, setNavOrder]);
+    },
+    [orderedNavItems, setNavOrder],
+  );
 
   // Handle drag end for secondary nav
-  const handleSecondaryDragEnd = useCallback((event) => {
-    const { active, over } = event;
-    if (active.id !== over?.id) {
-      const oldIndex = orderedSecondaryItems.findIndex((item) => item.href === active.id);
-      const newIndex = orderedSecondaryItems.findIndex((item) => item.href === over?.id);
-      if (oldIndex !== -1 && newIndex !== -1) {
-        const newOrder = arrayMove(orderedSecondaryItems, oldIndex, newIndex);
-        setSecondaryOrder(newOrder);
+  const handleSecondaryDragEnd = useCallback(
+    (event) => {
+      const { active, over } = event;
+      if (active.id !== over?.id) {
+        const oldIndex = orderedSecondaryItems.findIndex((item) => item.href === active.id);
+        const newIndex = orderedSecondaryItems.findIndex((item) => item.href === over?.id);
+        if (oldIndex !== -1 && newIndex !== -1) {
+          const newOrder = arrayMove(orderedSecondaryItems, oldIndex, newIndex);
+          setSecondaryOrder(newOrder);
+        }
       }
-    }
-  }, [orderedSecondaryItems, setSecondaryOrder]);
+    },
+    [orderedSecondaryItems, setSecondaryOrder],
+  );
 
   // Reset all nav order to default
   const handleResetNavOrder = useCallback(() => {
@@ -1039,9 +1028,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     // Filter out items with parentMenu if you want to implement a nested menu structure
     // For now, they are treated as top-level items for simplicity as per existing structure
     return orderedNavItems
-      .filter((item) =>
-        hasPageAccess(user, item.href, selectedTenantId, moduleSettings)
-    )
+      .filter((item) => hasPageAccess(user, item.href, selectedTenantId, moduleSettings))
       .map((item) => {
         // Apply custom entity labels if available
         const customLabel = getNavLabel(item.href);
@@ -1052,9 +1039,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   const filteredSecondaryNavItems = React.useMemo(() => {
     if (!user) return [];
     return orderedSecondaryItems
-      .filter((item) =>
-        hasPageAccess(user, item.href, selectedTenantId, moduleSettings)
-    )
+      .filter((item) => hasPageAccess(user, item.href, selectedTenantId, moduleSettings))
       .map((item) => {
         // Apply custom entity labels if available
         const customLabel = getNavLabel(item.href);
@@ -1067,36 +1052,34 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     const originalConsoleWarn = console.warn;
 
     const extensionErrorPatterns = [
-      "A listener indicated an asynchronous response by returning true",
-      "message channel closed before a response was received",
-      "Extension context invalidated",
-      "Could not establish connection. Receiving end does not exist",
-      "The message port closed before a response was received",
+      'A listener indicated an asynchronous response by returning true',
+      'message channel closed before a response was received',
+      'Extension context invalidated',
+      'Could not establish connection. Receiving end does not exist',
+      'The message port closed before a response was received',
     ];
 
     console.error = (...args) => {
-      const message = args.join(" ");
-      const isExtensionError = extensionErrorPatterns.some((pattern) =>
-        message.includes(pattern)
-      );
+      const message = args.join(' ');
+      const isExtensionError = extensionErrorPatterns.some((pattern) => message.includes(pattern));
 
       if (!isExtensionError) {
         originalConsoleError.apply(console, args);
       } else if (import.meta.env.DEV) {
-        console.debug("[Browser Extension]", ...args);
+        console.debug('[Browser Extension]', ...args);
       }
     };
 
     console.warn = (...args) => {
-      const message = args.join(" ");
+      const message = args.join(' ');
       const isExtensionWarning = extensionErrorPatterns.some((pattern) =>
-        message.includes(pattern)
+        message.includes(pattern),
       );
 
       if (!isExtensionWarning) {
         originalConsoleWarn.apply(console, args);
       } else if (import.meta.env.DEV) {
-        console.debug("[Browser Extension]", ...args);
+        console.debug('[Browser Extension]', ...args);
       }
     };
 
@@ -1123,14 +1106,14 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
             }
           })
           .catch((err) => {
-            console.debug("AI API key fetch skipped:", err.message);
+            console.debug('AI API key fetch skipped:', err.message);
           });
       }
     } catch (error) {
       if (import.meta.env.DEV) {
-        console.debug("User reload error (ignored):", error?.message || error);
+        console.debug('User reload error (ignored):', error?.message || error);
       }
-      setUserError(error?.message || "Failed to reload user");
+      setUserError(error?.message || 'Failed to reload user');
     }
   }, [reloadUser]);
 
@@ -1143,14 +1126,14 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   React.useEffect(() => {
     const warmCache = async () => {
       if (!authCookiesReady || !user) return;
-      
+
       const tenantId = selectedTenantId || user?.tenant_id || null;
-      
+
       // Skip if we already warmed this tenant
       if (tenantId && lastWarmedTenantRef.current === tenantId) {
         return;
       }
-      
+
       try {
         await getDashboardBundleFast({ tenant_id: tenantId, include_test_data: true });
         lastWarmedTenantRef.current = tenantId;
@@ -1167,48 +1150,38 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   React.useEffect(() => {
     const onEntityModified = (event) => {
       const { entity } = event.detail || {};
-      if (entity === "Employee" || entity === "User") {
+      if (entity === 'Employee' || entity === 'User') {
         // Re-load current user to pick up display_name/first/last changes
         refetchUser();
       }
     };
-    window.addEventListener("entity-modified", onEntityModified);
-    return () => window.removeEventListener("entity-modified", onEntityModified);
+    window.addEventListener('entity-modified', onEntityModified);
+    return () => window.removeEventListener('entity-modified', onEntityModified);
   }, [refetchUser]);
 
   React.useEffect(() => {
     // Persist AI API key (from getOrCreateUserApiKey) for agent/chat usage
     if (elevenLabsApiKey) {
       try {
-        const persistAllowed = (import.meta.env.VITE_ALLOW_PERSIST_API_KEYS === 'true');
+        const persistAllowed = import.meta.env.VITE_ALLOW_PERSIST_API_KEYS === 'true';
 
-        // Prefer ephemeral storage to avoid long-lived secrets in the browser
-        try {
-          sessionStorage.setItem("ai_sdk_api_key", elevenLabsApiKey);
-        } catch { /* ignore */ }
+        // Security: Use in-memory storage only for API keys (no browser storage)
+        // CodeQL flagged localStorage/sessionStorage as clear-text storage vulnerability
 
-        if (persistAllowed) {
-          try { localStorage.setItem("ai_sdk_api_key", elevenLabsApiKey); } catch { /* ignore */ }
-        } else {
-          // Clean up any legacy persistent copy
-          try { localStorage.removeItem("ai_sdk_api_key"); } catch { /* ignore */ }
-        }
-
-        // Also expose minimal context for components that can't import Layout state (in-memory only)
+        // Expose minimal context for components that can't import Layout state (in-memory only)
         window.__AI_CONTEXT = {
           ...(window.__AI_CONTEXT || {}),
           apiKey: elevenLabsApiKey,
         };
       } catch (e) {
-        console.warn("Storage access failed for AI SDK API key:", e);
+        console.warn('Storage access failed for AI SDK API key:', e);
       }
     }
   }, [elevenLabsApiKey]);
 
   // Initialize/refresh the agent SDK guard when client (tenant) context changes
   React.useEffect(() => {
-    const tenantId = currentTenantData?.id || selectedTenant?.id ||
-      selectedTenantId || null;
+    const tenantId = currentTenantData?.id || selectedTenant?.id || selectedTenantId || null;
     const tenantName = currentTenantData?.name || selectedTenant?.name || null;
 
     initAgentSdkGuard({ tenantId, tenantName });
@@ -1221,7 +1194,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         tenant_name: tenantName,
       };
     } catch (e) {
-      console.warn("Error exposing AI tenant context:", e);
+      console.warn('Error exposing AI tenant context:', e);
     }
   }, [currentTenantData, selectedTenant, selectedTenantId]);
 
@@ -1229,10 +1202,11 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   React.useEffect(() => {
     const currTenantId = user?.tenant_id || null;
     const isAdminLike = isAdminOrSuperAdmin(user);
-    const hasManualSelection = selectedTenantId !== null &&
+    const hasManualSelection =
+      selectedTenantId !== null &&
       selectedTenantId !== undefined &&
-      selectedTenantId !== "" &&
-      selectedTenantId !== "NO_TENANT_SELECTED_SAFETY_FILTER";
+      selectedTenantId !== '' &&
+      selectedTenantId !== 'NO_TENANT_SELECTED_SAFETY_FILTER';
 
     // If the logged-in user's tenant actually changed, reset caches/tenant data
     // Or if the user role changed which might affect default tenant selection logic
@@ -1258,9 +1232,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     }
 
     // Regular users: always align to their assigned tenant
-    if (
-      !isAdminLike && setSelectedTenantId && selectedTenantId !== currTenantId
-    ) {
+    if (!isAdminLike && setSelectedTenantId && selectedTenantId !== currTenantId) {
       setSelectedTenantId(currTenantId || null);
     }
   }, [user, selectedTenantId, setSelectedTenantId, clearCache]);
@@ -1270,13 +1242,12 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     const loadCurrentTenant = async () => {
       // ALWAYS log effect entry in dev
       if (import.meta.env.DEV) {
-        logDev("[Layout] loadCurrentTenant EFFECT RUNNING:", {
+        logDev('[Layout] loadCurrentTenant EFFECT RUNNING:', {
           user: !!user,
           effectiveTenantId,
           selectedTenantId,
           lastRequest: lastTenantRequestIdRef.current,
-          currentTenantData: currentTenantData?.name || currentTenantData?.id ||
-            null,
+          currentTenantData: currentTenantData?.name || currentTenantData?.id || null,
         });
       }
 
@@ -1293,7 +1264,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         const tenantIdToFetch = effectiveTenantId;
 
         if (import.meta.env.DEV) {
-          logDev("[Layout] loadCurrentTenant FETCHING:", {
+          logDev('[Layout] loadCurrentTenant FETCHING:', {
             effectiveTenantId: tenantIdToFetch,
             selectedTenantId,
             lastRequest: lastTenantRequestIdRef.current,
@@ -1315,15 +1286,16 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
 
           // For admins, clear the bad selection so they can pick a valid tenant
           if (
-            (user.role === "admin" || user.role === "superadmin") &&
-            setSelectedTenantId && selectedTenantId &&
+            (user.role === 'admin' || user.role === 'superadmin') &&
+            setSelectedTenantId &&
+            selectedTenantId &&
             effectiveTenantId === selectedTenantId
           ) {
             setSelectedTenantId(null);
             try {
-              localStorage.removeItem("selected_tenant_id");
+              localStorage.removeItem('selected_tenant_id');
             } catch {
-              console.warn("Storage access failed");
+              console.warn('Storage access failed');
             }
           }
           return;
@@ -1332,20 +1304,14 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         // Dedupe by id to prevent redundant Tenant.get calls
         if (lastTenantRequestIdRef.current === tenantIdToFetch) {
           if (import.meta.env.DEV) {
-            logDev(
-              "[Layout] loadCurrentTenant SKIPPED (dedupe):",
-              tenantIdToFetch,
-            );
+            logDev('[Layout] loadCurrentTenant SKIPPED (dedupe):', tenantIdToFetch);
           }
           return;
         }
         lastTenantRequestIdRef.current = tenantIdToFetch;
 
-        const tenant = await cachedRequest(
-          "Tenant",
-          "get",
-          { id: tenantIdToFetch },
-          () => Tenant.get(tenantIdToFetch),
+        const tenant = await cachedRequest('Tenant', 'get', { id: tenantIdToFetch }, () =>
+          Tenant.get(tenantIdToFetch),
         );
 
         if (tenant) {
@@ -1353,22 +1319,23 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
           setSelectedTenant(tenant);
           failedTenantIdsRef.current.delete(tenantIdToFetch);
         } else {
-          console.warn("Tenant not found/accessible:", tenantIdToFetch);
+          console.warn('Tenant not found/accessible:', tenantIdToFetch);
           failedTenantIdsRef.current.add(tenantIdToFetch);
           setCurrentTenantData(null);
           setSelectedTenant(null);
           lastTenantRequestIdRef.current = null;
 
           if (
-            (user.role === "admin" || user.role === "superadmin") &&
-            setSelectedTenantId && selectedTenantId &&
+            (user.role === 'admin' || user.role === 'superadmin') &&
+            setSelectedTenantId &&
+            selectedTenantId &&
             effectiveTenantId === selectedTenantId
           ) {
             setSelectedTenantId(null);
             try {
-              localStorage.removeItem("selected_tenant_id");
+              localStorage.removeItem('selected_tenant_id');
             } catch {
-              console.warn("Storage access failed");
+              console.warn('Storage access failed');
             }
           }
         }
@@ -1376,10 +1343,10 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         const attemptedTenantId = effectiveTenantId;
         const status = error?.response?.status || error?.status;
 
-        console.error("Tenant load failed:", {
+        console.error('Tenant load failed:', {
           tenantId: attemptedTenantId,
           status,
-          message: error?.message || "Unknown error",
+          message: error?.message || 'Unknown error',
         });
 
         // If it's a 404 or 429, mark this tenant as failed and clear everywhere
@@ -1398,15 +1365,15 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
 
           // CRITICAL FIX: Clear invalid tenant from localStorage for ALL users
           try {
-            const storedTenantId = localStorage.getItem("selected_tenant_id");
+            const storedTenantId = localStorage.getItem('selected_tenant_id');
             if (storedTenantId === attemptedTenantId) {
-              localStorage.removeItem("selected_tenant_id");
+              localStorage.removeItem('selected_tenant_id');
               if (setSelectedTenantId) {
                 setSelectedTenantId(null);
               }
             }
           } catch {
-            console.warn("Storage cleanup failed");
+            console.warn('Storage cleanup failed');
           }
         }
       }
@@ -1431,7 +1398,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   React.useEffect(() => {
     const handleTenantModified = async (event) => {
       const { entity } = event.detail || {};
-      if (entity === "Tenant" && effectiveTenantId) {
+      if (entity === 'Tenant' && effectiveTenantId) {
         // Tenant was modified, reload tenant data
         try {
           const updatedTenant = await Tenant.get(effectiveTenantId);
@@ -1444,15 +1411,15 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
             }
           }
         } catch (error) {
-          console.error("Failed to refresh tenant after update:", error);
+          console.error('Failed to refresh tenant after update:', error);
         }
       }
     };
 
-    window.addEventListener("entity-modified", handleTenantModified);
+    window.addEventListener('entity-modified', handleTenantModified);
 
     return () => {
-      window.removeEventListener("entity-modified", handleTenantModified);
+      window.removeEventListener('entity-modified', handleTenantModified);
     };
   }, [effectiveTenantId, clearCache]);
 
@@ -1484,16 +1451,13 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
             lastTenantRequestIdRef.current = t.id;
           }
         } else {
-          console.warn(
-            "Tenant branding fetch failed:",
-            res?.error || "Unknown error",
-          );
+          console.warn('Tenant branding fetch failed:', res?.error || 'Unknown error');
           setCurrentTenantData(null); // Clear stale data
           setSelectedTenant(null);
           lastTenantRequestIdRef.current = null; // Clear ref
         }
       } catch (error) {
-        console.error("Tenant branding fetch error (non-admin):", error);
+        console.error('Tenant branding fetch error (non-admin):', error);
         setCurrentTenantData(null);
         setSelectedTenant(null);
         lastTenantRequestIdRef.current = null;
@@ -1527,17 +1491,14 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       const fetchSettings = async () => {
         try {
           let settings;
-          if (user.role === "admin" || user.role === "superadmin") {
-            settings = await cachedRequest(
-              "ModuleSettings",
-              "list",
-              {},
-              () => ModuleSettings.list(),
+          if (user.role === 'admin' || user.role === 'superadmin') {
+            settings = await cachedRequest('ModuleSettings', 'list', {}, () =>
+              ModuleSettings.list(),
             );
           } else if (user.tenant_id) {
             settings = await cachedRequest(
-              "ModuleSettings",
-              "filter",
+              'ModuleSettings',
+              'filter',
               { filter: { tenant_id: user.tenant_id } },
               () => ModuleSettings.filter({ tenant_id: user.tenant_id }),
             );
@@ -1547,14 +1508,14 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
           setModuleSettings(settings || []);
           moduleSettingsLoadedRef.current = true; // Mark as loaded for the current user
         } catch (error) {
-          console.warn("Module settings load failed:", error);
+          console.warn('Module settings load failed:', error);
           setModuleSettings([]);
           // On error, do NOT mark as loaded, so it can retry
           moduleSettingsLoadedRef.current = false;
         }
       };
 
-      if (typeof window.requestIdleCallback === "function") {
+      if (typeof window.requestIdleCallback === 'function') {
         window.requestIdleCallback(fetchSettings, { timeout: 2000 });
       } else {
         setTimeout(fetchSettings, 750);
@@ -1570,17 +1531,14 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         try {
           if (user) {
             let settings;
-            if (user.role === "admin" || user.role === "superadmin") {
-              settings = await cachedRequest(
-                "ModuleSettings",
-                "list",
-                {},
-                () => ModuleSettings.list(),
+            if (user.role === 'admin' || user.role === 'superadmin') {
+              settings = await cachedRequest('ModuleSettings', 'list', {}, () =>
+                ModuleSettings.list(),
               );
             } else if (user.tenant_id) {
               settings = await cachedRequest(
-                "ModuleSettings",
-                "filter",
+                'ModuleSettings',
+                'filter',
                 { filter: { tenant_id: user.tenant_id } },
                 () => ModuleSettings.filter({ tenant_id: user.tenant_id }),
               );
@@ -1596,7 +1554,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
             moduleSettingsLoadedRef.current = true; // Mark as loaded after refresh
           }
         } catch (error) {
-          console.warn("Module settings reload failed:", error);
+          console.warn('Module settings reload failed:', error);
           // On error, do NOT mark as loaded, so it can retry
           moduleSettingsLoadedRef.current = false;
         }
@@ -1605,16 +1563,10 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       reloadSettings();
     };
 
-    window.addEventListener(
-      "module-settings-changed",
-      handleModuleSettingsChanged,
-    );
+    window.addEventListener('module-settings-changed', handleModuleSettingsChanged);
 
     return () => {
-      window.removeEventListener(
-        "module-settings-changed",
-        handleModuleSettingsChanged,
-      );
+      window.removeEventListener('module-settings-changed', handleModuleSettingsChanged);
     };
   }, [user, cachedRequest, clearCache]);
 
@@ -1644,7 +1596,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
 
     const dispatchEntityModifiedEvent = (entityName, payload = {}) => {
       window.dispatchEvent(
-        new CustomEvent("entity-modified", { detail: { entity: entityName, ...payload } }),
+        new CustomEvent('entity-modified', { detail: { entity: entityName, ...payload } }),
       );
     };
 
@@ -1652,12 +1604,12 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       const res = await originalEmployeeCreate(data);
       try {
         if (import.meta.env.DEV) {
-          console.debug("Employee created, refreshing data.");
+          console.debug('Employee created, refreshing data.');
         }
         if (clearCache) clearCache();
-        dispatchEntityModifiedEvent("Employee", { id: res?.id });
+        dispatchEntityModifiedEvent('Employee', { id: res?.id });
       } catch (e) {
-        console.warn("Data refresh failed after employee create:", e);
+        console.warn('Data refresh failed after employee create:', e);
       }
       return res;
     };
@@ -1666,12 +1618,12 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       const res = await originalEmployeeUpdate(id, data);
       try {
         if (import.meta.env.DEV) {
-          console.debug("Employee updated, refreshing data.");
+          console.debug('Employee updated, refreshing data.');
         }
         if (clearCache) clearCache();
-        dispatchEntityModifiedEvent("Employee", { id });
+        dispatchEntityModifiedEvent('Employee', { id });
       } catch (e) {
-        console.warn("Data refresh failed after employee update:", e);
+        console.warn('Data refresh failed after employee update:', e);
       }
       return res;
     };
@@ -1680,12 +1632,12 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       const res = await originalEmployeeDelete(id);
       try {
         if (import.meta.env.DEV) {
-          console.debug("Employee deleted, refreshing data.");
+          console.debug('Employee deleted, refreshing data.');
         }
         if (clearCache) clearCache();
-        dispatchEntityModifiedEvent("Employee", { id });
+        dispatchEntityModifiedEvent('Employee', { id });
       } catch (e) {
-        console.warn("Data refresh failed after employee delete:", e);
+        console.warn('Data refresh failed after employee delete:', e);
       }
       return res;
     };
@@ -1705,7 +1657,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
 
     const dispatchEntityModifiedEvent = (entityName, payload = {}) => {
       window.dispatchEvent(
-        new CustomEvent("entity-modified", { detail: { entity: entityName, ...payload } }),
+        new CustomEvent('entity-modified', { detail: { entity: entityName, ...payload } }),
       );
     };
 
@@ -1713,12 +1665,12 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       const res = await originalUserUpdate(id, data);
       try {
         if (import.meta.env.DEV) {
-          console.debug("User updated, refreshing current user.");
+          console.debug('User updated, refreshing current user.');
         }
         if (clearCache) clearCache();
-        dispatchEntityModifiedEvent("User", { id });
+        dispatchEntityModifiedEvent('User', { id });
       } catch (e) {
-        console.warn("Data refresh failed after user update:", e);
+        console.warn('Data refresh failed after user update:', e);
       }
       return res;
     };
@@ -1752,10 +1704,10 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   // }, [user, currentTenantData]);
 
   const getBrandingSettings = () => {
-    const defaultCompanyName = "Ai-SHA CRM";
-    const defaultLogoUrl = "/assets/Ai-SHA-logo-2.png"; // Default logo for global view
-    const defaultPrimaryColor = "#06b6d4"; // New Cyan
-    const defaultAccentColor = "#6366f1"; // New Indigo
+    const defaultCompanyName = 'Ai-SHA CRM';
+    const defaultLogoUrl = '/assets/Ai-SHA-logo-2.png'; // Default logo for global view
+    const defaultPrimaryColor = '#06b6d4'; // New Cyan
+    const defaultAccentColor = '#6366f1'; // New Indigo
 
     let companyName = defaultCompanyName;
     let logoUrl = defaultLogoUrl;
@@ -1773,20 +1725,18 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       // Admins/Superadmins:
       // If there's a selected tenant (e.g., from the switcher), use its branding.
       // Otherwise, if the user has specific branding set in their user object, use that.
-      if (user?.role === "superadmin" || user?.role === "admin") {
+      if (user?.role === 'superadmin' || user?.role === 'admin') {
         if (selectedTenantId && selectedTenant) {
           companyName = selectedTenant.name || defaultCompanyName;
           logoUrl = selectedTenant.logo_url || defaultLogoUrl;
           primaryColor = selectedTenant.primary_color || defaultPrimaryColor;
           accentColor = selectedTenant.accent_color || defaultAccentColor;
-        } else if (user.branding_settings) { // Fallback to user's own branding settings if no tenant selected
-          companyName = user.branding_settings.companyName ||
-            defaultCompanyName;
+        } else if (user.branding_settings) {
+          // Fallback to user's own branding settings if no tenant selected
+          companyName = user.branding_settings.companyName || defaultCompanyName;
           logoUrl = user.branding_settings.logoUrl || defaultLogoUrl;
-          primaryColor = user.branding_settings.primaryColor ||
-            defaultPrimaryColor;
-          accentColor = user.branding_settings.accentColor ||
-            defaultAccentColor;
+          primaryColor = user.branding_settings.primaryColor || defaultPrimaryColor;
+          accentColor = user.branding_settings.accentColor || defaultAccentColor;
         }
         // IMPORTANT: For non-admins/power-users, do NOT use personal branding here.
         // If currentTenantData is null, it means we are still fetching their assigned tenant branding (via getMyTenantBranding)
@@ -1812,7 +1762,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   // Debug: log branding in dev
   React.useEffect(() => {
     if (import.meta.env.DEV) {
-      logDev("[Layout] Branding:", {
+      logDev('[Layout] Branding:', {
         companyName,
         logoUrl,
         user: user?.email,
@@ -1820,13 +1770,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         currentTenantData: currentTenantData?.name,
       });
     }
-  }, [
-    companyName,
-    logoUrl,
-    user?.email,
-    selectedTenantId,
-    currentTenantData?.name,
-  ]);
+  }, [companyName, logoUrl, user?.email, selectedTenantId, currentTenantData?.name]);
 
   // Cache-bust static logo paths so updated files with the same name show immediately
   const logoVersionRef = React.useRef(0);
@@ -1842,12 +1786,13 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       try {
         const u = new URL(String(logoUrl));
         // Avoid appending cache-busting params to signed URLs (e.g., Supabase signed URLs)
-        const isSigned = u.pathname.includes('/storage/v1/object/sign') || u.searchParams.has('token');
+        const isSigned =
+          u.pathname.includes('/storage/v1/object/sign') || u.searchParams.has('token');
         if (isSigned) return u.toString();
-        u.searchParams.set("v", String(logoVersionRef.current || 1));
+        u.searchParams.set('v', String(logoVersionRef.current || 1));
         return u.toString();
       } catch {
-        return `${logoUrl}${String(logoUrl).includes("?") ? "&" : "?"}v=${
+        return `${logoUrl}${String(logoUrl).includes('?') ? '&' : '?'}v=${
           logoVersionRef.current || 1
         }`;
       }
@@ -1856,25 +1801,31 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     // For relative paths (e.g., /assets/...), make them relative to origin
     try {
       const u = new URL(String(logoUrl), window.location.origin);
-      u.searchParams.set("v", String(logoVersionRef.current || 1));
+      u.searchParams.set('v', String(logoVersionRef.current || 1));
       return u.pathname + u.search + u.hash;
     } catch {
-      return `${logoUrl}${String(logoUrl).includes("?") ? "&" : "?"}v=${
+      return `${logoUrl}${String(logoUrl).includes('?') ? '&' : '?'}v=${
         logoVersionRef.current || 1
       }`;
     }
   }, [logoUrl]);
   // Use tenant branding colors with safe fallbacks (remove hardcoded overrides)
-  const primaryColor = brandingSettings.primaryColor || "#06b6d4";
-  const accentColor = brandingSettings.accentColor || "#6366f1";
+  const primaryColor = brandingSettings.primaryColor || '#06b6d4';
+  const accentColor = brandingSettings.accentColor || '#6366f1';
   // UNUSED: elevenlabsAgentId - ChatWindow component is commented out
   // const elevenlabsAgentId = brandingSettings.elevenlabsAgentId;
 
   // Compute readable text colors for primary/accent backgrounds
   const getContrastText = (hex) => {
     const n = (h) => {
-      const s = h.replace("#", "");
-      const b = s.length === 3 ? s.split("").map((c) => c + c).join("") : s;
+      const s = h.replace('#', '');
+      const b =
+        s.length === 3
+          ? s
+              .split('')
+              .map((c) => c + c)
+              .join('')
+          : s;
       const r = parseInt(b.slice(0, 2), 16);
       const g = parseInt(b.slice(2, 4), 16);
       const bl = parseInt(b.slice(4, 6), 16);
@@ -1885,12 +1836,12 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       });
       const L = 0.2126 * srgb[0] + 0.7152 * srgb[1] + 0.0722 * srgb[2];
       // Return black for light colors, white for dark colors
-      return L > 0.179 ? "#0f172a" /* slate-900 */ : "#ffffff"; // Adjusted luminance threshold for better contrast
+      return L > 0.179 ? '#0f172a' /* slate-900 */ : '#ffffff'; // Adjusted luminance threshold for better contrast
     };
     try {
       return n(hex);
     } catch {
-      return "#ffffff";
+      return '#ffffff';
     }
   };
 
@@ -1902,10 +1853,14 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   // Convert HEX to HSL (for Tailwind CSS variable mapping like --primary/--accent)
   const hexToHsl = (hex) => {
     try {
-      let h = String(hex || "").trim();
+      let h = String(hex || '').trim();
       if (!h) return { h: 0, s: 0, l: 0 };
-      if (h.startsWith("#")) h = h.slice(1);
-      if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+      if (h.startsWith('#')) h = h.slice(1);
+      if (h.length === 3)
+        h = h
+          .split('')
+          .map((c) => c + c)
+          .join('');
       const r = parseInt(h.slice(0, 2), 16) / 255;
       const g = parseInt(h.slice(2, 4), 16) / 255;
       const b = parseInt(h.slice(4, 6), 16) / 255;
@@ -1955,18 +1910,18 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       const set = (k, v) => root.style.setProperty(k, String(v));
 
       // Direct color tokens used across the app
-      set("--primary-color", primaryColor);
-      set("--accent-color", accentColor);
-      set("--on-primary-text", onPrimaryText);
-      set("--on-accent-text", onAccentText);
+      set('--primary-color', primaryColor);
+      set('--accent-color', accentColor);
+      set('--on-primary-text', onPrimaryText);
+      set('--on-accent-text', onAccentText);
 
       // Map to Tailwind theme variables (expects HSL triplets)
-      set("--primary", hexToHslStringLocal(primaryColor));
-      set("--accent", hexToHslStringLocal(accentColor));
-      set("--primary-foreground", hexToHslStringLocal(onPrimaryText));
-      set("--accent-foreground", hexToHslStringLocal(onAccentText));
+      set('--primary', hexToHslStringLocal(primaryColor));
+      set('--accent', hexToHslStringLocal(accentColor));
+      set('--primary-foreground', hexToHslStringLocal(onPrimaryText));
+      set('--accent-foreground', hexToHslStringLocal(onAccentText));
     } catch (e) {
-      console.warn("Failed to apply branding variables at root:", e);
+      console.warn('Failed to apply branding variables at root:', e);
     }
   }, [primaryColor, accentColor, onPrimaryText, onAccentText]);
 
@@ -1975,13 +1930,13 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       if (user) {
         try {
           await createAuditLog({
-            action_type: "logout",
-            entity_type: "User",
+            action_type: 'logout',
+            entity_type: 'User',
             entity_id: user.id,
             description: `User logged out: ${user.full_name || user.email}`,
           });
         } catch (auditError) {
-          console.warn("Logout audit log failed:", auditError);
+          console.warn('Logout audit log failed:', auditError);
         }
       }
 
@@ -1991,7 +1946,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
           clearCache(); // Clear all cached API requests
         }
       } catch (e) {
-        console.warn("API cache clear failed on logout:", e);
+        console.warn('API cache clear failed on logout:', e);
       }
 
       // Explicitly sign out from Supabase Auth (clears local auth session & tokens)
@@ -2003,28 +1958,28 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
           await supabase.auth.signOut();
         }
       } catch (e) {
-        console.warn("Supabase signOut failed (continuing logout):", e);
+        console.warn('Supabase signOut failed (continuing logout):', e);
       }
 
       // NEW: Clear chat/session context before logging out
       try {
         // Notify chat UI to clean up (e.g., stop TTS playback)
-        window.dispatchEvent(new CustomEvent("chat:reset"));
+        window.dispatchEvent(new CustomEvent('chat:reset'));
       } catch (e) {
-        console.warn("Chat reset dispatch failed on logout:", e);
+        console.warn('Chat reset dispatch failed on logout:', e);
       }
 
       try {
         // CRITICAL: Clear ALL tenant-specific data on logout to prevent cross-tenant data leakage
-        
+
         // Clear explicit tenant keys
-        localStorage.removeItem("selected_tenant_id");
-        localStorage.removeItem("tenant_id");
-        localStorage.removeItem("effective_user_tenant_id");
-        
+        localStorage.removeItem('selected_tenant_id');
+        localStorage.removeItem('tenant_id');
+        localStorage.removeItem('effective_user_tenant_id');
+
         // Clear chat/AI-related keys
-        localStorage.removeItem("ai_sdk_api_key");
-        localStorage.removeItem("force_chat_fallback");
+        localStorage.removeItem('ai_sdk_api_key');
+        localStorage.removeItem('force_chat_fallback');
 
         // FIX: Prevent auto-login as mock user after explicit logout
         localStorage.setItem('DISABLE_MOCK_USER', 'true');
@@ -2036,44 +1991,47 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         for (let i = 0; i < localStorage.length; i++) {
           const k = localStorage.key(i);
           if (!k) continue;
-          
+
           // PRESERVE navigation order preferences across sessions
-          if (k.startsWith("aisha_crm_nav_order") || k.startsWith("aisha_crm_secondary_nav_order")) {
+          if (
+            k.startsWith('aisha_crm_nav_order') ||
+            k.startsWith('aisha_crm_secondary_nav_order')
+          ) {
             continue;
           }
-          
+
           // PRESERVE system flags
-          if (k === "DISABLE_MOCK_USER") {
+          if (k === 'DISABLE_MOCK_USER') {
             continue;
           }
-          
+
           // REMOVE everything else (tenant data, dashboard cache, chat, auth tokens, etc.)
           if (
-            k.startsWith("chat_") ||
-            k.startsWith("agent_") ||
-            k.startsWith("ai_chat_") ||
-            k.startsWith("agent_conversation") ||
-            k.startsWith("conversation_") ||
-            k.startsWith("dashboard:") ||
-            k.startsWith("sb-") || // Supabase auth tokens
-            k.includes("tenant") || // Any tenant-related keys
-            k.startsWith("aisha_crm_") // Other app-specific keys (except nav order)
+            k.startsWith('chat_') ||
+            k.startsWith('agent_') ||
+            k.startsWith('ai_chat_') ||
+            k.startsWith('agent_conversation') ||
+            k.startsWith('conversation_') ||
+            k.startsWith('dashboard:') ||
+            k.startsWith('sb-') || // Supabase auth tokens
+            k.includes('tenant') || // Any tenant-related keys
+            k.startsWith('aisha_crm_') // Other app-specific keys (except nav order)
           ) {
             toRemove.push(k);
           }
         }
         toRemove.forEach((k) => localStorage.removeItem(k));
-        
+
         console.log(`[Logout] Cleared ${toRemove.length} localStorage keys for session cleanup`);
       } catch (e) {
-        console.warn("Session data cleanup failed on logout:", e);
+        console.warn('Session data cleanup failed on logout:', e);
       }
 
       try {
         // Reset agent guard context (clears in-memory tenant context)
         resetAgentSdkGuard && resetAgentSdkGuard();
       } catch (e) {
-        console.warn("Agent guard reset failed on logout:", e);
+        console.warn('Agent guard reset failed on logout:', e);
       }
 
       try {
@@ -2085,9 +2043,9 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       } catch {
         // ignore network errors, still navigate out
       }
-      window.location.href = "/";
+      window.location.href = '/';
     } catch (error) {
-      console.error("User logout failed:", error);
+      console.error('User logout failed:', error);
     }
   };
 
@@ -2130,16 +2088,15 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   const showEmployeeScope = React.useMemo(() => {
     if (!user) return false;
     return (
-      user.role === "admin" ||
-      user.role === "superadmin" ||
-      user.permissions?.dashboard_scope === "aggregated"
+      user.role === 'admin' ||
+      user.role === 'superadmin' ||
+      user.permissions?.dashboard_scope === 'aggregated'
     );
   }, [user]);
 
-
   // NEW: Reposition any softphone/call widgets so they sit to the left of the Avatar launcher
   React.useEffect(() => {
-    const AVATAR_ID = "ai-avatar-launcher";
+    const AVATAR_ID = 'ai-avatar-launcher';
     const GAP_PX = 16; // gap between phone widget and avatar
     const MIN_RIGHT_PX = 128; // minimum right offset (for tiny screens)
     const BOTTOM_OFFSET_PX = 18;
@@ -2148,8 +2105,8 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
 
     // Heuristic selectors for softphone/call widgets (incl. iframe cases)
     const PHONE_SELECTORS = [
-      "#signalwire-softphone",
-      "[data-softphone]",
+      '#signalwire-softphone',
+      '[data-softphone]',
       '[id*="softphone" i]',
       '[class*="softphone" i]',
       '[id*="signalwire" i]',
@@ -2166,12 +2123,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
 
     const rectsOverlap = (a, b) => {
       if (!a || !b) return false;
-      return !(
-        a.right <= b.left ||
-        a.left >= b.right ||
-        a.bottom <= b.top ||
-        a.top >= b.bottom
-      );
+      return !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
     };
 
     const getAvatar = () => document.getElementById(AVATAR_ID);
@@ -2179,10 +2131,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     const getAvatarZ = () => {
       const avatar = getAvatar();
       if (!avatar) return 10000;
-      const z = Number.parseInt(
-        window.getComputedStyle(avatar).zIndex || "10000",
-        10,
-      );
+      const z = Number.parseInt(window.getComputedStyle(avatar).zIndex || '10000', 10);
       return Number.isFinite(z) ? z : 10000;
     };
 
@@ -2191,24 +2140,21 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       if (!avatar) return MIN_RIGHT_PX;
       const r = avatar.getBoundingClientRect();
       // Distance from viewport right edge to the avatar's LEFT edge, plus gap
-      const dynamicRight = Math.max(
-        Math.round(window.innerWidth - r.left + GAP_PX),
-        MIN_RIGHT_PX,
-      );
+      const dynamicRight = Math.max(Math.round(window.innerWidth - r.left + GAP_PX), MIN_RIGHT_PX);
       return dynamicRight;
     };
 
     // NEW: Ensure candidate element is in document.body (escape transformed/overflow ancestors)
     const ensureInDocumentBody = (el) => {
       try {
-        const likelyThirdParty = el.tagName === "IFRAME" ||
+        const likelyThirdParty =
+          el.tagName === 'IFRAME' ||
           (el.id && /signalwire|softphone|call/i.test(el.id)) ||
-          (el.className &&
-            /signalwire|softphone|call/i.test(String(el.className)));
+          (el.className && /signalwire|softphone|call/i.test(String(el.className)));
 
         if (likelyThirdParty && el.parentElement !== document.body) {
           // Mark and move to body to break out of stacking contexts
-          el.setAttribute("data-teleported", "true");
+          el.setAttribute('data-teleported', 'true');
           document.body.appendChild(el);
         }
       } catch {
@@ -2220,14 +2166,14 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       try {
         const s = el.style;
         // Normalize base styles
-        s.position = "fixed";
+        s.position = 'fixed';
         s.bottom = `${BOTTOM_OFFSET_PX}px`;
         s.right = `${computeRightOffset()}px`;
         // Ensure it sits above the avatar
         const baseZ = getAvatarZ();
         s.zIndex = String(Math.max(baseZ + 2, MAX_Z));
-        s.transform = "none";
-        s.pointerEvents = "auto";
+        s.transform = 'none';
+        s.pointerEvents = 'auto';
 
         // If still overlapping avatar visually, push further left intelligently
         requestAnimationFrame(() => {
@@ -2240,10 +2186,8 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
           let tries = 0;
           const maxTries = 8;
           while (rectsOverlap(avatarRect, phoneRect) && tries < maxTries) {
-            const currentRight = parseInt(s.right || "0", 10) || MIN_RIGHT_PX;
-            const pushBy = Math.ceil(
-              Math.max(avatarRect.width, 64) + GAP_PX + 12,
-            );
+            const currentRight = parseInt(s.right || '0', 10) || MIN_RIGHT_PX;
+            const pushBy = Math.ceil(Math.max(avatarRect.width, 64) + GAP_PX + 12);
             s.right = `${currentRight + pushBy}px`;
             tries += 1;
             phoneRect = el.getBoundingClientRect();
@@ -2252,9 +2196,9 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
           // Fallback: if overlap persists (e.g., third-party inline styles fight us), shift the avatar left instead
           if (rectsOverlap(avatarRect, phoneRect)) {
             const shift = Math.ceil((phoneRect.width || 160) + GAP_PX + 12);
-            avatar.style.position = "fixed";
+            avatar.style.position = 'fixed';
             avatar.style.right = `${Math.max(AVATAR_RIGHT_OFFSET_PX, shift)}px`;
-            avatar.style.bottom = "16px";
+            avatar.style.bottom = '16px';
             // Keep avatar below phone in stacking order
             avatar.style.zIndex = String(getAvatarZ() - 1);
           }
@@ -2269,8 +2213,8 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         const rect = el.getBoundingClientRect();
         const vw = window.innerWidth;
         const vh = window.innerHeight;
-        const nearRight = rect.right >= (vw - 260); // widened trigger zone
-        const nearBottom = rect.bottom >= (vh - 260);
+        const nearRight = rect.right >= vw - 260; // widened trigger zone
+        const nearBottom = rect.bottom >= vh - 260;
         return nearRight && nearBottom;
       } catch {
         return false;
@@ -2282,12 +2226,12 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         // Pin avatar at bottom-right as anchor (we may shift it in fallback)
         const avatar = getAvatar();
         if (avatar) {
-          if (!avatar.style.position) avatar.style.position = "fixed";
+          if (!avatar.style.position) avatar.style.position = 'fixed';
           // Start at default; fallback may change this later
           avatar.style.right = `${AVATAR_RIGHT_OFFSET_PX}px`;
-          avatar.style.bottom = "16px";
+          avatar.style.bottom = '16px';
           // Keep it lower than the phone z-index; phone will be MAX_Z
-          avatar.style.zIndex = "10004";
+          avatar.style.zIndex = '10004';
         }
 
         // Find and reposition likely phone widgets
@@ -2304,7 +2248,9 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
             // Always try to bring the phone above everything and to the left of avatar
             try {
               el.style.zIndex = String(MAX_Z);
-            } catch { /* ignore */ }
+            } catch {
+              /* ignore */
+            }
             placeLeftOfAvatar(el);
           });
         });
@@ -2320,14 +2266,16 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     mo.observe(document.body, { childList: true, subtree: true });
 
     // Re-adjust on resize (layout shifts)
-    window.addEventListener("resize", adjustAll);
+    window.addEventListener('resize', adjustAll);
 
     return () => {
       clearTimeout(t);
       try {
         mo.disconnect();
-      } catch { /* ignore */ }
-      window.removeEventListener("resize", adjustAll);
+      } catch {
+        /* ignore */
+      }
+      window.removeEventListener('resize', adjustAll);
     };
   }, []);
 
@@ -2347,9 +2295,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center max-w-md">
           <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-            <h2 className="text-lg font-semibold text-red-800 mb-2">
-              User Data Not Available
-            </h2>
+            <h2 className="text-lg font-semibold text-red-800 mb-2">User Data Not Available</h2>
             <p className="text-red-600 mb-4">{userError}</p>
             <button
               onClick={() => window.location.reload()}
@@ -2376,11 +2322,11 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 -z-10 opacity-10"
           style={{
-            backgroundImage: `url(${logoUrl || "/assets/Ai-SHA-logo-2.png"})`,
-            backgroundSize: "min(70vmin, 720px)",
-            backgroundRepeat: "no-repeat",
-            backgroundPosition: "center",
-            filter: "blur(6px)",
+            backgroundImage: `url(${logoUrl || '/assets/Ai-SHA-logo-2.png'})`,
+            backgroundSize: 'min(70vmin, 720px)',
+            backgroundRepeat: 'no-repeat',
+            backgroundPosition: 'center',
+            filter: 'blur(6px)',
           }}
         />
         {/* 4V Data Consulting logo watermark (top left) */}
@@ -2404,28 +2350,26 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
           style={{ borderColor: primaryColor }}
         >
           <div className="text-center mb-6">
-            <img
-              src="/assets/Ai-SHA-logo-2.png"
-              alt="AI-SHA CRM"
-              className="h-16 mx-auto mb-4"
-            />
-            <h2 className="text-2xl font-bold text-slate-800 mb-2">
-              Welcome to AI-SHA CRM
-            </h2>
+            <img src="/assets/Ai-SHA-logo-2.png" alt="AI-SHA CRM" className="h-16 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-slate-800 mb-2">Welcome to AI-SHA CRM</h2>
             <p className="text-slate-600">Sign in to access your account</p>
-            
+
             {/* Environment indicator on login page */}
             {(() => {
               // Use runtime window._env_ (injected by entrypoint) with fallback to build-time import.meta.env
-              const backendUrl = window._env_?.VITE_AISHACRM_BACKEND_URL || import.meta.env.VITE_AISHACRM_BACKEND_URL || '';
-              const supabaseUrl = window._env_?.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+              const backendUrl =
+                window._env_?.VITE_AISHACRM_BACKEND_URL ||
+                import.meta.env.VITE_AISHACRM_BACKEND_URL ||
+                '';
+              const supabaseUrl =
+                window._env_?.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
               const isDev = backendUrl.includes('localhost') || backendUrl.includes('127.0.0.1');
               const isDevDb = supabaseUrl.includes('efzqxjpfewkrgpdootte');
               const isProdDb = supabaseUrl.includes('ehjlenywplgyiahgxkfj');
-              
+
               let envLabel = null;
               let bgColor = '';
-              
+
               if (isDev && isDevDb) {
                 envLabel = '🔵 DEVELOPMENT ENVIRONMENT';
                 bgColor = 'bg-blue-100 border-blue-300 text-blue-800';
@@ -2436,14 +2380,14 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                 envLabel = '🟡 STAGING ENVIRONMENT';
                 bgColor = 'bg-yellow-100 border-yellow-300 text-yellow-800';
               }
-              
+
               return envLabel ? (
                 <div className={`mt-4 p-3 border rounded-md ${bgColor}`}>
                   <p className="text-sm font-bold text-center">{envLabel}</p>
                 </div>
               ) : null;
             })()}
-            
+
             {/* Password reset success message */}
             {new URLSearchParams(window.location.search).get('reset') === 'success' && (
               <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
@@ -2452,7 +2396,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                 </p>
               </div>
             )}
-            
+
             {/* Session expired message */}
             {new URLSearchParams(window.location.search).get('session_expired') === 'true' && (
               <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-md">
@@ -2470,7 +2414,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
               const password = e.target.password.value;
 
               try {
-                logDev("[Login] Attempting Supabase auth login:", email);
+                logDev('[Login] Attempting Supabase auth login:', email);
                 const { error } = await supabase.auth.signInWithPassword({
                   email,
                   password,
@@ -2478,31 +2422,34 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                 if (error) {
                   throw error;
                 }
-                logDev("[Login] Supabase auth successful, calling backend login...");
-                
+                logDev('[Login] Supabase auth successful, calling backend login...');
+
                 // Call backend /api/auth/login to get JWT cookies
                 // Use runtime env (window._env_) with fallback to build-time env
-                const backendUrl = window._env_?.VITE_AISHACRM_BACKEND_URL || import.meta.env.VITE_AISHACRM_BACKEND_URL || '';
+                const backendUrl =
+                  window._env_?.VITE_AISHACRM_BACKEND_URL ||
+                  import.meta.env.VITE_AISHACRM_BACKEND_URL ||
+                  '';
                 const loginResponse = await fetch(`${backendUrl}/api/auth/login`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   credentials: 'include', // Important: include cookies
-                  body: JSON.stringify({ email, password })
+                  body: JSON.stringify({ email, password }),
                 });
-                
+
                 if (!loginResponse.ok) {
                   throw new Error(`Backend login failed: ${loginResponse.status}`);
                 }
-                
+
                 const loginData = await loginResponse.json();
                 const tenant_id = loginData.data?.user?.tenant_id;
-                
-                logDev("[Login] Login response data:", { 
-                  tenant_id, 
+
+                logDev('[Login] Login response data:', {
+                  tenant_id,
                   hasUser: !!loginData.data?.user,
-                  userKeys: Object.keys(loginData.data?.user || {})
+                  userKeys: Object.keys(loginData.data?.user || {}),
                 });
-                
+
                 // Clear backend dashboard cache to ensure fresh data after login
                 if (tenant_id) {
                   try {
@@ -2510,30 +2457,29 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       credentials: 'include',
-                      body: JSON.stringify({ tenant_id })
+                      body: JSON.stringify({ tenant_id }),
                     });
                     const cacheResult = await cacheResponse.json();
-                    logDev("[Login] Dashboard cache cleared:", cacheResult);
+                    logDev('[Login] Dashboard cache cleared:', cacheResult);
                   } catch (cacheErr) {
-                    console.warn("[Login] Failed to clear cache (non-critical):", cacheErr);
+                    console.warn('[Login] Failed to clear cache (non-critical):', cacheErr);
                   }
                 } else {
-                  console.warn("[Login] No tenant_id found in login response, skipping cache clear");
+                  console.warn(
+                    '[Login] No tenant_id found in login response, skipping cache clear',
+                  );
                 }
-                
-                logDev("[Login] Backend login successful, reloading...");
+
+                logDev('[Login] Backend login successful, reloading...');
                 window.location.reload();
               } catch (error) {
-                console.error("[Login] Login failed:", error);
-                alert("Login failed: " + (error?.message || "Unknown error"));
+                console.error('[Login] Login failed:', error);
+                alert('Login failed: ' + (error?.message || 'Unknown error'));
               }
             }}
           >
             <div className="mb-4">
-              <label
-                className="block text-slate-800 text-sm font-semibold mb-2"
-                htmlFor="email"
-              >
+              <label className="block text-slate-800 text-sm font-semibold mb-2" htmlFor="email">
                 Email
               </label>
               <input
@@ -2544,16 +2490,13 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                 autoComplete="email"
                 autoFocus
                 className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 bg-white text-slate-900"
-                style={{ "--tw-ring-color": accentColor }}
+                style={{ '--tw-ring-color': accentColor }}
                 placeholder="your-email@example.com"
               />
             </div>
 
             <div className="mb-4">
-              <label
-                className="block text-slate-800 text-sm font-semibold mb-2"
-                htmlFor="password"
-              >
+              <label className="block text-slate-800 text-sm font-semibold mb-2" htmlFor="password">
                 Password
               </label>
               <input
@@ -2563,7 +2506,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                 required
                 autoComplete="current-password"
                 className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 bg-white text-slate-900"
-                style={{ "--tw-ring-color": accentColor }}
+                style={{ '--tw-ring-color': accentColor }}
                 placeholder="Enter your password"
               />
             </div>
@@ -2602,14 +2545,16 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                     const result = await response.json();
                     if (!response.ok) {
                       // Detect Supabase rate limit error (429 or rate_limit in message)
-                      const isRateLimit = response.status === 429 ||
-                        (result.message && (
-                          result.message.includes('rate limit') ||
-                          result.message.includes('over_email_send_rate_limit')
-                        ));
+                      const isRateLimit =
+                        response.status === 429 ||
+                        (result.message &&
+                          (result.message.includes('rate limit') ||
+                            result.message.includes('over_email_send_rate_limit')));
 
                       if (isRateLimit) {
-                        throw new Error('Too many password reset attempts. Please wait 60 seconds and try again.');
+                        throw new Error(
+                          'Too many password reset attempts. Please wait 60 seconds and try again.',
+                        );
                       }
                       throw new Error(result.message || 'Failed to send reset email');
                     }
@@ -2637,9 +2582,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         <PasswordChangeModal
           user={user}
           onPasswordChanged={() => {
-            logDev(
-              "[Password Change] Password changed successfully, reloading...",
-            );
+            logDev('[Password Change] Password changed successfully, reloading...');
             window.location.reload(); // Reload to refresh user data
           }}
         />
@@ -2657,64 +2600,55 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         className="border-b border-slate-800 px-4 py-2 flex flex-col items-center"
         data-testid="sidebar-header"
       >
-        {logoUrl
-          ? (
-            <img
-              src={displayedLogoUrl}
-              alt={companyName}
-              className="h-20 w-auto max-w-[180px] object-contain"
-              onError={(e) => {
-                // Hard fallback to global app logo so branding is always visible
-                try {
-                  const img = e?.currentTarget || e?.target;
-                  if (!img) return;
-
-                  // Prevent infinite retry loop by only attempting fallback once
-                  if (!img.dataset.fallbackApplied) {
-                    img.dataset.fallbackApplied = "1";
-                    const fallbackSrc = "/assets/Ai-SHA-logo-2.png"; // stable URL; no cache-busting here
-                    img.src = fallbackSrc;
-                    img.style.display = ""; // ensure it's visible
-                    if (import.meta.env.DEV) {
-                      console.debug("Logo failed to load, swapped to default:", {
-                        raw: logoUrl,
-                        resolved: displayedLogoUrl,
-                        fallback: fallbackSrc,
-                      });
-                    }
-                    return;
-                  }
-                } catch (err) {
-                  if (import.meta.env.DEV) {
-                    console.debug(
-                      "Logo fallback swap error (safe to ignore):",
-                      err?.message || err,
-                    );
-                  }
-                }
-
-                // If even the fallback fails, show the text-based placeholder
+        {logoUrl ? (
+          <img
+            src={displayedLogoUrl}
+            alt={companyName}
+            className="h-20 w-auto max-w-[180px] object-contain"
+            onError={(e) => {
+              // Hard fallback to global app logo so branding is always visible
+              try {
                 const img = e?.currentTarget || e?.target;
-                if (img) {
-                  img.style.display = "none";
-                  if (img.nextElementSibling) {
-                    img.nextElementSibling.style.display = "flex";
-                  }
-                }
-              }}
-              onLoad={(e) => {
-                const fallback = e.target.nextElementSibling;
-                if (fallback) fallback.style.display = "none";
-              }}
-            />
-          )
-          : null}
+                if (!img) return;
 
-        <div
-          className={`h-12 flex items-center justify-center ${
-            logoUrl ? "hidden" : ""
-          }`}
-        >
+                // Prevent infinite retry loop by only attempting fallback once
+                if (!img.dataset.fallbackApplied) {
+                  img.dataset.fallbackApplied = '1';
+                  const fallbackSrc = '/assets/Ai-SHA-logo-2.png'; // stable URL; no cache-busting here
+                  img.src = fallbackSrc;
+                  img.style.display = ''; // ensure it's visible
+                  if (import.meta.env.DEV) {
+                    console.debug('Logo failed to load, swapped to default:', {
+                      raw: logoUrl,
+                      resolved: displayedLogoUrl,
+                      fallback: fallbackSrc,
+                    });
+                  }
+                  return;
+                }
+              } catch (err) {
+                if (import.meta.env.DEV) {
+                  console.debug('Logo fallback swap error (safe to ignore):', err?.message || err);
+                }
+              }
+
+              // If even the fallback fails, show the text-based placeholder
+              const img = e?.currentTarget || e?.target;
+              if (img) {
+                img.style.display = 'none';
+                if (img.nextElementSibling) {
+                  img.nextElementSibling.style.display = 'flex';
+                }
+              }
+            }}
+            onLoad={(e) => {
+              const fallback = e.target.nextElementSibling;
+              if (fallback) fallback.style.display = 'none';
+            }}
+          />
+        ) : null}
+
+        <div className={`h-12 flex items-center justify-center ${logoUrl ? 'hidden' : ''}`}>
           <div
             className="w-10 h-10 rounded-lg flex items-center justify-center"
             style={{ backgroundColor: primaryColor }}
@@ -2723,28 +2657,20 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
               {companyName.charAt(0).toUpperCase()}
             </span>
           </div>
-          <span className="font-bold text-xl text-slate-100 ml-2">
-            {companyName}
-          </span>
+          <span className="font-bold text-xl text-slate-100 ml-2">{companyName}</span>
         </div>
 
-        {(user?.role === "superadmin" || user?.role === "admin") &&
-          selectedTenantId && selectedTenant &&
-          (
+        {(user?.role === 'superadmin' || user?.role === 'admin') &&
+          selectedTenantId &&
+          selectedTenant && (
             <p className="text-xs text-slate-400 mt-1 text-center">
-              Managing Client:{" "}
-              <span className="font-medium text-slate-300">
-                {selectedTenant.name}
-              </span>
+              Managing Client:{' '}
+              <span className="font-medium text-slate-300">{selectedTenant.name}</span>
             </p>
           )}
-        {(user?.role === "superadmin" || user?.role === "admin") &&
-          !selectedTenantId &&
-          (
-            <p className="text-xs text-orange-400 mt-1 text-center">
-              ⚠️ No Client Selected
-            </p>
-          )}
+        {(user?.role === 'superadmin' || user?.role === 'admin') && !selectedTenantId && (
+          <p className="text-xs text-orange-400 mt-1 text-center">⚠️ No Client Selected</p>
+        )}
       </div>
 
       <div className="px-4 py-2">
@@ -2752,9 +2678,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       </div>
 
       <div className="px-4 flex items-center justify-between">
-        <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider">
-          Navigation
-        </p>
+        <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Navigation</p>
         <div className="flex items-center gap-1">
           {(hasCustomNavOrder || hasCustomSecondaryOrder) && (
             <button
@@ -2770,23 +2694,20 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
             type="button"
             onClick={() => setIsDragMode(!isDragMode)}
             className={`p-1 transition-colors ${isDragMode ? 'text-blue-400' : 'text-slate-500 hover:text-slate-300'}`}
-            title={isDragMode ? "Exit reorder mode" : "Reorder navigation items"}
+            title={isDragMode ? 'Exit reorder mode' : 'Reorder navigation items'}
           >
             <GripVertical className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
-      <nav
-        className="flex-1 px-4 py-1 overflow-y-auto"
-        data-testid="main-navigation"
-      >
+      <nav className="flex-1 px-4 py-1 overflow-y-auto" data-testid="main-navigation">
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
           onDragEnd={handleNavDragEnd}
         >
           <SortableContext
-            items={filteredNavItems.map(item => item.href)}
+            items={filteredNavItems.map((item) => item.href)}
             strategy={verticalListSortingStrategy}
           >
             <ul className="space-y-1">
@@ -2812,7 +2733,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
           onDragEnd={handleSecondaryDragEnd}
         >
           <SortableContext
-            items={filteredSecondaryNavItems.map(item => item.href)}
+            items={filteredSecondaryNavItems.map((item) => item.href)}
             strategy={verticalListSortingStrategy}
           >
             <ul className="space-y-1">
@@ -2827,62 +2748,70 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                     <Link
                       to={createPageUrl(item.href)}
                       data-testid={`nav-${item.href.toLowerCase()}`}
-                      className={`flex-1 flex items-center ${item.isAvatar ? "justify-center" : "gap-3"
-                        } px-3 py-2.5 rounded-lg transition-all text-base font-medium ${currentPageName === item.href
-                          ? (item.isAvatar
-                            ? "bg-transparent"
-                            : "shadow-lg nav-active")
-                          : "text-slate-400 hover:bg-slate-800 hover:text-slate-300"
-                        }`}
+                      className={`flex-1 flex items-center ${
+                        item.isAvatar ? 'justify-center' : 'gap-3'
+                      } px-3 py-2.5 rounded-lg transition-all text-base font-medium ${
+                        currentPageName === item.href
+                          ? item.isAvatar
+                            ? 'bg-transparent'
+                            : 'shadow-lg nav-active'
+                          : 'text-slate-400 hover:bg-slate-800 hover:text-slate-300'
+                      }`}
                       onClick={onNavClick}
-                      style={currentPageName === item.href && !item.isAvatar
-                        ? {
-                          backgroundColor: "var(--primary-color)",
-                          color: "var(--on-primary-text)",
-                        }
-                        : {}}
+                      style={
+                        currentPageName === item.href && !item.isAvatar
+                          ? {
+                              backgroundColor: 'var(--primary-color)',
+                              color: 'var(--on-primary-text)',
+                            }
+                          : {}
+                      }
                     >
-                      {item.isAvatar
-                        ? (
-                          <div
-                            className="relative"
-                            style={{
-                              borderRadius: "50%",
-                              padding: "3px",
-                              background: currentPageName === item.href
+                      {item.isAvatar ? (
+                        <div
+                          className="relative"
+                          style={{
+                            borderRadius: '50%',
+                            padding: '3px',
+                            background:
+                              currentPageName === item.href
                                 ? `linear-gradient(135deg, ${primaryColor}, ${accentColor})`
-                                : "transparent",
-                              boxShadow: currentPageName === item.href
+                                : 'transparent',
+                            boxShadow:
+                              currentPageName === item.href
                                 ? `0 0 15px ${primaryColor}, 0 0 30px ${accentColor}`
-                                : "none",
+                                : 'none',
+                          }}
+                        >
+                          <img
+                            src={item.avatarUrl}
+                            alt="AI Assistant"
+                            style={{
+                              width: '0.75in',
+                              height: '0.75in',
+                              borderRadius: '50%',
                             }}
-                          >
-                            <img
-                              src={item.avatarUrl}
-                              alt="AI Assistant"
-                              style={{
-                                width: "0.75in",
-                                height: "0.75in",
-                                borderRadius: "50%",
-                              }}
-                              className={`object-cover sidebar-avatar-border ${currentPageName === item.href
-                                  ? "opacity-100"
-                                  : "opacity-90 hover:opacity-100"
-                                }`}
-                            />
-                          </div>
-                        )
-                        : (
-                          <item.icon
-                            className={`w-5 h-5 ${currentPageName === item.href ? "" : "text-slate-400"
-                              }`}
-                            style={currentPageName === item.href
-                              ? {
-                                color: "var(--on-primary-text)",
-                              }
-                              : {}}
+                            className={`object-cover sidebar-avatar-border ${
+                              currentPageName === item.href
+                                ? 'opacity-100'
+                                : 'opacity-90 hover:opacity-100'
+                            }`}
                           />
-                        )}
+                        </div>
+                      ) : (
+                        <item.icon
+                          className={`w-5 h-5 ${
+                            currentPageName === item.href ? '' : 'text-slate-400'
+                          }`}
+                          style={
+                            currentPageName === item.href
+                              ? {
+                                  color: 'var(--on-primary-text)',
+                                }
+                              : {}
+                          }
+                        />
+                      )}
 
                       {!item.isAvatar && <span>{item.label}</span>}
                     </Link>
@@ -2898,16 +2827,14 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
 
   return (
     <div
-      className={`brand-scope ${
-        theme === "light" ? "theme-light" : "theme-dark"
-      }`}
+      className={`brand-scope ${theme === 'light' ? 'theme-light' : 'theme-dark'}`}
       style={{
         /* Inject brand CSS variables so mappings resolve everywhere */
-        "--primary-color": primaryColor,
-        "--accent-color": accentColor,
-        "--on-primary-text": onPrimaryText,
-        "--on-accent-text": onAccentText,
-        backgroundColor: "var(--app-bg, #0f172a)",
+        '--primary-color': primaryColor,
+        '--accent-color': accentColor,
+        '--on-primary-text': onPrimaryText,
+        '--on-accent-text': onAccentText,
+        backgroundColor: 'var(--app-bg, #0f172a)',
       }}
     >
       {/* Ensure global portal targets exist for any dialog libraries */}
@@ -3703,9 +3630,9 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       </style>
 
       {/* Background heartbeat that ensures due cron jobs are processed when an admin is active */}
-  <CronHeartbeat />
-  {/* Keep user presence fresh while they are active */}
-  <UserPresenceHeartbeat currentUser={user} />
+      <CronHeartbeat />
+      {/* Keep user presence fresh while they are active */}
+      <UserPresenceHeartbeat currentUser={user} />
 
       {/* System Status Indicator (moved to top level within AppLayout) */}
       <SystemStatusIndicator user={user} />
@@ -3721,19 +3648,12 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
               <Menu className="w-6 h-6" />
             </Button>
           </SheetTrigger>
-          <SheetContent
-            side="left"
-            className="w-64 p-0 bg-slate-900 border-slate-800"
-          >
+          <SheetContent side="left" className="w-64 p-0 bg-slate-900 border-slate-800">
             <SidebarContent onNavClick={() => setIsSidebarOpen(false)} />
           </SheetContent>
         </Sheet>
         <div className="font-bold text-lg text-slate-100">{companyName}</div>
-        <UserNav
-          user={user}
-          handleLogout={handleLogout}
-          createPageUrl={createPageUrl}
-        />
+        <UserNav user={user} handleLogout={handleLogout} createPageUrl={createPageUrl} />
       </div>
 
       <aside className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-50 lg:block lg:w-64 lg:overflow-y-auto lg:border-r lg:border-slate-800">
@@ -3741,7 +3661,10 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       </aside>
 
       <div className="lg:pl-64">
-        <header data-testid="app-header" className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-x-4 border-b border-slate-800 bg-slate-900 px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
+        <header
+          data-testid="app-header"
+          className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-x-4 border-b border-slate-800 bg-slate-900 px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8"
+        >
           {/* Removed AI Command brain button */}
           {/* THEME TOGGLE BUTTON */}
           <TooltipProvider>
@@ -3752,17 +3675,13 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                   size="icon"
                   onClick={toggleTheme}
                   className="text-slate-400 hover:text-slate-300 hover:bg-slate-800"
-                  aria-label={theme === "dark"
-                    ? "Switch to light mode"
-                    : "Switch to dark mode"}
+                  aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
                 >
-                  {theme === "dark"
-                    ? <Sun className="w-5 h-5" />
-                    : <Moon className="w-5 h-5" />}
+                  {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
                 </Button>
               </TooltipTrigger>
               <TooltipContent className="bg-slate-800 border-slate-700 text-slate-200">
-                <p>{theme === "dark" ? "Light mode" : "Dark mode"}</p>
+                <p>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -3776,7 +3695,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                 realtimeModuleEnabled={realtimeVoiceModuleEnabled}
               />
               {/* Only superadmins can switch tenants - admins are locked to their assigned tenant */}
-              {user?.role === "superadmin" && (
+              {user?.role === 'superadmin' && (
                 <div className="flex items-center">
                   <TenantSwitcher user={user} />
                 </div>
@@ -3784,10 +3703,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
 
               {showEmployeeScope && (
                 <div className="flex items-center">
-                  <EmployeeScopeFilter
-                    user={user}
-                    selectedTenantId={selectedTenantId}
-                  />
+                  <EmployeeScopeFilter user={user} selectedTenantId={selectedTenantId} />
                 </div>
               )}
             </div>
@@ -3799,15 +3715,8 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
 
             {/* DEFERRED: mount notifications after initial load to reduce rate-limit hits */}
             {showNotificationsWidget ? <NotificationPanel user={user} /> : null}
-            <div
-              className="hidden lg:block lg:h-6 lg:w-px lg:bg-slate-700"
-              aria-hidden="true"
-            />
-            <UserNav
-              user={user}
-              handleLogout={handleLogout}
-              createPageUrl={createPageUrl}
-            />
+            <div className="hidden lg:block lg:h-6 lg:w-px lg:bg-slate-700" aria-hidden="true" />
+            <UserNav user={user} handleLogout={handleLogout} createPageUrl={createPageUrl} />
           </div>
         </header>
 
@@ -3831,13 +3740,11 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       </div>
 
       {/* REMOVED: ChatWindow popup - user has full Agent page instead */}
-      {
-        /* <ChatWindow
+      {/* <ChatWindow
         widgetContext={widgetContext}
         elevenlabsApiKey={elevenLabsApiKey}
         elevenlabsAgentId={elevenlabsAgentId}
-      /> */
-      }
+      /> */}
 
       <GlobalDetailViewer
         recordInfo={globalDetailRecord}
@@ -3874,11 +3781,7 @@ const queryClient = new QueryClient({
 function EntityLabelsWrapper({ children }) {
   const tenantContext = useTenant();
   const tenantId = tenantContext?.selectedTenantId || null;
-  return (
-    <EntityLabelsProvider tenantId={tenantId}>
-      {children}
-    </EntityLabelsProvider>
-  );
+  return <EntityLabelsProvider tenantId={tenantId}>{children}</EntityLabelsProvider>;
 }
 
 export default function LayoutWrapper({ children, currentPageName }) {
@@ -3894,21 +3797,19 @@ export default function LayoutWrapper({ children, currentPageName }) {
         <QueryClientProvider client={queryClient}>
           <ApiOptimizerProvider>
             <TenantProvider>
-            <EntityLabelsWrapper>
-              <ApiProvider>
-                <TimezoneProvider>
-                  <EmployeeScopeProvider>
-                    <LoggerProvider>
-                      <AiSidebarProvider>
-                        <Layout currentPageName={currentPageName}>
-                          {children}
-                        </Layout>
-                      </AiSidebarProvider>
-                    </LoggerProvider>
-                  </EmployeeScopeProvider>
-                </TimezoneProvider>
-              </ApiProvider>
-            </EntityLabelsWrapper>
+              <EntityLabelsWrapper>
+                <ApiProvider>
+                  <TimezoneProvider>
+                    <EmployeeScopeProvider>
+                      <LoggerProvider>
+                        <AiSidebarProvider>
+                          <Layout currentPageName={currentPageName}>{children}</Layout>
+                        </AiSidebarProvider>
+                      </LoggerProvider>
+                    </EmployeeScopeProvider>
+                  </TimezoneProvider>
+                </ApiProvider>
+              </EntityLabelsWrapper>
             </TenantProvider>
           </ApiOptimizerProvider>
         </QueryClientProvider>
