@@ -402,11 +402,11 @@ export async function executeBraidTool(
     return result;
   } catch (error) {
     const executionTimeMs = Date.now() - startTime;
-    console.error(
-      `[Braid Tool] ${toolName} EXCEPTION`,
-      error.message,
-      error.stack?.substring?.(0, 300),
-    );
+    console.error('[Braid Tool] EXCEPTION', {
+      toolName,
+      message: error.message,
+      stack: error.stack?.substring?.(0, 300),
+    });
 
     const errorResult = {
       tag: 'Err',
