@@ -5,7 +5,11 @@
 
 import express from 'express';
 import logger from '../lib/logger.js';
-import { validateUrl } from '../lib/urlValidator.js';
+import { validateUrl, validateInternalUrl } from '../lib/urlValidator.js';
+
+// UUID v4 pattern — used to validate tenant IDs before embedding in URLs (SSRF protection)
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const FALLBACK_TENANT_ID = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 
 export default function createTestingRoutes(_pgPool) {
   const router = express.Router();
@@ -401,10 +405,14 @@ export default function createTestingRoutes(_pgPool) {
   // Returns: { status: 'success', data: { summary: { total, passed, failed, warn, avg_latency_ms, max_latency_ms }, results: [...] } }
   router.get('/full-scan', async (req, res) => {
     try {
-      const tenantId =
-        req.query.tenant_id ||
-        process.env.SYSTEM_TENANT_ID ||
-        'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+      const tenantIdRaw = String(
+        req.query.tenant_id || process.env.SYSTEM_TENANT_ID || FALLBACK_TENANT_ID,
+      );
+      // Validate tenantId is a UUID to prevent path/query injection in constructed URLs
+      const systemTenantFallback = UUID_PATTERN.test(String(process.env.SYSTEM_TENANT_ID || ''))
+        ? String(process.env.SYSTEM_TENANT_ID)
+        : FALLBACK_TENANT_ID;
+      const tenantId = UUID_PATTERN.test(tenantIdRaw) ? tenantIdRaw : systemTenantFallback;
       const explicitBaseKeyRaw = req.query.base_url;
       const explicitBaseKey =
         typeof explicitBaseKeyRaw === 'string' ? explicitBaseKeyRaw.toLowerCase() : undefined;
@@ -417,7 +425,10 @@ export default function createTestingRoutes(_pgPool) {
       };
 
       let baseUrl = BASE_URL_PRESETS.default;
-      if (explicitBaseKey && Object.prototype.hasOwnProperty.call(BASE_URL_PRESETS, explicitBaseKey)) {
+      if (
+        explicitBaseKey &&
+        Object.prototype.hasOwnProperty.call(BASE_URL_PRESETS, explicitBaseKey)
+      ) {
         baseUrl = BASE_URL_PRESETS[explicitBaseKey];
       }
 
@@ -430,6 +441,9 @@ export default function createTestingRoutes(_pgPool) {
       if (!/^https?:\/\//i.test(baseUrl)) {
         baseUrl = `http://${baseUrl}`;
       }
+
+      // Derive expected host from the controlled baseUrl for use in validateInternalUrl
+      const expectedInternalHost = new URL(baseUrl).host;
 
       // Expected OK statuses (classification PASS); allow query override
       // Default: treat all 2xx as success
@@ -602,8 +616,8 @@ export default function createTestingRoutes(_pgPool) {
           const fullPath = ep.path.replace('{TENANT_ID}', tenantId);
           const url = `${baseUrl}${fullPath}`;
 
-          // Validate URL to prevent SSRF attacks
-          const validation = validateUrl(url, { allowLocalhostInDev: true });
+          // Validate URL to prevent SSRF attacks — enforce host matches the known internal target
+          const validation = validateInternalUrl(url, expectedInternalHost);
           if (!validation.valid) {
             logger.warn('[Full Scan] Skipping invalid URL:', { url, error: validation.error });
             return {
