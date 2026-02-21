@@ -1,19 +1,30 @@
-
 import { useState, useEffect, useCallback } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge"; // Added import for Badge
-import { EmailTemplate } from "@/api/entities";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge'; // Added import for Badge
+import { EmailTemplate } from '@/api/entities';
 import { useUser } from '@/components/shared/useUser.js';
-import { Loader2, Plus, Edit, Trash2, Save, ArrowLeft, Tag } from "lucide-react";
-import { toast } from "sonner";
+import { Loader2, Plus, Edit, Trash2, Save, ArrowLeft, Tag } from 'lucide-react';
+import { toast } from 'sonner';
 import { getTenantFilter } from './tenantUtils';
 import { useTenant } from './tenantContext';
 import TagInput from './TagInput';
 
-export default function EmailTemplateManager({ open, onOpenChange, onTemplatesUpdate, initialData = null }) {
+export default function EmailTemplateManager({
+  open,
+  onOpenChange,
+  onTemplatesUpdate,
+  initialData = null,
+}) {
   const [view, setView] = useState('list'); // 'list' or 'form'
   const [templates, setTemplates] = useState([]);
   const [allTags, setAllTags] = useState([]);
@@ -35,16 +46,15 @@ export default function EmailTemplateManager({ open, onOpenChange, onTemplatesUp
       setTemplates(fetchedTemplates);
 
       const tagCounts = {};
-      fetchedTemplates.forEach(t => {
-        (t.tags || []).forEach(tag => {
+      fetchedTemplates.forEach((t) => {
+        (t.tags || []).forEach((tag) => {
           tagCounts[tag] = (tagCounts[tag] || 0) + 1;
         });
       });
       setAllTags(Object.entries(tagCounts).map(([name, count]) => ({ name, count })));
-
     } catch (error) {
-      console.error("Failed to load templates:", error);
-      toast.error("Failed to load templates.");
+      console.error('Failed to load templates:', error);
+      toast.error('Failed to load templates.');
     } finally {
       setLoading(false);
     }
@@ -96,13 +106,13 @@ export default function EmailTemplateManager({ open, onOpenChange, onTemplatesUp
       toast.error('Failed to delete template.');
     }
   };
-  
+
   const handleSave = async () => {
     if (!formData.name || !formData.subject || !formData.body) {
-      toast.error("Template name, subject, and body are required.");
+      toast.error('Template name, subject, and body are required.');
       return;
     }
-    
+
     setIsSaving(true);
     try {
       if (!currentUser) {
@@ -118,7 +128,7 @@ export default function EmailTemplateManager({ open, onOpenChange, onTemplatesUp
         await EmailTemplate.create(dataToSave);
         toast.success('Template created successfully.');
       }
-      
+
       setView('list');
       loadTemplatesAndTags();
       onTemplatesUpdate(); // Notify parent
@@ -130,7 +140,7 @@ export default function EmailTemplateManager({ open, onOpenChange, onTemplatesUp
   };
 
   const handleChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   return (
@@ -139,7 +149,13 @@ export default function EmailTemplateManager({ open, onOpenChange, onTemplatesUp
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-slate-100">
             {view === 'form' && (
-              <Button variant="ghost" size="icon" onClick={() => setView('list')} className="mr-2 h-8 w-8 hover:bg-slate-700">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setView('list')}
+                className="mr-2 h-8 w-8 hover:bg-slate-700"
+                aria-label="Back to template list"
+              >
                 <ArrowLeft className="w-4 h-4" />
               </Button>
             )}
@@ -149,7 +165,7 @@ export default function EmailTemplateManager({ open, onOpenChange, onTemplatesUp
             Create, edit, and manage your reusable email templates.
           </DialogDescription>
         </DialogHeader>
-        
+
         <div className="flex-grow overflow-y-auto pr-2">
           {view === 'list' && (
             <div className="space-y-4">
@@ -158,21 +174,50 @@ export default function EmailTemplateManager({ open, onOpenChange, onTemplatesUp
                 Create New Template
               </Button>
               {loading ? (
-                <div className="flex justify-center items-center h-48"><Loader2 className="w-8 h-8 animate-spin text-blue-400"/></div>
+                <div className="flex justify-center items-center h-48">
+                  <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
+                </div>
               ) : (
                 <div className="space-y-2">
-                  {templates.map(t => (
-                    <div key={t.id} className="p-3 bg-slate-700/50 rounded-lg flex justify-between items-center">
+                  {templates.map((t) => (
+                    <div
+                      key={t.id}
+                      className="p-3 bg-slate-700/50 rounded-lg flex justify-between items-center"
+                    >
                       <div>
                         <p className="font-semibold text-slate-200">{t.name}</p>
                         <p className="text-sm text-slate-400 truncate max-w-md">{t.subject}</p>
                         <div className="flex gap-1 mt-1">
-                          {(t.tags || []).map(tag => <Badge key={tag} variant="secondary" className="bg-slate-600 text-slate-300 text-xs">{tag}</Badge>)}
+                          {(t.tags || []).map((tag) => (
+                            <Badge
+                              key={tag}
+                              variant="secondary"
+                              className="bg-slate-600 text-slate-300 text-xs"
+                            >
+                              {tag}
+                            </Badge>
+                          ))}
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => handleEdit(t)} className="hover:bg-slate-600 text-slate-400 h-8 w-8"><Edit className="w-4 h-4"/></Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDelete(t.id)} className="hover:bg-red-900/50 text-red-400 h-8 w-8"><Trash2 className="w-4 h-4"/></Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEdit(t)}
+                          className="hover:bg-slate-600 text-slate-400 h-8 w-8"
+                          aria-label="Edit template"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDelete(t.id)}
+                          className="hover:bg-red-900/50 text-red-400 h-8 w-8"
+                          aria-label="Delete template"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -185,21 +230,35 @@ export default function EmailTemplateManager({ open, onOpenChange, onTemplatesUp
             <div className="space-y-4">
               <div>
                 <label className="text-sm font-medium text-slate-300">Template Name</label>
-                <Input value={formData.name} onChange={e => handleChange('name', e.target.value)} className="mt-1 bg-slate-700 border-slate-600"/>
+                <Input
+                  value={formData.name}
+                  onChange={(e) => handleChange('name', e.target.value)}
+                  className="mt-1 bg-slate-700 border-slate-600"
+                />
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-300">Subject</label>
-                <Input value={formData.subject} onChange={e => handleChange('subject', e.target.value)} className="mt-1 bg-slate-700 border-slate-600"/>
+                <Input
+                  value={formData.subject}
+                  onChange={(e) => handleChange('subject', e.target.value)}
+                  className="mt-1 bg-slate-700 border-slate-600"
+                />
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-300">Body</label>
-                <Textarea value={formData.body} onChange={e => handleChange('body', e.target.value)} className="mt-1 h-48 bg-slate-700 border-slate-600"/>
+                <Textarea
+                  value={formData.body}
+                  onChange={(e) => handleChange('body', e.target.value)}
+                  className="mt-1 h-48 bg-slate-700 border-slate-600"
+                />
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-300 flex items-center gap-2"><Tag className="w-4 h-4"/> Categories / Tags</label>
+                <label className="text-sm font-medium text-slate-300 flex items-center gap-2">
+                  <Tag className="w-4 h-4" /> Categories / Tags
+                </label>
                 <TagInput
                   selectedTags={formData.tags}
-                  onTagsChange={newTags => handleChange('tags', newTags)}
+                  onTagsChange={(newTags) => handleChange('tags', newTags)}
                   allTags={allTags}
                   placeholder="Add categories like 'Follow-up', 'Sales'"
                   darkMode={true}
@@ -212,9 +271,23 @@ export default function EmailTemplateManager({ open, onOpenChange, onTemplatesUp
 
         {view === 'form' && (
           <DialogFooter className="border-t border-slate-700 pt-4">
-            <Button variant="outline" onClick={() => setView('list')} className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">Cancel</Button>
-            <Button onClick={handleSave} disabled={isSaving} className="bg-green-600 hover:bg-green-700 text-white">
-              {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : <Save className="w-4 h-4 mr-2"/>}
+            <Button
+              variant="outline"
+              onClick={() => setView('list')}
+              className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              {isSaving ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4 mr-2" />
+              )}
               {selectedTemplate ? 'Update Template' : 'Save Template'}
             </Button>
           </DialogFooter>

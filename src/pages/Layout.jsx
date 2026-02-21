@@ -3642,6 +3642,7 @@ function Layout({ children, currentPageName }) {
               variant="ghost"
               size="icon"
               className="text-slate-400 hover:text-slate-300 hover:bg-slate-800"
+              aria-label="Open navigation menu"
             >
               <Menu className="w-6 h-6" />
             </Button>

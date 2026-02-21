@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Bell, Loader2, Users, Star, Target, Calendar, AlertTriangle } from "lucide-react";
-import { Notification } from "@/api/entities";
-import { useUser } from "@/components/shared/useUser.js";
-import { formatDistanceToNow } from "date-fns";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Bell, Loader2, Users, Star, Target, Calendar, AlertTriangle } from 'lucide-react';
+import { Notification } from '@/api/entities';
+import { useUser } from '@/components/shared/useUser.js';
+import { formatDistanceToNow } from 'date-fns';
 
 const iconMap = {
   bell: Bell,
@@ -37,17 +37,16 @@ export default function NotificationPanel() {
     if (!email) return;
     try {
       if (!options.silent) setLoading(true);
-      const fetched = await Notification.filter(
-        { user_email: email },
-        '-created_date',
-        50
-      );
+      const fetched = await Notification.filter({ user_email: email }, '-created_date', 50);
       setNotifications(fetched);
-      setUnreadCount(fetched.filter(n => !n.is_read).length);
+      setUnreadCount(fetched.filter((n) => !n.is_read).length);
       return { ok: true };
     } catch (err) {
       // Suppress error if notifications table doesn't exist (non-critical feature)
-      if (import.meta.env.DEV || !err?.message?.includes('relation "notifications" does not exist')) {
+      if (
+        import.meta.env.DEV ||
+        !err?.message?.includes('relation "notifications" does not exist')
+      ) {
         console.warn('[NotificationPanel] Failed to load notifications:', err.message || err);
       }
       return { ok: false, error: err };
@@ -59,15 +58,15 @@ export default function NotificationPanel() {
   useEffect(() => {
     // Only run when user email is available and hasn't been loaded yet
     if (!user?.email) return;
-    
+
     // If email changed, reset and allow reload
     if (userEmailRef.current !== user.email) {
       initialLoadDoneRef.current = false;
     }
-    
+
     // Skip if already loaded for this user
     if (initialLoadDoneRef.current) return;
-    
+
     let cancelled = false;
 
     const scheduleNext = (delayMs) => {
@@ -81,7 +80,8 @@ export default function NotificationPanel() {
       const jitter = Math.floor(Math.random() * 1000);
       // If 429 or network error, back off aggressively
       const isRateLimit = err?.status === 429 || err?.response?.status === 429;
-      const next = isRateLimit ? Math.min(MAX_DELAY, Math.max(prevDelay * 2, BASE_DELAY * 2) + jitter)
+      const next = isRateLimit
+        ? Math.min(MAX_DELAY, Math.max(prevDelay * 2, BASE_DELAY * 2) + jitter)
         : Math.min(MAX_DELAY, prevDelay * 2 + jitter);
       return next;
     };
@@ -94,11 +94,7 @@ export default function NotificationPanel() {
         return;
       }
       const result = await loadNotifications({ silent: true });
-      pollDelayRef.current = computeNextDelay(
-        pollDelayRef.current,
-        !!result?.ok,
-        result?.error,
-      );
+      pollDelayRef.current = computeNextDelay(pollDelayRef.current, !!result?.ok, result?.error);
       scheduleNext(pollDelayRef.current);
     };
 
@@ -120,8 +116,10 @@ export default function NotificationPanel() {
     if (!notification.is_read) {
       try {
         await Notification.update(notification.id, { is_read: true });
-        setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, is_read: true } : n));
-        setUnreadCount(prev => Math.max(0, prev - 1));
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === notification.id ? { ...n, is_read: true } : n)),
+        );
+        setUnreadCount((prev) => Math.max(0, prev - 1));
       } catch (err) {
         console.error('[NotificationPanel] Mark read failed:', err);
       }
@@ -132,11 +130,11 @@ export default function NotificationPanel() {
   };
 
   const markAllAsRead = async () => {
-    const unread = notifications.filter(n => !n.is_read);
+    const unread = notifications.filter((n) => !n.is_read);
     if (unread.length === 0) return;
     try {
-      await Promise.all(unread.map(n => Notification.update(n.id, { is_read: true })));
-      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      await Promise.all(unread.map((n) => Notification.update(n.id, { is_read: true })));
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
       setUnreadCount(0);
     } catch (err) {
       console.error('[NotificationPanel] Bulk mark read failed:', err);
@@ -146,7 +144,12 @@ export default function NotificationPanel() {
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative text-slate-400 hover:text-slate-200 hover:bg-slate-800">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+          aria-label="Notifications"
+        >
           <Bell className="w-5 h-5" />
           {unreadCount > 0 && (
             <Badge className="absolute -top-1 -right-1 w-5 h-5 flex items-center justify-center p-0 text-xs bg-red-600 text-white border-2 border-slate-900">
@@ -184,7 +187,7 @@ export default function NotificationPanel() {
               <p className="text-sm">You&apos;ll see important updates here</p>
             </div>
           ) : (
-            notifications.map(n => (
+            notifications.map((n) => (
               <div
                 key={n.id}
                 className={`p-4 rounded-lg border cursor-pointer transition-colors ${
@@ -196,9 +199,11 @@ export default function NotificationPanel() {
               >
                 <div className="flex items-start gap-3">
                   {n.icon && (
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                      n.is_read ? 'bg-slate-600 text-slate-400' : 'bg-blue-600 text-white'
-                    }`}>
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                        n.is_read ? 'bg-slate-600 text-slate-400' : 'bg-blue-600 text-white'
+                      }`}
+                    >
                       {React.createElement(iconMap[n.icon] || Bell, { className: 'w-4 h-4' })}
                     </div>
                   )}

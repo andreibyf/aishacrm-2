@@ -1,21 +1,14 @@
-import { useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
-import {
-  Archive,
-  X,
-  AlertTriangle,
-  Loader2,
-  Database,
-  FileSpreadsheet
-} from "lucide-react";
-import { toast } from "sonner";
-import { callBackendAPI } from "@/api/entities";
+import { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
+import { Archive, X, AlertTriangle, Loader2, Database, FileSpreadsheet } from 'lucide-react';
+import { toast } from 'sonner';
+import { callBackendAPI } from '@/api/entities';
 
 export default function BulkArchiveDialog({ sources, onClose, onComplete }) {
   const [archiving, setArchiving] = useState(false);
@@ -32,24 +25,24 @@ export default function BulkArchiveDialog({ sources, onClose, onComplete }) {
       const response = await callBackendAPI('/api/bizdevsources/archive', {
         method: 'POST',
         body: JSON.stringify({
-          bizdev_source_ids: sources.map(s => s.id),
+          bizdev_source_ids: sources.map((s) => s.id),
           tenant_id: sources[0]?.tenant_id, // Use tenant_id from first source
           format: format,
           compress: compress,
-          remove_after_archive: minimizeRecords
-        })
+          remove_after_archive: minimizeRecords,
+        }),
       });
 
       if (response.ok) {
         const data = await response.json();
         toast.success(
-          data.message || `Successfully archived ${sources.length} record(s) to cloud storage`
+          data.message || `Successfully archived ${sources.length} record(s) to cloud storage`,
         );
-        
+
         if (onComplete) {
           onComplete(data.data);
         }
-        
+
         onClose();
       } else {
         const errorData = await response.json();
@@ -57,7 +50,9 @@ export default function BulkArchiveDialog({ sources, onClose, onComplete }) {
       }
     } catch (error) {
       console.error('Archive error:', error);
-      toast.error(error.message || 'Failed to archive records. Please try again or contact support.');
+      toast.error(
+        error.message || 'Failed to archive records. Please try again or contact support.',
+      );
     } finally {
       setArchiving(false);
     }
@@ -83,7 +78,8 @@ export default function BulkArchiveDialog({ sources, onClose, onComplete }) {
               <div>
                 <CardTitle className="text-slate-100">Archive Records</CardTitle>
                 <p className="text-sm text-slate-400 mt-1">
-                  Archiving {sources.length} record{sources.length > 1 ? 's' : ''} to secure cloud storage
+                  Archiving {sources.length} record{sources.length > 1 ? 's' : ''} to secure cloud
+                  storage
                 </p>
               </div>
             </div>
@@ -93,6 +89,7 @@ export default function BulkArchiveDialog({ sources, onClose, onComplete }) {
               onClick={onClose}
               disabled={archiving}
               className="text-slate-400 hover:text-slate-300 hover:bg-slate-700"
+              aria-label="Close"
             >
               <X className="w-5 h-5" />
             </Button>
@@ -106,8 +103,8 @@ export default function BulkArchiveDialog({ sources, onClose, onComplete }) {
             <AlertDescription className="text-blue-300">
               <p className="font-semibold mb-1">What happens when you archive?</p>
               <p className="text-sm">
-                Your records will be safely saved to cloud storage and marked as &quot;Archived&quot; in your system. 
-                You can retrieve them later if needed.
+                Your records will be safely saved to cloud storage and marked as
+                &quot;Archived&quot; in your system. You can retrieve them later if needed.
               </p>
             </AlertDescription>
           </Alert>
@@ -117,14 +114,15 @@ export default function BulkArchiveDialog({ sources, onClose, onComplete }) {
             <h3 className="text-sm font-semibold text-slate-300 mb-3">Records to Archive</h3>
             <div className="space-y-2">
               {Object.entries(batches).map(([batchId, batchSources]) => (
-                <div key={batchId} className="flex items-center justify-between p-3 bg-slate-700 rounded-lg">
+                <div
+                  key={batchId}
+                  className="flex items-center justify-between p-3 bg-slate-700 rounded-lg"
+                >
                   <div>
                     <Badge variant="outline" className="border-slate-600 text-slate-300 mb-1">
                       {batchId}
                     </Badge>
-                    <p className="text-xs text-slate-400">
-                      {batchSources[0].source}
-                    </p>
+                    <p className="text-xs text-slate-400">{batchSources[0].source}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-semibold text-slate-200">
@@ -142,7 +140,10 @@ export default function BulkArchiveDialog({ sources, onClose, onComplete }) {
             <RadioGroup value={format} onValueChange={setFormat} className="space-y-2">
               <div className="flex items-center space-x-2 p-3 bg-slate-700 rounded-lg hover:bg-slate-600 cursor-pointer">
                 <RadioGroupItem value="csv" id="format-csv" />
-                <Label htmlFor="format-csv" className="flex items-center gap-2 cursor-pointer flex-1">
+                <Label
+                  htmlFor="format-csv"
+                  className="flex items-center gap-2 cursor-pointer flex-1"
+                >
                   <FileSpreadsheet className="w-4 h-4 text-green-400" />
                   <div>
                     <p className="text-slate-200 font-medium">Spreadsheet (CSV)</p>
@@ -163,10 +164,7 @@ export default function BulkArchiveDialog({ sources, onClose, onComplete }) {
                 disabled={archiving}
               />
               <div className="flex-1">
-                <Label 
-                  htmlFor="compress" 
-                  className="text-slate-200 cursor-pointer font-medium"
-                >
+                <Label htmlFor="compress" className="text-slate-200 cursor-pointer font-medium">
                   Compress files to save storage space
                 </Label>
                 <p className="text-xs text-slate-400 mt-1">
@@ -186,15 +184,15 @@ export default function BulkArchiveDialog({ sources, onClose, onComplete }) {
                 disabled={archiving}
               />
               <div className="flex-1">
-                <Label 
-                  htmlFor="minimize-records" 
+                <Label
+                  htmlFor="minimize-records"
                   className="text-slate-200 cursor-pointer font-medium"
                 >
                   Clean up records after archiving
                 </Label>
                 <p className="text-xs text-slate-400 mt-1">
-                  Removes detailed notes and large text fields to free up space. 
-                  Key information stays in the system for easy reference.
+                  Removes detailed notes and large text fields to free up space. Key information
+                  stays in the system for easy reference.
                 </p>
               </div>
             </div>

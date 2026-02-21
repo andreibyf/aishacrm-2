@@ -1,28 +1,33 @@
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { DollarSign, Calendar, TrendingUp, MoreHorizontal, Edit, Trash2, Eye } from "lucide-react";
-import { format } from "date-fns";
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { DollarSign, Calendar, TrendingUp, MoreHorizontal, Edit, Trash2, Eye } from 'lucide-react';
+import { format } from 'date-fns';
 
 // Matching the stat card colors from Opportunities page - semi-transparent backgrounds
 const stageColors = {
-  prospecting: "bg-blue-900/20 text-blue-300 border-blue-700",
-  qualification: "bg-indigo-900/20 text-indigo-300 border-indigo-700",
-  proposal: "bg-purple-900/20 text-purple-300 border-purple-700",
-  negotiation: "bg-yellow-900/20 text-yellow-300 border-yellow-700",
-  closed_won: "bg-emerald-900/20 text-emerald-300 border-emerald-700",
-  closed_lost: "bg-red-900/20 text-red-300 border-red-700"
+  prospecting: 'bg-blue-900/20 text-blue-300 border-blue-700',
+  qualification: 'bg-indigo-900/20 text-indigo-300 border-indigo-700',
+  proposal: 'bg-purple-900/20 text-purple-300 border-purple-700',
+  negotiation: 'bg-yellow-900/20 text-yellow-300 border-yellow-700',
+  closed_won: 'bg-emerald-900/20 text-emerald-300 border-emerald-700',
+  closed_lost: 'bg-red-900/20 text-red-300 border-red-700',
 };
 
 const stageLabels = {
-  prospecting: "Prospecting",
-  qualification: "Qualification",
-  proposal: "Proposal",
-  negotiation: "Negotiation",
-  closed_won: "Closed Won",
-  closed_lost: "Closed Lost"
+  prospecting: 'Prospecting',
+  qualification: 'Qualification',
+  proposal: 'Proposal',
+  negotiation: 'Negotiation',
+  closed_won: 'Closed Won',
+  closed_lost: 'Closed Lost',
 };
 
 export default function OpportunityCard({
@@ -34,16 +39,18 @@ export default function OpportunityCard({
   onDelete,
   onViewDetails,
   isSelected,
-  onSelect
+  onSelect,
 }) {
   const formattedAmount = new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
     minimumFractionDigits: 0,
-    maximumFractionDigits: 0
+    maximumFractionDigits: 0,
   }).format(opportunity.amount || 0);
 
-  const closeDate = opportunity.close_date ? format(new Date(opportunity.close_date), 'MMM d, yyyy') : 'Not set';
+  const closeDate = opportunity.close_date
+    ? format(new Date(opportunity.close_date), 'MMM d, yyyy')
+    : 'Not set';
 
   return (
     <Card className="bg-slate-800 border-slate-700 hover:shadow-lg transition-all duration-200">
@@ -57,15 +64,15 @@ export default function OpportunityCard({
             />
             <div className="flex-1 min-w-0">
               {/* Stage Badge - Prominent at top with matching colors */}
-              <Badge 
+              <Badge
                 className={`${stageColors[opportunity.stage]} contrast-badge capitalize text-xs font-semibold mb-2 border`}
                 data-variant="status"
                 data-status={opportunity.stage}
               >
                 {stageLabels[opportunity.stage] || opportunity.stage?.replace(/_/g, ' ')}
               </Badge>
-              
-              <h3 
+
+              <h3
                 className="font-semibold text-slate-100 mb-1 cursor-pointer hover:text-blue-400 transition-colors break-words line-clamp-2"
                 onClick={onViewDetails}
               >
@@ -78,11 +85,19 @@ export default function OpportunityCard({
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-200 hover:bg-slate-700 flex-shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-slate-400 hover:text-slate-200 hover:bg-slate-700 flex-shrink-0"
+                aria-label="More options"
+              >
                 <MoreHorizontal className="w-4 h-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-slate-800 border-slate-700 text-slate-200">
+            <DropdownMenuContent
+              align="end"
+              className="bg-slate-800 border-slate-700 text-slate-200"
+            >
               <DropdownMenuItem onClick={onEdit} className="hover:bg-slate-700">
                 <Edit className="w-4 h-4 mr-2" />
                 Edit
@@ -91,7 +106,10 @@ export default function OpportunityCard({
                 <Eye className="w-4 h-4 mr-2" />
                 View Details
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={onDelete} className="text-red-400 hover:bg-slate-700 focus:text-red-400">
+              <DropdownMenuItem
+                onClick={onDelete}
+                className="text-red-400 hover:bg-slate-700 focus:text-red-400"
+              >
                 <Trash2 className="w-4 h-4 mr-2" />
                 Delete
               </DropdownMenuItem>
@@ -126,9 +144,7 @@ export default function OpportunityCard({
         )}
 
         {assignedUserName && (
-          <div className="text-sm text-slate-400 break-words">
-            Assigned: {assignedUserName}
-          </div>
+          <div className="text-sm text-slate-400 break-words">Assigned: {assignedUserName}</div>
         )}
       </CardContent>
     </Card>

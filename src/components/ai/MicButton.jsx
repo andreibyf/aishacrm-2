@@ -1,9 +1,9 @@
-import { logDev } from "@/utils/devLogger";
-import React from "react";
-import { Button } from "@/components/ui/button";
-import { Mic, MicOff } from "lucide-react";
+import { logDev } from '@/utils/devLogger';
+import React from 'react';
+import { Button } from '@/components/ui/button';
+import { Mic, MicOff } from 'lucide-react';
 
-export default function MicButton({ className = "" }) {
+export default function MicButton({ className = '' }) {
   const [supported, setSupported] = React.useState(false);
   const [listening, setListening] = React.useState(false);
 
@@ -53,7 +53,7 @@ export default function MicButton({ className = "" }) {
     logDev('[MicButton] Speech Recognition supported!');
     setSupported(true);
     const recog = new SR();
-    recog.lang = "en-US";
+    recog.lang = 'en-US';
     recog.continuous = true;
     recog.interimResults = false;
     recog.maxAlternatives = 1;
@@ -62,7 +62,7 @@ export default function MicButton({ className = "" }) {
       logDev('[MicButton] Recognition started');
       lastStartRef.current = performance.now();
       setListening(true);
-      window.dispatchEvent(new CustomEvent("chat:mic-active", { detail: { active: true } }));
+      window.dispatchEvent(new CustomEvent('chat:mic-active', { detail: { active: true } }));
       isStartingRef.current = false;
       scheduleSilenceCheck();
     };
@@ -73,17 +73,17 @@ export default function MicButton({ className = "" }) {
         logDev('[MicButton] Ignoring speech during audio playback');
         return;
       }
-      
+
       logDev('[MicButton] Got speech result:', e);
       const parts = [];
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
         if (r.isFinal && r[0]?.transcript) parts.push(r[0].transcript);
       }
-      const transcript = parts.join(" ").trim();
+      const transcript = parts.join(' ').trim();
       logDev('[MicButton] Final transcript:', transcript);
       if (transcript) {
-        window.dispatchEvent(new CustomEvent("chat:voice-result", { detail: { transcript } }));
+        window.dispatchEvent(new CustomEvent('chat:voice-result', { detail: { transcript } }));
       }
       scheduleSilenceCheck();
     };
@@ -94,19 +94,20 @@ export default function MicButton({ className = "" }) {
     };
 
     recog.onerror = (ev) => {
-      const error = (ev && ev.error) || "";
+      const error = (ev && ev.error) || '';
       console.warn('[MicButton] Recognition error:', error);
       const recoverable =
-        ["no-speech", "aborted", "network", "audio-capture", "service-not-allowed"].includes(error) ||
-        /busy|in use|invalid-state/i.test(error);
+        ['no-speech', 'aborted', 'network', 'audio-capture', 'service-not-allowed'].includes(
+          error,
+        ) || /busy|in use|invalid-state/i.test(error);
       if (keepAliveRef.current && recoverable && !audioPlayingRef.current) {
         logDev('[MicButton] Recoverable error, restarting...');
-        restartWithDelay(error === "invalid-state" ? 1500 : 1000);
+        restartWithDelay(error === 'invalid-state' ? 1500 : 1000);
         return;
       }
       console.error('[MicButton] Unrecoverable error, stopping');
       setListening(false);
-      window.dispatchEvent(new CustomEvent("chat:mic-active", { detail: { active: false } }));
+      window.dispatchEvent(new CustomEvent('chat:mic-active', { detail: { active: false } }));
     };
 
     recog.onend = () => {
@@ -117,7 +118,7 @@ export default function MicButton({ className = "" }) {
         return;
       }
       setListening(false);
-      window.dispatchEvent(new CustomEvent("chat:mic-active", { detail: { active: false } }));
+      window.dispatchEvent(new CustomEvent('chat:mic-active', { detail: { active: false } }));
     };
 
     recognitionRef.current = recog;
@@ -157,7 +158,11 @@ export default function MicButton({ className = "" }) {
       clearTimeout(silenceTimerId);
       window.removeEventListener('chat:lock-open', handleLockOpen);
       window.removeEventListener('chat:unlock-open', handleUnlockOpen);
-  try { recog.stop(); } catch (e) { void e; }
+      try {
+        recog.stop();
+      } catch (e) {
+        void e;
+      }
       recognitionRef.current = null;
       isStartingRef.current = false;
     };
@@ -178,7 +183,7 @@ export default function MicButton({ className = "" }) {
       console.warn('[MicButton] Already listening');
       return;
     }
-    
+
     logDev('[MicButton] Starting recognition...');
     keepAliveRef.current = true;
     try {
@@ -198,7 +203,7 @@ export default function MicButton({ className = "" }) {
     audioPlayingRef.current = false;
     clearTimeout(restartTimerRef.current);
     clearTimeout(silenceTimerRef.current);
-    try { 
+    try {
       recognitionRef.current?.stop();
       logDev('[MicButton] Recognition stopped');
     } catch (err) {
@@ -207,19 +212,19 @@ export default function MicButton({ className = "" }) {
   };
 
   const toggle = () => {
-    logDev('[MicButton] Toggle clicked, current state:', { 
-      supported, 
-      listening, 
+    logDev('[MicButton] Toggle clicked, current state:', {
+      supported,
+      listening,
       keepAlive: keepAliveRef.current,
       isStarting: isStartingRef.current,
-      audioPlaying: audioPlayingRef.current
+      audioPlaying: audioPlayingRef.current,
     });
-    
+
     if (!supported || !recognitionRef.current) {
       console.error('[MicButton] Cannot toggle - not supported or no recognition object');
       return;
     }
-    
+
     if (keepAliveRef.current || listening || isStartingRef.current) {
       stop();
     } else {
@@ -237,6 +242,7 @@ export default function MicButton({ className = "" }) {
         className={`bg-slate-700 border-slate-600 text-slate-300 ${className}`}
         disabled
         title="Speech recognition not supported in this browser"
+        aria-label="Speech recognition not supported"
       >
         <MicOff className="w-4 h-4" />
       </Button>
@@ -245,11 +251,15 @@ export default function MicButton({ className = "" }) {
 
   return (
     <Button
-      variant={listening ? "default" : "outline"}
+      variant={listening ? 'default' : 'outline'}
       size="icon"
       onClick={toggle}
-      className={listening ? "bg-red-600 hover:bg-red-700" : `bg-slate-700 border-slate-600 text-slate-300 ${className}`}
-      title={listening ? "Stop listening" : "Start voice input"}
+      className={
+        listening
+          ? 'bg-red-600 hover:bg-red-700'
+          : `bg-slate-700 border-slate-600 text-slate-300 ${className}`
+      }
+      title={listening ? 'Stop listening' : 'Start voice input'}
     >
       {listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
     </Button>

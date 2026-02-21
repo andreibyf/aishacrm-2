@@ -1,15 +1,15 @@
 /**
  * SuggestionQueue - Phase 3 Autonomous Operations Review UI
- * 
+ *
  * Displays AI-generated suggestions for human review and approval.
  * Supports approve/reject/defer actions with confidence indicators.
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { 
-  CheckCircle, 
-  XCircle, 
-  Clock, 
+import {
+  CheckCircle,
+  XCircle,
+  Clock,
   AlertTriangle,
   Lightbulb,
   TrendingUp,
@@ -20,38 +20,31 @@ import {
   ChevronUp,
   RefreshCw,
   Filter,
-  Loader2
+  Loader2,
 } from 'lucide-react';
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { toast } from "sonner";
-import { getBackendUrl } from "@/api/backendUrl";
-import { supabase } from "@/lib/supabase";
+} from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { toast } from 'sonner';
+import { getBackendUrl } from '@/api/backendUrl';
+import { supabase } from '@/lib/supabase';
 
 // Helper to get auth headers for authenticated API requests
 async function getAuthHeaders() {
   const headers = { 'Content-Type': 'application/json' };
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     if (session?.access_token) {
       headers.Authorization = `Bearer ${session.access_token}`;
     }
@@ -63,47 +56,47 @@ async function getAuthHeaders() {
 
 // Trigger type icons and labels
 const TRIGGER_CONFIG = {
-  lead_stagnant: { 
-    icon: Clock, 
-    label: 'Stagnant Lead', 
+  lead_stagnant: {
+    icon: Clock,
+    label: 'Stagnant Lead',
     color: 'text-orange-500',
-    bgColor: 'bg-orange-100'
+    bgColor: 'bg-orange-100',
   },
-  deal_decay: { 
-    icon: TrendingUp, 
-    label: 'Deal Decay', 
+  deal_decay: {
+    icon: TrendingUp,
+    label: 'Deal Decay',
     color: 'text-red-500',
-    bgColor: 'bg-red-100'
+    bgColor: 'bg-red-100',
   },
-  activity_overdue: { 
-    icon: Calendar, 
-    label: 'Overdue Activity', 
+  activity_overdue: {
+    icon: Calendar,
+    label: 'Overdue Activity',
     color: 'text-yellow-500',
-    bgColor: 'bg-yellow-100'
+    bgColor: 'bg-yellow-100',
   },
-  opportunity_hot: { 
-    icon: Lightbulb, 
-    label: 'Hot Opportunity', 
+  opportunity_hot: {
+    icon: Lightbulb,
+    label: 'Hot Opportunity',
     color: 'text-green-500',
-    bgColor: 'bg-green-100'
+    bgColor: 'bg-green-100',
   },
-  contact_inactive: { 
-    icon: User, 
-    label: 'Inactive Contact', 
+  contact_inactive: {
+    icon: User,
+    label: 'Inactive Contact',
     color: 'text-blue-500',
-    bgColor: 'bg-blue-100'
+    bgColor: 'bg-blue-100',
   },
-  followup_needed: { 
-    icon: Phone, 
-    label: 'Follow-up Needed', 
+  followup_needed: {
+    icon: Phone,
+    label: 'Follow-up Needed',
     color: 'text-purple-500',
-    bgColor: 'bg-purple-100'
+    bgColor: 'bg-purple-100',
   },
-  account_risk: { 
-    icon: AlertTriangle, 
-    label: 'Account at Risk', 
+  account_risk: {
+    icon: AlertTriangle,
+    label: 'Account at Risk',
     color: 'text-red-600',
-    bgColor: 'bg-red-100'
+    bgColor: 'bg-red-100',
   },
 };
 
@@ -137,10 +130,8 @@ function formatRelativeTime(dateString) {
  */
 function ConfidenceIndicator({ confidence }) {
   const percentage = Math.round(confidence * 100);
-  const colorClass = 
-    percentage >= 80 ? 'bg-green-500' :
-    percentage >= 60 ? 'bg-yellow-500' :
-    'bg-red-500';
+  const colorClass =
+    percentage >= 80 ? 'bg-green-500' : percentage >= 60 ? 'bg-yellow-500' : 'bg-red-500';
 
   return (
     <TooltipProvider>
@@ -148,7 +139,7 @@ function ConfidenceIndicator({ confidence }) {
         <TooltipTrigger asChild>
           <div className="flex items-center gap-1">
             <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
-              <div 
+              <div
                 className={`h-full ${colorClass} transition-all`}
                 style={{ width: `${percentage}%` }}
               />
@@ -167,18 +158,12 @@ function ConfidenceIndicator({ confidence }) {
 /**
  * Single suggestion card component
  */
-function SuggestionCard({ 
-  suggestion, 
-  onApprove, 
-  onReject, 
-  onDefer,
-  isProcessing 
-}) {
+function SuggestionCard({ suggestion, onApprove, onReject, onDefer, isProcessing }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const config = TRIGGER_CONFIG[suggestion.trigger_type] || TRIGGER_CONFIG.followup_needed;
   const Icon = config.icon;
 
-  const actionSummary = suggestion.action?.tool_name 
+  const actionSummary = suggestion.action?.tool_name
     ? `${suggestion.action.tool_name.replace(/_/g, ' ')}`
     : 'Suggested action';
 
@@ -191,7 +176,8 @@ function SuggestionCard({
               <Icon className={`w-5 h-5 ${config.color}`} />
               <div>
                 <CardTitle className="text-base">
-                  {suggestion.record_name || `${suggestion.record_type} ${suggestion.record_id?.slice(0, 8)}`}
+                  {suggestion.record_name ||
+                    `${suggestion.record_type} ${suggestion.record_id?.slice(0, 8)}`}
                 </CardTitle>
                 <CardDescription className="text-xs">
                   {config.label} • {formatRelativeTime(suggestion.created_at)}
@@ -204,7 +190,11 @@ function SuggestionCard({
               </Badge>
               <CollapsibleTrigger asChild>
                 <Button variant="ghost" size="sm">
-                  {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  {isExpanded ? (
+                    <ChevronUp className="w-4 h-4" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4" />
+                  )}
                 </Button>
               </CollapsibleTrigger>
             </div>
@@ -218,7 +208,7 @@ function SuggestionCard({
               {suggestion.reasoning?.slice(0, 150)}
               {suggestion.reasoning?.length > 150 ? '...' : ''}
             </p>
-            
+
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <Badge variant="outline">{actionSummary}</Badge>
@@ -244,15 +234,18 @@ function SuggestionCard({
             )}
 
             <div className="text-xs text-muted-foreground">
-              <p>Expires: {suggestion.expires_at ? new Date(suggestion.expires_at).toLocaleString() : 'Never'}</p>
+              <p>
+                Expires:{' '}
+                {suggestion.expires_at ? new Date(suggestion.expires_at).toLocaleString() : 'Never'}
+              </p>
               <p>Created by: {suggestion.created_by || 'AI Trigger Engine'}</p>
             </div>
           </CollapsibleContent>
 
           {/* Action buttons */}
           <div className="flex items-center gap-2 mt-4 pt-4 border-t">
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
               variant="default"
               className="bg-green-600 hover:bg-green-700"
               onClick={() => onApprove(suggestion.id)}
@@ -265,8 +258,8 @@ function SuggestionCard({
               )}
               Approve
             </Button>
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
               variant="destructive"
               onClick={() => onReject(suggestion.id)}
               disabled={isProcessing}
@@ -274,8 +267,8 @@ function SuggestionCard({
               <XCircle className="w-4 h-4 mr-1" />
               Reject
             </Button>
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
               variant="outline"
               onClick={() => onDefer(suggestion.id)}
               disabled={isProcessing}
@@ -342,67 +335,73 @@ export default function SuggestionQueue({ tenantId }) {
   /**
    * Approve a suggestion
    */
-  const handleApprove = useCallback(async (suggestionId) => {
-    try {
-      setIsProcessing(true);
-      const headers = await getAuthHeaders();
+  const handleApprove = useCallback(
+    async (suggestionId) => {
+      try {
+        setIsProcessing(true);
+        const headers = await getAuthHeaders();
 
-      const response = await fetch(`${backendUrl}/api/ai/suggestions/${suggestionId}/approve`, {
-        method: 'POST',
-        headers,
-        credentials: 'include',
-        body: JSON.stringify({ tenant_id: tenantId }),
-      });
+        const response = await fetch(`${backendUrl}/api/ai/suggestions/${suggestionId}/approve`, {
+          method: 'POST',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify({ tenant_id: tenantId }),
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to approve suggestion');
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to approve suggestion');
+        }
+
+        const result = await response.json();
+
+        // Remove from list
+        setSuggestions((prev) => prev.filter((s) => s.id !== suggestionId));
+
+        toast.success(result.message || 'Suggestion approved and executed');
+      } catch (err) {
+        console.error('Error approving suggestion:', err);
+        toast.error(err.message || 'Failed to approve suggestion');
+      } finally {
+        setIsProcessing(false);
       }
-
-      const result = await response.json();
-      
-      // Remove from list
-      setSuggestions(prev => prev.filter(s => s.id !== suggestionId));
-      
-      toast.success(result.message || 'Suggestion approved and executed');
-    } catch (err) {
-      console.error('Error approving suggestion:', err);
-      toast.error(err.message || 'Failed to approve suggestion');
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [backendUrl, tenantId]);
+    },
+    [backendUrl, tenantId],
+  );
 
   /**
    * Reject a suggestion
    */
-  const handleReject = useCallback(async (suggestionId) => {
-    try {
-      setIsProcessing(true);
-      const headers = await getAuthHeaders();
+  const handleReject = useCallback(
+    async (suggestionId) => {
+      try {
+        setIsProcessing(true);
+        const headers = await getAuthHeaders();
 
-      const response = await fetch(`${backendUrl}/api/ai/suggestions/${suggestionId}/reject`, {
-        method: 'POST',
-        headers,
-        credentials: 'include',
-        body: JSON.stringify({ tenant_id: tenantId, reason: 'User rejected' }),
-      });
+        const response = await fetch(`${backendUrl}/api/ai/suggestions/${suggestionId}/reject`, {
+          method: 'POST',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify({ tenant_id: tenantId, reason: 'User rejected' }),
+        });
 
-      if (!response.ok) {
-        throw new Error('Failed to reject suggestion');
+        if (!response.ok) {
+          throw new Error('Failed to reject suggestion');
+        }
+
+        // Remove from list
+        setSuggestions((prev) => prev.filter((s) => s.id !== suggestionId));
+
+        toast.success('Suggestion rejected');
+      } catch (err) {
+        console.error('Error rejecting suggestion:', err);
+        toast.error('Failed to reject suggestion');
+      } finally {
+        setIsProcessing(false);
       }
-
-      // Remove from list
-      setSuggestions(prev => prev.filter(s => s.id !== suggestionId));
-      
-      toast.success('Suggestion rejected');
-    } catch (err) {
-      console.error('Error rejecting suggestion:', err);
-      toast.error('Failed to reject suggestion');
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [backendUrl, tenantId]);
+    },
+    [backendUrl, tenantId],
+  );
 
   /**
    * Defer a suggestion (snooze for later)
@@ -413,8 +412,8 @@ export default function SuggestionQueue({ tenantId }) {
 
       // For now, just hide it from the list - in full implementation
       // this would update the expires_at or add a "snoozed_until" field
-      setSuggestions(prev => prev.filter(s => s.id !== suggestionId));
-      
+      setSuggestions((prev) => prev.filter((s) => s.id !== suggestionId));
+
       toast.info('Suggestion deferred');
     } catch (err) {
       console.error('Error deferring suggestion:', err);
@@ -434,7 +433,7 @@ export default function SuggestionQueue({ tenantId }) {
   // Get unique trigger types for filter
   const availableTriggerTypes = [
     'all',
-    ...new Set(suggestions.map(s => s.trigger_type).filter(Boolean))
+    ...new Set(suggestions.map((s) => s.trigger_type).filter(Boolean)),
   ];
 
   if (isLoading && suggestions.length === 0) {
@@ -455,7 +454,7 @@ export default function SuggestionQueue({ tenantId }) {
             {suggestions.length} pending suggestion{suggestions.length !== 1 ? 's' : ''} for review
           </p>
         </div>
-        
+
         <div className="flex items-center gap-2">
           <Select value={filter} onValueChange={setFilter}>
             <SelectTrigger className="w-[180px]">
@@ -463,21 +462,20 @@ export default function SuggestionQueue({ tenantId }) {
               <SelectValue placeholder="Filter by type" />
             </SelectTrigger>
             <SelectContent>
-              {availableTriggerTypes.map(type => (
+              {availableTriggerTypes.map((type) => (
                 <SelectItem key={type} value={type}>
-                  {type === 'all' 
-                    ? 'All Suggestions' 
-                    : TRIGGER_CONFIG[type]?.label || type}
+                  {type === 'all' ? 'All Suggestions' : TRIGGER_CONFIG[type]?.label || type}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          
-          <Button 
-            variant="outline" 
+
+          <Button
+            variant="outline"
             size="icon"
             onClick={fetchSuggestions}
             disabled={isLoading}
+            aria-label="Refresh suggestions"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
@@ -489,12 +487,7 @@ export default function SuggestionQueue({ tenantId }) {
         <Card className="border-red-200 bg-red-50">
           <CardContent className="py-4">
             <p className="text-sm text-red-600">{error}</p>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="mt-2"
-              onClick={fetchSuggestions}
-            >
+            <Button variant="outline" size="sm" className="mt-2" onClick={fetchSuggestions}>
               Try Again
             </Button>
           </CardContent>
@@ -516,7 +509,7 @@ export default function SuggestionQueue({ tenantId }) {
 
       {/* Suggestion list */}
       <div className="space-y-3">
-        {suggestions.map(suggestion => (
+        {suggestions.map((suggestion) => (
           <SuggestionCard
             key={suggestion.id}
             suggestion={suggestion}

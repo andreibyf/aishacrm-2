@@ -1,12 +1,28 @@
-import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Mail, Phone, Building2, Edit, Trash2, MoreHorizontal, Eye, UserCheck, TrendingUp, Globe } from "lucide-react";
-import { motion } from "framer-motion";
-import PhoneDisplay from "../shared/PhoneDisplay";
-import StatusHelper from "../shared/StatusHelper";
+import { Card, CardContent, CardHeader, CardFooter } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Mail,
+  Phone,
+  Building2,
+  Edit,
+  Trash2,
+  MoreHorizontal,
+  Eye,
+  UserCheck,
+  TrendingUp,
+  Globe,
+} from 'lucide-react';
+import { motion } from 'framer-motion';
+import PhoneDisplay from '../shared/PhoneDisplay';
+import StatusHelper from '../shared/StatusHelper';
 // Minted link deprecated for globe/Profile; use internal view instead
 
 // Matching the stat card colors - semi-transparent backgrounds
@@ -16,12 +32,23 @@ const statusColors = {
   qualified: 'bg-emerald-900/20 text-emerald-300 border-emerald-700',
   unqualified: 'bg-yellow-900/20 text-yellow-300 border-yellow-700',
   converted: 'bg-green-900/20 text-green-300 border-green-700',
-  lost: 'bg-red-900/20 text-red-300 border-red-700'
+  lost: 'bg-red-900/20 text-red-300 border-red-700',
 };
 
-export default function LeadCard({ lead, accountName, onEdit, onDelete, onViewDetails, onClick, isSelected, onSelect, onConvert, user }) {
+export default function LeadCard({
+  lead,
+  accountName,
+  onEdit,
+  onDelete,
+  onViewDetails,
+  onClick,
+  isSelected,
+  onSelect,
+  onConvert,
+  user,
+}) {
   const isConverted = lead.status === 'converted';
-  
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -31,7 +58,7 @@ export default function LeadCard({ lead, accountName, onEdit, onDelete, onViewDe
       data-testid={`lead-card-${lead.email}`}
       className={isConverted ? 'opacity-70' : ''}
     >
-      <Card 
+      <Card
         className={`hover:shadow-lg transition-all duration-200 cursor-pointer bg-slate-800 border-slate-700 ${
           isSelected ? 'ring-2 ring-blue-500' : ''
         }`}
@@ -51,18 +78,18 @@ export default function LeadCard({ lead, accountName, onEdit, onDelete, onViewDe
                   const isB2B = lead.lead_type === 'b2b' || lead.lead_type === 'B2B';
                   const personName = `${lead.first_name || ''} ${lead.last_name || ''}`.trim();
                   const companyName = accountName || lead.company;
-                  
+
                   if (isB2B && companyName) {
                     // B2B: Show company name prominently
                     return (
                       <>
-                        <h3 className={`font-semibold text-lg text-slate-100 ${isConverted ? 'line-through' : ''}`}>
+                        <h3
+                          className={`font-semibold text-lg text-slate-100 ${isConverted ? 'line-through' : ''}`}
+                        >
                           {companyName}
                         </h3>
                         {personName && (
-                          <p className="text-sm text-slate-300 mt-1">
-                            Contact: {personName}
-                          </p>
+                          <p className="text-sm text-slate-300 mt-1">Contact: {personName}</p>
                         )}
                       </>
                     );
@@ -70,7 +97,9 @@ export default function LeadCard({ lead, accountName, onEdit, onDelete, onViewDe
                   // B2C: Show person name prominently
                   return (
                     <>
-                      <h3 className={`font-semibold text-lg text-slate-100 ${isConverted ? 'line-through' : ''}`}>
+                      <h3
+                        className={`font-semibold text-lg text-slate-100 ${isConverted ? 'line-through' : ''}`}
+                      >
                         {personName || '—'}
                       </h3>
                       {companyName && (
@@ -93,31 +122,58 @@ export default function LeadCard({ lead, accountName, onEdit, onDelete, onViewDe
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-200" onClick={(e) => e.stopPropagation()}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-slate-400 hover:text-slate-200"
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label="More options"
+                >
                   <MoreHorizontal className="w-4 h-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="bg-slate-800 border-slate-700 text-slate-200">
-                <DropdownMenuItem 
-                  onClick={(e) => { e.stopPropagation(); onEdit(lead); }} 
+              <DropdownMenuContent
+                align="end"
+                className="bg-slate-800 border-slate-700 text-slate-200"
+              >
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit(lead);
+                  }}
                   className="hover:bg-slate-700"
                   disabled={isConverted}
                 >
                   <Edit className="w-4 h-4 mr-2" />
                   Edit
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onViewDetails(lead); }} className="hover:bg-slate-700">
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onViewDetails(lead);
+                  }}
+                  className="hover:bg-slate-700"
+                >
                   <Eye className="w-4 h-4 mr-2" />
                   View Details
                 </DropdownMenuItem>
                 {onConvert && lead.status !== 'converted' && (
-                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onConvert(lead); }} className="hover:bg-slate-700">
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onConvert(lead);
+                    }}
+                    className="hover:bg-slate-700"
+                  >
                     <UserCheck className="w-4 h-4 mr-2" />
                     Convert to Contact
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem 
-                  onClick={(e) => { e.stopPropagation(); onDelete(lead.id); }} 
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(lead.id);
+                  }}
                   className="text-red-400 hover:bg-slate-700 focus:text-red-400"
                   disabled={isConverted}
                 >
@@ -134,7 +190,11 @@ export default function LeadCard({ lead, accountName, onEdit, onDelete, onViewDe
             {lead.email && (
               <div className="flex items-center gap-2 text-slate-300">
                 <Mail className="w-4 h-4 text-slate-500" />
-                <a href={`mailto:${lead.email}`} className="hover:text-blue-400" onClick={(e) => e.stopPropagation()}>
+                <a
+                  href={`mailto:${lead.email}`}
+                  className="hover:text-blue-400"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   {lead.email}
                 </a>
               </div>
@@ -176,9 +236,11 @@ export default function LeadCard({ lead, accountName, onEdit, onDelete, onViewDe
                 <div className="w-full bg-slate-700 rounded-full h-2">
                   <div
                     className={`h-2 rounded-full transition-all ${
-                      lead.score >= 70 ? 'bg-green-600' :
-                      lead.score >= 40 ? 'bg-yellow-600' :
-                      'bg-red-600'
+                      lead.score >= 70
+                        ? 'bg-green-600'
+                        : lead.score >= 40
+                          ? 'bg-yellow-600'
+                          : 'bg-red-600'
                     }`}
                     style={{ width: `${lead.score}%` }}
                   />
@@ -189,7 +251,7 @@ export default function LeadCard({ lead, accountName, onEdit, onDelete, onViewDe
 
           <div className="flex justify-between items-center pt-2 border-t border-slate-700">
             <div className="flex items-center gap-1">
-              <Badge 
+              <Badge
                 className={`${statusColors[lead.status]} contrast-badge capitalize text-xs font-semibold border`}
                 data-variant="status"
                 data-status={lead.status}
@@ -209,7 +271,10 @@ export default function LeadCard({ lead, accountName, onEdit, onDelete, onViewDe
             <Button
               variant="outline"
               size="sm"
-              onClick={(e) => { e.stopPropagation(); onEdit(lead); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(lead);
+              }}
               className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
               disabled={isConverted}
             >
@@ -219,7 +284,10 @@ export default function LeadCard({ lead, accountName, onEdit, onDelete, onViewDe
             <Button
               variant="outline"
               size="sm"
-              onClick={(e) => { e.stopPropagation(); onViewDetails(lead); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewDetails(lead);
+              }}
               className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
             >
               <Eye className="w-3 h-3 mr-1" />
@@ -229,7 +297,10 @@ export default function LeadCard({ lead, accountName, onEdit, onDelete, onViewDe
             <Button
               variant="ghost"
               size="icon"
-              onClick={(e) => { e.stopPropagation(); onViewDetails(lead); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewDetails(lead);
+              }}
               className="text-slate-400 hover:text-blue-400"
             >
               <Globe className="w-4 h-4" />
@@ -237,7 +308,10 @@ export default function LeadCard({ lead, accountName, onEdit, onDelete, onViewDe
             <Button
               variant="link"
               size="sm"
-              onClick={(e) => { e.stopPropagation(); onViewDetails(lead); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewDetails(lead);
+              }}
               className="text-blue-400 hover:text-blue-300 px-1"
             >
               Profile
@@ -246,7 +320,10 @@ export default function LeadCard({ lead, accountName, onEdit, onDelete, onViewDe
           <Button
             variant="ghost"
             size="icon"
-            onClick={(e) => { e.stopPropagation(); onDelete(lead.id); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(lead.id);
+            }}
             className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
             disabled={isConverted}
           >

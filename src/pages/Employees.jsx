@@ -1,36 +1,60 @@
-import { logDev } from "@/utils/devLogger";
-import { Employee } from "@/api/entities";
-import { useUser } from "../components/shared/useUser.js";
-import { useTenant } from "../components/shared/tenantContext";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Plus, Search, MoreHorizontal, Pencil, Trash2, Upload, Download, Loader2, Eye, Shield } from "lucide-react";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { Card, CardContent } from "@/components/ui/card";
-import CsvImportDialog from "../components/shared/CsvImportDialog";
-import Pagination from "../components/shared/Pagination";
+import { logDev } from '@/utils/devLogger';
+import { Employee } from '@/api/entities';
+import { useUser } from '../components/shared/useUser.js';
+import { useTenant } from '../components/shared/tenantContext';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import {
+  Plus,
+  Search,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+  Upload,
+  Download,
+  Loader2,
+  Eye,
+  Shield,
+} from 'lucide-react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
+import { Card, CardContent } from '@/components/ui/card';
+import CsvImportDialog from '../components/shared/CsvImportDialog';
+import Pagination from '../components/shared/Pagination';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
-} from "@/components/ui/dialog";
-import EmployeeForm from "../components/employees/EmployeeForm";
-import EmployeeDetailPanel from "../components/employees/EmployeeDetailPanel";
-import EmployeePermissionsDialog from "../components/employees/EmployeePermissionsDialog";
-import EmployeeInviteDialog from "../components/employees/EmployeeInviteDialog";
-import { toast } from "sonner";
-import { useState, useEffect, useCallback } from "react";
-import { useLoadingToast } from "@/hooks/useLoadingToast";
+} from '@/components/ui/dialog';
+import EmployeeForm from '../components/employees/EmployeeForm';
+import EmployeeDetailPanel from '../components/employees/EmployeeDetailPanel';
+import EmployeePermissionsDialog from '../components/employees/EmployeePermissionsDialog';
+import EmployeeInviteDialog from '../components/employees/EmployeeInviteDialog';
+import { toast } from 'sonner';
+import { useState, useEffect, useCallback } from 'react';
+import { useLoadingToast } from '@/hooks/useLoadingToast';
 
 export default function Employees() {
   const loadingToast = useLoadingToast();
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState(null);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
@@ -64,7 +88,7 @@ export default function Employees() {
     setLoading(true);
     try {
       if (!currentUser) {
-        console.warn("Current user not available, cannot load employees.");
+        console.warn('Current user not available, cannot load employees.');
         setEmployees([]);
         setTotalItems(0);
         setLoading(false);
@@ -72,54 +96,59 @@ export default function Employees() {
       }
 
       const effectiveTenantId = selectedTenantId || currentUser.tenant_id;
-      
+
       let filter = { tenant_id: effectiveTenantId };
       if (!filter.tenant_id) {
-          console.warn("No tenant ID available, cannot load employees.");
-          setEmployees([]);
-          setTotalItems(0);
-          setLoading(false);
-          return;
+        console.warn('No tenant ID available, cannot load employees.');
+        setEmployees([]);
+        setTotalItems(0);
+        setLoading(false);
+        return;
       }
-      
-      const canSeeAll = currentUser.role === 'admin' || 
-                       currentUser.role === 'superadmin' || 
-                       currentUser.employee_role === 'manager';
-      
+
+      const canSeeAll =
+        currentUser.role === 'admin' ||
+        currentUser.role === 'superadmin' ||
+        currentUser.employee_role === 'manager';
+
       logDev('[Employees] Effective tenant ID:', effectiveTenantId);
       logDev('[Employees] Loading with filter:', filter);
       logDev('[Employees] canSeeAll:', canSeeAll);
-      
+
       let allEmployees;
       if (canSeeAll) {
-        allEmployees = await Employee.filter(filter, "-created_date");
+        allEmployees = await Employee.filter(filter, '-created_date');
       } else {
-        allEmployees = await Employee.filter({
-          ...filter,
-          $or: [
-            { created_by: currentUser.email },
-            { user_email: currentUser.email }
-          ]
-        }, "-created_date");
+        allEmployees = await Employee.filter(
+          {
+            ...filter,
+            $or: [{ created_by: currentUser.email }, { user_email: currentUser.email }],
+          },
+          '-created_date',
+        );
       }
-      
+
       logDev('[Employees] Loaded employees:', allEmployees?.length || 0);
-      logDev('[Employees] Sample employee tenant IDs:', allEmployees?.slice(0, 3).map(e => e.tenant_id));
-      
-      const filtered = allEmployees.filter(emp => 
-        (emp.first_name + ' ' + emp.last_name).toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (emp.email && emp.email.toLowerCase().includes(searchTerm.toLowerCase()))
+      logDev(
+        '[Employees] Sample employee tenant IDs:',
+        allEmployees?.slice(0, 3).map((e) => e.tenant_id),
+      );
+
+      const filtered = allEmployees.filter(
+        (emp) =>
+          (emp.first_name + ' ' + emp.last_name).toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (emp.email && emp.email.toLowerCase().includes(searchTerm.toLowerCase())),
       );
 
       setTotalItems(filtered.length);
 
       const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
       setEmployees(paginated);
-      loadingToast.showSuccess("Employees loading! ✨");
+      loadingToast.showSuccess('Employees loading! ✨');
     } catch (error) {
-      console.error("Error loading employees:", error);
-      loadingToast.showError("Failed to load employees");
-      toast.error("Failed to load employees.");
+      console.error('Error loading employees:', error);
+      loadingToast.showError('Failed to load employees');
+      toast.error('Failed to load employees.');
     } finally {
       setLoading(false);
     }
@@ -147,10 +176,10 @@ export default function Employees() {
   };
 
   const handleDeleteFromPanel = async (id) => {
-    if (confirm("Are you sure you want to delete this employee?")) {
+    if (confirm('Are you sure you want to delete this employee?')) {
       try {
         await Employee.delete(id);
-        toast.success("Employee deleted successfully.");
+        toast.success('Employee deleted successfully.');
         if (selectedEmployee && selectedEmployee.id === id) {
           setIsDetailPanelOpen(false);
           setSelectedEmployee(null);
@@ -165,11 +194,11 @@ export default function Employees() {
           logDev('[DELETE DEBUG] Error.response:', error?.response);
           logDev('[DELETE DEBUG] Error.message:', error?.message);
         }
-        
-        let errorMessage = "Failed to delete employee";
-        
+
+        let errorMessage = 'Failed to delete employee';
+
         if (!error) {
-          errorMessage = "Unknown error occurred";
+          errorMessage = 'Unknown error occurred';
         } else if (typeof error === 'string') {
           errorMessage = error;
         } else if (error.message) {
@@ -177,50 +206,50 @@ export default function Employees() {
         } else if (error.response?.data?.error) {
           errorMessage = error.response.data.error;
         }
-        
-        console.error("Final error message:", errorMessage);
+
+        console.error('Final error message:', errorMessage);
         toast.error(errorMessage);
       }
     }
   };
 
   const exportCsv = () => {
-    toast.info("CSV export feature is not fully implemented yet.");
+    toast.info('CSV export feature is not fully implemented yet.');
   };
-  
+
   const getFormTenantId = () => {
-      // Guard: Don't process if user isn't loaded yet
-      if (!currentUser) {
-          return null;
-      }
-      
-      if (currentUser?.role === 'superadmin' && selectedTenantId) {
-          logDev('[Employees] Using selected tenant for form:', selectedTenantId);
-          return selectedTenantId;
-      }
-      
-      // Try to get tenant_id from current user
-      const tenantId = currentUser?.tenant_id || currentUser?.tenantId;
-      
-      if (!tenantId) {
-          console.warn('[Employees] No tenant_id found on current user:', currentUser);
-          toast.error('Unable to determine tenant. Please refresh the page.');
-          return null;
-      }
-      
-      logDev('[Employees] Using user tenant for form:', tenantId);
-      return tenantId;
+    // Guard: Don't process if user isn't loaded yet
+    if (!currentUser) {
+      return null;
+    }
+
+    if (currentUser?.role === 'superadmin' && selectedTenantId) {
+      logDev('[Employees] Using selected tenant for form:', selectedTenantId);
+      return selectedTenantId;
+    }
+
+    // Try to get tenant_id from current user
+    const tenantId = currentUser?.tenant_id || currentUser?.tenantId;
+
+    if (!tenantId) {
+      console.warn('[Employees] No tenant_id found on current user:', currentUser);
+      toast.error('Unable to determine tenant. Please refresh the page.');
+      return null;
+    }
+
+    logDev('[Employees] Using user tenant for form:', tenantId);
+    return tenantId;
   };
 
   const canManagePermissions = (employee) => {
     if (!currentUser) return false;
-    
+
     if (currentUser.role === 'superadmin' || currentUser.role === 'admin') return true;
-    
+
     if (!employee.user_email) return false;
-    
+
     if (currentUser.employee_role === 'manager') return true;
-    
+
     return false;
   };
 
@@ -229,7 +258,9 @@ export default function Employees() {
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent className="max-w-4xl bg-slate-800 border-slate-700 text-slate-200">
           <DialogHeader>
-            <DialogTitle className="text-slate-100">{editingEmployee ? 'Edit Employee' : 'Add New Employee'}</DialogTitle>
+            <DialogTitle className="text-slate-100">
+              {editingEmployee ? 'Edit Employee' : 'Add New Employee'}
+            </DialogTitle>
             <DialogDescription className="text-slate-400">
               {editingEmployee ? 'Update employee information' : 'Add a new employee to your team'}
             </DialogDescription>
@@ -242,28 +273,54 @@ export default function Employees() {
           />
         </DialogContent>
       </Dialog>
-      
+
       <CsvImportDialog
         entity={Employee}
         schema={{
-          name: "Employee",
-          type: "object",
+          name: 'Employee',
+          type: 'object',
           properties: {
-            first_name: { type: "string", description: "Employee's first name" },
-            last_name: { type: "string", description: "Employee's last name" },
-            email: { type: "string", format: "email", description: "Employee's work email" },
-            phone: { type: "string", description: "Primary phone number" },
-            mobile: { type: "string", description: "Mobile phone number" },
-            department: { type: "string", enum: ["sales", "marketing", "operations", "field_services", "construction", "maintenance", "administration", "management", "technical", "customer_service", "other"] },
-            job_title: { type: "string", description: "Job title or position" },
-            employment_status: { type: "string", enum: ["active", "inactive", "terminated", "on_leave"], default: "active" },
-            employment_type: { type: "string", enum: ["full_time", "part_time", "contractor", "seasonal"], default: "full_time" },
-            hire_date: { type: "string", format: "date", description: "Date of hire" },
-            hourly_rate: { type: "number", description: "Hourly compensation rate" }
+            first_name: { type: 'string', description: "Employee's first name" },
+            last_name: { type: 'string', description: "Employee's last name" },
+            email: { type: 'string', format: 'email', description: "Employee's work email" },
+            phone: { type: 'string', description: 'Primary phone number' },
+            mobile: { type: 'string', description: 'Mobile phone number' },
+            department: {
+              type: 'string',
+              enum: [
+                'sales',
+                'marketing',
+                'operations',
+                'field_services',
+                'construction',
+                'maintenance',
+                'administration',
+                'management',
+                'technical',
+                'customer_service',
+                'other',
+              ],
+            },
+            job_title: { type: 'string', description: 'Job title or position' },
+            employment_status: {
+              type: 'string',
+              enum: ['active', 'inactive', 'terminated', 'on_leave'],
+              default: 'active',
+            },
+            employment_type: {
+              type: 'string',
+              enum: ['full_time', 'part_time', 'contractor', 'seasonal'],
+              default: 'full_time',
+            },
+            hire_date: { type: 'string', format: 'date', description: 'Date of hire' },
+            hourly_rate: { type: 'number', description: 'Hourly compensation rate' },
           },
-          required: ["first_name", "last_name", "department", "job_title"]
+          required: ['first_name', 'last_name', 'department', 'job_title'],
         }}
-        onSuccess={() => { loadEmployees(); setIsImportDialogOpen(false); }}
+        onSuccess={() => {
+          loadEmployees();
+          setIsImportDialogOpen(false);
+        }}
         open={isImportDialogOpen}
         onOpenChange={setIsImportDialogOpen}
         tenantId={getFormTenantId()}
@@ -306,14 +363,14 @@ export default function Employees() {
               await loadEmployees();
             } catch (e) {
               console.warn('Could not link user_email after inviting:', e?.message);
-              toast.error("Failed to link employee to user account after invite.");
+              toast.error('Failed to link employee to user account after invite.');
             }
           }
           setIsInviteOpen(false);
           setInviteEmployee(null);
         }}
       />
-      
+
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Employees</h1>
         <div className="flex items-center gap-2">
@@ -327,10 +384,10 @@ export default function Employees() {
             />
           </div>
           <Button
-            onClick={() => { 
+            onClick={() => {
               logDev('[Employees] Add Employee clicked', { currentUser, userLoading, isFormOpen });
-              setEditingEmployee(null); 
-              setIsFormOpen(true); 
+              setEditingEmployee(null);
+              setIsFormOpen(true);
             }}
             className="bg-blue-600 hover:bg-blue-700"
             disabled={!currentUser || userLoading}
@@ -339,15 +396,27 @@ export default function Employees() {
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="bg-slate-800 border-slate-700 hover:bg-slate-700">
+              <Button
+                variant="outline"
+                className="bg-slate-800 border-slate-700 hover:bg-slate-700"
+              >
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-slate-800 border-slate-700 text-slate-200">
-              <DropdownMenuItem onClick={() => setIsImportDialogOpen(true)} className="hover:bg-slate-700 focus:bg-slate-700">
+            <DropdownMenuContent
+              align="end"
+              className="bg-slate-800 border-slate-700 text-slate-200"
+            >
+              <DropdownMenuItem
+                onClick={() => setIsImportDialogOpen(true)}
+                className="hover:bg-slate-700 focus:bg-slate-700"
+              >
                 <Upload className="mr-2 h-4 w-4" /> Import from CSV
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={exportCsv} className="hover:bg-slate-700 focus:bg-slate-700">
+              <DropdownMenuItem
+                onClick={exportCsv}
+                className="hover:bg-slate-700 focus:bg-slate-700"
+              >
                 <Download className="mr-2 h-4 w-4" /> Export to CSV
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -385,27 +454,80 @@ export default function Employees() {
                   </TableRow>
                 ) : (
                   employees.map((employee) => (
-                    <TableRow key={employee.id} className="hover:bg-slate-700/50 border-b border-slate-800">
-                      <TableCell className="font-medium text-slate-200 cursor-pointer" onClick={() => { setSelectedEmployee(employee); setIsDetailPanelOpen(true); }}>
-                        <div className="font-semibold">{employee.first_name} {employee.last_name}</div>
-                        {employee.employee_number && <div className="text-xs text-slate-400">#{employee.employee_number}</div>}
+                    <TableRow
+                      key={employee.id}
+                      className="hover:bg-slate-700/50 border-b border-slate-800"
+                    >
+                      <TableCell
+                        className="font-medium text-slate-200 cursor-pointer"
+                        onClick={() => {
+                          setSelectedEmployee(employee);
+                          setIsDetailPanelOpen(true);
+                        }}
+                      >
+                        <div className="font-semibold">
+                          {employee.first_name} {employee.last_name}
+                        </div>
+                        {employee.employee_number && (
+                          <div className="text-xs text-slate-400">#{employee.employee_number}</div>
+                        )}
                       </TableCell>
-                      <TableCell className="hidden md:table-cell text-slate-300 cursor-pointer" onClick={() => { setSelectedEmployee(employee); setIsDetailPanelOpen(true); }}>
+                      <TableCell
+                        className="hidden md:table-cell text-slate-300 cursor-pointer"
+                        onClick={() => {
+                          setSelectedEmployee(employee);
+                          setIsDetailPanelOpen(true);
+                        }}
+                      >
                         {employee.email || '—'}
                       </TableCell>
-                      <TableCell className="hidden lg:table-cell text-slate-300 cursor-pointer" onClick={() => { setSelectedEmployee(employee); setIsDetailPanelOpen(true); }}>
+                      <TableCell
+                        className="hidden lg:table-cell text-slate-300 cursor-pointer"
+                        onClick={() => {
+                          setSelectedEmployee(employee);
+                          setIsDetailPanelOpen(true);
+                        }}
+                      >
                         {employee.phone || '—'}
                       </TableCell>
-                      <TableCell className="cursor-pointer" onClick={() => { setSelectedEmployee(employee); setIsDetailPanelOpen(true); }}>
-                        <Badge variant="outline" className="capitalize border-slate-600 text-slate-300">
+                      <TableCell
+                        className="cursor-pointer"
+                        onClick={() => {
+                          setSelectedEmployee(employee);
+                          setIsDetailPanelOpen(true);
+                        }}
+                      >
+                        <Badge
+                          variant="outline"
+                          className="capitalize border-slate-600 text-slate-300"
+                        >
                           {employee.department?.replace(/_/g, ' ')}
                         </Badge>
                       </TableCell>
-                      <TableCell className="hidden xl:table-cell text-slate-300 cursor-pointer" onClick={() => { setSelectedEmployee(employee); setIsDetailPanelOpen(true); }}>
+                      <TableCell
+                        className="hidden xl:table-cell text-slate-300 cursor-pointer"
+                        onClick={() => {
+                          setSelectedEmployee(employee);
+                          setIsDetailPanelOpen(true);
+                        }}
+                      >
                         {employee.job_title}
                       </TableCell>
-                      <TableCell className="cursor-pointer" onClick={() => { setSelectedEmployee(employee); setIsDetailPanelOpen(true); }}>
-                        <Badge variant="outline" className={employee.has_crm_access ? 'bg-green-900/30 text-green-400 border-green-700' : 'bg-slate-700 text-slate-400 border-slate-600'}>
+                      <TableCell
+                        className="cursor-pointer"
+                        onClick={() => {
+                          setSelectedEmployee(employee);
+                          setIsDetailPanelOpen(true);
+                        }}
+                      >
+                        <Badge
+                          variant="outline"
+                          className={
+                            employee.has_crm_access
+                              ? 'bg-green-900/30 text-green-400 border-green-700'
+                              : 'bg-slate-700 text-slate-400 border-slate-600'
+                          }
+                        >
                           {employee.has_crm_access ? 'Active' : 'No Access'}
                         </Badge>
                       </TableCell>
@@ -414,30 +536,49 @@ export default function Employees() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => { setEditingEmployee(employee); setIsFormOpen(true); }}
+                            onClick={() => {
+                              setEditingEmployee(employee);
+                              setIsFormOpen(true);
+                            }}
                             className="h-8 w-8 text-slate-400 hover:text-slate-200 hover:bg-slate-700"
+                            aria-label="Edit employee"
                           >
                             <Pencil className="w-4 h-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => { setSelectedEmployee(employee); setIsDetailPanelOpen(true); }}
+                            onClick={() => {
+                              setSelectedEmployee(employee);
+                              setIsDetailPanelOpen(true);
+                            }}
                             className="h-8 w-8 text-slate-400 hover:text-slate-200 hover:bg-slate-700"
+                            aria-label="View employee details"
                           >
                             <Eye className="w-4 h-4" />
                           </Button>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-200 hover:bg-slate-700">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-slate-400 hover:text-slate-200 hover:bg-slate-700"
+                                aria-label="More options"
+                              >
                                 <MoreHorizontal className="w-4 h-4" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="bg-slate-800 border-slate-700 text-slate-200">
+                            <DropdownMenuContent
+                              align="end"
+                              className="bg-slate-800 border-slate-700 text-slate-200"
+                            >
                               {canManagePermissions(employee) && employee.has_crm_access && (
                                 <>
                                   <DropdownMenuItem
-                                    onClick={() => { setPermissionsEmployee(employee); setIsPermissionsOpen(true); }}
+                                    onClick={() => {
+                                      setPermissionsEmployee(employee);
+                                      setIsPermissionsOpen(true);
+                                    }}
                                     className="hover:bg-slate-700 focus:bg-slate-700"
                                   >
                                     <Shield className="w-4 h-4 mr-2" />
@@ -452,30 +593,39 @@ export default function Employees() {
                                   if (!confirm('Are you sure you want to delete this employee?')) {
                                     return;
                                   }
-                                  
-                                      try {
-                                        await Employee.delete(employee.id);
+
+                                  try {
+                                    await Employee.delete(employee.id);
                                     toast.success('Employee deleted');
-                                    
+
                                     if (selectedEmployee?.id === employee.id) {
                                       setIsDetailPanelOpen(false);
                                       setSelectedEmployee(null);
                                     }
-                                    
+
                                     loadEmployees();
                                   } catch (err) {
                                     if (import.meta.env.DEV) {
                                       logDev('[DROPDOWN DELETE DEBUG] Error object:', err);
                                       logDev('[DROPDOWN DELETE DEBUG] Error type:', typeof err);
-                                      logDev('[DROPDOWN DELETE DEBUG] Error.response:', err?.response);
-                                      logDev('[DROPDOWN DELETE DEBUG] Error.message:', err?.message);
-                                      logDev('[DROPDOWN DELETE DEBUG] Error keys:', err ? Object.keys(err) : 'null/undefined');
+                                      logDev(
+                                        '[DROPDOWN DELETE DEBUG] Error.response:',
+                                        err?.response,
+                                      );
+                                      logDev(
+                                        '[DROPDOWN DELETE DEBUG] Error.message:',
+                                        err?.message,
+                                      );
+                                      logDev(
+                                        '[DROPDOWN DELETE DEBUG] Error keys:',
+                                        err ? Object.keys(err) : 'null/undefined',
+                                      );
                                     }
-                                    
-                                    let msg = "Failed to delete employee";
-                                    
+
+                                    let msg = 'Failed to delete employee';
+
                                     if (!err) {
-                                      msg = "Unknown error occurred";
+                                      msg = 'Unknown error occurred';
                                     } else if (typeof err === 'string') {
                                       msg = err;
                                     } else if (err.message) {
@@ -483,11 +633,11 @@ export default function Employees() {
                                     } else if (err.response?.data?.error) {
                                       msg = err.response.data.error;
                                     }
-                                    
-                                    console.error("Final dropdown delete error:", msg);
+
+                                    console.error('Final dropdown delete error:', msg);
                                     toast.error(msg);
                                   }
-                                    }}
+                                }}
                                 className="text-red-400 hover:bg-slate-700 focus:bg-slate-700 focus:text-red-400"
                               >
                                 <Trash2 className="w-4 h-4 mr-2" />

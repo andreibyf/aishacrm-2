@@ -1,27 +1,18 @@
-import { useState } from 'react'
+import { useState } from 'react';
 import {
   CardContent,
   // CardDescription, // Reserved for future use
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import {
-  Briefcase,
-  Building,
-  Edit3,
-  RotateCcw,
-  Save,
-  Star,
-  User,
-  X,
-} from "lucide-react";
-import { format } from "date-fns";
-import { Account, Contact, Lead, Opportunity } from "@/api/entities";
-import { setAiShaContext } from "@/utils/contextBridge";
-import { useEffect } from "react";
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Briefcase, Building, Edit3, RotateCcw, Save, Star, User, X } from 'lucide-react';
+import { format } from 'date-fns';
+import { Account, Contact, Lead, Opportunity } from '@/api/entities';
+import { setAiShaContext } from '@/utils/contextBridge';
+import { useEffect } from 'react';
 
 const entityIcons = {
   Contact: <User className="w-5 h-5 text-blue-400" />,
@@ -37,15 +28,15 @@ const DetailRow = ({ label, value, field, editMode, onValueChange }) => {
     <div className="grid grid-cols-3 gap-2 py-2 border-b border-slate-700/50">
       <dt className="text-sm font-medium text-slate-400">{label}</dt>
       <dd className="col-span-2">
-        {editMode
-          ? (
-            <Input
-              value={value || ""}
-              onChange={(e) => onValueChange(field, e.target.value)}
-              className="h-8 bg-slate-700 border-slate-600 text-slate-200 text-sm"
-            />
-          )
-          : <span className="text-sm text-slate-200">{value}</span>}
+        {editMode ? (
+          <Input
+            value={value || ''}
+            onChange={(e) => onValueChange(field, e.target.value)}
+            className="h-8 bg-slate-700 border-slate-600 text-slate-200 text-sm"
+          />
+        ) : (
+          <span className="text-sm text-slate-200">{value}</span>
+        )}
       </dd>
     </div>
   );
@@ -59,13 +50,12 @@ export default function GlobalDetailViewer({ recordInfo, open, onClose }) {
   useEffect(() => {
     if (open && recordInfo?.record) {
       const { record, entityType } = recordInfo;
-      const title = record.name ||
-        `${record.first_name || ""} ${record.last_name || ""}`.trim();
+      const title = record.name || `${record.first_name || ''} ${record.last_name || ''}`.trim();
 
       setAiShaContext({
         entity_type: entityType,
         entity_id: record.id,
-        title: title || entityType
+        title: title || entityType,
       });
     }
   }, [open, recordInfo]);
@@ -74,13 +64,12 @@ export default function GlobalDetailViewer({ recordInfo, open, onClose }) {
 
   const { record, entityType } = recordInfo;
 
-  const title = record.name ||
-    `${record.first_name || ""} ${record.last_name || ""}`.trim();
+  const title = record.name || `${record.first_name || ''} ${record.last_name || ''}`.trim();
   const Icon = entityIcons[entityType] || <User className="w-5 h-5" />;
 
   const formatDate = (dateString) => {
     try {
-      return format(new Date(dateString), "PPp");
+      return format(new Date(dateString), 'PPp');
     } catch {
       return dateString;
     }
@@ -103,20 +92,24 @@ export default function GlobalDetailViewer({ recordInfo, open, onClose }) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const Model = entityType === "Contact"
-        ? Contact
-        : entityType === "Lead"
-        ? Lead
-        : entityType === "Account"
-        ? Account
-        : Opportunity;
+      const Model =
+        entityType === 'Contact'
+          ? Contact
+          : entityType === 'Lead'
+            ? Lead
+            : entityType === 'Account'
+              ? Account
+              : Opportunity;
 
       // Only send changed fields
       const changes = {};
       Object.keys(editedRecord).forEach((key) => {
         if (
-          editedRecord[key] !== record[key] && !key.startsWith("_") &&
-          key !== "id" && key !== "created_date" && key !== "updated_date"
+          editedRecord[key] !== record[key] &&
+          !key.startsWith('_') &&
+          key !== 'id' &&
+          key !== 'created_date' &&
+          key !== 'updated_date'
         ) {
           changes[key] = editedRecord[key];
         }
@@ -131,7 +124,7 @@ export default function GlobalDetailViewer({ recordInfo, open, onClose }) {
 
       setEditMode(false);
     } catch (error) {
-      console.error("Failed to update record:", error);
+      console.error('Failed to update record:', error);
       alert(`Failed to update record: ${error.message}`);
     } finally {
       setSaving(false);
@@ -141,10 +134,7 @@ export default function GlobalDetailViewer({ recordInfo, open, onClose }) {
   const currentRecord = editMode ? editedRecord : record;
 
   return (
-    <div
-      className="fixed inset-0 bg-black/60 z-50 flex justify-end"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 bg-black/60 z-50 flex justify-end" onClick={onClose}>
       <div
         className="w-full max-w-md h-full bg-slate-800 shadow-2xl border-l border-slate-700 flex flex-col"
         onClick={(e) => e.stopPropagation()}
@@ -165,38 +155,36 @@ export default function GlobalDetailViewer({ recordInfo, open, onClose }) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {!editMode
-              ? (
+            {!editMode ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleEdit}
+                className="text-slate-400 hover:text-slate-100"
+              >
+                <Edit3 className="w-4 h-4" />
+              </Button>
+            ) : (
+              <>
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={handleEdit}
+                  onClick={handleCancel}
                   className="text-slate-400 hover:text-slate-100"
                 >
-                  <Edit3 className="w-4 h-4" />
+                  <RotateCcw className="w-4 h-4" />
                 </Button>
-              )
-              : (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleCancel}
-                    className="text-slate-400 hover:text-slate-100"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="text-green-400 hover:text-green-300"
-                  >
-                    <Save className="w-4 h-4" />
-                  </Button>
-                </>
-              )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="text-green-400 hover:text-green-300"
+                >
+                  <Save className="w-4 h-4" />
+                </Button>
+              </>
+            )}
             <Button
               variant="ghost"
               size="icon"
@@ -211,6 +199,7 @@ export default function GlobalDetailViewer({ recordInfo, open, onClose }) {
               size="icon"
               onClick={onClose}
               className="text-slate-400 hover:text-slate-100"
+              aria-label="Close"
             >
               <X className="w-5 h-5" />
             </Button>
@@ -290,30 +279,23 @@ export default function GlobalDetailViewer({ recordInfo, open, onClose }) {
             />
             <DetailRow
               label="Amount"
-              value={currentRecord.amount
-                ? `$${Number(currentRecord.amount).toLocaleString()}`
-                : currentRecord.amount}
+              value={
+                currentRecord.amount
+                  ? `$${Number(currentRecord.amount).toLocaleString()}`
+                  : currentRecord.amount
+              }
               field="amount"
               editMode={editMode}
               onValueChange={handleValueChange}
             />
             {currentRecord.close_date && (
-              <DetailRow
-                label="Close Date"
-                value={formatDate(currentRecord.close_date)}
-              />
+              <DetailRow label="Close Date" value={formatDate(currentRecord.close_date)} />
             )}
             {currentRecord.created_date && (
-              <DetailRow
-                label="Created"
-                value={formatDate(currentRecord.created_date)}
-              />
+              <DetailRow label="Created" value={formatDate(currentRecord.created_date)} />
             )}
             {currentRecord.updated_date && (
-              <DetailRow
-                label="Updated"
-                value={formatDate(currentRecord.updated_date)}
-              />
+              <DetailRow label="Updated" value={formatDate(currentRecord.updated_date)} />
             )}
           </dl>
         </CardContent>
