@@ -65,7 +65,13 @@ export function validateUrl(urlString, options = {}) {
     const hostname = url.hostname.toLowerCase();
 
     // Check for localhost/internal IPs
-    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+    const isLocalhost =
+      hostname === 'localhost' ||
+      hostname === '0.0.0.0' ||
+      /^127\./.test(hostname) || // Entire 127.0.0.0/8 loopback range
+      hostname === '::1' ||
+      hostname.startsWith('::ffff:127.') ||
+      hostname.startsWith('[::ffff:127.');
     const isPrivate = isPrivateIP(hostname);
 
     // Block localhost in production
