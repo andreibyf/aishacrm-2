@@ -201,6 +201,12 @@ export default function createActivityV2Routes(_pgPool) {
   async function resolveAssignedTo(assignedTo, tenantId, supabase) {
     if (!assignedTo) return null;
 
+    // Type safety: ensure assignedTo is a string to prevent type confusion
+    if (typeof assignedTo !== 'string') {
+      logger.warn('[Activities] assignedTo must be a string, received:', typeof assignedTo);
+      return null;
+    }
+
     // If it's already a valid UUID, return it directly
     if (UUID_REGEX.test(assignedTo)) return assignedTo;
 

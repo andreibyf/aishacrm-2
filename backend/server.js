@@ -89,12 +89,7 @@ app.get('/health', (req, res) => {
 import helmet from 'helmet'; // Need helmet here for the route-specific config
 app.use(
   '/api-docs',
-  (req, res, next) => {
-    res.removeHeader('Content-Security-Policy');
-    next();
-  },
   helmet({
-    frameguard: false, // Use CSP frame-ancestors instead for this route only
     contentSecurityPolicy: {
       directives: {
         ...helmet.contentSecurityPolicy.getDefaultDirectives(),
