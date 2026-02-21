@@ -9,7 +9,12 @@ import { CRM_POLICIES } from './policies.js';
 import { TOOL_REGISTRY } from './registry.js';
 import { TOOL_CACHE_TTL, generateBraidCacheKey } from './registry.js';
 import { trackRealtimeMetrics, logAuditEntry, extractEntityType } from './metrics.js';
-import { createBackendDeps, filterSensitiveFields, validateToolArgs, isValidUUID } from './utils.js';
+import {
+  createBackendDeps,
+  filterSensitiveFields,
+  validateToolArgs,
+  isValidUUID,
+} from './utils.js';
 import { objectToPositionalArgs, normalizeToolArgs } from './analysis.js';
 import cacheManager from '../cacheManager.js';
 import path from 'path';
@@ -26,7 +31,7 @@ const TOOLS_DIR = path.join(__dirname, '..', '..', '..', 'braid-llm-kit', 'examp
 export const TOOL_ACCESS_TOKEN = Object.freeze({
   verified: true,
   timestamp: Date.now(),
-  source: 'tenant-authorization'
+  source: 'tenant-authorization',
 });
 
 /**
@@ -57,12 +62,18 @@ export function validateToolAccessToken(accessToken) {
  * @param {string} userId - The user ID
  * @param {Object} accessToken - REQUIRED: Security token proving tenant authorization passed (default: false = denied)
  */
-export async function executeBraidTool(toolName, args, tenantRecord, userId = null, accessToken = false) {
+export async function executeBraidTool(
+  toolName,
+  args,
+  tenantRecord,
+  userId = null,
+  accessToken = false,
+) {
   // DEBUG: Log create_lead calls to debug field scrambling
   if (toolName === 'create_lead') {
     console.log('🔍 [DEBUG] create_lead called with args:', JSON.stringify(args, null, 2));
   }
-  
+
   // SECURITY: Verify the access token before any tool execution
   // This is the "key to the toolshed" - without it, no tools can be accessed
   if (!validateToolAccessToken(accessToken)) {
@@ -72,14 +83,15 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
       tokenVerified: accessToken?.verified,
       tokenSource: accessToken?.source,
       tenantId: tenantRecord?.id || tenantRecord?.tenant_id,
-      userId
+      userId,
     });
     return {
       tag: 'Err',
-      error: { 
-        type: 'AuthorizationError', 
-        message: "I'm sorry, but I cannot execute this action without proper authorization. Please ensure you're logged in and have access to this tenant." 
-      }
+      error: {
+        type: 'AuthorizationError',
+        message:
+          "I'm sorry, but I cannot execute this action without proper authorization. Please ensure you're logged in and have access to this tenant.",
+      },
     };
   }
 
@@ -87,7 +99,7 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
   if (!config) {
     return {
       tag: 'Err',
-      error: { type: 'UnknownTool', message: `Tool '${toolName}' not found in registry` }
+      error: { type: 'UnknownTool', message: `Tool '${toolName}' not found in registry` },
     };
   }
 
@@ -96,7 +108,7 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
   const validation = validateToolArgs(toolName, args, {
     tenantUuid: tenantUuidCandidate,
     userId,
-    confirmDelete: args?.confirmed === true || args?.force === true
+    confirmDelete: args?.confirmed === true || args?.force === true,
   });
   if (!validation.valid) {
     console.warn('[Braid Validation] Tool args invalid', { toolName, errors: validation.errors });
@@ -104,30 +116,30 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
       tag: 'Err',
       error: {
         type: 'ValidationError',
-        message: validation.errors.join('; ')
-      }
+        message: validation.errors.join('; '),
+      },
     };
   }
   if (validation.warnings.length > 0) {
     console.warn('[Braid Validation] Warnings:', { toolName, warnings: validation.warnings });
   }
-  
+
   const braidPath = path.join(TOOLS_DIR, config.file);
   // Attach execution context so audit logs include tenant/user and tenant isolation has data
   const basePolicy = CRM_POLICIES[config.policy];
-  
+
   // Extract user info from access token for audit logging and created_by fields
   const userRole = accessToken?.user_role || 'user';
   const userEmail = accessToken?.user_email || null;
   const userName = accessToken?.user_name || null;
   // Use userName for created_by (more readable), fallback to email
   const createdBy = userName || userEmail || null;
-  
+
   // === ROLE-BASED ACCESS CONTROL ===
   // Check if the tool requires specific roles and verify user has permission
   if (basePolicy?.required_roles && basePolicy.required_roles.length > 0) {
     const hasRequiredRole = basePolicy.required_roles.includes(userRole);
-    
+
     if (!hasRequiredRole) {
       console.warn('[Braid Security] Tool execution DENIED - insufficient role', {
         toolName,
@@ -135,14 +147,14 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
         requiredRoles: basePolicy.required_roles,
         userRole,
         userId,
-        tenantId: tenantRecord?.id
+        tenantId: tenantRecord?.id,
       });
       return {
         tag: 'Err',
         error: {
           type: 'InsufficientPermissions',
-          message: `This operation requires ${basePolicy.required_roles.join(' or ')} role. Your current role (${userRole}) does not have permission.`
-        }
+          message: `This operation requires ${basePolicy.required_roles.join(' or ')} role. Your current role (${userRole}) does not have permission.`,
+        },
       };
     }
   }
@@ -152,28 +164,27 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
   if (basePolicy?.rate_limit) {
     const rateLimitKey = `braid:ratelimit:${tenantRecord?.id}:${userId || 'anonymous'}:${basePolicy.tool_class || 'default'}`;
     try {
-      const currentCount = await cacheManager.get(rateLimitKey) || 0;
+      const currentCount = (await cacheManager.get(rateLimitKey)) || 0;
       const limit = basePolicy.rate_limit.requests_per_minute;
-      
+
       if (currentCount >= limit) {
         console.warn('[Braid Security] Rate limit exceeded', {
           toolName,
           toolClass: basePolicy.tool_class,
           currentCount,
           limit,
-          userId,
-          tenantId: tenantRecord?.id
+          tenantId: tenantRecord?.id,
         });
         return {
           tag: 'Err',
           error: {
             type: 'RateLimitExceeded',
             message: `Rate limit exceeded for ${basePolicy.tool_class} operations. Please wait a moment before trying again.`,
-            retryAfter: 60
-          }
+            retryAfter: 60,
+          },
         };
       }
-      
+
       // Increment the counter (TTL of 60 seconds for per-minute limiting)
       await cacheManager.set(rateLimitKey, currentCount + 1, 60);
     } catch (rateLimitErr) {
@@ -187,15 +198,19 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
   if (basePolicy?.requires_confirmation && toolName.includes('delete')) {
     const confirmationProvided = args?.confirmed === true || args?.force === true;
     if (!confirmationProvided) {
-      console.log('[Braid Security] Delete operation requires confirmation', { toolName, userId });
+      console.log('[Braid Security] Delete operation requires confirmation', {
+        toolName,
+        userId,
+        tenantId: tenantRecord?.id,
+      });
       return {
         tag: 'Err',
         error: {
           type: 'ConfirmationRequired',
           message: `This delete operation requires confirmation. Please provide { confirmed: true } to proceed.`,
           action: 'confirm_delete',
-          toolName
-        }
+          toolName,
+        },
       };
     }
   }
@@ -205,22 +220,23 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
     context: {
       ...(basePolicy?.context || {}),
       tenant_id: tenantRecord?.tenant_id || null,
-      user_id: userId || null
-    }
+      user_id: userId || null,
+    },
   };
   // CRITICAL: Use tenantRecord.id (UUID) not tenant_id (slug) for API calls
   const tenantUuid = tenantRecord?.id || tenantRecord?.tenant_id || null;
-  
+
   // Generate internal service JWT for server-to-server API calls
   const internalToken = jwt.sign(
     { sub: userId, tenant_id: tenantUuid, internal: true },
     process.env.JWT_SECRET,
-    { expiresIn: '5m' }
+    { expiresIn: '5m' },
   );
   // Use CRM_BACKEND_URL (set in docker-compose) or BACKEND_URL or sensible default
   // Inside Docker: CRM_BACKEND_URL=http://backend:3001
   // Outside Docker: BACKEND_URL=http://localhost:4001
-  const backendUrl = process.env.CRM_BACKEND_URL || process.env.BACKEND_URL || 'http://localhost:4001';
+  const backendUrl =
+    process.env.CRM_BACKEND_URL || process.env.BACKEND_URL || 'http://localhost:4001';
   // Pass createdBy (userName or email) for created_by field injection in POST requests
   const deps = createBackendDeps(backendUrl, tenantUuid, userId, internalToken, createdBy);
 
@@ -234,7 +250,7 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
     braidPath,
     function: config.function,
     tenantUuid,
-    argsPreview: JSON.stringify(positionalArgs).substring(0, 200)
+    argsPreview: JSON.stringify(positionalArgs).substring(0, 200),
   });
 
   // Check Redis cache for READ_ONLY tools
@@ -245,29 +261,43 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
     try {
       const cachedResult = await cacheManager.get(cacheKey);
       if (cachedResult !== null) {
-        console.log(`[Braid Tool] Cache HIT for ${toolName}`, { cacheKey: cacheKey.substring(0, 60) });
-        
+        console.log('[Braid Tool] Cache HIT for %s', toolName, {
+          cacheKey: cacheKey.substring(0, 60),
+        });
+
         // Track cache hit in real-time metrics
         trackRealtimeMetrics(tenantUuid, toolName, true, true, 0);
-        
+
         // Log cache hit to audit (async, don't await)
         logAuditEntry({
-          toolName, config, basePolicy, tenantUuid, userId, userEmail, userRole,
-          normalizedArgs, result: cachedResult, executionTimeMs: 0, cacheHit: true, supabase: deps.supabase
+          toolName,
+          config,
+          basePolicy,
+          tenantUuid,
+          userId,
+          userEmail,
+          userRole,
+          normalizedArgs,
+          result: cachedResult,
+          executionTimeMs: 0,
+          cacheHit: true,
+          supabase: deps.supabase,
         });
-        
+
         return cachedResult;
       }
-      console.log(`[Braid Tool] Cache MISS for ${toolName}`, { cacheKey: cacheKey.substring(0, 60) });
+      console.log('[Braid Tool] Cache MISS for %s', toolName, {
+        cacheKey: cacheKey.substring(0, 60),
+      });
     } catch (cacheErr) {
       // Cache errors should never block tool execution
-      console.warn(`[Braid Tool] Cache lookup failed for ${toolName}:`, cacheErr.message);
+      console.warn('[Braid Tool] Cache lookup failed for %s:', toolName, cacheErr.message);
     }
   }
 
   // Start timing for audit
   const startTime = Date.now();
-  
+
   try {
     const result = await executeBraid(
       braidPath,
@@ -275,17 +305,23 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
       policy,
       deps,
       positionalArgs,
-      { cache: false, timeout: 30000 } // Disable in-memory cache, use Redis instead
+      { cache: false, timeout: 30000 }, // Disable in-memory cache, use Redis instead
     );
-    
+
     console.log(`[Braid Tool] ${toolName} completed`, {
       resultTag: result?.tag,
       hasError: !!result?.error,
       errorType: result?.error?.type,
       errorMsg: result?.error?.message?.substring?.(0, 200),
       // For search/list operations, log result count for debugging
-      resultCount: Array.isArray(result?.value) ? result.value.length : (result?.value?.length !== undefined ? result.value.length : 'N/A'),
-      resultPreview: Array.isArray(result?.value) ? result.value.slice(0, 2).map(r => r?.first_name || r?.name || r?.id) : 'N/A'
+      resultCount: Array.isArray(result?.value)
+        ? result.value.length
+        : result?.value?.length !== undefined
+          ? result.value.length
+          : 'N/A',
+      resultPreview: Array.isArray(result?.value)
+        ? result.value.slice(0, 2).map((r) => r?.first_name || r?.name || r?.id)
+        : 'N/A',
     });
 
     // Cache successful READ_ONLY results in Redis
@@ -325,7 +361,9 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
         if (invalidatedEntity && tenantUuid) {
           // Invalidate all braid cache keys for this tenant and entity type
           const _pattern = `braid:${tenantUuid}:*${invalidatedEntity}*`;
-          console.log(`[Braid Tool] Invalidating cache for ${invalidatedEntity} (tenant: ${tenantUuid?.substring(0, 8)}...)`);
+          console.log(
+            `[Braid Tool] Invalidating cache for ${invalidatedEntity} (tenant: ${tenantUuid?.substring(0, 8)}...)`,
+          );
           await cacheManager.invalidateTenant(tenantUuid, 'braid');
         }
       } catch (cacheErr) {
@@ -342,8 +380,18 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
 
     // Log to audit (async, don't await to avoid blocking response)
     logAuditEntry({
-      toolName, config, basePolicy, tenantUuid, userId, userEmail, userRole,
-      normalizedArgs, result, executionTimeMs, cacheHit: false, supabase: deps.supabase
+      toolName,
+      config,
+      basePolicy,
+      tenantUuid,
+      userId,
+      userEmail,
+      userRole,
+      normalizedArgs,
+      result,
+      executionTimeMs,
+      cacheHit: false,
+      supabase: deps.supabase,
     });
 
     // Apply field-level filtering based on user role (mask sensitive data)
@@ -358,22 +406,36 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
     return result;
   } catch (error) {
     const executionTimeMs = Date.now() - startTime;
-    console.error(`[Braid Tool] ${toolName} EXCEPTION`, error.message, error.stack?.substring?.(0, 300));
-    
+    console.error('[Braid Tool] EXCEPTION', {
+      toolName,
+      message: error.message,
+      stack: error.stack?.substring?.(0, 300),
+    });
+
     const errorResult = {
       tag: 'Err',
-      error: { type: 'ExecutionError', message: error.message, stack: error.stack }
+      error: { type: 'ExecutionError', message: error.message, stack: error.stack },
     };
-    
+
     // Track error in real-time metrics
     trackRealtimeMetrics(tenantUuid, toolName, false, false, executionTimeMs);
 
     // Log error to audit (async, don't await)
     logAuditEntry({
-      toolName, config, basePolicy, tenantUuid, userId, userEmail, userRole,
-      normalizedArgs, result: errorResult, executionTimeMs, cacheHit: false, supabase: deps.supabase
+      toolName,
+      config,
+      basePolicy,
+      tenantUuid,
+      userId,
+      userEmail,
+      userRole,
+      normalizedArgs,
+      result: errorResult,
+      executionTimeMs,
+      cacheHit: false,
+      supabase: deps.supabase,
     });
-    
+
     return errorResult;
   }
 }

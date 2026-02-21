@@ -971,7 +971,6 @@ export default function createAIRoutes(pgPool) {
       logger.debug('[AI generateAssistantResponse] API key resolution:', {
         conversationId,
         provider: modelConfig.provider,
-        tenantSlug,
         hasExplicitKey: !!requestDescriptor.bodyApiKey,
         hasHeaderKey: !!requestDescriptor.headerApiKey,
         hasUserKey: !!requestDescriptor.userApiKey,
@@ -3125,8 +3124,7 @@ ${toolContextSummary}`,
       // BUGFIX: Log API key resolution for debugging production issues
       logger.debug('[AI Chat] API key resolution:', {
         provider: tenantModelConfig.provider,
-        tenantSlug: tenantRecord?.tenant_id,
-        tenantUuid: tenantRecord?.id,
+        tenantHasConfig: !!tenantRecord,
         hasExplicitKey: !!req.body?.api_key,
         hasHeaderKey: !!req.headers['x-openai-key'],
         hasUserKey: !!req.user?.system_openai_settings?.openai_api_key,
@@ -3162,20 +3160,14 @@ ${toolContextSummary}`,
       if (effectiveProvider === 'openai') {
         const trimmedKey = keyToUse.trim();
         if (!trimmedKey.startsWith('sk-')) {
-          logger.error('[AI Chat] ERROR: Invalid OpenAI API key format (must start with sk-):', {
-            keyPrefix: trimmedKey.substring(0, 7),
-            keyLength: trimmedKey.length,
-          });
+          logger.error('[AI Chat] ERROR: Invalid OpenAI API key format (must start with sk-)');
           return res.status(501).json({
             status: 'error',
             message: 'Invalid OpenAI API key configuration. Please contact your administrator.',
           });
         }
         if (trimmedKey.length < 20 || trimmedKey.length > 300) {
-          logger.error('[AI Chat] ERROR: Suspicious OpenAI API key length:', {
-            keyLength: trimmedKey.length,
-            keyPrefix: trimmedKey.substring(0, 7),
-          });
+          logger.error('[AI Chat] ERROR: Suspicious OpenAI API key length');
           return res.status(501).json({
             status: 'error',
             message:
@@ -3186,11 +3178,7 @@ ${toolContextSummary}`,
         const trimmedKey = keyToUse.trim();
         if (!trimmedKey.startsWith('sk-ant-')) {
           logger.error(
-            '[AI Chat] ERROR: Invalid Anthropic API key format (must start with sk-ant-):',
-            {
-              keyPrefix: trimmedKey.substring(0, 10),
-              keyLength: trimmedKey.length,
-            },
+            '[AI Chat] ERROR: Invalid Anthropic API key format (must start with sk-ant-)',
           );
           return res.status(501).json({
             status: 'error',

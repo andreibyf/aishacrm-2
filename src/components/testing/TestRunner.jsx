@@ -1,18 +1,11 @@
-import { useCallback, useEffect, useState, useRef, useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Clock,
-  FileText,
-  Play,
-  XCircle,
-} from "lucide-react";
-import { getBackendUrl } from "@/api/backendUrl";
+import { useCallback, useEffect, useState, useRef, useMemo } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AlertTriangle, CheckCircle2, Clock, FileText, Play, XCircle } from 'lucide-react';
+import { getBackendUrl } from '@/api/backendUrl';
 import { useUser } from '@/components/shared/useUser.js';
 import { useTenant } from '@/components/shared/tenantContext.jsx';
 
@@ -28,7 +21,9 @@ try {
     console.log('[TestRunner] Clearing stale test_runner_active flag from previous session');
     sessionStorage.removeItem('test_runner_active');
   }
-} catch { /* ignore */ }
+} catch {
+  /* ignore */
+}
 
 export default function TestRunner({ testSuites }) {
   // Initialize results from sessionStorage to survive remounts during test run
@@ -52,19 +47,25 @@ export default function TestRunner({ testSuites }) {
   const isSuperadmin = (user?.role || '').toLowerCase() === 'superadmin';
   const [config, setConfig] = useState(() => {
     try {
-      const ls = typeof window !== 'undefined' ? window.localStorage?.getItem(TEST_CONFIG_KEY) : null;
+      const ls =
+        typeof window !== 'undefined' ? window.localStorage?.getItem(TEST_CONFIG_KEY) : null;
       if (ls) return JSON.parse(ls);
       const ss = sessionStorage.getItem(TEST_CONFIG_KEY);
       if (ss) return JSON.parse(ss);
-    } catch { /* ignore config restore error */ }
+    } catch {
+      /* ignore config restore error */
+    }
     return { workers: 1, rate: 0, delayMs: 0 };
   });
   // Named profiles: save/load/delete (persisted to localStorage)
   const [profiles, setProfiles] = useState(() => {
     try {
-      const raw = typeof window !== 'undefined' ? window.localStorage?.getItem('unit_test_profiles') : null;
+      const raw =
+        typeof window !== 'undefined' ? window.localStorage?.getItem('unit_test_profiles') : null;
       if (raw) return JSON.parse(raw) || {};
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     return {};
   });
   const [activeProfile, setActiveProfile] = useState('');
@@ -77,25 +78,9 @@ export default function TestRunner({ testSuites }) {
   const rateLimited429Ref = useRef(0);
   const [uiStats, setUiStats] = useState({ avgRps: 0, rateLimited429: 0 });
 
-  // Category selection (suites) with persistence
+  // Category selection (suites) - in-memory only (no persistence for security)
   const allSuiteNames = useMemo(() => testSuites.map((s) => s.name), [testSuites]);
-  const [selectedCategories, setSelectedCategories] = useState(() => {
-    try {
-      const raw = typeof window !== 'undefined' ? window.localStorage?.getItem('unit_test_selected_categories') : null;
-      if (raw) {
-        const arr = JSON.parse(raw);
-        if (Array.isArray(arr)) return new Set(arr);
-      }
-    } catch { /* ignore */ }
-    return new Set(allSuiteNames);
-  });
-  useEffect(() => {
-    try {
-      if (typeof window !== 'undefined') {
-        window.localStorage?.setItem('unit_test_selected_categories', JSON.stringify(Array.from(selectedCategories)));
-      }
-    } catch { /* ignore */ }
-  }, [selectedCategories]);
+  const [selectedCategories, setSelectedCategories] = useState(() => new Set(allSuiteNames));
   // Keep selection in sync if suites change
   useEffect(() => {
     setSelectedCategories((prev) => {
@@ -108,7 +93,10 @@ export default function TestRunner({ testSuites }) {
     });
   }, [allSuiteNames]);
 
-  const effectiveSuites = useMemo(() => testSuites.filter((s) => selectedCategories.has(s.name)), [testSuites, selectedCategories]);
+  const effectiveSuites = useMemo(
+    () => testSuites.filter((s) => selectedCategories.has(s.name)),
+    [testSuites, selectedCategories],
+  );
 
   // Detect presence of stored results (for manual restore)
   useEffect(() => {
@@ -127,32 +115,51 @@ export default function TestRunner({ testSuites }) {
       if (typeof window !== 'undefined') {
         window.localStorage?.setItem(TEST_CONFIG_KEY, JSON.stringify(config));
       }
-    } catch { /* ignore config persist error */ }
+    } catch {
+      /* ignore config persist error */
+    }
   }, [config]);
   useEffect(() => {
     try {
       if (typeof window !== 'undefined') {
         window.localStorage?.setItem('unit_test_profiles', JSON.stringify(profiles));
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }, [profiles]);
 
-  const loadProfile = useCallback((name) => {
-    try {
-      const p = profiles?.[name];
-      if (!p) return;
-      setConfig((c) => ({ ...c, workers: p.workers ?? c.workers, rate: p.rate ?? c.rate, delayMs: p.delayMs ?? c.delayMs }));
-      if (Array.isArray(p.categories) && p.categories.length > 0) {
-        setSelectedCategories(new Set(p.categories));
+  const loadProfile = useCallback(
+    (name) => {
+      try {
+        const p = profiles?.[name];
+        if (!p) return;
+        setConfig((c) => ({
+          ...c,
+          workers: p.workers ?? c.workers,
+          rate: p.rate ?? c.rate,
+          delayMs: p.delayMs ?? c.delayMs,
+        }));
+        if (Array.isArray(p.categories) && p.categories.length > 0) {
+          setSelectedCategories(new Set(p.categories));
+        }
+        setActiveProfile(name);
+      } catch {
+        /* ignore */
       }
-      setActiveProfile(name);
-    } catch { /* ignore */ }
-  }, [profiles]);
+    },
+    [profiles],
+  );
 
   const saveProfile = useCallback(() => {
     const name = profileNameInput?.trim();
     if (!name) return;
-    const payload = { workers: config.workers, rate: config.rate, delayMs: config.delayMs, categories: Array.from(selectedCategories) };
+    const payload = {
+      workers: config.workers,
+      rate: config.rate,
+      delayMs: config.delayMs,
+      categories: Array.from(selectedCategories),
+    };
     setProfiles((prev) => ({ ...prev, [name]: payload }));
     setActiveProfile(name);
   }, [profileNameInput, config, selectedCategories]);
@@ -172,8 +179,10 @@ export default function TestRunner({ testSuites }) {
   useEffect(() => {
     const runningFlag = sessionStorage.getItem('test_runner_active');
     if (runningFlag === 'true' && !running) {
-      console.log('[TestRunner] Detected active test run in another component instance, polling for updates...');
-      
+      console.log(
+        '[TestRunner] Detected active test run in another component instance, polling for updates...',
+      );
+
       // Poll sessionStorage for updates
       const pollInterval = setInterval(() => {
         try {
@@ -211,7 +220,7 @@ export default function TestRunner({ testSuites }) {
       }, 500); // Poll every 500ms
 
       pollIntervalRef.current = pollInterval;
-      
+
       return () => {
         if (pollIntervalRef.current) {
           clearInterval(pollIntervalRef.current);
@@ -237,9 +246,9 @@ export default function TestRunner({ testSuites }) {
   };
   const [currentTest, setCurrentTest] = useState(null);
   const [preflight, setPreflight] = useState({
-    status: "unknown",
+    status: 'unknown',
     message: null,
-    database: "unknown",
+    database: 'unknown',
   });
   const [checking, setChecking] = useState(true);
 
@@ -251,16 +260,16 @@ export default function TestRunner({ testSuites }) {
       let resp = await fetch(`${BACKEND_URL}/api/system/status`);
       if (!resp.ok) throw new Error(`Status ${resp.status}`);
       const sys = await resp.json();
-      const dbStatus = sys?.data?.database || "unknown";
-      if (dbStatus === "connected") {
+      const dbStatus = sys?.data?.database || 'unknown';
+      if (dbStatus === 'connected') {
         setPreflight({
-          status: "ok",
-          message: "Backend online",
-          database: "connected",
+          status: 'ok',
+          message: 'Backend online',
+          database: 'connected',
         });
       } else {
         setPreflight({
-          status: "error",
+          status: 'error',
           message: `Database not ready: ${dbStatus}`,
           database: dbStatus,
         });
@@ -273,17 +282,15 @@ export default function TestRunner({ testSuites }) {
         const data = await resp.json();
         // Health may say connected = based on pool exist; keep conservative
         setPreflight({
-          status: data?.database === "connected" ? "ok" : "error",
-          message: data?.database === "connected"
-            ? "Backend online"
-            : "Database not ready",
-          database: data?.database || "unknown",
+          status: data?.database === 'connected' ? 'ok' : 'error',
+          message: data?.database === 'connected' ? 'Backend online' : 'Database not ready',
+          database: data?.database || 'unknown',
         });
       } catch {
         setPreflight({
-          status: "error",
+          status: 'error',
           message: `Backend not reachable at ${BACKEND_URL}`,
-          database: "unknown",
+          database: 'unknown',
         });
       }
     } finally {
@@ -297,23 +304,26 @@ export default function TestRunner({ testSuites }) {
   }, [checkBackend]);
 
   // Compute totals from selected suites
-  const totalTests = effectiveSuites.reduce(
-    (sum, suite) => sum + suite.tests.length,
-    0,
-  );
+  const totalTests = effectiveSuites.reduce((sum, suite) => sum + suite.tests.length, 0);
 
   const runTests = async () => {
     // Prevent concurrent runs - check both state AND sessionStorage
     const runningFlag = sessionStorage.getItem('test_runner_active');
     if (running || runningFlag === 'true') {
-      console.log('[TestRunner] Already running (running=' + running + ', sessionStorage=' + runningFlag + '), ignoring duplicate runTests call');
+      console.log(
+        '[TestRunner] Already running (running=' +
+          running +
+          ', sessionStorage=' +
+          runningFlag +
+          '), ignoring duplicate runTests call',
+      );
       return;
     }
-    
+
     // Mark as running in BOTH locations
     setRunning(true);
     sessionStorage.setItem('test_runner_active', 'true');
-    
+
     const allResults = [];
     resultsRef.current = [];
     console.log('[TestRunner] CLEARING results at start of run');
@@ -334,9 +344,9 @@ export default function TestRunner({ testSuites }) {
 
     // Live stats instrumentation
     startAtRef.current = Date.now();
-    const originalFetch = (typeof window !== 'undefined' && window.fetch) ? window.fetch : null;
+    const originalFetch = typeof window !== 'undefined' && window.fetch ? window.fetch : null;
     rateLimited429Ref.current = 0;
-      try {
+    try {
       if (typeof window !== 'undefined' && originalFetch) {
         window.fetch = async (...args) => {
           const res = await originalFetch(...args);
@@ -344,16 +354,23 @@ export default function TestRunner({ testSuites }) {
             if (res && res.status === 429) {
               rateLimited429Ref.current = (rateLimited429Ref.current || 0) + 1;
             }
-            } catch { /* ignore */ }
+          } catch {
+            /* ignore */
+          }
           return res;
         };
       }
-      } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
 
     const flushResults = () => {
       // Batch UI/state updates to reduce flicker
       resultsRef.current = [...allResults];
-      console.log('[TestRunner] flushResults called - setting results to length:', allResults.length);
+      console.log(
+        '[TestRunner] flushResults called - setting results to length:',
+        allResults.length,
+      );
       setResults([...allResults]);
       try {
         sessionStorage.setItem(TEST_RESULTS_KEY, JSON.stringify(allResults));
@@ -381,7 +398,9 @@ export default function TestRunner({ testSuites }) {
     let queueIndex = 0;
     let nextAllowedStart = 0;
 
-    setCurrentTest(`Running with ${maxWorkers} worker${maxWorkers > 1 ? 's' : ''}${rate ? ` @ ${rate}/s` : ''}${delayAfterMs ? ` + ${delayAfterMs}ms delay` : ''}`);
+    setCurrentTest(
+      `Running with ${maxWorkers} worker${maxWorkers > 1 ? 's' : ''}${rate ? ` @ ${rate}/s` : ''}${delayAfterMs ? ` + ${delayAfterMs}ms delay` : ''}`,
+    );
 
     const runOne = async (_workerId) => {
       while (true) {
@@ -394,7 +413,7 @@ export default function TestRunner({ testSuites }) {
         if (startGapMs > 0 && now < nextAllowedStart) {
           await sleep(nextAllowedStart - now);
         }
-        nextAllowedStart = (Date.now()) + startGapMs;
+        nextAllowedStart = Date.now() + startGapMs;
 
         testIndex++;
         setCurrentTest(`${suite.name} - ${test.name}`);
@@ -407,9 +426,14 @@ export default function TestRunner({ testSuites }) {
           error: null,
         };
 
-        const execPromise = (async () => { await test.fn(); })();
+        const execPromise = (async () => {
+          await test.fn();
+        })();
         const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error(`Timeout after ${TEST_TIMEOUT_MS}ms`)), TEST_TIMEOUT_MS);
+          setTimeout(
+            () => reject(new Error(`Timeout after ${TEST_TIMEOUT_MS}ms`)),
+            TEST_TIMEOUT_MS,
+          );
         });
 
         try {
@@ -442,17 +466,23 @@ export default function TestRunner({ testSuites }) {
     } catch (error) {
       console.error('[TestRunner] FATAL ERROR during test execution:', error);
       console.error('[TestRunner] Stack:', error.stack);
-      alert(`Test runner crashed at test ${testIndex}: ${error.message}\n\nCheck console for details.`);
+      alert(
+        `Test runner crashed at test ${testIndex}: ${error.message}\n\nCheck console for details.`,
+      );
     } finally {
       // Restore fetch and log simple stats
       try {
         if (typeof window !== 'undefined' && originalFetch && window.fetch !== originalFetch) {
           window.fetch = originalFetch;
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
       const elapsed = Math.max(1, Date.now() - (startAtRef.current || Date.now()));
       const avgRps = (allResults.length / (elapsed / 1000)).toFixed(1);
-      console.log(`[TestRunner] Stats: completed=${allResults.length}, rps_avg=${avgRps}, rate_limited_429=${rateLimited429Ref.current || 0}`);
+      console.log(
+        `[TestRunner] Stats: completed=${allResults.length}, rps_avg=${avgRps}, rate_limited_429=${rateLimited429Ref.current || 0}`,
+      );
       setUiStats({ avgRps: Number(avgRps), rateLimited429: rateLimited429Ref.current || 0 });
       flushResults();
       setCurrentTest(null);
@@ -465,7 +495,9 @@ export default function TestRunner({ testSuites }) {
         delete window.__UNIT_TEST_SUPPRESS_CODES;
       }
       if (allResults.length !== totalTests) {
-        console.warn(`[TestRunner] WARNING: Expected ${totalTests} tests, but only ${allResults.length} completed.`);
+        console.warn(
+          `[TestRunner] WARNING: Expected ${totalTests} tests, but only ${allResults.length} completed.`,
+        );
       }
     }
   };
@@ -485,14 +517,19 @@ export default function TestRunner({ testSuites }) {
 
   // REMOVED: Auto-restore was causing double-run issues
   // Use the manual "Restore Previous Results" button instead
-  const passedTests = results.filter((r) => r.status === "passed").length;
-  const failedTests = results.filter((r) => r.status === "failed").length;
+  const passedTests = results.filter((r) => r.status === 'passed').length;
+  const failedTests = results.filter((r) => r.status === 'failed').length;
   const completedTests = results.length;
-  const passRate = completedTests > 0
-    ? ((passedTests / completedTests) * 100).toFixed(1)
-    : 0;
+  const passRate = completedTests > 0 ? ((passedTests / completedTests) * 100).toFixed(1) : 0;
 
-  console.log('[TestRunner] Render - results.length:', results.length, 'passed:', passedTests, 'failed:', failedTests);
+  console.log(
+    '[TestRunner] Render - results.length:',
+    results.length,
+    'passed:',
+    passedTests,
+    'failed:',
+    failedTests,
+  );
 
   const [cleaning, setCleaning] = useState(false);
   const clearResults = async () => {
@@ -518,28 +555,34 @@ export default function TestRunner({ testSuites }) {
     const BACKEND_URL = getBackendUrl();
     const cleanupSpecs = [
       {
-        endpoint: 'contacts', key: 'contacts', matcher: (r) =>
-          (r.email && r.email.includes('@unittest.local')) || r.first_name === 'Test'
+        endpoint: 'contacts',
+        key: 'contacts',
+        matcher: (r) => (r.email && r.email.includes('@unittest.local')) || r.first_name === 'Test',
       },
       {
-        endpoint: 'leads', key: 'leads', matcher: (r) =>
-          (r.email && r.email.includes('@unittest.local')) || r.first_name === 'Test'
+        endpoint: 'leads',
+        key: 'leads',
+        matcher: (r) => (r.email && r.email.includes('@unittest.local')) || r.first_name === 'Test',
       },
       {
-        endpoint: 'accounts', key: 'accounts', matcher: (r) =>
-          r.name && r.name.startsWith('Test Account ')
+        endpoint: 'accounts',
+        key: 'accounts',
+        matcher: (r) => r.name && r.name.startsWith('Test Account '),
       },
       {
-        endpoint: 'system-logs', key: 'system-logs', matcher: (r) =>
-          r.source === 'UnitTests:SystemLogs'
-      }
+        endpoint: 'system-logs',
+        key: 'system-logs',
+        matcher: (r) => r.source === 'UnitTests:SystemLogs',
+      },
     ];
 
     setCleaning(true);
     const summary = [];
     for (const spec of cleanupSpecs) {
       try {
-        const listResp = await fetch(`${BACKEND_URL}/api/${spec.endpoint}?tenant_id=${encodeURIComponent(tenantId)}&limit=200`);
+        const listResp = await fetch(
+          `${BACKEND_URL}/api/${spec.endpoint}?tenant_id=${encodeURIComponent(tenantId)}&limit=200`,
+        );
         if (!listResp.ok) {
           console.warn(`[Cleanup] Skip ${spec.endpoint}: status ${listResp.status}`);
           continue;
@@ -551,7 +594,10 @@ export default function TestRunner({ testSuites }) {
         for (const item of targets) {
           if (!item.id) continue;
           try {
-            const del = await fetch(`${BACKEND_URL}/api/${spec.endpoint}/${item.id}?tenant_id=${encodeURIComponent(tenantId)}`, { method: 'DELETE' });
+            const del = await fetch(
+              `${BACKEND_URL}/api/${spec.endpoint}/${item.id}?tenant_id=${encodeURIComponent(tenantId)}`,
+              { method: 'DELETE' },
+            );
             if (del.ok) deleted++;
           } catch (e) {
             console.warn(`[Cleanup] Failed delete ${spec.endpoint} ${item.id}:`, e.message);
@@ -583,7 +629,12 @@ export default function TestRunner({ testSuites }) {
                       max={32}
                       value={config.workers}
                       disabled={running}
-                      onChange={(e) => setConfig((c) => ({ ...c, workers: Math.max(1, Number(e.target.value) || 1) }))}
+                      onChange={(e) =>
+                        setConfig((c) => ({
+                          ...c,
+                          workers: Math.max(1, Number(e.target.value) || 1),
+                        }))
+                      }
                       className="w-20 bg-slate-700 border-slate-600 h-8 text-slate-100"
                     />
                   </div>
@@ -595,7 +646,9 @@ export default function TestRunner({ testSuites }) {
                       max={1000}
                       value={config.rate}
                       disabled={running}
-                      onChange={(e) => setConfig((c) => ({ ...c, rate: Math.max(0, Number(e.target.value) || 0) }))}
+                      onChange={(e) =>
+                        setConfig((c) => ({ ...c, rate: Math.max(0, Number(e.target.value) || 0) }))
+                      }
                       className="w-24 bg-slate-700 border-slate-600 h-8 text-slate-100"
                     />
                   </div>
@@ -607,7 +660,12 @@ export default function TestRunner({ testSuites }) {
                       max={60000}
                       value={config.delayMs}
                       disabled={running}
-                      onChange={(e) => setConfig((c) => ({ ...c, delayMs: Math.max(0, Number(e.target.value) || 0) }))}
+                      onChange={(e) =>
+                        setConfig((c) => ({
+                          ...c,
+                          delayMs: Math.max(0, Number(e.target.value) || 0),
+                        }))
+                      }
                       className="w-28 bg-slate-700 border-slate-600 h-8 text-slate-100"
                     />
                   </div>
@@ -623,7 +681,9 @@ export default function TestRunner({ testSuites }) {
                   >
                     <option value="">Profiles…</option>
                     {Object.keys(profiles).map((name) => (
-                      <option key={name} value={name}>{name}</option>
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
                     ))}
                   </select>
                   <input
@@ -639,13 +699,17 @@ export default function TestRunner({ testSuites }) {
                     className="bg-slate-700 border-slate-600 h-8 px-2 text-xs"
                     disabled={running || !profileNameInput.trim()}
                     onClick={saveProfile}
-                  >Save</Button>
+                  >
+                    Save
+                  </Button>
                   <Button
                     variant="outline"
                     className="bg-slate-700 border-slate-600 h-8 px-2 text-xs"
                     disabled={running || !activeProfile}
                     onClick={deleteProfile}
-                  >Delete</Button>
+                  >
+                    Delete
+                  </Button>
                 </div>
               )}
               {isSuperadmin && (
@@ -655,19 +719,25 @@ export default function TestRunner({ testSuites }) {
                     className="bg-slate-700 border-slate-600 h-8 px-2 text-xs"
                     disabled={running}
                     onClick={() => setConfig({ workers: 2, rate: 5, delayMs: 25 })}
-                  >Balanced</Button>
+                  >
+                    Balanced
+                  </Button>
                   <Button
                     variant="outline"
                     className="bg-slate-700 border-slate-600 h-8 px-2 text-xs"
                     disabled={running}
                     onClick={() => setConfig({ workers: 4, rate: 15, delayMs: 0 })}
-                  >Fast</Button>
+                  >
+                    Fast
+                  </Button>
                   <Button
                     variant="outline"
                     className="bg-slate-700 border-slate-600 h-8 px-2 text-xs"
                     disabled={running}
                     onClick={() => setConfig({ workers: 8, rate: 0, delayMs: 0 })}
-                  >Max</Button>
+                  >
+                    Max
+                  </Button>
                 </div>
               )}
               <Button
@@ -676,9 +746,11 @@ export default function TestRunner({ testSuites }) {
                 className="bg-slate-700 border-slate-600"
                 disabled={checking}
               >
-                {checking
-                  ? <Clock className="w-4 h-4 mr-2 animate-spin" />
-                  : <FileText className="w-4 h-4 mr-2" />}
+                {checking ? (
+                  <Clock className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <FileText className="w-4 h-4 mr-2" />
+                )}
                 Check Backend
               </Button>
               {(results.length > 0 || !running) && (
@@ -705,56 +777,50 @@ export default function TestRunner({ testSuites }) {
               )}
               <Button
                 onClick={runTests}
-                disabled={running || checking || preflight.status !== "ok" || effectiveSuites.length === 0}
+                disabled={
+                  running || checking || preflight.status !== 'ok' || effectiveSuites.length === 0
+                }
                 className="bg-blue-600 hover:bg-blue-700"
               >
-                {running
-                  ? (
-                    <>
-                      <Clock className="w-4 h-4 mr-2 animate-spin" />
-                      Running...
-                    </>
-                  )
-                  : (
-                    <>
-                      <Play className="w-4 h-4 mr-2" />
-                      Run All Tests
-                    </>
-                  )}
+                {running ? (
+                  <>
+                    <Clock className="w-4 h-4 mr-2 animate-spin" />
+                    Running...
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-4 h-4 mr-2" />
+                    Run All Tests
+                  </>
+                )}
               </Button>
             </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
           {/* Preflight banner */}
-          {checking
-            ? (
-              <Alert className="mb-4 bg-blue-900/30 border-blue-700">
-                <Clock className="h-4 w-4 animate-spin" />
-                <AlertDescription className="text-blue-300">
-                  Checking backend status…
-                </AlertDescription>
-              </Alert>
-            )
-            : preflight.status !== "ok"
-            ? (
-              <Alert className="mb-4 bg-red-900/30 border-red-700">
-                <AlertTriangle className="h-4 w-4 text-red-400" />
-                <AlertDescription className="text-red-300">
-                  {preflight.message}. Tests are disabled until the backend is
-                  reachable.
-                </AlertDescription>
-              </Alert>
-            )
-            : (
-              <Alert className="mb-4 bg-green-900/30 border-green-700">
-                <CheckCircle2 className="h-4 w-4 text-green-400" />
-                <AlertDescription className="text-green-300">
-                  Backend online (database:{" "}
-                  {preflight.database}). You can run the tests.
-                </AlertDescription>
-              </Alert>
-            )}
+          {checking ? (
+            <Alert className="mb-4 bg-blue-900/30 border-blue-700">
+              <Clock className="h-4 w-4 animate-spin" />
+              <AlertDescription className="text-blue-300">
+                Checking backend status…
+              </AlertDescription>
+            </Alert>
+          ) : preflight.status !== 'ok' ? (
+            <Alert className="mb-4 bg-red-900/30 border-red-700">
+              <AlertTriangle className="h-4 w-4 text-red-400" />
+              <AlertDescription className="text-red-300">
+                {preflight.message}. Tests are disabled until the backend is reachable.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <Alert className="mb-4 bg-green-900/30 border-green-700">
+              <CheckCircle2 className="h-4 w-4 text-green-400" />
+              <AlertDescription className="text-green-300">
+                Backend online (database: {preflight.database}). You can run the tests.
+              </AlertDescription>
+            </Alert>
+          )}
 
           {isSuperadmin && (
             <div className="mb-4 p-3 rounded border border-slate-700 bg-slate-800/60">
@@ -766,18 +832,25 @@ export default function TestRunner({ testSuites }) {
                     className="bg-slate-700 border-slate-600 h-7 px-2 text-xs"
                     disabled={running}
                     onClick={() => setSelectedCategories(new Set(allSuiteNames))}
-                  >Select All</Button>
+                  >
+                    Select All
+                  </Button>
                   <Button
                     variant="outline"
                     className="bg-slate-700 border-slate-600 h-7 px-2 text-xs"
                     disabled={running}
                     onClick={() => setSelectedCategories(new Set())}
-                  >Select None</Button>
+                  >
+                    Select None
+                  </Button>
                 </div>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
                 {testSuites.map((suite) => (
-                  <label key={suite.name} className="flex items-center gap-2 text-slate-200 text-sm">
+                  <label
+                    key={suite.name}
+                    className="flex items-center gap-2 text-slate-200 text-sm"
+                  >
                     <input
                       type="checkbox"
                       className="accent-blue-500 h-4 w-4"
@@ -785,7 +858,8 @@ export default function TestRunner({ testSuites }) {
                       disabled={running}
                       onChange={(e) => {
                         const next = new Set(selectedCategories);
-                        if (e.target.checked) next.add(suite.name); else next.delete(suite.name);
+                        if (e.target.checked) next.add(suite.name);
+                        else next.delete(suite.name);
                         setSelectedCategories(next);
                       }}
                     />
@@ -800,9 +874,7 @@ export default function TestRunner({ testSuites }) {
           {running && currentTest && (
             <Alert className="mb-4 bg-blue-900/30 border-blue-700">
               <Clock className="h-4 w-4 animate-spin" />
-              <AlertDescription className="text-blue-300">
-                Running: {currentTest}
-              </AlertDescription>
+              <AlertDescription className="text-blue-300">Running: {currentTest}</AlertDescription>
             </Alert>
           )}
 
@@ -817,13 +889,17 @@ export default function TestRunner({ testSuites }) {
               <Card className="bg-slate-700 border-slate-600">
                 <CardContent className="p-3">
                   <div className="text-xs text-slate-400">429 Count</div>
-                  <div className="text-lg font-semibold text-slate-100">{uiStats.rateLimited429}</div>
+                  <div className="text-lg font-semibold text-slate-100">
+                    {uiStats.rateLimited429}
+                  </div>
                 </CardContent>
               </Card>
               <Card className="bg-slate-700 border-slate-600">
                 <CardContent className="p-3">
                   <div className="text-xs text-slate-400">Config</div>
-                  <div className="text-xs text-slate-200">w:{config.workers} r:{config.rate}/s d:{config.delayMs}ms</div>
+                  <div className="text-xs text-slate-200">
+                    w:{config.workers} r:{config.rate}/s d:{config.delayMs}ms
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -842,32 +918,30 @@ export default function TestRunner({ testSuites }) {
               <Card className="bg-green-900/30 border-green-700">
                 <CardContent className="p-4">
                   <div className="text-sm text-green-400">Passed</div>
-                  <div className="text-2xl font-bold text-green-300">
-                    {passedTests}
-                  </div>
+                  <div className="text-2xl font-bold text-green-300">{passedTests}</div>
                 </CardContent>
               </Card>
               <Card className="bg-red-900/30 border-red-700">
                 <CardContent className="p-4">
                   <div className="text-sm text-red-400">Failed</div>
-                  <div className="text-2xl font-bold text-red-300">
-                    {failedTests}
-                  </div>
+                  <div className="text-2xl font-bold text-red-300">{failedTests}</div>
                 </CardContent>
               </Card>
               <Card className="bg-blue-900/30 border-blue-700">
                 <CardContent className="p-4">
                   <div className="text-sm text-blue-400">Pass Rate</div>
-                  <div className="text-2xl font-bold text-blue-300">
-                    {passRate}%
-                  </div>
+                  <div className="text-2xl font-bold text-blue-300">{passRate}%</div>
                 </CardContent>
               </Card>
               {completedTests > 0 && completedTests !== totalTests && !running && (
                 <Card className="bg-yellow-900/30 border-yellow-700 col-span-4">
                   <CardContent className="p-4">
                     <div className="text-sm text-yellow-400">Integrity Warning</div>
-                    <div className="text-sm text-yellow-300 mt-1">Missing tests detected: expected {totalTests} but only {completedTests} completed. This usually indicates a component remount or early abort. Results were auto-recovered from storage if possible.</div>
+                    <div className="text-sm text-yellow-300 mt-1">
+                      Missing tests detected: expected {totalTests} but only {completedTests}{' '}
+                      completed. This usually indicates a component remount or early abort. Results
+                      were auto-recovered from storage if possible.
+                    </div>
                   </CardContent>
                 </Card>
               )}
@@ -879,24 +953,24 @@ export default function TestRunner({ testSuites }) {
               <div
                 key={index}
                 className={`p-4 rounded-lg border ${
-                  result.status === "passed"
-                    ? "bg-green-900/20 border-green-700"
-                    : "bg-red-900/20 border-red-700"
+                  result.status === 'passed'
+                    ? 'bg-green-900/20 border-green-700'
+                    : 'bg-red-900/20 border-red-700'
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    {result.status === "passed"
-                      ? <CheckCircle2 className="w-5 h-5 text-green-400" />
-                      : <XCircle className="w-5 h-5 text-red-400" />}
+                    {result.status === 'passed' ? (
+                      <CheckCircle2 className="w-5 h-5 text-green-400" />
+                    ) : (
+                      <XCircle className="w-5 h-5 text-red-400" />
+                    )}
                     <div>
                       <div className="font-medium text-slate-200">
                         {result.suite} - {result.test}
                       </div>
                       {result.error && (
-                        <div className="text-sm text-red-400 mt-1">
-                          Error: {result.error}
-                        </div>
+                        <div className="text-sm text-red-400 mt-1">Error: {result.error}</div>
                       )}
                     </div>
                   </div>
