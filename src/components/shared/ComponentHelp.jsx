@@ -6,28 +6,30 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-  DialogDescription
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 /**
  * ComponentHelp
- * 
+ *
  * A small trigger button (Play icon) that opens a video dialog.
  * Place this next to section headers or complex components.
- * 
+ *
  * @param {string} title - Title of the help video
  * @param {string} description - Optional description
  * @param {string} videoUrl - Embed URL for the video (YouTube, Loom, Vimeo, etc.)
+ * @param {string} transcriptUrl - Optional transcript URL
  * @param {string} triggerType - 'play' (default) or 'help' (question mark)
  */
-export function ComponentHelp({ title, description, videoUrl, triggerType = 'play' }) {
+export function ComponentHelp({
+  title,
+  description,
+  videoUrl,
+  transcriptUrl,
+  triggerType = 'play',
+}) {
   const Icon = triggerType === 'help' ? HelpCircle : PlayCircle;
 
   return (
@@ -36,9 +38,9 @@ export function ComponentHelp({ title, description, videoUrl, triggerType = 'pla
         <Tooltip>
           <TooltipTrigger asChild>
             <DialogTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon" 
+              <Button
+                variant="ghost"
+                size="icon"
                 className="h-6 w-6 text-muted-foreground hover:text-primary ml-2"
               >
                 <Icon className="h-4 w-4" />
@@ -57,16 +59,36 @@ export function ComponentHelp({ title, description, videoUrl, triggerType = 'pla
           <DialogTitle>{title}</DialogTitle>
           {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
-        
+
         <div className="aspect-video w-full overflow-hidden rounded-lg border bg-muted mt-2">
           {videoUrl ? (
-            <iframe
-              src={videoUrl}
-              className="h-full w-full"
-              allowFullScreen
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              title={`Help video for ${title}`}
-            />
+            <>
+              <iframe
+                src={videoUrl}
+                className="h-full w-full"
+                allowFullScreen
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                title={`Help video for ${title}`}
+              />
+              <div className="mt-3 text-sm text-muted-foreground">
+                <p>
+                  {transcriptUrl && (
+                    <>
+                      <a
+                        href={transcriptUrl}
+                        className="underline hover:text-primary"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Read transcript
+                      </a>
+                      {' • '}
+                    </>
+                  )}
+                  <span>Captions available in video player</span>
+                </p>
+              </div>
+            </>
           ) : (
             <div className="flex h-full w-full items-center justify-center bg-slate-100 text-slate-400">
               <p>Video URL not provided</p>
