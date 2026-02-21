@@ -196,8 +196,7 @@ import createUtilsRoutes from './routes/utils.js';
 import createClientRoutes from './routes/clients.js';
 import createWorkflowRoutes from './routes/workflows.js';
 import createWorkflowExecutionRoutes from './routes/workflowexecutions.js';
-// V1 activities route RETIRED - import kept for reference only
-// import createActivityRoutes from "./routes/activities.js";
+// V1 activities route RETIRED (file deleted) - use /api/v2/activities
 import createOpportunityRoutes from './routes/opportunities.js';
 import createOpportunityV2Routes from './routes/opportunities.v2.js';
 import createActivityV2Routes from './routes/activities.v2.js';
