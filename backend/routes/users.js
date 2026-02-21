@@ -1939,7 +1939,11 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           const { error: passwordError } = await updateAuthUserPassword(authUser.id, new_password);
 
           if (passwordError) {
-            logger.error('[User Update] Password update error:', passwordError);
+            // Redact sensitive error details from logs
+            logger.error('[User Update] Password update error:', {
+              code: passwordError.code,
+              message: '[REDACTED]',
+            });
             return res.status(500).json({
               status: 'error',
               message: `Failed to update password: ${passwordError.message}`,

@@ -23,17 +23,17 @@ import { getSupabaseClient } from '../lib/supabase-db.js';
 import { initMemoryClient, getMemoryClient } from '../lib/memoryClient.js';
 import logger from '../lib/logger.js';
 
+import { setCorsHeaders } from '../lib/cors.js';
+
 /**
  * Ensure CORS headers are set on error responses so browsers can read the error
  * This is critical for cross-origin requests - without CORS headers, browsers
  * will show "CORS error" instead of the actual 403/401/etc status
  */
 function ensureCorsHeaders(req, res) {
-  if (!res.getHeader('Access-Control-Allow-Origin')) {
-    const origin = req.headers.origin || '*';
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Vary', 'Origin');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
+    // Use secure origin whitelist instead of reflecting arbitrary origins
+    setCorsHeaders(req.headers.origin, res, true);
   }
 }
 
@@ -55,7 +55,7 @@ async function initRedisClient() {
     // Ensure Redis/Valkey client is initialized before retrieving instance
     await initMemoryClient(process.env.REDIS_MEMORY_URL || process.env.REDIS_URL);
     redisClient = getMemoryClient();
-    
+
     if (redisClient) {
       // Load existing blocked IPs from Redis on startup
       const keys = await redisClient.keys('idr:blocked:*');
@@ -73,7 +73,7 @@ async function initRedisClient() {
 }
 
 // Initialize Redis on module load (non-blocking, runs in background)
-initRedisClient().catch(e => logger.warn('[IDR] Redis init deferred:', e.message));
+initRedisClient().catch((e) => logger.warn('[IDR] Redis init deferred:', e.message));
 
 // IP Whitelist - Trusted IPs that bypass ALL IDR checks
 // Add your admin/trusted IPs here to prevent lockouts
@@ -82,15 +82,17 @@ const WHITELISTED_IPS = new Set([
   // '203.0.113.42',        // Office IP
   // '198.51.100.0/24',     // Company network (CIDR not supported yet, list individually)
   // Load from environment variable
-  ...(process.env.IDR_WHITELIST_IPS?.split(',').map(ip => ip.trim()).filter(Boolean) || [])
+  ...(process.env.IDR_WHITELIST_IPS?.split(',')
+    .map((ip) => ip.trim())
+    .filter(Boolean) || []),
 ]);
 
 // Configuration
 const IDR_CONFIG = {
-  MAX_TENANT_VIOLATIONS_PER_HOUR: 5,        // Increased from 3
-  MAX_FAILED_REQUESTS_PER_MINUTE: 50,       // Increased from 10 (less aggressive)
-  BLOCK_DURATION_MS: 5 * 60 * 1000,         // Reduced from 15 to 5 minutes
-  ALERT_COOLDOWN_MS: 5 * 60 * 1000,         // 5 minutes between alerts
+  MAX_TENANT_VIOLATIONS_PER_HOUR: 5, // Increased from 3
+  MAX_FAILED_REQUESTS_PER_MINUTE: 50, // Increased from 10 (less aggressive)
+  BLOCK_DURATION_MS: 5 * 60 * 1000, // Reduced from 15 to 5 minutes
+  ALERT_COOLDOWN_MS: 5 * 60 * 1000, // 5 minutes between alerts
   SQL_INJECTION_PATTERNS: [
     /(\bUNION\b.*\bSELECT\b)|(\bOR\b.*=.*)/i,
     /(\bDROP\b.*\bTABLE\b)|(\bEXEC\b.*\()/i,
@@ -99,7 +101,7 @@ const IDR_CONFIG = {
   ],
   SUSPICIOUS_PATTERNS: {
     RAPID_TENANT_SWITCHING: 5, // Different tenants in 5 requests
-    EXCESSIVE_FAILURES: 50,    // Increased from 10 - less aggressive
+    EXCESSIVE_FAILURES: 50, // Increased from 10 - less aggressive
     BULK_DATA_EXTRACTION: 1000, // Records in single request
   },
   // Block escalated bulk extraction attempts
@@ -115,7 +117,7 @@ function isWhitelistedIP(ip) {
   if (WHITELISTED_IPS.has(ip)) {
     return true;
   }
-  
+
   // Check CIDR ranges
   for (const entry of WHITELISTED_IPS) {
     if (entry.includes('/')) {
@@ -125,7 +127,7 @@ function isWhitelistedIP(ip) {
       }
     }
   }
-  
+
   return false;
 }
 
@@ -137,15 +139,15 @@ function ipMatchesCIDR(ip, cidr) {
   try {
     const [range, prefixLen] = cidr.split('/');
     const prefix = parseInt(prefixLen, 10);
-    
+
     // Determine if IPv6 or IPv4
     const isIPv6 = ip.includes(':');
     const isRangeIPv6 = range.includes(':');
-    
+
     if (isIPv6 !== isRangeIPv6) {
       return false; // Type mismatch
     }
-    
+
     if (isIPv6) {
       return ipv6MatchesCIDR(ip, range, prefix);
     } else {
@@ -169,22 +171,27 @@ function ipv6MatchesCIDR(ip, range, prefixLen) {
       const right = parts[1] ? parts[1].split(':') : [];
       const missing = 8 - left.length - right.length;
       const middle = Array(missing).fill('0');
-      return [...left, ...middle, ...right].map(p => p.padStart(4, '0')).join(':');
+      return [...left, ...middle, ...right].map((p) => p.padStart(4, '0')).join(':');
     }
-    return addr.split(':').map(p => p.padStart(4, '0')).join(':');
+    return addr
+      .split(':')
+      .map((p) => p.padStart(4, '0'))
+      .join(':');
   };
-  
+
   const ipExpanded = expandIPv6(ip);
   const rangeExpanded = expandIPv6(range);
-  
+
   // Convert to binary string for comparison
-  const ipBinary = ipExpanded.split(':').map(hex => 
-    parseInt(hex, 16).toString(2).padStart(16, '0')
-  ).join('');
-  const rangeBinary = rangeExpanded.split(':').map(hex => 
-    parseInt(hex, 16).toString(2).padStart(16, '0')
-  ).join('');
-  
+  const ipBinary = ipExpanded
+    .split(':')
+    .map((hex) => parseInt(hex, 16).toString(2).padStart(16, '0'))
+    .join('');
+  const rangeBinary = rangeExpanded
+    .split(':')
+    .map((hex) => parseInt(hex, 16).toString(2).padStart(16, '0'))
+    .join('');
+
   // Compare prefix bits
   return ipBinary.substring(0, prefixLen) === rangeBinary.substring(0, prefixLen);
 }
@@ -195,14 +202,15 @@ function ipv6MatchesCIDR(ip, range, prefixLen) {
 function ipv4MatchesCIDR(ip, range, prefixLen) {
   const ipParts = ip.split('.').map(Number);
   const rangeParts = range.split('.').map(Number);
-  
+
   // Convert to 32-bit integers
   const ipInt = (ipParts[0] << 24) | (ipParts[1] << 16) | (ipParts[2] << 8) | ipParts[3];
-  const rangeInt = (rangeParts[0] << 24) | (rangeParts[1] << 16) | (rangeParts[2] << 8) | rangeParts[3];
-  
+  const rangeInt =
+    (rangeParts[0] << 24) | (rangeParts[1] << 16) | (rangeParts[2] << 8) | rangeParts[3];
+
   // Create mask
   const mask = ~((1 << (32 - prefixLen)) - 1);
-  
+
   return (ipInt & mask) === (rangeInt & mask);
 }
 
@@ -313,10 +321,10 @@ async function blockIP(ip, durationMs = IDR_CONFIG.BLOCK_DURATION_MS) {
         JSON.stringify({
           blocked_at: new Date().toISOString(),
           duration_ms: durationMs,
-          expires_at: new Date(expiresAt).toISOString()
+          expires_at: new Date(expiresAt).toISOString(),
         }),
         'PX', // millisecond precision
-        durationMs
+        durationMs,
       );
       logger.debug(`[IDR] IP blocked in Redis: ${ip} (expires in ${durationMs}ms)`);
     } catch (error) {
@@ -457,9 +465,8 @@ export async function intrusionDetection(req, res, next) {
   }
 
   // Exempt logging endpoints from SQL injection detection (logs may contain SQL)
-  const isLoggingEndpoint = 
-    req.originalUrl?.includes('/api/system-logs') || 
-    req.path?.includes('/system-logs');
+  const isLoggingEndpoint =
+    req.originalUrl?.includes('/api/system-logs') || req.path?.includes('/system-logs');
   if (isLoggingEndpoint) {
     return next();
   }
@@ -475,7 +482,7 @@ export async function intrusionDetection(req, res, next) {
       status: 'error',
       message: 'Access denied: IP address temporarily blocked due to suspicious activity',
       code: 'IP_BLOCKED',
-      hint: 'Contact support to unblock your IP or wait for automatic expiration'
+      hint: 'Contact support to unblock your IP or wait for automatic expiration',
     });
   }
 
@@ -619,7 +626,9 @@ export async function intrusionDetection(req, res, next) {
     const limit = parseInt(req.query.limit) || 0;
     if (limit > IDR_CONFIG.SUSPICIOUS_PATTERNS.BULK_DATA_EXTRACTION) {
       // Log as warning, not security alert (intent-based, not result-based)
-      logger.warn(`[IDR] High limit requested: ${limit} (threshold: ${IDR_CONFIG.SUSPICIOUS_PATTERNS.BULK_DATA_EXTRACTION})`);
+      logger.warn(
+        `[IDR] High limit requested: ${limit} (threshold: ${IDR_CONFIG.SUSPICIOUS_PATTERNS.BULK_DATA_EXTRACTION})`,
+      );
 
       await logSecurityEvent(supabase, {
         tenant_id: user?.tenant_id,
@@ -643,7 +652,7 @@ export async function intrusionDetection(req, res, next) {
       // Escalate to temporary IP block ONLY for extreme values
       if (limit >= IDR_CONFIG.BULK_BLOCK_THRESHOLD) {
         // Block for 1 hour for severe extraction attempts
-        blockIP(ip, 60 * 60 * 1000).catch(e => logger.error('[IDR] Failed to block IP:', e));
+        blockIP(ip, 60 * 60 * 1000).catch((e) => logger.error('[IDR] Failed to block IP:', e));
 
         return res.status(400).json({
           status: 'error',
@@ -687,7 +696,7 @@ export async function intrusionDetection(req, res, next) {
           });
 
           // Block IP (fire-and-forget, don't await in sync function)
-          blockIP(ip, 5 * 60 * 1000).catch(e => logger.error('[IDR] Failed to block IP:', e)); // 5 minute block
+          blockIP(ip, 5 * 60 * 1000).catch((e) => logger.error('[IDR] Failed to block IP:', e)); // 5 minute block
         }
 
         trackActivity(activityKey, 'FAILED_REQUEST', {
@@ -723,26 +732,26 @@ export async function getSecurityStatus() {
           const ip = key.replace('idr:blocked:', '');
           const data = await redisClient.get(key);
           const ttl = await redisClient.ttl(key);
-          
+
           try {
             const metadata = JSON.parse(data);
             return {
               ip,
               blocked_at: metadata.blocked_at,
               expires_in_seconds: ttl,
-              expires_at: metadata.expires_at
+              expires_at: metadata.expires_at,
             };
           } catch {
             return { ip, blocked_at: 'unknown', expires_in_seconds: ttl, expires_at: 'unknown' };
           }
-        })
+        }),
       );
 
       return {
         blocked_ips: blockedIPsWithMeta,
         active_trackers: suspiciousActivityTracker.size,
         timestamp: new Date().toISOString(),
-        redis_available: true
+        redis_available: true,
       };
     } catch (error) {
       logger.warn('[IDR] Failed to get Redis status:', error.message);
@@ -751,10 +760,15 @@ export async function getSecurityStatus() {
 
   // Fallback to in-memory only
   return {
-    blocked_ips: allBlockedIPs.map(ip => ({ ip, blocked_at: 'unknown', expires_in_seconds: -1, expires_at: 'unknown' })),
+    blocked_ips: allBlockedIPs.map((ip) => ({
+      ip,
+      blocked_at: 'unknown',
+      expires_in_seconds: -1,
+      expires_at: 'unknown',
+    })),
     active_trackers: suspiciousActivityTracker.size,
     timestamp: new Date().toISOString(),
-    redis_available: false
+    redis_available: false,
   };
 }
 

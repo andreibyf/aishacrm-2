@@ -3,8 +3,12 @@
  * Usage: node scripts/run-sql.js <path-to-sql>
  */
 
-// Disable TLS certificate verification for self-signed certs
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+// Conditionally disable TLS certificate verification for local development with self-signed certs
+// WARNING: Only use in development - never in production!
+if (process.env.NODE_ENV === 'development' && process.env.ALLOW_SELF_SIGNED_CERTS === 'true') {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  console.warn('⚠️  WARNING: TLS certificate validation DISABLED (development mode)');
+}
 
 import fs from 'fs';
 import path from 'path';
@@ -25,9 +29,7 @@ if (!sqlPathArg) {
   process.exit(1);
 }
 
-const sqlPath = path.isAbsolute(sqlPathArg)
-  ? sqlPathArg
-  : path.join(process.cwd(), sqlPathArg);
+const sqlPath = path.isAbsolute(sqlPathArg) ? sqlPathArg : path.join(process.cwd(), sqlPathArg);
 
 if (!fs.existsSync(sqlPath)) {
   console.error(`SQL file not found: ${sqlPath}`);
@@ -45,7 +47,7 @@ console.log(`Connecting to Postgres (Supabase) at ${redacted}`);
 
 const client = new Client({
   connectionString,
-  ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: false },
 });
 
 async function run() {
