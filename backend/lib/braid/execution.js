@@ -198,7 +198,11 @@ export async function executeBraidTool(
   if (basePolicy?.requires_confirmation && toolName.includes('delete')) {
     const confirmationProvided = args?.confirmed === true || args?.force === true;
     if (!confirmationProvided) {
-      console.log('[Braid Security] Delete operation requires confirmation', { toolName });
+      console.log('[Braid Security] Delete operation requires confirmation', {
+        toolName,
+        userId,
+        tenantId: tenantRecord?.id,
+      });
       return {
         tag: 'Err',
         error: {
