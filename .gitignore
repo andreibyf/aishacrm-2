@@ -29,6 +29,8 @@ dist-ssr
 .env
 .env.local
 .env.production
+.env.production.*
+!.env.production.template
 .env.*.local
 .env.docker
 .doppler-token
