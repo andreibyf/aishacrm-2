@@ -1,7 +1,7 @@
 /**
  * Activities V2 Route Filter Tests
  * Tests filter capabilities of /api/v2/activities endpoint
- * 
+ *
  * Migrated from v1 to v2 AI-enhanced routes
  */
 import { test, before, after } from 'node:test';
@@ -10,7 +10,7 @@ import { getAuthHeaders } from '../helpers/auth.js';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
-const SHOULD_RUN = process.env.CI ? (process.env.CI_BACKEND_TESTS === 'true') : true;
+const SHOULD_RUN = process.env.CI ? process.env.CI_BACKEND_TESTS === 'true' : true;
 
 // Unique subject prefix to isolate test data
 const TEST_SUBJECT_PREFIX = `FiltersUT_${Date.now()}`;
@@ -38,8 +38,8 @@ async function createActivity(payload) {
       body: 'Test activity for filter validation',
       status: 'scheduled',
       is_test_data: true,
-      ...payload
-    })
+      ...payload,
+    }),
   });
   const json = await res.json();
   return { status: res.status, json };
@@ -77,26 +77,32 @@ before(async () => {
   const A = await createActivity({
     subject: `${TEST_SUBJECT_PREFIX} Activity A`,
     tags: ['x', 'y'],
-    due_date: '2025-11-10'
+    due_date: '2025-11-10',
   });
 
   if (![200, 201].includes(A.status)) {
     console.error('Failed to create Activity A:', A.json);
   }
-  assert.ok([200, 201].includes(A.status), `Expected 200 or 201, got ${A.status}: ${JSON.stringify(A.json)}`);
+  assert.ok(
+    [200, 201].includes(A.status),
+    `Expected 200 or 201, got ${A.status}: ${JSON.stringify(A.json)}`,
+  );
   createdIds.push(extractActivityId(A.json));
 
   // Activity B: Due Nov 15, tagged y,z
   const B = await createActivity({
     subject: `${TEST_SUBJECT_PREFIX} Activity B`,
     tags: ['y', 'z'],
-    due_date: '2025-11-15'
+    due_date: '2025-11-15',
   });
 
   if (![200, 201].includes(B.status)) {
     console.error('Failed to create Activity B:', B.json);
   }
-  assert.ok([200, 201].includes(B.status), `Expected 200 or 201, got ${B.status}: ${JSON.stringify(B.json)}`);
+  assert.ok(
+    [200, 201].includes(B.status),
+    `Expected 200 or 201, got ${B.status}: ${JSON.stringify(B.json)}`,
+  );
   createdIds.push(extractActivityId(B.json));
 
   console.log('Test setup complete. Created IDs:', createdIds);
@@ -114,7 +120,7 @@ after(async () => {
 // Test: Basic list with tenant_id filter
 (SHOULD_RUN ? test : test.skip)('GET /api/v2/activities returns list with tenant_id', async () => {
   const res = await fetch(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&limit=10`, {
-    headers: getAuthHeaders()
+    headers: getAuthHeaders(),
   });
   assert.equal(res.status, 200);
 
@@ -125,22 +131,31 @@ after(async () => {
 });
 
 // Test: Filter by status
-(SHOULD_RUN ? test : test.skip)('Filter by status=scheduled returns scheduled activities', async () => {
-  const res = await fetch(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&status=scheduled&limit=50`, {
-    headers: getAuthHeaders()
-  });
-  assert.equal(res.status, 200);
+(SHOULD_RUN ? test : test.skip)(
+  'Filter by status=scheduled returns scheduled activities',
+  async () => {
+    const res = await fetch(
+      `${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&status=scheduled&limit=50`,
+      {
+        headers: getAuthHeaders(),
+      },
+    );
+    assert.equal(res.status, 200);
 
-  const json = await res.json();
-  const activities = json.data?.activities || [];
+    const json = await res.json();
+    const activities = json.data?.activities || [];
 
-  // Check that our test activities are included
-  const testActivities = activities.filter(a => a.subject?.includes(TEST_SUBJECT_PREFIX));
-  console.log(`Found ${testActivities.length} test activities with scheduled status`);
+    // Check that our test activities are included
+    const testActivities = activities.filter((a) => a.subject?.includes(TEST_SUBJECT_PREFIX));
+    console.log(`Found ${testActivities.length} test activities with scheduled status`);
 
-  // All returned should have scheduled status
-  assert.ok(activities.every(a => a.status === 'scheduled'), 'All returned activities should be scheduled');
-});
+    // All returned should have scheduled status
+    assert.ok(
+      activities.every((a) => a.status === 'scheduled'),
+      'All returned activities should be scheduled',
+    );
+  },
+);
 
 // Test: Filter by is_test_data
 (SHOULD_RUN ? test : test.skip)('Filter by is_test_data=true returns test activities', async () => {
@@ -150,59 +165,82 @@ after(async () => {
     return;
   }
 
-  const res = await fetch(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&is_test_data=true&limit=50`, {
-    headers: getAuthHeaders()
-  });
+  const res = await fetch(
+    `${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&is_test_data=true&limit=50`,
+    {
+      headers: getAuthHeaders(),
+    },
+  );
   assert.equal(res.status, 200);
 
   const json = await res.json();
   const activities = json.data?.activities || [];
 
   // All returned should have is_test_data=true
-  assert.ok(activities.every(a => a.is_test_data === true), 'All returned activities should have is_test_data=true');
+  assert.ok(
+    activities.every((a) => a.is_test_data === true),
+    'All returned activities should have is_test_data=true',
+  );
 
   // Our test activities should be among them
-  const testActivities = activities.filter(a => a.subject?.includes(TEST_SUBJECT_PREFIX));
+  const testActivities = activities.filter((a) => a.subject?.includes(TEST_SUBJECT_PREFIX));
   console.log(`Found ${testActivities.length} test activities with is_test_data=true`);
 });
 
 // Test: Filter by is_test_data=false excludes test data
-(SHOULD_RUN ? test : test.skip)('Filter by is_test_data=false excludes test activities', async () => {
-  const res = await fetch(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&is_test_data=false&limit=50`, {
-    headers: getAuthHeaders()
-  });
-  assert.equal(res.status, 200);
+(SHOULD_RUN ? test : test.skip)(
+  'Filter by is_test_data=false excludes test activities',
+  async () => {
+    const res = await fetch(
+      `${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&is_test_data=false&limit=50`,
+      {
+        headers: getAuthHeaders(),
+      },
+    );
+    assert.equal(res.status, 200);
 
-  const json = await res.json();
-  const activities = json.data?.activities || [];
+    const json = await res.json();
+    const activities = json.data?.activities || [];
 
-  // None should have is_test_data=true
-  assert.ok(activities.every(a => a.is_test_data !== true), 'No activities should have is_test_data=true');
+    // None should have is_test_data=true
+    assert.ok(
+      activities.every((a) => a.is_test_data !== true),
+      'No activities should have is_test_data=true',
+    );
 
-  // Our test activities should NOT be among them
-  const testActivities = activities.filter(a => a.subject?.includes(TEST_SUBJECT_PREFIX));
-  assert.equal(testActivities.length, 0, 'Test activities should be excluded');
-});
+    // Our test activities should NOT be among them
+    const testActivities = activities.filter((a) => a.subject?.includes(TEST_SUBJECT_PREFIX));
+    assert.equal(testActivities.length, 0, 'Test activities should be excluded');
+  },
+);
 
 // Test: Pagination works correctly
 (SHOULD_RUN ? test : test.skip)('Pagination with limit and offset works', async () => {
   // First page
-  const res1 = await fetch(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&limit=5&offset=0`, {
-    headers: getAuthHeaders()
-  });
+  const res1 = await fetch(
+    `${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&limit=5&offset=0`,
+    {
+      headers: getAuthHeaders(),
+    },
+  );
   assert.equal(res1.status, 200);
   const json1 = await res1.json();
   const page1 = json1.data?.activities || [];
 
   // Second page
-  const res2 = await fetch(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&limit=5&offset=5`, {
-    headers: getAuthHeaders()
-  });
+  const res2 = await fetch(
+    `${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&limit=5&offset=5`,
+    {
+      headers: getAuthHeaders(),
+    },
+  );
   assert.equal(res2.status, 200);
   const json2 = await res2.json();
   const page2 = json2.data?.activities || [];
 
-  console.log(`Pagination test: page1=${page1.length} activities, page2=${page2.length} activities`);
+  console.log(
+    `Pagination test: page1=${page1.length} activities, page2=${page2.length} activities`,
+  );
 
   // Skip overlap check if not enough data for pagination
   if (page1.length === 0 || page2.length === 0) {
@@ -211,8 +249,8 @@ after(async () => {
   }
 
   // Check for overlap (log but don't fail - may be affected by cache)
-  const page1Ids = new Set(page1.map(a => a.id));
-  const hasOverlap = page2.some(a => page1Ids.has(a.id));
+  const page1Ids = new Set(page1.map((a) => a.id));
+  const hasOverlap = page2.some((a) => page1Ids.has(a.id));
   if (hasOverlap) {
     console.log('Note: Paginated results have overlap (may be cache-related)');
   }
@@ -220,29 +258,32 @@ after(async () => {
   assert.ok(page1.length > 0, 'First page should have activities');
 });
 
-(SHOULD_RUN ? test : test.skip)('AI timezone inputs retain local components and capture original ISO', async () => {
-  const aiDueDate = '2025-11-20T14:45:00-05:00';
-  const res = await createActivity({
-    subject: `${TEST_SUBJECT_PREFIX} Timezone Case`,
-    due_date: aiDueDate,
-    due_time: '14:45'
-  });
+(SHOULD_RUN ? test : test.skip)(
+  'AI timezone inputs retain local components and capture original ISO',
+  async () => {
+    const aiDueDate = '2025-11-20T14:45:00-05:00';
+    const res = await createActivity({
+      subject: `${TEST_SUBJECT_PREFIX} Timezone Case`,
+      due_date: aiDueDate,
+      due_time: '14:45',
+    });
 
-  assert.equal(res.status, 201, `Expected 201 from activity create, got ${res.status}`);
+    assert.equal(res.status, 201, `Expected 201 from activity create, got ${res.status}`);
 
-  const activityId = extractActivityId(res.json);
-  if (activityId) {
-    createdIds.push(activityId);
-  }
+    const activityId = extractActivityId(res.json);
+    if (activityId) {
+      createdIds.push(activityId);
+    }
 
-  const activity = res.json?.data?.activity;
-  assert.ok(activity, 'Response should include created activity data');
-  assert.equal(activity.due_date, '2025-11-20');
-  // DB stores time as HH:MM:SS format (with seconds), even if sent as HH:MM
-  assert.equal(activity.due_time, '19:45:00', 'due_time should be stored in UTC HH:MM:SS format');
-  assert.equal(activity.metadata?.original_due_datetime, aiDueDate);
-  assert.equal(activity.metadata?.original_timezone_offset, '-05:00');
-});
+    const activity = res.json?.data?.activity;
+    assert.ok(activity, 'Response should include created activity data');
+    assert.equal(activity.due_date, '2025-11-20');
+    // DB stores time as HH:MM:SS format (with seconds), even if sent as HH:MM
+    assert.equal(activity.due_time, '19:45:00', 'due_time should be stored in UTC HH:MM:SS format');
+    assert.equal(activity.metadata?.original_due_datetime, aiDueDate);
+    assert.equal(activity.metadata?.original_timezone_offset, '-05:00');
+  },
+);
 
 // Test: Get single activity by ID
 (SHOULD_RUN ? test : test.skip)('GET /api/v2/activities/:id returns single activity', async () => {
@@ -252,7 +293,7 @@ after(async () => {
   }
 
   const res = await fetch(`${BASE_URL}/api/v2/activities/${createdIds[0]}?tenant_id=${TENANT_ID}`, {
-    headers: getAuthHeaders()
+    headers: getAuthHeaders(),
   });
   assert.equal(res.status, 200);
 
@@ -267,24 +308,30 @@ after(async () => {
 
 // Test: Activity type filter
 (SHOULD_RUN ? test : test.skip)('Filter by type=task returns task activities', async () => {
-  const res = await fetch(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&type=task&limit=50`, {
-    headers: getAuthHeaders()
-  });
+  const res = await fetch(
+    `${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&type=task&limit=50`,
+    {
+      headers: getAuthHeaders(),
+    },
+  );
   assert.equal(res.status, 200);
 
   const json = await res.json();
   const activities = json.data?.activities || [];
 
   // Our test activities should be among them (they are type=task)
-  const testActivities = activities.filter(a => a.subject?.includes(TEST_SUBJECT_PREFIX));
+  const testActivities = activities.filter((a) => a.subject?.includes(TEST_SUBJECT_PREFIX));
   console.log(`Found ${testActivities.length} test task activities`);
 });
 
 // Test: Include stats query param
 (SHOULD_RUN ? test : test.skip)('include_stats=true returns activity counts', async () => {
-  const res = await fetch(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&include_stats=true&limit=10`, {
-    headers: getAuthHeaders()
-  });
+  const res = await fetch(
+    `${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&include_stats=true&limit=10`,
+    {
+      headers: getAuthHeaders(),
+    },
+  );
   assert.equal(res.status, 200);
 
   const json = await res.json();
@@ -300,45 +347,48 @@ after(async () => {
 });
 
 // Test: MongoDB-style $or filter with $regex (from frontend search)
-(SHOULD_RUN ? test : test.skip)('Filter with $or and $regex operators works correctly', async () => {
-  if (createdIds.filter(Boolean).length < 2) {
-    console.log('Skipping: test activities not created');
-    return;
-  }
+(SHOULD_RUN ? test : test.skip)(
+  'Filter with $or and $regex operators works correctly',
+  async () => {
+    if (createdIds.filter(Boolean).length < 2) {
+      console.log('Skipping: test activities not created');
+      return;
+    }
 
-  // Create a filter object matching what the frontend sends during search
-  // This simulates searching for "Activity A" across subject, description, and related_name
-  const searchFilter = {
-    $or: [
-      { subject: { $regex: 'Activity A', $options: 'i' } },
-      { description: { $regex: 'Activity A', $options: 'i' } },
-      { related_name: { $regex: 'Activity A', $options: 'i' } }
-    ]
-  };
+    // Create a filter object matching what the frontend sends during search
+    // This simulates searching for "Activity A" across subject, description, and related_name
+    const searchFilter = {
+      $or: [
+        { subject: { $regex: 'Activity A', $options: 'i' } },
+        { description: { $regex: 'Activity A', $options: 'i' } },
+        { related_name: { $regex: 'Activity A', $options: 'i' } },
+      ],
+    };
 
-  const url = `${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&include_stats=false&filter=${encodeURIComponent(JSON.stringify(searchFilter))}`;
-  
-  console.log('Testing search filter with $regex. URL length:', url.length);
-  
-  const res = await fetch(url, {
-    headers: getAuthHeaders()
-  });
-  assert.equal(res.status, 200, `Expected 200 OK, got ${res.status}`);
+    const url = `${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&include_stats=false&filter=${encodeURIComponent(JSON.stringify(searchFilter))}`;
 
-  const json = await res.json();
-  assert.equal(json.status, 'success', 'Response should have success status');
-  
-  const activities = json.data?.activities || [];
-  console.log(`Search returned ${activities.length} activities`);
+    console.log('Testing search filter with $regex. URL length:', url.length);
 
-  // Should find Activity A (which has "Activity A" in the subject)
-  const foundActivityA = activities.find(a => a.subject?.includes('Activity A'));
-  assert.ok(foundActivityA, 'Should find Activity A in search results');
+    const res = await fetch(url, {
+      headers: getAuthHeaders(),
+    });
+    assert.equal(res.status, 200, `Expected 200 OK, got ${res.status}`);
 
-  // Should NOT find Activity B (which doesn't have "Activity A" in any field)
-  const foundActivityB = activities.find(a => a.subject?.includes('Activity B'));
-  assert.ok(!foundActivityB, 'Should NOT find Activity B in search results');
-});
+    const json = await res.json();
+    assert.equal(json.status, 'success', 'Response should have success status');
+
+    const activities = json.data?.activities || [];
+    console.log(`Search returned ${activities.length} activities`);
+
+    // Should find Activity A (which has "Activity A" in the subject)
+    const foundActivityA = activities.find((a) => a.subject?.includes('Activity A'));
+    assert.ok(foundActivityA, 'Should find Activity A in search results');
+
+    // Should NOT find Activity B (which doesn't have "Activity A" in any field)
+    const foundActivityB = activities.find((a) => a.subject?.includes('Activity B'));
+    assert.ok(!foundActivityB, 'Should NOT find Activity B in search results');
+  },
+);
 
 // Test: Search with special characters in $regex
 (SHOULD_RUN ? test : test.skip)('Filter with special characters in $regex pattern', async () => {
@@ -346,35 +396,42 @@ after(async () => {
   const specialActivity = await createActivity({
     subject: `${TEST_SUBJECT_PREFIX} Initial contact: ABC Inc`,
     body: 'Test activity with special characters',
-    status: 'scheduled'
+    status: 'scheduled',
   });
 
-  assert.ok([200, 201].includes(specialActivity.status), 'Should create activity with special characters');
+  assert.ok(
+    [200, 201].includes(specialActivity.status),
+    'Should create activity with special characters',
+  );
   const specialId = extractActivityId(specialActivity.json);
   createdIds.push(specialId);
 
-  // Search for it using the exact pattern from the bug report
+  // Brief pause to ensure the row is visible to subsequent queries
+  await new Promise((r) => setTimeout(r, 500));
+
+  // Search using the unique prefix + special chars to avoid cache hits from prior runs
+  const searchPattern = `${TEST_SUBJECT_PREFIX} Initial contact: ABC Inc`;
   const searchFilter = {
     $or: [
-      { subject: { $regex: 'Initial contact: ABC Inc', $options: 'i' } },
-      { description: { $regex: 'Initial contact: ABC Inc', $options: 'i' } },
-      { related_name: { $regex: 'Initial contact: ABC Inc', $options: 'i' } }
-    ]
+      { subject: { $regex: searchPattern, $options: 'i' } },
+      { description: { $regex: searchPattern, $options: 'i' } },
+      { related_name: { $regex: searchPattern, $options: 'i' } },
+    ],
   };
 
   const url = `${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&include_stats=false&filter=${encodeURIComponent(JSON.stringify(searchFilter))}`;
-  
+
   const res = await fetch(url, {
-    headers: getAuthHeaders()
+    headers: getAuthHeaders(),
   });
   assert.equal(res.status, 200, `Expected 200 OK for special character search, got ${res.status}`);
 
   const json = await res.json();
   assert.equal(json.status, 'success', 'Response should have success status');
-  
+
   const activities = json.data?.activities || [];
-  const found = activities.find(a => a.id === specialId);
-  
+  const found = activities.find((a) => a.id === specialId);
+
   assert.ok(found, 'Should find activity with special characters in search results');
   console.log('Successfully searched for activity with special characters');
 });

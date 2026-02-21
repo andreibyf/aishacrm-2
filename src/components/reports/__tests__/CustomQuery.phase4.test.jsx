@@ -362,7 +362,7 @@ describe('CustomQuery — Phase 4 Saved Reports', () => {
 
     // Click the trash icon in the "Open Leads" row
     const openLeadsRow = screen.getByRole('row', { name: /Open Leads/i });
-    const deleteBtn = within(openLeadsRow).getByRole('button');
+    const deleteBtn = within(openLeadsRow).getByRole('button', { name: /Delete/i });
     fireEvent.click(deleteBtn);
 
     await waitFor(() => {

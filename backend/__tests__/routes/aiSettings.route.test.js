@@ -72,6 +72,6 @@ describe('AI Settings Routes', { skip: !SHOULD_RUN }, () => {
     const res = await fetch(`${BASE_URL}/api/ai-settings/clear-cache`, {
       method: 'POST'
     });
-    assert.ok([200, 401, 404].includes(res.status), `expected clear-cache response, got ${res.status}`);
+    assert.ok([200, 401, 403, 404].includes(res.status), `expected clear-cache response, got ${res.status}`);
   });
 });

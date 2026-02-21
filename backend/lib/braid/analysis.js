@@ -12,7 +12,15 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ASSISTANT_DIR = path.resolve(__dirname, '..', '..', '..', 'braid-llm-kit', 'examples', 'assistant');
+const ASSISTANT_DIR = path.resolve(
+  __dirname,
+  '..',
+  '..',
+  '..',
+  'braid-llm-kit',
+  'examples',
+  'assistant',
+);
 
 /**
  * Tool categories for grouping in visualizations
@@ -21,108 +29,108 @@ export const TOOL_CATEGORIES = {
   ACCOUNTS: {
     name: 'Accounts',
     color: '#3B82F6', // blue
-    icon: 'building'
+    icon: 'building',
   },
   CONTACTS: {
     name: 'Contacts',
     color: '#10B981', // green
-    icon: 'users'
+    icon: 'users',
   },
   LEADS: {
     name: 'Leads',
     color: '#F59E0B', // amber
-    icon: 'target'
+    icon: 'target',
   },
   OPPORTUNITIES: {
     name: 'Opportunities',
     color: '#8B5CF6', // purple
-    icon: 'trending-up'
+    icon: 'trending-up',
   },
   ACTIVITIES: {
     name: 'Activities',
     color: '#EC4899', // pink
-    icon: 'calendar'
+    icon: 'calendar',
   },
   REPORTS: {
     name: 'Reports',
     color: '#6366F1', // indigo
-    icon: 'bar-chart'
+    icon: 'bar-chart',
   },
   SYSTEM: {
     name: 'System',
     color: '#6B7280', // gray
-    icon: 'settings'
+    icon: 'settings',
   },
   AI: {
     name: 'AI/Intelligence',
     color: '#14B8A6', // teal
-    icon: 'brain'
+    icon: 'brain',
   },
   DOCUMENTS: {
     name: 'Documents',
     color: '#F97316', // orange
-    icon: 'file'
+    icon: 'file',
   },
   EMPLOYEES: {
     name: 'Employees',
     color: '#84CC16', // lime
-    icon: 'user-check'
+    icon: 'user-check',
   },
   BIZDEV: {
     name: 'BizDev Sources',
     color: '#06B6D4', // cyan
-    icon: 'lightbulb'
+    icon: 'lightbulb',
   },
   LIFECYCLE: {
     name: 'Lifecycle',
     color: '#8B5CF6', // purple
-    icon: 'arrow-right'
+    icon: 'arrow-right',
   },
   NAVIGATION: {
     name: 'Navigation',
     color: '#6B7280', // gray
-    icon: 'navigation'
+    icon: 'navigation',
   },
   NOTES: {
     name: 'Notes',
     color: '#EF4444', // red
-    icon: 'edit'
+    icon: 'edit',
   },
   SNAPSHOT: {
     name: 'Snapshot',
     color: '#14B8A6', // teal
-    icon: 'camera'
+    icon: 'camera',
   },
   SUGGESTIONS: {
     name: 'AI Suggestions',
     color: '#A855F7', // violet
-    icon: 'sparkles'
+    icon: 'sparkles',
   },
   TELEPHONY: {
     name: 'Telephony',
     color: '#059669', // emerald
-    icon: 'phone'
+    icon: 'phone',
   },
   USERS: {
     name: 'Users',
     color: '#DC2626', // red
-    icon: 'user'
+    icon: 'user',
   },
   WEB_RESEARCH: {
     name: 'Web Research',
     color: '#7C2D12', // amber-800
-    icon: 'search'
+    icon: 'search',
   },
   WORKFLOWS: {
     name: 'Workflows',
     color: '#4F46E5', // indigo
-    icon: 'workflow'
-  }
+    icon: 'workflow',
+  },
 };
 
 /**
  * Tool Dependency Graph
- * 
+ *
  * Each tool entry contains:
  * - category: Which category this tool belongs to
  * - dependencies: Tools this tool commonly calls or requires data from
@@ -140,7 +148,7 @@ export const TOOL_GRAPH = {
     inputs: ['name', 'industry'],
     outputs: ['account'],
     effects: ['create'],
-    description: 'Create a new account/company record'
+    description: 'Create a new account/company record',
   },
   get_account_details: {
     category: 'ACCOUNTS',
@@ -148,7 +156,7 @@ export const TOOL_GRAPH = {
     inputs: ['account_id'],
     outputs: ['account'],
     effects: ['read'],
-    description: 'Retrieve account details by ID'
+    description: 'Retrieve account details by ID',
   },
   list_accounts: {
     category: 'ACCOUNTS',
@@ -156,7 +164,7 @@ export const TOOL_GRAPH = {
     inputs: ['limit', 'offset'],
     outputs: ['accounts[]'],
     effects: ['read'],
-    description: 'List accounts with pagination'
+    description: 'List accounts with pagination',
   },
   search_accounts: {
     category: 'ACCOUNTS',
@@ -164,7 +172,7 @@ export const TOOL_GRAPH = {
     inputs: ['query'],
     outputs: ['accounts[]'],
     effects: ['read'],
-    description: 'Search accounts by name or other fields'
+    description: 'Search accounts by name or other fields',
   },
   search_accounts_by_status: {
     category: 'ACCOUNTS',
@@ -172,7 +180,7 @@ export const TOOL_GRAPH = {
     inputs: ['status'],
     outputs: ['accounts[]'],
     effects: ['read'],
-    description: 'Search accounts filtered by status'
+    description: 'Search accounts filtered by status',
   },
   update_account: {
     category: 'ACCOUNTS',
@@ -180,7 +188,7 @@ export const TOOL_GRAPH = {
     inputs: ['account_id', 'updates'],
     outputs: ['account'],
     effects: ['update'],
-    description: 'Update account fields'
+    description: 'Update account fields',
   },
   delete_account: {
     category: 'ACCOUNTS',
@@ -188,7 +196,7 @@ export const TOOL_GRAPH = {
     inputs: ['account_id'],
     outputs: [],
     effects: ['delete'],
-    description: 'Delete an account (cascades to related records)'
+    description: 'Delete an account (cascades to related records)',
   },
 
   // ========== ACTIVITIES ==========
@@ -198,7 +206,7 @@ export const TOOL_GRAPH = {
     inputs: ['subject', 'activity_type', 'due_date', 'entity_type', 'entity_id'],
     outputs: ['activity'],
     effects: ['create'],
-    description: 'Schedule an activity (call, meeting, task, email)'
+    description: 'Schedule an activity (call, meeting, task, email)',
   },
   get_activity_details: {
     category: 'ACTIVITIES',
@@ -206,7 +214,7 @@ export const TOOL_GRAPH = {
     inputs: ['activity_id'],
     outputs: ['activity'],
     effects: ['read'],
-    description: 'Retrieve activity details by ID'
+    description: 'Retrieve activity details by ID',
   },
   list_activities: {
     category: 'ACTIVITIES',
@@ -214,7 +222,7 @@ export const TOOL_GRAPH = {
     inputs: ['status', 'limit'],
     outputs: ['activities[]'],
     effects: ['read'],
-    description: 'List activities with optional status filter'
+    description: 'List activities with optional status filter',
   },
   search_activities: {
     category: 'ACTIVITIES',
@@ -222,7 +230,7 @@ export const TOOL_GRAPH = {
     inputs: ['query'],
     outputs: ['activities[]'],
     effects: ['read'],
-    description: 'Search activities by subject or body'
+    description: 'Search activities by subject or body',
   },
   get_upcoming_activities: {
     category: 'ACTIVITIES',
@@ -230,7 +238,7 @@ export const TOOL_GRAPH = {
     inputs: ['assigned_to', 'days'],
     outputs: ['activities[]'],
     effects: ['read'],
-    description: 'Get upcoming activities for a user'
+    description: 'Get upcoming activities for a user',
   },
   update_activity: {
     category: 'ACTIVITIES',
@@ -238,7 +246,7 @@ export const TOOL_GRAPH = {
     inputs: ['activity_id', 'updates'],
     outputs: ['activity'],
     effects: ['update'],
-    description: 'Update activity fields'
+    description: 'Update activity fields',
   },
   mark_activity_complete: {
     category: 'ACTIVITIES',
@@ -246,7 +254,7 @@ export const TOOL_GRAPH = {
     inputs: ['activity_id'],
     outputs: ['activity'],
     effects: ['update'],
-    description: 'Mark activity as completed'
+    description: 'Mark activity as completed',
   },
   schedule_meeting: {
     category: 'ACTIVITIES',
@@ -254,7 +262,7 @@ export const TOOL_GRAPH = {
     inputs: ['subject', 'date', 'attendees'],
     outputs: ['activity'],
     effects: ['create'],
-    description: 'Schedule a new meeting with attendees'
+    description: 'Schedule a new meeting with attendees',
   },
   delete_activity: {
     category: 'ACTIVITIES',
@@ -262,7 +270,7 @@ export const TOOL_GRAPH = {
     inputs: ['activity_id'],
     outputs: [],
     effects: ['delete'],
-    description: 'Delete an activity'
+    description: 'Delete an activity',
   },
 
   // ========== CONTACTS ==========
@@ -272,7 +280,7 @@ export const TOOL_GRAPH = {
     inputs: ['first_name', 'last_name', 'email', 'phone', 'job_title', 'account_id'],
     outputs: ['contact'],
     effects: ['create'],
-    description: 'Create a new contact record'
+    description: 'Create a new contact record',
   },
   get_contact_details: {
     category: 'CONTACTS',
@@ -280,7 +288,7 @@ export const TOOL_GRAPH = {
     inputs: ['contact_id'],
     outputs: ['contact'],
     effects: ['read'],
-    description: 'Retrieve contact details by ID'
+    description: 'Retrieve contact details by ID',
   },
   list_contacts_for_account: {
     category: 'CONTACTS',
@@ -288,7 +296,7 @@ export const TOOL_GRAPH = {
     inputs: ['account_id', 'limit'],
     outputs: ['contacts[]'],
     effects: ['read'],
-    description: 'List all contacts associated with an account'
+    description: 'List all contacts associated with an account',
   },
   search_contacts: {
     category: 'CONTACTS',
@@ -296,7 +304,7 @@ export const TOOL_GRAPH = {
     inputs: ['query', 'limit'],
     outputs: ['contacts[]'],
     effects: ['read'],
-    description: 'Search contacts by name or other fields'
+    description: 'Search contacts by name or other fields',
   },
   get_contact_by_name: {
     category: 'CONTACTS',
@@ -304,7 +312,7 @@ export const TOOL_GRAPH = {
     inputs: ['name'],
     outputs: ['contact'],
     effects: ['read'],
-    description: 'Get contact details by searching for name'
+    description: 'Get contact details by searching for name',
   },
   list_all_contacts: {
     category: 'CONTACTS',
@@ -312,7 +320,7 @@ export const TOOL_GRAPH = {
     inputs: ['limit'],
     outputs: ['contacts[]'],
     effects: ['read'],
-    description: 'List all contacts with pagination'
+    description: 'List all contacts with pagination',
   },
   search_contacts_by_status: {
     category: 'CONTACTS',
@@ -320,7 +328,7 @@ export const TOOL_GRAPH = {
     inputs: ['status', 'limit'],
     outputs: ['contacts[]'],
     effects: ['read'],
-    description: 'Search contacts filtered by status'
+    description: 'Search contacts filtered by status',
   },
   update_contact: {
     category: 'CONTACTS',
@@ -328,7 +336,7 @@ export const TOOL_GRAPH = {
     inputs: ['contact_id', 'updates'],
     outputs: ['contact'],
     effects: ['update'],
-    description: 'Update contact fields'
+    description: 'Update contact fields',
   },
   delete_contact: {
     category: 'CONTACTS',
@@ -336,7 +344,7 @@ export const TOOL_GRAPH = {
     inputs: ['contact_id'],
     outputs: [],
     effects: ['delete'],
-    description: 'Delete a contact record'
+    description: 'Delete a contact record',
   },
 
   // ========== LEADS ==========
@@ -346,7 +354,7 @@ export const TOOL_GRAPH = {
     inputs: ['first_name', 'last_name', 'email', 'phone', 'company', 'status', 'source'],
     outputs: ['lead'],
     effects: ['create'],
-    description: 'Create a new lead record'
+    description: 'Create a new lead record',
   },
   get_lead_details: {
     category: 'LEADS',
@@ -354,7 +362,7 @@ export const TOOL_GRAPH = {
     inputs: ['lead_id'],
     outputs: ['lead'],
     effects: ['read'],
-    description: 'Retrieve lead details by ID'
+    description: 'Retrieve lead details by ID',
   },
   list_leads: {
     category: 'LEADS',
@@ -362,7 +370,7 @@ export const TOOL_GRAPH = {
     inputs: ['status', 'account_id', 'limit'],
     outputs: ['leads[]'],
     effects: ['read'],
-    description: 'List leads with optional status filter'
+    description: 'List leads with optional status filter',
   },
   search_leads: {
     category: 'LEADS',
@@ -370,7 +378,7 @@ export const TOOL_GRAPH = {
     inputs: ['query', 'limit'],
     outputs: ['leads[]'],
     effects: ['read'],
-    description: 'Search leads by name, email, or company'
+    description: 'Search leads by name, email, or company',
   },
   search_leads_by_status: {
     category: 'LEADS',
@@ -378,7 +386,7 @@ export const TOOL_GRAPH = {
     inputs: ['status', 'limit'],
     outputs: ['leads[]'],
     effects: ['read'],
-    description: 'Search leads filtered by status'
+    description: 'Search leads filtered by status',
   },
   qualify_lead: {
     category: 'LEADS',
@@ -386,7 +394,7 @@ export const TOOL_GRAPH = {
     inputs: ['lead_id'],
     outputs: ['lead'],
     effects: ['update'],
-    description: 'Mark lead as qualified'
+    description: 'Mark lead as qualified',
   },
   update_lead: {
     category: 'LEADS',
@@ -394,7 +402,7 @@ export const TOOL_GRAPH = {
     inputs: ['lead_id', 'updates'],
     outputs: ['lead'],
     effects: ['update'],
-    description: 'Update lead fields'
+    description: 'Update lead fields',
   },
   delete_lead: {
     category: 'LEADS',
@@ -402,7 +410,7 @@ export const TOOL_GRAPH = {
     inputs: ['lead_id'],
     outputs: [],
     effects: ['delete'],
-    description: 'Delete a lead record'
+    description: 'Delete a lead record',
   },
 
   // ========== OPPORTUNITIES ==========
@@ -412,7 +420,7 @@ export const TOOL_GRAPH = {
     inputs: ['name', 'amount', 'stage', 'close_date', 'account_id', 'contact_id'],
     outputs: ['opportunity'],
     effects: ['create'],
-    description: 'Create a new opportunity (deal)'
+    description: 'Create a new opportunity (deal)',
   },
   get_opportunity_details: {
     category: 'OPPORTUNITIES',
@@ -420,7 +428,7 @@ export const TOOL_GRAPH = {
     inputs: ['opportunity_id'],
     outputs: ['opportunity'],
     effects: ['read'],
-    description: 'Retrieve opportunity details by ID'
+    description: 'Retrieve opportunity details by ID',
   },
   list_opportunities_by_stage: {
     category: 'OPPORTUNITIES',
@@ -428,7 +436,7 @@ export const TOOL_GRAPH = {
     inputs: ['stage', 'limit'],
     outputs: ['opportunities[]'],
     effects: ['read'],
-    description: 'List opportunities filtered by stage'
+    description: 'List opportunities filtered by stage',
   },
   search_opportunities: {
     category: 'OPPORTUNITIES',
@@ -436,7 +444,7 @@ export const TOOL_GRAPH = {
     inputs: ['query', 'limit'],
     outputs: ['opportunities[]'],
     effects: ['read'],
-    description: 'Search opportunities by name or description'
+    description: 'Search opportunities by name or description',
   },
   update_opportunity: {
     category: 'OPPORTUNITIES',
@@ -444,7 +452,7 @@ export const TOOL_GRAPH = {
     inputs: ['opportunity_id', 'updates'],
     outputs: ['opportunity'],
     effects: ['update'],
-    description: 'Update opportunity fields'
+    description: 'Update opportunity fields',
   },
   delete_opportunity: {
     category: 'OPPORTUNITIES',
@@ -452,7 +460,7 @@ export const TOOL_GRAPH = {
     inputs: ['opportunity_id'],
     outputs: [],
     effects: ['delete'],
-    description: 'Delete an opportunity'
+    description: 'Delete an opportunity',
   },
 
   // ========== SNAPSHOT ==========
@@ -462,7 +470,7 @@ export const TOOL_GRAPH = {
     inputs: [],
     outputs: ['snapshot'],
     effects: ['read'],
-    description: 'Get high-level CRM data summary'
+    description: 'Get high-level CRM data summary',
   },
   debug_probe: {
     category: 'SNAPSHOT',
@@ -470,7 +478,7 @@ export const TOOL_GRAPH = {
     inputs: [],
     outputs: ['probe_result'],
     effects: ['read'],
-    description: 'Debug probe for troubleshooting'
+    description: 'Debug probe for troubleshooting',
   },
 
   // Additional tool entries...
@@ -479,22 +487,23 @@ export const TOOL_GRAPH = {
 
 /**
  * Parameter order for each Braid function.
- * 
+ *
  * AUTO-GENERATED at module load time by parsing .braid files from
  * braid-llm-kit/examples/assistant/. This eliminates the maintenance risk
  * of a hand-maintained static map drifting out of sync with actual .braid
  * function signatures (Issue #4 from braid-refactoring-issues.md).
- * 
+ *
  * Falls back to an empty map if parsing fails (with a loud warning).
- * 
+ *
  * To inspect the generated map, run:
  *   node backend/scripts/generate-braid-param-order.js --check
  */
 const BRAID_PARAM_ORDER = (() => {
   const order = {};
   try {
-    const braidFiles = fs.readdirSync(ASSISTANT_DIR)
-      .filter(f => f.endsWith('.braid'))
+    const braidFiles = fs
+      .readdirSync(ASSISTANT_DIR)
+      .filter((f) => f.endsWith('.braid'))
       .sort();
 
     let fnCount = 0;
@@ -505,7 +514,7 @@ const BRAID_PARAM_ORDER = (() => {
         const ast = parseBraid(source, file);
         for (const item of ast.items) {
           if (item.type === 'FnDecl') {
-            order[item.name] = (item.params || []).map(p => p.name);
+            order[item.name] = (item.params || []).map((p) => p.name);
             fnCount++;
           }
         }
@@ -514,7 +523,9 @@ const BRAID_PARAM_ORDER = (() => {
       }
     }
 
-    console.log(`[Braid] ✅ Auto-generated BRAID_PARAM_ORDER: ${fnCount} functions from ${braidFiles.length} .braid files`);
+    console.log(
+      `[Braid] ✅ Auto-generated BRAID_PARAM_ORDER: ${fnCount} functions from ${braidFiles.length} .braid files`,
+    );
   } catch (err) {
     console.error(`[Braid] ❌ Failed to auto-generate BRAID_PARAM_ORDER: ${err.message}`);
     console.error('[Braid]    Tool argument ordering may be incorrect. Check ASSISTANT_DIR path.');
@@ -528,9 +539,7 @@ const BRAID_PARAM_ORDER = (() => {
  * @returns {{ valid: boolean, missing: string[], extra: string[] }}
  */
 export function validateParamOrderCoverage() {
-  const registryFunctions = new Set(
-    Object.values(TOOL_REGISTRY).map(config => config.function)
-  );
+  const registryFunctions = new Set(Object.values(TOOL_REGISTRY).map((config) => config.function));
   const paramOrderFunctions = new Set(Object.keys(BRAID_PARAM_ORDER));
 
   const missing = [];
@@ -552,7 +561,9 @@ export function validateParamOrderCoverage() {
     console.warn(`[Braid] ⚠️  BRAID_PARAM_ORDER missing entries for: ${missing.join(', ')}`);
   }
   if (extra.length > 0) {
-    console.warn(`[Braid] ⚠️  BRAID_PARAM_ORDER has extra entries not in TOOL_REGISTRY: ${extra.join(', ')}`);
+    console.warn(
+      `[Braid] ⚠️  BRAID_PARAM_ORDER has extra entries not in TOOL_REGISTRY: ${extra.join(', ')}`,
+    );
   }
 
   return { valid: missing.length === 0, missing, extra };
@@ -574,7 +585,7 @@ export function objectToPositionalArgs(toolName, argsObj) {
   }
 
   // Extract values in order, using undefined for missing params
-  return paramOrder.map(param => argsObj[param]);
+  return paramOrder.map((param) => argsObj[param]);
 }
 
 /**
@@ -590,15 +601,19 @@ export function normalizeToolArgs(toolName, rawArgs, tenantRecord) {
   // The AI model should NOT be trusted to pass the tenant - we enforce it server-side
   const currentTenant = args.tenant || args.tenant_id || null;
   if (!currentTenant || currentTenant === 'default') {
-    args.tenant = tenantUuid;
+    args.tenant_id = tenantUuid;
   } else if (currentTenant !== tenantUuid) {
     // Security: If AI passed a different tenant, override it with the authorized one
     console.warn('[Braid Security] Overriding AI-provided tenant with authorized context', {
       toolName,
       providedTenant: currentTenant,
-      authorizedTenant: tenantUuid
+      authorizedTenant: tenantUuid,
     });
-    args.tenant = tenantUuid;
+    args.tenant_id = tenantUuid;
+  }
+  // Always ensure tenant_id is set (some callers set args.tenant, normalize to tenant_id)
+  if (!args.tenant_id && args.tenant) {
+    args.tenant_id = args.tenant;
   }
 
   // Unwrap common filter pattern for listing tools
@@ -616,19 +631,65 @@ export function normalizeToolArgs(toolName, rawArgs, tenantRecord) {
     }
   }
 
+  // Default empty string for 'query' on search tools that treat it as optional filter
+  // The Braid type system requires String (not String?), so we supply '' meaning "no filter"
+  const SEARCH_TOOLS = new Set([
+    'search_accounts',
+    'search_contacts',
+    'search_leads',
+    'search_opportunities',
+    'search_activities',
+    'search_bizdev_sources',
+    'search_notes',
+  ]);
+  if (SEARCH_TOOLS.has(toolName) && args.query === undefined) {
+    args.query = '';
+  }
+
+  // createLead uses first_name/last_name but AI sometimes sends only 'name'
+  // Split 'name' into first_name + last_name so the Braid type validator is satisfied
+  if (toolName === 'create_lead') {
+    if (args.first_name === undefined && args.name) {
+      const parts = String(args.name).trim().split(/\s+/);
+      args.first_name = parts[0] || '';
+      args.last_name = parts.slice(1).join(' ') || '';
+    }
+    if (args.first_name === undefined) args.first_name = '';
+    if (args.last_name === undefined) args.last_name = '';
+  }
+
   // Normalize common scalar fields
   if (typeof args.limit === 'string') {
     const n = parseInt(args.limit, 10);
     if (!Number.isNaN(n)) args.limit = n;
   }
-  
+
   // ── Context translation: AI sentinel values → route-safe defaults ──
   // The AI often sends "all", "any", "<UNKNOWN>", etc. for optional filters.
   // Routes treat empty string as "no filter", so translate here to keep
   // Braid type signatures strict (String, not String?).
-  const SENTINEL_VALUES = new Set(['all', 'any', '', 'undefined', 'none', '<UNKNOWN>', 'unknown', 'null']);
+  const SENTINEL_VALUES = new Set([
+    'all',
+    'any',
+    '',
+    'undefined',
+    'none',
+    '<UNKNOWN>',
+    'unknown',
+    'null',
+  ]);
 
-  for (const field of ['status', 'account_id', 'entity_type', 'entity_id', 'related_to_type', 'related_to_id', 'related_id', 'source', 'assigned_to']) {
+  for (const field of [
+    'status',
+    'account_id',
+    'entity_type',
+    'entity_id',
+    'related_to_type',
+    'related_to_id',
+    'related_id',
+    'source',
+    'assigned_to',
+  ]) {
     if (args[field] !== undefined && SENTINEL_VALUES.has(String(args[field]).toLowerCase())) {
       args[field] = '';
     }
@@ -643,7 +704,7 @@ export function normalizeToolArgs(toolName, rawArgs, tenantRecord) {
     'update_contact',
     'update_opportunity',
     'update_note',
-    'update_bizdev_source'
+    'update_bizdev_source',
   ]);
 
   if (updateTools.has(toolName) && args.updates) {
@@ -659,7 +720,7 @@ export function normalizeToolArgs(toolName, rawArgs, tenantRecord) {
     if (typeof args.updates === 'object' && args.updates !== null) {
       args.updates = {
         ...args.updates,
-        tenant_id: tenantUuid
+        tenant_id: tenantUuid,
       };
     }
   }
@@ -687,7 +748,7 @@ export function getToolDependencies(toolName) {
       if (visited.has(dep)) continue;
       visited.add(dep);
       transitive.add(dep);
-      
+
       const depTool = TOOL_GRAPH[dep];
       if (depTool?.dependencies) {
         collectTransitive(depTool.dependencies);
@@ -699,7 +760,7 @@ export function getToolDependencies(toolName) {
 
   return {
     direct,
-    transitive: Array.from(transitive).filter(t => !direct.includes(t))
+    transitive: Array.from(transitive).filter((t) => !direct.includes(t)),
   };
 }
 
@@ -744,7 +805,7 @@ export function getToolDependents(toolName) {
 
   return {
     direct: directDependents,
-    transitive: Array.from(transitive).filter(t => !directDependents.includes(t))
+    transitive: Array.from(transitive).filter((t) => !directDependents.includes(t)),
   };
 }
 
@@ -771,7 +832,7 @@ export function getToolGraph(options = {}) {
       label: name.replace(/_/g, ' '),
       category: config.category,
       color: categoryConfig.color,
-      icon: categoryConfig.icon
+      icon: categoryConfig.icon,
     };
 
     if (includeMetadata) {
@@ -784,13 +845,13 @@ export function getToolGraph(options = {}) {
     nodes.push(node);
 
     // Add edges for dependencies
-    for (const dep of (config.dependencies || [])) {
+    for (const dep of config.dependencies || []) {
       // Only add edge if dependency is in filtered set
       if (!category || TOOL_GRAPH[dep]?.category === category) {
         edges.push({
           source: dep,
           target: name,
-          type: 'dependency'
+          type: 'dependency',
         });
       }
     }
@@ -807,7 +868,7 @@ export function getToolGraph(options = {}) {
       adjacency[node.id] = {
         ...node,
         dependencies: TOOL_GRAPH[node.id]?.dependencies || [],
-        dependents: edges.filter(e => e.source === node.id).map(e => e.target)
+        dependents: edges.filter((e) => e.source === node.id).map((e) => e.target),
       };
     }
     return { adjacency, categories: TOOL_CATEGORIES };
@@ -856,7 +917,7 @@ export function detectCircularDependencies() {
 
   return {
     hasCircular: cycles.length > 0,
-    cycles
+    cycles,
   };
 }
 
@@ -872,7 +933,7 @@ export function getToolsByCategory(category) {
       tools.push({
         name,
         ...config,
-        categoryInfo: TOOL_CATEGORIES[category]
+        categoryInfo: TOOL_CATEGORIES[category],
       });
     }
   }
@@ -903,14 +964,14 @@ export async function getToolImpactAnalysis(toolName) {
     // Skip dynamic chains that don't have static steps
     if (!chain.steps || chain.dynamic) continue;
 
-    const chainTools = chain.steps.map(s => s.tool);
+    const chainTools = chain.steps.map((s) => s.tool);
     if (chainTools.includes(toolName)) {
       affectedChains.push({
         name: chainName,
         displayName: chain.name,
         stepIndex: chainTools.indexOf(toolName),
         totalSteps: chainTools.length,
-        isRequired: chain.steps.find(s => s.tool === toolName)?.required ?? true
+        isRequired: chain.steps.find((s) => s.tool === toolName)?.required ?? true,
       });
     }
   }
@@ -925,7 +986,7 @@ export async function getToolImpactAnalysis(toolName) {
     dependencies,
     dependents,
     affectedChains,
-    impactScore: calculateImpactScore(dependents, affectedChains)
+    impactScore: calculateImpactScore(dependents, affectedChains),
   };
 }
 
@@ -946,7 +1007,7 @@ function calculateImpactScore(dependents, affectedChains) {
   score += affectedChains.length * 10;
 
   // Required steps in chains are more critical
-  score += affectedChains.filter(c => c.isRequired).length * 5;
+  score += affectedChains.filter((c) => c.isRequired).length * 5;
 
   return Math.min(100, score);
 }

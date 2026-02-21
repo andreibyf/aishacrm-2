@@ -7,25 +7,20 @@
  *   DELETE /api/pep/saved-reports/:id
  *   PATCH  /api/pep/saved-reports/:id/run
  *
- * Strategy: mock authenticateRequest + getSupabaseClient so tests run
- * without live credentials. Validates input validation, tenant isolation
- * guards, conflict handling (409), and happy-path shapes.
+ * Strategy: each describe block gets its own Express server on a unique port
+ * with a pre-configured supabase mock injected via createPepRoutes(null, mock).
+ * No mock.module needed — works on Node 20+.
  */
 
-import { describe, it, before, after, mock } from 'node:test';
+import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
+import express from 'express';
+import { createServer } from 'node:http';
 
-// ─── Supabase mock factory ────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/**
- * Build a chainable Supabase query mock that resolves to { data, error }.
- * Each method returns `this` so chaining works: .from().select().eq()...
- */
-function makeSupabaseMock({ data = null, error = null, single = false } = {}) {
-  const chain = {
-    data,
-    error,
-    _single: single,
+function makeSupabaseMock({ data = null, error = null } = {}) {
+  return {
     from() {
       return this;
     },
@@ -47,265 +42,267 @@ function makeSupabaseMock({ data = null, error = null, single = false } = {}) {
     order() {
       return this;
     },
+    limit() {
+      return this;
+    },
     single() {
-      this._single = true;
-      return Promise.resolve({ data: this.data, error: this.error });
+      return Promise.resolve({ data, error });
     },
     then(resolve) {
-      return Promise.resolve({ data: this.data, error: this.error }).then(resolve);
+      return Promise.resolve({ data, error }).then(resolve);
+    },
+    rpc() {
+      return Promise.resolve({ error });
     },
   };
-  return chain;
 }
 
-const port = 3142;
+let pepRoutes;
 
-async function request(method, path, body) {
-  const opts = {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-  };
+async function buildServer(port, supabaseMock) {
+  if (!pepRoutes) {
+    const mod = await import('../../routes/pep.js');
+    pepRoutes = mod.default;
+  }
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => {
+    req.user = { email: 'test@tenant.com', id: 'user-uuid-123' };
+    next();
+  });
+  app.use('/api/pep', pepRoutes(null, supabaseMock));
+  const server = createServer(app);
+  await new Promise((r) => server.listen(port, r));
+  return server;
+}
+
+function req(port, method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
   return fetch(`http://localhost:${port}${path}`, opts);
 }
 
-// ─── Test suite ───────────────────────────────────────────────────────────────
+// ─── GET /api/pep/saved-reports ──────────────────────────────────────────────
 
-describe('PEP Phase 4 — Saved Reports Routes', () => {
-  let app;
+describe('GET /api/pep/saved-reports', () => {
   let server;
+  const port = 3142;
 
   before(async () => {
-    // Mock authenticateRequest — sets req.user and calls next()
-    mock.module('../../middleware/authenticate.js', {
-      namedExports: {
-        authenticateRequest: (_req, _res, next) => {
-          _req.user = { email: 'test@tenant.com', id: 'user-uuid-123' };
-          next();
-        },
-      },
-    });
-
-    // Mock logger to silence output during tests
-    mock.module('../../lib/logger.js', {
-      defaultExport: {
-        warn: () => {},
-        error: () => {},
-        info: () => {},
-      },
-    });
-
-    // Mock the PEP compiler modules (not used by saved-reports endpoints but imported at top level)
-    mock.module('../../../pep/compiler/resolver.js', {
-      namedExports: { resolveQuery: () => ({}) },
-    });
-    mock.module('../../../pep/compiler/emitter.js', {
-      namedExports: { emitQuery: () => ({}), buildConfirmationString: () => '' },
-    });
-    mock.module('../../../pep/compiler/llmParser.js', {
-      namedExports: { parseLLM: async () => ({ match: false }) },
-    });
-
-    const express = (await import('express')).default;
-    const createPepRoutes = (await import('../../routes/pep.js')).default;
-
-    app = express();
-    app.use(express.json());
-    app.use('/api/pep', createPepRoutes(null));
-
-    server = app.listen(port);
-    await new Promise((r) => server.on('listening', r));
+    server = await buildServer(port, makeSupabaseMock({ data: [], error: null }));
   });
-
   after(async () => {
-    if (server) await new Promise((r) => server.close(r));
-    mock.restoreAll();
+    await new Promise((r) => server.close(r));
   });
 
-  // ── GET /api/pep/saved-reports ──────────────────────────────────────────────
-
-  describe('GET /api/pep/saved-reports', () => {
-    it('returns 400 when tenant_id is missing', async () => {
-      const res = await request('GET', '/api/pep/saved-reports');
-      assert.strictEqual(res.status, 400);
-      const json = await res.json();
-      assert.strictEqual(json.status, 'error');
-      assert.ok(json.message.includes('tenant_id'));
-    });
-
-    it('returns 200 with empty array when no saved reports exist', async () => {
-      // Mock supabase to return empty list
-      mock.module('../../lib/supabase-db.js', {
-        namedExports: {
-          getSupabaseClient: () => makeSupabaseMock({ data: [], error: null }),
-        },
-      });
-
-      const res = await request('GET', '/api/pep/saved-reports?tenant_id=tenant-abc');
-      assert.strictEqual(res.status, 200);
-      const json = await res.json();
-      assert.strictEqual(json.status, 'success');
-      assert.ok(Array.isArray(json.data));
-    });
+  it('returns 400 when tenant_id is missing', async () => {
+    const res = await req(port, 'GET', '/api/pep/saved-reports');
+    assert.strictEqual(res.status, 400);
+    const json = await res.json();
+    assert.ok(json.message.includes('tenant_id'));
   });
 
-  // ── POST /api/pep/saved-reports ─────────────────────────────────────────────
+  it('returns 200 with empty array when no saved reports exist', async () => {
+    const res = await req(port, 'GET', '/api/pep/saved-reports?tenant_id=tenant-abc');
+    assert.strictEqual(res.status, 200);
+    const json = await res.json();
+    assert.strictEqual(json.status, 'success');
+    assert.ok(Array.isArray(json.data));
+  });
+});
 
-  describe('POST /api/pep/saved-reports', () => {
-    it('returns 400 when required fields are missing', async () => {
-      const res = await request('POST', '/api/pep/saved-reports', {
-        tenant_id: 'tenant-abc',
-        // missing report_name, plain_english, compiled_ir
-      });
-      assert.strictEqual(res.status, 400);
-      const json = await res.json();
-      assert.strictEqual(json.status, 'error');
-      assert.ok(json.message.includes('Missing required fields'));
-    });
+// ─── POST /api/pep/saved-reports ─────────────────────────────────────────────
 
-    it('returns 400 when tenant_id is missing', async () => {
-      const res = await request('POST', '/api/pep/saved-reports', {
-        report_name: 'My Report',
-        plain_english: 'Show me open leads',
-        compiled_ir: { op: 'query_entity', target: 'leads', filters: [] },
-      });
-      assert.strictEqual(res.status, 400);
-      const json = await res.json();
-      assert.strictEqual(json.status, 'error');
-    });
+describe('POST /api/pep/saved-reports — validation', () => {
+  let server;
+  const port = 3143;
 
-    it('returns 409 when report name already exists for tenant', async () => {
-      mock.module('../../lib/supabase-db.js', {
-        namedExports: {
-          getSupabaseClient: () => {
-            const chain = makeSupabaseMock({
-              data: null,
-              error: { code: '23505', message: 'duplicate key value' },
-            });
-            // .single() needs to reject with the error
-            chain.single = () =>
-              Promise.resolve({
-                data: null,
-                error: { code: '23505', message: 'duplicate key value' },
-              });
-            return chain;
-          },
-        },
-      });
-
-      const res = await request('POST', '/api/pep/saved-reports', {
-        tenant_id: 'tenant-abc',
-        report_name: 'Duplicate Report',
-        plain_english: 'Show me open leads',
-        compiled_ir: { op: 'query_entity', target: 'leads', filters: [] },
-      });
-      assert.strictEqual(res.status, 409);
-      const json = await res.json();
-      assert.strictEqual(json.status, 'error');
-      assert.ok(json.message.includes('already exists'));
-    });
+  before(async () => {
+    server = await buildServer(port, makeSupabaseMock({ data: null, error: null }));
+  });
+  after(async () => {
+    await new Promise((r) => server.close(r));
   });
 
-  // ── DELETE /api/pep/saved-reports/:id ──────────────────────────────────────
-
-  describe('DELETE /api/pep/saved-reports/:id', () => {
-    it('returns 400 when tenant_id query param is missing', async () => {
-      const res = await request('DELETE', '/api/pep/saved-reports/some-uuid');
-      assert.strictEqual(res.status, 400);
-      const json = await res.json();
-      assert.strictEqual(json.status, 'error');
-      assert.ok(json.message.includes('tenant_id'));
-    });
-
-    it('returns 200 on successful delete', async () => {
-      mock.module('../../lib/supabase-db.js', {
-        namedExports: {
-          getSupabaseClient: () => makeSupabaseMock({ data: null, error: null }),
-        },
-      });
-
-      const res = await request('DELETE', '/api/pep/saved-reports/some-uuid?tenant_id=tenant-abc');
-      assert.strictEqual(res.status, 200);
-      const json = await res.json();
-      assert.strictEqual(json.status, 'success');
-    });
+  it('returns 400 when required fields are missing', async () => {
+    const res = await req(port, 'POST', '/api/pep/saved-reports', { tenant_id: 'tenant-abc' });
+    assert.strictEqual(res.status, 400);
+    const json = await res.json();
+    assert.ok(json.message.includes('Missing required fields'));
   });
 
-  // ── PATCH /api/pep/saved-reports/:id/run ───────────────────────────────────
-
-  describe('PATCH /api/pep/saved-reports/:id/run', () => {
-    it('returns 400 when tenant_id body field is missing', async () => {
-      const res = await request('PATCH', '/api/pep/saved-reports/some-uuid/run', {});
-      assert.strictEqual(res.status, 400);
-      const json = await res.json();
-      assert.strictEqual(json.status, 'error');
-      assert.ok(json.message.includes('tenant_id'));
+  it('returns 400 when tenant_id is missing', async () => {
+    const res = await req(port, 'POST', '/api/pep/saved-reports', {
+      report_name: 'My Report',
+      plain_english: 'Show me open leads',
+      compiled_ir: { op: 'query_entity', target: 'leads', filters: [] },
     });
+    assert.strictEqual(res.status, 400);
+  });
+});
 
-    it('returns 404 when saved report does not exist for tenant', async () => {
-      mock.module('../../lib/supabase-db.js', {
-        namedExports: {
-          getSupabaseClient: () => {
-            const chain = makeSupabaseMock({ data: null, error: { message: 'not found' } });
-            chain.single = () => Promise.resolve({ data: null, error: { message: 'not found' } });
-            return chain;
-          },
-        },
-      });
+describe('POST /api/pep/saved-reports — duplicate', () => {
+  let server;
+  const port = 3144;
 
-      const res = await request('PATCH', '/api/pep/saved-reports/missing-uuid/run', {
-        tenant_id: 'tenant-abc',
-      });
-      assert.strictEqual(res.status, 404);
-      const json = await res.json();
-      assert.strictEqual(json.status, 'error');
-    });
-
-    it('returns 200 on successful atomic increment via RPC', async () => {
-      let rpcCalled = false;
-      mock.module('../../lib/supabase-db.js', {
-        namedExports: {
-          getSupabaseClient: () => ({
-            rpc(fnName, params) {
-              rpcCalled = true;
-              assert.strictEqual(fnName, 'pep_increment_report_run');
-              assert.strictEqual(params.p_id, 'existing-uuid');
-              assert.strictEqual(params.p_tenant_id, 'tenant-abc');
-              return Promise.resolve({ error: null });
-            },
-          }),
-        },
-      });
-
-      const res = await request('PATCH', '/api/pep/saved-reports/existing-uuid/run', {
-        tenant_id: 'tenant-abc',
-      });
-      assert.strictEqual(res.status, 200);
-      const json = await res.json();
-      assert.strictEqual(json.status, 'success');
-      assert.ok(rpcCalled, 'rpc should have been called');
-    });
+  before(async () => {
+    const dupMock = {
+      ...makeSupabaseMock(),
+      single() {
+        return Promise.resolve({
+          data: null,
+          error: { code: '23505', message: 'duplicate key value' },
+        });
+      },
+    };
+    server = await buildServer(port, dupMock);
+  });
+  after(async () => {
+    await new Promise((r) => server.close(r));
   });
 
-  // ── Tenant isolation guard ──────────────────────────────────────────────────
-
-  describe('Tenant isolation', () => {
-    it('DELETE always scopes by tenant_id — wrong tenant gets no rows deleted', async () => {
-      // The .eq('tenant_id', tenantId) chain ensures isolation at DB level.
-      // This test verifies the route passes tenant_id correctly by checking
-      // that the response is still 200 (Supabase deletes 0 rows silently).
-      mock.module('../../lib/supabase-db.js', {
-        namedExports: {
-          getSupabaseClient: () => makeSupabaseMock({ data: null, error: null }),
-        },
-      });
-
-      const res = await request(
-        'DELETE',
-        '/api/pep/saved-reports/uuid-owned-by-other-tenant?tenant_id=tenant-xyz',
-      );
-      // Route returns 200; zero rows deleted is enforced by DB RLS + .eq() filter
-      assert.strictEqual(res.status, 200);
+  it('returns 409 when report name already exists for tenant', async () => {
+    const res = await req(port, 'POST', '/api/pep/saved-reports', {
+      tenant_id: 'tenant-abc',
+      report_name: 'Duplicate Report',
+      plain_english: 'Show me open leads',
+      compiled_ir: { op: 'query_entity', target: 'leads', filters: [] },
     });
+    assert.strictEqual(res.status, 409);
+    const json = await res.json();
+    assert.strictEqual(json.status, 'error');
+    assert.ok(json.message.includes('already exists'));
+  });
+});
+
+// ─── DELETE /api/pep/saved-reports/:id ───────────────────────────────────────
+
+describe('DELETE /api/pep/saved-reports/:id', () => {
+  let server;
+  const port = 3145;
+
+  before(async () => {
+    server = await buildServer(port, makeSupabaseMock({ data: null, error: null }));
+  });
+  after(async () => {
+    await new Promise((r) => server.close(r));
+  });
+
+  it('returns 400 when tenant_id query param is missing', async () => {
+    const res = await req(port, 'DELETE', '/api/pep/saved-reports/some-uuid');
+    assert.strictEqual(res.status, 400);
+    const json = await res.json();
+    assert.ok(json.message.includes('tenant_id'));
+  });
+
+  it('returns 200 on successful delete', async () => {
+    const res = await req(port, 'DELETE', '/api/pep/saved-reports/some-uuid?tenant_id=tenant-abc');
+    assert.strictEqual(res.status, 200);
+    const json = await res.json();
+    assert.strictEqual(json.status, 'success');
+  });
+});
+
+// ─── PATCH /api/pep/saved-reports/:id/run ────────────────────────────────────
+
+describe('PATCH /api/pep/saved-reports/:id/run — validation', () => {
+  let server;
+  const port = 3146;
+
+  before(async () => {
+    server = await buildServer(port, makeSupabaseMock({ data: null, error: null }));
+  });
+  after(async () => {
+    await new Promise((r) => server.close(r));
+  });
+
+  it('returns 400 when tenant_id body field is missing', async () => {
+    const res = await req(port, 'PATCH', '/api/pep/saved-reports/some-uuid/run', {});
+    assert.strictEqual(res.status, 400);
+    const json = await res.json();
+    assert.ok(json.message.includes('tenant_id'));
+  });
+});
+
+describe('PATCH /api/pep/saved-reports/:id/run — not found', () => {
+  let server;
+  const port = 3147;
+
+  before(async () => {
+    const notFoundMock = {
+      ...makeSupabaseMock(),
+      rpc() {
+        return Promise.resolve({ error: { message: 'not found', code: 'P0001' } });
+      },
+    };
+    server = await buildServer(port, notFoundMock);
+  });
+  after(async () => {
+    await new Promise((r) => server.close(r));
+  });
+
+  it('returns 404 when saved report does not exist for tenant', async () => {
+    const res = await req(port, 'PATCH', '/api/pep/saved-reports/missing-uuid/run', {
+      tenant_id: 'tenant-abc',
+    });
+    assert.strictEqual(res.status, 404);
+    const json = await res.json();
+    assert.strictEqual(json.status, 'error');
+  });
+});
+
+describe('PATCH /api/pep/saved-reports/:id/run — success', () => {
+  let server;
+  const port = 3148;
+  let rpcCalled = false;
+
+  before(async () => {
+    const rpcMock = {
+      ...makeSupabaseMock(),
+      rpc(fnName, params) {
+        rpcCalled = true;
+        assert.strictEqual(fnName, 'pep_increment_report_run');
+        assert.strictEqual(params.p_id, 'existing-uuid');
+        assert.strictEqual(params.p_tenant_id, 'tenant-abc');
+        return Promise.resolve({ error: null });
+      },
+    };
+    server = await buildServer(port, rpcMock);
+  });
+  after(async () => {
+    await new Promise((r) => server.close(r));
+  });
+
+  it('returns 200 on successful atomic increment via RPC', async () => {
+    const res = await req(port, 'PATCH', '/api/pep/saved-reports/existing-uuid/run', {
+      tenant_id: 'tenant-abc',
+    });
+    assert.strictEqual(res.status, 200);
+    const json = await res.json();
+    assert.strictEqual(json.status, 'success');
+    assert.ok(rpcCalled, 'rpc should have been called');
+  });
+});
+
+// ─── Tenant isolation ─────────────────────────────────────────────────────────
+
+describe('Tenant isolation', () => {
+  let server;
+  const port = 3149;
+
+  before(async () => {
+    server = await buildServer(port, makeSupabaseMock({ data: null, error: null }));
+  });
+  after(async () => {
+    await new Promise((r) => server.close(r));
+  });
+
+  it('DELETE always scopes by tenant_id — wrong tenant gets no rows deleted', async () => {
+    const res = await req(
+      port,
+      'DELETE',
+      '/api/pep/saved-reports/uuid-owned-by-other-tenant?tenant_id=tenant-xyz',
+    );
+    assert.strictEqual(res.status, 200);
   });
 });

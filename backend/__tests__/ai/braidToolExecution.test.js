@@ -1,9 +1,9 @@
 /**
  * Braid Tool Execution Tests
- * 
+ *
  * Tests AI retrieval, navigation, and update functions via Braid SDK.
  * Validates executeBraidTool(), tool metrics, and the dependency graph.
- * 
+ *
  * @module tests/ai/braidToolExecution.test
  */
 
@@ -13,13 +13,13 @@ import { initSupabaseForTests, hasSupabaseCredentials } from '../setup.js';
 import { authGet, authPost, authPut, authDelete } from '../helpers/auth.js';
 
 // Inside Docker: CRM_BACKEND_URL=http://backend:3001 or use localhost:3001
-// Outside Docker: BACKEND_URL=http://localhost:3001 (matches internal port for consistency)
-const BASE_URL = process.env.CRM_BACKEND_URL || process.env.BACKEND_URL || 'http://localhost:3001';
+// Outside Docker: BACKEND_URL=http://localhost:4001 (set by run-tests-safe.sh)
+// Always run via: npm run test:safe — never call node --test directly
+const BASE_URL = process.env.CRM_BACKEND_URL || process.env.BACKEND_URL || 'http://localhost:4001';
 const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
-const SHOULD_RUN = process.env.CI ? (process.env.CI_BACKEND_TESTS === 'true') : true;
+const SHOULD_RUN = process.env.CI ? process.env.CI_BACKEND_TESTS === 'true' : true;
 
 describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
-  
   before(async () => {
     if (hasSupabaseCredentials()) {
       await initSupabaseForTests();
@@ -29,18 +29,17 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
   // ============================================================
   // BRAID GRAPH API TESTS
   // ============================================================
-  
+
   describe('Braid Graph API', () => {
-    
     test('GET /api/braid/graph returns tool dependency graph', async () => {
       const res = await authGet(`${BASE_URL}/api/braid/graph`);
       const json = await res.json();
-      
+
       assert.equal(res.status, 200, `Expected 200, got ${res.status}`);
       assert.ok(Array.isArray(json.nodes), 'Expected nodes array');
       assert.ok(Array.isArray(json.edges), 'Expected edges array');
       assert.ok(json.nodes.length > 0, 'Expected at least one tool node');
-      
+
       // Verify node structure
       const firstNode = json.nodes[0];
       assert.ok(firstNode.id, 'Node should have id');
@@ -52,10 +51,10 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
     test('GET /api/braid/graph/categories returns tool categories', async () => {
       const res = await authGet(`${BASE_URL}/api/braid/graph/categories`);
       const json = await res.json();
-      
+
       assert.equal(res.status, 200);
       assert.ok(json.categories, 'Expected categories object');
-      
+
       // Verify expected categories exist
       const categories = Object.keys(json.categories);
       assert.ok(categories.includes('ACCOUNTS'), 'Should have ACCOUNTS category');
@@ -67,7 +66,7 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
     test('GET /api/braid/graph/tool/:name returns tool details', async () => {
       const res = await authGet(`${BASE_URL}/api/braid/graph/tool/search_accounts`);
       const json = await res.json();
-      
+
       assert.equal(res.status, 200);
       assert.ok(json.tool, 'Expected tool object');
       assert.equal(json.tool.name, 'search_accounts');
@@ -79,7 +78,7 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
     test('GET /api/braid/graph/tool/:name/impact returns impact analysis', async () => {
       const res = await authGet(`${BASE_URL}/api/braid/graph/tool/create_account/impact`);
       const json = await res.json();
-      
+
       assert.equal(res.status, 200);
       assert.ok(json.tool, 'Expected tool info');
       assert.ok(json.category, 'Expected category');
@@ -91,7 +90,7 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
     test('GET /api/braid/graph/validate checks for circular dependencies', async () => {
       const res = await authGet(`${BASE_URL}/api/braid/graph/validate`);
       const json = await res.json();
-      
+
       assert.equal(res.status, 200);
       assert.ok(typeof json.valid === 'boolean', 'Expected valid boolean');
       assert.ok(json.circularDependencies, 'Expected circularDependencies object');
@@ -101,12 +100,12 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
     test('GET /api/braid/graph/effects/:effect returns tools by effect', async () => {
       const res = await authGet(`${BASE_URL}/api/braid/graph/effects/read`);
       const json = await res.json();
-      
+
       assert.equal(res.status, 200);
       assert.equal(json.effect, 'read');
       assert.ok(Array.isArray(json.tools), 'Expected tools array');
       assert.ok(json.tools.length > 0, 'Expected read tools to exist');
-      
+
       // All returned tools should have 'read' in their effects
       for (const tool of json.tools) {
         assert.ok(tool.effects.includes('read'), `${tool.id} should have read effect`);
@@ -117,13 +116,12 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
   // ============================================================
   // RETRIEVAL TOOL TESTS (via routes that use Braid)
   // ============================================================
-  
+
   describe('Retrieval Functions', () => {
-    
     test('GET /api/v2/accounts returns accounts list', async () => {
       const res = await authGet(`${BASE_URL}/api/v2/accounts?tenant_id=${TENANT_ID}`);
       const json = await res.json();
-      
+
       assert.equal(res.status, 200);
       // V2 API returns { status: 'success', data: { accounts: [...] } }
       assert.ok(json.status === 'success' || Array.isArray(json), 'Expected success response');
@@ -135,7 +133,7 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
     test('GET /api/v2/contacts returns contacts list', async () => {
       const res = await authGet(`${BASE_URL}/api/v2/contacts?tenant_id=${TENANT_ID}`);
       const json = await res.json();
-      
+
       assert.equal(res.status, 200);
       assert.ok(json.status === 'success' || Array.isArray(json), 'Expected success response');
     });
@@ -143,7 +141,7 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
     test('GET /api/v2/leads returns leads list', async () => {
       const res = await authGet(`${BASE_URL}/api/v2/leads?tenant_id=${TENANT_ID}`);
       const json = await res.json();
-      
+
       assert.equal(res.status, 200);
       assert.ok(json.status === 'success' || Array.isArray(json), 'Expected success response');
     });
@@ -151,7 +149,7 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
     test('GET /api/v2/opportunities returns opportunities list', async () => {
       const res = await authGet(`${BASE_URL}/api/v2/opportunities?tenant_id=${TENANT_ID}`);
       const json = await res.json();
-      
+
       assert.equal(res.status, 200);
       assert.ok(json.status === 'success' || Array.isArray(json), 'Expected success response');
     });
@@ -159,7 +157,7 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
     test('GET /api/v2/activities returns activities list', async () => {
       const res = await authGet(`${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}`);
       const json = await res.json();
-      
+
       assert.equal(res.status, 200);
       assert.ok(json.status === 'success' || Array.isArray(json), 'Expected success response');
     });
@@ -167,29 +165,31 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
     test('Search endpoints support query parameters', async () => {
       const res = await authGet(`${BASE_URL}/api/v2/accounts?tenant_id=${TENANT_ID}&limit=5`);
       const json = await res.json();
-      
+
       assert.equal(res.status, 200);
       // V2 returns nested data
       const accounts = json.data?.accounts || json.data || json;
-      assert.ok(Array.isArray(accounts) ? accounts.length <= 5 : true, 'Should respect limit parameter');
+      assert.ok(
+        Array.isArray(accounts) ? accounts.length <= 5 : true,
+        'Should respect limit parameter',
+      );
     });
   });
 
   // ============================================================
   // NAVIGATION TESTS (AI sidebar navigation commands)
   // ============================================================
-  
+
   describe('Navigation Functions', () => {
-    
     test('AI routes are accessible', async () => {
       const res = await authGet(`${BASE_URL}/api/ai/suggestions?tenant_id=${TENANT_ID}`);
-      
+
       assert.equal(res.status, 200, 'AI suggestions endpoint should be accessible');
     });
 
     test('Braid graph endpoint is accessible', async () => {
       const res = await authGet(`${BASE_URL}/api/braid/graph`);
-      
+
       assert.equal(res.status, 200, 'Braid graph endpoint should be accessible');
     });
   });
@@ -197,10 +197,10 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
   // ============================================================
   // UPDATE FUNCTION TESTS
   // ============================================================
-  
+
   describe('Update Functions', () => {
     let testLeadId = null;
-    
+
     test('POST /api/leads creates a new lead', async () => {
       const leadData = {
         tenant_id: TENANT_ID,
@@ -208,14 +208,17 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
         email: `test${Date.now()}@example.com`,
         status: 'new',
         source: 'api_test',
-        company: 'Test Company'
+        company: 'Test Company',
       };
-      
+
       const res = await authPost(`${BASE_URL}/api/leads`, leadData);
       const json = await res.json();
-      
+
       // Accept 200, 201 (success), 400 (validation), 401/403 (auth required)
-      assert.ok([200, 201, 400, 401, 403].includes(res.status), `Expected valid response, got ${res.status}: ${JSON.stringify(json)}`);
+      assert.ok(
+        [200, 201, 400, 401, 403].includes(res.status),
+        `Expected valid response, got ${res.status}: ${JSON.stringify(json)}`,
+      );
       if (res.status === 200 || res.status === 201) {
         testLeadId = json.id || json.data?.id;
       }
@@ -226,37 +229,42 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
         // Skip if no lead was created
         return;
       }
-      
+
       const updateData = {
         tenant_id: TENANT_ID,
-        status: 'contacted'
+        status: 'contacted',
       };
-      
+
       const res = await authPut(`${BASE_URL}/api/leads/${testLeadId}`, updateData);
-      
-      assert.ok([200, 400, 401, 403, 404].includes(res.status), `Expected valid response, got ${res.status}`);
+
+      assert.ok(
+        [200, 400, 401, 403, 404].includes(res.status),
+        `Expected valid response, got ${res.status}`,
+      );
     });
 
     test('DELETE /api/leads/:id removes a lead', async () => {
       if (!testLeadId) {
         return;
       }
-      
+
       const res = await authDelete(`${BASE_URL}/api/leads/${testLeadId}?tenant_id=${TENANT_ID}`);
-      
-      assert.ok([200, 204, 400, 401, 403, 404].includes(res.status), `Expected valid response, got ${res.status}`);
+
+      assert.ok(
+        [200, 204, 400, 401, 403, 404].includes(res.status),
+        `Expected valid response, got ${res.status}`,
+      );
     });
   });
 
   // ============================================================
   // BRAID METRICS API TESTS
   // ============================================================
-  
+
   describe('Braid Metrics API', () => {
-    
     test('GET /api/braid/metrics/tools returns tool metrics', async () => {
       const res = await authGet(`${BASE_URL}/api/braid/metrics/tools?tenant_id=${TENANT_ID}`);
-      
+
       // May require auth
       if (res.status === 200) {
         const json = await res.json();
@@ -267,8 +275,10 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
     });
 
     test('GET /api/braid/metrics/timeseries returns time series data', async () => {
-      const res = await authGet(`${BASE_URL}/api/braid/metrics/timeseries?tenant_id=${TENANT_ID}&period=1h`);
-      
+      const res = await authGet(
+        `${BASE_URL}/api/braid/metrics/timeseries?tenant_id=${TENANT_ID}&period=1h`,
+      );
+
       if (res.status === 200) {
         const json = await res.json();
         assert.ok(json.data || json.timeseries, 'Expected timeseries data');
@@ -281,10 +291,10 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
   // ============================================================
   // BRAID INTEGRATION UNIT TESTS
   // ============================================================
-  
+
   describe('Braid Integration Module', () => {
     let braidModule;
-    
+
     before(async () => {
       try {
         braidModule = await import('../../lib/braidIntegration-v2.js');
@@ -297,7 +307,7 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
       if (!braidModule?.TOOL_CATEGORIES) {
         return; // Skip if module not loaded
       }
-      
+
       const categories = braidModule.TOOL_CATEGORIES;
       assert.ok(categories.ACCOUNTS, 'Should have ACCOUNTS category');
       assert.ok(categories.CONTACTS, 'Should have CONTACTS category');
@@ -310,12 +320,12 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
       if (!braidModule?.TOOL_GRAPH) {
         return;
       }
-      
+
       const graph = braidModule.TOOL_GRAPH;
       assert.ok(graph.search_accounts, 'Should have search_accounts tool');
       assert.ok(graph.create_lead, 'Should have create_lead tool');
       assert.ok(graph.get_opportunity_details, 'Should have get_opportunity_details tool');
-      
+
       // Verify tool structure
       const tool = graph.search_accounts;
       assert.equal(tool.category, 'ACCOUNTS');
@@ -328,33 +338,39 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
       if (!braidModule?.getToolDependencies) {
         return;
       }
-      
+
       const deps = braidModule.getToolDependencies('create_opportunity');
       // Returns { direct: [], transitive: [] }
       assert.ok(deps, 'Should return object');
-      assert.ok(deps.direct !== undefined || Array.isArray(deps), 'Should have dependencies structure');
+      assert.ok(
+        deps.direct !== undefined || Array.isArray(deps),
+        'Should have dependencies structure',
+      );
     });
 
     test('getToolDependents returns dependents object', () => {
       if (!braidModule?.getToolDependents) {
         return;
       }
-      
+
       const dependents = braidModule.getToolDependents('create_account');
       // Returns { direct: [], transitive: [] }
       assert.ok(dependents, 'Should return object');
-      assert.ok(dependents.direct !== undefined || Array.isArray(dependents), 'Should have dependents structure');
+      assert.ok(
+        dependents.direct !== undefined || Array.isArray(dependents),
+        'Should have dependents structure',
+      );
     });
 
     test('getToolsByCategory returns tools in category', () => {
       if (!braidModule?.getToolsByCategory) {
         return;
       }
-      
+
       const accountTools = braidModule.getToolsByCategory('ACCOUNTS');
       assert.ok(Array.isArray(accountTools), 'Should return array');
       assert.ok(accountTools.length > 0, 'Should have account tools');
-      
+
       for (const tool of accountTools) {
         assert.equal(tool.category, 'ACCOUNTS', 'All tools should be in ACCOUNTS category');
       }
@@ -364,18 +380,21 @@ describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {
       if (!braidModule?.detectCircularDependencies) {
         return;
       }
-      
+
       const result = braidModule.detectCircularDependencies();
       // Returns { hasCircular: boolean, cycles: [] }
       assert.ok(result, 'Should return result object');
-      assert.ok(result.hasCircular !== undefined || result.cycles, 'Should have cycle detection result');
+      assert.ok(
+        result.hasCircular !== undefined || result.cycles,
+        'Should have cycle detection result',
+      );
     });
 
     test('getToolImpactAnalysis returns analysis for valid tool', async () => {
       if (!braidModule?.getToolImpactAnalysis) {
         return;
       }
-      
+
       const analysis = await braidModule.getToolImpactAnalysis('search_accounts');
       assert.ok(analysis.tool, 'Should have tool info');
       assert.ok(analysis.category, 'Should have category');

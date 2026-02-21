@@ -253,8 +253,11 @@ function applyFilter(query, filter) {
 
 // ─── Router ──────────────────────────────────────────────────────────────────
 
-export default function createPepRoutes(_pgPool) {
+export default function createPepRoutes(_pgPool, _supabaseOverride = null) {
   const router = express.Router();
+
+  // Allow tests to inject a mock supabase client without needing mock.module
+  const getDb = () => _supabaseOverride || getSupabaseClient();
 
   router.use(authenticateRequest);
 
@@ -385,7 +388,7 @@ export default function createPepRoutes(_pgPool) {
       });
     }
 
-    const supabase = getSupabaseClient();
+    const supabase = getDb();
 
     try {
       // Resolve all filter values (date tokens + employee tokens)
@@ -468,7 +471,7 @@ export default function createPepRoutes(_pgPool) {
         .json({ status: 'error', message: 'Missing required query param: tenant_id' });
     }
 
-    const supabase = getSupabaseClient();
+    const supabase = getDb();
     try {
       const { data, error } = await supabase
         .from('pep_saved_reports')
@@ -506,7 +509,7 @@ export default function createPepRoutes(_pgPool) {
     const dateSuffix = new Date().toISOString().split('T')[0];
     const filename = `${slugify(report_name)}-${dateSuffix}`;
 
-    const supabase = getSupabaseClient();
+    const supabase = getDb();
     try {
       const { data, error } = await supabase
         .from('pep_saved_reports')
@@ -558,7 +561,7 @@ export default function createPepRoutes(_pgPool) {
         .json({ status: 'error', message: 'Missing required query param: tenant_id' });
     }
 
-    const supabase = getSupabaseClient();
+    const supabase = getDb();
     try {
       const { error } = await supabase
         .from('pep_saved_reports')
@@ -590,21 +593,21 @@ export default function createPepRoutes(_pgPool) {
         .json({ status: 'error', message: 'Missing required field: tenant_id' });
     }
 
+    const supabase = getDb();
     try {
-      // Use an atomic UPDATE to avoid lost increments under concurrent access
-      const result = await _pgPool.query(
-        `
-        UPDATE pep_saved_reports
-        SET run_count = COALESCE(run_count, 0) + 1,
-            last_run_at = NOW(),
-            updated_at = NOW()
-        WHERE id = $1 AND tenant_id = $2
-        `,
-        [id, tenant_id],
-      );
+      // Atomic increment via Supabase RPC — avoids lost updates under concurrency
+      const { error } = await supabase.rpc('pep_increment_report_run', {
+        p_id: id,
+        p_tenant_id: tenant_id,
+      });
 
-      if (result.rowCount === 0) {
-        return res.status(404).json({ status: 'error', message: 'Saved report not found.' });
+      if (error) {
+        // RPC returns error when row not found (raised exception) or on DB error
+        if (error.message?.includes('not found') || error.code === 'P0001') {
+          return res.status(404).json({ status: 'error', message: 'Saved report not found.' });
+        }
+        logger.warn({ err: error }, '[PEP] saved-reports PATCH/run error');
+        return res.status(500).json({ status: 'error', message: error.message });
       }
 
       return res.status(200).json({ status: 'success' });
