@@ -1,16 +1,19 @@
 /**
- * CustomQuery — Phase 3 PEP Natural Language Report Query Component
+ * CustomQuery — PEP Natural Language Report Query Component
+ *
+ * Phase 3: compile + query flow
+ * Phase 4: saved reports persisted to DB (pep_saved_reports), shared across tenant
  *
  * Flow:
  *  1. User types a plain English query and clicks Run
  *  2. POST /api/pep/compile → returns IR + confirmation string
  *  3. Show confirmation strip: "Showing X where Y"
  *  4. POST /api/pep/query → returns rows
- *  5. Render results table
- *  6. Optional: Save report to localStorage
+ *  5. Optional: Save report → POST /api/pep/saved-reports
+ *  6. Saved reports panel loads from GET /api/pep/saved-reports (tenant-shared)
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   Sparkles,
   Play,
@@ -28,25 +31,6 @@ import { getBackendUrl } from '@/api/backendUrl';
 import { useTenant } from '@/components/shared/tenantContext';
 import { useUser } from '@/components/shared/useUser';
 import { toast } from 'react-hot-toast';
-
-// ─── localStorage helpers ─────────────────────────────────────────────────────
-
-function getSavedReports(tenantId) {
-  try {
-    const raw = localStorage.getItem(`pep_saved_reports_${tenantId}`);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function setSavedReports(tenantId, reports) {
-  try {
-    localStorage.setItem(`pep_saved_reports_${tenantId}`, JSON.stringify(reports));
-  } catch {
-    // storage full or unavailable — silently ignore
-  }
-}
 
 // ─── ResultsTable ─────────────────────────────────────────────────────────────
 
@@ -174,14 +158,60 @@ function ResultsTable({ rows }) {
 
 // ─── SavedReportsList ─────────────────────────────────────────────────────────
 
-function SavedReportsList({ tenantId, onLoad }) {
-  const [reports, setReports] = useState(() => getSavedReports(tenantId));
+function SavedReportsList({ tenantId, backendUrl, onLoad, refreshKey }) {
+  const [reports, setReports] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  const handleDelete = (idx) => {
-    const updated = reports.filter((_, i) => i !== idx);
-    setSavedReports(tenantId, updated);
-    setReports(updated);
+  useEffect(() => {
+    if (!tenantId) return;
+    setLoading(true);
+    setError(null);
+    fetch(`${backendUrl}/api/pep/saved-reports?tenant_id=${tenantId}`, {
+      credentials: 'include',
+    })
+      .then((r) => r.json())
+      .then((body) => {
+        if (body.status === 'success') {
+          setReports(body.data || []);
+        } else {
+          setError(body.message || 'Failed to load saved reports.');
+        }
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, [tenantId, backendUrl, refreshKey]);
+
+  const handleDelete = async (id, name) => {
+    try {
+      const res = await fetch(`${backendUrl}/api/pep/saved-reports/${id}?tenant_id=${tenantId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      const body = await res.json();
+      if (body.status === 'success') {
+        setReports((prev) => prev.filter((r) => r.id !== id));
+        toast.success(`Deleted "${name}".`);
+      } else {
+        toast.error(body.message || 'Delete failed.');
+      }
+    } catch (err) {
+      toast.error(`Delete failed: ${err.message}`);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-slate-400 text-sm py-4 justify-center">
+        <Loader2 className="w-4 h-4 animate-spin" />
+        Loading saved reports...
+      </div>
+    );
+  }
+
+  if (error) {
+    return <p className="text-red-400 text-sm text-center py-4">{error}</p>;
+  }
 
   if (reports.length === 0) {
     return (
@@ -193,14 +223,23 @@ function SavedReportsList({ tenantId, onLoad }) {
 
   return (
     <div className="space-y-2">
-      {reports.map((r, i) => (
+      {reports.map((r) => (
         <div
-          key={i}
+          key={r.id}
           className="flex items-center justify-between bg-slate-700/50 rounded-lg px-3 py-2 border border-slate-600"
         >
           <div className="min-w-0 flex-1">
-            <p className="text-slate-200 text-sm font-medium truncate">{r.name}</p>
-            <p className="text-slate-400 text-xs truncate">{r.confirmation}</p>
+            <p className="text-slate-200 text-sm font-medium truncate">{r.report_name}</p>
+            <p className="text-slate-400 text-xs truncate">{r.plain_english}</p>
+            <p className="text-slate-600 text-xs mt-0.5">
+              Saved by {r.created_by} &middot;{' '}
+              {new Date(r.created_at).toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              })}
+              {r.run_count > 0 && ` · ${r.run_count} run${r.run_count === 1 ? '' : 's'}`}
+            </p>
           </div>
           <div className="flex items-center gap-2 ml-3 flex-shrink-0">
             <button
@@ -210,7 +249,7 @@ function SavedReportsList({ tenantId, onLoad }) {
               Run
             </button>
             <button
-              onClick={() => handleDelete(i)}
+              onClick={() => handleDelete(r.id, r.report_name)}
               className="text-slate-500 hover:text-red-400 transition-colors"
             >
               <Trash2 className="w-3.5 h-3.5" />
@@ -336,29 +375,56 @@ export default function CustomQuery({ tenantFilter }) {
     if (compiledIr) runQuery(compiledIr, confirmation);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!saveName.trim() || !compiledIr || !tenantId) return;
-    const existing = getSavedReports(tenantId);
-    const newEntry = {
-      name: saveName.trim(),
-      confirmation,
-      ir: compiledIr,
-      source,
-      saved_at: new Date().toISOString(),
-    };
-    setSavedReports(tenantId, [newEntry, ...existing].slice(0, 20));
-    setSaveMode(false);
-    setSaveName('');
-    setSavedRefreshKey((k) => k + 1);
-    toast.success(`Report "${newEntry.name}" saved.`);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/pep/saved-reports`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          tenant_id: tenantId,
+          report_name: saveName.trim(),
+          plain_english: source,
+          compiled_ir: compiledIr,
+        }),
+      });
+      const body = await res.json();
+      if (body.status === 'success') {
+        setSaveMode(false);
+        setSaveName('');
+        setSavedRefreshKey((k) => k + 1);
+        toast.success(`Report "${saveName.trim()}" saved.`);
+      } else {
+        toast.error(body.message || 'Save failed.');
+      }
+    } catch (err) {
+      toast.error(`Save failed: ${err.message}`);
+    }
   };
 
-  const handleLoadSaved = (report) => {
-    setSource(report.source || '');
-    setCompiledIr(report.ir);
-    setConfirmation(report.confirmation);
+  const handleLoadSaved = async (report) => {
+    const ir = report.compiled_ir;
+    const querySource = report.plain_english;
+    setSource(querySource || '');
+    setCompiledIr(ir);
+    setConfirmation(null);
     setShowSaved(false);
-    runQuery(report.ir, report.confirmation);
+    await runQuery(ir, null);
+    // Record the run fire-and-forget
+    fetch(`${BACKEND_URL}/api/pep/saved-reports/${report.id}/run`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ tenant_id: tenantId }),
+    }).catch((err) => {
+      // Non-critical: don't block user flow, but log for debugging / observability
+      console.error(
+        'Failed to record run for saved report:',
+        report.id,
+        err
+      );
+    });
   };
 
   const handleKeyDown = (e) => {
@@ -392,7 +458,13 @@ export default function CustomQuery({ tenantFilter }) {
       {showSaved && (
         <div className="bg-slate-900/60 rounded-lg border border-slate-700 p-4">
           <h3 className="text-sm font-medium text-slate-300 mb-3">Saved Reports</h3>
-          <SavedReportsList key={savedRefreshKey} tenantId={tenantId} onLoad={handleLoadSaved} />
+          <SavedReportsList
+            key={savedRefreshKey}
+            tenantId={tenantId}
+            backendUrl={BACKEND_URL}
+            onLoad={handleLoadSaved}
+            refreshKey={savedRefreshKey}
+          />
         </div>
       )}
 
