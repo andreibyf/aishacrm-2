@@ -531,39 +531,26 @@ export default function createPepRoutes(_pgPool) {
       logger.error({ err }, '[PEP] saved-reports DELETE exception');
       return res.status(500).json({ status: 'error', message: err.message });
     }
-  });
-
-  // ── PATCH /api/pep/saved-reports/:id/run ─────────────────────────────────────
-  router.patch('/saved-reports/:id/run', async (req, res) => {
-    const { id } = req.params;
-    const { tenant_id } = req.body;
-
-    if (!tenant_id) {
-      return res
-        .status(400)
-        .json({ status: 'error', message: 'Missing required field: tenant_id' });
-    }
-
-    const supabase = getSupabaseClient();
     try {
-      // Atomic increment via Postgres RPC — avoids read-then-write race condition
-      const { error: rpcErr } = await supabase.rpc('pep_increment_report_run', {
-        p_id: id,
-        p_tenant_id: tenant_id,
-      });
+      // Use an atomic UPDATE to avoid lost increments under concurrent access
+      const result = await _pgPool.query(
+        `
+        UPDATE pep_saved_reports
+        SET run_count = COALESCE(run_count, 0) + 1,
+            last_run_at = NOW(),
+            updated_at = NOW()
+        WHERE id = $1 AND tenant_id = $2
+        `,
+        [id, tenant_id],
+      );
 
-      if (rpcErr) {
-        // SQLSTATE P0002 = no_data_found — report doesn't exist or wrong tenant
-        if (rpcErr.code === 'P0002' || rpcErr.message?.includes('not found')) {
-          return res.status(404).json({ status: 'error', message: 'Saved report not found.' });
-        }
-        logger.warn({ err: rpcErr }, '[PEP] saved-reports PATCH/run error');
-        return res.status(500).json({ status: 'error', message: rpcErr.message });
+      if (result.rowCount === 0) {
+        return res.status(404).json({ status: 'error', message: 'Saved report not found.' });
       }
 
       return res.status(200).json({ status: 'success' });
     } catch (err) {
-      logger.error({ err }, '[PEP] saved-reports PATCH/run exception');
+      logger.warn({ err }, '[PEP] saved-reports PATCH/run error');
       return res.status(500).json({ status: 'error', message: err.message });
     }
   });
