@@ -23,13 +23,16 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 // Inline slug helper — avoids adding a new dependency
+// Note: character classes kept non-overlapping to avoid ReDoS (CodeQL)
 const slugify = (str) =>
   str
     .toLowerCase()
     .trim()
-    .replace(/[^\w\s-]/g, '')
-    .replace(/[\s_-]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+    .replace(/[^\w\s-]/g, '') // strip non-word chars
+    .replace(/\s+/g, '-') // spaces → hyphens (no overlap with _ or -)
+    .replace(/_+/g, '-') // underscores → hyphens (separate pass)
+    .replace(/-{2,}/g, '-') // collapse multiple hyphens
+    .replace(/^-+|-+$/g, ''); // trim leading/trailing hyphens
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
