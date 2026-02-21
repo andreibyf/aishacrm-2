@@ -8,6 +8,7 @@ import fetch from 'node-fetch';
 import crypto from 'crypto';
 import fs from 'fs';
 import logger from '../lib/logger.js';
+import { validateUrlAgainstWhitelist } from '../lib/urlValidator.js';
 
 const router = express.Router();
 
@@ -19,7 +20,7 @@ let redisClient = null;
  */
 async function getRedisClient() {
   if (redisClient) return redisClient;
-  
+
   try {
     const { getCacheClient } = await import('../lib/cacheClient.js');
     redisClient = getCacheClient();
@@ -31,7 +32,11 @@ async function getRedisClient() {
 }
 
 // GitHub Configuration (token fallback + normalization)
-const RAW_GITHUB_TOKEN = process.env.GH_TOKEN || process.env.GITHUB_TOKEN || process.env.GITHUB_PAT || process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
+const RAW_GITHUB_TOKEN =
+  process.env.GH_TOKEN ||
+  process.env.GITHUB_TOKEN ||
+  process.env.GITHUB_PAT ||
+  process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
 const GITHUB_TOKEN = (RAW_GITHUB_TOKEN || '').trim();
 const GITHUB_REPO_OWNER = process.env.REPO_OWNER || process.env.GITHUB_REPO_OWNER || 'andreibyf';
 const GITHUB_REPO_NAME = process.env.REPO_NAME || process.env.GITHUB_REPO_NAME || 'aishacrm-2';
@@ -43,7 +48,7 @@ logger.debug('[GitHub Issues] Configuration:', {
   tokenLength: GITHUB_TOKEN.length,
   owner: GITHUB_REPO_OWNER,
   repo: GITHUB_REPO_NAME,
-  apiBase: GITHUB_API_BASE
+  apiBase: GITHUB_API_BASE,
 });
 
 // Environment / build metadata
@@ -83,7 +88,7 @@ function generateIdempotencyKey({ type, component, severity, description, enviro
     .replace(/\d+/g, 'N') // Normalize numbers
     .replace(/[^a-z0-9\s]/g, '') // Remove special chars
     .trim();
-  
+
   const key = `${environment}:${type}:${component}:${severity}:${errorSignature}`;
   const hash = crypto.createHash('sha256').update(key).digest('hex').substring(0, 16);
   return `github:issue:${hash}`;
@@ -95,7 +100,7 @@ function generateIdempotencyKey({ type, component, severity, description, enviro
 async function checkIdempotency(idempotencyKey) {
   const redis = await getRedisClient();
   if (!redis) return null; // Redis unavailable, allow creation
-  
+
   try {
     const existing = await redis.get(idempotencyKey);
     if (existing) {
@@ -104,7 +109,7 @@ async function checkIdempotency(idempotencyKey) {
         suppressed: true,
         existingIssue: data.issueNumber,
         createdAt: data.createdAt,
-        url: data.url
+        url: data.url,
       };
     }
     return { suppressed: false };
@@ -120,12 +125,12 @@ async function checkIdempotency(idempotencyKey) {
 async function recordIssueCreation(idempotencyKey, issueData) {
   const redis = await getRedisClient();
   if (!redis) return;
-  
+
   try {
     const data = JSON.stringify({
       issueNumber: issueData.number,
       url: issueData.html_url,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
     });
     await redis.set(idempotencyKey, data, 'PX', IDEMPOTENCY_TTL);
   } catch (error) {
@@ -138,29 +143,31 @@ async function recordIssueCreation(idempotencyKey, issueData) {
  */
 async function retryWithBackoff(fn, maxRetries = MAX_RETRIES) {
   let lastError;
-  
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       return await fn();
     } catch (error) {
       lastError = error;
-      
+
       // Don't retry on client errors (400-499) except rate limits
       if (error.status && error.status >= 400 && error.status < 500 && error.status !== 429) {
         throw error;
       }
-      
+
       if (attempt < maxRetries) {
         const delay = INITIAL_RETRY_DELAY * Math.pow(2, attempt);
         const jitter = Math.random() * delay * 0.3; // 30% jitter
         const totalDelay = delay + jitter;
-        
-        logger.debug(`[GitHub Issues] Retry ${attempt + 1}/${maxRetries} after ${Math.round(totalDelay)}ms (error: ${error.message})`);
-        await new Promise(resolve => setTimeout(resolve, totalDelay));
+
+        logger.debug(
+          `[GitHub Issues] Retry ${attempt + 1}/${maxRetries} after ${Math.round(totalDelay)}ms (error: ${error.message})`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, totalDelay));
       }
     }
   }
-  
+
   throw lastError;
 }
 
@@ -175,7 +182,7 @@ router.post('/create-health-issue', async (req, res) => {
       return res.status(503).json({
         success: false,
         error: 'GitHub token not configured',
-        message: 'GITHUB_TOKEN environment variable is required for autonomous issue creation'
+        message: 'GITHUB_TOKEN environment variable is required for autonomous issue creation',
       });
     }
 
@@ -187,7 +194,7 @@ router.post('/create-health-issue', async (req, res) => {
       suggestedFix,
       severity, // 'critical' | 'high' | 'medium' | 'low'
       component, // e.g., 'backend', 'mcp-server', 'database'
-      assignee // optional GitHub username
+      assignee, // optional GitHub username
     } = req.body;
 
     // Validate required fields
@@ -195,7 +202,7 @@ router.post('/create-health-issue', async (req, res) => {
       return res.status(400).json({
         success: false,
         error: 'Missing required fields',
-        required: ['type', 'title', 'description']
+        required: ['type', 'title', 'description'],
       });
     }
 
@@ -208,7 +215,7 @@ router.post('/create-health-issue', async (req, res) => {
       component: component || 'unknown',
       severity: severity || 'unknown',
       description,
-      environment: ENVIRONMENT
+      environment: ENVIRONMENT,
     });
 
     // Check if this issue was already created recently (safely handle Redis errors)
@@ -223,9 +230,9 @@ router.post('/create-health-issue', async (req, res) => {
       logger.debug('[GitHub Issues] Suppressed duplicate issue:', {
         idempotencyKey,
         existingIssue: idempotencyCheck.existingIssue,
-        createdAt: idempotencyCheck.createdAt
+        createdAt: idempotencyCheck.createdAt,
       });
-      
+
       return res.json({
         success: true,
         suppressed: true,
@@ -233,8 +240,8 @@ router.post('/create-health-issue', async (req, res) => {
         issue: {
           number: idempotencyCheck.existingIssue,
           url: idempotencyCheck.url,
-          createdAt: idempotencyCheck.createdAt
-        }
+          createdAt: idempotencyCheck.createdAt,
+        },
       });
     }
 
@@ -248,7 +255,7 @@ router.post('/create-health-issue', async (req, res) => {
       component,
       environment: ENVIRONMENT,
       buildVersion: BUILD_VERSION,
-      requestId
+      requestId,
     });
 
     // Determine labels based on type, severity, component, and environment
@@ -264,14 +271,14 @@ router.post('/create-health-issue', async (req, res) => {
       title: finalTitle,
       body: issueBody,
       labels,
-      ...(assignee && { assignees: [assignee] })
+      ...(assignee && { assignees: [assignee] }),
     };
 
     logger.debug('[GitHub Issues] Creating issue:', {
       title: issuePayload.title,
       labels,
       assignee,
-      idempotencyKey
+      idempotencyKey,
     });
 
     // Create GitHub issue with retry logic
@@ -284,13 +291,13 @@ router.post('/create-health-issue', async (req, res) => {
             {
               method: 'POST',
               headers: {
-                'Authorization': `Bearer ${GITHUB_TOKEN}`,
-                'Accept': 'application/vnd.github+json',
+                Authorization: `Bearer ${GITHUB_TOKEN}`,
+                Accept: 'application/vnd.github+json',
                 'Content-Type': 'application/json',
-                'User-Agent': 'aishacrm-health-monitor'
+                'User-Agent': 'aishacrm-health-monitor',
               },
-              body: JSON.stringify(issuePayload)
-            }
+              body: JSON.stringify(issuePayload),
+            },
           );
 
           if (!response.ok) {
@@ -308,7 +315,7 @@ router.post('/create-health-issue', async (req, res) => {
             status: fetchErr.status,
             details: fetchErr.details,
             stack: fetchErr.stack,
-            requestId
+            requestId,
           });
           throw fetchErr;
         }
@@ -319,7 +326,7 @@ router.post('/create-health-issue', async (req, res) => {
         status: retryErr.status,
         details: retryErr.details,
         stack: retryErr.stack,
-        requestId
+        requestId,
       });
       throw retryErr;
     }
@@ -334,7 +341,7 @@ router.post('/create-health-issue', async (req, res) => {
         message: recordErr.message,
         stack: recordErr.stack,
         issueNumber: issue.number,
-        requestId
+        requestId,
       });
       // Don't fail the response - issue was created successfully
     }
@@ -351,11 +358,10 @@ router.post('/create-health-issue', async (req, res) => {
         url: issue.html_url,
         title: issue.title,
         state: issue.state,
-        labels: issue.labels.map(l => l.name)
+        labels: issue.labels.map((l) => l.name),
       },
-      idempotencyKey // Include for debugging/monitoring
+      idempotencyKey, // Include for debugging/monitoring
     });
-
   } catch (error) {
     logger.error('[GitHub Issues] CRITICAL - Error creating issue:', {
       message: error.message,
@@ -364,15 +370,15 @@ router.post('/create-health-issue', async (req, res) => {
       stack: error.stack,
       name: error.name,
       type: typeof error,
-      keys: Object.keys(error || {})
+      keys: Object.keys(error || {}),
     });
-    
+
     const statusCode = error.status || 500;
     res.status(statusCode).json({
       success: false,
       error: 'Failed to create GitHub issue',
       message: error.message || 'Unknown error',
-      ...(error.details && { details: error.details })
+      ...(error.details && { details: error.details }),
     });
   }
 });
@@ -387,7 +393,7 @@ router.post('/assign-copilot', async (req, res) => {
     if (!GITHUB_TOKEN) {
       return res.status(503).json({
         success: false,
-        error: 'GitHub token not configured'
+        error: 'GitHub token not configured',
       });
     }
 
@@ -396,7 +402,7 @@ router.post('/assign-copilot', async (req, res) => {
     if (!issueNumber) {
       return res.status(400).json({
         success: false,
-        error: 'Missing issueNumber'
+        error: 'Missing issueNumber',
       });
     }
 
@@ -414,26 +420,32 @@ ${additionalContext ? `\n**Additional Context:**\n${additionalContext}` : ''}
 ---
 *This is an automated request from the AishaCRM health monitoring system.*`;
 
-    const response = await fetch(
-      `${GITHUB_API_BASE}/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/issues/${issueNumber}/comments`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${GITHUB_TOKEN}`,
-          'Accept': 'application/vnd.github+json',
-          'Content-Type': 'application/json',
-          'User-Agent': 'aishacrm-health-monitor'
-        },
-        body: JSON.stringify({ body: commentBody })
-      }
-    );
+    const apiUrl = `${GITHUB_API_BASE}/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/issues/${issueNumber}/comments`;
+
+    // Validate URL to prevent SSRF (only allow GitHub API domain)
+    const validation = validateUrlAgainstWhitelist(apiUrl, ['api.github.com']);
+    if (!validation.valid) {
+      logger.error('[GitHub Issues] Invalid API URL:', validation.error);
+      return res.status(400).json({ success: false, error: 'Invalid GitHub API URL' });
+    }
+
+    const response = await fetch(validation.url.toString(), {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${GITHUB_TOKEN}`,
+        Accept: 'application/vnd.github+json',
+        'Content-Type': 'application/json',
+        'User-Agent': 'aishacrm-health-monitor',
+      },
+      body: JSON.stringify({ body: commentBody }),
+    });
 
     if (!response.ok) {
       const errorText = await response.text();
       return res.status(response.status).json({
         success: false,
         error: 'Failed to add comment',
-        details: errorText
+        details: errorText,
       });
     }
 
@@ -442,28 +454,37 @@ ${additionalContext ? `\n**Additional Context:**\n${additionalContext}` : ''}
       success: true,
       comment: {
         id: comment.id,
-        url: comment.html_url
-      }
+        url: comment.html_url,
+      },
     });
-
   } catch (error) {
     logger.error('[GitHub Issues] Error assigning Copilot:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to assign Copilot',
-      message: error.message
+      message: error.message,
     });
   }
 });
 
 // Helper: Build structured issue body
-function buildIssueBody({ type, description, context, suggestedFix, severity, component, environment, buildVersion, requestId }) {
+function buildIssueBody({
+  type,
+  description,
+  context,
+  suggestedFix,
+  severity,
+  component,
+  environment,
+  buildVersion,
+  requestId,
+}) {
   const timestamp = new Date().toISOString();
   const severityEmoji = {
     critical: '🔴',
     high: '🟠',
     medium: '🟡',
-    low: '🟢'
+    low: '🟢',
   };
 
   let body = `## ${severityEmoji[severity] || '⚪'} Health Monitor Alert

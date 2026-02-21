@@ -5,6 +5,7 @@
 import express from 'express';
 import { cacheList } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
+import { validateInternalUrl } from '../lib/urlValidator.js';
 
 // Helper: attempt to count rows from a table safely (optionally by tenant)
 // options:
@@ -59,15 +60,25 @@ async function safeCount(_pgPool, table, tenantId, filterBuilder, options = {}) 
       try {
         let exact = supabase.from(table).select('*', { count: 'exact', head: true });
         if (tenantId) {
-          try { exact = exact.eq('tenant_id', tenantId); } catch { /* ignore */ void 0; }
+          try {
+            exact = exact.eq('tenant_id', tenantId);
+          } catch {
+            /* ignore */ void 0;
+          }
         }
         if (!includeTestData) {
           try {
             exact = exact.or('is_test_data.is.false,is_test_data.is.null');
-          } catch { /* ignore */ void 0; }
+          } catch {
+            /* ignore */ void 0;
+          }
         }
         if (typeof filterBuilder === 'function') {
-          try { exact = filterBuilder(exact) || exact; } catch { /* ignore */ void 0; }
+          try {
+            exact = filterBuilder(exact) || exact;
+          } catch {
+            /* ignore */ void 0;
+          }
         }
         const { count: exactCount } = await exact;
         return exactCount ?? plannedCount;
@@ -124,17 +135,17 @@ export default function createReportRoutes(_pgPool) {
     try {
       const { tenant_id } = req.body;
       const cacheManager = req.app?.locals?.cacheManager;
-      
+
       if (!cacheManager || !cacheManager.client) {
         return res.json({
           status: 'warning',
           message: 'Cache manager not available',
-          data: { cleared: false }
+          data: { cleared: false },
         });
       }
-      
+
       logger.debug('[Reports] clear-cache called via redis:', { tenant_id });
-      
+
       if (tenant_id) {
         // Clear specific tenant cache: delete dashboard bundle keys for this tenant
         const pattern = `dashboard:bundle:${tenant_id}:*`;
@@ -161,17 +172,17 @@ export default function createReportRoutes(_pgPool) {
         }
         logger.debug('[Reports] Cleared all dashboard bundle cache');
       }
-      
+
       res.json({
         status: 'success',
         message: `Cache cleared${tenant_id ? ' for tenant ' + tenant_id : ' (all tenants)'}`,
-        data: { cleared: true }
+        data: { cleared: true },
       });
     } catch (error) {
       logger.error('[Reports] clear-cache error:', error);
       res.status(500).json({
         status: 'error',
-        message: error.message
+        message: error.message,
       });
     }
   });
@@ -260,15 +271,19 @@ export default function createReportRoutes(_pgPool) {
     if (stats.totalLeads > 0 && stats.totalContacts > 0) {
       const ratio = stats.totalContacts / stats.totalLeads;
       if (ratio > 2) {
-        insights.push(`Strong conversion: ${stats.totalContacts} contacts from ${stats.totalLeads} leads (${(ratio * 100).toFixed(0)}% conversion)`);
+        insights.push(
+          `Strong conversion: ${stats.totalContacts} contacts from ${stats.totalLeads} leads (${(ratio * 100).toFixed(0)}% conversion)`,
+        );
         healthScore += 15;
       } else if (ratio < 0.5) {
-        insights.push(`Low conversion: Only ${stats.totalContacts} contacts from ${stats.totalLeads} leads (${(ratio * 100).toFixed(0)}% conversion)`);
+        insights.push(
+          `Low conversion: Only ${stats.totalContacts} contacts from ${stats.totalLeads} leads (${(ratio * 100).toFixed(0)}% conversion)`,
+        );
         suggestions.push({
           action: 'improve_conversion',
           priority: 'high',
           reason: 'Lead to contact conversion is below 50%',
-          confidence: 0.8
+          confidence: 0.8,
         });
         healthScore -= 10;
       }
@@ -278,15 +293,17 @@ export default function createReportRoutes(_pgPool) {
     if (stats.totalAccounts > 0 && stats.totalOpportunities > 0) {
       const oppPerAccount = stats.totalOpportunities / stats.totalAccounts;
       if (oppPerAccount > 1.5) {
-        insights.push(`Healthy pipeline: ${(oppPerAccount).toFixed(1)} opportunities per account`);
+        insights.push(`Healthy pipeline: ${oppPerAccount.toFixed(1)} opportunities per account`);
         healthScore += 10;
       } else if (oppPerAccount < 0.3) {
-        insights.push(`Low opportunity coverage: ${(oppPerAccount).toFixed(1)} opportunities per account`);
+        insights.push(
+          `Low opportunity coverage: ${oppPerAccount.toFixed(1)} opportunities per account`,
+        );
         suggestions.push({
           action: 'identify_opportunities',
           priority: 'medium',
           reason: 'Many accounts lack active opportunities',
-          confidence: 0.75
+          confidence: 0.75,
         });
         healthScore -= 5;
       }
@@ -296,16 +313,18 @@ export default function createReportRoutes(_pgPool) {
     if (stats.totalActivities > 0 && stats.totalContacts > 0) {
       const activitiesPerContact = stats.totalActivities / stats.totalContacts;
       if (activitiesPerContact < 2) {
-        insights.push(`Low activity level: ${(activitiesPerContact).toFixed(1)} activities per contact`);
+        insights.push(
+          `Low activity level: ${activitiesPerContact.toFixed(1)} activities per contact`,
+        );
         suggestions.push({
           action: 'increase_touchpoints',
           priority: 'medium',
           reason: 'Contact engagement is below recommended level',
-          confidence: 0.7
+          confidence: 0.7,
         });
         healthScore -= 5;
       } else if (activitiesPerContact > 5) {
-        insights.push(`High engagement: ${(activitiesPerContact).toFixed(1)} activities per contact`);
+        insights.push(`High engagement: ${activitiesPerContact.toFixed(1)} activities per contact`);
         healthScore += 10;
       }
     }
@@ -316,7 +335,7 @@ export default function createReportRoutes(_pgPool) {
         action: 'add_leads',
         priority: 'high',
         reason: 'No leads in pipeline - add lead sources or import data',
-        confidence: 0.9
+        confidence: 0.9,
       });
       healthScore -= 20;
     }
@@ -326,7 +345,7 @@ export default function createReportRoutes(_pgPool) {
         action: 'create_accounts',
         priority: 'medium',
         reason: 'Contacts exist without account associations',
-        confidence: 0.8
+        confidence: 0.8,
       });
       healthScore -= 10;
     }
@@ -338,7 +357,7 @@ export default function createReportRoutes(_pgPool) {
         action: 'log_activities',
         priority: 'high',
         reason: 'No activities in the last 10 records - ensure team is logging interactions',
-        confidence: 0.85
+        confidence: 0.85,
       });
       healthScore -= 15;
     } else if (stats.recentActivities && stats.recentActivities.length > 0) {
@@ -355,8 +374,9 @@ export default function createReportRoutes(_pgPool) {
       insights,
       suggestions,
       predictions: {
-        pipelineHealth: healthScore >= 70 ? 'healthy' : healthScore >= 50 ? 'moderate' : 'needs_attention',
-        recommendedActions: suggestions.filter(s => s.priority === 'high').length,
+        pipelineHealth:
+          healthScore >= 70 ? 'healthy' : healthScore >= 50 ? 'moderate' : 'needs_attention',
+        recommendedActions: suggestions.filter((s) => s.priority === 'high').length,
       },
       processingTime: Date.now(),
     };
@@ -397,7 +417,12 @@ export default function createReportRoutes(_pgPool) {
 
       // Parse visible widgets to optimize data fetching
       const widgetsParam = req.query.widgets || '';
-      const visibleWidgets = widgetsParam ? widgetsParam.split(',').map(w => w.trim()).filter(Boolean) : [];
+      const visibleWidgets = widgetsParam
+        ? widgetsParam
+            .split(',')
+            .map((w) => w.trim())
+            .filter(Boolean)
+        : [];
       const widgetSet = new Set(visibleWidgets);
 
       // Profiling: track individual query times when profile=true
@@ -406,22 +431,25 @@ export default function createReportRoutes(_pgPool) {
       const profileQuery = (name, promiseFn) => {
         if (!enableProfiling) return promiseFn();
         const start = Date.now();
-        return promiseFn().then(result => {
-          queryTimes[name] = Date.now() - start;
-          return result;
-        }).catch(err => {
-          queryTimes[name] = Date.now() - start;
-          throw err;
-        });
+        return promiseFn()
+          .then((result) => {
+            queryTimes[name] = Date.now() - start;
+            return result;
+          })
+          .catch((err) => {
+            queryTimes[name] = Date.now() - start;
+            throw err;
+          });
       };
-      
+
       // Use redis cache for distributed, persistent caching
       const includeTestData = (req.query.include_test_data ?? 'true') !== 'false';
       const bustCache = req.query.bust_cache === 'true'; // Allow cache bypass for testing
       // Include widgets in cache key to avoid serving wrong dataset
-      const widgetsCacheKey = visibleWidgets.length > 0 ? `:widgets=${visibleWidgets.sort().join('_')}` : '';
+      const widgetsCacheKey =
+        visibleWidgets.length > 0 ? `:widgets=${visibleWidgets.sort().join('_')}` : '';
       const cacheKey = `dashboard:bundle:${tenant_id}:include=${includeTestData ? 'true' : 'false'}${widgetsCacheKey}`;
-      
+
       // Try redis cache first (distributed across instances)
       const cacheManager = req.app?.locals?.cacheManager;
       if (!bustCache && cacheManager && cacheManager.client) {
@@ -442,19 +470,19 @@ export default function createReportRoutes(_pgPool) {
 
       /**
        * DASHBOARD BUNDLE OPTIMIZATION (v3.6.18+)
-       * 
+       *
        * Three execution paths exist (in order of preference):
        * 1. RPC `get_dashboard_bundle` - Fast (389ms) but lacks new aggregations
        * 2. RPC `get_dashboard_stats` + manual lists - Hybrid approach
        * 3. Full manual queries with aggregations - CURRENT (214ms)
-       * 
+       *
        * MANUAL APPROACH BENEFITS (currently active):
        * - Pre-aggregated leadsBySource (23 sources) → eliminates LeadSourceChart API call
        * - Increased limits: 100 leads (was 5), 50 opps (was 5) → widgets have enough data
        * - Materialized view funnelAggregates → instant pipeline breakdown by stage
        * - Extra fields (email, phone, source, is_test_data) → richer widget data
        * - Faster: 214ms vs 389ms with RPC
-       * 
+       *
        * FUTURE: Update Supabase RPC functions to include these aggregations,
        * then re-enable RPC for potential sub-200ms performance.
        */
@@ -465,14 +493,16 @@ export default function createReportRoutes(_pgPool) {
           const startTime = Date.now();
           const { data: rpcData, error: rpcError } = await supabase.rpc('get_dashboard_bundle', {
             p_tenant_id: tenant_id,
-            p_include_test_data: includeTestData
+            p_include_test_data: includeTestData,
           });
           const elapsed = Date.now() - startTime;
           if (rpcError) {
             logger.warn(`[dashboard-bundle] Bundle RPC error (${elapsed}ms): ${rpcError.message}`);
           } else if (rpcData) {
             bundleData = rpcData;
-            logger.debug(`[dashboard-bundle] Single RPC success (${elapsed}ms) source=${bundleData?.meta?.source || 'unknown'}`);
+            logger.debug(
+              `[dashboard-bundle] Single RPC success (${elapsed}ms) source=${bundleData?.meta?.source || 'unknown'}`,
+            );
           }
         } catch (rpcErr) {
           logger.warn(`[dashboard-bundle] Bundle RPC fallback: ${rpcErr.message}`);
@@ -528,7 +558,9 @@ export default function createReportRoutes(_pgPool) {
       const USE_MV_STATS = false; // Set true to use MV stats RPC, false for full manual aggregation
       if (USE_MV_STATS) {
         try {
-          const { data: mvData, error: mvError } = await supabase.rpc('get_dashboard_stats', { p_tenant_id: tenant_id });
+          const { data: mvData, error: mvError } = await supabase.rpc('get_dashboard_stats', {
+            p_tenant_id: tenant_id,
+          });
           if (mvError) {
             logger.warn(`[dashboard-bundle] MV stats RPC error: ${mvError.message}`);
           } else if (mvData) {
@@ -544,40 +576,72 @@ export default function createReportRoutes(_pgPool) {
       if (mvStats) {
         const recentActivitiesP = (async () => {
           try {
-            let q = supabase.from('activities').select('id,type,subject,status,created_at,created_date,assigned_to').order('created_at', { ascending: false }).limit(10);
+            let q = supabase
+              .from('activities')
+              .select('id,type,subject,status,created_at,created_date,assigned_to')
+              .order('created_at', { ascending: false })
+              .limit(10);
             if (tenant_id) q = q.eq('tenant_id', tenant_id);
             if (!includeTestData) {
-              try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
+              try {
+                q = q.or('is_test_data.is.false,is_test_data.is.null');
+              } catch {
+                /* ignore */
+              }
             }
             const { data } = await q;
             return Array.isArray(data) ? data : [];
-          } catch { return []; }
+          } catch {
+            return [];
+          }
         })();
         const recentLeadsP = (async () => {
           try {
-            let q = supabase.from('leads').select('id,first_name,last_name,company,created_date,status').order('created_date', { ascending: false }).limit(5);
+            let q = supabase
+              .from('leads')
+              .select('id,first_name,last_name,company,created_date,status')
+              .order('created_date', { ascending: false })
+              .limit(5);
             if (tenant_id) q = q.eq('tenant_id', tenant_id);
             if (!includeTestData) {
-              try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
+              try {
+                q = q.or('is_test_data.is.false,is_test_data.is.null');
+              } catch {
+                /* ignore */
+              }
             }
             const { data } = await q;
             return Array.isArray(data) ? data : [];
-          } catch { return []; }
+          } catch {
+            return [];
+          }
         })();
         const recentOppsP = (async () => {
           try {
-            let q = supabase.from('opportunities').select('id,name,amount,stage,updated_at').order('updated_at', { ascending: false }).limit(5);
+            let q = supabase
+              .from('opportunities')
+              .select('id,name,amount,stage,updated_at')
+              .order('updated_at', { ascending: false })
+              .limit(5);
             if (tenant_id) q = q.eq('tenant_id', tenant_id);
             if (!includeTestData) {
-              try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
+              try {
+                q = q.or('is_test_data.is.false,is_test_data.is.null');
+              } catch {
+                /* ignore */
+              }
             }
             const { data } = await q;
             return Array.isArray(data) ? data : [];
-          } catch { return []; }
+          } catch {
+            return [];
+          }
         })();
 
         const [recentActivities, recentLeads, recentOpportunities] = await Promise.all([
-          recentActivitiesP, recentLeadsP, recentOppsP
+          recentActivitiesP,
+          recentLeadsP,
+          recentOppsP,
         ]);
 
         const bundle = {
@@ -620,25 +684,57 @@ export default function createReportRoutes(_pgPool) {
 
       /**
        * FALLBACK 2: Full manual queries with enhanced aggregations (CURRENTLY ACTIVE)
-       * 
+       *
        * This path provides the richest dataset for dashboard widgets:
        * - leadsBySource: Pre-aggregated source counts for LeadSourceChart
        * - funnelAggregates: Materialized view with pipeline breakdown
        * - 100 leads with email, phone, source fields (was 5 leads)
        * - 50 opportunities with probability, is_test_data (was 5 opps)
-       * 
+       *
        * Performance: ~214ms average (faster than RPC's 389ms)
        * Cache TTL: 60 seconds
        */
       logger.debug(`[dashboard-bundle] Falling back to individual queries`);
       const commonOpts = { includeTestData, countMode: 'exact', confirmSmallCounts: false };
-      const totalContactsP = profileQuery('totalContacts', () => safeCount(null, 'contacts', tenant_id, undefined, commonOpts));
-      const totalAccountsP = profileQuery('totalAccounts', () => safeCount(null, 'accounts', tenant_id, undefined, commonOpts));
-      const totalLeadsP = profileQuery('totalLeads', () => safeCount(null, 'leads', tenant_id, undefined, commonOpts));
-      const totalOpportunitiesP = profileQuery('totalOpportunities', () => safeCount(null, 'opportunities', tenant_id, undefined, commonOpts));
-      const openLeadsP = profileQuery('openLeads', () => safeCount(null, 'leads', tenant_id, (q) => q.not('status', 'in', '("converted","lost")'), commonOpts));
-      const wonOpportunitiesP = profileQuery('wonOpportunities', () => safeCount(null, 'opportunities', tenant_id, (q) => q.in('stage', ['won', 'closed_won']), commonOpts));
-      const openOpportunitiesP = profileQuery('openOpportunities', () => safeCount(null, 'opportunities', tenant_id, (q) => q.not('stage', 'in', '("won","closed_won","lost","closed_lost")'), commonOpts));
+      const totalContactsP = profileQuery('totalContacts', () =>
+        safeCount(null, 'contacts', tenant_id, undefined, commonOpts),
+      );
+      const totalAccountsP = profileQuery('totalAccounts', () =>
+        safeCount(null, 'accounts', tenant_id, undefined, commonOpts),
+      );
+      const totalLeadsP = profileQuery('totalLeads', () =>
+        safeCount(null, 'leads', tenant_id, undefined, commonOpts),
+      );
+      const totalOpportunitiesP = profileQuery('totalOpportunities', () =>
+        safeCount(null, 'opportunities', tenant_id, undefined, commonOpts),
+      );
+      const openLeadsP = profileQuery('openLeads', () =>
+        safeCount(
+          null,
+          'leads',
+          tenant_id,
+          (q) => q.not('status', 'in', '("converted","lost")'),
+          commonOpts,
+        ),
+      );
+      const wonOpportunitiesP = profileQuery('wonOpportunities', () =>
+        safeCount(
+          null,
+          'opportunities',
+          tenant_id,
+          (q) => q.in('stage', ['won', 'closed_won']),
+          commonOpts,
+        ),
+      );
+      const openOpportunitiesP = profileQuery('openOpportunities', () =>
+        safeCount(
+          null,
+          'opportunities',
+          tenant_id,
+          (q) => q.not('stage', 'in', '("won","closed_won","lost","closed_lost")'),
+          commonOpts,
+        ),
+      );
 
       // New leads last 30 days (exact count for accuracy)
       const since = new Date();
@@ -651,11 +747,17 @@ export default function createReportRoutes(_pgPool) {
           q = q.gte('created_date', sinceISO);
           q = q.not('status', 'in', '("converted","lost")'); // Exclude converted/lost leads
           if (!includeTestData) {
-            try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ void 0; }
+            try {
+              q = q.or('is_test_data.is.false,is_test_data.is.null');
+            } catch {
+              /* ignore */ void 0;
+            }
           }
           const { count } = await q;
           return count ?? 0;
-        } catch { return 0; }
+        } catch {
+          return 0;
+        }
       });
 
       // Activities last 30 days (exact count for accuracy)
@@ -665,27 +767,45 @@ export default function createReportRoutes(_pgPool) {
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
           q = q.gte('created_date', sinceISO);
           if (!includeTestData) {
-            try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
+            try {
+              q = q.or('is_test_data.is.false,is_test_data.is.null');
+            } catch {
+              /* ignore */
+            }
           }
           const { count } = await q;
           return count ?? 0;
-        } catch { return 0; }
+        } catch {
+          return 0;
+        }
       });
 
       // Recent small lists (narrow columns, limited)
       // OPTIMIZATION: Skip if recentActivities widget is hidden
       const needsActivities = visibleWidgets.length === 0 || widgetSet.has('recentActivities');
-      const recentActivitiesP = needsActivities ? profileQuery('recentActivities', async () => {
-        try {
-          let q = supabase.from('activities').select('id,type,subject,status,created_at,created_date,assigned_to').order('created_at', { ascending: false }).limit(10);
-          if (tenant_id) q = q.eq('tenant_id', tenant_id);
-          if (!includeTestData) {
-            try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
-          }
-          const { data } = await q;
-          return Array.isArray(data) ? data : [];
-        } catch { return []; }
-      }) : Promise.resolve([]);
+      const recentActivitiesP = needsActivities
+        ? profileQuery('recentActivities', async () => {
+            try {
+              let q = supabase
+                .from('activities')
+                .select('id,type,subject,status,created_at,created_date,assigned_to')
+                .order('created_at', { ascending: false })
+                .limit(10);
+              if (tenant_id) q = q.eq('tenant_id', tenant_id);
+              if (!includeTestData) {
+                try {
+                  q = q.or('is_test_data.is.false,is_test_data.is.null');
+                } catch {
+                  /* ignore */
+                }
+              }
+              const { data } = await q;
+              return Array.isArray(data) ? data : [];
+            } catch {
+              return [];
+            }
+          })
+        : Promise.resolve([]);
       /**
        * Recent Leads Query (Enhanced for Widgets)
        * Limit: 100 (was 5) - Provides enough data for:
@@ -695,18 +815,35 @@ export default function createReportRoutes(_pgPool) {
        * Performance: ~80ms for 100 leads
        * OPTIMIZATION: Skip if neither leadSourceChart nor leadAgeReport widgets are visible
        */
-      const needsLeads = visibleWidgets.length === 0 || widgetSet.has('leadSourceChart') || widgetSet.has('leadAgeReport');
-      const recentLeadsP = needsLeads ? profileQuery('recentLeads', async () => {
-        try {
-          let q = supabase.from('leads').select('id,first_name,last_name,company,email,phone,created_date,status,source,is_test_data').order('created_date', { ascending: false }).limit(100);
-          if (tenant_id) q = q.eq('tenant_id', tenant_id);
-          if (!includeTestData) {
-            try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
-          }
-          const { data } = await q;
-          return Array.isArray(data) ? data : [];
-        } catch { return []; }
-      }) : Promise.resolve([]);
+      const needsLeads =
+        visibleWidgets.length === 0 ||
+        widgetSet.has('leadSourceChart') ||
+        widgetSet.has('leadAgeReport');
+      const recentLeadsP = needsLeads
+        ? profileQuery('recentLeads', async () => {
+            try {
+              let q = supabase
+                .from('leads')
+                .select(
+                  'id,first_name,last_name,company,email,phone,created_date,status,source,is_test_data',
+                )
+                .order('created_date', { ascending: false })
+                .limit(100);
+              if (tenant_id) q = q.eq('tenant_id', tenant_id);
+              if (!includeTestData) {
+                try {
+                  q = q.or('is_test_data.is.false,is_test_data.is.null');
+                } catch {
+                  /* ignore */
+                }
+              }
+              const { data } = await q;
+              return Array.isArray(data) ? data : [];
+            } catch {
+              return [];
+            }
+          })
+        : Promise.resolve([]);
       /**
        * Recent Opportunities Query (Enhanced for Widgets)
        * Limit: 50 (was 5) - Better sample for SalesPipeline and opportunity widgets
@@ -715,18 +852,30 @@ export default function createReportRoutes(_pgPool) {
        * OPTIMIZATION: Skip if salesPipeline widget is hidden
        */
       const needsOpportunities = visibleWidgets.length === 0 || widgetSet.has('salesPipeline');
-      const recentOppsP = needsOpportunities ? profileQuery('recentOpportunities', async () => {
-        try {
-          let q = supabase.from('opportunities').select('id,name,amount,stage,probability,updated_at,is_test_data').order('updated_at', { ascending: false }).limit(50);
-          if (tenant_id) q = q.eq('tenant_id', tenant_id);
-          if (!includeTestData) {
-            try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
-          }
-          const { data } = await q;
-          return Array.isArray(data) ? data : [];
-        } catch { return []; }
-      }) : Promise.resolve([]);
-      
+      const recentOppsP = needsOpportunities
+        ? profileQuery('recentOpportunities', async () => {
+            try {
+              let q = supabase
+                .from('opportunities')
+                .select('id,name,amount,stage,probability,updated_at,is_test_data')
+                .order('updated_at', { ascending: false })
+                .limit(50);
+              if (tenant_id) q = q.eq('tenant_id', tenant_id);
+              if (!includeTestData) {
+                try {
+                  q = q.or('is_test_data.is.false,is_test_data.is.null');
+                } catch {
+                  /* ignore */
+                }
+              }
+              const { data } = await q;
+              return Array.isArray(data) ? data : [];
+            } catch {
+              return [];
+            }
+          })
+        : Promise.resolve([]);
+
       /**
        * Funnel Aggregates from Materialized View
        * Source: dashboard_funnel_counts table (refreshed nightly or on-demand)
@@ -742,7 +891,8 @@ export default function createReportRoutes(_pgPool) {
           const { data } = await q;
           return Array.isArray(data) && data.length > 0 ? data[0] : null;
         } catch (err) {
-          if (process.env.NODE_ENV === 'development') logger.warn('[dashboard-bundle] Funnel MV unavailable:', err.message);
+          if (process.env.NODE_ENV === 'development')
+            logger.warn('[dashboard-bundle] Funnel MV unavailable:', err.message);
           return null;
         }
       });
@@ -757,35 +907,41 @@ export default function createReportRoutes(_pgPool) {
        * OPTIMIZATION: Skip if leadSourceChart widget is hidden
        */
       const needsLeadSources = visibleWidgets.length === 0 || widgetSet.has('leadSourceChart');
-      const leadSourcesP = needsLeadSources ? profileQuery('leadSources', async () => {
-        try {
-          logger.debug('[dashboard-bundle] Fetching lead sources for tenant:', tenant_id);
-          let q = supabase.from('leads').select('source');
-          if (tenant_id) q = q.eq('tenant_id', tenant_id);
-          if (!includeTestData) {
-            try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
-          }
-          const { data, error } = await q;
-          if (error) {
-            logger.error('[dashboard-bundle] Lead sources query error:', error);
-            return {};
-          }
-          logger.debug('[dashboard-bundle] Lead sources query returned:', data?.length, 'rows');
-          if (!Array.isArray(data)) return {};
+      const leadSourcesP = needsLeadSources
+        ? profileQuery('leadSources', async () => {
+            try {
+              logger.debug('[dashboard-bundle] Fetching lead sources for tenant:', tenant_id);
+              let q = supabase.from('leads').select('source');
+              if (tenant_id) q = q.eq('tenant_id', tenant_id);
+              if (!includeTestData) {
+                try {
+                  q = q.or('is_test_data.is.false,is_test_data.is.null');
+                } catch {
+                  /* ignore */
+                }
+              }
+              const { data, error } = await q;
+              if (error) {
+                logger.error('[dashboard-bundle] Lead sources query error:', error);
+                return {};
+              }
+              logger.debug('[dashboard-bundle] Lead sources query returned:', data?.length, 'rows');
+              if (!Array.isArray(data)) return {};
 
-          // Aggregate sources client-side (still faster than fetching full records)
-          const sources = {};
-          data.forEach(row => {
-            const source = row.source || 'other';
-            sources[source] = (sources[source] || 0) + 1;
-          });
-          logger.debug('[dashboard-bundle] Lead sources aggregated:', sources);
-          return sources;
-        } catch (err) {
-          logger.error('[dashboard-bundle] Lead sources fetch error:', err);
-          return {};
-        }
-      }) : Promise.resolve({});
+              // Aggregate sources client-side (still faster than fetching full records)
+              const sources = {};
+              data.forEach((row) => {
+                const source = row.source || 'other';
+                sources[source] = (sources[source] || 0) + 1;
+              });
+              logger.debug('[dashboard-bundle] Lead sources aggregated:', sources);
+              return sources;
+            } catch (err) {
+              logger.error('[dashboard-bundle] Lead sources fetch error:', err);
+              return {};
+            }
+          })
+        : Promise.resolve({});
 
       // Fetch ALL opportunities for pipeline value calculation
       const allOppsP = profileQuery('allOpportunities', async () => {
@@ -793,11 +949,17 @@ export default function createReportRoutes(_pgPool) {
           let q = supabase.from('opportunities').select('id,name,amount,stage,created_date');
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
           if (!includeTestData) {
-            try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
+            try {
+              q = q.or('is_test_data.is.false,is_test_data.is.null');
+            } catch {
+              /* ignore */
+            }
           }
           const { data } = await q;
           return Array.isArray(data) ? data : [];
-        } catch { return []; }
+        } catch {
+          return [];
+        }
       });
 
       const [
@@ -1000,7 +1162,10 @@ export default function createReportRoutes(_pgPool) {
       let { tenant_id } = req.query;
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
-      let query = supabase.from('v_opportunity_pipeline_by_stage').select('stage, count').order('stage');
+      let query = supabase
+        .from('v_opportunity_pipeline_by_stage')
+        .select('stage, count')
+        .order('stage');
       if (tenant_id) query = query.eq('tenant_id', tenant_id);
       const { data, error } = await query;
       if (error) throw new Error(error.message);
@@ -1143,23 +1308,23 @@ export default function createReportRoutes(_pgPool) {
           query = query.eq('tenant_id', tenantId);
         }
         const { data, error } = await query;
-        
+
         if (error) {
           logger.error(`Error analyzing ${tableName}:`, error);
           return { total: 0, missingFields: {} };
         }
-        
+
         const records = data || [];
         const total = records.length;
         const missingFields = {};
-        
+
         // Count missing values for each field
-        fields.forEach(field => {
-          missingFields[field] = records.filter(r => 
-            r[field] === null || r[field] === '' || r[field] === undefined
+        fields.forEach((field) => {
+          missingFields[field] = records.filter(
+            (r) => r[field] === null || r[field] === '' || r[field] === undefined,
           ).length;
         });
-        
+
         return { total, missingFields };
       }
 
@@ -1167,29 +1332,39 @@ export default function createReportRoutes(_pgPool) {
       const contactFields = ['email', 'phone', 'first_name', 'last_name'];
       const contactsAnalysis = await analyzeTable('contacts', contactFields, tenant_id);
       const contactsTotal = contactsAnalysis.total;
-      const contactsIssues = Object.values(contactsAnalysis.missingFields).reduce((a, b) => a + b, 0);
-      const contactsIssuesPercent = contactsTotal > 0 ? (contactsIssues / (contactsTotal * contactFields.length)) * 100 : 0;
+      const contactsIssues = Object.values(contactsAnalysis.missingFields).reduce(
+        (a, b) => a + b,
+        0,
+      );
+      const contactsIssuesPercent =
+        contactsTotal > 0 ? (contactsIssues / (contactsTotal * contactFields.length)) * 100 : 0;
 
       // Analyze Accounts
       const accountFields = ['name', 'industry', 'website'];
       const accountsAnalysis = await analyzeTable('accounts', accountFields, tenant_id);
       const accountsTotal = accountsAnalysis.total;
-      const accountsIssues = Object.values(accountsAnalysis.missingFields).reduce((a, b) => a + b, 0);
-      const accountsIssuesPercent = accountsTotal > 0 ? (accountsIssues / (accountsTotal * accountFields.length)) * 100 : 0;
+      const accountsIssues = Object.values(accountsAnalysis.missingFields).reduce(
+        (a, b) => a + b,
+        0,
+      );
+      const accountsIssuesPercent =
+        accountsTotal > 0 ? (accountsIssues / (accountsTotal * accountFields.length)) * 100 : 0;
 
       // Analyze Leads
       const leadFields = ['email', 'phone', 'status', 'source'];
       const leadsAnalysis = await analyzeTable('leads', leadFields, tenant_id);
       const leadsTotal = leadsAnalysis.total;
       const leadsIssues = Object.values(leadsAnalysis.missingFields).reduce((a, b) => a + b, 0);
-      const leadsIssuesPercent = leadsTotal > 0 ? (leadsIssues / (leadsTotal * leadFields.length)) * 100 : 0;
+      const leadsIssuesPercent =
+        leadsTotal > 0 ? (leadsIssues / (leadsTotal * leadFields.length)) * 100 : 0;
 
       // Analyze Opportunities
       const oppFields = ['account_id', 'stage', 'close_date', 'amount'];
       const oppsAnalysis = await analyzeTable('opportunities', oppFields, tenant_id);
       const oppsTotal = oppsAnalysis.total;
       const oppsIssues = Object.values(oppsAnalysis.missingFields).reduce((a, b) => a + b, 0);
-      const oppsIssuesPercent = oppsTotal > 0 ? (oppsIssues / (oppsTotal * oppFields.length)) * 100 : 0;
+      const oppsIssuesPercent =
+        oppsTotal > 0 ? (oppsIssues / (oppsTotal * oppFields.length)) * 100 : 0;
 
       // Build response
       const report = {
@@ -1201,8 +1376,8 @@ export default function createReportRoutes(_pgPool) {
             email: contactsAnalysis.missingFields.email || 0,
             phone: contactsAnalysis.missingFields.phone || 0,
             first_name: contactsAnalysis.missingFields.first_name || 0,
-            last_name: contactsAnalysis.missingFields.last_name || 0
-          }
+            last_name: contactsAnalysis.missingFields.last_name || 0,
+          },
         },
         accounts: {
           total: accountsTotal,
@@ -1211,8 +1386,8 @@ export default function createReportRoutes(_pgPool) {
           missing_fields: {
             name: accountsAnalysis.missingFields.name || 0,
             industry: accountsAnalysis.missingFields.industry || 0,
-            website: accountsAnalysis.missingFields.website || 0
-          }
+            website: accountsAnalysis.missingFields.website || 0,
+          },
         },
         leads: {
           total: leadsTotal,
@@ -1222,8 +1397,8 @@ export default function createReportRoutes(_pgPool) {
             email: leadsAnalysis.missingFields.email || 0,
             phone: leadsAnalysis.missingFields.phone || 0,
             status: leadsAnalysis.missingFields.status || 0,
-            source: leadsAnalysis.missingFields.source || 0
-          }
+            source: leadsAnalysis.missingFields.source || 0,
+          },
         },
         opportunities: {
           total: oppsTotal,
@@ -1233,17 +1408,17 @@ export default function createReportRoutes(_pgPool) {
             account_id: oppsAnalysis.missingFields.account_id || 0,
             stage: oppsAnalysis.missingFields.stage || 0,
             close_date: oppsAnalysis.missingFields.close_date || 0,
-            amount: oppsAnalysis.missingFields.amount || 0
-          }
-        }
+            amount: oppsAnalysis.missingFields.amount || 0,
+          },
+        },
       };
 
-      res.json({ 
-        status: 'success', 
-        data: { 
+      res.json({
+        status: 'success',
+        data: {
           report,
-          generated_at: new Date().toISOString()
-        } 
+          generated_at: new Date().toISOString(),
+        },
       });
     } catch (error) {
       logger.error('Error analyzing data quality:', error);
@@ -1255,10 +1430,20 @@ export default function createReportRoutes(_pgPool) {
   router.post('/export-insights-pdf', async (req, res) => {
     let browser;
     try {
-      const { tenant_id: _tenant_id, tenant_name, industry, business_model: _business_model, geographic_focus, insights } = req.body;
+      const {
+        tenant_id: _tenant_id,
+        tenant_name,
+        industry,
+        business_model: _business_model,
+        geographic_focus,
+        insights,
+      } = req.body;
 
       if (!insights) {
-        return res.status(400).json({ status: 'error', message: 'No insights data provided. Please generate insights first.' });
+        return res.status(400).json({
+          status: 'error',
+          message: 'No insights data provided. Please generate insights first.',
+        });
       }
 
       // Import puppeteer
@@ -1268,34 +1453,43 @@ export default function createReportRoutes(_pgPool) {
       browser = await puppeteer.default.launch({
         headless: 'new',
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+        ],
       });
 
       const page = await browser.newPage();
       await page.setViewport({ width: 1200, height: 800 });
 
       // Helper to safely get array items
-      const safeArray = (arr) => Array.isArray(arr) ? arr : [];
+      const safeArray = (arr) => (Array.isArray(arr) ? arr : []);
       const safeStr = (str) => str || 'N/A';
-      
+
       // Helper to format large numbers
       const formatLargeNumber = (num) => {
         if (num === null || num === undefined || typeof num !== 'number' || isNaN(num)) return num;
-        if (Math.abs(num) >= 1e9) return (num / 1e9).toFixed(1).replace(/\.0$/, "") + "B";
-        if (Math.abs(num) >= 1e6) return (num / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
-        if (Math.abs(num) >= 1e3) return (num / 1e3).toFixed(1).replace(/\.0$/, "") + "K";
+        if (Math.abs(num) >= 1e9) return (num / 1e9).toFixed(1).replace(/\.0$/, '') + 'B';
+        if (Math.abs(num) >= 1e6) return (num / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+        if (Math.abs(num) >= 1e3) return (num / 1e3).toFixed(1).replace(/\.0$/, '') + 'K';
         return num.toFixed(1);
       };
 
       // Helper to format display value with unit
       const formatDisplayValue = (value, unit) => {
-        if (value === null || value === undefined || typeof value !== 'number' || isNaN(value)) return value;
+        if (value === null || value === undefined || typeof value !== 'number' || isNaN(value))
+          return value;
         if (unit && typeof unit === 'string') {
           const lowerUnit = unit.toLowerCase();
-          if (lowerUnit.includes("usd") || lowerUnit.includes("dollar")) return "$" + formatLargeNumber(value);
-          if (lowerUnit.includes("percent") || lowerUnit === "%") return value.toFixed(1) + "%";
+          if (lowerUnit.includes('usd') || lowerUnit.includes('dollar'))
+            return '$' + formatLargeNumber(value);
+          if (lowerUnit.includes('percent') || lowerUnit === '%') return value.toFixed(1) + '%';
         }
-        return value.toLocaleString("en-US", { maximumFractionDigits: 2 }) + (unit ? " " + unit : "");
+        return (
+          value.toLocaleString('en-US', { maximumFractionDigits: 2 }) + (unit ? ' ' + unit : '')
+        );
       };
 
       // Build comprehensive HTML from insights data
@@ -1769,7 +1963,9 @@ export default function createReportRoutes(_pgPool) {
             </div>
 
             <!-- Executive Summary -->
-            ${insights.executive_summary ? `
+            ${
+              insights.executive_summary
+                ? `
               <div class="section">
                 <div class="section-title">
                   <span class="section-icon">S</span> Executive Summary
@@ -1778,10 +1974,14 @@ export default function createReportRoutes(_pgPool) {
                   ${insights.executive_summary}
                 </div>
               </div>
-            `: ''}
+            `
+                : ''
+            }
 
             <!-- Market Overview -->
-            ${insights.market_overview ? `
+            ${
+              insights.market_overview
+                ? `
               <div class="section">
                 <div class="section-title">
                   <span class="section-icon">M</span> Market Overview
@@ -1790,10 +1990,17 @@ export default function createReportRoutes(_pgPool) {
                   ${insights.market_overview}
                 </div>
               </div>
-            `: ''}
+            `
+                : ''
+            }
 
             <!-- SWOT Analysis -->
-            ${(insights.swot_analysis?.strengths?.length || insights.swot_analysis?.weaknesses?.length || insights.swot_analysis?.opportunities?.length || insights.swot_analysis?.threats?.length) ? `
+            ${
+              insights.swot_analysis?.strengths?.length ||
+              insights.swot_analysis?.weaknesses?.length ||
+              insights.swot_analysis?.opportunities?.length ||
+              insights.swot_analysis?.threats?.length
+                ? `
               <div class="section">
                 <div class="section-title">
                   <span class="section-icon">S</span> SWOT Analysis
@@ -1802,33 +2009,53 @@ export default function createReportRoutes(_pgPool) {
                   <div class="swot-card swot-strengths">
                     <div class="swot-header">Strengths</div>
                     <ul class="swot-list">
-                      ${safeArray(insights.swot_analysis?.strengths).map(s => `<li>${s}</li>`).join('') || '<li>No data</li>'}
+                      ${
+                        safeArray(insights.swot_analysis?.strengths)
+                          .map((s) => `<li>${s}</li>`)
+                          .join('') || '<li>No data</li>'
+                      }
                     </ul>
                   </div>
                   <div class="swot-card swot-weaknesses">
                     <div class="swot-header">Weaknesses</div>
                     <ul class="swot-list">
-                      ${safeArray(insights.swot_analysis?.weaknesses).map(w => `<li>${w}</li>`).join('') || '<li>No data</li>'}
+                      ${
+                        safeArray(insights.swot_analysis?.weaknesses)
+                          .map((w) => `<li>${w}</li>`)
+                          .join('') || '<li>No data</li>'
+                      }
                     </ul>
                   </div>
                   <div class="swot-card swot-opportunities">
                     <div class="swot-header">Opportunities</div>
                     <ul class="swot-list">
-                      ${safeArray(insights.swot_analysis?.opportunities).map(o => `<li>${o}</li>`).join('') || '<li>No data</li>'}
+                      ${
+                        safeArray(insights.swot_analysis?.opportunities)
+                          .map((o) => `<li>${o}</li>`)
+                          .join('') || '<li>No data</li>'
+                      }
                     </ul>
                   </div>
                   <div class="swot-card swot-threats">
                     <div class="swot-header">Threats</div>
                     <ul class="swot-list">
-                      ${safeArray(insights.swot_analysis?.threats).map(t => `<li>${t}</li>`).join('') || '<li>No data</li>'}
+                      ${
+                        safeArray(insights.swot_analysis?.threats)
+                          .map((t) => `<li>${t}</li>`)
+                          .join('') || '<li>No data</li>'
+                      }
                     </ul>
                   </div>
                 </div>
               </div>
-            `: ''}
+            `
+                : ''
+            }
 
             <!-- Competitive Landscape -->
-            ${insights.competitive_landscape ? `
+            ${
+              insights.competitive_landscape
+                ? `
               <div class="section">
                 <div class="section-title">
                   <span class="section-icon">C</span> Competitive Landscape
@@ -1836,32 +2063,48 @@ export default function createReportRoutes(_pgPool) {
                 <div class="narrative-box">
                   <p>${insights.competitive_landscape.overview || ''}</p>
                   
-                  ${safeArray(insights.competitive_landscape.major_competitors).length > 0 ? `
+                  ${
+                    safeArray(insights.competitive_landscape.major_competitors).length > 0
+                      ? `
                     <div style="margin-top: 20px;">
                       <strong style="display: block; margin-bottom: 10px; font-size: 13px; text-transform: uppercase; color: #64748b;">Major Competitors</strong>
                       <div>
-                        ${safeArray(insights.competitive_landscape.major_competitors).map(c => `<span class="badge">${c}</span>`).join('')}
+                        ${safeArray(insights.competitive_landscape.major_competitors)
+                          .map((c) => `<span class="badge">${c}</span>`)
+                          .join('')}
                       </div>
                     </div>
-                  `: ''}
+                  `
+                      : ''
+                  }
                   
-                  ${insights.competitive_landscape.market_dynamics ? `
+                  ${
+                    insights.competitive_landscape.market_dynamics
+                      ? `
                     <div style="margin-top: 20px; background: #f1f5f9; padding: 15px; border-radius: 6px; font-size: 13px;">
                       <strong>Market Dynamics:</strong> ${insights.competitive_landscape.market_dynamics}
                     </div>
-                  `: ''}
+                  `
+                      : ''
+                  }
                 </div>
               </div>
-            `: ''}
+            `
+                : ''
+            }
 
             <!-- Industry Trends -->
-            ${safeArray(insights.industry_trends).length > 0 ? `
+            ${
+              safeArray(insights.industry_trends).length > 0
+                ? `
               <div class="section page-break">
                 <div class="section-title">
                   <span class="section-icon">T</span> Industry Trends
                 </div>
                 <div class="trends-grid">
-                  ${safeArray(insights.industry_trends).map(trend => `
+                  ${safeArray(insights.industry_trends)
+                    .map(
+                      (trend) => `
                     <div class="trend-card">
                       <div class="trend-name">${trend.name}</div>
                       <div class="trend-desc">${trend.description || ''}</div>
@@ -1870,19 +2113,27 @@ export default function createReportRoutes(_pgPool) {
                         ${trend.timeframe ? `<span class="trend-timeframe">${trend.timeframe}</span>` : ''}
                       </div>
                     </div>
-                  `).join('')}
+                  `,
+                    )
+                    .join('')}
                 </div>
               </div>
-            `: ''}
+            `
+                : ''
+            }
 
             <!-- Economic Indicators -->
-            ${safeArray(insights.economic_indicators).length > 0 ? `
+            ${
+              safeArray(insights.economic_indicators).length > 0
+                ? `
               <div class="section">
                 <div class="section-title">
                   <span class="section-icon">I</span> Key Economic Indicators
                 </div>
                 <div class="indicators-grid">
-                  ${safeArray(insights.economic_indicators).map(ind => `
+                  ${safeArray(insights.economic_indicators)
+                    .map(
+                      (ind) => `
                     <div class="indicator-card">
                       <div class="indicator-name">${ind.name || 'Indicator'}</div>
                       <div class="indicator-value">${formatDisplayValue(ind.current_value, ind.unit)}</div>
@@ -1890,19 +2141,28 @@ export default function createReportRoutes(_pgPool) {
                         ${ind.trend === 'up' ? '▲' : ind.trend === 'down' ? '▼' : '●'} ${ind.trend ? ind.trend.toUpperCase() : 'STABLE'}
                       </div>
                     </div>
-                  `).join('')}
+                  `,
+                    )
+                    .join('')}
                 </div>
               </div>
-            `: ''}
+            `
+                : ''
+            }
 
             <!-- Major News -->
-            ${safeArray(insights.major_news).length > 0 ? `
+            ${
+              safeArray(insights.major_news).length > 0
+                ? `
               <div class="section">
                 <div class="section-title">
                   <span class="section-icon">N</span> Major News & Events
                 </div>
                 <div>
-                  ${safeArray(insights.major_news).slice(0, 5).map(news => `
+                  ${safeArray(insights.major_news)
+                    .slice(0, 5)
+                    .map(
+                      (news) => `
                     <div class="news-item">
                       <div class="news-date">${news.date || 'Recent'}</div>
                       <div class="news-content">
@@ -1913,44 +2173,66 @@ export default function createReportRoutes(_pgPool) {
                         <p class="news-desc">${news.description || ''}</p>
                       </div>
                     </div>
-                  `).join('')}
+                  `,
+                    )
+                    .join('')}
                 </div>
               </div>
-            `: ''}
+            `
+                : ''
+            }
 
             <!-- Strategic Recommendations -->
-            ${safeArray(insights.recommendations).length > 0 ? `
+            ${
+              safeArray(insights.recommendations).length > 0
+                ? `
               <div class="section page-break">
                 <div class="section-title">
                   <span class="section-icon">R</span> Strategic Recommendations
                 </div>
                 <div>
-                  ${safeArray(insights.recommendations).map(rec => `
+                  ${safeArray(insights.recommendations)
+                    .map(
+                      (rec) => `
                     <div class="rec-card">
                       <div class="rec-header">
                         <div class="rec-title">${rec.title}</div>
                         <div class="rec-priority priority-${rec.priority || 'medium'}">${(rec.priority || 'MEDIUM').toUpperCase()} PRIORITY</div>
                       </div>
                       <div class="rec-desc">${rec.description || ''}</div>
-                      ${safeArray(rec.action_items).length > 0 ? `
+                      ${
+                        safeArray(rec.action_items).length > 0
+                          ? `
                         <div class="rec-actions">
                           <div class="rec-actions-title">Action Items</div>
                           <ul class="rec-actions-list">
-                            ${safeArray(rec.action_items).map(item => `<li>${item}</li>`).join('')}
+                            ${safeArray(rec.action_items)
+                              .map((item) => `<li>${item}</li>`)
+                              .join('')}
                           </ul>
                         </div>
-                      ` : ''}
-                      ${rec.timeline || rec.expected_impact ? `
+                      `
+                          : ''
+                      }
+                      ${
+                        rec.timeline || rec.expected_impact
+                          ? `
                         <div class="rec-meta">
                           ${rec.timeline ? `<span><strong>Timeline:</strong> ${rec.timeline}</span>` : ''}
                           ${rec.expected_impact ? `<span><strong>Expected Impact:</strong> ${rec.expected_impact}</span>` : ''}
                         </div>
-                      ` : ''}
+                      `
+                          : ''
+                      }
                     </div>
-                  `).join('')}
+                  `,
+                    )
+                    .join('')}
                 </div>
               </div>
-            `: ''}
+            `
+                : ''
+            }
 
             <div class="footer">
               Generated by Aisha CRM Intelligence • ${new Date().getFullYear()} • Confidential & Proprietary
@@ -1965,18 +2247,24 @@ export default function createReportRoutes(_pgPool) {
       const pdfBuffer = await page.pdf({
         format: 'A4',
         printBackground: true,
-        margin: { top: '0', right: '0', bottom: '0', left: '0' } // Zero margins because we handle padding in CSS
+        margin: { top: '0', right: '0', bottom: '0', left: '0' }, // Zero margins because we handle padding in CSS
       });
 
       const pdfData = Buffer.from(pdfBuffer);
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="ai_insights_report_${Date.now()}.pdf"`);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="ai_insights_report_${Date.now()}.pdf"`,
+      );
       res.setHeader('Content-Length', pdfData.length);
       res.end(pdfData);
-
     } catch (error) {
       logger.error('Error generating AI insights PDF:', error);
-      res.status(500).json({ status: 'error', message: error.message, details: 'Failed to generate PDF report' });
+      res.status(500).json({
+        status: 'error',
+        message: error.message,
+        details: 'Failed to generate PDF report',
+      });
     } finally {
       if (browser) await browser.close();
     }
@@ -2036,8 +2324,8 @@ export default function createReportRoutes(_pgPool) {
           '--no-sandbox',
           '--disable-setuid-sandbox',
           '--disable-dev-shm-usage',
-          '--disable-gpu'
-        ]
+          '--disable-gpu',
+        ],
       });
 
       const page = await browser.newPage();
@@ -2047,13 +2335,22 @@ export default function createReportRoutes(_pgPool) {
 
       // Generate HTML content based on report type
       let htmlContent = '';
-      
+
       if (report_type === 'overview' || report_type === 'dashboard-stats') {
         // Fetch dashboard stats data
-        const statsUrl = new URL(`${req.protocol}://${req.get('host')}/api/reports/dashboard-stats`);
+        const statsUrl = new URL(
+          `${req.protocol}://${req.get('host')}/api/reports/dashboard-stats`,
+        );
         if (tenant_id) statsUrl.searchParams.append('tenant_id', tenant_id);
-        
-        const statsResponse = await fetch(statsUrl.toString());
+
+        // Validate URL to prevent SSRF
+        const validation = validateInternalUrl(statsUrl.toString(), req.get('host'));
+        if (!validation.valid) {
+          logger.error('[Reports PDF] Invalid stats URL:', validation.error);
+          return res.status(400).json({ error: validation.error });
+        }
+
+        const statsResponse = await fetch(validation.url.toString());
         const statsData = await statsResponse.json();
         const stats = statsData.data || {};
 
@@ -2121,13 +2418,18 @@ export default function createReportRoutes(_pgPool) {
                 </tr>
               </thead>
               <tbody>
-                ${(stats.recent_activities || []).slice(0, 10).map(activity => `
+                ${(stats.recent_activities || [])
+                  .slice(0, 10)
+                  .map(
+                    (activity) => `
                   <tr>
                     <td>${activity.type || 'N/A'}</td>
                     <td>${activity.subject || 'No subject'}</td>
                     <td>${new Date(activity.created_at).toLocaleDateString()}</td>
                   </tr>
-                `).join('')}
+                `,
+                  )
+                  .join('')}
               </tbody>
             </table>
 
@@ -2141,8 +2443,15 @@ export default function createReportRoutes(_pgPool) {
         // Fetch data quality report
         const qualityUrl = new URL(`${req.protocol}://${req.get('host')}/api/reports/data-quality`);
         if (tenant_id) qualityUrl.searchParams.append('tenant_id', tenant_id);
-        
-        const qualityResponse = await fetch(qualityUrl.toString());
+
+        // Validate URL to prevent SSRF
+        const validation = validateInternalUrl(qualityUrl.toString(), req.get('host'));
+        if (!validation.valid) {
+          logger.error('[Reports PDF] Invalid quality URL:', validation.error);
+          return res.status(400).json({ error: validation.error });
+        }
+
+        const qualityResponse = await fetch(validation.url.toString());
         const qualityData = await qualityResponse.json();
         const report = qualityData.data?.report || {};
 
@@ -2173,11 +2482,13 @@ export default function createReportRoutes(_pgPool) {
               <p>Generated on ${new Date().toLocaleString()}</p>
             </div>
             
-            ${Object.entries(report).map(([entity, data]) => {
-              const qualityPercent = 100 - (data.issues_percentage || 0);
-              const qualityClass = qualityPercent >= 80 ? 'good' : qualityPercent >= 60 ? 'warning' : 'poor';
-              
-              return `
+            ${Object.entries(report)
+              .map(([entity, data]) => {
+                const qualityPercent = 100 - (data.issues_percentage || 0);
+                const qualityClass =
+                  qualityPercent >= 80 ? 'good' : qualityPercent >= 60 ? 'warning' : 'poor';
+
+                return `
                 <div class="entity-section">
                   <h2>${entity.charAt(0).toUpperCase() + entity.slice(1)}</h2>
                   <p><strong>Total Records:</strong> ${data.total || 0}</p>
@@ -2187,19 +2498,28 @@ export default function createReportRoutes(_pgPool) {
                   <p><strong>Quality Score</strong></p>
                   <p>Records with Issues: ${data.issues_count || 0} (${(data.issues_percentage || 0).toFixed(1)}%)</p>
                   
-                  ${data.missing_fields && Object.keys(data.missing_fields).length > 0 ? `
+                  ${
+                    data.missing_fields && Object.keys(data.missing_fields).length > 0
+                      ? `
                     <div class="missing-fields">
                       <h3>Missing Fields:</h3>
-                      ${Object.entries(data.missing_fields).map(([field, count]) => `
+                      ${Object.entries(data.missing_fields)
+                        .map(
+                          ([field, count]) => `
                         <div class="missing-field-item">
                           <strong>${field}:</strong> ${count} records missing
                         </div>
-                      `).join('')}
+                      `,
+                        )
+                        .join('')}
                     </div>
-                  ` : '<p>No missing fields detected</p>'}
+                  `
+                      : '<p>No missing fields detected</p>'
+                  }
                 </div>
               `;
-            }).join('')}
+              })
+              .join('')}
 
             <div class="footer">
               <p>Aisha CRM - Data Quality Analysis</p>
@@ -2211,11 +2531,11 @@ export default function createReportRoutes(_pgPool) {
         // AI Market Insights Report
         // Note: This generates a template for manually-triggered insights
         // The actual insights are generated via /api/mcp/market-insights
-        
+
         // Get tenant info for context
         const { getSupabaseClient } = await import('../lib/supabase-db.js');
         const supabase = getSupabaseClient();
-        
+
         let tenantInfo = { name: 'Unknown Tenant', industry: 'Not specified' };
         if (tenant_id) {
           const { data: tenantData } = await supabase
@@ -2332,8 +2652,8 @@ export default function createReportRoutes(_pgPool) {
           top: '20mm',
           right: '15mm',
           bottom: '20mm',
-          left: '15mm'
-        }
+          left: '15mm',
+        },
       });
 
       // Convert to Buffer if needed (puppeteer returns Uint8Array in newer versions)
@@ -2341,18 +2661,20 @@ export default function createReportRoutes(_pgPool) {
 
       // Set response headers
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="${report_type}_report_${Date.now()}.pdf"`);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${report_type}_report_${Date.now()}.pdf"`,
+      );
       res.setHeader('Content-Length', pdfData.length);
 
       // Send PDF as binary
       res.end(pdfData);
-
     } catch (error) {
       logger.error('Error generating PDF:', error);
-      res.status(500).json({ 
-        status: 'error', 
+      res.status(500).json({
+        status: 'error',
         message: error.message,
-        details: 'Failed to generate PDF report'
+        details: 'Failed to generate PDF report',
       });
     } finally {
       // Always close the browser
