@@ -51,7 +51,7 @@
     "morgan": "^1.10.0",
     "multer": "^2.0.2",
     "node-fetch": "^2.7.0",
-    "nodemailer": "^7.0.7",
+    "nodemailer": "^8.0.1",
     "openai": "^4.0.0",
     "pg": "^8.11.3",
     "pino": "^10.3.1",
