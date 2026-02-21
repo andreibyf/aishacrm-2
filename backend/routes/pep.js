@@ -155,10 +155,10 @@ function resolveDateToken(token) {
 function resolveFilterValue(value, tenantId, supabase) {
   if (typeof value !== 'string') return { resolved: true, value };
 
-  // Date token
-  const dateMatch = value.match(/^{{date:\s*(.+?)}}$/);
-  if (dateMatch) {
-    const resolved = resolveDateToken(dateMatch[1].trim());
+  // Date token — use indexOf instead of regex with \s* to avoid ReDoS on user input
+  if (value.startsWith('{{date:') && value.endsWith('}}')) {
+    const inner = value.slice(7, -2).trim(); // slice off '{{date:' and '}}'
+    const resolved = resolveDateToken(inner);
     if (!resolved) {
       return { resolved: false, reason: `Unknown date token: ${value}` };
     }
@@ -177,10 +177,12 @@ function resolveFilterValue(value, tenantId, supabase) {
 
 async function resolveEmployeeToken(token, tenantId, supabase) {
   // token = "{{resolve_employee: James}}"
-  const nameMatch = token.match(/^{{resolve_employee:\s*(.+?)}}$/);
-  if (!nameMatch) return { resolved: false, reason: `Invalid employee token: ${token}` };
-
-  const name = nameMatch[1].trim();
+  // Use string methods instead of regex with \s* to avoid ReDoS on user input
+  if (!token.startsWith('{{resolve_employee:') || !token.endsWith('}}')) {
+    return { resolved: false, reason: `Invalid employee token: ${token}` };
+  }
+  const name = token.slice(19, -2).trim(); // slice off '{{resolve_employee:' and '}}'
+  if (!name) return { resolved: false, reason: `Empty employee name in token: ${token}` };
   const parts = name.split(/\s+/);
 
   let query = supabase
@@ -255,6 +257,41 @@ export default function createPepRoutes(_pgPool) {
   const router = express.Router();
 
   router.use(authenticateRequest);
+
+  // ── In-memory rate limiter for saved-reports write endpoints (prevents abuse)
+  // 30 requests per user per 15 minutes across POST, DELETE, PATCH/run
+  const savedReportsRequests = new Map(); // key: `${tenantId}:${userId}` → { count, resetAt }
+  const SR_MAX = 30;
+  const SR_WINDOW_MS = 15 * 60 * 1000;
+  const SR_MAX_CACHE = 10000;
+  function checkSavedReportsRateLimit(req, res) {
+    const userId = req.user?.id || req.user?.sub || 'anon';
+    const tenantId = req.body?.tenant_id || req.query?.tenant_id || 'unknown';
+    const key = `${tenantId}:${userId}`;
+    const now = Date.now();
+    if (savedReportsRequests.size > SR_MAX_CACHE) {
+      const cutoff = now - SR_WINDOW_MS;
+      for (const [k, v] of savedReportsRequests.entries()) {
+        if (v.resetAt < cutoff) savedReportsRequests.delete(k);
+      }
+    }
+    const rec = savedReportsRequests.get(key) ?? { count: 0, resetAt: now + SR_WINDOW_MS };
+    if (now > rec.resetAt) {
+      rec.count = 0;
+      rec.resetAt = now + SR_WINDOW_MS;
+    }
+    rec.count++;
+    savedReportsRequests.set(key, rec);
+    if (rec.count > SR_MAX) {
+      const retryAfter = Math.ceil((rec.resetAt - now) / 1000);
+      res.set('Retry-After', String(retryAfter));
+      res
+        .status(429)
+        .json({ status: 'error', message: 'Too many requests. Please try again later.' });
+      return false;
+    }
+    return true;
+  }
 
   // ── POST /api/pep/compile ─────────────────────────────────────────────────
   router.post('/compile', async (req, res) => {
@@ -455,6 +492,7 @@ export default function createPepRoutes(_pgPool) {
 
   // ── POST /api/pep/saved-reports ───────────────────────────────────────────────
   router.post('/saved-reports', async (req, res) => {
+    if (!checkSavedReportsRateLimit(req, res)) return;
     const { tenant_id, report_name, plain_english, compiled_ir } = req.body;
 
     if (!tenant_id || !report_name || !plain_english || !compiled_ir) {
@@ -504,6 +542,7 @@ export default function createPepRoutes(_pgPool) {
 
   // ── DELETE /api/pep/saved-reports/:id ────────────────────────────────────────
   router.delete('/saved-reports/:id', async (req, res) => {
+    if (!checkSavedReportsRateLimit(req, res)) return;
     const { id } = req.params;
     const tenantId = req.query.tenant_id;
 
@@ -535,6 +574,7 @@ export default function createPepRoutes(_pgPool) {
 
   // ── PATCH /api/pep/saved-reports/:id/run ─────────────────────────────────────
   router.patch('/saved-reports/:id/run', async (req, res) => {
+    if (!checkSavedReportsRateLimit(req, res)) return;
     const { id } = req.params;
     const { tenant_id } = req.body;
 
