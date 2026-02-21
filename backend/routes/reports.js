@@ -2344,7 +2344,6 @@ export default function createReportRoutes(_pgPool) {
         const statsUrl = new URL('/api/reports/dashboard-stats', internalBase);
 
         // Validate URL to prevent SSRF
-        const expectedHost = new URL(baseUrl).host;
         const validation = validateInternalUrl(statsUrl.toString(), internalBase.host);
         if (!validation.valid) {
           logger.error('[Reports PDF] Invalid stats URL:', validation.error);
