@@ -492,13 +492,19 @@ export default function createPepRoutes(_pgPool) {
           });
         }
         logger.warn({ err: error }, '[PEP] saved-reports POST error');
-        return res.status(500).json({ status: 'error', message: error.message });
+        return res.status(500).json({
+          status: 'error',
+          message: 'An unexpected error occurred while saving the report.',
+        });
       }
 
       return res.status(201).json({ status: 'success', data });
     } catch (err) {
       logger.error({ err }, '[PEP] saved-reports POST exception');
-      return res.status(500).json({ status: 'error', message: err.message });
+      return res.status(500).json({
+        status: 'error',
+        message: 'An unexpected error occurred while saving the report.',
+      });
     }
   });
 
