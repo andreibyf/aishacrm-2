@@ -1160,21 +1160,8 @@ function Layout({ children, currentPageName }) {
   }, [refetchUser]);
 
   React.useEffect(() => {
-    // Persist AI API key (from getOrCreateUserApiKey) for agent/chat usage
-    if (elevenLabsApiKey) {
-      try {
-        // Security: Use in-memory storage only for API keys (no browser storage)
-        // CodeQL flagged localStorage/sessionStorage as clear-text storage vulnerability
-
-        // Expose minimal context for components that can't import Layout state (in-memory only)
-        window.__AI_CONTEXT = {
-          ...(window.__AI_CONTEXT || {}),
-          apiKey: elevenLabsApiKey,
-        };
-      } catch (e) {
-        console.warn('Storage access failed for AI SDK API key:', e);
-      }
-    }
+    // API key is passed as a prop directly to components that need it (see elevenlabsApiKey prop usage).
+    // It is intentionally not stored in window.__AI_CONTEXT to avoid global exposure.
   }, [elevenLabsApiKey]);
 
   // Initialize/refresh the agent SDK guard when client (tenant) context changes
@@ -1183,17 +1170,7 @@ function Layout({ children, currentPageName }) {
     const tenantName = currentTenantData?.name || selectedTenant?.name || null;
 
     initAgentSdkGuard({ tenantId, tenantName });
-
-    // Also expose globally for any legacy code paths
-    try {
-      window.__AI_CONTEXT = {
-        ...(window.__AI_CONTEXT || {}),
-        tenant_id: tenantId,
-        tenant_name: tenantName,
-      };
-    } catch (e) {
-      console.warn('Error exposing AI tenant context:', e);
-    }
+    // Tenant context is managed by initAgentSdkGuard; no need to expose via window.__AI_CONTEXT
   }, [currentTenantData, selectedTenant, selectedTenantId]);
 
   // NEW: Respect manual selection for admins; only set default if none. Non-admins always follow their own tenant.
@@ -2028,6 +2005,10 @@ function Layout({ children, currentPageName }) {
       try {
         // Reset agent guard context (clears in-memory tenant context)
         resetAgentSdkGuard && resetAgentSdkGuard();
+        // Clear window.__AI_CONTEXT to remove any in-memory sensitive data on logout
+        if (typeof window !== 'undefined') {
+          window.__AI_CONTEXT = null;
+        }
       } catch (e) {
         console.warn('Agent guard reset failed on logout:', e);
       }

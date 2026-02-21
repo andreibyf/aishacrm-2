@@ -78,7 +78,7 @@ export default function TestRunner({ testSuites }) {
   const rateLimited429Ref = useRef(0);
   const [uiStats, setUiStats] = useState({ avgRps: 0, rateLimited429: 0 });
 
-  // Category selection (suites) - in-memory only (no persistence for security)
+  // Category selection (suites) - in-memory only, not persisted across sessions
   const allSuiteNames = useMemo(() => testSuites.map((s) => s.name), [testSuites]);
   const [selectedCategories, setSelectedCategories] = useState(() => new Set(allSuiteNames));
   // Keep selection in sync if suites change
