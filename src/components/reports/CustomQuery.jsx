@@ -251,6 +251,7 @@ function SavedReportsList({ tenantId, backendUrl, onLoad, refreshKey }) {
             <button
               onClick={() => handleDelete(r.id, r.report_name)}
               className="text-slate-500 hover:text-red-400 transition-colors"
+              aria-label={`Delete ${r.report_name}`}
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
