@@ -232,6 +232,7 @@ export default function DocumentManagement() {
 
       const result = await response.json();
 
+      // Optimistically update UI
       setDocuments((prev) => prev.filter((doc) => doc.id !== documentToDelete.id));
 
       if (result.audit_logged) {
@@ -243,9 +244,14 @@ export default function DocumentManagement() {
       setDeleteDialogOpen(false);
       setDocumentToDelete(null);
       setDeletionReason('');
+
+      // Refresh documents from server to ensure consistency
+      await loadDocuments();
     } catch (error) {
       console.error('Failed to delete document:', error);
       toast.error(error.message || 'Failed to delete document. Please try again.');
+      // Refresh on error to sync UI state
+      await loadDocuments();
     } finally {
       setDeletingId(null);
     }

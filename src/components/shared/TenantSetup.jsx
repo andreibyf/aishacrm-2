@@ -936,6 +936,13 @@ export default function TenantSetup() {
       if (editingTenant && editingTenant !== 'new') {
         await Tenant.update(editingTenant.id, tenantData);
         toast.success('Tenant updated successfully!');
+        loadTenants();
+        setEditingTenant(null); // Close modal
+
+        // Reload page to ensure all components see the updated tenant data
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
       } else {
         // Assign a high display_order and the current user's email
         const newTenantData = {
@@ -945,9 +952,14 @@ export default function TenantSetup() {
         };
         await createTenantWithR2Bucket(newTenantData);
         toast.success('Tenant created successfully!');
+        loadTenants();
+        setEditingTenant(null); // Close modal
+
+        // Reload page to show new tenant
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
       }
-      loadTenants();
-      setEditingTenant(null); // Close modal
     } catch (error) {
       console.error('Error saving tenant:', error);
       toast.error('Failed to save tenant. Please try again.');

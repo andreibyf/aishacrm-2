@@ -1,20 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Account, Contact, Employee } from "@/api/entities";
-import { useApiManager } from "../components/shared/ApiManager";
-import { loadUsersSafely } from "../components/shared/userLoader"; // TODO: remove after refactor if unused
-import { useUser } from "@/components/shared/useUser.js";
-import CustomerCard from "../components/customers/CustomerCard";
-import CustomerForm from "../components/customers/CustomerForm";
-import CustomerDetailPanel from "../components/customers/CustomerDetailPanel";
-import BulkActionsMenu from "../components/customers/BulkActionsMenu";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Account, Contact, Employee } from '@/api/entities';
+import { useApiManager } from '../components/shared/ApiManager';
+import { loadUsersSafely } from '../components/shared/userLoader'; // TODO: remove after refactor if unused
+import { useUser } from '@/components/shared/useUser.js';
+import CustomerCard from '../components/customers/CustomerCard';
+import CustomerForm from '../components/customers/CustomerForm';
+import CustomerDetailPanel from '../components/customers/CustomerDetailPanel';
+import BulkActionsMenu from '../components/customers/BulkActionsMenu';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   AlertCircle,
   Edit,
@@ -27,29 +22,25 @@ import {
   Trash2,
   Upload,
   X,
-} from "lucide-react";
-import CsvExportButton from "../components/shared/CsvExportButton";
-import CsvImportDialog from "../components/shared/CsvImportDialog";
-import { useTenant } from "../components/shared/tenantContext";
-import Pagination from "../components/shared/Pagination";
-import { toast } from "sonner";
-import TagFilter from "../components/shared/TagFilter";
-import { useEmployeeScope } from "../components/shared/EmployeeScopeContext";
-import RefreshButton from "../components/shared/RefreshButton";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import StatusHelper from "../components/shared/StatusHelper";
-import { ComponentHelp } from "../components/shared/ComponentHelp";
-import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
-import { useLoadingToast } from "@/hooks/useLoadingToast";
-import { formatIndustry } from "@/utils/industryUtils";
-import { useEntityLabel } from "@/components/shared/entityLabelsHooks";
+} from 'lucide-react';
+import CsvExportButton from '../components/shared/CsvExportButton';
+import CsvImportDialog from '../components/shared/CsvImportDialog';
+import { useTenant } from '../components/shared/tenantContext';
+import Pagination from '../components/shared/Pagination';
+import { toast } from 'sonner';
+import TagFilter from '../components/shared/TagFilter';
+import { useEmployeeScope } from '../components/shared/EmployeeScopeContext';
+import RefreshButton from '../components/shared/RefreshButton';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import StatusHelper from '../components/shared/StatusHelper';
+import { ComponentHelp } from '../components/shared/ComponentHelp';
+import { useStatusCardPreferences } from '@/hooks/useStatusCardPreferences';
+import { useLoadingToast } from '@/hooks/useLoadingToast';
+import { formatIndustry } from '@/utils/industryUtils';
+import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
+import { useProgress } from '@/components/shared/ProgressOverlay';
 
 // Helper to add delay between API calls
 const _delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -63,11 +54,11 @@ export default function CustomersPage() {
   const [employees, setEmployees] = useState([]);
   const [supportingDataReady, setSupportingDataReady] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [typeFilter, setTypeFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState(null);
-  const [viewMode, setViewMode] = useState("list");
+  const [viewMode, setViewMode] = useState('list');
   const [selectedAccounts, setSelectedAccounts] = useState(() => new Set());
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -96,6 +87,7 @@ export default function CustomersPage() {
   const { cachedRequest, clearCacheByKey } = useApiManager();
   const { selectedEmail } = useEmployeeScope();
   const { getCardLabel, isCardVisible } = useStatusCardPreferences();
+  const { startProgress, updateProgress, completeProgress } = useProgress();
 
   // Ref to track if initial load is done
   const initialLoadDone = useRef(false);
@@ -103,12 +95,12 @@ export default function CustomersPage() {
 
   // Type colors matching stat cards - semi-transparent backgrounds
   const typeBadgeColors = {
-    prospect: "bg-blue-900/20 text-blue-300 border-blue-700",
-    customer: "bg-emerald-900/20 text-emerald-300 border-emerald-700",
-    partner: "bg-purple-900/20 text-purple-300 border-purple-700",
-    competitor: "bg-red-900/20 text-red-300 border-red-700",
-    vendor: "bg-amber-900/20 text-amber-300 border-amber-700",
-    inactive: "bg-gray-900/20 text-gray-300 border-gray-700",
+    prospect: 'bg-blue-900/20 text-blue-300 border-blue-700',
+    customer: 'bg-emerald-900/20 text-emerald-300 border-emerald-700',
+    partner: 'bg-purple-900/20 text-purple-300 border-purple-700',
+    competitor: 'bg-red-900/20 text-red-300 border-red-700',
+    vendor: 'bg-amber-900/20 text-amber-300 border-amber-700',
+    inactive: 'bg-gray-900/20 text-gray-300 border-gray-700',
   };
 
   // Local getTenantFilter function that incorporates employee scope and test data
@@ -118,7 +110,7 @@ export default function CustomersPage() {
     let filter = {};
 
     // Tenant filtering
-    if (user.role === "superadmin" || user.role === "admin") {
+    if (user.role === 'superadmin' || user.role === 'admin') {
       if (selectedTenantId) {
         filter.tenant_id = selectedTenantId;
       }
@@ -129,25 +121,24 @@ export default function CustomersPage() {
     const filterObj = {}; // For accumulating JSON filter properties
 
     // Employee scope filtering from context
-    if (selectedEmail && selectedEmail !== "all") {
-      if (selectedEmail === "unassigned") {
+    if (selectedEmail && selectedEmail !== 'all') {
+      if (selectedEmail === 'unassigned') {
         // Only filter by null
         filterObj.$or = [{ assigned_to: null }];
       } else {
         // Robust filtering: Match by ID or Email
         let emailToUse = selectedEmail;
         // Check if selectedEmail looks like a UUID (it often is from LazyEmployeeSelector)
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedEmail);
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          selectedEmail,
+        );
 
         if (isUuid && employees && employees.length > 0) {
-          const emp = employees.find(e => e.id === selectedEmail);
+          const emp = employees.find((e) => e.id === selectedEmail);
           if (emp && emp.email) {
             emailToUse = emp.email;
             // Match either ID OR Email
-            filterObj.$or = [
-              { assigned_to: selectedEmail },
-              { assigned_to: emailToUse }
-            ];
+            filterObj.$or = [{ assigned_to: selectedEmail }, { assigned_to: emailToUse }];
           } else {
             filter.assigned_to = selectedEmail;
           }
@@ -156,8 +147,9 @@ export default function CustomersPage() {
         }
       }
     } else if (
-      user.employee_role === "employee" && user.role !== "admin" &&
-      user.role !== "superadmin"
+      user.employee_role === 'employee' &&
+      user.role !== 'admin' &&
+      user.role !== 'superadmin'
     ) {
       // Regular employees only see their own data
       filter.assigned_to = user.email;
@@ -191,7 +183,7 @@ export default function CustomersPage() {
         // We revert to basic tenant filter for supporting data for now.
         // Base tenant filter without employee scope for Account and Employee entities
         let baseTenantFilter = {};
-        if (user.role === "superadmin" || user.role === "admin") {
+        if (user.role === 'superadmin' || user.role === 'admin') {
           if (selectedTenantId) {
             baseTenantFilter.tenant_id = selectedTenantId;
           }
@@ -202,7 +194,7 @@ export default function CustomersPage() {
         // Guard: Don't load if no tenant_id for superadmin (must select a tenant first)
         if ((user.role === 'superadmin' || user.role === 'admin') && !baseTenantFilter.tenant_id) {
           if (import.meta.env.DEV) {
-            console.log("[Accounts] Skipping data load - no tenant selected");
+            console.log('[Accounts] Skipping data load - no tenant selected');
           }
           supportingDataLoaded.current = true;
           return;
@@ -210,35 +202,40 @@ export default function CustomersPage() {
 
         // PERFORMANCE OPTIMIZATION: Load all data concurrently
         // This reduces the 'UUID -> Email -> Name' transition flicker
-        const [
-          accountsData,
-          contactsData,
-          usersData,
-          employeesData
-        ] = await Promise.all([
+        const [accountsData, contactsData, usersData, employeesData] = await Promise.all([
           // Load accounts for lookups (e.g. parent accounts)
-          cachedRequest("Account", "filter", {
-            filter: baseTenantFilter,
-          }, () => Account.filter(baseTenantFilter)),
-
-          // Load contacts
-          cachedRequest("Contact", "filter", {
-            filter: baseTenantFilter,
-          }, () => Contact.filter(baseTenantFilter)),
-
-          // Load users safely (limit 1000)
-          loadUsersSafely(
-            user,
-            selectedTenantId,
-            cachedRequest,
-            1000
+          cachedRequest(
+            'Account',
+            'filter',
+            {
+              filter: baseTenantFilter,
+            },
+            () => Account.filter(baseTenantFilter),
           ),
 
+          // Load contacts
+          cachedRequest(
+            'Contact',
+            'filter',
+            {
+              filter: baseTenantFilter,
+            },
+            () => Contact.filter(baseTenantFilter),
+          ),
+
+          // Load users safely (limit 1000)
+          loadUsersSafely(user, selectedTenantId, cachedRequest, 1000),
+
           // Load employees (limit 1000)
-          cachedRequest("Employee", "filter", {
-            filter: baseTenantFilter,
-            limit: 1000
-          }, () => Employee.filter(baseTenantFilter, 'created_at', 1000))
+          cachedRequest(
+            'Employee',
+            'filter',
+            {
+              filter: baseTenantFilter,
+              limit: 1000,
+            },
+            () => Employee.filter(baseTenantFilter, 'created_at', 1000),
+          ),
         ]);
 
         // Batch updates to reduce render cycles
@@ -250,7 +247,7 @@ export default function CustomersPage() {
         supportingDataLoaded.current = true; // Mark as loaded
         setSupportingDataReady(true);
       } catch (error) {
-        console.error("[Accounts] Failed to load supporting data:", error);
+        console.error('[Accounts] Failed to load supporting data:', error);
         // Even on error, allow accounts to load (will just show UUIDs)
         setSupportingDataReady(true);
       }
@@ -263,7 +260,7 @@ export default function CustomersPage() {
   useEffect(() => {
     const loadAccountFromUrl = async () => {
       const urlParams = new URLSearchParams(window.location.search);
-      const accountId = urlParams.get("accountId");
+      const accountId = urlParams.get('accountId');
 
       if (accountId) {
         try {
@@ -274,11 +271,11 @@ export default function CustomersPage() {
             setIsDetailOpen(true);
           }
         } catch (error) {
-          console.error("[Accounts] Failed to load account from URL:", error);
-          toast.error("Account not found");
+          console.error('[Accounts] Failed to load account from URL:', error);
+          toast.error('Account not found');
         } finally {
           // Clear the URL parameter
-          window.history.replaceState({}, "", "/Accounts");
+          window.history.replaceState({}, '', '/Accounts');
         }
       }
     };
@@ -293,7 +290,7 @@ export default function CustomersPage() {
 
     try {
       const currentTenantFilter = getTenantFilter();
-      
+
       // Guard: Don't load stats if no tenant_id for superadmin
       if ((user.role === 'superadmin' || user.role === 'admin') && !currentTenantFilter.tenant_id) {
         setTotalStats({
@@ -305,26 +302,26 @@ export default function CustomersPage() {
         });
         return;
       }
-      
+
       const allAccounts = await cachedRequest(
-        "Account",
-        "filter",
+        'Account',
+        'filter',
         { filter: currentTenantFilter },
         () => Account.filter(currentTenantFilter),
       );
 
       const stats = {
         total: allAccounts.length,
-        customer: allAccounts.filter((a) => a.type === "customer").length,
-        prospect: allAccounts.filter((a) => a.type === "prospect").length,
-        partner: allAccounts.filter((a) => a.type === "partner").length,
-        competitor: allAccounts.filter((a) => a.type === "competitor").length,
-        inactive: allAccounts.filter((a) => a.type === "inactive").length || 0,
+        customer: allAccounts.filter((a) => a.type === 'customer').length,
+        prospect: allAccounts.filter((a) => a.type === 'prospect').length,
+        partner: allAccounts.filter((a) => a.type === 'partner').length,
+        competitor: allAccounts.filter((a) => a.type === 'competitor').length,
+        inactive: allAccounts.filter((a) => a.type === 'inactive').length || 0,
       };
 
       setTotalStats(stats);
     } catch (error) {
-      console.error("[Accounts] Failed to load stats:", error);
+      console.error('[Accounts] Failed to load stats:', error);
     }
   }, [user, cachedRequest, getTenantFilter]);
 
@@ -346,8 +343,8 @@ export default function CustomersPage() {
       }
 
       const allAccounts = await cachedRequest(
-        "Account",
-        "filter",
+        'Account',
+        'filter',
         { filter: currentTenantFilter },
         () => Account.filter(currentTenantFilter),
       );
@@ -357,29 +354,28 @@ export default function CustomersPage() {
       // Apply client-side filters
       if (searchTerm) {
         const search = searchTerm.toLowerCase();
-        filtered = filtered.filter((account) =>
-          account.name?.toLowerCase().includes(search) ||
-          account.website?.toLowerCase().includes(search) ||
-          account.email?.toLowerCase().includes(search) ||
-          account.phone?.includes(searchTerm)
+        filtered = filtered.filter(
+          (account) =>
+            account.name?.toLowerCase().includes(search) ||
+            account.website?.toLowerCase().includes(search) ||
+            account.email?.toLowerCase().includes(search) ||
+            account.phone?.includes(searchTerm),
         );
       }
 
-      if (typeFilter !== "all") {
+      if (typeFilter !== 'all') {
         filtered = filtered.filter((account) => account.type === typeFilter);
       }
 
       if (selectedTags.length > 0) {
-        filtered = filtered.filter((account) =>
-          Array.isArray(account.tags) &&
-          selectedTags.every((tag) => account.tags.includes(tag))
+        filtered = filtered.filter(
+          (account) =>
+            Array.isArray(account.tags) && selectedTags.every((tag) => account.tags.includes(tag)),
         );
       }
 
       // Sort by created_date descending
-      filtered.sort((a, b) =>
-        new Date(b.created_date) - new Date(a.created_date)
-      );
+      filtered.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
 
       setTotalItems(filtered.length);
 
@@ -397,9 +393,9 @@ export default function CustomersPage() {
       setCustomers(paginatedAccounts);
       loadingToast.showSuccess(`${customersLabel} loading! ✨`);
     } catch (error) {
-      console.error("[Accounts] Failed to load accounts:", error);
+      console.error('[Accounts] Failed to load accounts:', error);
       loadingToast.showError(`Failed to load ${customersLabel.toLowerCase()}`);
-      toast.error("Failed to load accounts");
+      toast.error('Failed to load accounts');
       setCustomers([]);
     } finally {
       setLoading(false);
@@ -444,7 +440,7 @@ export default function CustomersPage() {
   // Handle page change
   const handlePageChange = useCallback((newPage) => {
     setCurrentPage(newPage);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
   // Handle page size change
@@ -461,7 +457,7 @@ export default function CustomersPage() {
     customers.forEach((account) => {
       if (Array.isArray(account.tags)) {
         account.tags.forEach((tag) => {
-          if (tag && typeof tag === "string") {
+          if (tag && typeof tag === 'string') {
             tagCounts[tag] = (tagCounts[tag] || 0) + 1;
           }
         });
@@ -499,20 +495,13 @@ export default function CustomersPage() {
   const handleSave = async () => {
     setIsFormOpen(false);
     setEditingAccount(null);
-    clearCacheByKey("Account");
-    await Promise.all([
-      loadAccounts(),
-      loadTotalStats(),
-    ]);
-    toast.success(
-      editingAccount
-        ? "Account updated successfully"
-        : "Account created successfully",
-    );
+    clearCacheByKey('Account');
+    await Promise.all([loadAccounts(), loadTotalStats()]);
+    toast.success(editingAccount ? 'Account updated successfully' : 'Account created successfully');
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this account?")) {
+    if (!window.confirm('Are you sure you want to delete this account?')) {
       return;
     }
 
@@ -527,15 +516,12 @@ export default function CustomersPage() {
       });
 
       await Account.delete(id);
-      clearCacheByKey("Account");
-      await Promise.all([
-        loadAccounts(),
-        loadTotalStats(),
-      ]);
-      toast.success("Account deleted successfully");
+      clearCacheByKey('Account');
+      await Promise.all([loadAccounts(), loadTotalStats()]);
+      toast.success('Account deleted successfully');
     } catch (error) {
-      console.error("Failed to delete account:", error);
-      toast.error("Failed to delete account");
+      console.error('Failed to delete account:', error);
+      toast.error('Failed to delete account');
       // Ensure UI consistency by reloading on failure
       await loadAccounts();
     }
@@ -547,18 +533,21 @@ export default function CustomersPage() {
         !window.confirm(
           `Delete ALL ${totalItems} account(s) matching current filters? This cannot be undone!`,
         )
-      ) return;
+      )
+        return;
 
       try {
+        startProgress({ message: 'Fetching accounts to delete...' });
+
         let currentTenantFilter = getTenantFilter();
         // The employee scope filter is already applied within getTenantFilter()
 
-        if (typeFilter !== "all") {
+        if (typeFilter !== 'all') {
           currentTenantFilter = { ...currentTenantFilter, type: typeFilter };
         }
 
         if (searchTerm) {
-          const searchRegex = { $regex: searchTerm, $options: "i" };
+          const searchRegex = { $regex: searchTerm, $options: 'i' };
           currentTenantFilter = {
             ...currentTenantFilter,
             $or: [
@@ -578,45 +567,68 @@ export default function CustomersPage() {
           };
         }
 
-        const allAccountsToDelete = await cachedRequest("Account", "filter", {
-          filter: currentTenantFilter,
-          sort: "id",
-          limit: 10000,
-        }, () => Account.filter(currentTenantFilter, "id", 10000));
+        const allAccountsToDelete = await cachedRequest(
+          'Account',
+          'filter',
+          {
+            filter: currentTenantFilter,
+            sort: 'id',
+            limit: 10000,
+          },
+          () => Account.filter(currentTenantFilter, 'id', 10000),
+        );
         const deleteCount = allAccountsToDelete.length;
+
+        updateProgress({
+          message: `Deleting ${deleteCount} accounts...`,
+          total: deleteCount,
+          current: 0,
+        });
 
         // Delete in batches to avoid overwhelming the system
         const BATCH_SIZE = 50;
+        let successCount = 0;
+        let failCount = 0;
+
         for (let i = 0; i < allAccountsToDelete.length; i += BATCH_SIZE) {
           const batch = allAccountsToDelete.slice(i, i + BATCH_SIZE);
-          await Promise.all(batch.map((a) => Account.delete(a.id)));
+          const results = await Promise.allSettled(batch.map((a) => Account.delete(a.id)));
+
+          results.forEach((r) => {
+            if (r.status === 'fulfilled') successCount++;
+            else {
+              const is404 = r.reason?.response?.status === 404;
+              if (!is404) failCount++;
+              else successCount++;
+            }
+          });
+
+          updateProgress({
+            current: successCount + failCount,
+            message: `Deleted ${successCount} of ${deleteCount} accounts...`,
+          });
         }
 
-        // Optimistically remove from UI immediately
-        const deletedIds = new Set(allAccountsToDelete.map(a => a.id));
-        setCustomers((prev) => prev.filter((a) => !deletedIds.has(a.id)));
-        setTotalItems((t) => Math.max(0, (t || 0) - deleteCount));
+        completeProgress();
 
+        // Clear selections and update UI
         setSelectedAccounts(new Set());
         setSelectAllMode(false);
-        
-        // Refresh in background to ensure sync
-        setTimeout(() => {
-          clearCacheByKey("Account");
-          Promise.all([
-            loadAccounts(),
-            loadTotalStats(),
-          ]);
-        }, 500);
-        
-        toast.success(`${deleteCount} account(s) deleted`);
+
+        clearCacheByKey('Account');
+        await Promise.all([loadAccounts(), loadTotalStats()]);
+
+        if (successCount > 0) toast.success(`${successCount} account(s) deleted`);
+        if (failCount > 0) toast.error(`${failCount} account(s) failed to delete`);
       } catch (error) {
-        console.error("Failed to delete accounts:", error);
-        toast.error("Failed to delete accounts");
+        completeProgress();
+        console.error('Failed to delete accounts:', error);
+        toast.error('Failed to delete accounts');
+        await loadAccounts();
       }
     } else {
       if (!selectedAccounts || selectedAccounts.size === 0) {
-        toast.error("No accounts selected");
+        toast.error('No accounts selected');
         return;
       }
 
@@ -624,24 +636,49 @@ export default function CustomersPage() {
         return;
       }
 
+      const accountIds = Array.from(selectedAccounts);
+      startProgress({
+        message: `Deleting ${accountIds.length} accounts...`,
+        total: accountIds.length,
+      });
+
       try {
-        await Promise.all(
-          [...selectedAccounts].map((id) => Account.delete(id)),
-        );
-        // Optimistically update UI for selected deletions
-        const idsToRemove = new Set(selectedAccounts);
-        setCustomers((prev) => prev.filter((a) => !idsToRemove.has(a.id)));
-        setTotalItems((t) => Math.max(0, (t || 0) - idsToRemove.size));
+        let successCount = 0;
+        let failCount = 0;
+        const BATCH_SIZE = 50;
+
+        for (let i = 0; i < accountIds.length; i += BATCH_SIZE) {
+          const batch = accountIds.slice(i, i + BATCH_SIZE);
+          const results = await Promise.allSettled(batch.map((id) => Account.delete(id)));
+
+          results.forEach((r) => {
+            if (r.status === 'fulfilled') {
+              successCount++;
+            } else {
+              const is404 = r.reason?.response?.status === 404;
+              if (!is404) failCount++;
+              else successCount++;
+            }
+          });
+
+          updateProgress({
+            current: Math.min(i + BATCH_SIZE, accountIds.length),
+            message: `Deleted ${successCount} of ${accountIds.length} accounts...`,
+          });
+        }
+
+        completeProgress();
+
         setSelectedAccounts(new Set());
-        clearCacheByKey("Account");
-        await Promise.all([
-          loadAccounts(),
-          loadTotalStats(),
-        ]);
-        toast.success(`${selectedAccounts.size} account(s) deleted`);
+        clearCacheByKey('Account');
+        await Promise.all([loadAccounts(), loadTotalStats()]);
+
+        if (successCount > 0) toast.success(`${successCount} account(s) deleted`);
+        if (failCount > 0) toast.error(`${failCount} account(s) failed to delete`);
       } catch (error) {
-        console.error("Failed to delete accounts:", error);
-        toast.error("Failed to delete accounts");
+        completeProgress();
+        console.error('Failed to delete accounts:', error);
+        toast.error('Failed to delete accounts');
         await loadAccounts();
       }
     }
@@ -653,18 +690,19 @@ export default function CustomersPage() {
         !window.confirm(
           `Update type for ALL ${totalItems} account(s) matching current filters to ${newType}?`,
         )
-      ) return;
+      )
+        return;
 
       try {
         let currentTenantFilter = getTenantFilter();
         // The employee scope filter is already applied within getTenantFilter()
 
-        if (typeFilter !== "all") {
+        if (typeFilter !== 'all') {
           currentTenantFilter = { ...currentTenantFilter, type: typeFilter };
         }
 
         if (searchTerm) {
-          const searchRegex = { $regex: searchTerm, $options: "i" };
+          const searchRegex = { $regex: searchTerm, $options: 'i' };
           currentTenantFilter = {
             ...currentTenantFilter,
             $or: [
@@ -684,78 +722,69 @@ export default function CustomersPage() {
           };
         }
 
-        const allAccountsToUpdate = await cachedRequest("Account", "filter", {
-          filter: currentTenantFilter,
-          sort: "id",
-          limit: 10000,
-        }, () => Account.filter(currentTenantFilter, "id", 10000));
+        const allAccountsToUpdate = await cachedRequest(
+          'Account',
+          'filter',
+          {
+            filter: currentTenantFilter,
+            sort: 'id',
+            limit: 10000,
+          },
+          () => Account.filter(currentTenantFilter, 'id', 10000),
+        );
         const updateCount = allAccountsToUpdate.length;
 
         // Update in batches
         const BATCH_SIZE = 50;
         for (let i = 0; i < allAccountsToUpdate.length; i += BATCH_SIZE) {
           const batch = allAccountsToUpdate.slice(i, i + BATCH_SIZE);
-          await Promise.all(
-            batch.map((a) => Account.update(a.id, { type: newType })),
-          );
+          await Promise.all(batch.map((a) => Account.update(a.id, { type: newType })));
         }
 
         setSelectedAccounts(new Set());
         setSelectAllMode(false);
-        clearCacheByKey("Account");
-        await Promise.all([
-          loadAccounts(),
-          loadTotalStats(),
-        ]);
+        clearCacheByKey('Account');
+        await Promise.all([loadAccounts(), loadTotalStats()]);
         toast.success(`Updated ${updateCount} account(s) to ${newType}`);
       } catch (error) {
-        console.error("Failed to update accounts:", error);
-        toast.error("Failed to update accounts");
+        console.error('Failed to update accounts:', error);
+        toast.error('Failed to update accounts');
       }
     } else {
       if (!selectedAccounts || selectedAccounts.size === 0) {
-        toast.error("No accounts selected");
+        toast.error('No accounts selected');
         return;
       }
 
       try {
-        const promises = [...selectedAccounts].map((id) =>
-          Account.update(id, { type: newType })
-        );
+        const promises = [...selectedAccounts].map((id) => Account.update(id, { type: newType }));
 
         await Promise.all(promises);
         setSelectedAccounts(new Set());
-        clearCacheByKey("Account");
-        await Promise.all([
-          loadAccounts(),
-          loadTotalStats(),
-        ]);
+        clearCacheByKey('Account');
+        await Promise.all([loadAccounts(), loadTotalStats()]);
         toast.success(`Updated ${promises.length} account(s) to ${newType}`);
       } catch (error) {
-        console.error("Failed to update accounts:", error);
-        toast.error("Failed to update accounts");
+        console.error('Failed to update accounts:', error);
+        toast.error('Failed to update accounts');
       }
     }
   };
 
   const handleBulkAssign = async (assignedTo) => {
     if (selectAllMode) {
-      if (
-        !window.confirm(
-          `Assign ALL ${totalItems} account(s) matching current filters?`,
-        )
-      ) return;
+      if (!window.confirm(`Assign ALL ${totalItems} account(s) matching current filters?`)) return;
 
       try {
         let currentTenantFilter = getTenantFilter();
         // The employee scope filter is already applied within getTenantFilter()
 
-        if (typeFilter !== "all") {
+        if (typeFilter !== 'all') {
           currentTenantFilter = { ...currentTenantFilter, type: typeFilter };
         }
 
         if (searchTerm) {
-          const searchRegex = { $regex: searchTerm, $options: "i" };
+          const searchRegex = { $regex: searchTerm, $options: 'i' };
           currentTenantFilter = {
             ...currentTenantFilter,
             $or: [
@@ -775,11 +804,16 @@ export default function CustomersPage() {
           };
         }
 
-        const allAccountsToAssign = await cachedRequest("Account", "filter", {
-          filter: currentTenantFilter,
-          sort: "id",
-          limit: 10000,
-        }, () => Account.filter(currentTenantFilter, "id", 10000));
+        const allAccountsToAssign = await cachedRequest(
+          'Account',
+          'filter',
+          {
+            filter: currentTenantFilter,
+            sort: 'id',
+            limit: 10000,
+          },
+          () => Account.filter(currentTenantFilter, 'id', 10000),
+        );
         const updateCount = allAccountsToAssign.length;
 
         // Update in batches
@@ -787,46 +821,38 @@ export default function CustomersPage() {
         for (let i = 0; i < allAccountsToAssign.length; i += BATCH_SIZE) {
           const batch = allAccountsToAssign.slice(i, i + BATCH_SIZE);
           await Promise.all(
-            batch.map((a) =>
-              Account.update(a.id, { assigned_to: assignedTo || null })
-            ),
+            batch.map((a) => Account.update(a.id, { assigned_to: assignedTo || null })),
           );
         }
 
         setSelectedAccounts(new Set());
         setSelectAllMode(false);
-        clearCacheByKey("Account");
-        await Promise.all([
-          loadAccounts(),
-          loadTotalStats(),
-        ]);
+        clearCacheByKey('Account');
+        await Promise.all([loadAccounts(), loadTotalStats()]);
         toast.success(`Assigned ${updateCount} account(s)`);
       } catch (error) {
-        console.error("Failed to assign accounts:", error);
-        toast.error("Failed to assign accounts");
+        console.error('Failed to assign accounts:', error);
+        toast.error('Failed to assign accounts');
       }
     } else {
       if (!selectedAccounts || selectedAccounts.size === 0) {
-        toast.error("No accounts selected");
+        toast.error('No accounts selected');
         return;
       }
 
       try {
         const promises = [...selectedAccounts].map((id) =>
-          Account.update(id, { assigned_to: assignedTo || null })
+          Account.update(id, { assigned_to: assignedTo || null }),
         );
 
         await Promise.all(promises);
         setSelectedAccounts(new Set());
-        clearCacheByKey("Account");
-        await Promise.all([
-          loadAccounts(),
-          loadTotalStats(),
-        ]);
+        clearCacheByKey('Account');
+        await Promise.all([loadAccounts(), loadTotalStats()]);
         toast.success(`Assigned ${promises.length} account(s)`);
       } catch (error) {
-        console.error("Failed to assign accounts:", error);
-        toast.error("Failed to assign accounts");
+        console.error('Failed to assign accounts:', error);
+        toast.error('Failed to assign accounts');
       }
     }
   };
@@ -868,17 +894,14 @@ export default function CustomersPage() {
   };
 
   const handleRefresh = async () => {
-    clearCacheByKey("Account");
-    clearCacheByKey("Employee");
-    clearCacheByKey("User"); // Clear User cache as well since it's loaded with cachedRequest
-    clearCacheByKey("Contact"); // Clear Contact cache
+    clearCacheByKey('Account');
+    clearCacheByKey('Employee');
+    clearCacheByKey('User'); // Clear User cache as well since it's loaded with cachedRequest
+    clearCacheByKey('Contact'); // Clear Contact cache
     // Also reset supportingDataLoaded ref so it can reload
     supportingDataLoaded.current = false;
-    await Promise.all([
-      loadAccounts(),
-      loadTotalStats(),
-    ]);
-    toast.success("Accounts refreshed");
+    await Promise.all([loadAccounts(), loadTotalStats()]);
+    toast.success('Accounts refreshed');
   };
 
   const handleTypeFilterClick = (type) => {
@@ -887,15 +910,15 @@ export default function CustomersPage() {
   };
 
   const handleClearFilters = () => {
-    setSearchTerm("");
-    setTypeFilter("all");
+    setSearchTerm('');
+    setTypeFilter('all');
     setSelectedTags([]);
     // currentPage reset handled by useEffect for filters
     handleClearSelection();
   };
 
   const hasActiveFilters = useMemo(() => {
-    return searchTerm !== "" || typeFilter !== "all" || selectedTags.length > 0;
+    return searchTerm !== '' || typeFilter !== 'all' || selectedTags.length > 0;
   }, [searchTerm, typeFilter, selectedTags]);
 
   if (!user) {
@@ -937,11 +960,8 @@ export default function CustomersPage() {
           onOpenChange={setIsImportOpen}
           schema={Account.schema ? Account.schema() : null}
           onSuccess={async () => {
-            clearCacheByKey("Account");
-            await Promise.all([
-              loadAccounts(),
-              loadTotalStats(),
-            ]);
+            clearCacheByKey('Account');
+            await Promise.all([loadAccounts(), loadTotalStats()]);
           }}
         />
 
@@ -970,10 +990,10 @@ export default function CustomersPage() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-3xl font-bold text-slate-100">{customersLabel}</h1>
-              <ComponentHelp 
-                title="Accounts Management Guide" 
+              <ComponentHelp
+                title="Accounts Management Guide"
                 description="Learn how to create, filter, and manage your accounts effectively."
-                videoUrl="https://www.youtube.com/embed/dQw4w9WgXcQ" 
+                videoUrl="https://www.youtube.com/embed/dQw4w9WgXcQ"
               />
             </div>
             <p className="text-slate-400 mt-1">
@@ -986,17 +1006,18 @@ export default function CustomersPage() {
               <TooltipTrigger asChild>
                 <Button
                   variant="outline"
-                  onClick={() =>
-                    setViewMode(viewMode === "list" ? "grid" : "list")}
+                  onClick={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
                   className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
                 >
-                  {viewMode === "list"
-                    ? <Grid className="w-4 h-4" />
-                    : <List className="w-4 h-4" />}
+                  {viewMode === 'list' ? (
+                    <Grid className="w-4 h-4" />
+                  ) : (
+                    <List className="w-4 h-4" />
+                  )}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Switch to {viewMode === "list" ? "card" : "list"} view</p>
+                <p>Switch to {viewMode === 'list' ? 'card' : 'list'} view</p>
               </TooltipContent>
             </Tooltip>
             <Tooltip>
@@ -1014,16 +1035,10 @@ export default function CustomersPage() {
                 <p>Import accounts from CSV</p>
               </TooltipContent>
             </Tooltip>
-            <CsvExportButton
-              entityName="Account"
-              data={customers}
-              filename="accounts_export"
-            />
+            <CsvExportButton entityName="Account" data={customers} filename="accounts_export" />
             {(selectedAccounts.size > 0 || selectAllMode) && (
               <BulkActionsMenu
-                selectedCount={selectAllMode
-                  ? totalItems
-                  : selectedAccounts.size}
+                selectedCount={selectAllMode ? totalItems : selectedAccounts.size}
                 onBulkTypeChange={handleBulkTypeChange}
                 onBulkAssign={handleBulkAssign}
                 onBulkDelete={handleBulkDelete}
@@ -1058,71 +1073,73 @@ export default function CustomersPage() {
             {
               label: `Total ${customersLabel}`,
               value: totalStats.total,
-              filter: "all",
-              bgColor: "bg-slate-800",
-              tooltip: "total_all",
+              filter: 'all',
+              bgColor: 'bg-slate-800',
+              tooltip: 'total_all',
             },
             {
-              label: "Prospects",
+              label: 'Prospects',
               value: totalStats.prospect,
-              filter: "prospect",
-              bgColor: "bg-blue-900/20",
-              borderColor: "border-blue-700",
-              tooltip: "account_prospect",
+              filter: 'prospect',
+              bgColor: 'bg-blue-900/20',
+              borderColor: 'border-blue-700',
+              tooltip: 'account_prospect',
             },
             {
-              label: "Customers",
+              label: 'Customers',
               value: totalStats.customer,
-              filter: "customer",
-              bgColor: "bg-emerald-900/20",
-              borderColor: "border-emerald-700",
-              tooltip: "account_customer",
+              filter: 'customer',
+              bgColor: 'bg-emerald-900/20',
+              borderColor: 'border-emerald-700',
+              tooltip: 'account_customer',
             },
             {
-              label: "Partners",
+              label: 'Partners',
               value: totalStats.partner,
-              filter: "partner",
-              bgColor: "bg-purple-900/20",
-              borderColor: "border-purple-700",
-              tooltip: "account_partner",
+              filter: 'partner',
+              bgColor: 'bg-purple-900/20',
+              borderColor: 'border-purple-700',
+              tooltip: 'account_partner',
             },
             {
-              label: "Competitors",
+              label: 'Competitors',
               value: totalStats.competitor,
-              filter: "competitor",
-              bgColor: "bg-red-900/20",
-              borderColor: "border-red-700",
-              tooltip: "account_competitor",
+              filter: 'competitor',
+              bgColor: 'bg-red-900/20',
+              borderColor: 'border-red-700',
+              tooltip: 'account_competitor',
             },
             {
-              label: "Inactive",
+              label: 'Inactive',
               value: totalStats.inactive,
-              filter: "inactive",
-              bgColor: "bg-gray-900/20",
-              borderColor: "border-gray-700",
-              tooltip: "account_inactive",
+              filter: 'inactive',
+              bgColor: 'bg-gray-900/20',
+              borderColor: 'border-gray-700',
+              tooltip: 'account_inactive',
             },
           ]
-            .filter(stat => stat.tooltip === 'total_all' || isCardVisible(stat.tooltip))
+            .filter((stat) => stat.tooltip === 'total_all' || isCardVisible(stat.tooltip))
             .map((stat) => (
-            <div
-              key={stat.label}
-              className={`${stat.bgColor} ${
-                stat.borderColor || "border-slate-700"
-              } border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
-                typeFilter === stat.filter
-                  ? "ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900"
-                  : ""
-              }`}
-              onClick={() => handleTypeFilterClick(stat.filter)}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-sm text-slate-400">{getCardLabel(stat.tooltip) || stat.label}</p>
-                <StatusHelper statusKey={stat.tooltip} />
+              <div
+                key={stat.label}
+                className={`${stat.bgColor} ${
+                  stat.borderColor || 'border-slate-700'
+                } border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
+                  typeFilter === stat.filter
+                    ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900'
+                    : ''
+                }`}
+                onClick={() => handleTypeFilterClick(stat.filter)}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-sm text-slate-400">
+                    {getCardLabel(stat.tooltip) || stat.label}
+                  </p>
+                  <StatusHelper statusKey={stat.tooltip} />
+                </div>
+                <p className="text-2xl font-bold text-slate-100">{stat.value}</p>
               </div>
-              <p className="text-2xl font-bold text-slate-100">{stat.value}</p>
-            </div>
-          ))}
+            ))}
         </div>
 
         <div className="flex flex-col sm:flex-row gap-4">
@@ -1171,32 +1188,34 @@ export default function CustomersPage() {
         </div>
 
         {/* Select All Banner */}
-        {selectedAccounts.size === customers.length && customers.length > 0 &&
-          !selectAllMode && totalItems > customers.length && (
-          <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-blue-400" />
-              <span className="text-blue-200">
-                All {customers.length} accounts on this page are selected.
-              </span>
+        {selectedAccounts.size === customers.length &&
+          customers.length > 0 &&
+          !selectAllMode &&
+          totalItems > customers.length && (
+            <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-blue-400" />
+                <span className="text-blue-200">
+                  All {customers.length} accounts on this page are selected.
+                </span>
+                <Button
+                  variant="link"
+                  onClick={handleSelectAllRecords}
+                  className="text-blue-400 hover:text-blue-300 p-0 h-auto"
+                >
+                  Select all {totalItems} accounts matching current filters
+                </Button>
+              </div>
               <Button
-                variant="link"
-                onClick={handleSelectAllRecords}
-                className="text-blue-400 hover:text-blue-300 p-0 h-auto"
+                variant="ghost"
+                size="sm"
+                onClick={handleClearSelection}
+                className="text-slate-400 hover:text-slate-200"
               >
-                Select all {totalItems} accounts matching current filters
+                <X className="w-4 h-4" />
               </Button>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleClearSelection}
-              className="text-slate-400 hover:text-slate-200"
-            >
-              <X className="w-4 h-4" />
-            </Button>
-          </div>
-        )}
+          )}
 
         {selectAllMode && (
           <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
@@ -1217,254 +1236,236 @@ export default function CustomersPage() {
           </div>
         )}
 
-        {loading && !initialLoadDone.current
-          ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="text-center">
-                <Loader2 className="w-8 h-8 animate-spin text-blue-400 mx-auto mb-4" />
-                <p className="text-slate-400">Loading customers...</p>
-              </div>
+        {loading && !initialLoadDone.current ? (
+          <div className="flex items-center justify-center py-20">
+            <div className="text-center">
+              <Loader2 className="w-8 h-8 animate-spin text-blue-400 mx-auto mb-4" />
+              <p className="text-slate-400">Loading customers...</p>
             </div>
-          )
-          : customers.length === 0
-          ? (
-            <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-12 text-center">
-              <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-slate-300 mb-2">
-                No {customersLabel.toLowerCase()} found
-              </h3>
-              <p className="text-slate-500 mb-6">
-                {hasActiveFilters
-                  ? "Try adjusting your filters or search term"
-                  : `Get started by adding your first ${customerLabel.toLowerCase()}`}
-              </p>
-              {!hasActiveFilters && (
-                <Button
-                  onClick={() => setIsFormOpen(true)}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Your First {customerLabel}
-                </Button>
-              )}
-            </div>
-          )
-          : viewMode === "list"
-          ? (
-            <>
-              {/* List/Table View */}
-              <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-slate-700/50">
-                      <tr>
-                        <th className="px-4 py-3 text-left">
+          </div>
+        ) : customers.length === 0 ? (
+          <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-12 text-center">
+            <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-slate-300 mb-2">
+              No {customersLabel.toLowerCase()} found
+            </h3>
+            <p className="text-slate-500 mb-6">
+              {hasActiveFilters
+                ? 'Try adjusting your filters or search term'
+                : `Get started by adding your first ${customerLabel.toLowerCase()}`}
+            </p>
+            {!hasActiveFilters && (
+              <Button onClick={() => setIsFormOpen(true)} className="bg-blue-600 hover:bg-blue-700">
+                <Plus className="w-4 h-4 mr-2" />
+                Add Your First {customerLabel}
+              </Button>
+            )}
+          </div>
+        ) : viewMode === 'list' ? (
+          <>
+            {/* List/Table View */}
+            <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-slate-700/50">
+                    <tr>
+                      <th className="px-4 py-3 text-left">
+                        <Checkbox
+                          checked={
+                            selectedAccounts.size === customers.length &&
+                            customers.length > 0 &&
+                            !selectAllMode
+                          }
+                          onCheckedChange={toggleSelectAll}
+                          className="border-slate-600"
+                        />
+                      </th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                        Name
+                      </th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                        Website
+                      </th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                        Phone
+                      </th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                        Industry
+                      </th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                        Assigned To
+                      </th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                        Type
+                      </th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-700">
+                    {customers.map((account) => (
+                      <tr key={account.id} className="hover:bg-slate-700/30 transition-colors">
+                        <td className="px-4 py-3">
                           <Checkbox
-                            checked={selectedAccounts.size ===
-                                customers.length &&
-                              customers.length > 0 && !selectAllMode}
-                            onCheckedChange={toggleSelectAll}
+                            checked={selectedAccounts.has(account.id) || selectAllMode}
+                            onCheckedChange={() => toggleSelection(account.id)}
                             className="border-slate-600"
                           />
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                          Name
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                          Website
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                          Phone
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                          Industry
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                          Assigned To
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                          Type
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-700">
-                      {customers.map((account) => (
-                        <tr
-                          key={account.id}
-                          className="hover:bg-slate-700/30 transition-colors"
-                        >
-                          <td className="px-4 py-3">
-                            <Checkbox
-                              checked={selectedAccounts.has(account.id) ||
-                                selectAllMode}
-                              onCheckedChange={() =>
-                                toggleSelection(account.id)}
-                              className="border-slate-600"
-                            />
-                          </td>
-                          <td className="px-4 py-3 text-sm text-slate-300">
-                            {account.name}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-slate-300">
-                            {account.website
-                              ? (
-                                <a
-                                  href={account.website}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-blue-400 hover:text-blue-300"
-                                >
-                                  {account.website}
-                                </a>
-                              )
-                              : <span className="text-slate-500">—</span>}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-slate-300">
-                            {account.phone || (
-                              <span className="text-slate-500">—</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-slate-300">
-                            {formatIndustry(account.industry) || (
-                              <span className="text-slate-500">—</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-slate-300">
-                            {assignedToMap[account.assigned_to] ||
-                              account.assigned_to || (
-                              <span className="text-slate-500">Unassigned</span>
-                            )}
-                          </td>
-                          <td
-                            className="cursor-pointer p-3"
-                            onClick={() => handleViewDetails(account)}
-                          >
-                            <Badge
-                              variant="outline"
-                              className={`${
-                                typeBadgeColors[account.type]
-                              } contrast-badge border capitalize text-xs font-semibold whitespace-nowrap`}
-                              data-variant="status"
-                              data-status={account.type}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-300">{account.name}</td>
+                        <td className="px-4 py-3 text-sm text-slate-300">
+                          {account.website ? (
+                            <a
+                              href={account.website}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-400 hover:text-blue-300"
                             >
-                              {account.type?.replace(/_/g, " ")}
-                            </Badge>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleViewDetails(account);
-                                    }}
-                                    className="h-8 w-8 text-slate-400 hover:text-blue-400"
-                                  >
-                                    <Eye className="w-4 h-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>View details</p>
-                                </TooltipContent>
-                              </Tooltip>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setEditingAccount(account);
-                                      setIsFormOpen(true);
-                                    }}
-                                    className="h-8 w-8 text-slate-400 hover:text-blue-400"
-                                  >
-                                    <Edit className="w-4 h-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Edit {customerLabel.toLowerCase()}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDelete(account.id);
-                                    }}
-                                    className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-900/20"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Delete account</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                              {account.website}
+                            </a>
+                          ) : (
+                            <span className="text-slate-500">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-300">
+                          {account.phone || <span className="text-slate-500">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-300">
+                          {formatIndustry(account.industry) || (
+                            <span className="text-slate-500">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-300">
+                          {assignedToMap[account.assigned_to] || account.assigned_to || (
+                            <span className="text-slate-500">Unassigned</span>
+                          )}
+                        </td>
+                        <td
+                          className="cursor-pointer p-3"
+                          onClick={() => handleViewDetails(account)}
+                        >
+                          <Badge
+                            variant="outline"
+                            className={`${
+                              typeBadgeColors[account.type]
+                            } contrast-badge border capitalize text-xs font-semibold whitespace-nowrap`}
+                            data-variant="status"
+                            data-status={account.type}
+                          >
+                            {account.type?.replace(/_/g, ' ')}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleViewDetails(account);
+                                  }}
+                                  className="h-8 w-8 text-slate-400 hover:text-blue-400"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>View details</p>
+                              </TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingAccount(account);
+                                    setIsFormOpen(true);
+                                  }}
+                                  className="h-8 w-8 text-slate-400 hover:text-blue-400"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Edit {customerLabel.toLowerCase()}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDelete(account.id);
+                                  }}
+                                  className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Delete account</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
+            </div>
 
-              <Pagination
-                currentPage={currentPage}
-                totalPages={Math.ceil(totalItems / pageSize)}
-                totalItems={totalItems}
-                pageSize={pageSize}
-                onPageChange={handlePageChange}
-                onPageSizeChange={handlePageSizeChange}
-                loading={loading}
-              />
-            </>
-          )
-          : (
-            <>
-              {/* Card View */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {customers.map((account) => (
-                  <CustomerCard
-                    key={account.id}
-                    account={account}
-                    assignedUserName={assignedToMap[account.assigned_to] || account.assigned_to}
-                    onEdit={(a) => {
-                      setEditingAccount(a);
-                      setIsFormOpen(true);
-                    }}
-                    onDelete={handleDelete}
-                    onViewDetails={handleViewDetails}
-                    onClick={() => handleViewDetails(account)}
-                    isSelected={selectedAccounts.has(account.id) ||
-                      selectAllMode}
-                    onSelect={() => toggleSelection(account.id)}
-                    user={user}
-                  />
-                ))}
-              </div>
+            <Pagination
+              currentPage={currentPage}
+              totalPages={Math.ceil(totalItems / pageSize)}
+              totalItems={totalItems}
+              pageSize={pageSize}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+              loading={loading}
+            />
+          </>
+        ) : (
+          <>
+            {/* Card View */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {customers.map((account) => (
+                <CustomerCard
+                  key={account.id}
+                  account={account}
+                  assignedUserName={assignedToMap[account.assigned_to] || account.assigned_to}
+                  onEdit={(a) => {
+                    setEditingAccount(a);
+                    setIsFormOpen(true);
+                  }}
+                  onDelete={handleDelete}
+                  onViewDetails={handleViewDetails}
+                  onClick={() => handleViewDetails(account)}
+                  isSelected={selectedAccounts.has(account.id) || selectAllMode}
+                  onSelect={() => toggleSelection(account.id)}
+                  user={user}
+                />
+              ))}
+            </div>
 
-              <Pagination
-                currentPage={currentPage}
-                totalPages={Math.ceil(totalItems / pageSize)}
-                totalItems={totalItems}
-                pageSize={pageSize}
-                onPageChange={handlePageChange}
-                onPageSizeChange={handlePageSizeChange}
-                loading={loading}
-              />
-            </>
-          )}
+            <Pagination
+              currentPage={currentPage}
+              totalPages={Math.ceil(totalItems / pageSize)}
+              totalItems={totalItems}
+              pageSize={pageSize}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+              loading={loading}
+            />
+          </>
+        )}
       </div>
     </TooltipProvider>
   );
