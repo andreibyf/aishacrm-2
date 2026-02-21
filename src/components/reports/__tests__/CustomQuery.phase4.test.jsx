@@ -360,8 +360,9 @@ describe('CustomQuery — Phase 4 Saved Reports', () => {
 
     await waitFor(() => expect(screen.getByText('Open Leads')).toBeInTheDocument());
 
-    // Click the trash icon
-    const deleteBtn = screen.getByRole('button', { name: '' }); // Trash2 icon button
+    // Click the trash icon in the "Open Leads" row
+    const openLeadsRow = screen.getByRole('row', { name: /Open Leads/i });
+    const deleteBtn = within(openLeadsRow).getByRole('button');
     fireEvent.click(deleteBtn);
 
     await waitFor(() => {
