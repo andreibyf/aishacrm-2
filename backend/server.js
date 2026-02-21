@@ -196,8 +196,7 @@ import createUtilsRoutes from './routes/utils.js';
 import createClientRoutes from './routes/clients.js';
 import createWorkflowRoutes from './routes/workflows.js';
 import createWorkflowExecutionRoutes from './routes/workflowexecutions.js';
-// V1 activities route RETIRED - import kept for reference only
-// import createActivityRoutes from "./routes/activities.js";
+// V1 activities route RETIRED (file deleted) - use /api/v2/activities
 import createOpportunityRoutes from './routes/opportunities.js';
 import createOpportunityV2Routes from './routes/opportunities.v2.js';
 import createActivityV2Routes from './routes/activities.v2.js';
@@ -245,6 +244,7 @@ import createBundleRoutes from './routes/bundles.js';
 import { createDeprecationMiddleware } from './middleware/deprecation.js';
 import { authenticateRequest, requireAuth } from './middleware/authenticate.js';
 import { validateTenantAccess } from './middleware/validateTenant.js';
+import { defaultLimiter, authLimiter } from './middleware/rateLimiter.js';
 
 // Apply v1 deprecation headers middleware (before routes)
 app.use(createDeprecationMiddleware());
@@ -253,48 +253,60 @@ logger.info('v1 API deprecation headers middleware enabled');
 // Use the pgPool directly; per-request DB time is measured inside the DB adapter
 const measuredPgPool = pgPool;
 
-// Mount routers with instrumented database pool
-app.use('/api/database', createDatabaseRoutes(measuredPgPool));
-app.use('/api/integrations', createIntegrationRoutes(measuredPgPool));
-app.use('/api/telephony', createTelephonyRoutes(measuredPgPool));
-app.use('/api/ai', authenticateRequest, createAiRoutes(measuredPgPool));
-app.use('/api/agent-office', authenticateRequest, createAgentOfficeRoutes(measuredPgPool));
-app.use('/api/ai-settings', authenticateRequest, aiSettingsRoutes); // AI configuration settings
-app.use('/api/mcp', createMcpRoutes(measuredPgPool));
-app.use('/api/devai', devaiRoutes); // Phase 6: Developer AI approvals (superadmin only)
-app.use('/api/devai', devaiHealthAlertsRoutes); // Health monitoring alerts (superadmin only)
-app.use('/api/accounts', authenticateRequest, createAccountRoutes(measuredPgPool));
-app.use('/api/leads', authenticateRequest, createLeadRoutes(measuredPgPool));
-app.use('/api/contacts', authenticateRequest, createContactRoutes(measuredPgPool));
-app.use('/api/validation', createValidationRoutes(measuredPgPool));
-app.use('/api/billing', authenticateRequest, createBillingRoutes(measuredPgPool));
-app.use('/api/storage', authenticateRequest, createStorageRoutes(measuredPgPool));
-app.use('/api/webhooks', createWebhookRoutes(measuredPgPool));
-app.use('/api/system', createSystemRoutes(measuredPgPool));
-app.use('/api/system-settings', createSystemSettingsRoutes(measuredPgPool));
-app.use('/api/users', createUserRoutes(measuredPgPool, supabaseAuth));
-app.use('/api/employees', authenticateRequest, createEmployeeRoutes(measuredPgPool));
-app.use('/api/permissions', createPermissionRoutes(measuredPgPool));
-app.use('/api/testing', createTestingRoutes(measuredPgPool));
-app.use('/api/documents', createDocumentRoutes(measuredPgPool));
+// Mount routers with instrumented database pool and rate limiting
+app.use('/api/database', defaultLimiter, createDatabaseRoutes(measuredPgPool));
+app.use('/api/integrations', defaultLimiter, createIntegrationRoutes(measuredPgPool));
+app.use('/api/telephony', defaultLimiter, createTelephonyRoutes(measuredPgPool));
+app.use('/api/ai', defaultLimiter, authenticateRequest, createAiRoutes(measuredPgPool));
+app.use(
+  '/api/agent-office',
+  defaultLimiter,
+  authenticateRequest,
+  createAgentOfficeRoutes(measuredPgPool),
+);
+app.use('/api/ai-settings', defaultLimiter, authenticateRequest, aiSettingsRoutes); // AI configuration settings
+app.use('/api/mcp', defaultLimiter, createMcpRoutes(measuredPgPool));
+app.use('/api/devai', defaultLimiter, devaiRoutes); // Phase 6: Developer AI approvals (superadmin only)
+app.use('/api/devai', defaultLimiter, devaiHealthAlertsRoutes); // Health monitoring alerts (superadmin only)
+app.use('/api/accounts', defaultLimiter, authenticateRequest, createAccountRoutes(measuredPgPool));
+app.use('/api/leads', defaultLimiter, authenticateRequest, createLeadRoutes(measuredPgPool));
+app.use('/api/contacts', defaultLimiter, authenticateRequest, createContactRoutes(measuredPgPool));
+app.use('/api/validation', defaultLimiter, createValidationRoutes(measuredPgPool));
+app.use('/api/billing', defaultLimiter, authenticateRequest, createBillingRoutes(measuredPgPool));
+app.use('/api/storage', defaultLimiter, authenticateRequest, createStorageRoutes(measuredPgPool));
+app.use('/api/webhooks', defaultLimiter, createWebhookRoutes(measuredPgPool));
+app.use('/api/system', defaultLimiter, createSystemRoutes(measuredPgPool));
+app.use('/api/system-settings', defaultLimiter, createSystemSettingsRoutes(measuredPgPool));
+app.use('/api/users', defaultLimiter, createUserRoutes(measuredPgPool, supabaseAuth));
+app.use(
+  '/api/employees',
+  defaultLimiter,
+  authenticateRequest,
+  createEmployeeRoutes(measuredPgPool),
+);
+app.use('/api/permissions', defaultLimiter, createPermissionRoutes(measuredPgPool));
+app.use('/api/testing', defaultLimiter, createTestingRoutes(measuredPgPool));
+app.use('/api/documents', defaultLimiter, createDocumentRoutes(measuredPgPool));
 app.use(
   '/api/documentationfiles',
+  defaultLimiter,
   authenticateRequest,
   createDocumentationFileRoutes(measuredPgPool),
 );
-app.use('/api/reports', createReportRoutes(measuredPgPool));
-app.use('/api/bundles', authenticateRequest, createBundleRoutes(measuredPgPool)); // Bundle endpoints for optimized page loading
-app.use('/api/documentation', createDocumentationRoutes(measuredPgPool));
-app.use('/api/cashflow', createCashflowRoutes(measuredPgPool));
-app.use('/api/cron', createCronRoutes(measuredPgPool));
+app.use('/api/reports', defaultLimiter, createReportRoutes(measuredPgPool));
+app.use('/api/bundles', defaultLimiter, authenticateRequest, createBundleRoutes(measuredPgPool)); // Bundle endpoints for optimized page loading
+app.use('/api/documentation', defaultLimiter, createDocumentationRoutes(measuredPgPool));
+app.use('/api/cashflow', defaultLimiter, createCashflowRoutes(measuredPgPool));
+app.use('/api/cron', defaultLimiter, createCronRoutes(measuredPgPool));
 // Metrics routes read from performance_logs; use resilient wrapper to avoid ended pool errors
-app.use('/api/metrics', createMetricsRoutes(resilientPerfDb));
-app.use('/api/utils', createUtilsRoutes(measuredPgPool));
-app.use('/api/bizdevsources', createBizDevSourceRoutes(measuredPgPool));
-app.use('/api/clients', createClientRoutes(measuredPgPool));
+app.use('/api/metrics', defaultLimiter, createMetricsRoutes(resilientPerfDb));
+app.use('/api/utils', defaultLimiter, createUtilsRoutes(measuredPgPool));
+app.use('/api/bizdevsources', defaultLimiter, createBizDevSourceRoutes(measuredPgPool));
+app.use('/api/clients', defaultLimiter, createClientRoutes(measuredPgPool));
 // Workflow routes with conditional auth: webhooks bypass auth, all other routes require auth
 app.use(
   '/api/workflows',
+  defaultLimiter,
   (req, res, next) => {
     // Allow unauthenticated webhook calls (external systems, internal C.A.R.E. triggers)
     // Auth bypass for: POST /api/workflows/:id/webhook
@@ -313,92 +325,137 @@ app.use(
 );
 app.use(
   '/api/workflowexecutions',
+  defaultLimiter,
   authenticateRequest,
   createWorkflowExecutionRoutes(measuredPgPool),
 );
 // V1 activities route RETIRED - use /api/v2/activities (tenant-isolated, secure DELETE)
 // app.use("/api/activities", createActivityRoutes(measuredPgPool));
-app.use('/api/opportunities', authenticateRequest, createOpportunityRoutes(measuredPgPool));
+app.use(
+  '/api/opportunities',
+  defaultLimiter,
+  authenticateRequest,
+  createOpportunityRoutes(measuredPgPool),
+);
 // v2 opportunities endpoints (Phase 4.2 internal pilot).
 // Always mounted in local/dev backend; production gating is handled via CI/CD.
 logger.debug('Mounting /api/v2/opportunities routes (dev/internal)');
-app.use('/api/v2/opportunities', authenticateRequest, createOpportunityV2Routes(measuredPgPool));
+app.use(
+  '/api/v2/opportunities',
+  defaultLimiter,
+  authenticateRequest,
+  createOpportunityV2Routes(measuredPgPool),
+);
 logger.debug('Mounting /api/v2/activities routes (dev/internal)');
-app.use('/api/v2/activities', authenticateRequest, createActivityV2Routes(measuredPgPool));
+app.use(
+  '/api/v2/activities',
+  defaultLimiter,
+  authenticateRequest,
+  createActivityV2Routes(measuredPgPool),
+);
 logger.debug('Mounting /api/v2/contacts routes (dev/internal)');
-app.use('/api/v2/contacts', authenticateRequest, createContactV2Routes(measuredPgPool));
+app.use(
+  '/api/v2/contacts',
+  defaultLimiter,
+  authenticateRequest,
+  createContactV2Routes(measuredPgPool),
+);
 logger.debug('Mounting /api/v2/accounts routes (dev/internal)');
-app.use('/api/v2/accounts', authenticateRequest, createAccountV2Routes(measuredPgPool));
+app.use(
+  '/api/v2/accounts',
+  defaultLimiter,
+  authenticateRequest,
+  createAccountV2Routes(measuredPgPool),
+);
 logger.debug('Mounting /api/v2/leads routes (dev/internal)');
-app.use('/api/v2/leads', authenticateRequest, createLeadsV2Routes(measuredPgPool));
+app.use('/api/v2/leads', defaultLimiter, authenticateRequest, createLeadsV2Routes(measuredPgPool));
 logger.debug('Mounting /api/v2/reports routes (dev/internal)');
-app.use('/api/v2/reports', createReportsV2Routes(measuredPgPool));
+app.use('/api/v2/reports', defaultLimiter, createReportsV2Routes(measuredPgPool));
 logger.debug('Mounting /api/v2/workflows routes (dev/internal)');
-app.use('/api/v2/workflows', createWorkflowV2Routes(measuredPgPool));
+app.use('/api/v2/workflows', defaultLimiter, createWorkflowV2Routes(measuredPgPool));
 logger.debug('Mounting /api/v2/documents routes (dev/internal)');
-app.use('/api/v2/documents', createDocumentV2Routes(measuredPgPool));
+app.use('/api/v2/documents', defaultLimiter, createDocumentV2Routes(measuredPgPool));
 logger.debug('Mounting /api/workflow-templates routes');
-app.use('/api/workflow-templates', createWorkflowTemplateRoutes(measuredPgPool));
-app.use('/api/notifications', createNotificationRoutes(measuredPgPool));
-app.use('/api/system-logs', createSystemLogRoutes(measuredPgPool));
-app.use('/api/audit-logs', authenticateRequest, requireAuth, createAuditLogRoutes(measuredPgPool));
-app.use('/api/modulesettings', createModuleSettingsRoutes(measuredPgPool));
-app.use('/api/entity-labels', createEntityLabelsRoutes(measuredPgPool));
-app.use('/api/tenantintegrations', createTenantIntegrationRoutes(measuredPgPool));
-app.use('/api/tenants', createTenantRoutes(measuredPgPool));
-app.use('/api/tenantresolve', createTenantResolveRoutes(measuredPgPool));
-app.use('/api/announcements', createAnnouncementRoutes(measuredPgPool));
-app.use('/api/apikeys', createApikeyRoutes(measuredPgPool));
-app.use('/api/notes', createNoteRoutes(measuredPgPool));
-app.use('/api/systembrandings', createSystemBrandingRoutes(measuredPgPool));
-app.use('/api/synchealths', createSyncHealthRoutes(measuredPgPool));
-app.use('/api/aicampaigns', createAICampaignRoutes(measuredPgPool));
-app.use('/api/security', createSecurityRoutes(measuredPgPool));
+app.use('/api/workflow-templates', defaultLimiter, createWorkflowTemplateRoutes(measuredPgPool));
+app.use('/api/notifications', defaultLimiter, createNotificationRoutes(measuredPgPool));
+app.use('/api/system-logs', defaultLimiter, createSystemLogRoutes(measuredPgPool));
+app.use(
+  '/api/audit-logs',
+  defaultLimiter,
+  authenticateRequest,
+  requireAuth,
+  createAuditLogRoutes(measuredPgPool),
+);
+app.use('/api/modulesettings', defaultLimiter, createModuleSettingsRoutes(measuredPgPool));
+app.use('/api/entity-labels', defaultLimiter, createEntityLabelsRoutes(measuredPgPool));
+app.use('/api/tenantintegrations', defaultLimiter, createTenantIntegrationRoutes(measuredPgPool));
+app.use('/api/tenants', defaultLimiter, createTenantRoutes(measuredPgPool));
+app.use('/api/tenantresolve', defaultLimiter, createTenantResolveRoutes(measuredPgPool));
+app.use('/api/announcements', defaultLimiter, createAnnouncementRoutes(measuredPgPool));
+app.use('/api/apikeys', defaultLimiter, createApikeyRoutes(measuredPgPool));
+app.use('/api/notes', defaultLimiter, createNoteRoutes(measuredPgPool));
+app.use('/api/systembrandings', defaultLimiter, createSystemBrandingRoutes(measuredPgPool));
+app.use('/api/synchealths', defaultLimiter, createSyncHealthRoutes(measuredPgPool));
+app.use('/api/aicampaigns', defaultLimiter, createAICampaignRoutes(measuredPgPool));
+app.use('/api/security', defaultLimiter, createSecurityRoutes(measuredPgPool));
 // Dashboard funnel counts (materialized view for fast dashboard loading)
 logger.debug('Mounting /api/dashboard/funnel-counts routes');
-app.use('/api/dashboard', createDashboardFunnelRoutes(measuredPgPool));
+app.use('/api/dashboard', defaultLimiter, createDashboardFunnelRoutes(measuredPgPool));
 // CARE Workflow Config routes (per-tenant CARE settings)
 logger.debug('Mounting /api/care-config routes');
-app.use('/api/care-config', authenticateRequest, createCareConfigRoutes(measuredPgPool));
+app.use(
+  '/api/care-config',
+  defaultLimiter,
+  authenticateRequest,
+  createCareConfigRoutes(measuredPgPool),
+);
 // Braid SDK Audit Log routes
 logger.debug('Mounting /api/braid/audit routes');
-app.use('/api/braid/audit', braidAuditRoutes);
+app.use('/api/braid/audit', defaultLimiter, braidAuditRoutes);
 // Braid SDK Tool Chaining routes
 logger.debug('Mounting /api/braid/chain routes');
-app.use('/api/braid/chain', braidChainRoutes);
+app.use('/api/braid/chain', defaultLimiter, braidChainRoutes);
 // Braid SDK Metrics routes
 logger.debug('Mounting /api/braid/metrics routes');
-app.use('/api/braid/metrics', braidMetricsRoutes);
+app.use('/api/braid/metrics', defaultLimiter, braidMetricsRoutes);
 // Braid SDK Tool Dependency Graph routes
 logger.debug('Mounting /api/braid/graph routes');
-app.use('/api/braid/graph', braidGraphRoutes);
+app.use('/api/braid/graph', defaultLimiter, braidGraphRoutes);
 // PEP Phase 3 — Natural language report queries
 logger.debug('Mounting /api/pep routes');
-app.use('/api/pep', createPepRoutes(measuredPgPool));
+app.use('/api/pep', defaultLimiter, createPepRoutes(measuredPgPool));
 // Construction Projects module routes
 logger.debug('Mounting /api/construction/projects routes');
-app.use('/api/construction/projects', createConstructionProjectsRoutes(measuredPgPool));
+app.use(
+  '/api/construction/projects',
+  defaultLimiter,
+  createConstructionProjectsRoutes(measuredPgPool),
+);
 logger.debug('Mounting /api/construction/assignments routes');
-app.use('/api/construction/assignments', createConstructionAssignmentsRoutes(measuredPgPool));
+app.use(
+  '/api/construction/assignments',
+  defaultLimiter,
+  createConstructionAssignmentsRoutes(measuredPgPool),
+);
 logger.debug('Mounting /api/workers routes');
-app.use('/api/workers', createWorkersRoutes(measuredPgPool));
+app.use('/api/workers', defaultLimiter, createWorkersRoutes(measuredPgPool));
 logger.debug('Mounting /api/tasks routes');
-app.use('/api/tasks', createTasksRoutes());
+app.use('/api/tasks', defaultLimiter, createTasksRoutes());
 // Memory routes use Redis/Valkey; DB pool not required
-app.use('/api/memory', createMemoryRoutes());
-// Auth routes (cookie-based login/refresh/logout)
-app.use('/api/auth', createAuthRoutes(measuredPgPool));
+app.use('/api/memory', defaultLimiter, createMemoryRoutes());
+// Auth routes (cookie-based login/refresh/logout) - uses strict rate limiting for security
+app.use('/api/auth', authLimiter, createAuthRoutes(measuredPgPool));
 // GitHub Issues routes for autonomous health monitoring
-app.use('/api/github-issues', createGitHubIssuesRoutes);
+app.use('/api/github-issues', defaultLimiter, createGitHubIssuesRoutes);
 // Proxy selected Supabase Edge Functions to avoid CORS issues in browsers
-app.use('/api/edge', createEdgeFunctionRoutes());
+app.use('/api/edge', defaultLimiter, createEdgeFunctionRoutes());
 
 // AI summary generation
-app.use('/api/ai', createAISummaryRoutes);
+app.use('/api/ai', defaultLimiter, createAISummaryRoutes);
 // Supabase Auth proxy (CORS-controlled access to /auth/v1/user)
-app.use('/api/supabase-proxy', createSupabaseProxyRoutes());
+app.use('/api/supabase-proxy', defaultLimiter, createSupabaseProxyRoutes());
 // AI Suggestions routes (Phase 3 Autonomous Operations)
-app.use('/api/ai/suggestions', createSuggestionsRoutes(measuredPgPool));
+app.use('/api/ai/suggestions', defaultLimiter, createSuggestionsRoutes(measuredPgPool));
 
 // 404 handler - Ensure CORS headers so browser shows real error, not "CORS error"
 app.use((req, res, next) => {
