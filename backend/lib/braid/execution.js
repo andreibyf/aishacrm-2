@@ -287,7 +287,7 @@ export async function executeBraidTool(
       });
     } catch (cacheErr) {
       // Cache errors should never block tool execution
-      console.warn(`[Braid Tool] Cache lookup failed for ${toolName}:`, cacheErr.message);
+      console.warn('[Braid Tool] Cache lookup failed for %s:', toolName, cacheErr.message);
     }
   }
 
