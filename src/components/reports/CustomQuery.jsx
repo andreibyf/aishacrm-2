@@ -417,7 +417,14 @@ export default function CustomQuery({ tenantFilter }) {
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify({ tenant_id: tenantId }),
-    }).catch(() => {}); // non-critical
+    }).catch((err) => {
+      // Non-critical: don't block user flow, but log for debugging / observability
+      console.error(
+        'Failed to record run for saved report:',
+        report.id,
+        err
+      );
+    });
   };
 
   const handleKeyDown = (e) => {
