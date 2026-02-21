@@ -2338,13 +2338,14 @@ export default function createReportRoutes(_pgPool) {
 
       if (report_type === 'overview' || report_type === 'dashboard-stats') {
         // Fetch dashboard stats data
-        const baseUrl = process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`;
-        const statsUrl = new URL('/api/reports/dashboard-stats', baseUrl);
-        if (tenant_id) statsUrl.searchParams.append('tenant_id', tenant_id);
+        const internalBaseUrl =
+          process.env.INTERNAL_API_BASE_URL || `${req.protocol}://${req.hostname}`;
+        const internalBase = new URL(internalBaseUrl);
+        const statsUrl = new URL('/api/reports/dashboard-stats', internalBase);
 
         // Validate URL to prevent SSRF
         const expectedHost = new URL(baseUrl).host;
-        const validation = validateInternalUrl(statsUrl.toString(), expectedHost);
+        const validation = validateInternalUrl(statsUrl.toString(), internalBase.host);
         if (!validation.valid) {
           logger.error('[Reports PDF] Invalid stats URL:', validation.error);
           return res.status(400).json({ error: validation.error });
@@ -2441,11 +2442,14 @@ export default function createReportRoutes(_pgPool) {
         `;
       } else if (report_type === 'data-quality') {
         // Fetch data quality report
-        const qualityUrl = new URL(`${req.protocol}://${req.get('host')}/api/reports/data-quality`);
+        const internalBaseUrl =
+          process.env.INTERNAL_API_BASE_URL || `${req.protocol}://${req.hostname}`;
+        const internalBase = new URL(internalBaseUrl);
+        const qualityUrl = new URL('/api/reports/data-quality', internalBase);
         if (tenant_id) qualityUrl.searchParams.append('tenant_id', tenant_id);
 
         // Validate URL to prevent SSRF
-        const validation = validateInternalUrl(qualityUrl.toString(), req.get('host'));
+        const validation = validateInternalUrl(qualityUrl.toString(), internalBase.host);
         if (!validation.valid) {
           logger.error('[Reports PDF] Invalid quality URL:', validation.error);
           return res.status(400).json({ error: validation.error });
