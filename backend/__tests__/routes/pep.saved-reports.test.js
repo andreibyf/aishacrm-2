@@ -135,9 +135,6 @@ describe('PEP Phase 4 — Saved Reports Routes', () => {
 
     it('returns 200 with empty array when no saved reports exist', async () => {
       // Mock supabase to return empty list
-      const { getSupabaseClient } = await import('../../lib/supabase-db.js');
-      const originalGet = getSupabaseClient;
-
       mock.module('../../lib/supabase-db.js', {
         namedExports: {
           getSupabaseClient: () => makeSupabaseMock({ data: [], error: null }),
@@ -264,34 +261,19 @@ describe('PEP Phase 4 — Saved Reports Routes', () => {
       assert.strictEqual(json.status, 'error');
     });
 
-    it('returns 200 and increments run_count on success', async () => {
-      let updateCalled = false;
+    it('returns 200 on successful atomic increment via RPC', async () => {
+      let rpcCalled = false;
       mock.module('../../lib/supabase-db.js', {
         namedExports: {
-          getSupabaseClient: () => {
-            const chain = {
-              from() {
-                return this;
-              },
-              select() {
-                return this;
-              },
-              update(vals) {
-                updateCalled = true;
-                assert.ok(typeof vals.run_count === 'number');
-                assert.ok(vals.last_run_at);
-                return this;
-              },
-              eq() {
-                return this;
-              },
-              single: () => Promise.resolve({ data: { run_count: 3 }, error: null }),
-              then(resolve) {
-                return Promise.resolve({ data: null, error: null }).then(resolve);
-              },
-            };
-            return chain;
-          },
+          getSupabaseClient: () => ({
+            rpc(fnName, params) {
+              rpcCalled = true;
+              assert.strictEqual(fnName, 'pep_increment_report_run');
+              assert.strictEqual(params.p_id, 'existing-uuid');
+              assert.strictEqual(params.p_tenant_id, 'tenant-abc');
+              return Promise.resolve({ error: null });
+            },
+          }),
         },
       });
 
@@ -301,6 +283,7 @@ describe('PEP Phase 4 — Saved Reports Routes', () => {
       assert.strictEqual(res.status, 200);
       const json = await res.json();
       assert.strictEqual(json.status, 'success');
+      assert.ok(rpcCalled, 'rpc should have been called');
     });
   });
 

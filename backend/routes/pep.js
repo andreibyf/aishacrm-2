@@ -23,16 +23,21 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 // Inline slug helper — avoids adding a new dependency
-// Note: character classes kept non-overlapping to avoid ReDoS (CodeQL)
-const slugify = (str) =>
-  str
-    .toLowerCase()
-    .trim()
-    .replace(/[^\w\s-]/g, '') // strip non-word chars
-    .replace(/\s+/g, '-') // spaces → hyphens (no overlap with _ or -)
-    .replace(/_+/g, '-') // underscores → hyphens (separate pass)
-    .replace(/-{2,}/g, '-') // collapse multiple hyphens
-    .replace(/^-+|-+$/g, ''); // trim leading/trailing hyphens
+// No regex quantifiers on user-controlled data to prevent ReDoS (CodeQL)
+function slugify(str) {
+  let s = str.toLowerCase().trim();
+  s = s.replace(/[^\w\s-]/g, ''); // strip non-word chars (anchored, no ambiguity)
+  s = s.replace(/\s/g, '-'); // one space → one hyphen
+  s = s.replace(/_/g, '-'); // one underscore → one hyphen
+  // Collapse consecutive hyphens with a loop — avoids polynomial regex on '-' sequences
+  while (s.includes('--')) s = s.replace('--', '-');
+  // Trim leading/trailing hyphens without regex
+  let start = 0;
+  let end = s.length - 1;
+  while (start <= end && s[start] === '-') start++;
+  while (end >= start && s[end] === '-') end--;
+  return s.slice(start, end + 1);
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -461,7 +466,7 @@ export default function createPepRoutes(_pgPool) {
 
     const created_by = req.user?.email || req.user?.id || 'unknown';
     const dateSuffix = new Date().toISOString().split('T')[0];
-    const filename = `${slugify(report_name, { lower: true, strict: true })}-${dateSuffix}`;
+    const filename = `${slugify(report_name)}-${dateSuffix}`;
 
     const supabase = getSupabaseClient();
     try {
@@ -541,32 +546,19 @@ export default function createPepRoutes(_pgPool) {
 
     const supabase = getSupabaseClient();
     try {
-      // Increment run_count and update last_run_at atomically via RPC would be ideal,
-      // but a read-then-write is fine here — report execution is not high-frequency
-      const { data: existing, error: fetchErr } = await supabase
-        .from('pep_saved_reports')
-        .select('run_count')
-        .eq('id', id)
-        .eq('tenant_id', tenant_id)
-        .single();
+      // Atomic increment via Postgres RPC — avoids read-then-write race condition
+      const { error: rpcErr } = await supabase.rpc('pep_increment_report_run', {
+        p_id: id,
+        p_tenant_id: tenant_id,
+      });
 
-      if (fetchErr || !existing) {
-        return res.status(404).json({ status: 'error', message: 'Saved report not found.' });
-      }
-
-      const { error: updateErr } = await supabase
-        .from('pep_saved_reports')
-        .update({
-          run_count: (existing.run_count || 0) + 1,
-          last_run_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', id)
-        .eq('tenant_id', tenant_id);
-
-      if (updateErr) {
-        logger.warn({ err: updateErr }, '[PEP] saved-reports PATCH/run error');
-        return res.status(500).json({ status: 'error', message: updateErr.message });
+      if (rpcErr) {
+        // SQLSTATE P0002 = no_data_found — report doesn't exist or wrong tenant
+        if (rpcErr.code === 'P0002' || rpcErr.message?.includes('not found')) {
+          return res.status(404).json({ status: 'error', message: 'Saved report not found.' });
+        }
+        logger.warn({ err: rpcErr }, '[PEP] saved-reports PATCH/run error');
+        return res.status(500).json({ status: 'error', message: rpcErr.message });
       }
 
       return res.status(200).json({ status: 'success' });
