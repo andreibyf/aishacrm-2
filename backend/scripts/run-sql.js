@@ -3,11 +3,29 @@
  * Usage: node scripts/run-sql.js <path-to-sql>
  */
 
-// Conditionally disable TLS certificate verification for local development with self-signed certs
-// WARNING: Only use in development - never in production!
-if (process.env.NODE_ENV === 'development' && process.env.ALLOW_SELF_SIGNED_CERTS === 'true') {
+// SECURITY: Certificate validation
+// Production MUST use valid certificates. Self-signed certs only allowed via explicit opt-in.
+// To use self-signed certs in development, set both environment variables:
+//   NODE_ENV=development
+//   ALLOW_SELF_SIGNED_CERTS=true
+// WARNING: NEVER disable certificate validation in production!
+const isDevelopment = process.env.NODE_ENV === 'development';
+const allowSelfSigned = process.env.ALLOW_SELF_SIGNED_CERTS === 'true';
+
+if (isDevelopment && allowSelfSigned) {
+  // Only disable TLS validation if BOTH conditions are met
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-  console.warn('⚠️  WARNING: TLS certificate validation DISABLED (development mode)');
+  console.warn(
+    '⚠️  WARNING: TLS certificate validation DISABLED (development mode with explicit opt-in)',
+  );
+  console.warn('⚠️  This configuration is INSECURE and must NEVER be used in production!');
+} else if (!isDevelopment && allowSelfSigned) {
+  // Refuse to run in production with self-signed certs
+  console.error(
+    '❌ ERROR: Cannot disable certificate validation in production (NODE_ENV !== development)',
+  );
+  console.error('❌ Use valid certificates or run in development mode.');
+  process.exit(1);
 }
 
 import fs from 'fs';

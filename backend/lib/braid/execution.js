@@ -82,7 +82,6 @@ export async function executeBraidTool(
       hasToken: !!accessToken,
       tokenVerified: accessToken?.verified,
       tokenSource: accessToken?.source,
-      tenantId: tenantRecord?.id || tenantRecord?.tenant_id,
       userId,
     });
     return {
@@ -146,7 +145,6 @@ export async function executeBraidTool(
         policy: config.policy,
         requiredRoles: basePolicy.required_roles,
         userRole,
-        userId,
         tenantId: tenantRecord?.id,
       });
       return {
@@ -200,8 +198,6 @@ export async function executeBraidTool(
     if (!confirmationProvided) {
       console.log('[Braid Security] Delete operation requires confirmation', {
         toolName,
-        userId,
-        tenantId: tenantRecord?.id,
       });
       return {
         tag: 'Err',

@@ -116,6 +116,81 @@ export function initMiddleware(app, pgPool) {
 
   logger.info({ origins: allowedOrigins.join(', ') }, '[CORS] Allowed origins configured');
 
+  // CSRF Protection Middleware
+  // For JWT-based APIs, CSRF is mitigated by requiring custom headers on state-changing operations
+  // This implements defense-in-depth for any cookie-based auth
+  function csrfProtection(req, res, next) {
+    try {
+      // Skip CSRF for safe methods (CSRF only affects state-changing operations)
+      const safeMethods = ['GET', 'HEAD', 'OPTIONS'];
+      if (safeMethods.includes(req.method)) {
+        return next();
+      }
+
+      // Skip CSRF for requests with Bearer token (JWT auth inherently CSRF-safe)
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        return next();
+      }
+
+      // For cookie-based auth or no auth, require custom headers as CSRF protection
+      // These headers cannot be set by simple forms, only by JavaScript with CORS
+      const hasCustomHeader =
+        req.headers['x-requested-with'] ||
+        (req.headers['content-type'] && req.headers['content-type'].includes('application/json')) ||
+        req.headers['x-csrf-token'];
+
+      if (hasCustomHeader) {
+        return next();
+      }
+
+      // Additional check: verify request came from allowed origin
+      const origin = req.headers.origin || req.headers.referer;
+      if (origin) {
+        try {
+          const originUrl = new URL(origin);
+          const hostname = originUrl.hostname;
+
+          // Allow requests from our own domains
+          if (
+            hostname === 'aishacrm.com' ||
+            hostname.endsWith('.aishacrm.com') ||
+            hostname === 'localhost' ||
+            allowedOrigins.includes(origin)
+          ) {
+            return next();
+          }
+        } catch {
+          // Invalid origin URL, reject
+        }
+      }
+
+      // CSRF protection triggered - reject request
+      logger.warn(
+        {
+          method: req.method,
+          path: req.path,
+          hasAuth: !!authHeader,
+          origin: req.headers.origin,
+          referer: req.headers.referer,
+        },
+        '[CSRF] Request blocked - missing CSRF protection headers',
+      );
+
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'CSRF protection: Missing required headers for state-changing operation',
+      });
+    } catch (err) {
+      logger.error({ err }, '[CSRF] Error in CSRF protection middleware');
+      // Fail closed on error - reject the request
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'CSRF protection error',
+      });
+    }
+  }
+
   app.use(
     cors({
       origin: (origin, callback) => {
@@ -175,6 +250,9 @@ export function initMiddleware(app, pgPool) {
 
   // Apply limiter to API routes AFTER CORS so 429 responses include CORS headers
   app.use('/api', rateLimiter);
+
+  // Apply CSRF protection to API routes (after CORS and rate limiting)
+  app.use('/api', csrfProtection);
 
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
