@@ -825,7 +825,7 @@ export default function createReportRoutes(_pgPool) {
               let q = supabase
                 .from('leads')
                 .select(
-                  'id,first_name,last_name,company,email,phone,created_date,status,source,is_test_data',
+                  'id,first_name,last_name,company,email,phone,created_date,status,source,assigned_to,is_test_data',
                 )
                 .order('created_date', { ascending: false })
                 .limit(100);
