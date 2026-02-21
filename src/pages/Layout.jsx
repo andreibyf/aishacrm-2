@@ -1163,8 +1163,6 @@ function Layout({ children, currentPageName }) {
     // Persist AI API key (from getOrCreateUserApiKey) for agent/chat usage
     if (elevenLabsApiKey) {
       try {
-        const persistAllowed = import.meta.env.VITE_ALLOW_PERSIST_API_KEYS === 'true';
-
         // Security: Use in-memory storage only for API keys (no browser storage)
         // CodeQL flagged localStorage/sessionStorage as clear-text storage vulnerability
 
