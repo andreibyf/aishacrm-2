@@ -7,6 +7,12 @@
 
 set -e
 
+# Skip in CI environments (GitHub Actions, etc.)
+if [ "${CI}" = "true" ] || [ "${GITHUB_ACTIONS}" = "true" ] || [ "${HUSKY}" = "0" ]; then
+  echo "   ⚠️  CI/automated environment detected — skipping pre-push checks"
+  exit 0
+fi
+
 echo ""
 echo "╔══════════════════════════════════════════════╗"
 echo "║        PRE-PUSH CHECKS (v4.7.0+)            ║"
