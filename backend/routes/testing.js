@@ -405,11 +405,31 @@ export default function createTestingRoutes(_pgPool) {
         req.query.tenant_id ||
         process.env.SYSTEM_TENANT_ID ||
         'a11dfb63-4b18-4eb8-872e-747af2e37c46';
-      const explicitBase = req.query.base_url;
-      let baseUrl = explicitBase || process.env.INTERNAL_BASE_URL || 'http://localhost:4001';
-      if (baseUrl === 'internal') baseUrl = 'http://backend:3001';
-      if (/localhost:4001$/i.test(baseUrl)) baseUrl = 'http://backend:3001';
-      if (!/^https?:\/\//i.test(baseUrl)) baseUrl = `http://${baseUrl}`;
+      const explicitBaseKeyRaw = req.query.base_url;
+      const explicitBaseKey =
+        typeof explicitBaseKeyRaw === 'string' ? explicitBaseKeyRaw.toLowerCase() : undefined;
+
+      // Restrict base URLs to a small allow-list of known internal targets.
+      const BASE_URL_PRESETS = {
+        default: process.env.INTERNAL_BASE_URL || 'http://backend:3001',
+        internal: 'http://backend:3001',
+        localhost: 'http://localhost:4001',
+      };
+
+      let baseUrl = BASE_URL_PRESETS.default;
+      if (explicitBaseKey && Object.prototype.hasOwnProperty.call(BASE_URL_PRESETS, explicitBaseKey)) {
+        baseUrl = BASE_URL_PRESETS[explicitBaseKey];
+      }
+
+      // Preserve legacy behavior: map specific localhost URL to internal backend
+      if (/localhost:4001$/i.test(baseUrl)) {
+        baseUrl = 'http://backend:3001';
+      }
+
+      // Ensure baseUrl has an http/https scheme
+      if (!/^https?:\/\//i.test(baseUrl)) {
+        baseUrl = `http://${baseUrl}`;
+      }
 
       // Expected OK statuses (classification PASS); allow query override
       // Default: treat all 2xx as success
@@ -429,7 +449,8 @@ export default function createTestingRoutes(_pgPool) {
       let probeOk = false;
       try {
         const probeUrlStr = `${baseUrl}/api/testing/ping`;
-        const validation = validateUrl(probeUrlStr, { allowLocalhostInDev: true });
+        // Use standard URL validation (no user-controlled hostnames beyond presets above)
+        const validation = validateUrl(probeUrlStr);
         if (!validation.valid) {
           logger.warn('[Full Scan] Invalid probe URL:', validation.error);
         } else {
