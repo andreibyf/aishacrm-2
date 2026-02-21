@@ -77,12 +77,14 @@ function renderCustomQuery() {
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe('CustomQuery — Phase 4 Saved Reports', () => {
+  let getItemSpy, setItemSpy;
+
   beforeEach(() => {
     vi.clearAllMocks();
     // Ensure localStorage is clean and we can spy on it
     localStorage.clear();
-    vi.spyOn(localStorage, 'getItem');
-    vi.spyOn(localStorage, 'setItem');
+    getItemSpy = vi.spyOn(localStorage, 'getItem');
+    setItemSpy = vi.spyOn(localStorage, 'setItem');
   });
 
   afterEach(() => {
@@ -117,7 +119,7 @@ describe('CustomQuery — Phase 4 Saved Reports', () => {
     expect(screen.getByText(/3 runs/)).toBeInTheDocument();
 
     // Verify it called the API, not localStorage
-    expect(localStorage.getItem).not.toHaveBeenCalled();
+    expect(getItemSpy).not.toHaveBeenCalled();
   });
 
   // ── 2. localStorage is never used ──────────────────────────────────────────
@@ -142,8 +144,8 @@ describe('CustomQuery — Phase 4 Saved Reports', () => {
       expect(screen.getByText(/No saved reports yet/i)).toBeInTheDocument();
     });
 
-    expect(localStorage.getItem).not.toHaveBeenCalled();
-    expect(localStorage.setItem).not.toHaveBeenCalled();
+    expect(getItemSpy).not.toHaveBeenCalled();
+    expect(setItemSpy).not.toHaveBeenCalled();
   });
 
   // ── 3. Save Report calls POST /api/pep/saved-reports ───────────────────────
@@ -245,7 +247,7 @@ describe('CustomQuery — Phase 4 Saved Reports', () => {
     expect(body.compiled_ir).toBeTruthy();
 
     // localStorage was never written
-    expect(localStorage.setItem).not.toHaveBeenCalled();
+    expect(setItemSpy).not.toHaveBeenCalled();
   });
 
   // ── 4. 409 duplicate name shows toast error ─────────────────────────────────
@@ -360,9 +362,8 @@ describe('CustomQuery — Phase 4 Saved Reports', () => {
 
     await waitFor(() => expect(screen.getByText('Open Leads')).toBeInTheDocument());
 
-    // Click the trash icon in the "Open Leads" row
-    const openLeadsRow = screen.getByRole('row', { name: /Open Leads/i });
-    const deleteBtn = within(openLeadsRow).getByRole('button');
+    // Click the trash icon in the "Open Leads" item
+    const deleteBtn = screen.getByRole('button', { name: /Delete Open Leads/i });
     fireEvent.click(deleteBtn);
 
     await waitFor(() => {
@@ -374,7 +375,7 @@ describe('CustomQuery — Phase 4 Saved Reports', () => {
     });
 
     // localStorage was not touched
-    expect(localStorage.setItem).not.toHaveBeenCalled();
+    expect(setItemSpy).not.toHaveBeenCalled();
   });
 
   // ── 6. Running a saved report fires PATCH .../run ───────────────────────────

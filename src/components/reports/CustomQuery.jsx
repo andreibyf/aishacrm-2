@@ -226,6 +226,7 @@ function SavedReportsList({ tenantId, backendUrl, onLoad, refreshKey }) {
       {reports.map((r) => (
         <div
           key={r.id}
+          data-testid="saved-report-item"
           className="flex items-center justify-between bg-slate-700/50 rounded-lg px-3 py-2 border border-slate-600"
         >
           <div className="min-w-0 flex-1">
@@ -250,6 +251,7 @@ function SavedReportsList({ tenantId, backendUrl, onLoad, refreshKey }) {
             </button>
             <button
               onClick={() => handleDelete(r.id, r.report_name)}
+              aria-label={`Delete ${r.report_name}`}
               className="text-slate-500 hover:text-red-400 transition-colors"
             >
               <Trash2 className="w-3.5 h-3.5" />
