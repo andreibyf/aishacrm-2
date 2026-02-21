@@ -4,11 +4,10 @@
  */
 
 import express from 'express';
-import fetch from 'node-fetch';
 import crypto from 'crypto';
 import fs from 'fs';
 import logger from '../lib/logger.js';
-import { validateUrlAgainstWhitelist } from '../lib/urlValidator.js';
+import { validateUrlAgainstWhitelist, safeFetch } from '../lib/urlValidator.js';
 
 const router = express.Router();
 
@@ -286,19 +285,17 @@ router.post('/create-health-issue', async (req, res) => {
     try {
       issue = await retryWithBackoff(async () => {
         try {
-          const response = await fetch(
-            `${GITHUB_API_BASE}/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/issues`,
-            {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${GITHUB_TOKEN}`,
-                Accept: 'application/vnd.github+json',
-                'Content-Type': 'application/json',
-                'User-Agent': 'aishacrm-health-monitor',
-              },
-              body: JSON.stringify(issuePayload),
+          const ghIssueUrl = `${GITHUB_API_BASE}/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/issues`;
+          const response = await safeFetch(ghIssueUrl, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${GITHUB_TOKEN}`,
+              Accept: 'application/vnd.github+json',
+              'Content-Type': 'application/json',
+              'User-Agent': 'aishacrm-health-monitor',
             },
-          );
+            body: JSON.stringify(issuePayload),
+          });
 
           if (!response.ok) {
             const errorText = await response.text();
@@ -437,7 +434,8 @@ ${additionalContext ? `\n**Additional Context:**\n${additionalContext}` : ''}
       return res.status(400).json({ success: false, error: 'Invalid GitHub API URL' });
     }
 
-    const response = await fetch(validation.url.toString(), {
+    // Use safeFetch for DNS rebinding protection in addition to the whitelist check
+    const response = await safeFetch(validation.url.toString(), {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${GITHUB_TOKEN}`,
