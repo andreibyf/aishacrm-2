@@ -282,23 +282,28 @@ router.post('/create-health-issue', async (req, res) => {
     });
 
     // Create GitHub issue with retry logic
+    const issuesApiUrl = `${GITHUB_API_BASE}/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/issues`;
+    // Validate URL to prevent SSRF (only allow GitHub API domain)
+    const issuesUrlValidation = validateUrlAgainstWhitelist(issuesApiUrl, ['api.github.com']);
+    if (!issuesUrlValidation.valid) {
+      logger.error('[GitHub Issues] Invalid API URL:', issuesUrlValidation.error);
+      return res.status(400).json({ success: false, error: 'Invalid GitHub API URL' });
+    }
+
     let issue;
     try {
       issue = await retryWithBackoff(async () => {
         try {
-          const response = await fetch(
-            `${GITHUB_API_BASE}/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/issues`,
-            {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${GITHUB_TOKEN}`,
-                Accept: 'application/vnd.github+json',
-                'Content-Type': 'application/json',
-                'User-Agent': 'aishacrm-health-monitor',
-              },
-              body: JSON.stringify(issuePayload),
+          const response = await fetch(issuesUrlValidation.url.toString(), {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${GITHUB_TOKEN}`,
+              Accept: 'application/vnd.github+json',
+              'Content-Type': 'application/json',
+              'User-Agent': 'aishacrm-health-monitor',
             },
-          );
+            body: JSON.stringify(issuePayload),
+          });
 
           if (!response.ok) {
             const errorText = await response.text();
