@@ -2338,13 +2338,13 @@ export default function createReportRoutes(_pgPool) {
 
       if (report_type === 'overview' || report_type === 'dashboard-stats') {
         // Fetch dashboard stats data
-        const statsUrl = new URL(
-          `${req.protocol}://${req.get('host')}/api/reports/dashboard-stats`,
-        );
+        const baseUrl = process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`;
+        const statsUrl = new URL('/api/reports/dashboard-stats', baseUrl);
         if (tenant_id) statsUrl.searchParams.append('tenant_id', tenant_id);
 
         // Validate URL to prevent SSRF
-        const validation = validateInternalUrl(statsUrl.toString(), req.get('host'));
+        const expectedHost = new URL(baseUrl).host;
+        const validation = validateInternalUrl(statsUrl.toString(), expectedHost);
         if (!validation.valid) {
           logger.error('[Reports PDF] Invalid stats URL:', validation.error);
           return res.status(400).json({ error: validation.error });
