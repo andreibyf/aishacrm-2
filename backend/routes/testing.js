@@ -203,7 +203,14 @@ export default function createTestingRoutes(_pgPool) {
 
       const listUrl = `https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/actions/workflows/${GITHUB_WORKFLOW_FILE}/runs?branch=${encodeURIComponent(ref)}&event=workflow_dispatch&per_page=${perPage}`;
 
-      const ghRes = await fetch(listUrl, {
+      const listUrlValidation = validateUrl(listUrl);
+      if (!listUrlValidation.valid) {
+        return res
+          .status(400)
+          .json({ status: 'error', message: `Invalid GitHub API URL: ${listUrlValidation.error}` });
+      }
+
+      const ghRes = await fetch(listUrlValidation.url.toString(), {
         headers: {
           Authorization: `Bearer ${GITHUB_TOKEN}`,
           Accept: 'application/vnd.github+json',
@@ -417,7 +424,10 @@ export default function createTestingRoutes(_pgPool) {
       };
 
       let baseUrl = BASE_URL_PRESETS.default;
-      if (explicitBaseKey && Object.prototype.hasOwnProperty.call(BASE_URL_PRESETS, explicitBaseKey)) {
+      if (
+        explicitBaseKey &&
+        Object.prototype.hasOwnProperty.call(BASE_URL_PRESETS, explicitBaseKey)
+      ) {
         baseUrl = BASE_URL_PRESETS[explicitBaseKey];
       }
 
