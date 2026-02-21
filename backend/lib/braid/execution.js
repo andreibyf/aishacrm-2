@@ -69,9 +69,13 @@ export async function executeBraidTool(
   userId = null,
   accessToken = false,
 ) {
-  // DEBUG: Log create_lead calls to debug field scrambling
+  // DEBUG: Log create_lead calls to debug field scrambling (sensitive data redacted)
   if (toolName === 'create_lead') {
-    console.log('🔍 [DEBUG] create_lead called with args:', JSON.stringify(args, null, 2));
+    // Redact sensitive fields from logs
+    const sanitized = { ...args };
+    if (sanitized.email) sanitized.email = '[REDACTED]';
+    if (sanitized.phone) sanitized.phone = '[REDACTED]';
+    console.log('🔍 [DEBUG] create_lead called with args:', JSON.stringify(sanitized, null, 2));
   }
 
   // SECURITY: Verify the access token before any tool execution

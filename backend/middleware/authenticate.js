@@ -62,12 +62,12 @@ export async function authenticateRequest(req, _res, next) {
     const providedApiKey =
       req.headers?.apikey || (hasBearer ? authHeader.substring(7).trim() : null);
 
-    // DEBUG: Temporary logging for leads POST
+    // DEBUG: Temporary logging for leads POST (sensitive keys redacted)
     if (req.path.includes('/api/leads')) {
       logger.warn('[AUTH DEBUG] Service Role Check for /api/leads:', {
         method: req.method,
         hasServiceKey: !!serviceRoleKey,
-        hasProvidedKey: !!providedApiKey,
+        // Note: Only log boolean flags, never log actual keys
         hasApiKeyHeader: !!req.headers?.apikey,
         hasBearerToken: hasBearer,
       });

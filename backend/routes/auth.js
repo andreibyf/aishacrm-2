@@ -720,9 +720,8 @@ export default function createAuthRoutes(_pgPool) {
           iat: decoded?.iat,
         });
       } catch (jwtErr) {
-        logger.debug('[Auth.refresh] JWT verify failed:', {
-          error: jwtErr?.message || 'Unknown JWT error',
-        });
+        // Redact error details to prevent token leakage
+        logger.debug('[Auth.refresh] JWT verify failed');
         return res.status(401).json({ status: 'error', message: 'Unauthorized' });
       }
 

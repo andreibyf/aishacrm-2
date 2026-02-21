@@ -58,6 +58,9 @@ export function setCorsHeaders(origin, res, allowCredentials = true) {
 
   // Check if origin is in whitelist
   if (ALLOWED_ORIGINS.includes(origin)) {
+    // lgtm[js/cors-misconfiguration-for-credentials]
+    // CodeQL suppression: Origin is validated against whitelist before reflection
+    // This is secure - only whitelisted origins are reflected, never arbitrary origins
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
 
