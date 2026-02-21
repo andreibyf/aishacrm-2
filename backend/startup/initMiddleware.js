@@ -128,9 +128,17 @@ export function initMiddleware(app, pgPool) {
             return callback(null, true);
           }
 
-          // Check for subdomains of aishacrm.com if needed
-          if (origin.endsWith('.aishacrm.com')) {
-            return callback(null, true);
+          // Check for subdomains of aishacrm.com - validate hostname to prevent suffix-matching attacks
+          try {
+            const parsed = new URL(origin);
+            const hostname = parsed.hostname;
+            // Regex ensures only direct single-level subdomains (e.g. app.aishacrm.com),
+            // preventing bypasses like evilaishacrm.com or evil.com.aishacrm.com
+            if (/^[a-z0-9-]+\.aishacrm\.com$/.test(hostname)) {
+              return callback(null, true);
+            }
+          } catch {
+            // If origin is not a valid URL, fall through to rejection
           }
 
           logger.warn({ origin }, '[CORS] Origin rejected');
