@@ -78,37 +78,9 @@ export default function TestRunner({ testSuites }) {
   const rateLimited429Ref = useRef(0);
   const [uiStats, setUiStats] = useState({ avgRps: 0, rateLimited429: 0 });
 
-  // Category selection (suites) with persistence
+  // Category selection (suites) - in-memory only (no persistence for security)
   const allSuiteNames = useMemo(() => testSuites.map((s) => s.name), [testSuites]);
-  const [selectedCategories, setSelectedCategories] = useState(() => {
-    try {
-      // Use sessionStorage instead of localStorage for UI preferences (security best practice)
-      const raw =
-        typeof window !== 'undefined'
-          ? window.sessionStorage?.getItem('unit_test_selected_categories')
-          : null;
-      if (raw) {
-        const arr = JSON.parse(raw);
-        if (Array.isArray(arr)) return new Set(arr);
-      }
-    } catch {
-      /* ignore */
-    }
-    return new Set(allSuiteNames);
-  });
-  useEffect(() => {
-    try {
-      if (typeof window !== 'undefined') {
-        // Use sessionStorage instead of localStorage for UI preferences (security best practice)
-        window.sessionStorage?.setItem(
-          'unit_test_selected_categories',
-          JSON.stringify(Array.from(selectedCategories)),
-        );
-      }
-    } catch {
-      /* ignore */
-    }
-  }, [selectedCategories]);
+  const [selectedCategories, setSelectedCategories] = useState(() => new Set(allSuiteNames));
   // Keep selection in sync if suites change
   useEffect(() => {
     setSelectedCategories((prev) => {
