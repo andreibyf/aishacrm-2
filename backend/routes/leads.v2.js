@@ -8,7 +8,12 @@ import express from 'express';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { sanitizeUuidInput } from '../lib/uuidValidator.js';
 import { buildLeadAiContext } from '../lib/aiContextEnricher.js';
-import { cacheList, cacheDetail, invalidateCache, invalidateTenantCache } from '../lib/cacheMiddleware.js';
+import {
+  cacheList,
+  cacheDetail,
+  invalidateCache,
+  invalidateTenantCache,
+} from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 
 export default function createLeadsV2Routes() {
@@ -55,7 +60,7 @@ export default function createLeadsV2Routes() {
       }
 
       const supabase = getSupabaseClient();
-      
+
       // Build filter for test data
       let testDataFilter = '';
       if (is_test_data === 'false') {
@@ -72,7 +77,7 @@ export default function createLeadsV2Routes() {
           WHERE tenant_id = $1 ${testDataFilter}
           GROUP BY status
         `,
-        params: [tenant_id]
+        params: [tenant_id],
       });
 
       // If RPC not available, fall back to simple count queries
@@ -85,11 +90,11 @@ export default function createLeadsV2Routes() {
             .select('id', { count: 'exact', head: true })
             .eq('tenant_id', tenant_id)
             .eq('status', status);
-          
+
           if (is_test_data === 'false') {
             query = query.or('is_test_data.is.false,is_test_data.is.null');
           }
-          
+
           const { count } = await query;
           return { status, count: count || 0 };
         });
@@ -99,15 +104,12 @@ export default function createLeadsV2Routes() {
           .from('leads')
           .select('id', { count: 'exact', head: true })
           .eq('tenant_id', tenant_id);
-        
+
         if (is_test_data === 'false') {
           totalQuery = totalQuery.or('is_test_data.is.false,is_test_data.is.null');
         }
 
-        const [totalResult, ...statusResults] = await Promise.all([
-          totalQuery,
-          ...countPromises
-        ]);
+        const [totalResult, ...statusResults] = await Promise.all([totalQuery, ...countPromises]);
 
         const stats = {
           total: totalResult.count || 0,
@@ -123,7 +125,7 @@ export default function createLeadsV2Routes() {
 
       // Transform RPC result to stats object
       const stats = { total: 0 };
-      (data || []).forEach(row => {
+      (data || []).forEach((row) => {
         stats[row.status] = row.count;
         stats.total += row.count;
       });
@@ -170,32 +172,70 @@ export default function createLeadsV2Routes() {
    */
   router.get('/', cacheList('leads', 180), async (req, res) => {
     try {
-      const { tenant_id, status, source, filter, assigned_to, account_id, is_test_data, query: searchQuery, exclude_status, sort } = req.query;
+      const {
+        tenant_id,
+        status,
+        source,
+        filter,
+        assigned_to,
+        account_id,
+        is_test_data,
+        query: searchQuery,
+        exclude_status,
+        sort,
+      } = req.query;
       const limit = parseInt(req.query.limit || '50', 10);
       const offset = parseInt(req.query.offset || '0', 10);
 
-      logger.debug('[V2 Leads GET] Called with:', { tenant_id, filter, status, exclude_status, assigned_to, account_id, is_test_data, searchQuery, sort });
+      logger.debug('[V2 Leads GET] Called with:', {
+        tenant_id,
+        filter,
+        status,
+        exclude_status,
+        assigned_to,
+        account_id,
+        is_test_data,
+        searchQuery,
+        sort,
+      });
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
-      
+
+      // Allowlist of valid sort fields + alias map for frontend-facing names.
+      // Prevents passing arbitrary column names to Supabase and maps frontend
+      // aliases (e.g. updated_date) to actual DB column names (e.g. updated_at).
+      const SORT_FIELD_ALIASES = {
+        updated_date: 'updated_at',
+        created_date: 'created_at',
+        updated_at: 'updated_at',
+        created_at: 'created_at',
+        first_name: 'first_name',
+        last_name: 'last_name',
+        company: 'company',
+        score: 'score',
+        status: 'status',
+        estimated_value: 'estimated_value',
+        email: 'email',
+        source: 'source',
+      };
+
       // Parse sort parameter: -field for descending, field for ascending
       let sortField = 'created_at';
       let sortAscending = false;
       if (sort) {
-        if (sort.startsWith('-')) {
-          sortField = sort.substring(1);
-          sortAscending = false;
-        } else {
-          sortField = sort;
-          sortAscending = true;
+        const rawField = sort.startsWith('-') ? sort.substring(1) : sort;
+        sortAscending = !sort.startsWith('-');
+        sortField = SORT_FIELD_ALIASES[rawField] ?? 'created_at'; // safe fallback
+        if (!SORT_FIELD_ALIASES[rawField]) {
+          logger.warn(`[V2 Leads] Unknown sort field '${rawField}' — falling back to created_at`);
         }
         logger.debug('[V2 Leads] Sorting by:', sortField, 'ascending:', sortAscending);
       }
 
       const supabase = getSupabaseClient();
-      
+
       // Helper function to build the base query with all filters
       const buildBaseQuery = (selectClause) => {
         let query = supabase
@@ -208,20 +248,20 @@ export default function createLeadsV2Routes() {
           logger.debug('[V2 Leads] Applying text search:', searchQuery);
           const searchTerm = searchQuery.trim();
           const searchPattern = `%${searchTerm}%`;
-          
+
           const orConditions = [
             `first_name.ilike.${searchPattern}`,
             `last_name.ilike.${searchPattern}`,
             `email.ilike.${searchPattern}`,
-            `company.ilike.${searchPattern}`
+            `company.ilike.${searchPattern}`,
           ];
-          
+
           // If search contains a space, also search concatenated first_name + last_name
           // This handles full name searches like "John Doe" or "Iso Check"
           if (searchTerm.includes(' ')) {
             // PostgreSQL: concat(first_name, ' ', last_name) ILIKE '%search%'
             // PostgREST doesn't support concat directly in filters, so we search for each part
-            const parts = searchTerm.split(/\s+/).filter(p => p.length > 0);
+            const parts = searchTerm.split(/\s+/).filter((p) => p.length > 0);
             if (parts.length >= 2) {
               // Add condition: first_name matches first part AND last_name matches second part
               // Format: (first_name.ilike.%Iso%,last_name.ilike.%Check%)
@@ -231,7 +271,7 @@ export default function createLeadsV2Routes() {
               logger.debug('[V2 Leads] Added full name search condition for parts:', parts);
             }
           }
-          
+
           query = query.or(orConditions.join(','));
           logger.debug('[V2 Leads] Search OR conditions:', orConditions.join(','));
         }
@@ -249,44 +289,54 @@ export default function createLeadsV2Routes() {
           }
 
           // Handle $or with $icontains for text search (from frontend filters)
-          if (typeof parsedFilter === 'object' && parsedFilter.$or && Array.isArray(parsedFilter.$or)) {
+          if (
+            typeof parsedFilter === 'object' &&
+            parsedFilter.$or &&
+            Array.isArray(parsedFilter.$or)
+          ) {
             // Check if this is a text search filter (contains $icontains operators)
-            const hasTextSearch = parsedFilter.$or.some(cond => 
-              cond && typeof cond === 'object' && 
-              Object.values(cond).some(val => val && typeof val === 'object' && '$icontains' in val)
+            const hasTextSearch = parsedFilter.$or.some(
+              (cond) =>
+                cond &&
+                typeof cond === 'object' &&
+                Object.values(cond).some(
+                  (val) => val && typeof val === 'object' && '$icontains' in val,
+                ),
             );
 
             if (hasTextSearch) {
               // Build PostgREST OR conditions for text search
               const orConditions = [];
-              parsedFilter.$or.forEach(cond => {
+              parsedFilter.$or.forEach((cond) => {
                 Object.entries(cond).forEach(([field, value]) => {
                   if (value && typeof value === 'object' && value.$icontains) {
                     orConditions.push(`${field}.ilike.%${value.$icontains}%`);
                   }
                 });
               });
-              
+
               if (orConditions.length > 0) {
                 logger.debug('[V2 Leads] Applying text search filter:', orConditions.join(','));
                 query = query.or(orConditions.join(','));
               }
             } else {
               // Handle $or for assigned_to filtering
-              const normalizedOr = parsedFilter.$or.filter(cond => cond && typeof cond === 'object');
+              const normalizedOr = parsedFilter.$or.filter(
+                (cond) => cond && typeof cond === 'object',
+              );
 
               // Detect unassigned explicitly and apply a safe null check
-              const hasUnassigned = normalizedOr.some(cond => cond.assigned_to === null);
+              const hasUnassigned = normalizedOr.some((cond) => cond.assigned_to === null);
               const nonEmptyAssignedTo = normalizedOr
-                .map(cond => cond.assigned_to)
-                .filter(val => val !== undefined && val !== null && String(val).trim() !== '');
+                .map((cond) => cond.assigned_to)
+                .filter((val) => val !== undefined && val !== null && String(val).trim() !== '');
 
               if (hasUnassigned && nonEmptyAssignedTo.length === 0) {
                 logger.debug('[V2 Leads] Applying unassigned-only filter');
                 query = query.is('assigned_to', null);
               } else if (nonEmptyAssignedTo.length > 0) {
                 logger.debug('[V2 Leads] Applying assigned_to $or filter:', nonEmptyAssignedTo);
-                const orParts = nonEmptyAssignedTo.map(val => `assigned_to.eq.${val}`);
+                const orParts = nonEmptyAssignedTo.map((val) => `assigned_to.eq.${val}`);
                 query = query.or(orParts.join(','));
               }
             }
@@ -304,7 +354,13 @@ export default function createLeadsV2Routes() {
         }
 
         // Handle direct query parameters (fallback if no filter param)
-        if (status && status !== 'all' && status !== 'any' && status !== '' && status !== 'undefined') {
+        if (
+          status &&
+          status !== 'all' &&
+          status !== 'any' &&
+          status !== '' &&
+          status !== 'undefined'
+        ) {
           let parsedStatus = status;
           if (typeof status === 'string' && status.startsWith('{')) {
             try {
@@ -322,17 +378,20 @@ export default function createLeadsV2Routes() {
             query = query.eq('status', status);
           }
         }
-        
+
         // Handle exclude_status parameter (WAF-safe alternative to $nin in filter)
         // Usage: exclude_status=converted,lost
         if (exclude_status && typeof exclude_status === 'string') {
-          const excludeList = exclude_status.split(',').map(s => s.trim()).filter(Boolean);
+          const excludeList = exclude_status
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
           if (excludeList.length > 0) {
             logger.debug('[V2 Leads] Applying exclude_status filter:', excludeList);
             query = query.not('status', 'in', `(${excludeList.join(',')})`);
           }
         }
-        
+
         if (source) query = query.eq('source', source);
         // Filter by account_id if provided
         const safeAccountId = sanitizeUuidInput(account_id);
@@ -358,35 +417,43 @@ export default function createLeadsV2Routes() {
           }
         }
 
-        return query.order(sortField, { ascending: sortAscending })
+        return query
+          .order(sortField, { ascending: sortAscending })
           .range(offset, offset + limit - 1);
       };
 
       // Try with FK join first (requires leads_assigned_to_fkey constraint)
       // Falls back to simple query without join if FK constraint doesn't exist
       let data, error, count;
-      
-      const fkJoinSelect = '*, employee:employees!leads_assigned_to_fkey(id, first_name, last_name, email)';
+
+      const fkJoinSelect =
+        '*, employee:employees!leads_assigned_to_fkey(id, first_name, last_name, email)';
       const simpleSelect = '*';
-      
+
       let result = await buildBaseQuery(fkJoinSelect);
       ({ data, error, count } = result);
-      
+
       // If FK join fails (constraint doesn't exist), fall back to simple query
-      if (error && (error.message?.includes('relationship') || error.message?.includes('hint') || error.code === 'PGRST200')) {
+      if (
+        error &&
+        (error.message?.includes('relationship') ||
+          error.message?.includes('hint') ||
+          error.code === 'PGRST200')
+      ) {
         logger.warn('[V2 Leads GET] FK join failed, falling back to simple query:', error.message);
         result = await buildBaseQuery(simpleSelect);
         ({ data, error, count } = result);
       }
-      
+
       if (error) throw new Error(error.message);
 
       // Transform leads: expand metadata and denormalize employee name
-      const leads = (data || []).map(lead => {
+      const leads = (data || []).map((lead) => {
         const expanded = expandMetadata(lead);
         // Add assigned_to_name from joined employee data
         if (lead.employee) {
-          expanded.assigned_to_name = `${lead.employee.first_name || ''} ${lead.employee.last_name || ''}`.trim();
+          expanded.assigned_to_name =
+            `${lead.employee.first_name || ''} ${lead.employee.last_name || ''}`.trim();
           expanded.assigned_to_email = lead.employee.email;
         }
         // Remove the nested employee object from response
@@ -493,7 +560,7 @@ export default function createLeadsV2Routes() {
       let fixedPhone = phone;
       let fixedCompany = company;
       if (phone && company) {
-        const phoneIsDigits   = /^[\d\s\-().+]+$/.test(phone.trim());
+        const phoneIsDigits = /^[\d\s\-().+]+$/.test(phone.trim());
         const companyIsDigits = /^[\d\s\-().+]+$/.test(company.trim());
         const phoneHasLetters = /[a-zA-Z]/.test(phone);
         const companyHasLetters = /[a-zA-Z]/.test(company);
@@ -590,8 +657,8 @@ export default function createLeadsV2Routes() {
       if (!data) throw new Error('Lead created but could not be fetched');
 
       // Invalidate cache in background
-      invalidateTenantCache(tenant_id, 'leads').catch(err =>
-        logger.warn('[Leads v2 POST] Cache invalidation failed:', err.message)
+      invalidateTenantCache(tenant_id, 'leads').catch((err) =>
+        logger.warn('[Leads v2 POST] Cache invalidation failed:', err.message),
       );
 
       const created = expandMetadata(data);
@@ -714,10 +781,30 @@ export default function createLeadsV2Routes() {
 
       // Map allowed fields
       const allowedFields = [
-        'first_name', 'last_name', 'email', 'phone', 'company', 'job_title',
-        'status', 'source', 'score', 'score_reason', 'estimated_value',
-        'do_not_call', 'do_not_text', 'address_1', 'address_2', 'city', 'state',
-        'zip', 'country', 'unique_id', 'tags', 'is_test_data', 'metadata', 'assigned_to',
+        'first_name',
+        'last_name',
+        'email',
+        'phone',
+        'company',
+        'job_title',
+        'status',
+        'source',
+        'score',
+        'score_reason',
+        'estimated_value',
+        'do_not_call',
+        'do_not_text',
+        'address_1',
+        'address_2',
+        'city',
+        'state',
+        'zip',
+        'country',
+        'unique_id',
+        'tags',
+        'is_test_data',
+        'metadata',
+        'assigned_to',
       ];
 
       allowedFields.forEach((field) => {
@@ -746,8 +833,8 @@ export default function createLeadsV2Routes() {
       }
 
       // Invalidate cache in background
-      invalidateTenantCache(tenant_id, 'leads').catch(err =>
-        logger.warn('[Leads v2 PUT] Cache invalidation failed:', err.message)
+      invalidateTenantCache(tenant_id, 'leads').catch((err) =>
+        logger.warn('[Leads v2 PUT] Cache invalidation failed:', err.message),
       );
 
       res.json({
@@ -782,6 +869,73 @@ export default function createLeadsV2Routes() {
    *       404:
    *         description: Lead not found
    */
+  /**
+   * @openapi
+   * /api/v2/leads/bulk-delete:
+   *   post:
+   *     summary: Bulk delete leads by IDs (single DB round-trip, avoids N×429 issues)
+   *     tags: [leads-v2]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, ids]
+   *             properties:
+   *               tenant_id: { type: string, format: uuid }
+   *               ids:
+   *                 type: array
+   *                 items: { type: string, format: uuid }
+   *                 maxItems: 500
+   *     responses:
+   *       200:
+   *         description: Bulk delete result
+   */
+  router.post('/bulk-delete', async (req, res) => {
+    try {
+      const { tenant_id, ids } = req.body || {};
+
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ status: 'error', message: 'ids must be a non-empty array' });
+      }
+      if (ids.length > 500) {
+        return res.status(400).json({ status: 'error', message: 'Maximum 500 ids per request' });
+      }
+
+      const supabase = getSupabaseClient();
+      const startMs = Date.now();
+
+      const { error, count } = await supabase
+        .from('leads')
+        .delete({ count: 'exact' })
+        .eq('tenant_id', tenant_id)
+        .in('id', ids);
+
+      const elapsed = Date.now() - startMs;
+      logger.info(`[Leads v2 BULK-DELETE] Deleted ${count ?? '?'} leads in ${elapsed}ms`);
+
+      if (error) throw new Error(error.message);
+
+      // Invalidate cache once for the whole batch
+      invalidateTenantCache(tenant_id, 'leads').catch((err) =>
+        logger.warn('[Leads v2 BULK-DELETE] Cache invalidation failed:', err.message),
+      );
+
+      res.json({
+        status: 'success',
+        message: `${count ?? ids.length} lead(s) deleted`,
+        data: { deleted: count ?? ids.length, requested: ids.length },
+      });
+    } catch (err) {
+      logger.error('[Leads v2 BULK-DELETE] Error:', err.message);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
   router.delete('/:id', invalidateCache('leads'), async (req, res) => {
     try {
       const { id } = req.params;
