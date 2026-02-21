@@ -5,7 +5,30 @@
 
 version: 2
 updates:
-  - package-ecosystem: "npm" # See documentation for possible values
-    directory: ["/backend", "/" # Location of package manifests
+  # Root package.json
+  - package-ecosystem: "npm"
+    directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 10
+    
+  # Backend package.json
+  - package-ecosystem: "npm"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    
+  # Braid MCP server
+  - package-ecosystem: "npm"
+    directory: "/braid-mcp-node-server"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    
+  # Agent Office - Office Viz
+  - package-ecosystem: "npm"
+    directory: "/addons/agent-office/services/office-viz"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
