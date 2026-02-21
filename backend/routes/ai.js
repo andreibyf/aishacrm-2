@@ -967,12 +967,10 @@ export default function createAIRoutes(pgPool) {
         provider: modelConfig.provider,
       });
 
-      // BUGFIX: Log API key resolution for debugging production issues
+      // BUGFIX: Log API key resolution for debugging production issues (no sensitive data)
       logger.debug('[AI generateAssistantResponse] API key resolution:', {
         conversationId,
         provider: modelConfig.provider,
-        hasExplicitKey: !!requestDescriptor.bodyApiKey,
-        hasHeaderKey: !!requestDescriptor.headerApiKey,
         hasUserKey: !!requestDescriptor.userApiKey,
         resolvedKeyExists: !!apiKey,
         resolvedKeyLength: apiKey?.length || 0,
@@ -3121,13 +3119,10 @@ ${toolContextSummary}`,
         provider: tenantModelConfig.provider,
       });
 
-      // BUGFIX: Log API key resolution for debugging production issues
+      // BUGFIX: Log API key resolution for debugging production issues (no sensitive data)
       logger.debug('[AI Chat] API key resolution:', {
         provider: tenantModelConfig.provider,
         tenantHasConfig: !!tenantRecord,
-        hasExplicitKey: !!req.body?.api_key,
-        hasHeaderKey: !!req.headers['x-openai-key'],
-        hasUserKey: !!req.user?.system_openai_settings?.openai_api_key,
         resolvedKeyExists: !!apiKey,
         resolvedKeyLength: apiKey?.length || 0,
         resolvedKeyPrefix: apiKey ? apiKey.substring(0, 7) : 'none',

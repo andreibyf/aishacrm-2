@@ -1,6 +1,6 @@
 /**
  * Unified LLM API key resolver for multi-provider support.
- * 
+ *
  * Supports providers:
  * - openai: OpenAI API
  * - anthropic: Anthropic Claude API
@@ -8,29 +8,29 @@
  * - local: Local OpenAI-compatible server
  */
 
-import { getSupabaseClient } from "../supabase-db.js";
+import { getSupabaseClient } from '../supabase-db.js';
 // Note: Do NOT call getSupabaseClient() at module load time - defer to function call
 
 /**
  * Map provider name to integration_type values in tenant_integrations table.
  */
 const PROVIDER_INTEGRATION_TYPES = {
-  openai: ["openai_llm"],
-  anthropic: ["anthropic_llm"],
-  groq: ["groq_llm"],
-  local: ["local_llm"],
+  openai: ['openai_llm'],
+  anthropic: ['anthropic_llm'],
+  groq: ['groq_llm'],
+  local: ['local_llm'],
 };
 
 /**
  * resolveLLMApiKey
- * 
+ *
  * Resolution order:
  * 1. explicitKey / headerKey / userKey (passed in)
  * 2. tenant_integrations row for this tenant + provider
  * 3. system_settings.settings.system_openai_settings (for OpenAI) or system_anthropic_settings
  * 4. Legacy users.system_openai_settings (admin fallback)
  * 5. Environment variable for provider (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.)
- * 
+ *
  * @param {Object} opts
  * @param {string} [opts.explicitKey] - Explicitly passed API key
  * @param {string} [opts.headerKey] - API key from request header
@@ -44,7 +44,7 @@ export async function resolveLLMApiKey({
   headerKey,
   userKey,
   tenantSlugOrId,
-  provider = "openai",
+  provider = 'openai',
 } = {}) {
   // Get Supabase client at call time (after server initialization)
   const supa = getSupabaseClient();
@@ -55,62 +55,73 @@ export async function resolveLLMApiKey({
   if (userKey) return userKey;
 
   // Tenant-specific integration lookup
-  const integrationTypes = PROVIDER_INTEGRATION_TYPES[provider] || ["openai_llm"];
+  const integrationTypes = PROVIDER_INTEGRATION_TYPES[provider] || ['openai_llm'];
 
   if (tenantSlugOrId) {
     try {
       const { data, error } = await supa
-        .from("tenant_integrations")
-        .select("api_credentials, integration_type, is_active")
-        .eq("tenant_id", tenantSlugOrId)
-        .eq("is_active", true)
-        .in("integration_type", integrationTypes)
-        .order("updated_at", { ascending: false, nullsFirst: false })
-        .order("created_at", { ascending: false })
+        .from('tenant_integrations')
+        .select('api_credentials, integration_type, is_active')
+        .eq('tenant_id', tenantSlugOrId)
+        .eq('is_active', true)
+        .in('integration_type', integrationTypes)
+        .order('updated_at', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
         .limit(1);
 
       if (error) throw error;
 
       if (data && data.length) {
         const rawCreds = data[0].api_credentials;
-        const creds =
-          typeof rawCreds === "object" ? rawCreds : JSON.parse(rawCreds || "{}");
+        const creds = typeof rawCreds === 'object' ? rawCreds : JSON.parse(rawCreds || '{}');
         const k = creds.api_key || creds.apiKey || null;
         if (k) {
           // BUGFIX: Trim whitespace, remove newlines, and validate API key format
           // Some keys may have been copy-pasted with trailing newlines or spaces
-          const trimmedKey = String(k).replace(/[\r\n\t]/g, '').trim();
-          
+          const trimmedKey = String(k)
+            .replace(/[\r\n\t]/g, '')
+            .trim();
+
           // Validate OpenAI key format (starts with sk- and reasonable length)
           if (provider === 'openai') {
             if (!trimmedKey.startsWith('sk-')) {
-              console.warn("[AIEngine][KeyResolver] Invalid OpenAI API key format in tenant_integrations (must start with sk-)");
+              console.warn(
+                '[AIEngine][KeyResolver] Invalid OpenAI API key format in tenant_integrations (must start with sk-)',
+              );
               // Continue to fallback instead of returning invalid key
             } else if (trimmedKey.length < 20 || trimmedKey.length > 300) {
-              console.warn("[AIEngine][KeyResolver] Suspicious OpenAI API key length:", trimmedKey.length, "(expected 20-300 chars)");
-              // Continue to fallback instead of returning invalid key  
+              console.warn(
+                '[AIEngine][KeyResolver] Suspicious OpenAI API key length detected (expected 20-300 chars)',
+              );
+              // Continue to fallback instead of returning invalid key
             } else {
-              console.log("[AIEngine][KeyResolver] Using tenant-specific API key from tenant_integrations for provider:", provider);
+              console.log(
+                '[AIEngine][KeyResolver] Using tenant-specific API key from tenant_integrations for provider:',
+                provider,
+              );
               return trimmedKey;
             }
           } else {
             // For non-OpenAI providers, just clean and return
-            console.log("[AIEngine][KeyResolver] Using tenant-specific API key from tenant_integrations for provider:", provider);
+            console.log(
+              '[AIEngine][KeyResolver] Using tenant-specific API key from tenant_integrations for provider:',
+              provider,
+            );
             return trimmedKey;
           }
         }
       }
     } catch (e) {
-      console.warn("[AIEngine][KeyResolver] tenant_integrations lookup failed:", e?.message || e);
+      console.warn('[AIEngine][KeyResolver] tenant_integrations lookup failed:', e?.message || e);
     }
   }
 
   // System-level settings (provider-aware)
   try {
     const { data, error } = await supa
-      .from("system_settings")
-      .select("settings")
-      .not("settings", "is", null)
+      .from('system_settings')
+      .select('settings')
+      .not('settings', 'is', null)
       .limit(1);
 
     if (error) throw error;
@@ -118,96 +129,123 @@ export async function resolveLLMApiKey({
     if (data && data.length) {
       const rawSettings = data[0].settings;
       const settings =
-        typeof rawSettings === "object"
-          ? rawSettings
-          : JSON.parse(rawSettings || "{}");
+        typeof rawSettings === 'object' ? rawSettings : JSON.parse(rawSettings || '{}');
 
       // Check provider-specific system settings
-      if (provider === "openai") {
+      if (provider === 'openai') {
         const systemOpenAI = settings.system_openai_settings;
         if (systemOpenAI?.enabled && systemOpenAI?.openai_api_key) {
-          const trimmedKey = String(systemOpenAI.openai_api_key).replace(/[\r\n\t]/g, '').trim();
-          console.log("[AIEngine][KeyResolver] Using system-level OpenAI API key from system_settings");
+          const trimmedKey = String(systemOpenAI.openai_api_key)
+            .replace(/[\r\n\t]/g, '')
+            .trim();
+          console.log(
+            '[AIEngine][KeyResolver] Using system-level OpenAI API key from system_settings',
+          );
           return trimmedKey;
         }
       }
 
-      if (provider === "anthropic") {
+      if (provider === 'anthropic') {
         const systemAnthropic = settings.system_anthropic_settings;
         if (systemAnthropic?.enabled && systemAnthropic?.anthropic_api_key) {
-          const trimmedKey = String(systemAnthropic.anthropic_api_key).replace(/[\r\n\t]/g, '').trim();
-          console.log("[AIEngine][KeyResolver] Using system-level Anthropic API key from system_settings");
+          const trimmedKey = String(systemAnthropic.anthropic_api_key)
+            .replace(/[\r\n\t]/g, '')
+            .trim();
+          console.log(
+            '[AIEngine][KeyResolver] Using system-level Anthropic API key from system_settings',
+          );
           return trimmedKey;
         }
       }
 
-      if (provider === "groq") {
+      if (provider === 'groq') {
         const systemGroq = settings.system_groq_settings;
         if (systemGroq?.enabled && systemGroq?.groq_api_key) {
-          const trimmedKey = String(systemGroq.groq_api_key).replace(/[\r\n\t]/g, '').trim();
-          console.log("[AIEngine][KeyResolver] Using system-level Groq API key from system_settings");
+          const trimmedKey = String(systemGroq.groq_api_key)
+            .replace(/[\r\n\t]/g, '')
+            .trim();
+          console.log(
+            '[AIEngine][KeyResolver] Using system-level Groq API key from system_settings',
+          );
           return trimmedKey;
         }
       }
     }
   } catch (e) {
-    console.warn("[AIEngine][KeyResolver] system_settings lookup failed:", e?.message || e);
+    console.warn('[AIEngine][KeyResolver] system_settings lookup failed:', e?.message || e);
   }
 
   // Legacy admin/superadmin fallback (users.system_openai_settings) - OpenAI only
-  if (provider === "openai") {
+  if (provider === 'openai') {
     try {
       const { data, error } = await supa
-        .from("users")
-        .select("system_openai_settings, role")
-        .in("role", ["admin", "superadmin"])
-        .not("system_openai_settings", "is", null)
-        .order("role", { ascending: true })
-        .order("updated_at", { ascending: false, nullsFirst: false })
+        .from('users')
+        .select('system_openai_settings, role')
+        .in('role', ['admin', 'superadmin'])
+        .not('system_openai_settings', 'is', null)
+        .order('role', { ascending: true })
+        .order('updated_at', { ascending: false, nullsFirst: false })
         .limit(1);
 
       if (error) throw error;
 
       if (data && data.length) {
         const rawSys = data[0].system_openai_settings;
-        const systemSettings =
-          typeof rawSys === "object" ? rawSys : JSON.parse(rawSys || "{}");
+        const systemSettings = typeof rawSys === 'object' ? rawSys : JSON.parse(rawSys || '{}');
         if (systemSettings.openai_api_key) {
-          const trimmedKey = String(systemSettings.openai_api_key).replace(/[\r\n\t]/g, '').trim();
-          console.log("[AIEngine][KeyResolver] Using legacy admin OpenAI API key from users table");
+          const trimmedKey = String(systemSettings.openai_api_key)
+            .replace(/[\r\n\t]/g, '')
+            .trim();
+          console.log('[AIEngine][KeyResolver] Using legacy admin OpenAI API key from users table');
           return trimmedKey;
         }
       }
     } catch (e) {
-      console.warn("[AIEngine][KeyResolver] user system_openai_settings lookup failed:", e?.message || e);
+      console.warn(
+        '[AIEngine][KeyResolver] user system_openai_settings lookup failed:',
+        e?.message || e,
+      );
     }
   }
 
   // Environment fallback (per-provider)
-  if (provider === "openai" && process.env.OPENAI_API_KEY) {
-    const trimmedKey = String(process.env.OPENAI_API_KEY).replace(/[\r\n\t]/g, '').trim();
-    console.log("[AIEngine][KeyResolver] Using OpenAI API key from environment variable");
+  if (provider === 'openai' && process.env.OPENAI_API_KEY) {
+    const trimmedKey = String(process.env.OPENAI_API_KEY)
+      .replace(/[\r\n\t]/g, '')
+      .trim();
+    console.log('[AIEngine][KeyResolver] Using OpenAI API key from environment variable');
     return trimmedKey;
   }
 
-  if (provider === "anthropic" && process.env.ANTHROPIC_API_KEY) {
-    const trimmedKey = String(process.env.ANTHROPIC_API_KEY).replace(/[\r\n\t]/g, '').trim();
-    console.log("[AIEngine][KeyResolver] Using Anthropic API key from environment variable");
+  if (provider === 'anthropic' && process.env.ANTHROPIC_API_KEY) {
+    const trimmedKey = String(process.env.ANTHROPIC_API_KEY)
+      .replace(/[\r\n\t]/g, '')
+      .trim();
+    console.log('[AIEngine][KeyResolver] Using Anthropic API key from environment variable');
     return trimmedKey;
   }
 
-  if (provider === "groq" && process.env.GROQ_API_KEY) {
-    const trimmedKey = String(process.env.GROQ_API_KEY).replace(/[\r\n\t]/g, '').trim();
-    console.log("[AIEngine][KeyResolver] Using Groq API key from environment variable");
+  if (provider === 'groq' && process.env.GROQ_API_KEY) {
+    const trimmedKey = String(process.env.GROQ_API_KEY)
+      .replace(/[\r\n\t]/g, '')
+      .trim();
+    console.log('[AIEngine][KeyResolver] Using Groq API key from environment variable');
     return trimmedKey;
   }
 
-  if (provider === "local" && process.env.LOCAL_LLM_API_KEY) {
-    const trimmedKey = String(process.env.LOCAL_LLM_API_KEY).replace(/[\r\n\t]/g, '').trim();
-    console.log("[AIEngine][KeyResolver] Using Local LLM API key from environment variable");
+  if (provider === 'local' && process.env.LOCAL_LLM_API_KEY) {
+    const trimmedKey = String(process.env.LOCAL_LLM_API_KEY)
+      .replace(/[\r\n\t]/g, '')
+      .trim();
+    console.log('[AIEngine][KeyResolver] Using Local LLM API key from environment variable');
     return trimmedKey;
   }
 
-  console.warn("[AIEngine][KeyResolver] No API key found for provider:", provider, "tenant:", tenantSlugOrId || 'none');
+  console.warn(
+    '[AIEngine][KeyResolver] No API key found for provider:',
+    provider,
+    'tenant:',
+    tenantSlugOrId || 'none',
+  );
   return null;
 }
