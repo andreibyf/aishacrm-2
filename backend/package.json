@@ -50,7 +50,7 @@
     "minimatch": "^10.2.2",
     "morgan": "^1.10.0",
     "multer": "^2.0.2",
-    "node-fetch": "^2.7.0",
+    "node-fetch": "^3.3.2",
     "nodemailer": "^8.0.1",
     "openai": "^4.0.0",
     "pg": "^8.11.3",
