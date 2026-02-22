@@ -79,7 +79,8 @@ C.A.R.E. ENTITY NOTES:
 - Use CareHistory to query the audit trail of state transitions and autonomous decisions.
 - care_state valid values: unaware, aware, engaged, evaluating, committed, active, at_risk, dormant, reactivated, lost
 - escalation_status valid values: open, closed (or null if no escalation)
-- event_type examples: state_proposed, state_applied, escalation_detected, action_candidate, action_skipped
+- event_type examples (history table): state_transition, state_applied, action_candidate, action_skipped (examples, not exhaustive)
+- Note: other CARE logs/webhooks may use additional event_type values such as escalation_detected; do not assume those exist in customer_care_state_history.
 - actor_type valid values: system, user, agent
 - Do NOT use CareState when the user is asking about Lead/Contact/Account records themselves — only use it when asking about relationship state or C.A.R.E. status.
 `.trim();
