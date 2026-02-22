@@ -147,11 +147,12 @@ services:
       #   AI_TRIGGERS_WORKER_ENABLED, AI_TRIGGERS_WORKER_INTERVAL_MS
       #   CARE_STATE_WRITE_ENABLED, CARE_WORKFLOW_TRIGGERS_ENABLED
       #   CARE_AUTONOMY_ENABLED, CARE_SHADOW_MODE
-      # PEP LLM Parser (Ollama)
+      # PEP LLM Parser
       - LOCAL_LLM_BASE_URL=http://ollama:11434/v1
       - LOCAL_LLM_API_KEY=${LOCAL_LLM_API_KEY:-ollama}
-      - PEP_LLM_PROVIDER=local
-      - PEP_LLM_MODEL=qwen2.5-coder:3b
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - PEP_LLM_PROVIDER=groq
+      - PEP_LLM_MODEL=llama-3.3-70b-versatile
       # Telemetry
       - TELEMETRY_ENABLED=true
       - TELEMETRY_LOG_PATH=/telemetry/telemetry.ndjson

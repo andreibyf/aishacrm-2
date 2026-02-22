@@ -26,6 +26,7 @@ import {
   ChevronDown,
   Trash2,
   BookOpen,
+  Download,
 } from 'lucide-react';
 import { getBackendUrl } from '@/api/backendUrl';
 import { useTenant } from '@/components/shared/tenantContext';
@@ -378,6 +379,35 @@ export default function CustomQuery({ tenantFilter }) {
     if (compiledIr) runQuery(compiledIr, confirmation);
   };
 
+  const handleExportCsv = () => {
+    if (!rows || rows.length === 0) return;
+    const HIDDEN_COLS = new Set([
+      'tenant_id',
+      'metadata',
+      'activity_metadata',
+      'tags',
+      '_fieldDef',
+    ]);
+    const headers = Object.keys(rows[0]).filter((k) => !HIDDEN_COLS.has(k));
+    const replacer = (_key, value) => (value === null ? '' : value);
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((row) => headers.map((h) => JSON.stringify(row[h], replacer)).join(',')),
+    ].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    const safeName = (source || 'pep-query')
+      .slice(0, 40)
+      .replace(/[^a-z0-9]/gi, '_')
+      .toLowerCase();
+    link.download = `${safeName}_${Date.now()}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    URL.revokeObjectURL(link.href);
+    link.remove();
+  };
+
   const handleSave = async () => {
     if (!saveName.trim() || !compiledIr || !tenantId) return;
     try {
@@ -529,6 +559,13 @@ export default function CustomQuery({ tenantFilter }) {
                 className="text-xs text-slate-400 hover:text-violet-400 transition-colors disabled:opacity-50"
               >
                 Refresh
+              </button>
+              <button
+                onClick={handleExportCsv}
+                className="flex items-center gap-1 text-xs text-slate-400 hover:text-emerald-400 border border-slate-600 hover:border-emerald-700 px-2 py-1 rounded transition-colors"
+              >
+                <Download className="w-3 h-3" />
+                Export CSV
               </button>
               {!saveMode ? (
                 <button

@@ -631,6 +631,13 @@ async function logRecoveryIfGap() {
 // Start server
 const server = createServer(app);
 
+// Extend HTTP server timeout to accommodate slow local LLM inference (Ollama on CPU).
+// Default Node.js socket timeout is 0 (no timeout) but proxies/load balancers
+// can reset connections after ~30s. Setting explicitly to 5 minutes covers the
+// worst-case qwen2.5-coder:3b CPU inference time seen in dev (~76s).
+server.timeout = 5 * 60 * 1000; // 5 minutes
+server.requestTimeout = 5 * 60 * 1000; // 5 minutes (Node 18+ request-level timeout)
+
 // Supabase admin helpers for storage bucket provisioning
 import { getSupabaseAdmin, getBucketName } from './lib/supabaseFactory.js';
 
@@ -780,6 +787,55 @@ server.listen(PORT, async () => {
   }
 
   // Note: Agent office task queue processor is registered in startTaskWorkers() above
+
+  // Warm up Ollama so the model is loaded in memory before the first real PEP query.
+  // Fires a minimal inference request in the background — never blocks startup.
+  if (process.env.PEP_LLM_PROVIDER === 'local' || !process.env.PEP_LLM_PROVIDER) {
+    const ollamaBase = (process.env.LOCAL_LLM_BASE_URL || 'http://ollama:11434/v1').replace(
+      /\/$/,
+      '',
+    );
+    const ollamaModel = process.env.PEP_LLM_MODEL || 'qwen2.5-coder:3b';
+    setTimeout(async () => {
+      try {
+        logger.info(
+          { model: ollamaModel, url: ollamaBase },
+          '[OllamaWarmup] Warming up LLM model...',
+        );
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3 * 60 * 1000); // 3 min max
+        const resp = await fetch(`${ollamaBase}/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ollama' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            model: ollamaModel,
+            messages: [{ role: 'user', content: 'hi' }],
+            temperature: 0,
+            max_tokens: 1,
+          }),
+        });
+        clearTimeout(timeout);
+        if (resp.ok) {
+          logger.info({ model: ollamaModel }, '[OllamaWarmup] Model warmed up successfully');
+        } else {
+          logger.warn(
+            { status: resp.status },
+            '[OllamaWarmup] Warmup request returned non-OK status',
+          );
+        }
+      } catch (err) {
+        if (err?.name === 'AbortError') {
+          logger.warn('[OllamaWarmup] Warmup timed out — Ollama may still be loading');
+        } else {
+          logger.warn(
+            { err: err?.message },
+            '[OllamaWarmup] Warmup failed — Ollama may not be running yet',
+          );
+        }
+      }
+    }, 3000); // 3s delay so Ollama container has time to be reachable after restart
+  }
 
   // Keep-alive interval to prevent process from exiting
   setInterval(() => {

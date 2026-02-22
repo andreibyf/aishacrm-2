@@ -14,44 +14,47 @@
  * Returns normalized shape: { status: "success"|"error", content?, raw?, error? }
  */
 
-import fetch from "node-fetch";
+import fetch from 'node-fetch';
 
 // ============================================================================
 // OpenAI-compatible providers (openai, groq, local)
 // ============================================================================
 
 function resolveOpenAIBaseUrl(provider, explicitBaseUrl) {
-  if (explicitBaseUrl) return explicitBaseUrl.replace(/\/$/, "");
+  if (explicitBaseUrl) return explicitBaseUrl.replace(/\/$/, '');
 
   switch (provider) {
-    case "openai":
-      return (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
-    case "groq":
-      return (process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1").replace(/\/$/, "");
-    case "local":
-      return (process.env.LOCAL_LLM_BASE_URL || "http://localhost:1234/v1").replace(/\/$/, "");
+    case 'openai':
+      return (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
+    case 'groq':
+      return (process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1').replace(/\/$/, '');
+    case 'local':
+      return (process.env.LOCAL_LLM_BASE_URL || 'http://localhost:1234/v1').replace(/\/$/, '');
     default:
-      return (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+      return (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
   }
 }
 
 function resolveOpenAIAuthHeader(provider, explicitApiKey) {
   if (explicitApiKey) return `Bearer ${explicitApiKey}`;
 
-  if (provider === "openai" && process.env.OPENAI_API_KEY) {
+  if (provider === 'openai' && process.env.OPENAI_API_KEY) {
     return `Bearer ${process.env.OPENAI_API_KEY}`;
   }
 
-  if (provider === "groq" && process.env.GROQ_API_KEY) {
+  if (provider === 'groq' && process.env.GROQ_API_KEY) {
     return `Bearer ${process.env.GROQ_API_KEY}`;
   }
 
-  if (provider === "local" && process.env.LOCAL_LLM_API_KEY) {
+  if (provider === 'local' && process.env.LOCAL_LLM_API_KEY) {
     return `Bearer ${process.env.LOCAL_LLM_API_KEY}`;
   }
 
   return null;
 }
+
+// Timeout (ms) for local Ollama inference — CPU inference can be slow
+const LOCAL_LLM_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 async function callOpenAICompatible({ provider, model, messages, temperature, apiKey, baseUrl }) {
   const finalBaseUrl = resolveOpenAIBaseUrl(provider, baseUrl);
@@ -59,7 +62,7 @@ async function callOpenAICompatible({ provider, model, messages, temperature, ap
 
   if (!authHeader) {
     return {
-      status: "error",
+      status: 'error',
       error: `Missing API key for provider ${provider}`,
     };
   }
@@ -72,42 +75,52 @@ async function callOpenAICompatible({ provider, model, messages, temperature, ap
     temperature,
   };
 
+  // For local Ollama, use a longer timeout since CPU inference can exceed 60s
+  const controller = provider === 'local' ? new AbortController() : null;
+  const timeoutHandle = controller
+    ? setTimeout(() => controller.abort(), LOCAL_LLM_TIMEOUT_MS)
+    : null;
+
   try {
     const resp = await fetch(url, {
-      method: "POST",
+      method: 'POST',
       headers: {
-        "Authorization": authHeader,
-        "Content-Type": "application/json",
+        Authorization: authHeader,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
+      ...(controller ? { signal: controller.signal } : {}),
     });
 
     if (!resp.ok) {
       const text = await resp.text();
       return {
-        status: "error",
+        status: 'error',
         error: `HTTP ${resp.status}: ${text}`,
       };
     }
 
     const json = await resp.json();
     const content =
-      json?.choices?.[0]?.message?.content ||
-      json?.choices?.[0]?.delta?.content ||
-      "";
+      json?.choices?.[0]?.message?.content || json?.choices?.[0]?.delta?.content || '';
 
     return {
-      status: "success",
+      status: 'success',
       content: Array.isArray(content)
-        ? content.map((c) => (typeof c === "string" ? c : c.text || "")).join("")
-        : String(content || ""),
+        ? content.map((c) => (typeof c === 'string' ? c : c.text || '')).join('')
+        : String(content || ''),
       raw: json,
     };
   } catch (err) {
+    const isAbort = err?.name === 'AbortError';
     return {
-      status: "error",
-      error: err?.message || String(err),
+      status: 'error',
+      error: isAbort
+        ? `Local LLM timed out after ${LOCAL_LLM_TIMEOUT_MS / 1000}s`
+        : err?.message || String(err),
     };
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
   }
 }
 
@@ -116,8 +129,8 @@ async function callOpenAICompatible({ provider, model, messages, temperature, ap
 // ============================================================================
 
 function resolveAnthropicBaseUrl(explicitBaseUrl) {
-  if (explicitBaseUrl) return explicitBaseUrl.replace(/\/$/, "");
-  return (process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com").replace(/\/$/, "");
+  if (explicitBaseUrl) return explicitBaseUrl.replace(/\/$/, '');
+  return (process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com').replace(/\/$/, '');
 }
 
 /**
@@ -125,17 +138,17 @@ function resolveAnthropicBaseUrl(explicitBaseUrl) {
  * Anthropic uses separate system param and messages array.
  */
 function convertToAnthropicFormat(messages) {
-  let systemPrompt = "";
+  let systemPrompt = '';
   const anthropicMessages = [];
 
   for (const msg of messages || []) {
-    if (msg.role === "system") {
+    if (msg.role === 'system') {
       // Concatenate all system messages into one
-      systemPrompt += (systemPrompt ? "\n\n" : "") + (msg.content || "");
-    } else if (msg.role === "user" || msg.role === "assistant") {
+      systemPrompt += (systemPrompt ? '\n\n' : '') + (msg.content || '');
+    } else if (msg.role === 'user' || msg.role === 'assistant') {
       anthropicMessages.push({
         role: msg.role,
-        content: msg.content || "",
+        content: msg.content || '',
       });
     }
   }
@@ -148,20 +161,20 @@ async function callAnthropic({ model, messages, temperature, apiKey, baseUrl }) 
 
   if (!apiKey && !process.env.ANTHROPIC_API_KEY) {
     return {
-      status: "error",
-      error: "Missing API key for provider anthropic",
+      status: 'error',
+      error: 'Missing API key for provider anthropic',
     };
   }
 
   const finalApiKey = apiKey || process.env.ANTHROPIC_API_KEY;
-  const anthropicVersion = process.env.ANTHROPIC_VERSION || "2023-06-01";
+  const anthropicVersion = process.env.ANTHROPIC_VERSION || '2023-06-01';
   const url = `${finalBaseUrl}/v1/messages`;
 
   const { systemPrompt, anthropicMessages } = convertToAnthropicFormat(messages);
 
   // Anthropic requires at least one user message
   if (anthropicMessages.length === 0) {
-    anthropicMessages.push({ role: "user", content: "Hello" });
+    anthropicMessages.push({ role: 'user', content: 'Hello' });
   }
 
   const body = {
@@ -178,11 +191,11 @@ async function callAnthropic({ model, messages, temperature, apiKey, baseUrl }) 
 
   try {
     const resp = await fetch(url, {
-      method: "POST",
+      method: 'POST',
       headers: {
-        "x-api-key": finalApiKey,
-        "anthropic-version": anthropicVersion,
-        "Content-Type": "application/json",
+        'x-api-key': finalApiKey,
+        'anthropic-version': anthropicVersion,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
     });
@@ -190,7 +203,7 @@ async function callAnthropic({ model, messages, temperature, apiKey, baseUrl }) 
     if (!resp.ok) {
       const text = await resp.text();
       return {
-        status: "error",
+        status: 'error',
         error: `HTTP ${resp.status}: ${text}`,
       };
     }
@@ -198,25 +211,25 @@ async function callAnthropic({ model, messages, temperature, apiKey, baseUrl }) 
     const json = await resp.json();
 
     // Anthropic returns content as array of blocks
-    let content = "";
+    let content = '';
     if (json?.content && Array.isArray(json.content)) {
       content = json.content
-        .filter((block) => block.type === "text")
-        .map((block) => block.text || "")
-        .join("");
+        .filter((block) => block.type === 'text')
+        .map((block) => block.text || '')
+        .join('');
     }
 
     // Normalize usage to OpenAI-like format
     const usage = json?.usage
       ? {
-        prompt_tokens: json.usage.input_tokens || 0,
-        completion_tokens: json.usage.output_tokens || 0,
-        total_tokens: (json.usage.input_tokens || 0) + (json.usage.output_tokens || 0),
-      }
+          prompt_tokens: json.usage.input_tokens || 0,
+          completion_tokens: json.usage.output_tokens || 0,
+          total_tokens: (json.usage.input_tokens || 0) + (json.usage.output_tokens || 0),
+        }
       : null;
 
     return {
-      status: "success",
+      status: 'success',
       content,
       raw: {
         ...json,
@@ -226,7 +239,7 @@ async function callAnthropic({ model, messages, temperature, apiKey, baseUrl }) 
     };
   } catch (err) {
     return {
-      status: "error",
+      status: 'error',
       error: err?.message || String(err),
     };
   }
@@ -250,7 +263,7 @@ async function callAnthropic({ model, messages, temperature, apiKey, baseUrl }) 
  * @returns {Promise<{ status: "success"|"error", content?: string, raw?: any, error?: string }>}
  */
 export async function generateChatCompletion({
-  provider = "openai",
+  provider = 'openai',
   model,
   messages,
   temperature = 0.2,
@@ -258,7 +271,7 @@ export async function generateChatCompletion({
   baseUrl,
 }) {
   // Route to appropriate provider handler
-  if (provider === "anthropic") {
+  if (provider === 'anthropic') {
     return callAnthropic({ model, messages, temperature, apiKey, baseUrl });
   }
 

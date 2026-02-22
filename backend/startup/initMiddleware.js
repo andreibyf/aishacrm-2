@@ -308,6 +308,9 @@ export function initMiddleware(app, pgPool) {
         '/api/auth/login', // Authentication login (critical for access)
         '/api/auth/refresh', // JWT token refresh (critical for sessions)
         '/api/auth/logout', // Authentication logout
+        '/api/pep/compile', // PEP LLM compile — read-only NL→IR, no DB writes
+        '/api/pep/query', // PEP query execution — read-only SELECT via Supabase
+        '/api/pep/saved-reports', // PEP saved reports — tenant-scoped reads/writes
       ],
       pgPool, // Pass database connection for security event logging
     }),
