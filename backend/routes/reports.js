@@ -599,8 +599,8 @@ export default function createReportRoutes(_pgPool) {
           try {
             let q = supabase
               .from('leads')
-              .select('id,first_name,last_name,company,created_date,status')
-              .order('created_date', { ascending: false })
+              .select('id,first_name,last_name,company,created_date,created_at,status')
+              .order('created_at', { ascending: false })
               .limit(5);
             if (tenant_id) q = q.eq('tenant_id', tenant_id);
             if (!includeTestData) {
@@ -825,9 +825,9 @@ export default function createReportRoutes(_pgPool) {
               let q = supabase
                 .from('leads')
                 .select(
-                  'id,first_name,last_name,company,email,phone,created_date,status,source,is_test_data',
+                  'id,first_name,last_name,company,email,phone,created_date,created_at,status,source,is_test_data',
                 )
-                .order('created_date', { ascending: false })
+                .order('created_at', { ascending: false })
                 .limit(100);
               if (tenant_id) q = q.eq('tenant_id', tenant_id);
               if (!includeTestData) {
