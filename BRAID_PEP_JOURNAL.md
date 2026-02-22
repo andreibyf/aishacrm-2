@@ -494,7 +494,7 @@ After initial build, the container failed with `ERR_MODULE_NOT_FOUND` for `pepRu
 **Branch:** `feature/pep-phase4-saved-reports`  
 **Date:** February 2026  
 **Auditor:** Claude (Anthropic)  
-**Status:** 🚧 In Progress
+**Status:** ✅ Complete
 
 ### What Was Built
 
@@ -558,3 +558,20 @@ The slug helper is inlined in `pep.js` (3-line regex chain) rather than adding `
 - No sharing saved reports across tenants
 - No scheduling / recurring execution of saved reports
 - No permissions model within a tenant (any user can delete any tenant’s saved report)
+
+### Post-Spec Additions (Completed in Phase 4)
+
+**LLM provider switched from local Ollama to Groq**
+Original Phase 2/3 implementation used `qwen2.5-coder:3b` via containerized Ollama running on CPU — inference was ~76 seconds per query. Switched to `PEP_LLM_PROVIDER=groq` / `PEP_LLM_MODEL=llama-3.3-70b-versatile` in `docker-compose.yml`. Compile time dropped to under 2 seconds. `GROQ_API_KEY` injected from Doppler via `.env.local`.
+
+**Production safety guard exemptions**
+Added `/api/pep/compile`, `/api/pep/query`, and `/api/pep/saved-reports` to `exemptPaths` in `backend/startup/initMiddleware.js`. Without these, all PEP POST requests were blocked with 403 in test/dev mode.
+
+**HTTP timeout extended for local LLM**
+`backend/lib/aiEngine/llmClient.js` — 5-minute `AbortController` timeout for `provider === "local"`. `backend/server.js` — `server.timeout` and `server.requestTimeout` set to 5 minutes.
+
+**Ollama warmup on startup**
+`backend/server.js` — fires a silent warmup request to Ollama 3 seconds after startup. No-ops gracefully if provider is not `local` or Ollama is unreachable.
+
+**CSV export added to CustomQuery results toolbar**
+`src/components/reports/CustomQuery.jsx` — `handleExportCsv()` and Export CSV button added to results toolbar alongside Refresh and Save Report. Strips internal columns, derives filename from query text. Client-side only.
