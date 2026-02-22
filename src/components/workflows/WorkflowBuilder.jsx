@@ -1,13 +1,30 @@
-
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Workflow } from '@/api/entities';
 import { useUser } from '@/components/shared/useUser.js';
 import { BACKEND_URL } from '@/api/entities';
-import { Webhook, Search, Save, Plus, X, Copy, Check, RefreshCw, Sparkles, Clock, Play } from 'lucide-react';
+import {
+  Webhook,
+  Search,
+  Save,
+  Plus,
+  X,
+  Copy,
+  Check,
+  RefreshCw,
+  Sparkles,
+  Clock,
+  Play,
+} from 'lucide-react';
 import WorkflowCanvas from './WorkflowCanvas';
 import NodeLibrary from './NodeLibrary';
 import WorkflowTemplatesBrowser from './WorkflowTemplatesBrowser';
@@ -38,7 +55,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
   const [loadingCareHistory, setLoadingCareHistory] = useState(false);
   const [executionLimit, setExecutionLimit] = useState(10);
   const [executionOffset, setExecutionOffset] = useState(0);
-  
+
   const [autoConnect, setAutoConnect] = useState(true);
   const [showTemplates, setShowTemplates] = useState(false);
 
@@ -50,12 +67,15 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
     setNodes(JSON.parse(JSON.stringify(template.nodes || [])));
     setConnections(JSON.parse(JSON.stringify(template.connections || [])));
     setShowTemplates(false);
-    toast({ title: "Template loaded", description: `Template "${template.name}" loaded successfully!` });
+    toast({
+      title: 'Template loaded',
+      description: `Template "${template.name}" loaded successfully!`,
+    });
   };
 
   // Update state when workflow prop changes (for editing)
   useEffect(() => {
-    console.log("!!! FRONTEND VERSION CHECK: FIX APPLIED (v2) !!!");
+    console.log('!!! FRONTEND VERSION CHECK: FIX APPLIED (v2) !!!');
     if (workflow) {
       console.log('[WorkflowBuilder] Workflow prop changed:', {
         id: workflow.id,
@@ -65,7 +85,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
         nodesData: workflow.nodes,
         hasConnections: !!workflow.connections,
         connectionsLength: workflow.connections?.length,
-        connectionsData: workflow.connections
+        connectionsData: workflow.connections,
       });
 
       setName(workflow.name || '');
@@ -86,7 +106,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
         id: 'trigger-1',
         type: 'webhook_trigger',
         config: {},
-        position: { x: 400, y: 200 } // Center of canvas for better expansion
+        position: { x: 400, y: 200 }, // Center of canvas for better expansion
       };
       setNodes([initialNode]);
       // Make the initial webhook trigger node selectable
@@ -99,27 +119,23 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
       id: `node-${Date.now()}`,
       type: nodeType,
       config: {},
-      position: { x: 400, y: 200 + (nodes.length * 150) } // Centered horizontally, spaced vertically
+      position: { x: 400, y: 200 + nodes.length * 150 }, // Centered horizontally, spaced vertically
     };
     setNodes([...nodes, newNode]);
     setSelectedNodeId(newNode.id);
   };
 
   const handleUpdateNode = (nodeId, updates) => {
-    setNodes(nodes.map(node =>
-      node.id === nodeId ? { ...node, ...updates } : node
-    ));
+    setNodes(nodes.map((node) => (node.id === nodeId ? { ...node, ...updates } : node)));
   };
 
   const updateNodeConfig = (nodeId, newConfig) => {
-    setNodes(nodes.map(node =>
-      node.id === nodeId ? { ...node, config: newConfig } : node
-    ));
+    setNodes(nodes.map((node) => (node.id === nodeId ? { ...node, config: newConfig } : node)));
   };
 
   const handleDeleteNode = (nodeId) => {
-    setNodes(nodes.filter(node => node.id !== nodeId));
-    setConnections(connections.filter(conn => conn.from !== nodeId && conn.to !== nodeId));
+    setNodes(nodes.filter((node) => node.id !== nodeId));
+    setConnections(connections.filter((conn) => conn.from !== nodeId && conn.to !== nodeId));
     if (selectedNodeId === nodeId) {
       setSelectedNodeId(null);
     }
@@ -127,17 +143,17 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
 
   const handleConnect = (fromId, toId) => {
     // Check if the source node is a condition node
-    const fromNode = nodes.find(n => n.id === fromId);
+    const fromNode = nodes.find((n) => n.id === fromId);
     const isCondition = fromNode?.type === 'condition';
-    
+
     if (isCondition) {
       // For condition nodes, allow up to 2 outgoing connections (TRUE and FALSE)
-      const existingConnections = connections.filter(conn => conn.from === fromId);
-      
+      const existingConnections = connections.filter((conn) => conn.from === fromId);
+
       // If already has 2 connections, remove the oldest one
       if (existingConnections.length >= 2) {
-        const filteredConnections = connections.filter(conn => 
-          conn.from !== fromId || conn.to !== existingConnections[0].to
+        const filteredConnections = connections.filter(
+          (conn) => conn.from !== fromId || conn.to !== existingConnections[0].to,
         );
         setConnections([...filteredConnections, { from: fromId, to: toId }]);
       } else {
@@ -146,7 +162,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
       }
     } else {
       // For non-condition nodes, replace existing connection (only one allowed)
-      const filteredConnections = connections.filter(conn => conn.from !== fromId);
+      const filteredConnections = connections.filter((conn) => conn.from !== fromId);
       setConnections([...filteredConnections, { from: fromId, to: toId }]);
     }
   };
@@ -156,36 +172,42 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
   };
 
   const handleCopyWebhookUrl = () => {
-    const webhookUrl = workflow?.id ? `/api/workflows/${workflow.id}/webhook` : '/api/workflows/PENDING/webhook';
+    const webhookUrl = workflow?.id
+      ? `/api/workflows/${workflow.id}/webhook`
+      : '/api/workflows/PENDING/webhook';
     navigator.clipboard.writeText(webhookUrl);
     setCopied(true);
-    toast({ title: "Copied", description: 'Webhook URL copied to clipboard' });
+    toast({ title: 'Copied', description: 'Webhook URL copied to clipboard' });
     setTimeout(() => setCopied(false), 2000);
   };
 
   // New function: handleUseSamplePayload (replaces part of old handleTestPayload logic)
   const handleUseSamplePayload = () => {
     const genericSamplePayload = {
-      email: "test@example.com",
-      first_name: "John",
-      last_name: "Doe",
-      status: "qualified",
+      email: 'test@example.com',
+      first_name: 'John',
+      last_name: 'Doe',
+      status: 'qualified',
       score: 85,
-      company: "Test Corp",
-      phone: "+1234567890",
-      notes: "Sample lead from webhook",
-      source: "website",
-      next_action: "Schedule demo"
+      company: 'Test Corp',
+      phone: '+1234567890',
+      notes: 'Sample lead from webhook',
+      source: 'website',
+      next_action: 'Schedule demo',
     };
     setTestPayload(genericSamplePayload);
     setShowPayload(true);
-    toast({ title: "Sample loaded", description: "Loaded a generic sample payload." });
+    toast({ title: 'Sample loaded', description: 'Loaded a generic sample payload.' });
     setShowExecutions(false); // Hide executions list if showing
   };
 
   const handleWaitForWebhook = async () => {
     if (!workflow?.id) {
-      toast({ title: "Save required", description: 'Please save the workflow first to wait for a real webhook.', variant: 'destructive' });
+      toast({
+        title: 'Save required',
+        description: 'Please save the workflow first to wait for a real webhook.',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -194,45 +216,52 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
     setShowExecutions(false);
 
     try {
-      toast({ title: "Waiting for webhook", description: "Listening for a new webhook (max 30 seconds)..." });
-      
+      toast({
+        title: 'Waiting for webhook',
+        description: 'Listening for a new webhook (max 30 seconds)...',
+      });
+
       // Get the current latest execution timestamp
       const currentExecutions = await WorkflowExecution.filter(
         { workflow_id: workflow.id },
         '-created_at',
-        1
+        1,
       );
       const lastTimestamp = currentExecutions[0]?.created_at || new Date(0).toISOString();
 
       // Poll for new executions
       let attempts = 0;
       const maxAttempts = 15; // 30 seconds (15 attempts * 2 seconds)
-      
+
       const checkForNew = async () => {
         attempts++;
-        
+
         const latestExecutions = await WorkflowExecution.filter(
           { workflow_id: workflow.id },
           '-created_at',
-          1
+          1,
         );
 
         if (latestExecutions && latestExecutions.length > 0) {
           const latest = latestExecutions[0];
-          
+
           // Check if this is a new execution
           if (latest.created_at > lastTimestamp && latest.trigger_data) {
             setTestPayload(latest.trigger_data);
             setShowPayload(true);
             setWaitingForWebhook(false);
-            toast({ title: "Webhook received", description: 'Payload loaded successfully.' });
+            toast({ title: 'Webhook received', description: 'Payload loaded successfully.' });
             return true;
           }
         }
 
         if (attempts >= maxAttempts) {
           setWaitingForWebhook(false);
-          toast({ title: "No webhook detected", description: "Try sending a test webhook to the URL above, or use a sample payload.", variant: "destructive" });
+          toast({
+            title: 'No webhook detected',
+            description: 'Try sending a test webhook to the URL above, or use a sample payload.',
+            variant: 'destructive',
+          });
           handleUseSamplePayload(); // Fallback to sample
           return true;
         }
@@ -244,10 +273,13 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
 
       // Start polling
       checkForNew();
-
     } catch (error) {
       console.error('Error waiting for webhook:', error);
-      toast({ title: "Webhook timeout", description: 'Failed to wait for webhook. Using sample payload instead.', variant: 'destructive' });
+      toast({
+        title: 'Webhook timeout',
+        description: 'Failed to wait for webhook. Using sample payload instead.',
+        variant: 'destructive',
+      });
       handleUseSamplePayload(); // Fallback to sample on error
       setWaitingForWebhook(false);
     }
@@ -256,7 +288,11 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
   // CARE wait function
   const handleWaitForCare = async () => {
     if (!workflow?.id) {
-      toast({ title: "Save workflow first", description: "Please save the workflow to wait for CARE events.", variant: "destructive" });
+      toast({
+        title: 'Save workflow first',
+        description: 'Please save the workflow to wait for CARE events.',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -265,45 +301,55 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
     setShowExecutions(false);
 
     try {
-      toast({ title: "Listening for CARE events", description: "Waiting for new CARE event (max 30 seconds)..." });
-      
+      toast({
+        title: 'Listening for CARE events',
+        description: 'Waiting for new CARE event (max 30 seconds)...',
+      });
+
       // Get the current latest execution timestamp for this workflow
       const currentExecutions = await WorkflowExecution.filter(
         { workflow_id: workflow.id },
         '-created_at',
-        1
+        1,
       );
       const lastTimestamp = currentExecutions[0]?.created_at || new Date(0).toISOString();
 
       // Poll for new executions
       let attempts = 0;
       const maxAttempts = 15; // 30 seconds (15 attempts * 2 seconds)
-      
+
       const checkForNewCare = async () => {
         attempts++;
-        
+
         const latestExecutions = await WorkflowExecution.filter(
           { workflow_id: workflow.id },
           '-created_at',
-          1
+          1,
         );
 
         if (latestExecutions && latestExecutions.length > 0) {
           const latest = latestExecutions[0];
-          
+
           // Check if this is a new execution
           if (latest.created_at > lastTimestamp && latest.trigger_data) {
             setTestPayload(latest.trigger_data);
             setShowPayload(true);
             setWaitingForCare(false);
-            toast({ title: "CARE event received!", description: "Event data loaded successfully." });
+            toast({
+              title: 'CARE event received!',
+              description: 'Event data loaded successfully.',
+            });
             return true;
           }
         }
 
         if (attempts >= maxAttempts) {
           setWaitingForCare(false);
-          toast({ title: "No CARE event detected", description: "Try triggering a CARE event or use the sample payload.", variant: "destructive" });
+          toast({
+            title: 'No CARE event detected',
+            description: 'Try triggering a CARE event or use the sample payload.',
+            variant: 'destructive',
+          });
           return true;
         }
 
@@ -314,10 +360,13 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
 
       // Start polling
       checkForNewCare();
-
     } catch (error) {
       console.error('Error waiting for CARE event:', error);
-      toast({ title: "Error waiting for CARE", description: "Failed to listen for CARE events.", variant: "destructive" });
+      toast({
+        title: 'Error waiting for CARE',
+        description: 'Failed to listen for CARE events.',
+        variant: 'destructive',
+      });
       setWaitingForCare(false);
     }
   };
@@ -325,7 +374,11 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
   // CARE history function
   const loadCareHistory = async () => {
     if (!workflow?.id) {
-      toast({ title: "Save workflow first", description: "Please save the workflow to view history.", variant: "destructive" });
+      toast({
+        title: 'Save workflow first',
+        description: 'Please save the workflow to view history.',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -337,20 +390,30 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
         action_origin: 'care_autonomous',
         limit: executionLimit,
         offset: executionOffset,
-        order: '-created_at'
+        order: '-created_at',
       });
-      
+
       setRecentExecutions(executions || []);
       setShowExecutions(true);
-      
+
       if (executions && executions.length > 0) {
-        toast({ title: "CARE history loaded", description: `Found ${executions.length} recent CARE executions.` });
+        toast({
+          title: 'CARE history loaded',
+          description: `Found ${executions.length} recent CARE executions.`,
+        });
       } else {
-        toast({ title: "No CARE history", description: "No recent CARE executions found for this workflow." });
+        toast({
+          title: 'No CARE history',
+          description: 'No recent CARE executions found for this workflow.',
+        });
       }
     } catch (error) {
       console.error('Error loading CARE history:', error);
-      toast({ title: "Failed to load CARE history", description: "Error retrieving execution history.", variant: "destructive" });
+      toast({
+        title: 'Failed to load CARE history',
+        description: 'Error retrieving execution history.',
+        variant: 'destructive',
+      });
     } finally {
       setLoadingCareHistory(false);
     }
@@ -359,7 +422,11 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
   // New function: loadRecentExecutions (from outline)
   const loadRecentExecutions = async () => {
     if (!workflow?.id) {
-      toast({ title: "Save required", description: 'Please save the workflow first', variant: 'destructive' });
+      toast({
+        title: 'Save required',
+        description: 'Please save the workflow first',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -370,18 +437,25 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
         workflow_id: workflow.id,
         limit: executionLimit,
         offset: executionOffset,
-        order: '-created_at'
+        order: '-created_at',
       });
       setRecentExecutions(executions || []);
       setShowExecutions(true); // Show the executions list
       if (executions && executions.length > 0) {
-        toast({ title: "Executions loaded", description: 'Recent webhook executions loaded.' });
+        toast({ title: 'Executions loaded', description: 'Recent webhook executions loaded.' });
       } else {
-        toast({ title: "No executions", description: "No recent webhook executions found for this workflow." });
+        toast({
+          title: 'No executions',
+          description: 'No recent webhook executions found for this workflow.',
+        });
       }
     } catch (error) {
       console.error('Error loading executions:', error);
-      toast({ title: "Load failed", description: 'Failed to load webhook history', variant: 'destructive' });
+      toast({
+        title: 'Load failed',
+        description: 'Failed to load webhook history',
+        variant: 'destructive',
+      });
     } finally {
       setLoadingExecutions(false);
     }
@@ -389,7 +463,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
 
   const handleNextExecutionsPage = async () => {
     if (recentExecutions.length < executionLimit) {
-      toast({ title: "Last page", description: "You are on the last page." });
+      toast({ title: 'Last page', description: 'You are on the last page.' });
       return;
     }
     setExecutionOffset(executionOffset + executionLimit);
@@ -408,10 +482,14 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
     if (execution.trigger_data) {
       setTestPayload(execution.trigger_data);
       setShowPayload(true);
-      toast({ title: "Payload loaded", description: 'Payload loaded from execution' });
+      toast({ title: 'Payload loaded', description: 'Payload loaded from execution' });
       setShowExecutions(false); // Hide executions list once a payload is selected
     } else {
-      toast({ title: "No payload", description: 'No payload data in this execution', variant: 'destructive' });
+      toast({
+        title: 'No payload',
+        description: 'No payload data in this execution',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -449,7 +527,11 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                     onClick={handleCopyWebhookUrl}
                     className="bg-slate-800 border-slate-700"
                   >
-                    {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                    {copied ? (
+                      <Check className="w-4 h-4 text-green-400" />
+                    ) : (
+                      <Copy className="w-4 h-4" />
+                    )}
                   </Button>
                 </div>
               </div>
@@ -545,7 +627,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                     </Button>
                   </div>
                 </div>
-                
+
                 <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                   {recentExecutions.length === 0 ? (
                     <p className="text-sm text-slate-500 text-center py-4">
@@ -559,30 +641,33 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                         onClick={() => handleUseExecutionPayload(execution)}
                       >
                         <div className="flex items-center justify-between mb-2">
-                          <span className={`text-xs px-2 py-1 rounded ${
-                            execution.status === 'success' ? 'bg-green-900/30 text-green-400' :
-                            execution.status === 'failed' ? 'bg-red-900/30 text-red-400' :
-                            'bg-blue-900/30 text-blue-400'
-                          }`}>
+                          <span
+                            className={`text-xs px-2 py-1 rounded ${
+                              execution.status === 'success'
+                                ? 'bg-green-900/30 text-green-400'
+                                : execution.status === 'failed'
+                                  ? 'bg-red-900/30 text-red-400'
+                                  : 'bg-blue-900/30 text-blue-400'
+                            }`}
+                          >
                             {execution.status}
                           </span>
                           <span className="text-xs text-slate-500">
                             {new Date(execution.created_at).toLocaleString()}
                           </span>
                         </div>
-                        
+
                         {execution.trigger_data && (
                           <div className="bg-slate-950 rounded p-2 mt-2">
                             <pre className="text-xs text-slate-400 overflow-x-auto whitespace-pre-wrap break-all">
                               {JSON.stringify(execution.trigger_data, null, 2).substring(0, 200)}
-                              {JSON.stringify(execution.trigger_data, null, 2).length > 200 && '...'}
+                              {JSON.stringify(execution.trigger_data, null, 2).length > 200 &&
+                                '...'}
                             </pre>
                           </div>
                         )}
-                        
-                        <p className="text-xs text-slate-500 mt-2">
-                          Click to use this payload
-                        </p>
+
+                        <p className="text-xs text-slate-500 mt-2">Click to use this payload</p>
                       </div>
                     ))
                   )}
@@ -590,7 +675,9 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 <div className="flex items-center justify-between mt-3">
                   <span className="text-xs text-slate-500">
                     {executionOffset + 1}
-                    {recentExecutions.length > 0 ? `–${executionOffset + recentExecutions.length}` : ''}
+                    {recentExecutions.length > 0
+                      ? `–${executionOffset + recentExecutions.length}`
+                      : ''}
                   </span>
                   <div className="flex gap-2">
                     <Button
@@ -667,9 +754,11 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                     <SelectValue placeholder="Select webhook field" />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-800 border-slate-700">
-                    {getAvailableFields().map(field => (
+                    {getAvailableFields().map((field) => (
                       <SelectItem key={field} value={field}>
-                        {'{{'}{field}{'}}'}
+                        {'{{'}
+                        {field}
+                        {'}}'}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -696,9 +785,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           <div className="space-y-4">
             <div>
               <Label className="text-slate-200">Field Mappings</Label>
-              <p className="text-sm text-slate-400 mb-3">
-                Map webhook fields to new lead fields
-              </p>
+              <p className="text-sm text-slate-400 mb-3">Map webhook fields to new lead fields</p>
 
               <div className="max-h-96 overflow-y-auto pr-2 space-y-2">
                 {(node.config?.field_mappings || []).map((mapping, index) => (
@@ -735,15 +822,20 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                         onValueChange={(value) => {
                           const newMappings = [...(node.config?.field_mappings || [])];
                           newMappings[index] = { ...mapping, webhook_field: value };
-                          updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
+                          updateNodeConfig(node.id, {
+                            ...node.config,
+                            field_mappings: newMappings,
+                          });
                         }}
                       >
                         <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
                           <SelectValue placeholder="Webhook Field" />
                         </SelectTrigger>
                         <SelectContent className="bg-slate-800 border-slate-700">
-                          {getAvailableFields().map(field => (
-                            <SelectItem key={field} value={field}>{field}</SelectItem>
+                          {getAvailableFields().map((field) => (
+                            <SelectItem key={field} value={field}>
+                              {field}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -753,7 +845,10 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                         onChange={(e) => {
                           const newMappings = [...(node.config?.field_mappings || [])];
                           newMappings[index] = { ...mapping, webhook_field: e.target.value };
-                          updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
+                          updateNodeConfig(node.id, {
+                            ...node.config,
+                            field_mappings: newMappings,
+                          });
                         }}
                         placeholder="webhook_field"
                         className="bg-slate-800 border-slate-700 text-slate-200"
@@ -764,7 +859,9 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                       variant="ghost"
                       size="icon"
                       onClick={() => {
-                        const newMappings = (node.config?.field_mappings || []).filter((_, i) => i !== index);
+                        const newMappings = (node.config?.field_mappings || []).filter(
+                          (_, i) => i !== index,
+                        );
                         updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
                       }}
                       className="text-red-400 hover:text-red-300 hover:bg-red-900/20 flex-shrink-0"
@@ -779,7 +876,10 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  const newMappings = [...(node.config?.field_mappings || []), { lead_field: '', webhook_field: '' }];
+                  const newMappings = [
+                    ...(node.config?.field_mappings || []),
+                    { lead_field: '', webhook_field: '' },
+                  ];
                   updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
                 }}
                 className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700 mt-2 w-full"
@@ -796,9 +896,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           <div className="space-y-4">
             <div>
               <Label className="text-slate-200">Field Mappings</Label>
-              <p className="text-sm text-slate-400 mb-3">
-                Map webhook fields to lead fields
-              </p>
+              <p className="text-sm text-slate-400 mb-3">Map webhook fields to lead fields</p>
 
               <div className="max-h-96 overflow-y-auto pr-2 space-y-2">
                 {(node.config?.field_mappings || []).map((mapping, index) => (
@@ -833,15 +931,20 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                         onValueChange={(value) => {
                           const newMappings = [...(node.config?.field_mappings || [])];
                           newMappings[index] = { ...mapping, webhook_field: value };
-                          updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
+                          updateNodeConfig(node.id, {
+                            ...node.config,
+                            field_mappings: newMappings,
+                          });
                         }}
                       >
                         <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
                           <SelectValue placeholder="Webhook Field" />
                         </SelectTrigger>
                         <SelectContent className="bg-slate-800 border-slate-700">
-                          {getAvailableFields().map(field => (
-                            <SelectItem key={field} value={field}>{field}</SelectItem>
+                          {getAvailableFields().map((field) => (
+                            <SelectItem key={field} value={field}>
+                              {field}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -851,7 +954,10 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                         onChange={(e) => {
                           const newMappings = [...(node.config?.field_mappings || [])];
                           newMappings[index] = { ...mapping, webhook_field: e.target.value };
-                          updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
+                          updateNodeConfig(node.id, {
+                            ...node.config,
+                            field_mappings: newMappings,
+                          });
                         }}
                         placeholder="webhook_field"
                         className="bg-slate-800 border-slate-700 text-slate-200"
@@ -862,7 +968,9 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                       variant="ghost"
                       size="icon"
                       onClick={() => {
-                        const newMappings = (node.config?.field_mappings || []).filter((_, i) => i !== index);
+                        const newMappings = (node.config?.field_mappings || []).filter(
+                          (_, i) => i !== index,
+                        );
                         updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
                       }}
                       className="text-red-400 hover:text-red-300 hover:bg-red-900/20 flex-shrink-0"
@@ -877,7 +985,10 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  const newMappings = [...(node.config?.field_mappings || []), { lead_field: '', webhook_field: '' }];
+                  const newMappings = [
+                    ...(node.config?.field_mappings || []),
+                    { lead_field: '', webhook_field: '' },
+                  ];
                   updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
                 }}
                 className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700 mt-2 w-full"
@@ -903,12 +1014,14 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
             <div>
               <Label className="text-slate-300 text-sm">Tenant ID (Required)</Label>
               <p className="text-xs text-slate-500 mt-1 mb-2">
-                This workflow will only accept CARE events from this specific tenant. 
-                Payloads with mismatched tenant_id will be rejected.
+                This workflow will only accept CARE events from this specific tenant. Payloads with
+                mismatched tenant_id will be rejected.
               </p>
               <Input
                 value={node.config?.tenant_id || ''}
-                onChange={(e) => updateNodeConfig(node.id, { ...node.config, tenant_id: e.target.value })}
+                onChange={(e) =>
+                  updateNodeConfig(node.id, { ...node.config, tenant_id: e.target.value })
+                }
                 placeholder="a11dfb63-4b18-4eb8-872e-747af2e37c46"
                 className="bg-slate-900 border-slate-700 text-slate-200 font-mono text-sm"
               />
@@ -922,16 +1035,20 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
             {/* CARE Feature Toggles */}
             <div className="border border-slate-700 rounded-lg p-4 space-y-4">
               <Label className="text-slate-200 font-medium">CARE Settings</Label>
-              
+
               {/* Enable/Disable Toggle */}
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label className="text-slate-300 text-sm">Enable CARE Processing</Label>
-                  <p className="text-xs text-slate-500">When disabled, events are logged but not processed</p>
+                  <p className="text-xs text-slate-500">
+                    When disabled, events are logged but not processed
+                  </p>
                 </div>
                 <Switch
                   checked={node.config?.is_enabled ?? true}
-                  onCheckedChange={(checked) => updateNodeConfig(node.id, { ...node.config, is_enabled: checked })}
+                  onCheckedChange={(checked) =>
+                    updateNodeConfig(node.id, { ...node.config, is_enabled: checked })
+                  }
                 />
               </div>
 
@@ -940,20 +1057,27 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-2">
                     <Label className="text-slate-300 text-sm">Shadow Mode</Label>
-                    <span className="text-xs bg-green-600/20 text-green-400 px-1.5 py-0.5 rounded">Recommended</span>
+                    <span className="text-xs bg-green-600/20 text-green-400 px-1.5 py-0.5 rounded">
+                      Recommended
+                    </span>
                   </div>
-                  <p className="text-xs text-slate-500">Log actions without executing them (safe for testing)</p>
+                  <p className="text-xs text-slate-500">
+                    Log actions without executing them (safe for testing)
+                  </p>
                 </div>
                 <Switch
                   checked={node.config?.shadow_mode ?? true}
-                  onCheckedChange={(checked) => updateNodeConfig(node.id, { ...node.config, shadow_mode: checked })}
+                  onCheckedChange={(checked) =>
+                    updateNodeConfig(node.id, { ...node.config, shadow_mode: checked })
+                  }
                 />
               </div>
 
               {!(node.config?.shadow_mode ?? true) && (node.config?.is_enabled ?? true) && (
                 <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
                   <p className="text-xs text-red-300">
-                    <strong>⚠️ Live Mode:</strong> CARE will execute real actions. Ensure workflow is tested.
+                    <strong>⚠️ Live Mode:</strong> CARE will execute real actions. Ensure workflow
+                    is tested.
                   </p>
                 </div>
               )}
@@ -962,11 +1086,15 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label className="text-slate-300 text-sm">Persist State to Database</Label>
-                  <p className="text-xs text-slate-500">Write CARE state/history to customer_care_state tables</p>
+                  <p className="text-xs text-slate-500">
+                    Write CARE state/history to customer_care_state tables
+                  </p>
                 </div>
                 <Switch
                   checked={node.config?.state_write_enabled ?? false}
-                  onCheckedChange={(checked) => updateNodeConfig(node.id, { ...node.config, state_write_enabled: checked })}
+                  onCheckedChange={(checked) =>
+                    updateNodeConfig(node.id, { ...node.config, state_write_enabled: checked })
+                  }
                 />
               </div>
 
@@ -976,7 +1104,12 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                   <Label className="text-slate-300 text-sm">Webhook Timeout</Label>
                   <Select
                     value={String(node.config?.webhook_timeout_ms || 3000)}
-                    onValueChange={(v) => updateNodeConfig(node.id, { ...node.config, webhook_timeout_ms: parseInt(v, 10) })}
+                    onValueChange={(v) =>
+                      updateNodeConfig(node.id, {
+                        ...node.config,
+                        webhook_timeout_ms: parseInt(v, 10),
+                      })
+                    }
                   >
                     <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-200 mt-1">
                       <SelectValue />
@@ -993,7 +1126,12 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                   <Label className="text-slate-300 text-sm">Max Retries</Label>
                   <Select
                     value={String(node.config?.webhook_max_retries ?? 2)}
-                    onValueChange={(v) => updateNodeConfig(node.id, { ...node.config, webhook_max_retries: parseInt(v, 10) })}
+                    onValueChange={(v) =>
+                      updateNodeConfig(node.id, {
+                        ...node.config,
+                        webhook_max_retries: parseInt(v, 10),
+                      })
+                    }
                   >
                     <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-200 mt-1">
                       <SelectValue />
@@ -1022,9 +1160,13 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                   onClick={() => {
                     if (workflow?.id) {
                       navigator.clipboard.writeText(`/api/workflows/${workflow.id}/webhook`);
-                      toast({ title: "Copied to clipboard" });
+                      toast({ title: 'Copied to clipboard' });
                     } else {
-                      toast({ title: "Save workflow first", description: "Please save the workflow to get the webhook URL.", variant: "destructive" });
+                      toast({
+                        title: 'Save workflow first',
+                        description: 'Please save the workflow to get the webhook URL.',
+                        variant: 'destructive',
+                      });
                     }
                   }}
                   className="p-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded"
@@ -1037,7 +1179,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
 
             {/* Action Buttons */}
             <div className="grid grid-cols-1 gap-2">
-              <button 
+              <button
                 onClick={handleWaitForCare}
                 disabled={waitingForCare || !workflow?.id}
                 className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:cursor-not-allowed text-white py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
@@ -1054,8 +1196,8 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                   </>
                 )}
               </button>
-              
-              <button 
+
+              <button
                 onClick={loadCareHistory}
                 disabled={loadingCareHistory || !workflow?.id}
                 className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:cursor-not-allowed text-white py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
@@ -1072,59 +1214,76 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                   </>
                 )}
               </button>
-              
+
               <button
                 onClick={() => {
                   if (!workflow?.id) {
-                    toast({ title: "Save workflow first", description: "Please save the workflow before testing.", variant: "destructive" });
+                    toast({
+                      title: 'Save workflow first',
+                      description: 'Please save the workflow before testing.',
+                      variant: 'destructive',
+                    });
                     return;
                   }
-                  
+
                   // Sample payload matching CARE EVENT CONTRACT (docs/CARE_EVENT_CONTRACT.md)
                   const samplePayload = {
                     event_id: `trigger-${Date.now()}-sample${Math.random().toString(36).substr(2, 6)}`,
-                    type: "care.trigger_detected",
+                    type: 'care.trigger_detected',
                     ts: new Date().toISOString(),
-                    tenant_id: "a11dfb63-4b18-4eb8-872e-747af2e37c46",
-                    entity_type: "contact",
-                    entity_id: "6fe96ad8-84d8-49f3-9dcc-74c41fa8b24c",
-                    signal_entity_type: "activity",
-                    signal_entity_id: "a1b2c3d4-5678-9012-3456-789012345678",
-                    trigger_type: "activity_overdue",
-                    action_origin: "care_autonomous",
-                    policy_gate_result: "allowed",
-                    reason: "Activity overdue by 2 days",
-                    care_state: "at_risk",
-                    previous_state: "aware",
+                    tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
+                    entity_type: 'contact',
+                    entity_id: '6fe96ad8-84d8-49f3-9dcc-74c41fa8b24c',
+                    signal_entity_type: 'activity',
+                    signal_entity_id: 'a1b2c3d4-5678-9012-3456-789012345678',
+                    trigger_type: 'activity_overdue',
+                    action_origin: 'care_autonomous',
+                    policy_gate_result: 'allowed',
+                    reason: 'Activity overdue by 2 days',
+                    care_state: 'at_risk',
+                    previous_state: 'aware',
                     escalation_detected: true,
                     escalation_status: null,
-                    deep_link: "/app/contacts/6fe96ad8-84d8-49f3-9dcc-74c41fa8b24c",
-                    intent: "triage_trigger",
+                    deep_link: '/app/contacts/6fe96ad8-84d8-49f3-9dcc-74c41fa8b24c',
+                    intent: 'triage_trigger',
                     meta: {
-                      subject: "Follow-up call with prospect",
+                      subject: 'Follow-up call with prospect',
                       days_overdue: 2,
-                      type: "task",
-                      state_transition: "aware → at_risk"
-                    }
+                      type: 'task',
+                      state_transition: 'aware → at_risk',
+                    },
                   };
-                  
+
                   // Trigger the workflow with sample payload
                   fetch(`${BACKEND_URL}/api/workflows/${workflow.id}/webhook`, {
                     method: 'POST',
                     headers: {
                       'Content-Type': 'application/json',
-                      'User-Agent': 'AiSHA-CARE/1.0'
+                      'User-Agent': 'AiSHA-CARE/1.0',
                     },
-                    body: JSON.stringify(samplePayload)
-                  }).then(response => {
-                    if (response.ok) {
-                      toast({ title: "Sample CARE event sent!", description: "Check workflow execution logs for results." });
-                    } else {
-                      toast({ title: "Failed to send sample", description: "Check workflow configuration.", variant: "destructive" });
-                    }
-                  }).catch(error => {
-                    toast({ title: "Network error", description: error.message, variant: "destructive" });
-                  });
+                    body: JSON.stringify(samplePayload),
+                  })
+                    .then((response) => {
+                      if (response.ok) {
+                        toast({
+                          title: 'Sample CARE event sent!',
+                          description: 'Check workflow execution logs for results.',
+                        });
+                      } else {
+                        toast({
+                          title: 'Failed to send sample',
+                          description: 'Check workflow configuration.',
+                          variant: 'destructive',
+                        });
+                      }
+                    })
+                    .catch((error) => {
+                      toast({
+                        title: 'Network error',
+                        description: error.message,
+                        variant: 'destructive',
+                      });
+                    });
                 }}
                 className="w-full bg-slate-700 hover:bg-slate-600 text-white py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
               >
@@ -1139,8 +1298,8 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 <div>
                   <p className="text-amber-200 text-sm font-medium">Internal CARE Events Only</p>
                   <p className="text-amber-300 text-xs mt-1">
-                    This node automatically resolves email addresses from entity_id for internal CARE triggers.
-                    Supports: activities, leads, contacts, accounts, opportunities.
+                    This node automatically resolves email addresses from entity_id for internal
+                    CARE triggers. Supports: activities, leads, contacts, accounts, opportunities.
                   </p>
                 </div>
               </div>
@@ -1149,34 +1308,42 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
             {/* Sample Payload Display */}
             <div className="space-y-3">
               <div>
-                <Label className="text-slate-300 text-sm">Complete CARE Event Payload (per EVENT CONTRACT)</Label>
+                <Label className="text-slate-300 text-sm">
+                  Complete CARE Event Payload (per EVENT CONTRACT)
+                </Label>
                 <div className="bg-slate-900 border border-slate-700 rounded-lg p-3 mt-2">
-                  <pre className="text-xs text-slate-300 whitespace-pre-wrap overflow-x-auto">{JSON.stringify({
-                    event_id: "trigger-1706234567890-abc123def",
-                    type: "care.trigger_detected",
-                    ts: "2026-01-26T12:34:56.789Z",
-                    tenant_id: "a11dfb63-4b18-4eb8-872e-747af2e37c46",
-                    entity_type: "contact",
-                    entity_id: "CONTACT_UUID",
-                    signal_entity_type: "activity",
-                    signal_entity_id: "ACTIVITY_UUID",
-                    trigger_type: "activity_overdue",
-                    action_origin: "care_autonomous",
-                    policy_gate_result: "allowed",
-                    reason: "Activity overdue by 2 days",
-                    care_state: "at_risk",
-                    previous_state: "aware",
-                    escalation_detected: true,
-                    escalation_status: null,
-                    deep_link: "/app/contacts/CONTACT_UUID",
-                    intent: "triage_trigger",
-                    meta: {
-                      subject: "Follow-up call with prospect",
-                      days_overdue: 2,
-                      type: "task",
-                      state_transition: "aware → at_risk"
-                    }
-                  }, null, 2)}</pre>
+                  <pre className="text-xs text-slate-300 whitespace-pre-wrap overflow-x-auto">
+                    {JSON.stringify(
+                      {
+                        event_id: 'trigger-1706234567890-abc123def',
+                        type: 'care.trigger_detected',
+                        ts: '2026-01-26T12:34:56.789Z',
+                        tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
+                        entity_type: 'contact',
+                        entity_id: 'CONTACT_UUID',
+                        signal_entity_type: 'activity',
+                        signal_entity_id: 'ACTIVITY_UUID',
+                        trigger_type: 'activity_overdue',
+                        action_origin: 'care_autonomous',
+                        policy_gate_result: 'allowed',
+                        reason: 'Activity overdue by 2 days',
+                        care_state: 'at_risk',
+                        previous_state: 'aware',
+                        escalation_detected: true,
+                        escalation_status: null,
+                        deep_link: '/app/contacts/CONTACT_UUID',
+                        intent: 'triage_trigger',
+                        meta: {
+                          subject: 'Follow-up call with prospect',
+                          days_overdue: 2,
+                          type: 'task',
+                          state_transition: 'aware → at_risk',
+                        },
+                      },
+                      null,
+                      2,
+                    )}
+                  </pre>
                 </div>
               </div>
 
@@ -1257,11 +1424,12 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                       </Button>
                     </div>
                   </div>
-                  
+
                   <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                     {recentExecutions.length === 0 ? (
                       <p className="text-sm text-slate-500 text-center py-4">
-                        No CARE executions yet. CARE will trigger automatically when conditions are met.
+                        No CARE executions yet. CARE will trigger automatically when conditions are
+                        met.
                       </p>
                     ) : (
                       recentExecutions.map((execution) => (
@@ -1271,32 +1439,40 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                           onClick={() => handleUseExecutionPayload(execution)}
                         >
                           <div className="flex items-center justify-between mb-2">
-                            <span className={`text-xs px-2 py-1 rounded ${
-                              execution.status === 'completed' ? 'bg-green-900/30 text-green-400' :
-                              execution.status === 'failed' ? 'bg-red-900/30 text-red-400' :
-                              'bg-blue-900/30 text-blue-400'
-                            }`}>
+                            <span
+                              className={`text-xs px-2 py-1 rounded ${
+                                execution.status === 'completed'
+                                  ? 'bg-green-900/30 text-green-400'
+                                  : execution.status === 'failed'
+                                    ? 'bg-red-900/30 text-red-400'
+                                    : 'bg-blue-900/30 text-blue-400'
+                              }`}
+                            >
                               {execution.status}
                             </span>
                             <span className="text-xs text-slate-500">
                               {new Date(execution.created_at).toLocaleString()}
                             </span>
                           </div>
-                          
+
                           {execution.trigger_data && (
                             <div className="bg-slate-950 rounded p-2 mt-2">
                               <div className="text-xs mb-1">
-                                <span className="text-orange-400">Entity:</span> {execution.trigger_data.entity_type} | 
-                                <span className="text-blue-400"> Trigger:</span> {execution.trigger_data.trigger_type} |
-                                <span className="text-purple-400"> Reason:</span> {execution.trigger_data.reason}
+                                <span className="text-orange-400">Entity:</span>{' '}
+                                {execution.trigger_data.entity_type} |
+                                <span className="text-blue-400"> Trigger:</span>{' '}
+                                {execution.trigger_data.trigger_type} |
+                                <span className="text-purple-400"> Reason:</span>{' '}
+                                {execution.trigger_data.reason}
                               </div>
                               <pre className="text-xs text-slate-400 overflow-x-auto whitespace-pre-wrap break-all">
                                 {JSON.stringify(execution.trigger_data, null, 2).substring(0, 300)}
-                                {JSON.stringify(execution.trigger_data, null, 2).length > 300 && '...'}
+                                {JSON.stringify(execution.trigger_data, null, 2).length > 300 &&
+                                  '...'}
                               </pre>
                             </div>
                           )}
-                          
+
                           <p className="text-xs text-slate-500 mt-2">
                             Click to use this CARE trigger data as a test payload
                           </p>
@@ -1304,7 +1480,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                       ))
                     )}
                   </div>
-                  
+
                   <div className="flex justify-between items-center mt-3 pt-2 border-t border-slate-700">
                     <Button
                       variant="ghost"
@@ -1316,7 +1492,8 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                       ← Previous
                     </Button>
                     <span className="text-xs text-slate-500">
-                      Showing {executionOffset + 1} to {executionOffset + Math.min(executionLimit, recentExecutions.length)}
+                      Showing {executionOffset + 1} to{' '}
+                      {executionOffset + Math.min(executionLimit, recentExecutions.length)}
                     </span>
                     <Button
                       variant="ghost"
@@ -1330,6 +1507,202 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        );
+
+      case 'pep_query':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-200">PEP Query</Label>
+              <p className="text-sm text-slate-400 mt-1">
+                Write a plain English query to retrieve CRM data during workflow execution
+              </p>
+            </div>
+
+            {/* English Query Source */}
+            <div>
+              <Label className="text-slate-300 text-sm">English Query</Label>
+              <textarea
+                value={node.config?.source || ''}
+                onChange={(e) =>
+                  updateNodeConfig(node.id, {
+                    ...node.config,
+                    source: e.target.value,
+                    compile_status: null,
+                    compiled_ir: null,
+                    compile_error: null,
+                  })
+                }
+                placeholder="show me all activities for lead {{entity_id}} in the last 30 days"
+                className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-3 py-2 text-sm min-h-[80px] resize-y mt-1 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                rows={3}
+              />
+            </div>
+
+            {/* Variable Hints */}
+            <div>
+              <Label className="text-slate-400 text-xs">
+                Available variables from trigger payload
+              </Label>
+              <div className="flex flex-wrap gap-1.5 mt-1.5">
+                {['entity_id', 'tenant_id', 'event_type', 'email', 'phone', 'company'].map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => {
+                      const current = node.config?.source || '';
+                      updateNodeConfig(node.id, {
+                        ...node.config,
+                        source: current + `{{${v}}}`,
+                        compile_status: null,
+                        compiled_ir: null,
+                      });
+                    }}
+                    className="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-xs text-emerald-400 font-mono hover:bg-slate-700 transition-colors"
+                  >
+                    {`{{${v}}}`}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Compile Button */}
+            <div>
+              <button
+                onClick={async () => {
+                  const source = node.config?.source?.trim();
+                  if (!source) {
+                    toast({
+                      title: 'No query',
+                      description: 'Please enter a plain English query first.',
+                      variant: 'destructive',
+                    });
+                    return;
+                  }
+                  updateNodeConfig(node.id, { ...node.config, compile_status: 'compiling' });
+                  try {
+                    const tenantId = workflow?.tenant_id || node.config?.tenant_id;
+                    if (!tenantId) {
+                      updateNodeConfig(node.id, {
+                        ...node.config,
+                        compile_status: 'error',
+                        compile_error: 'No tenant_id available. Save the workflow first.',
+                      });
+                      return;
+                    }
+                    const resp = await fetch(`${BACKEND_URL}/api/pep/compile`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        ...(localStorage.getItem('token')
+                          ? { Authorization: `Bearer ${localStorage.getItem('token')}` }
+                          : {}),
+                      },
+                      body: JSON.stringify({ source, tenant_id: tenantId }),
+                    });
+                    const result = await resp.json();
+                    if (result.status === 'success') {
+                      updateNodeConfig(node.id, {
+                        ...node.config,
+                        compiled_ir: result.data.ir,
+                        compiled_at: new Date().toISOString(),
+                        compile_status: 'success',
+                        compile_error: null,
+                        _compile_meta: {
+                          target: result.data.target,
+                          target_kind: result.data.target_kind,
+                          confirmation: result.data.confirmation,
+                        },
+                      });
+                      toast({
+                        title: 'Compiled',
+                        description: result.data.confirmation || 'Query compiled successfully.',
+                      });
+                    } else if (result.status === 'clarification_required') {
+                      updateNodeConfig(node.id, {
+                        ...node.config,
+                        compile_status: 'error',
+                        compile_error: result.reason || 'Could not parse query.',
+                      });
+                    } else {
+                      updateNodeConfig(node.id, {
+                        ...node.config,
+                        compile_status: 'error',
+                        compile_error: result.message || 'Compilation failed.',
+                      });
+                    }
+                  } catch (err) {
+                    updateNodeConfig(node.id, {
+                      ...node.config,
+                      compile_status: 'error',
+                      compile_error: err.message,
+                    });
+                  }
+                }}
+                disabled={
+                  node.config?.compile_status === 'compiling' || !node.config?.source?.trim()
+                }
+                className="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+              >
+                {node.config?.compile_status === 'compiling' ? (
+                  <>
+                    <span className="animate-spin">⟳</span> Compiling...
+                  </>
+                ) : (
+                  <>▶ Compile Query</>
+                )}
+              </button>
+            </div>
+
+            {/* Compile Status */}
+            {node.config?.compile_status === 'success' && (
+              <div className="bg-emerald-900/20 border border-emerald-700 rounded-lg p-3">
+                <p className="text-emerald-300 text-sm font-medium">✅ Compiled successfully</p>
+                <p className="text-emerald-400 text-xs mt-1">
+                  Target:{' '}
+                  {node.config._compile_meta?.target || node.config.compiled_ir?.target || '—'}
+                  {' | '}
+                  Filters: {node.config.compiled_ir?.filters?.length || 0}
+                  {node.config.compiled_at && (
+                    <> | Last compiled: {new Date(node.config.compiled_at).toLocaleString()}</>
+                  )}
+                </p>
+              </div>
+            )}
+
+            {node.config?.compile_status === 'error' && (
+              <div className="bg-red-900/20 border border-red-700 rounded-lg p-3">
+                <p className="text-red-300 text-sm font-medium">❌ Compile failed</p>
+                <p className="text-red-400 text-xs mt-1">{node.config.compile_error}</p>
+              </div>
+            )}
+
+            {/* Collapsible IR Preview */}
+            {node.config?.compiled_ir && (
+              <details className="border border-slate-700 rounded-lg">
+                <summary className="px-3 py-2 text-xs text-slate-400 cursor-pointer hover:text-slate-300">
+                  View compiled IR
+                </summary>
+                <div className="px-3 pb-3">
+                  <pre className="text-xs text-slate-400 bg-slate-900 rounded p-2 overflow-x-auto whitespace-pre-wrap">
+                    {JSON.stringify(node.config.compiled_ir, null, 2)}
+                  </pre>
+                </div>
+              </details>
+            )}
+
+            {/* Runtime Info */}
+            <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-3">
+              <p className="text-slate-400 text-xs">
+                <strong className="text-slate-300">At runtime:</strong> Workflow variables like{' '}
+                <code className="text-emerald-400">{'{{entity_id}}'}</code> in filters will be
+                resolved from the trigger payload. Results are stored in{' '}
+                <code className="text-emerald-400">{'{{pep_results.count}}'}</code> and{' '}
+                <code className="text-emerald-400">{'{{pep_results.rows}}'}</code> for downstream
+                nodes.
+              </p>
             </div>
           </div>
         );
@@ -1368,9 +1741,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 placeholder="https://api.example.com/endpoint"
                 className="bg-slate-800 border-slate-700 text-slate-200"
               />
-              <p className="text-xs text-slate-500 mt-1">
-                Supports {'{{field_name}}'} variables
-              </p>
+              <p className="text-xs text-slate-500 mt-1">Supports {'{{field_name}}'} variables</p>
             </div>
 
             <div>
@@ -1402,7 +1773,9 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                       variant="ghost"
                       size="icon"
                       onClick={() => {
-                        const newHeaders = (node.config?.headers || []).filter((_, i) => i !== index);
+                        const newHeaders = (node.config?.headers || []).filter(
+                          (_, i) => i !== index,
+                        );
                         updateNodeConfig(node.id, { ...node.config, headers: newHeaders });
                       }}
                       className="text-red-400 hover:text-red-300"
@@ -1470,7 +1843,10 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                             onChange={(e) => {
                               const newMappings = [...(node.config?.body_mappings || [])];
                               newMappings[index] = { ...mapping, key: e.target.value };
-                              updateNodeConfig(node.id, { ...node.config, body_mappings: newMappings });
+                              updateNodeConfig(node.id, {
+                                ...node.config,
+                                body_mappings: newMappings,
+                              });
                             }}
                             placeholder="JSON key"
                             className="bg-slate-800 border-slate-700 text-slate-200 flex-1"
@@ -1481,15 +1857,20 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                               onValueChange={(value) => {
                                 const newMappings = [...(node.config?.body_mappings || [])];
                                 newMappings[index] = { ...mapping, value };
-                                updateNodeConfig(node.id, { ...node.config, body_mappings: newMappings });
+                                updateNodeConfig(node.id, {
+                                  ...node.config,
+                                  body_mappings: newMappings,
+                                });
                               }}
                             >
                               <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200 flex-1">
                                 <SelectValue placeholder="Select field" />
                               </SelectTrigger>
                               <SelectContent className="bg-slate-800 border-slate-700">
-                                {getAvailableFields().map(field => (
-                                  <SelectItem key={field} value={field}>{field}</SelectItem>
+                                {getAvailableFields().map((field) => (
+                                  <SelectItem key={field} value={field}>
+                                    {field}
+                                  </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
@@ -1499,7 +1880,10 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                               onChange={(e) => {
                                 const newMappings = [...(node.config?.body_mappings || [])];
                                 newMappings[index] = { ...mapping, value: e.target.value };
-                                updateNodeConfig(node.id, { ...node.config, body_mappings: newMappings });
+                                updateNodeConfig(node.id, {
+                                  ...node.config,
+                                  body_mappings: newMappings,
+                                });
                               }}
                               placeholder="webhook_field"
                               className="bg-slate-800 border-slate-700 text-slate-200 flex-1"
@@ -1509,8 +1893,13 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                             variant="ghost"
                             size="icon"
                             onClick={() => {
-                              const newMappings = (node.config?.body_mappings || []).filter((_, i) => i !== index);
-                              updateNodeConfig(node.id, { ...node.config, body_mappings: newMappings });
+                              const newMappings = (node.config?.body_mappings || []).filter(
+                                (_, i) => i !== index,
+                              );
+                              updateNodeConfig(node.id, {
+                                ...node.config,
+                                body_mappings: newMappings,
+                              });
                             }}
                             className="text-red-400 hover:text-red-300"
                           >
@@ -1523,7 +1912,10 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                       variant="outline"
                       size="sm"
                       onClick={() => {
-                        const newMappings = [...(node.config?.body_mappings || []), { key: '', value: '' }];
+                        const newMappings = [
+                          ...(node.config?.body_mappings || []),
+                          { key: '', value: '' },
+                        ];
                         updateNodeConfig(node.id, { ...node.config, body_mappings: newMappings });
                       }}
                       className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700 mt-2 w-full"
@@ -1537,9 +1929,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
             )}
 
             <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-3">
-              <p className="text-sm text-blue-300 font-semibold mb-2">
-                💡 Common Use Cases:
-              </p>
+              <p className="text-sm text-blue-300 font-semibold mb-2">💡 Common Use Cases:</p>
               <ul className="text-xs text-blue-400 space-y-1 ml-4 list-disc">
                 <li>Send to Slack: POST to webhook URL</li>
                 <li>Add to Google Sheets: Use Sheets API</li>
@@ -1591,7 +1981,8 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               />
             </div>
             <p className="text-xs text-slate-500">
-              This queues an email as an Activity with type &quot;email&quot;. Delivery handling can be wired later.
+              This queues an email as an Activity with type &quot;email&quot;. Delivery handling can
+              be wired later.
             </p>
           </div>
         );
@@ -1629,9 +2020,11 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                     <SelectValue placeholder="Select phone field" />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-800 border-slate-700">
-                    {getAvailableFields().map(field => (
+                    {getAvailableFields().map((field) => (
                       <SelectItem key={field} value={field}>
-                        {'{{'}{field}{'}}'}
+                        {'{{'}
+                        {field}
+                        {'}}'}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1666,7 +2059,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               <textarea
                 value={(node.config?.talking_points || []).join('\n')}
                 onChange={(e) => {
-                  const points = e.target.value.split('\n').filter(p => p.trim());
+                  const points = e.target.value.split('\n').filter((p) => p.trim());
                   updateNodeConfig(node.id, { ...node.config, talking_points: points });
                 }}
                 placeholder="Enter each talking point on a new line"
@@ -1678,8 +2071,9 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
             </div>
             <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-700">
               <p className="text-xs text-slate-400">
-                <strong>Note:</strong> Requires CallFluent or Thoughtly integration configured in tenant settings.
-                The AI agent will call the contact and follow the provided talking points.
+                <strong>Note:</strong> Requires CallFluent or Thoughtly integration configured in
+                tenant settings. The AI agent will call the contact and follow the provided talking
+                points.
               </p>
             </div>
           </div>
@@ -1720,9 +2114,11 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                     <SelectValue placeholder="Select webhook field" />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-800 border-slate-700">
-                    {getAvailableFields().map(field => (
+                    {getAvailableFields().map((field) => (
                       <SelectItem key={field} value={field}>
-                        {'{{'}{field}{'}}'}
+                        {'{{'}
+                        {field}
+                        {'}}'}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1750,9 +2146,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           <div className="space-y-4">
             <div>
               <Label className="text-slate-200">Field Mappings</Label>
-              <p className="text-sm text-slate-400 mb-3">
-                Map webhook fields to account fields
-              </p>
+              <p className="text-sm text-slate-400 mb-3">Map webhook fields to account fields</p>
 
               <div className="max-h-96 overflow-y-auto pr-2 space-y-2">
                 {(node.config?.field_mappings || []).map((mapping, index) => (
@@ -1783,15 +2177,20 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                         onValueChange={(value) => {
                           const newMappings = [...(node.config?.field_mappings || [])];
                           newMappings[index] = { ...mapping, webhook_field: value };
-                          updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
+                          updateNodeConfig(node.id, {
+                            ...node.config,
+                            field_mappings: newMappings,
+                          });
                         }}
                       >
                         <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
                           <SelectValue placeholder="Webhook Field" />
                         </SelectTrigger>
                         <SelectContent className="bg-slate-800 border-slate-700">
-                          {getAvailableFields().map(field => (
-                            <SelectItem key={field} value={field}>{field}</SelectItem>
+                          {getAvailableFields().map((field) => (
+                            <SelectItem key={field} value={field}>
+                              {field}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -1801,7 +2200,10 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                         onChange={(e) => {
                           const newMappings = [...(node.config?.field_mappings || [])];
                           newMappings[index] = { ...mapping, webhook_field: e.target.value };
-                          updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
+                          updateNodeConfig(node.id, {
+                            ...node.config,
+                            field_mappings: newMappings,
+                          });
                         }}
                         placeholder="webhook_field"
                         className="bg-slate-800 border-slate-700 text-slate-200"
@@ -1812,7 +2214,9 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                       variant="ghost"
                       size="icon"
                       onClick={() => {
-                        const newMappings = (node.config?.field_mappings || []).filter((_, i) => i !== index);
+                        const newMappings = (node.config?.field_mappings || []).filter(
+                          (_, i) => i !== index,
+                        );
                         updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
                       }}
                       className="text-red-400 hover:text-red-300 hover:bg-red-900/20 flex-shrink-0"
@@ -1827,7 +2231,10 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  const newMappings = [...(node.config?.field_mappings || []), { account_field: '', webhook_field: '' }];
+                  const newMappings = [
+                    ...(node.config?.field_mappings || []),
+                    { account_field: '', webhook_field: '' },
+                  ];
                   updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
                 }}
                 className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700 mt-2 w-full"
@@ -1879,15 +2286,20 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                         onValueChange={(value) => {
                           const newMappings = [...(node.config?.field_mappings || [])];
                           newMappings[index] = { ...mapping, webhook_field: value };
-                          updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
+                          updateNodeConfig(node.id, {
+                            ...node.config,
+                            field_mappings: newMappings,
+                          });
                         }}
                       >
                         <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
                           <SelectValue placeholder="Webhook Field" />
                         </SelectTrigger>
                         <SelectContent className="bg-slate-800 border-slate-700">
-                          {getAvailableFields().map(field => (
-                            <SelectItem key={field} value={field}>{field}</SelectItem>
+                          {getAvailableFields().map((field) => (
+                            <SelectItem key={field} value={field}>
+                              {field}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -1897,7 +2309,10 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                         onChange={(e) => {
                           const newMappings = [...(node.config?.field_mappings || [])];
                           newMappings[index] = { ...mapping, webhook_field: e.target.value };
-                          updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
+                          updateNodeConfig(node.id, {
+                            ...node.config,
+                            field_mappings: newMappings,
+                          });
                         }}
                         placeholder="webhook_field"
                         className="bg-slate-800 border-slate-700 text-slate-200"
@@ -1908,7 +2323,9 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                       variant="ghost"
                       size="icon"
                       onClick={() => {
-                        const newMappings = (node.config?.field_mappings || []).filter((_, i) => i !== index);
+                        const newMappings = (node.config?.field_mappings || []).filter(
+                          (_, i) => i !== index,
+                        );
                         updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
                       }}
                       className="text-red-400 hover:text-red-300 hover:bg-red-900/20 flex-shrink-0"
@@ -1923,7 +2340,10 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  const newMappings = [...(node.config?.field_mappings || []), { opportunity_field: '', webhook_field: '' }];
+                  const newMappings = [
+                    ...(node.config?.field_mappings || []),
+                    { opportunity_field: '', webhook_field: '' },
+                  ];
                   updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
                 }}
                 className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700 mt-2 w-full"
@@ -1974,15 +2394,20 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                         onValueChange={(value) => {
                           const newMappings = [...(node.config?.field_mappings || [])];
                           newMappings[index] = { ...mapping, webhook_field: value };
-                          updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
+                          updateNodeConfig(node.id, {
+                            ...node.config,
+                            field_mappings: newMappings,
+                          });
                         }}
                       >
                         <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
                           <SelectValue placeholder="Webhook Field" />
                         </SelectTrigger>
                         <SelectContent className="bg-slate-800 border-slate-700">
-                          {getAvailableFields().map(field => (
-                            <SelectItem key={field} value={field}>{field}</SelectItem>
+                          {getAvailableFields().map((field) => (
+                            <SelectItem key={field} value={field}>
+                              {field}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -1992,7 +2417,10 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                         onChange={(e) => {
                           const newMappings = [...(node.config?.field_mappings || [])];
                           newMappings[index] = { ...mapping, webhook_field: e.target.value };
-                          updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
+                          updateNodeConfig(node.id, {
+                            ...node.config,
+                            field_mappings: newMappings,
+                          });
                         }}
                         placeholder="webhook_field"
                         className="bg-slate-800 border-slate-700 text-slate-200"
@@ -2003,7 +2431,9 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                       variant="ghost"
                       size="icon"
                       onClick={() => {
-                        const newMappings = (node.config?.field_mappings || []).filter((_, i) => i !== index);
+                        const newMappings = (node.config?.field_mappings || []).filter(
+                          (_, i) => i !== index,
+                        );
                         updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
                       }}
                       className="text-red-400 hover:text-red-300 hover:bg-red-900/20 flex-shrink-0"
@@ -2018,7 +2448,10 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  const newMappings = [...(node.config?.field_mappings || []), { opportunity_field: '', webhook_field: '' }];
+                  const newMappings = [
+                    ...(node.config?.field_mappings || []),
+                    { opportunity_field: '', webhook_field: '' },
+                  ];
                   updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
                 }}
                 className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700 mt-2 w-full"
@@ -2130,7 +2563,9 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               <Label className="text-slate-200">Model</Label>
               <Input
                 value={node.config?.model || 'default'}
-                onChange={(e) => updateNodeConfig(node.id, { ...node.config, model: e.target.value })}
+                onChange={(e) =>
+                  updateNodeConfig(node.id, { ...node.config, model: e.target.value })
+                }
                 placeholder="e.g., gpt-4.1, claude-3.5, gemini-1.5-pro or 'default'"
                 className="bg-slate-800 border-slate-700 text-slate-200"
               />
@@ -2139,11 +2574,16 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               <Label className="text-slate-200">Text/Context</Label>
               <textarea
                 value={node.config?.text || ''}
-                onChange={(e) => updateNodeConfig(node.id, { ...node.config, text: e.target.value })}
+                onChange={(e) =>
+                  updateNodeConfig(node.id, { ...node.config, text: e.target.value })
+                }
                 placeholder="Provide notes or use {{field}} variables from payload/context"
                 className="w-full min-h-[120px] rounded-md bg-slate-800 border border-slate-700 text-slate-200 p-2"
               />
-              <p className="text-xs text-slate-500 mt-1">Output stored in {'{{ai_stage}}'} with {'{{ai_stage.stage}}'} and {'{{ai_stage.confidence}}'}</p>
+              <p className="text-xs text-slate-500 mt-1">
+                Output stored in {'{{ai_stage}}'} with {'{{ai_stage.stage}}'} and{' '}
+                {'{{ai_stage.confidence}}'}
+              </p>
             </div>
           </div>
         );
@@ -2156,7 +2596,9 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               <Label className="text-slate-200">Provider</Label>
               <Select
                 value={node.config?.provider || 'mcp'}
-                onValueChange={(value) => updateNodeConfig(node.id, { ...node.config, provider: value })}
+                onValueChange={(value) =>
+                  updateNodeConfig(node.id, { ...node.config, provider: value })
+                }
               >
                 <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
                   <SelectValue />
@@ -2173,11 +2615,16 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               <Label className="text-slate-200">Prompt</Label>
               <textarea
                 value={node.config?.prompt || ''}
-                onChange={(e) => updateNodeConfig(node.id, { ...node.config, prompt: e.target.value })}
+                onChange={(e) =>
+                  updateNodeConfig(node.id, { ...node.config, prompt: e.target.value })
+                }
                 placeholder="Describe the email to generate. Use {{field}} variables."
                 className="w-full min-h-[120px] rounded-md bg-slate-800 border border-slate-700 text-slate-200 p-2"
               />
-              <p className="text-xs text-slate-500 mt-1">Output stored in {'{{ai_email}}'} with {'{{ai_email.subject}}'} and {'{{ai_email.body}}'}</p>
+              <p className="text-xs text-slate-500 mt-1">
+                Output stored in {'{{ai_email}}'} with {'{{ai_email.subject}}'} and{' '}
+                {'{{ai_email.body}}'}
+              </p>
             </div>
           </div>
         );
@@ -2190,7 +2637,9 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               <Label className="text-slate-200">Provider</Label>
               <Select
                 value={node.config?.provider || 'mcp'}
-                onValueChange={(value) => updateNodeConfig(node.id, { ...node.config, provider: value })}
+                onValueChange={(value) =>
+                  updateNodeConfig(node.id, { ...node.config, provider: value })
+                }
               >
                 <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
                   <SelectValue />
@@ -2207,11 +2656,15 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               <Label className="text-slate-200">Input (e.g., domain)</Label>
               <Input
                 value={node.config?.input || '{{company}}'}
-                onChange={(e) => updateNodeConfig(node.id, { ...node.config, input: e.target.value })}
+                onChange={(e) =>
+                  updateNodeConfig(node.id, { ...node.config, input: e.target.value })
+                }
                 placeholder="e.g., {{domain}} or {{company}}"
                 className="bg-slate-800 border-slate-700 text-slate-200"
               />
-              <p className="text-xs text-slate-500 mt-1">Output stored in {'{{ai_enrichment}}'} (e.g., website, industry, size)</p>
+              <p className="text-xs text-slate-500 mt-1">
+                Output stored in {'{{ai_enrichment}}'} (e.g., website, industry, size)
+              </p>
             </div>
           </div>
         );
@@ -2224,7 +2677,9 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               <Label className="text-slate-200">Provider</Label>
               <Select
                 value={node.config?.provider || 'mcp'}
-                onValueChange={(value) => updateNodeConfig(node.id, { ...node.config, provider: value })}
+                onValueChange={(value) =>
+                  updateNodeConfig(node.id, { ...node.config, provider: value })
+                }
               >
                 <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
                   <SelectValue />
@@ -2241,11 +2696,16 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               <Label className="text-slate-200">Context</Label>
               <textarea
                 value={node.config?.context || ''}
-                onChange={(e) => updateNodeConfig(node.id, { ...node.config, context: e.target.value })}
+                onChange={(e) =>
+                  updateNodeConfig(node.id, { ...node.config, context: e.target.value })
+                }
                 placeholder="Provide context for next best action (use {{field}} variables)"
                 className="w-full min-h-[120px] rounded-md bg-slate-800 border border-slate-700 text-slate-200 p-2"
               />
-              <p className="text-xs text-slate-500 mt-1">Output stored in {'{{ai_route}}'}: {'{{type}}'}, {'{{title}}'}, {'{{details}}'}, {'{{priority}}'}</p>
+              <p className="text-xs text-slate-500 mt-1">
+                Output stored in {'{{ai_route}}'}: {'{{type}}'}, {'{{title}}'}, {'{{details}}'},{' '}
+                {'{{priority}}'}
+              </p>
             </div>
           </div>
         );
@@ -2328,7 +2788,8 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
 
             <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-3 mt-4">
               <p className="text-sm text-blue-300">
-                <strong>How to connect:</strong> After saving, connect this node to two different nodes:
+                <strong>How to connect:</strong> After saving, connect this node to two different
+                nodes:
               </p>
               <ul className="text-xs text-blue-400 mt-2 space-y-1 ml-4 list-disc">
                 <li>First connection = TRUE path (condition matches)</li>
@@ -2349,7 +2810,10 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                   min="1"
                   value={node.config?.duration_value || 1}
                   onChange={(e) => {
-                    updateNodeConfig(node.id, { ...node.config, duration_value: parseInt(e.target.value) || 1 });
+                    updateNodeConfig(node.id, {
+                      ...node.config,
+                      duration_value: parseInt(e.target.value) || 1,
+                    });
                   }}
                   placeholder="1"
                   className="bg-slate-800 border-slate-700 text-slate-200 flex-1"
@@ -2376,9 +2840,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               </p>
             </div>
             <div className="bg-amber-900/20 border border-amber-700 rounded-lg p-3">
-              <p className="text-sm text-amber-300 font-semibold mb-2">
-                ⚠️ Important Notes:
-              </p>
+              <p className="text-sm text-amber-300 font-semibold mb-2">⚠️ Important Notes:</p>
               <ul className="text-xs text-amber-400 space-y-1 ml-4 list-disc">
                 <li>Use for follow-up delays (e.g., wait 3 days then send email)</li>
                 <li>Workflow execution continues after delay completes</li>
@@ -2404,7 +2866,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                     <SelectValue placeholder="Select phone field" />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-800 border-slate-700">
-                    {getAvailableFields().map(field => (
+                    {getAvailableFields().map((field) => (
                       <SelectItem key={field} value={field}>
                         {'{{' + field + '}}'}
                       </SelectItem>
@@ -2441,9 +2903,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               </p>
             </div>
             <div className="bg-fuchsia-900/20 border border-fuchsia-700 rounded-lg p-3">
-              <p className="text-sm text-fuchsia-300 font-semibold mb-2">
-                📱 SMS Integration:
-              </p>
+              <p className="text-sm text-fuchsia-300 font-semibold mb-2">📱 SMS Integration:</p>
               <ul className="text-xs text-fuchsia-400 space-y-1 ml-4 list-disc">
                 <li>Requires Twilio or SMS provider configuration</li>
                 <li>Phone numbers must include country code (+1 for US)</li>
@@ -2505,9 +2965,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               </div>
             )}
             <div className="bg-lime-900/20 border border-lime-700 rounded-lg p-3">
-              <p className="text-sm text-lime-300 font-semibold mb-2">
-                👥 Assignment Methods:
-              </p>
+              <p className="text-sm text-lime-300 font-semibold mb-2">👥 Assignment Methods:</p>
               <ul className="text-xs text-lime-400 space-y-1 ml-4 list-disc">
                 <li>**Specific User**: Assign to a designated user ID</li>
                 <li>**Round Robin**: Rotate assignments evenly across team</li>
@@ -2550,17 +3008,16 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 placeholder="e.g., 'qualified', 'contacted', 'closed won'"
                 className="bg-slate-800 border-slate-700 text-slate-200"
               />
-              <p className="text-xs text-slate-500 mt-1">
-                Use exact status values from your CRM
-              </p>
+              <p className="text-xs text-slate-500 mt-1">Use exact status values from your CRM</p>
             </div>
             <div className="bg-sky-900/20 border border-sky-700 rounded-lg p-3">
-              <p className="text-sm text-sky-300 font-semibold mb-2">
-                📊 Common Status Updates:
-              </p>
+              <p className="text-sm text-sky-300 font-semibold mb-2">📊 Common Status Updates:</p>
               <ul className="text-xs text-sky-400 space-y-1 ml-4 list-disc">
                 <li>**Leads**: new, contacted, qualified, disqualified, converted</li>
-                <li>**Opportunities**: prospecting, qualification, proposal, negotiation, closed won, closed lost</li>
+                <li>
+                  **Opportunities**: prospecting, qualification, proposal, negotiation, closed won,
+                  closed lost
+                </li>
                 <li>**Contacts**: active, inactive, churned</li>
               </ul>
             </div>
@@ -2607,9 +3064,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               </p>
             </div>
             <div className="bg-amber-900/20 border border-amber-700 rounded-lg p-3">
-              <p className="text-sm text-amber-300 font-semibold mb-2">
-                📝 Note Tips:
-              </p>
+              <p className="text-sm text-amber-300 font-semibold mb-2">📝 Note Tips:</p>
               <ul className="text-xs text-amber-400 space-y-1 ml-4 list-disc">
                 <li>Notes are attached to the record found in the workflow context</li>
                 <li>Use {'{{date}}'} to include the current date</li>
@@ -2673,12 +3128,10 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               </Select>
             </div>
             <div className="bg-violet-900/20 border border-violet-700 rounded-lg p-3">
-              <p className="text-sm text-violet-300 font-semibold mb-2">
-                ✨ AI Summarize
-              </p>
+              <p className="text-sm text-violet-300 font-semibold mb-2">✨ AI Summarize</p>
               <p className="text-xs text-violet-400">
-                Uses AI to generate summaries from workflow context (leads, contacts, opportunities).
-                Result is stored in {'{{ai_summary}}'} for use in subsequent nodes.
+                Uses AI to generate summaries from workflow context (leads, contacts,
+                opportunities). Result is stored in {'{{ai_summary}}'} for use in subsequent nodes.
               </p>
             </div>
           </div>
@@ -2740,12 +3193,10 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               </div>
             )}
             <div className="bg-fuchsia-900/20 border border-fuchsia-700 rounded-lg p-3">
-              <p className="text-sm text-fuchsia-300 font-semibold mb-2">
-                📄 AI Note Generation
-              </p>
+              <p className="text-sm text-fuchsia-300 font-semibold mb-2">📄 AI Note Generation</p>
               <p className="text-xs text-fuchsia-400">
-                Uses AI to generate intelligent notes based on workflow context.
-                Notes are automatically saved and attached to the related record.
+                Uses AI to generate intelligent notes based on workflow context. Notes are
+                automatically saved and attached to the related record.
               </p>
             </div>
           </div>
@@ -2772,9 +3223,14 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               </Select>
             </div>
             <div>
-              <Label className="text-slate-200">{node.config?.message_type === 'email' ? 'Email Address' : 'Phone Number'}</Label>
+              <Label className="text-slate-200">
+                {node.config?.message_type === 'email' ? 'Email Address' : 'Phone Number'}
+              </Label>
               <Input
-                value={node.config?.to || (node.config?.message_type === 'email' ? '{{email}}' : '{{phone}}')}
+                value={
+                  node.config?.to ||
+                  (node.config?.message_type === 'email' ? '{{email}}' : '{{phone}}')
+                }
                 onChange={(e) => {
                   updateNodeConfig(node.id, { ...node.config, to: e.target.value });
                 }}
@@ -2807,12 +3263,10 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               />
             </div>
             <div className="bg-sky-900/20 border border-sky-700 rounded-lg p-3">
-              <p className="text-sm text-sky-300 font-semibold mb-2">
-                💬 Thoughtly Integration
-              </p>
+              <p className="text-sm text-sky-300 font-semibold mb-2">💬 Thoughtly Integration</p>
               <p className="text-xs text-sky-400">
-                Send SMS or email messages through Thoughtly AI platform.
-                API credentials are configured in tenant integration settings.
+                Send SMS or email messages through Thoughtly AI platform. API credentials are
+                configured in tenant integration settings.
               </p>
             </div>
           </div>
@@ -2843,7 +3297,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 className="w-full min-h-[80px] rounded-md bg-slate-800 border border-slate-700 text-slate-200 p-2"
               />
               <p className="text-xs text-slate-400 mt-1">
-                {(node.config?.message?.length || 0)}/160 characters
+                {node.config?.message?.length || 0}/160 characters
               </p>
             </div>
             <div>
@@ -2858,12 +3312,10 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               />
             </div>
             <div className="bg-lime-900/20 border border-lime-700 rounded-lg p-3">
-              <p className="text-sm text-lime-300 font-semibold mb-2">
-                📱 CallFluent SMS
-              </p>
+              <p className="text-sm text-lime-300 font-semibold mb-2">📱 CallFluent SMS</p>
               <p className="text-xs text-lime-400">
-                Send SMS messages through CallFluent AI platform.
-                API credentials are configured in tenant integration settings.
+                Send SMS messages through CallFluent AI platform. API credentials are configured in
+                tenant integration settings.
               </p>
             </div>
           </div>
@@ -2932,7 +3384,9 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                       variant="ghost"
                       size="sm"
                       onClick={() => {
-                        const mappings = (node.config.field_mappings || []).filter((_, i) => i !== idx);
+                        const mappings = (node.config.field_mappings || []).filter(
+                          (_, i) => i !== idx,
+                        );
                         updateNodeConfig(node.id, { ...node.config, field_mappings: mappings });
                       }}
                       className="text-red-400 hover:text-red-300"
@@ -2945,7 +3399,10 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    const mappings = [...(node.config.field_mappings || []), { pabbly_field: '', source_value: '' }];
+                    const mappings = [
+                      ...(node.config.field_mappings || []),
+                      { pabbly_field: '', source_value: '' },
+                    ];
                     updateNodeConfig(node.id, { ...node.config, field_mappings: mappings });
                   }}
                   className="w-full border-slate-600 text-slate-300"
@@ -2955,69 +3412,75 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               </div>
             )}
             <div className="bg-pink-900/20 border border-pink-700 rounded-lg p-3">
-              <p className="text-sm text-pink-300 font-semibold mb-2">
-                🔗 Pabbly Connect
-              </p>
+              <p className="text-sm text-pink-300 font-semibold mb-2">🔗 Pabbly Connect</p>
               <p className="text-xs text-pink-400">
-                Send workflow data to Pabbly Connect for cross-platform automation.
-                Use &quot;Full Entity Data&quot; to send all context, or map specific fields.
+                Send workflow data to Pabbly Connect for cross-platform automation. Use &quot;Full
+                Entity Data&quot; to send all context, or map specific fields.
               </p>
             </div>
 
             {/* Payload Preview Section */}
             <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4">
               <div className="flex items-center justify-between mb-2">
-                <Label className="text-slate-200 text-sm font-semibold">📦 Sample Payload Preview</Label>
+                <Label className="text-slate-200 text-sm font-semibold">
+                  📦 Sample Payload Preview
+                </Label>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    const innerPayload = node.config?.payload_type === 'custom' 
-                      ? {
-                          // Show custom mapping example
-                          ...(node.config?.field_mappings || []).reduce((acc, m) => {
-                            if (m.pabbly_field) {
-                              acc[m.pabbly_field] = m.source_value ? `{{${m.source_value}}}` : 'example_value';
-                            }
-                            return acc;
-                          }, {})
-                        }
-                      : {
-                          // CARE event payload matching CARE_EVENT_CONTRACT.md
-                          event_id: 'trigger-1706234567890-abc123def',
-                          type: 'care.trigger_detected',
-                          ts: new Date().toISOString(),
-                          tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
-                          entity_type: 'contact',
-                          entity_id: 'CONTACT_UUID',
-                          signal_entity_type: 'activity',
-                          signal_entity_id: 'ACTIVITY_UUID',
-                          trigger_type: 'activity_overdue',
-                          action_origin: 'care_autonomous',
-                          policy_gate_result: 'allowed',
-                          reason: 'Activity overdue by 2 days',
-                          care_state: 'at_risk',
-                          previous_state: 'aware',
-                          escalation_detected: true,
-                          escalation_status: null,
-                          deep_link: '/app/contacts/CONTACT_UUID',
-                          intent: 'triage_trigger',
-                          meta: {
-                            subject: 'Follow-up call with prospect',
-                            days_overdue: 2,
-                            type: 'task',
-                            state_transition: 'aware → at_risk'
-                          },
-                          resolved_email: 'contact@example.com',
-                          source: 'aisha_crm',
-                          workflow_id: workflow?.id || 'uuid',
-                          workflow_name: workflow?.name || 'My Workflow'
-                        };
+                    const innerPayload =
+                      node.config?.payload_type === 'custom'
+                        ? {
+                            // Show custom mapping example
+                            ...(node.config?.field_mappings || []).reduce((acc, m) => {
+                              if (m.pabbly_field) {
+                                acc[m.pabbly_field] = m.source_value
+                                  ? `{{${m.source_value}}}`
+                                  : 'example_value';
+                              }
+                              return acc;
+                            }, {}),
+                          }
+                        : {
+                            // CARE event payload matching CARE_EVENT_CONTRACT.md
+                            event_id: 'trigger-1706234567890-abc123def',
+                            type: 'care.trigger_detected',
+                            ts: new Date().toISOString(),
+                            tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
+                            entity_type: 'contact',
+                            entity_id: 'CONTACT_UUID',
+                            signal_entity_type: 'activity',
+                            signal_entity_id: 'ACTIVITY_UUID',
+                            trigger_type: 'activity_overdue',
+                            action_origin: 'care_autonomous',
+                            policy_gate_result: 'allowed',
+                            reason: 'Activity overdue by 2 days',
+                            care_state: 'at_risk',
+                            previous_state: 'aware',
+                            escalation_detected: true,
+                            escalation_status: null,
+                            deep_link: '/app/contacts/CONTACT_UUID',
+                            intent: 'triage_trigger',
+                            meta: {
+                              subject: 'Follow-up call with prospect',
+                              days_overdue: 2,
+                              type: 'task',
+                              state_transition: 'aware → at_risk',
+                            },
+                            resolved_email: 'contact@example.com',
+                            source: 'aisha_crm',
+                            workflow_id: workflow?.id || 'uuid',
+                            workflow_name: workflow?.name || 'My Workflow',
+                          };
                     // Wrap under "data" key for Pabbly field parsing
                     const samplePayload = { data: innerPayload };
-                    
+
                     navigator.clipboard.writeText(JSON.stringify(samplePayload, null, 2));
-                    toast({ title: "Copied to clipboard!", description: "Paste this into Pabbly to map fields" });
+                    toast({
+                      title: 'Copied to clipboard!',
+                      description: 'Paste this into Pabbly to map fields',
+                    });
                   }}
                   className="text-pink-400 hover:text-pink-300 text-xs"
                 >
@@ -3027,45 +3490,50 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               <div className="bg-slate-950 rounded p-3 max-h-60 overflow-y-auto">
                 <pre className="text-xs text-slate-300 font-mono whitespace-pre-wrap">
                   {JSON.stringify(
-                    { data: node.config?.payload_type === 'custom'
-                      ? {
-                          ...(node.config?.field_mappings || []).reduce((acc, m) => {
-                            if (m.pabbly_field) {
-                              acc[m.pabbly_field] = m.source_value ? `{{${m.source_value}}}` : 'example_value';
+                    {
+                      data:
+                        node.config?.payload_type === 'custom'
+                          ? {
+                              ...(node.config?.field_mappings || []).reduce((acc, m) => {
+                                if (m.pabbly_field) {
+                                  acc[m.pabbly_field] = m.source_value
+                                    ? `{{${m.source_value}}}`
+                                    : 'example_value';
+                                }
+                                return acc;
+                              }, {}),
                             }
-                            return acc;
-                          }, {})
-                        }
-                      : {
-                          event_id: 'trigger-...-sample',
-                          type: 'care.trigger_detected',
-                          ts: '2026-01-26T12:34:56.789Z',
-                          tenant_id: 'tenant_uuid',
-                          entity_type: 'contact',
-                          entity_id: 'CONTACT_UUID',
-                          signal_entity_type: 'activity',
-                          signal_entity_id: 'ACTIVITY_UUID',
-                          trigger_type: 'activity_overdue',
-                          action_origin: 'care_autonomous',
-                          reason: 'Activity overdue by 2 days',
-                          care_state: 'at_risk',
-                          previous_state: 'aware',
-                          escalation_detected: true,
-                          deep_link: '/app/contacts/CONTACT_UUID',
-                          meta: { subject: '...', days_overdue: 2 },
-                          resolved_email: 'contact@example.com',
-                          source: 'aisha_crm',
-                          workflow_id: workflow?.id || 'uuid',
-                          workflow_name: workflow?.name || 'My Workflow'
-                        }
+                          : {
+                              event_id: 'trigger-...-sample',
+                              type: 'care.trigger_detected',
+                              ts: '2026-01-26T12:34:56.789Z',
+                              tenant_id: 'tenant_uuid',
+                              entity_type: 'contact',
+                              entity_id: 'CONTACT_UUID',
+                              signal_entity_type: 'activity',
+                              signal_entity_id: 'ACTIVITY_UUID',
+                              trigger_type: 'activity_overdue',
+                              action_origin: 'care_autonomous',
+                              reason: 'Activity overdue by 2 days',
+                              care_state: 'at_risk',
+                              previous_state: 'aware',
+                              escalation_detected: true,
+                              deep_link: '/app/contacts/CONTACT_UUID',
+                              meta: { subject: '...', days_overdue: 2 },
+                              resolved_email: 'contact@example.com',
+                              source: 'aisha_crm',
+                              workflow_id: workflow?.id || 'uuid',
+                              workflow_name: workflow?.name || 'My Workflow',
+                            },
                     },
                     null,
-                    2
+                    2,
                   )}
                 </pre>
               </div>
               <p className="text-xs text-slate-500 mt-2">
-                This is what Pabbly will receive. Use &quot;Use Sample CARE Payload&quot; button above to test with real data.
+                This is what Pabbly will receive. Use &quot;Use Sample CARE Payload&quot; button
+                above to test with real data.
               </p>
             </div>
 
@@ -3127,7 +3595,10 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 type="number"
                 value={node.config?.timeout_minutes || 60}
                 onChange={(e) => {
-                  updateNodeConfig(node.id, { ...node.config, timeout_minutes: parseInt(e.target.value) || 60 });
+                  updateNodeConfig(node.id, {
+                    ...node.config,
+                    timeout_minutes: parseInt(e.target.value) || 60,
+                  });
                 }}
                 className="bg-slate-800 border-slate-700 text-slate-200"
                 min={1}
@@ -3140,8 +3611,8 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 ⏳ Wait for External Response
               </p>
               <p className="text-xs text-slate-400">
-                Pauses workflow execution until a matching webhook is received.
-                Useful for waiting on call results from Thoughtly/CallFluent.
+                Pauses workflow execution until a matching webhook is received. Useful for waiting
+                on call results from Thoughtly/CallFluent.
               </p>
             </div>
           </div>
@@ -3149,26 +3620,36 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
 
       default:
         return (
-          <div className="text-slate-400 text-sm">
-            No configuration needed for this node type
-          </div>
+          <div className="text-slate-400 text-sm">No configuration needed for this node type</div>
         );
     }
   };
 
   const handleSave = async () => {
     if (!name.trim()) {
-      toast({ title: "Name required", description: 'Please enter a workflow name', variant: 'destructive' });
+      toast({
+        title: 'Name required',
+        description: 'Please enter a workflow name',
+        variant: 'destructive',
+      });
       return;
     }
 
     if (nodes.length === 0) {
-      toast({ title: "Nodes required", description: 'Add at least one node to your workflow', variant: 'destructive' });
+      toast({
+        title: 'Nodes required',
+        description: 'Add at least one node to your workflow',
+        variant: 'destructive',
+      });
       return;
     }
 
     if (!user) {
-      toast({ title: "User error", description: 'User not loaded. Please try again.', variant: 'destructive' });
+      toast({
+        title: 'User error',
+        description: 'User not loaded. Please try again.',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -3181,14 +3662,20 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           const selected = localStorage.getItem('selected_tenant_id');
           if (selected) tenantId = selected;
         }
-      } catch { /* noop */ }
+      } catch {
+        /* noop */
+      }
       if (!tenantId && import.meta.env.DEV) {
         // Dev fallback to seeded tenant
         tenantId = '6cb4c008-4847-426a-9a2e-918ad70e7b69';
       }
 
       if (!tenantId) {
-        toast({ title: "Tenant required", description: 'No tenant selected. Please choose a tenant and try again.', variant: 'destructive' });
+        toast({
+          title: 'Tenant required',
+          description: 'No tenant selected. Please choose a tenant and try again.',
+          variant: 'destructive',
+        });
         setSaving(false);
         return;
       }
@@ -3200,11 +3687,12 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
         is_active: true,
         trigger: {
           type: 'webhook',
-          config: {}
+          config: {},
         },
         nodes,
         connections,
-        webhook_url: workflow?.webhook_url || `${BACKEND_URL}/api/workflows/execute?workflow_id=PENDING`
+        webhook_url:
+          workflow?.webhook_url || `${BACKEND_URL}/api/workflows/execute?workflow_id=PENDING`,
       };
 
       console.log('[WorkflowBuilder] Saving workflow with nodes:', nodes);
@@ -3228,28 +3716,34 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           webhook_url: `${BACKEND_URL}/api/workflows/execute?workflow_id=${savedWorkflow.id}`,
           nodes,
           connections,
-          tenant_id: tenantId // Ensure tenant_id is passed
+          tenant_id: tenantId, // Ensure tenant_id is passed
         });
       }
 
-      toast({ title: "Workflow saved", description: 'Workflow saved successfully' });
+      toast({ title: 'Workflow saved', description: 'Workflow saved successfully' });
       onSave();
     } catch (error) {
       console.error('Failed to save workflow:', error);
-      toast({ title: "Save failed", description: 'Failed to save workflow', variant: 'destructive' });
+      toast({
+        title: 'Save failed',
+        description: 'Failed to save workflow',
+        variant: 'destructive',
+      });
     } finally {
       setSaving(false);
     }
   };
 
-  const selectedNode = nodes.find(node => node.id === selectedNodeId);
+  const selectedNode = nodes.find((node) => node.id === selectedNodeId);
 
   return (
     <div className="flex flex-col h-full">
       <div className="p-4 border-b border-slate-700">
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
-            <Label htmlFor="workflow-name" className="text-slate-300">Workflow Name</Label>
+            <Label htmlFor="workflow-name" className="text-slate-300">
+              Workflow Name
+            </Label>
             <Input
               id="workflow-name"
               value={name}
@@ -3259,7 +3753,9 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
             />
           </div>
           <div>
-            <Label htmlFor="workflow-description" className="text-slate-300">Description</Label>
+            <Label htmlFor="workflow-description" className="text-slate-300">
+              Description
+            </Label>
             <Input
               id="workflow-description"
               value={description}
@@ -3307,7 +3803,9 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
 
         <div className="w-80 border-l border-slate-700 overflow-y-auto p-4 bg-slate-900 flex-shrink-0">
           <h3 className="text-lg font-semibold text-slate-100 mb-4">
-            {selectedNode ? `${selectedNode.type.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase())} Config` : 'Node Configuration'}
+            {selectedNode
+              ? `${selectedNode.type.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())} Config`
+              : 'Node Configuration'}
           </h3>
           {selectedNode ? (
             renderNodeConfig(selectedNode)
@@ -3333,11 +3831,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
         </div>
         <div className="flex gap-2 items-center">
           <div className="flex items-center gap-2 mr-4">
-            <Switch 
-              id="auto-connect" 
-              checked={autoConnect} 
-              onCheckedChange={setAutoConnect} 
-            />
+            <Switch id="auto-connect" checked={autoConnect} onCheckedChange={setAutoConnect} />
             <Label htmlFor="auto-connect" className="text-slate-300 cursor-pointer text-sm">
               Auto-connect
             </Label>

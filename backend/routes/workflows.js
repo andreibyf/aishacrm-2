@@ -11,6 +11,48 @@ import { initiateOutboundCall } from '../lib/outboundCallService.js';
 import { executeWorkflowById as executeWorkflowByIdService } from '../services/workflowExecutionService.js';
 import logger from '../lib/logger.js';
 
+// PEP Query Node — Phase 5b imports
+import { getSupabaseClient } from '../lib/supabase-db.js';
+import { resolveQuery } from '../../pep/compiler/resolver.js';
+import { emitQuery } from '../../pep/compiler/emitter.js';
+import { parseLLM } from '../../pep/compiler/llmParser.js';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { parse as parseYaml } from 'yaml';
+
+const __wf_filename = fileURLToPath(import.meta.url);
+const __wf_dirname = dirname(__wf_filename);
+const PEP_CATALOGS_DIR = join(__wf_dirname, '..', '..', 'pep', 'catalogs');
+
+// Load entity catalog once at module load time (same as pep.js)
+let pepEntityCatalog;
+let pepSystemPrompt;
+try {
+  pepEntityCatalog = parseYaml(readFileSync(join(PEP_CATALOGS_DIR, 'entity-catalog.yaml'), 'utf8'));
+  const entityLines = (pepEntityCatalog.entities || [])
+    .filter((e) => Array.isArray(e.fields))
+    .map(
+      (e) =>
+        `${e.id} (table: ${e.aisha_binding?.table}) — fields: ${e.fields.map((f) => f.name).join(', ')}`,
+    );
+  const viewLines = (pepEntityCatalog.views || []).map(
+    (v) => `${v.id} — columns: ${v.columns.map((c) => c.name).join(', ')}`,
+  );
+  pepSystemPrompt = `You are a strict query parser for a CRM reporting system.
+Return ONLY valid JSON. If you cannot parse, return { "match": false, "reason": "..." }.
+Output shape: { "match": true, "target": "...", "target_kind": "entity"|"view", "filters": [...], "sort": null, "limit": null }
+Entities: ${entityLines.join('; ')}
+Views: ${viewLines.join('; ')}
+Operators: eq, neq, gt, gte, lt, lte, contains, in, is_null, is_not_null
+Date tokens: {{date: today}}, {{date: start_of_month}}, {{date: last_N_days}}
+Employee names: {{resolve_employee: <name>}}`;
+} catch (_err) {
+  // Non-fatal — PEP query nodes will error at runtime if catalog missing
+  pepEntityCatalog = null;
+  pepSystemPrompt = null;
+}
+
 // Redis client for idempotency checks
 const redisCache = new Redis(process.env.REDIS_CACHE_URL || 'redis://redis-cache:6380');
 
@@ -25,13 +67,10 @@ async function syncCareWorkflowConfig(pgPool, workflow, nodes) {
   if (!nodes || !Array.isArray(nodes)) return;
 
   // Find CARE trigger node
-  const careTrigger = nodes.find(node => node.type === 'care_trigger');
+  const careTrigger = nodes.find((node) => node.type === 'care_trigger');
   if (!careTrigger) {
     // No CARE trigger - delete any existing config
-    await pgPool.query(
-      'DELETE FROM care_workflow_config WHERE workflow_id = $1',
-      [workflow.id]
-    );
+    await pgPool.query('DELETE FROM care_workflow_config WHERE workflow_id = $1', [workflow.id]);
     return;
   }
 
@@ -74,12 +113,15 @@ async function syncCareWorkflowConfig(pgPool, workflow, nodes) {
     careConfig.shadow_mode !== false, // Default true (safe mode)
     careConfig.state_write_enabled === true, // Default false
     careConfig.webhook_timeout_ms || 3000,
-    careConfig.webhook_max_retries || 2
+    careConfig.webhook_max_retries || 2,
   ];
 
   try {
     const result = await pgPool.query(upsertQuery, values);
-    logger.info(`[CARE Config] Synced care_workflow_config for workflow ${workflow.id}:`, result.rows[0]);
+    logger.info(
+      `[CARE Config] Synced care_workflow_config for workflow ${workflow.id}:`,
+      result.rows[0],
+    );
   } catch (error) {
     logger.error(`[CARE Config] Failed to sync care_workflow_config:`, error);
     throw error;
@@ -106,23 +148,35 @@ function normalizeWorkflow(row) {
   meta = meta && typeof meta === 'object' ? meta : {};
 
   console.log(`[normalizeWorkflow] Processing workflow "${row.name}" (id: ${row.id})`);
-  console.log(`[normalizeWorkflow] Metadata has nodes: ${!!meta.nodes}, length: ${meta.nodes?.length || 0}`);
-  console.log(`[normalizeWorkflow] Metadata has connections: ${!!meta.connections}, length: ${meta.connections?.length || 0}`);
+  console.log(
+    `[normalizeWorkflow] Metadata has nodes: ${!!meta.nodes}, length: ${meta.nodes?.length || 0}`,
+  );
+  console.log(
+    `[normalizeWorkflow] Metadata has connections: ${!!meta.connections}, length: ${meta.connections?.length || 0}`,
+  );
 
   // Log if nodes are missing but expected (debugging)
   if ((!meta.nodes || meta.nodes.length === 0) && row.name) {
-    logger.debug(`[normalizeWorkflow] Workflow "${row.name}" (id: ${row.id}) has no nodes in metadata. Raw metadata type: ${typeof row.metadata}`);
-    logger.debug(`[normalizeWorkflow] Metadata value:`, JSON.stringify(row.metadata).substring(0, 200));
+    logger.debug(
+      `[normalizeWorkflow] Workflow "${row.name}" (id: ${row.id}) has no nodes in metadata. Raw metadata type: ${typeof row.metadata}`,
+    );
+    logger.debug(
+      `[normalizeWorkflow] Metadata value:`,
+      JSON.stringify(row.metadata).substring(0, 200),
+    );
   } else {
-    logger.debug(`[normalizeWorkflow] Workflow "${row.name}" (id: ${row.id}) has ${meta.nodes?.length || 0} nodes, ${meta.connections?.length || 0} connections`);
+    logger.debug(
+      `[normalizeWorkflow] Workflow "${row.name}" (id: ${row.id}) has ${meta.nodes?.length || 0} nodes, ${meta.connections?.length || 0} connections`,
+    );
   }
 
   const normalized = {
     ...row,
     // Frontend expects trigger object
-    trigger: row.trigger_type || row.trigger_config
-      ? { type: row.trigger_type || 'webhook', config: row.trigger_config || {} }
-      : undefined,
+    trigger:
+      row.trigger_type || row.trigger_config
+        ? { type: row.trigger_type || 'webhook', config: row.trigger_config || {} }
+        : undefined,
     // Lift commonly used fields stored in metadata
     nodes: meta.nodes || [],
     connections: meta.connections || [],
@@ -131,7 +185,9 @@ function normalizeWorkflow(row) {
     last_executed: meta.last_executed || null,
   };
 
-  console.log(`[normalizeWorkflow] Returning workflow with ${normalized.nodes.length} nodes, ${normalized.connections.length} connections`);
+  console.log(
+    `[normalizeWorkflow] Returning workflow with ${normalized.nodes.length} nodes, ${normalized.connections.length} connections`,
+  );
   console.log(`[normalizeWorkflow] Returning connections:`, JSON.stringify(normalized.connections));
 
   return normalized;
@@ -208,7 +264,13 @@ export default function createWorkflowRoutes(pgPool) {
       const exRes = await pgPool.query(
         `INSERT INTO workflow_execution (workflow_id, tenant_id, status, trigger_data, execution_log, started_at, created_at)
          VALUES ($1, $2, $3, $4, $5, NOW(), NOW()) RETURNING *`,
-        [workflow.id, workflow.tenant_id, 'running', JSON.stringify(triggerPayload ?? {}), JSON.stringify([])]
+        [
+          workflow.id,
+          workflow.tenant_id,
+          'running',
+          JSON.stringify(triggerPayload ?? {}),
+          JSON.stringify([]),
+        ],
       );
       const execution = exRes.rows[0];
       executionId = execution.id;
@@ -218,18 +280,18 @@ export default function createWorkflowRoutes(pgPool) {
 
       // Helper: resolve next node
       function getNextNode(currentNodeId) {
-        const outgoing = (workflow.connections || []).filter(c => c.from === currentNodeId);
+        const outgoing = (workflow.connections || []).filter((c) => c.from === currentNodeId);
         if (!outgoing.length) return null;
-        const current = (workflow.nodes || []).find(n => n.id === currentNodeId);
+        const current = (workflow.nodes || []).find((n) => n.id === currentNodeId);
         if (current?.type === 'condition') {
           const conditionResult = context.last_condition_result;
           if (outgoing.length >= 2) {
             const target = conditionResult ? outgoing[0] : outgoing[1];
-            return (workflow.nodes || []).find(n => n.id === target.to) || null;
+            return (workflow.nodes || []).find((n) => n.id === target.to) || null;
           }
-          return (workflow.nodes || []).find(n => n.id === outgoing[0].to) || null;
+          return (workflow.nodes || []).find((n) => n.id === outgoing[0].to) || null;
         }
-        return (workflow.nodes || []).find(n => n.id === outgoing[0].to) || null;
+        return (workflow.nodes || []).find((n) => n.id === outgoing[0].to) || null;
       }
 
       // Helper: variable replacement
@@ -237,12 +299,17 @@ export default function createWorkflowRoutes(pgPool) {
         if (typeof template !== 'string') return template;
         return template.replace(/\{\{([^}]+)\}\}/g, (match, variable) => {
           const trimmed = String(variable).trim();
-          if (context.payload && context.payload[trimmed] !== undefined) return context.payload[trimmed];
+          if (context.payload && context.payload[trimmed] !== undefined)
+            return context.payload[trimmed];
           const parts = trimmed.split('.');
           if (parts.length > 1) {
             let value = context.variables[parts[0]];
             for (let i = 1; i < parts.length; i++) {
-              if (value && value[parts[i]] !== undefined) value = value[parts[i]]; else { value = undefined; break; }
+              if (value && value[parts[i]] !== undefined) value = value[parts[i]];
+              else {
+                value = undefined;
+                break;
+              }
             }
             if (value !== undefined) return value;
           } else if (context.variables && context.variables[trimmed] !== undefined) {
@@ -254,7 +321,13 @@ export default function createWorkflowRoutes(pgPool) {
 
       // Node executors using Postgres
       async function execNode(node) {
-        const log = { node_id: node.id, node_type: node.type, timestamp: new Date().toISOString(), status: 'success', output: {} };
+        const log = {
+          node_id: node.id,
+          node_type: node.type,
+          timestamp: new Date().toISOString(),
+          status: 'success',
+          output: {},
+        };
         const cfg = node.config || {};
         try {
           switch (node.type) {
@@ -265,7 +338,7 @@ export default function createWorkflowRoutes(pgPool) {
             case 'http_request': {
               const method = (cfg.method || 'POST').toUpperCase();
               const url = replaceVariables(cfg.url || '');
-              
+
               if (!url || url === cfg.url) {
                 log.status = 'error';
                 log.error = 'URL is required and must be properly configured';
@@ -311,13 +384,16 @@ export default function createWorkflowRoutes(pgPool) {
                 const fetchOptions = {
                   method,
                   headers,
-                  ...(requestBody && { body: typeof requestBody === 'string' ? requestBody : JSON.stringify(requestBody) })
+                  ...(requestBody && {
+                    body:
+                      typeof requestBody === 'string' ? requestBody : JSON.stringify(requestBody),
+                  }),
                 };
 
                 const response = await fetch(url, fetchOptions);
                 const contentType = response.headers.get('content-type');
                 let responseData;
-                
+
                 if (contentType && contentType.includes('application/json')) {
                   responseData = await response.json().catch(() => null);
                 } else {
@@ -328,9 +404,9 @@ export default function createWorkflowRoutes(pgPool) {
                   status_code: response.status,
                   status_text: response.statusText,
                   headers: Object.fromEntries(response.headers.entries()),
-                  data: responseData
+                  data: responseData,
                 };
-                
+
                 context.variables.last_http_response = responseData;
                 context.variables.last_http_status = response.status;
 
@@ -351,15 +427,17 @@ export default function createWorkflowRoutes(pgPool) {
               const bodyRaw = cfg.body || '';
 
               const toValue = Array.isArray(toRaw)
-                ? toRaw.map(t => replaceVariables(t))
-                : String(replaceVariables(toRaw)).replace(/^['"]|['"]$/g, '').trim();
+                ? toRaw.map((t) => replaceVariables(t))
+                : String(replaceVariables(toRaw))
+                    .replace(/^['"]|['"]$/g, '')
+                    .trim();
               const subject = String(replaceVariables(subjectRaw));
               const body = String(replaceVariables(bodyRaw));
 
               const lead = context.variables.found_lead;
               const contact = context.variables.found_contact;
-              const related_to = lead ? 'lead' : (contact ? 'contact' : null);
-              const related_id = lead ? lead.id : (contact ? contact.id : null);
+              const related_to = lead ? 'lead' : contact ? 'contact' : null;
+              const related_id = lead ? lead.id : contact ? contact.id : null;
 
               const emailMeta = {
                 created_by_workflow: workflow.id,
@@ -368,8 +446,8 @@ export default function createWorkflowRoutes(pgPool) {
                   subject,
                   cc: cfg.cc ? replaceVariables(cfg.cc) : undefined,
                   bcc: cfg.bcc ? replaceVariables(cfg.bcc) : undefined,
-                  from: cfg.from ? replaceVariables(cfg.from) : undefined
-                }
+                  from: cfg.from ? replaceVariables(cfg.from) : undefined,
+                },
               };
 
               const q = `
@@ -391,7 +469,7 @@ export default function createWorkflowRoutes(pgPool) {
                 'queued',
                 related_id,
                 related_to,
-                JSON.stringify(emailMeta)
+                JSON.stringify(emailMeta),
               ];
               const r = await pgPool.query(q, vals);
               log.output = { email_queued: true, to: toValue, subject, activity_id: r.rows[0]?.id };
@@ -414,7 +492,11 @@ export default function createWorkflowRoutes(pgPool) {
             }
             case 'create_lead': {
               const mappings = cfg.field_mappings || [];
-              if (!mappings.length) { log.status = 'error'; log.error = 'No field mappings configured'; break; }
+              if (!mappings.length) {
+                log.status = 'error';
+                log.error = 'No field mappings configured';
+                break;
+              }
               const cols = ['tenant_id', 'created_at', 'created_date'];
               const vals = [workflow.tenant_id];
               const ph = ['$1'];
@@ -427,7 +509,11 @@ export default function createWorkflowRoutes(pgPool) {
               for (const m of mappings) {
                 if (m.lead_field && m.webhook_field) {
                   const v = replaceVariables(`{{${m.webhook_field}}}`);
-                  if (v !== null && v !== undefined && v !== '') { cols.push(m.lead_field); vals.push(v); ph.push(`$${idx++}`); }
+                  if (v !== null && v !== undefined && v !== '') {
+                    cols.push(m.lead_field);
+                    vals.push(v);
+                    ph.push(`$${idx++}`);
+                  }
                 }
               }
               const q = `INSERT INTO leads (${cols.join(',')}) VALUES (${ph.join(',')}) RETURNING *`;
@@ -438,7 +524,11 @@ export default function createWorkflowRoutes(pgPool) {
             }
             case 'update_lead': {
               const lead = context.variables.found_lead;
-              if (!lead) { log.status = 'error'; log.error = 'No lead found in context'; break; }
+              if (!lead) {
+                log.status = 'error';
+                log.error = 'No lead found in context';
+                break;
+              }
               const mappings = cfg.field_mappings || [];
               const sets = [];
               const vals = [];
@@ -446,14 +536,26 @@ export default function createWorkflowRoutes(pgPool) {
               for (const m of mappings) {
                 if (m.lead_field && m.webhook_field) {
                   const v = replaceVariables(`{{${m.webhook_field}}}`);
-                  if (v !== `{{${m.webhook_field}}}` && v !== null && v !== undefined) { sets.push(`${m.lead_field} = $${idx++}`); vals.push(v); }
+                  if (v !== `{{${m.webhook_field}}}` && v !== null && v !== undefined) {
+                    sets.push(`${m.lead_field} = $${idx++}`);
+                    vals.push(v);
+                  }
                 }
               }
-              if (!sets.length) { log.status = 'error'; log.error = 'No field mappings configured or no values to update'; break; }
+              if (!sets.length) {
+                log.status = 'error';
+                log.error = 'No field mappings configured or no values to update';
+                break;
+              }
               vals.push(lead.id);
               const q = `UPDATE leads SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${idx} RETURNING *`;
               const r = await pgPool.query(q, vals);
-              log.output = { updatedLead: r.rows[0], applied_updates: Object.fromEntries(sets.map((s, i) => [s.split('=')[0].trim(), vals[i]])) };
+              log.output = {
+                updatedLead: r.rows[0],
+                applied_updates: Object.fromEntries(
+                  sets.map((s, i) => [s.split('=')[0].trim(), vals[i]]),
+                ),
+              };
               break;
             }
             case 'find_contact': {
@@ -473,7 +575,11 @@ export default function createWorkflowRoutes(pgPool) {
             }
             case 'update_contact': {
               const contact = context.variables.found_contact;
-              if (!contact) { log.status = 'error'; log.error = 'No contact found in context'; break; }
+              if (!contact) {
+                log.status = 'error';
+                log.error = 'No contact found in context';
+                break;
+              }
               const mappings = cfg.field_mappings || [];
               const sets = [];
               const vals = [];
@@ -481,14 +587,26 @@ export default function createWorkflowRoutes(pgPool) {
               for (const m of mappings) {
                 if (m.contact_field && m.webhook_field) {
                   const v = replaceVariables(`{{${m.webhook_field}}}`);
-                  if (v !== `{{${m.webhook_field}}}` && v !== null && v !== undefined) { sets.push(`${m.contact_field} = $${idx++}`); vals.push(v); }
+                  if (v !== `{{${m.webhook_field}}}` && v !== null && v !== undefined) {
+                    sets.push(`${m.contact_field} = $${idx++}`);
+                    vals.push(v);
+                  }
                 }
               }
-              if (!sets.length) { log.status = 'error'; log.error = 'No field mappings configured'; break; }
+              if (!sets.length) {
+                log.status = 'error';
+                log.error = 'No field mappings configured';
+                break;
+              }
               vals.push(contact.id);
               const q = `UPDATE contacts SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${idx} RETURNING *`;
               const r = await pgPool.query(q, vals);
-              log.output = { updatedContact: r.rows[0], applied_updates: Object.fromEntries(sets.map((s, i) => [s.split('=')[0].trim(), vals[i]])) };
+              log.output = {
+                updatedContact: r.rows[0],
+                applied_updates: Object.fromEntries(
+                  sets.map((s, i) => [s.split('=')[0].trim(), vals[i]]),
+                ),
+              };
               break;
             }
             case 'find_account': {
@@ -508,7 +626,11 @@ export default function createWorkflowRoutes(pgPool) {
             }
             case 'update_account': {
               const account = context.variables.found_account;
-              if (!account) { log.status = 'error'; log.error = 'No account found in context'; break; }
+              if (!account) {
+                log.status = 'error';
+                log.error = 'No account found in context';
+                break;
+              }
               const mappings = cfg.field_mappings || [];
               const sets = [];
               const vals = [];
@@ -516,19 +638,35 @@ export default function createWorkflowRoutes(pgPool) {
               for (const m of mappings) {
                 if (m.account_field && m.webhook_field) {
                   const v = replaceVariables(`{{${m.webhook_field}}}`);
-                  if (v !== `{{${m.webhook_field}}}` && v !== null && v !== undefined) { sets.push(`${m.account_field} = $${idx++}`); vals.push(v); }
+                  if (v !== `{{${m.webhook_field}}}` && v !== null && v !== undefined) {
+                    sets.push(`${m.account_field} = $${idx++}`);
+                    vals.push(v);
+                  }
                 }
               }
-              if (!sets.length) { log.status = 'error'; log.error = 'No field mappings configured or no values to update'; break; }
+              if (!sets.length) {
+                log.status = 'error';
+                log.error = 'No field mappings configured or no values to update';
+                break;
+              }
               vals.push(account.id);
               const q = `UPDATE accounts SET ${sets.join(', ')}, updated_date = NOW() WHERE id = $${idx} RETURNING *`;
               const r = await pgPool.query(q, vals);
-              log.output = { updatedAccount: r.rows[0], applied_updates: Object.fromEntries(sets.map((s, i) => [s.split('=')[0].trim(), vals[i]])) };
+              log.output = {
+                updatedAccount: r.rows[0],
+                applied_updates: Object.fromEntries(
+                  sets.map((s, i) => [s.split('=')[0].trim(), vals[i]]),
+                ),
+              };
               break;
             }
             case 'create_opportunity': {
               const mappings = cfg.field_mappings || [];
-              if (!mappings.length) { log.status = 'error'; log.error = 'No field mappings configured'; break; }
+              if (!mappings.length) {
+                log.status = 'error';
+                log.error = 'No field mappings configured';
+                break;
+              }
               const cols = ['tenant_id'];
               const vals = [workflow.tenant_id];
               const ph = ['$1'];
@@ -536,14 +674,26 @@ export default function createWorkflowRoutes(pgPool) {
               for (const m of mappings) {
                 if (m.opportunity_field && m.webhook_field) {
                   const v = replaceVariables(`{{${m.webhook_field}}}`);
-                  if (v !== null && v !== undefined && v !== '') { cols.push(m.opportunity_field); vals.push(v); ph.push(`$${idx++}`); }
+                  if (v !== null && v !== undefined && v !== '') {
+                    cols.push(m.opportunity_field);
+                    vals.push(v);
+                    ph.push(`$${idx++}`);
+                  }
                 }
               }
               // Try to associate to an account or lead if present
               const account = context.variables.found_account;
               const lead = context.variables.found_lead;
-              if (account) { cols.push('account_id'); vals.push(account.id); ph.push(`$${idx++}`); }
-              if (lead) { cols.push('lead_id'); vals.push(lead.id); ph.push(`$${idx++}`); }
+              if (account) {
+                cols.push('account_id');
+                vals.push(account.id);
+                ph.push(`$${idx++}`);
+              }
+              if (lead) {
+                cols.push('lead_id');
+                vals.push(lead.id);
+                ph.push(`$${idx++}`);
+              }
               const q = `INSERT INTO opportunities (${cols.join(',')}) VALUES (${ph.join(',')}) RETURNING *`;
               const r = await pgPool.query(q, vals);
               log.output = { opportunity: r.rows[0] };
@@ -552,7 +702,11 @@ export default function createWorkflowRoutes(pgPool) {
             }
             case 'update_opportunity': {
               const opportunity = context.variables.found_opportunity;
-              if (!opportunity) { log.status = 'error'; log.error = 'No opportunity found in context'; break; }
+              if (!opportunity) {
+                log.status = 'error';
+                log.error = 'No opportunity found in context';
+                break;
+              }
               const mappings = cfg.field_mappings || [];
               const sets = [];
               const vals = [];
@@ -560,14 +714,26 @@ export default function createWorkflowRoutes(pgPool) {
               for (const m of mappings) {
                 if (m.opportunity_field && m.webhook_field) {
                   const v = replaceVariables(`{{${m.webhook_field}}}`);
-                  if (v !== `{{${m.webhook_field}}}` && v !== null && v !== undefined) { sets.push(`${m.opportunity_field} = $${idx++}`); vals.push(v); }
+                  if (v !== `{{${m.webhook_field}}}` && v !== null && v !== undefined) {
+                    sets.push(`${m.opportunity_field} = $${idx++}`);
+                    vals.push(v);
+                  }
                 }
               }
-              if (!sets.length) { log.status = 'error'; log.error = 'No field mappings configured'; break; }
+              if (!sets.length) {
+                log.status = 'error';
+                log.error = 'No field mappings configured';
+                break;
+              }
               vals.push(opportunity.id);
               const q = `UPDATE opportunities SET ${sets.join(', ')}, updated_date = NOW() WHERE id = $${idx} RETURNING *`;
               const r = await pgPool.query(q, vals);
-              log.output = { updatedOpportunity: r.rows[0], applied_updates: Object.fromEntries(sets.map((s, i) => [s.split('=')[0].trim(), vals[i]])) };
+              log.output = {
+                updatedOpportunity: r.rows[0],
+                applied_updates: Object.fromEntries(
+                  sets.map((s, i) => [s.split('=')[0].trim(), vals[i]]),
+                ),
+              };
               break;
             }
             case 'create_activity': {
@@ -578,8 +744,24 @@ export default function createWorkflowRoutes(pgPool) {
               const contact = context.variables.found_contact;
               const account = context.variables.found_account;
               const opportunity = context.variables.found_opportunity;
-              const related_to = lead ? 'lead' : (contact ? 'contact' : (account ? 'account' : (opportunity ? 'opportunity' : null)));
-              const related_id = lead ? lead.id : (contact ? contact.id : (account ? account.id : (opportunity ? opportunity.id : null)));
+              const related_to = lead
+                ? 'lead'
+                : contact
+                  ? 'contact'
+                  : account
+                    ? 'account'
+                    : opportunity
+                      ? 'opportunity'
+                      : null;
+              const related_id = lead
+                ? lead.id
+                : contact
+                  ? contact.id
+                  : account
+                    ? account.id
+                    : opportunity
+                      ? opportunity.id
+                      : null;
               const metadata = { created_by_workflow: workflow.id };
               const q = `
                 INSERT INTO activities (
@@ -600,7 +782,7 @@ export default function createWorkflowRoutes(pgPool) {
                 'scheduled',
                 related_id,
                 related_to,
-                JSON.stringify(metadata)
+                JSON.stringify(metadata),
               ];
               const r = await pgPool.query(q, vals);
               log.output = { activity: r.rows[0] };
@@ -613,17 +795,54 @@ export default function createWorkflowRoutes(pgPool) {
               const actualValue = replaceVariables(`{{${fieldTemplate}}}`);
               let result = false;
               switch (operator) {
-                case 'equals': result = String(actualValue) === String(compareValue); break;
-                case 'not_equals': result = String(actualValue) !== String(compareValue); break;
-                case 'contains': result = String(actualValue || '').toLowerCase().includes(String(compareValue || '').toLowerCase()); break;
-                case 'greater_than': result = Number(actualValue) > Number(compareValue); break;
-                case 'less_than': result = Number(actualValue) < Number(compareValue); break;
-                case 'exists': result = actualValue !== null && actualValue !== undefined && actualValue !== '' && !(typeof actualValue === 'string' && actualValue.startsWith('{{') && actualValue.endsWith('}}')); break;
-                case 'not_exists': result = actualValue === null || actualValue === undefined || actualValue === '' || (typeof actualValue === 'string' && actualValue.startsWith('{{') && actualValue.endsWith('}}')); break;
-                default: result = false;
+                case 'equals':
+                  result = String(actualValue) === String(compareValue);
+                  break;
+                case 'not_equals':
+                  result = String(actualValue) !== String(compareValue);
+                  break;
+                case 'contains':
+                  result = String(actualValue || '')
+                    .toLowerCase()
+                    .includes(String(compareValue || '').toLowerCase());
+                  break;
+                case 'greater_than':
+                  result = Number(actualValue) > Number(compareValue);
+                  break;
+                case 'less_than':
+                  result = Number(actualValue) < Number(compareValue);
+                  break;
+                case 'exists':
+                  result =
+                    actualValue !== null &&
+                    actualValue !== undefined &&
+                    actualValue !== '' &&
+                    !(
+                      typeof actualValue === 'string' &&
+                      actualValue.startsWith('{{') &&
+                      actualValue.endsWith('}}')
+                    );
+                  break;
+                case 'not_exists':
+                  result =
+                    actualValue === null ||
+                    actualValue === undefined ||
+                    actualValue === '' ||
+                    (typeof actualValue === 'string' &&
+                      actualValue.startsWith('{{') &&
+                      actualValue.endsWith('}}'));
+                  break;
+                default:
+                  result = false;
               }
               context.last_condition_result = result;
-              log.output = { condition_result: result, field_template: fieldTemplate, actual_value: actualValue, compare_value: compareValue, operator };
+              log.output = {
+                condition_result: result,
+                field_template: fieldTemplate,
+                actual_value: actualValue,
+                compare_value: compareValue,
+                operator,
+              };
               break;
             }
             // AI nodes via MCP-first, provider stubs
@@ -637,10 +856,14 @@ export default function createWorkflowRoutes(pgPool) {
                   // Placeholder: call MCP classification tool via internal adapter
                   // For now, use simple heuristics
                   const t = text.toLowerCase();
-                  if (t.includes('closed won') || t.includes('signed')) output = { stage: 'Closed Won', confidence: 0.9, provider };
-                  else if (t.includes('negotiation') || t.includes('proposal')) output = { stage: 'Negotiation', confidence: 0.7, provider };
-                  else if (t.includes('qualified') || t.includes('meeting')) output = { stage: 'Qualified', confidence: 0.6, provider };
-                  else if (t.includes('discovery') || t.includes('intro')) output = { stage: 'Discovery', confidence: 0.5, provider };
+                  if (t.includes('closed won') || t.includes('signed'))
+                    output = { stage: 'Closed Won', confidence: 0.9, provider };
+                  else if (t.includes('negotiation') || t.includes('proposal'))
+                    output = { stage: 'Negotiation', confidence: 0.7, provider };
+                  else if (t.includes('qualified') || t.includes('meeting'))
+                    output = { stage: 'Qualified', confidence: 0.6, provider };
+                  else if (t.includes('discovery') || t.includes('intro'))
+                    output = { stage: 'Discovery', confidence: 0.5, provider };
                 } else {
                   // stubs for openai/anthropic/google
                   output = { stage: 'Qualified', confidence: 0.5, provider };
@@ -663,7 +886,7 @@ export default function createWorkflowRoutes(pgPool) {
                   email = {
                     subject: 'Follow-up on our conversation',
                     body: `Hi there,\n\n${prompt}\n\nBest regards,\nAisha CRM`,
-                    provider
+                    provider,
                   };
                 } else {
                   email = { subject: 'Follow-up', body: prompt || 'Draft body', provider };
@@ -679,7 +902,13 @@ export default function createWorkflowRoutes(pgPool) {
             case 'ai_enrich_account': {
               const provider = (cfg.provider || 'mcp').toLowerCase();
               const input = String(replaceVariables(cfg.input || ''));
-              let enrichment = { company: input || null, website: null, industry: null, size: null, provider };
+              let enrichment = {
+                company: input || null,
+                website: null,
+                industry: null,
+                size: null,
+                provider,
+              };
               try {
                 if (provider === 'mcp') {
                   enrichment.website = input && input.includes('.') ? `https://${input}` : null;
@@ -699,13 +928,27 @@ export default function createWorkflowRoutes(pgPool) {
             case 'ai_route_activity': {
               const provider = (cfg.provider || 'mcp').toLowerCase();
               const contextText = String(replaceVariables(cfg.context || ''));
-              let route = { type: 'task', title: 'Next best action', details: contextText, priority: 'medium', provider };
+              let route = {
+                type: 'task',
+                title: 'Next best action',
+                details: contextText,
+                priority: 'medium',
+                provider,
+              };
               try {
                 if (provider === 'mcp') {
                   const t = contextText.toLowerCase();
-                  if (t.includes('call')) route = { ...route, type: 'call', title: 'Call the contact', priority: 'high' };
-                  else if (t.includes('email')) route = { ...route, type: 'email', title: 'Send an email', priority: 'medium' };
-                  else if (t.includes('meeting')) route = { ...route, type: 'task', title: 'Schedule a meeting', priority: 'high' };
+                  if (t.includes('call'))
+                    route = { ...route, type: 'call', title: 'Call the contact', priority: 'high' };
+                  else if (t.includes('email'))
+                    route = { ...route, type: 'email', title: 'Send an email', priority: 'medium' };
+                  else if (t.includes('meeting'))
+                    route = {
+                      ...route,
+                      type: 'task',
+                      title: 'Schedule a meeting',
+                      priority: 'high',
+                    };
                 }
                 log.output = { ai_route: route };
                 context.variables.ai_route = route;
@@ -721,7 +964,7 @@ export default function createWorkflowRoutes(pgPool) {
               let phoneNumber = replaceVariables(cfg.phone_number || '{{phone}}');
               const purpose = replaceVariables(cfg.purpose || 'Follow-up call');
               const talkingPointsRaw = cfg.talking_points || [];
-              const talkingPoints = talkingPointsRaw.map(tp => replaceVariables(tp));
+              const talkingPoints = talkingPointsRaw.map((tp) => replaceVariables(tp));
 
               // Get contact info from context
               const lead = context.variables.found_lead;
@@ -744,7 +987,9 @@ export default function createWorkflowRoutes(pgPool) {
                   provider,
                   phone_number: phoneNumber,
                   contact_id: entity?.id,
-                  contact_name: entity?.first_name ? `${entity.first_name} ${entity.last_name || ''}`.trim() : entity?.name,
+                  contact_name: entity?.first_name
+                    ? `${entity.first_name} ${entity.last_name || ''}`.trim()
+                    : entity?.name,
                   contact_email: entity?.email,
                   company: entity?.company,
                   purpose,
@@ -752,8 +997,8 @@ export default function createWorkflowRoutes(pgPool) {
                   agent_id: cfg.agent_id,
                   metadata: {
                     workflow_id: workflow.id,
-                    workflow_name: workflow.name
-                  }
+                    workflow_name: workflow.name,
+                  },
                 });
 
                 log.output = {
@@ -761,7 +1006,7 @@ export default function createWorkflowRoutes(pgPool) {
                   provider,
                   call_id: callResult.call_id,
                   phone_number: phoneNumber,
-                  status: callResult.status
+                  status: callResult.status,
                 };
                 context.variables.call_result = callResult;
               } catch (callError) {
@@ -779,7 +1024,7 @@ export default function createWorkflowRoutes(pgPool) {
                 seconds: 1000,
                 minutes: 60000,
                 hours: 3600000,
-                days: 86400000
+                days: 86400000,
               };
 
               const delayMs = durationValue * (conversions[durationUnit] || 60000);
@@ -788,11 +1033,11 @@ export default function createWorkflowRoutes(pgPool) {
               log.output = {
                 duration_value: durationValue,
                 duration_unit: durationUnit,
-                delay_ms: Math.min(delayMs, maxDelay)
+                delay_ms: Math.min(delayMs, maxDelay),
               };
 
               // Actually wait
-              await new Promise(resolve => setTimeout(resolve, Math.min(delayMs, maxDelay)));
+              await new Promise((resolve) => setTimeout(resolve, Math.min(delayMs, maxDelay)));
 
               break;
             }
@@ -801,7 +1046,9 @@ export default function createWorkflowRoutes(pgPool) {
               const toRaw = cfg.to || '{{phone}}';
               const messageRaw = cfg.message || '';
 
-              const toValue = String(replaceVariables(toRaw)).replace(/^['"']|['"']$/g, '').trim();
+              const toValue = String(replaceVariables(toRaw))
+                .replace(/^['"']|['"']$/g, '')
+                .trim();
               const message = String(replaceVariables(messageRaw));
 
               // Validate phone number format
@@ -814,16 +1061,16 @@ export default function createWorkflowRoutes(pgPool) {
               // For now, log SMS as an activity (queued for external processing)
               const lead = context.variables.found_lead;
               const contact = context.variables.found_contact;
-              const related_to = lead ? 'lead' : (contact ? 'contact' : null);
-              const related_id = lead ? lead.id : (contact ? contact.id : null);
+              const related_to = lead ? 'lead' : contact ? 'contact' : null;
+              const related_id = lead ? lead.id : contact ? contact.id : null;
 
               const smsMeta = {
                 created_by_workflow: workflow.id,
                 sms: {
                   to: toValue,
-                  message: message.substring(0, 160) // SMS limit
+                  message: message.substring(0, 160), // SMS limit
                 },
-                provider: cfg.provider || 'twilio'
+                provider: cfg.provider || 'twilio',
               };
 
               const q = `
@@ -845,10 +1092,15 @@ export default function createWorkflowRoutes(pgPool) {
                 'queued',
                 related_id,
                 related_to,
-                JSON.stringify(smsMeta)
+                JSON.stringify(smsMeta),
               ];
               const r = await pgPool.query(q, vals);
-              log.output = { sms_queued: true, to: toValue, message_length: message.length, activity_id: r.rows[0]?.id };
+              log.output = {
+                sms_queued: true,
+                to: toValue,
+                message_length: message.length,
+                activity_id: r.rows[0]?.id,
+              };
               break;
             }
             case 'assign_record': {
@@ -863,10 +1115,19 @@ export default function createWorkflowRoutes(pgPool) {
               let targetTable = null;
 
               // Determine which record to assign
-              if (lead) { targetRecord = lead; targetTable = 'leads'; }
-              else if (contact) { targetRecord = contact; targetTable = 'contacts'; }
-              else if (opportunity) { targetRecord = opportunity; targetTable = 'opportunities'; }
-              else if (account) { targetRecord = account; targetTable = 'accounts'; }
+              if (lead) {
+                targetRecord = lead;
+                targetTable = 'leads';
+              } else if (contact) {
+                targetRecord = contact;
+                targetTable = 'contacts';
+              } else if (opportunity) {
+                targetRecord = opportunity;
+                targetTable = 'opportunities';
+              } else if (account) {
+                targetRecord = account;
+                targetTable = 'accounts';
+              }
 
               if (!targetRecord || !targetTable) {
                 log.status = 'error';
@@ -888,7 +1149,7 @@ export default function createWorkflowRoutes(pgPool) {
                   // Get all users in tenant (or group if we had that feature)
                   const usersRes = await pgPool.query(
                     'SELECT id FROM employees WHERE tenant_id = $1 AND status = $2 ORDER BY id',
-                    [workflow.tenant_id, 'active']
+                    [workflow.tenant_id, 'active'],
                   );
 
                   if (usersRes.rows.length === 0) {
@@ -908,7 +1169,7 @@ export default function createWorkflowRoutes(pgPool) {
                   assignmentCounters[group] = currentIndex + 1;
                   await pgPool.query(
                     'UPDATE workflow SET metadata = metadata || $1 WHERE id = $2',
-                    [JSON.stringify({ assignment_counters: assignmentCounters }), workflow.id]
+                    [JSON.stringify({ assignment_counters: assignmentCounters }), workflow.id],
                   );
 
                   log.output.round_robin_index = currentIndex;
@@ -933,7 +1194,7 @@ export default function createWorkflowRoutes(pgPool) {
                     // No assignments yet, get first user
                     const firstUserRes = await pgPool.query(
                       'SELECT id FROM employees WHERE tenant_id = $1 AND status = $2 LIMIT 1',
-                      [workflow.tenant_id, 'active']
+                      [workflow.tenant_id, 'active'],
                     );
                     if (firstUserRes.rows.length > 0) {
                       assigneeId = firstUserRes.rows[0].id;
@@ -968,7 +1229,7 @@ export default function createWorkflowRoutes(pgPool) {
                 assigned_to: assigneeId,
                 record_type: targetTable,
                 record_id: targetRecord.id,
-                updated_record: updateRes.rows[0]
+                updated_record: updateRes.rows[0],
               };
 
               // Update context
@@ -1037,15 +1298,239 @@ export default function createWorkflowRoutes(pgPool) {
                 record_id: targetRecord.id,
                 old_status: targetRecord[statusColumn],
                 new_status: newStatus,
-                updated_record: updateRes.rows[0]
+                updated_record: updateRes.rows[0],
               };
 
               // Update context
               if (recordType === 'lead') context.variables.found_lead = updateRes.rows[0];
-              else if (recordType === 'contact') context.variables.found_contact = updateRes.rows[0];
-              else if (recordType === 'opportunity') context.variables.found_opportunity = updateRes.rows[0];
-              else if (recordType === 'account') context.variables.found_account = updateRes.rows[0];
+              else if (recordType === 'contact')
+                context.variables.found_contact = updateRes.rows[0];
+              else if (recordType === 'opportunity')
+                context.variables.found_opportunity = updateRes.rows[0];
+              else if (recordType === 'account')
+                context.variables.found_account = updateRes.rows[0];
 
+              break;
+            }
+            case 'care_trigger': {
+              // Configuration-only node — payload validation happens at webhook ingress
+              // (see CARE TRIGGER TENANT VALIDATION in the webhook endpoint below)
+              log.output = { config: cfg, payload: context.payload };
+              break;
+            }
+            case 'pep_query': {
+              // Phase 5b: PEP Query Node — compile English to IR, resolve variables, execute query
+              if (!pepEntityCatalog) {
+                log.status = 'error';
+                log.error = 'PEP entity catalog not loaded — cannot execute query';
+                break;
+              }
+
+              const pepSource = cfg.source || '';
+              if (!pepSource.trim()) {
+                log.status = 'error';
+                log.error = 'PEP Query node has no source query configured';
+                break;
+              }
+
+              let pepIr = cfg.compiled_ir ? structuredClone(cfg.compiled_ir) : null;
+
+              // If no cached IR, compile on the fly
+              if (!pepIr) {
+                try {
+                  const parsed = await parseLLM(
+                    pepSource,
+                    { entity_catalog: pepEntityCatalog, capability_catalog: {} },
+                    pepSystemPrompt,
+                  );
+                  if (!parsed.match) {
+                    log.status = 'error';
+                    log.error = `PEP compile failed: ${parsed.reason || 'Could not parse query'}`;
+                    break;
+                  }
+
+                  const queryFrame = {
+                    target: parsed.target,
+                    target_kind: parsed.target_kind,
+                    filters: parsed.filters || [],
+                    sort: parsed.sort || null,
+                    limit: parsed.limit || null,
+                  };
+
+                  const resolved = resolveQuery(queryFrame, pepEntityCatalog);
+                  if (!resolved.resolved) {
+                    log.status = 'error';
+                    log.error = `PEP resolve failed: ${resolved.reason}`;
+                    break;
+                  }
+
+                  const { braid_ir } = emitQuery(resolved, pepSource);
+                  pepIr = braid_ir.instructions[0];
+                } catch (compileErr) {
+                  log.status = 'error';
+                  log.error = `PEP compile error: ${compileErr.message}`;
+                  break;
+                }
+              }
+
+              // Stage 2: resolve workflow variables in IR filter values
+              for (const filter of pepIr.filters || []) {
+                if (typeof filter.value === 'string') {
+                  filter.value = replaceVariables(filter.value);
+                }
+              }
+
+              // Resolve PEP-specific tokens (date, employee)
+              const supabase = getSupabaseClient();
+              const pepResolvedFilters = [];
+              for (const filter of pepIr.filters || []) {
+                let val = filter.value;
+
+                // Date token resolution
+                if (typeof val === 'string' && val.startsWith('{{date:') && val.endsWith('}}')) {
+                  const tokenInner = val.slice(7, -2).trim();
+                  const now = new Date();
+                  const y = now.getFullYear();
+                  const m = now.getMonth();
+                  const dateMap = {
+                    today: now.toISOString().split('T')[0],
+                    start_of_month: new Date(y, m, 1).toISOString().split('T')[0],
+                    end_of_month: new Date(y, m + 1, 0).toISOString().split('T')[0],
+                    start_of_year: `${y}-01-01`,
+                  };
+                  if (dateMap[tokenInner]) {
+                    val = dateMap[tokenInner];
+                  } else {
+                    const lastN = tokenInner.match(/^last_(\d+)_days$/);
+                    if (lastN) {
+                      const d = new Date(now);
+                      d.setDate(d.getDate() - parseInt(lastN[1], 10));
+                      val = d.toISOString().split('T')[0];
+                    }
+                  }
+                }
+
+                // Employee token resolution
+                if (
+                  typeof val === 'string' &&
+                  val.startsWith('{{resolve_employee:') &&
+                  val.endsWith('}}')
+                ) {
+                  const empName = val.slice(19, -2).trim();
+                  const parts = empName.split(/\s+/);
+                  let empQuery = supabase
+                    .from('employees')
+                    .select('id, first_name, last_name')
+                    .eq('tenant_id', workflow.tenant_id)
+                    .limit(5);
+                  if (parts.length === 1) {
+                    empQuery = empQuery.or(
+                      `first_name.ilike.%${parts[0]}%,last_name.ilike.%${parts[0]}%`,
+                    );
+                  } else {
+                    const firstName = parts[0];
+                    const lastName = parts.slice(1).join(' ');
+                    empQuery = empQuery
+                      .ilike('first_name', `%${firstName}%`)
+                      .ilike('last_name', `%${lastName}%`);
+                  }
+                  const { data: empData, error: empErr } = await empQuery;
+                  if (empErr || !empData?.length) {
+                    log.status = 'error';
+                    log.error = `Could not resolve employee: ${empName}`;
+                    pepResolvedFilters.length = 0;
+                    break;
+                  }
+                  if (empData.length > 1) {
+                    const names = empData.map((e) => `${e.first_name} ${e.last_name}`).join(', ');
+                    log.status = 'error';
+                    log.error = `Ambiguous employee "${empName}" — matches: ${names}`;
+                    pepResolvedFilters.length = 0;
+                    break;
+                  }
+                  val = empData[0].id;
+                }
+
+                pepResolvedFilters.push({ ...filter, value: val });
+              }
+
+              // If employee resolution broke out with error, stop
+              if (log.status === 'error') break;
+
+              // Execute query via Supabase — tenant_id ALWAYS from workflow, never from IR
+              let pepQuery = supabase
+                .from(pepIr.table || pepIr.target)
+                .select('*')
+                .eq('tenant_id', workflow.tenant_id);
+
+              for (const filter of pepResolvedFilters) {
+                const { field, operator, value } = filter;
+                switch (operator) {
+                  case 'eq':
+                    pepQuery = pepQuery.eq(field, value);
+                    break;
+                  case 'neq':
+                    pepQuery = pepQuery.neq(field, value);
+                    break;
+                  case 'gt':
+                    pepQuery = pepQuery.gt(field, value);
+                    break;
+                  case 'gte':
+                    pepQuery = pepQuery.gte(field, value);
+                    break;
+                  case 'lt':
+                    pepQuery = pepQuery.lt(field, value);
+                    break;
+                  case 'lte':
+                    pepQuery = pepQuery.lte(field, value);
+                    break;
+                  case 'contains':
+                    pepQuery = pepQuery.ilike(field, `%${value}%`);
+                    break;
+                  case 'in':
+                    pepQuery = pepQuery.in(field, Array.isArray(value) ? value : [value]);
+                    break;
+                  case 'is_null':
+                    pepQuery = pepQuery.is(field, null);
+                    break;
+                  case 'is_not_null':
+                    pepQuery = pepQuery.not(field, 'is', null);
+                    break;
+                  default:
+                    break;
+                }
+              }
+
+              if (pepIr.sort?.field) {
+                pepQuery = pepQuery.order(pepIr.sort.field, {
+                  ascending: pepIr.sort.direction === 'asc',
+                });
+              }
+
+              const pepLimit = Math.min(Math.max(1, Number(pepIr.limit) || 100), 500);
+              pepQuery = pepQuery.limit(pepLimit);
+
+              const { data: pepData, error: pepError } = await pepQuery;
+
+              if (pepError) {
+                log.status = 'error';
+                log.error = `PEP query failed: ${pepError.message}`;
+                break;
+              }
+
+              // Store results in context for downstream nodes
+              context.variables.pep_results = {
+                rows: pepData || [],
+                count: (pepData || []).length,
+                target: pepIr.target,
+                executed_at: new Date().toISOString(),
+              };
+
+              log.output = {
+                query_source: pepSource,
+                target: pepIr.target,
+                result_count: context.variables.pep_results.count,
+              };
               break;
             }
             default:
@@ -1060,13 +1545,25 @@ export default function createWorkflowRoutes(pgPool) {
       }
 
       // Execute workflow graph
-      let current = (workflow.nodes || []).find(n => n.type === 'webhook_trigger') || (workflow.nodes || [])[0];
+      let current =
+        (workflow.nodes || []).find(
+          (n) => n.type === 'webhook_trigger' || n.type === 'care_trigger',
+        ) || (workflow.nodes || [])[0];
       if (!current) {
         throw new Error('Workflow has no nodes');
       }
       const visited = new Set();
       while (current) {
-        if (visited.has(current.id)) { executionLog.push({ node_id: current.id, node_type: current.type, timestamp: new Date().toISOString(), status: 'error', error: 'Detected loop' }); break; }
+        if (visited.has(current.id)) {
+          executionLog.push({
+            node_id: current.id,
+            node_type: current.type,
+            timestamp: new Date().toISOString(),
+            status: 'error',
+            error: 'Detected loop',
+          });
+          break;
+        }
         visited.add(current.id);
         const log = await execNode(current);
         executionLog.push(log);
@@ -1074,36 +1571,56 @@ export default function createWorkflowRoutes(pgPool) {
         current = getNextNode(current.id);
       }
 
-      const finalStatus = executionLog.some(l => l.status === 'error') ? 'failed' : 'success';
+      const finalStatus = executionLog.some((l) => l.status === 'error') ? 'failed' : 'success';
       const duration = Date.now() - startTime;
 
       // Update execution record
       await pgPool.query(
         `UPDATE workflow_execution SET status = $1, execution_log = $2, completed_at = NOW() WHERE id = $3`,
-        [finalStatus, JSON.stringify(executionLog), execution.id]
+        [finalStatus, JSON.stringify(executionLog), execution.id],
       );
 
       // Bump workflow metadata counters
-      const currMetaRes = await pgPool.query('SELECT metadata FROM workflow WHERE id = $1', [workflow.id]);
-      const meta = currMetaRes.rows[0]?.metadata && typeof currMetaRes.rows[0].metadata === 'object' ? currMetaRes.rows[0].metadata : {};
+      const currMetaRes = await pgPool.query('SELECT metadata FROM workflow WHERE id = $1', [
+        workflow.id,
+      ]);
+      const meta =
+        currMetaRes.rows[0]?.metadata && typeof currMetaRes.rows[0].metadata === 'object'
+          ? currMetaRes.rows[0].metadata
+          : {};
       const nextCount = (meta.execution_count || 0) + 1;
-      const newMeta = { ...meta, execution_count: nextCount, last_executed: new Date().toISOString() };
-      await pgPool.query('UPDATE workflow SET metadata = $1, updated_at = NOW() WHERE id = $2', [JSON.stringify(newMeta), workflow.id]);
+      const newMeta = {
+        ...meta,
+        execution_count: nextCount,
+        last_executed: new Date().toISOString(),
+      };
+      await pgPool.query('UPDATE workflow SET metadata = $1, updated_at = NOW() WHERE id = $2', [
+        JSON.stringify(newMeta),
+        workflow.id,
+      ]);
 
-      return { status: finalStatus, httpStatus: 200, data: { execution_id: execution.id, execution_log: executionLog, duration_ms: duration } };
+      return {
+        status: finalStatus,
+        httpStatus: 200,
+        data: { execution_id: execution.id, execution_log: executionLog, duration_ms: duration },
+      };
     } catch (error) {
       // Try to mark execution as failed if we created one
       if (executionId) {
         try {
           await pgPool.query(
             `UPDATE workflow_execution SET status = 'failed', execution_log = $1, completed_at = NOW() WHERE id = $2`,
-            [JSON.stringify(executionLog), executionId]
+            [JSON.stringify(executionLog), executionId],
           );
         } catch {
           // ignore secondary failure
         }
       }
-      return { status: 'error', httpStatus: 500, data: { message: error.message, execution_log: executionLog } };
+      return {
+        status: 'error',
+        httpStatus: 500,
+        data: { message: error.message, execution_log: executionLog },
+      };
     }
   }
 
@@ -1118,9 +1635,9 @@ export default function createWorkflowRoutes(pgPool) {
 
       // CRITICAL: Tenant isolation - require tenant_id for all workflow queries
       if (!tenant_id) {
-        return res.status(400).json({ 
-          status: 'error', 
-          message: 'tenant_id is required for workflow queries'
+        return res.status(400).json({
+          status: 'error',
+          message: 'tenant_id is required for workflow queries',
         });
       }
 
@@ -1163,8 +1680,8 @@ export default function createWorkflowRoutes(pgPool) {
           workflows: result.rows.map(normalizeWorkflow),
           total: parseInt(countResult.rows[0].count),
           limit: parseInt(limit),
-          offset: parseInt(offset)
-        }
+          offset: parseInt(offset),
+        },
       });
     } catch (error) {
       logger.error('Error fetching workflows:', error);
@@ -1181,9 +1698,9 @@ export default function createWorkflowRoutes(pgPool) {
       logger.debug('[Workflows POST] Received connections:', connections);
 
       if (!tenant_id || !name) {
-        return res.status(400).json({ 
-          status: 'error', 
-          message: 'tenant_id and name are required' 
+        return res.status(400).json({
+          status: 'error',
+          message: 'tenant_id and name are required',
         });
       }
 
@@ -1193,7 +1710,7 @@ export default function createWorkflowRoutes(pgPool) {
         connections: connections || [],
         webhook_url: null, // Will be set after creation
         execution_count: 0,
-        last_executed: null
+        last_executed: null,
       };
 
       logger.debug('[Workflows POST] Metadata to store:', metadata);
@@ -1215,7 +1732,7 @@ export default function createWorkflowRoutes(pgPool) {
         trigger_type,
         trigger_config,
         is_active !== undefined ? is_active : true,
-        metadata
+        metadata,
       ];
 
       const result = await pgPool.query(query, values);
@@ -1224,10 +1741,10 @@ export default function createWorkflowRoutes(pgPool) {
       // Update webhook URL in metadata now that we have the ID
       if (trigger_type === 'webhook') {
         const webhookUrl = `/api/workflows/${workflow.id}/webhook`;
-        await pgPool.query(
-          `UPDATE workflow SET metadata = metadata || $1 WHERE id = $2`,
-          [JSON.stringify({ webhook_url: webhookUrl }), workflow.id]
-        );
+        await pgPool.query(`UPDATE workflow SET metadata = metadata || $1 WHERE id = $2`, [
+          JSON.stringify({ webhook_url: webhookUrl }),
+          workflow.id,
+        ]);
         workflow.webhook_url = webhookUrl;
       }
 
@@ -1236,7 +1753,7 @@ export default function createWorkflowRoutes(pgPool) {
 
       res.status(201).json({
         status: 'success',
-        data: workflow
+        data: workflow,
       });
     } catch (error) {
       logger.error('Error creating workflow:', error);
@@ -1294,26 +1811,34 @@ export default function createWorkflowRoutes(pgPool) {
       const { id } = req.params;
       const { tenant_id, name, description, trigger, nodes, connections, is_active } = req.body;
 
-      console.log('[Workflows PUT] Received nodes:', nodes ? `Array(${nodes.length})` : 'undefined', JSON.stringify(nodes || []).substring(0, 300));
-      console.log('[Workflows PUT] Received connections:', connections ? `Array(${connections.length})` : 'undefined', JSON.stringify(connections || []));
+      console.log(
+        '[Workflows PUT] Received nodes:',
+        nodes ? `Array(${nodes.length})` : 'undefined',
+        JSON.stringify(nodes || []).substring(0, 300),
+      );
+      console.log(
+        '[Workflows PUT] Received connections:',
+        connections ? `Array(${connections.length})` : 'undefined',
+        JSON.stringify(connections || []),
+      );
 
       if (!tenant_id) {
-        return res.status(400).json({ 
-          status: 'error', 
-          message: 'tenant_id is required' 
+        return res.status(400).json({
+          status: 'error',
+          message: 'tenant_id is required',
         });
       }
 
       // Verify workflow exists and belongs to tenant
       const checkResult = await pgPool.query(
         'SELECT * FROM workflow WHERE id = $1 AND tenant_id = $2',
-        [id, tenant_id]
+        [id, tenant_id],
       );
 
       if (checkResult.rows.length === 0) {
-        return res.status(404).json({ 
-          status: 'error', 
-          message: 'Workflow not found or access denied' 
+        return res.status(404).json({
+          status: 'error',
+          message: 'Workflow not found or access denied',
         });
       }
 
@@ -1334,23 +1859,41 @@ export default function createWorkflowRoutes(pgPool) {
       }
 
       logger.debug('[Workflows PUT] Parsed existing metadata:', existingMetadata);
-      logger.debug('[Workflows PUT] Incoming nodes:', nodes ? `Array(${nodes.length})` : 'undefined');
-      logger.debug('[Workflows PUT] Incoming connections:', connections ? `Array(${connections.length})` : 'undefined');
+      logger.debug(
+        '[Workflows PUT] Incoming nodes:',
+        nodes ? `Array(${nodes.length})` : 'undefined',
+      );
+      logger.debug(
+        '[Workflows PUT] Incoming connections:',
+        connections ? `Array(${connections.length})` : 'undefined',
+      );
 
       // Build updated metadata - use explicit property assignment to avoid TDZ issues
-      const updatedNodes = nodes !== undefined ? nodes : (existingMetadata.nodes || []);
-      const updatedConnections = connections !== undefined ? connections : (existingMetadata.connections || []);
+      const updatedNodes = nodes !== undefined ? nodes : existingMetadata.nodes || [];
+      const updatedConnections =
+        connections !== undefined ? connections : existingMetadata.connections || [];
 
-      console.log('[Workflows PUT] Updated nodes:', updatedNodes ? `Array(${updatedNodes.length})` : 'undefined');
-      console.log('[Workflows PUT] Updated connections:', updatedConnections ? `Array(${updatedConnections.length})` : 'undefined');
+      console.log(
+        '[Workflows PUT] Updated nodes:',
+        updatedNodes ? `Array(${updatedNodes.length})` : 'undefined',
+      );
+      console.log(
+        '[Workflows PUT] Updated connections:',
+        updatedConnections ? `Array(${updatedConnections.length})` : 'undefined',
+      );
 
       const metadata = {
         ...existingMetadata,
         nodes: updatedNodes,
-        connections: updatedConnections
+        connections: updatedConnections,
       };
 
-      console.log('[Workflows PUT] Final merged metadata nodes:', metadata.nodes?.length, 'connections:', metadata.connections?.length);
+      console.log(
+        '[Workflows PUT] Final merged metadata nodes:',
+        metadata.nodes?.length,
+        'connections:',
+        metadata.connections?.length,
+      );
       console.log('[Workflows PUT] Metadata connections:', JSON.stringify(metadata.connections));
 
       logger.debug('[Workflows PUT] Metadata to store:', metadata);
@@ -1380,7 +1923,7 @@ export default function createWorkflowRoutes(pgPool) {
         is_active !== undefined ? is_active : existingWorkflow.is_active,
         metadata,
         id,
-        tenant_id
+        tenant_id,
       ];
 
       const result = await pgPool.query(query, values);
@@ -1389,12 +1932,17 @@ export default function createWorkflowRoutes(pgPool) {
       // Sync CARE workflow configuration if this workflow has a CARE trigger
       await syncCareWorkflowConfig(pgPool, workflow, updatedNodes);
 
-      console.log('[Workflows PUT] Returning workflow nodes:', workflow.nodes?.length, 'connections:', workflow.connections?.length);
+      console.log(
+        '[Workflows PUT] Returning workflow nodes:',
+        workflow.nodes?.length,
+        'connections:',
+        workflow.connections?.length,
+      );
       console.log('[Workflows PUT] Returning connections:', JSON.stringify(workflow.connections));
 
       res.json({
         status: 'success',
-        data: workflow
+        data: workflow,
       });
     } catch (error) {
       logger.error('Error updating workflow:', error);
@@ -1409,27 +1957,27 @@ export default function createWorkflowRoutes(pgPool) {
       const { tenant_id } = req.query;
 
       if (!tenant_id) {
-        return res.status(400).json({ 
-          status: 'error', 
-          message: 'tenant_id is required' 
+        return res.status(400).json({
+          status: 'error',
+          message: 'tenant_id is required',
         });
       }
 
       const result = await pgPool.query(
         'DELETE FROM workflow WHERE id = $1 AND tenant_id = $2 RETURNING id',
-        [id, tenant_id]
+        [id, tenant_id],
       );
 
       if (result.rows.length === 0) {
-        return res.status(404).json({ 
-          status: 'error', 
-          message: 'Workflow not found or access denied' 
+        return res.status(404).json({
+          status: 'error',
+          message: 'Workflow not found or access denied',
         });
       }
 
       res.json({
         status: 'success',
-        data: { id: result.rows[0].id, deleted: true }
+        data: { id: result.rows[0].id, deleted: true },
       });
     } catch (error) {
       logger.error('Error deleting workflow:', error);
@@ -1473,16 +2021,16 @@ export default function createWorkflowRoutes(pgPool) {
       const { tenant_id, is_active } = req.body;
 
       if (!tenant_id) {
-        return res.status(400).json({ 
-          status: 'error', 
-          message: 'tenant_id is required' 
+        return res.status(400).json({
+          status: 'error',
+          message: 'tenant_id is required',
         });
       }
 
       if (typeof is_active !== 'boolean') {
-        return res.status(400).json({ 
-          status: 'error', 
-          message: 'is_active must be a boolean' 
+        return res.status(400).json({
+          status: 'error',
+          message: 'is_active must be a boolean',
         });
       }
 
@@ -1491,20 +2039,20 @@ export default function createWorkflowRoutes(pgPool) {
          SET is_active = $1, updated_at = NOW() 
          WHERE id = $2 AND tenant_id = $3 
          RETURNING id, name, is_active`,
-        [is_active, id, tenant_id]
+        [is_active, id, tenant_id],
       );
 
       if (result.rows.length === 0) {
-        return res.status(404).json({ 
-          status: 'error', 
-          message: 'Workflow not found or access denied' 
+        return res.status(404).json({
+          status: 'error',
+          message: 'Workflow not found or access denied',
         });
       }
 
       res.json({
         status: 'success',
         message: `Workflow ${is_active ? 'activated' : 'deactivated'}`,
-        data: result.rows[0]
+        data: result.rows[0],
       });
     } catch (error) {
       logger.error('Error updating workflow status:', error);
@@ -1548,7 +2096,7 @@ export default function createWorkflowRoutes(pgPool) {
       // Queue the workflow for async execution
       const job = await workflowQueue.add({
         workflow_id,
-        trigger_data: triggerPayload
+        trigger_data: triggerPayload,
       });
 
       // Return immediately with 202 Accepted
@@ -1558,8 +2106,8 @@ export default function createWorkflowRoutes(pgPool) {
           job_id: job.id,
           workflow_id,
           message: 'Workflow queued for execution',
-          check_status_at: `/api/workflows/executions?workflow_id=${workflow_id}`
-        }
+          check_status_at: `/api/workflows/executions?workflow_id=${workflow_id}`,
+        },
       });
     } catch (error) {
       logger.error('[Workflow Execute] Error queuing workflow:', error);
@@ -1599,177 +2147,188 @@ export default function createWorkflowRoutes(pgPool) {
     try {
       const { id } = req.params;
       const payload = req.body?.payload ?? req.body ?? {};
-      
+
       // === WEBHOOK AUTHENTICATION BYPASS ===
       // Webhooks can be called from:
       // 1. External systems (n8n, Pabbly, etc.) - no auth required
       // 2. Internal C.A.R.E. triggers - signature validated if secret configured
       // Skip the global authenticateRequest middleware for webhooks
       // Tenant validation happens below via CARE node config
-      
+
       // === BLOCKLIST FOR DELETED/PROBLEMATIC WORKFLOWS ===
       const BLOCKED_WORKFLOW_IDS = [
-        'ad38e6cf-1454-48ac-a80d-0cfc79c5aa94' // C.A.R.E. Workflow Test (old deleted ID) - keep blocked permanently
+        'ad38e6cf-1454-48ac-a80d-0cfc79c5aa94', // C.A.R.E. Workflow Test (old deleted ID) - keep blocked permanently
       ];
-      
+
       if (BLOCKED_WORKFLOW_IDS.includes(id)) {
         logger.warn(`[Webhook] Blocked webhook call to deleted/old workflow ${id}`);
-        return res.status(410).json({ 
-          status: 'error', 
+        return res.status(410).json({
+          status: 'error',
           message: 'Workflow has been deleted or replaced',
-          hint: 'Remove this webhook URL from external systems (n8n, cron, etc.)'
+          hint: 'Remove this webhook URL from external systems (n8n, cron, etc.)',
         });
       }
-      
+
       // === CARE TRIGGER TENANT VALIDATION ===
       // Fetch workflow to check if it has a care_trigger node with tenant restriction
-      const workflowResult = await pgPool.query(
-        'SELECT id, nodes FROM workflow WHERE id = $1',
-        [id]
-      );
-      
+      const workflowResult = await pgPool.query('SELECT id, nodes FROM workflow WHERE id = $1', [
+        id,
+      ]);
+
       if (workflowResult.rows.length === 0) {
         logger.warn(`[Webhook] Workflow ${id} not found`);
         return res.status(404).json({ status: 'error', message: 'Workflow not found' });
       }
-      
+
       const workflowNodes = workflowResult.rows[0].nodes || [];
-      const careTriggerNode = workflowNodes.find(n => n.type === 'care_trigger');
-      
+      const careTriggerNode = workflowNodes.find((n) => n.type === 'care_trigger');
+
       // If workflow has a care_trigger node, enforce tenant isolation
       if (careTriggerNode) {
         const nodeConfig = careTriggerNode.config || {};
         const configuredTenantId = nodeConfig.tenant_id;
         const payloadTenantId = payload.tenant_id;
-        
+
         // Check if CARE processing is disabled
         if (nodeConfig.is_enabled === false) {
           logger.info(`[Webhook] CARE workflow ${id} is disabled - logging event only`);
-          return res.status(200).json({ 
-            status: 'skipped', 
+          return res.status(200).json({
+            status: 'skipped',
             message: 'CARE processing is disabled for this workflow',
-            logged: true
+            logged: true,
           });
         }
-        
+
         // Require tenant_id in care_trigger config
         if (!configuredTenantId) {
-          logger.warn(`[Webhook] CARE workflow ${id} has no tenant_id configured - rejecting all events`);
-          return res.status(403).json({ 
-            status: 'error', 
+          logger.warn(
+            `[Webhook] CARE workflow ${id} has no tenant_id configured - rejecting all events`,
+          );
+          return res.status(403).json({
+            status: 'error',
             message: 'CARE workflow not configured: missing tenant_id in CARE Start node',
-            hint: 'Configure the tenant_id in the CARE Start node to accept events'
+            hint: 'Configure the tenant_id in the CARE Start node to accept events',
           });
         }
-        
+
         // Require tenant_id in payload
         if (!payloadTenantId) {
           logger.warn(`[Webhook] CARE event missing tenant_id in payload for workflow ${id}`);
-          return res.status(400).json({ 
-            status: 'error', 
-            message: 'CARE event payload missing required tenant_id field'
+          return res.status(400).json({
+            status: 'error',
+            message: 'CARE event payload missing required tenant_id field',
           });
         }
-        
+
         // Validate tenant_id matches
         if (configuredTenantId !== payloadTenantId) {
-          logger.warn(`[Webhook] CARE tenant mismatch for workflow ${id}: expected ${configuredTenantId}, got ${payloadTenantId}`);
-          return res.status(403).json({ 
-            status: 'error', 
+          logger.warn(
+            `[Webhook] CARE tenant mismatch for workflow ${id}: expected ${configuredTenantId}, got ${payloadTenantId}`,
+          );
+          return res.status(403).json({
+            status: 'error',
             message: 'Tenant mismatch: this CARE workflow is configured for a different tenant',
-            expected_tenant: configuredTenantId.substring(0, 8) + '...',  // Partial for security
-            received_tenant: payloadTenantId.substring(0, 8) + '...'
+            expected_tenant: configuredTenantId.substring(0, 8) + '...', // Partial for security
+            received_tenant: payloadTenantId.substring(0, 8) + '...',
           });
         }
-        
+
         logger.info(`[Webhook] CARE tenant validated: ${payloadTenantId} matches workflow ${id}`, {
           shadow_mode: nodeConfig.shadow_mode ?? true,
           state_write_enabled: nodeConfig.state_write_enabled ?? false,
-          webhook_timeout_ms: nodeConfig.webhook_timeout_ms || 3000
+          webhook_timeout_ms: nodeConfig.webhook_timeout_ms || 3000,
         });
-        
+
         // Pass CARE config to the workflow execution context
         payload._care_config = {
           shadow_mode: nodeConfig.shadow_mode ?? true,
           state_write_enabled: nodeConfig.state_write_enabled ?? false,
           webhook_timeout_ms: nodeConfig.webhook_timeout_ms || 3000,
-          webhook_max_retries: nodeConfig.webhook_max_retries ?? 2
+          webhook_max_retries: nodeConfig.webhook_max_retries ?? 2,
         };
       }
       // === END CARE TRIGGER TENANT VALIDATION ===
-      
+
       // Compute idempotency key for deduplication
       // Hash the payload for deterministic jobId
-      const payloadHash = crypto.createHash('sha256')
+      const payloadHash = crypto
+        .createHash('sha256')
         .update(JSON.stringify(payload))
         .digest('hex')
         .substring(0, 8);
-      
+
       // CRITICAL: jobId should NOT include time - only workflow+payload hash
       // This ensures Bull rejects exact duplicates
       const jobId = `${id}:${payloadHash}`;
       const idempotencyKey = `webhook:${id}:${payloadHash}`;
-      
-      logger.info(`[Webhook] Received request for workflow ${id}`, { 
+
+      logger.info(`[Webhook] Received request for workflow ${id}`, {
         payload,
         jobId,
         idempotencyKey,
         sourceIp: req.ip,
-        requestId: req.headers['x-request-id'] || 'none'
+        requestId: req.headers['x-request-id'] || 'none',
       });
-      
+
       // Check Redis for idempotency (prevents duplicate processing within 60s)
       const existing = await redisCache.get(idempotencyKey);
       if (existing) {
-        logger.info(`[Webhook] Duplicate webhook detected (idempotency key exists) - returning cached response`, {
-          workflow_id: id,
-          idempotencyKey,
-          cachedJobId: existing
-        });
-        return res.status(202).json({ 
-          status: 'accepted', 
+        logger.info(
+          `[Webhook] Duplicate webhook detected (idempotency key exists) - returning cached response`,
+          {
+            workflow_id: id,
+            idempotencyKey,
+            cachedJobId: existing,
+          },
+        );
+        return res.status(202).json({
+          status: 'accepted',
           message: 'Workflow already queued (duplicate prevented by idempotency)',
           workflow_id: id,
-          job_id: existing
+          job_id: existing,
         });
       }
-      
+
       // Queue workflow for async execution with deterministic jobId
       // If jobId already exists, Bull will reject the duplicate
-      await workflowQueue.add('execute-workflow', {
-        workflow_id: id,
-        trigger_data: payload,  // Match what the processor expects
-        trigger: 'webhook'
-      }, {
-        jobId // CRITICAL: Prevents duplicate enqueues
-      });
-      
+      await workflowQueue.add(
+        'execute-workflow',
+        {
+          workflow_id: id,
+          trigger_data: payload, // Match what the processor expects
+          trigger: 'webhook',
+        },
+        {
+          jobId, // CRITICAL: Prevents duplicate enqueues
+        },
+      );
+
       // Store idempotency key in Redis (60s TTL)
       await redisCache.setex(idempotencyKey, 60, jobId);
-      
+
       logger.info(`[Webhook] Workflow ${id} queued for execution with jobId ${jobId}`);
-      
+
       // Return 202 Accepted immediately
-      return res.status(202).json({ 
-        status: 'accepted', 
+      return res.status(202).json({
+        status: 'accepted',
         message: 'Workflow queued for execution',
         workflow_id: id,
-        job_id: jobId
+        job_id: jobId,
       });
     } catch (error) {
       // If job already exists, Bull throws an error - this is OK (idempotency)
       if (error.message?.includes('already exists') || error.message?.includes('duplicate')) {
         logger.info(`[Webhook] Duplicate job detected by Bull - returning success (idempotent)`, {
           workflow_id: id,
-          error: error.message
+          error: error.message,
         });
-        return res.status(202).json({ 
-          status: 'accepted', 
+        return res.status(202).json({
+          status: 'accepted',
           message: 'Workflow already queued (duplicate prevented by Bull)',
-          workflow_id: id
+          workflow_id: id,
         });
       }
-      
+
       logger.error(`[Webhook] Error queueing workflow: ${error.message}`, error);
       return res.status(500).json({ status: 'error', message: error.message });
     }

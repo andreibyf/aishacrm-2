@@ -81,8 +81,8 @@ describe('CustomQuery — Phase 4 Saved Reports', () => {
     vi.clearAllMocks();
     // Ensure localStorage is clean and we can spy on it
     localStorage.clear();
-    vi.spyOn(localStorage, 'getItem');
-    vi.spyOn(localStorage, 'setItem');
+    vi.spyOn(Storage.prototype, 'getItem');
+    vi.spyOn(Storage.prototype, 'setItem');
   });
 
   afterEach(() => {
@@ -117,7 +117,7 @@ describe('CustomQuery — Phase 4 Saved Reports', () => {
     expect(screen.getByText(/3 runs/)).toBeInTheDocument();
 
     // Verify it called the API, not localStorage
-    expect(localStorage.getItem).not.toHaveBeenCalled();
+    expect(Storage.prototype.getItem).not.toHaveBeenCalled();
   });
 
   // ── 2. localStorage is never used ──────────────────────────────────────────
@@ -142,8 +142,8 @@ describe('CustomQuery — Phase 4 Saved Reports', () => {
       expect(screen.getByText(/No saved reports yet/i)).toBeInTheDocument();
     });
 
-    expect(localStorage.getItem).not.toHaveBeenCalled();
-    expect(localStorage.setItem).not.toHaveBeenCalled();
+    expect(Storage.prototype.getItem).not.toHaveBeenCalled();
+    expect(Storage.prototype.setItem).not.toHaveBeenCalled();
   });
 
   // ── 3. Save Report calls POST /api/pep/saved-reports ───────────────────────
@@ -245,7 +245,7 @@ describe('CustomQuery — Phase 4 Saved Reports', () => {
     expect(body.compiled_ir).toBeTruthy();
 
     // localStorage was never written
-    expect(localStorage.setItem).not.toHaveBeenCalled();
+    expect(Storage.prototype.setItem).not.toHaveBeenCalled();
   });
 
   // ── 4. 409 duplicate name shows toast error ─────────────────────────────────
@@ -374,7 +374,7 @@ describe('CustomQuery — Phase 4 Saved Reports', () => {
     });
 
     // localStorage was not touched
-    expect(localStorage.setItem).not.toHaveBeenCalled();
+    expect(Storage.prototype.setItem).not.toHaveBeenCalled();
   });
 
   // ── 6. Running a saved report fires PATCH .../run ───────────────────────────

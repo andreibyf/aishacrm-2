@@ -69,7 +69,21 @@ opportunities.account_id → accounts.id
 opportunities.contact_id → contacts.id
 opportunities.lead_id → leads.id
 activities.related_id → polymorphic (related_to indicates entity type)
-all entities.assigned_to → employees.id`.trim();
+all entities.assigned_to → employees.id
+customer_care_state.entity_id → polymorphic (entity_type = 'lead'|'contact'|'account')
+customer_care_state_history.entity_id → polymorphic (entity_type = 'lead'|'contact'|'account')`.trim();
+
+  const careContext = `
+C.A.R.E. ENTITY NOTES:
+- Use CareState to query the CURRENT state of leads/contacts/accounts in the C.A.R.E. system.
+- Use CareHistory to query the audit trail of state transitions and autonomous decisions.
+- care_state valid values: unaware, aware, engaged, evaluating, committed, active, at_risk, dormant, reactivated, lost
+- escalation_status valid values: open, closed (or null if no escalation)
+- event_type examples (history table): state_transition, state_applied, action_candidate, action_skipped (examples, not exhaustive)
+- Note: other CARE logs/webhooks may use additional event_type values such as escalation_detected; do not assume those exist in customer_care_state_history.
+- actor_type valid values: system, user, agent
+- Do NOT use CareState when the user is asking about Lead/Contact/Account records themselves — only use it when asking about relationship state or C.A.R.E. status.
+`.trim();
 
   return `You are a strict query parser for a CRM reporting system.
 
@@ -110,6 +124,8 @@ use value format: "{{resolve_employee: <name>}}"
 
 ENTITY RELATIONSHIPS:
 ${relationshipSummary}
+
+${careContext}
 
 Return { "match": false, "reason": "..." } if:
 - No entity or view can be identified from the request
