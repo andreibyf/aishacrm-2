@@ -27,11 +27,30 @@ const PEP_CATALOGS_DIR = join(__wf_dirname, '..', '..', 'pep', 'catalogs');
 
 // Load entity catalog once at module load time (same as pep.js)
 let pepEntityCatalog;
+let pepSystemPrompt;
 try {
   pepEntityCatalog = parseYaml(readFileSync(join(PEP_CATALOGS_DIR, 'entity-catalog.yaml'), 'utf8'));
+  const entityLines = (pepEntityCatalog.entities || [])
+    .filter((e) => Array.isArray(e.fields))
+    .map(
+      (e) =>
+        `${e.id} (table: ${e.aisha_binding?.table}) — fields: ${e.fields.map((f) => f.name).join(', ')}`,
+    );
+  const viewLines = (pepEntityCatalog.views || []).map(
+    (v) => `${v.id} — columns: ${v.columns.map((c) => c.name).join(', ')}`,
+  );
+  pepSystemPrompt = `You are a strict query parser for a CRM reporting system.
+Return ONLY valid JSON. If you cannot parse, return { "match": false, "reason": "..." }.
+Output shape: { "match": true, "target": "...", "target_kind": "entity"|"view", "filters": [...], "sort": null, "limit": null }
+Entities: ${entityLines.join('; ')}
+Views: ${viewLines.join('; ')}
+Operators: eq, neq, gt, gte, lt, lte, contains, in, is_null, is_not_null
+Date tokens: {{date: today}}, {{date: start_of_month}}, {{date: last_N_days}}
+Employee names: {{resolve_employee: <name>}}`;
 } catch (_err) {
   // Non-fatal — PEP query nodes will error at runtime if catalog missing
   pepEntityCatalog = null;
+  pepSystemPrompt = null;
 }
 
 // Redis client for idempotency checks
@@ -1314,34 +1333,15 @@ export default function createWorkflowRoutes(pgPool) {
                 break;
               }
 
-              let pepIr = cfg.compiled_ir ? JSON.parse(JSON.stringify(cfg.compiled_ir)) : null;
+              let pepIr = cfg.compiled_ir ? structuredClone(cfg.compiled_ir) : null;
 
               // If no cached IR, compile on the fly
               if (!pepIr) {
                 try {
-                  // Build query system prompt (same as pep.js)
-                  const entityLines = (pepEntityCatalog.entities || [])
-                    .filter((e) => Array.isArray(e.fields))
-                    .map(
-                      (e) =>
-                        `${e.id} (table: ${e.aisha_binding?.table}) — fields: ${e.fields.map((f) => f.name).join(', ')}`,
-                    );
-                  const viewLines = (pepEntityCatalog.views || []).map(
-                    (v) => `${v.id} — columns: ${v.columns.map((c) => c.name).join(', ')}`,
-                  );
-                  const systemPrompt = `You are a strict query parser for a CRM reporting system.
-Return ONLY valid JSON. If you cannot parse, return { "match": false, "reason": "..." }.
-Output shape: { "match": true, "target": "...", "target_kind": "entity"|"view", "filters": [...], "sort": null, "limit": null }
-Entities: ${entityLines.join('; ')}
-Views: ${viewLines.join('; ')}
-Operators: eq, neq, gt, gte, lt, lte, contains, in, is_null, is_not_null
-Date tokens: {{date: today}}, {{date: start_of_month}}, {{date: last_N_days}}
-Employee names: {{resolve_employee: <name>}}`;
-
                   const parsed = await parseLLM(
                     pepSource,
                     { entity_catalog: pepEntityCatalog, capability_catalog: {} },
-                    systemPrompt,
+                    pepSystemPrompt,
                   );
                   if (!parsed.match) {
                     log.status = 'error';
@@ -1428,18 +1428,24 @@ Employee names: {{resolve_employee: <name>}}`;
                       `first_name.ilike.%${parts[0]}%,last_name.ilike.%${parts[0]}%`,
                     );
                   } else {
-                    empQuery = empQuery.ilike('full_name', `%${empName}%`);
+                    const firstName = parts[0];
+                    const lastName = parts.slice(1).join(' ');
+                    empQuery = empQuery
+                      .ilike('first_name', `%${firstName}%`)
+                      .ilike('last_name', `%${lastName}%`);
                   }
                   const { data: empData, error: empErr } = await empQuery;
                   if (empErr || !empData?.length) {
                     log.status = 'error';
                     log.error = `Could not resolve employee: ${empName}`;
+                    pepResolvedFilters.length = 0;
                     break;
                   }
                   if (empData.length > 1) {
                     const names = empData.map((e) => `${e.first_name} ${e.last_name}`).join(', ');
                     log.status = 'error';
                     log.error = `Ambiguous employee "${empName}" — matches: ${names}`;
+                    pepResolvedFilters.length = 0;
                     break;
                   }
                   val = empData[0].id;
