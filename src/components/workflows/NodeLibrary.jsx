@@ -1,4 +1,25 @@
-import { Search, Edit, Mail, Plus, GitBranch, UserPlus, Globe, Building2, Briefcase, Activity, Brain, Sparkles, Phone, Clock, MessageSquare, UserCheck, CheckCircle, Send, Shield } from 'lucide-react'
+import {
+  Search,
+  Edit,
+  Mail,
+  Plus,
+  GitBranch,
+  UserPlus,
+  Globe,
+  Building2,
+  Briefcase,
+  Activity,
+  Brain,
+  Sparkles,
+  Phone,
+  Clock,
+  MessageSquare,
+  UserCheck,
+  CheckCircle,
+  Send,
+  Shield,
+  Database,
+} from 'lucide-react';
 
 const nodeTypes = [
   // Trigger Nodes (Start Points)
@@ -7,101 +28,100 @@ const nodeTypes = [
     label: 'CARE Start',
     icon: Shield,
     description: 'Start workflow from CARE system events (entity_id based)',
-    color: 'red'
+    color: 'red',
   },
-  // Entity Nodes  
+  // Entity Nodes
   {
     type: 'find_lead',
     label: 'Find Lead',
     icon: Search,
     description: 'Find a lead by email or other criteria',
-    color: 'blue'
+    color: 'blue',
   },
   {
     type: 'create_lead',
     label: 'Create Lead',
     icon: UserPlus,
     description: 'Create a new lead record',
-    color: 'green'
+    color: 'green',
   },
   {
     type: 'update_lead',
     label: 'Update Lead',
     icon: Edit,
     description: 'Update lead fields',
-    color: 'emerald'
+    color: 'emerald',
   },
   {
     type: 'http_request',
     label: 'HTTP Request',
     icon: Globe,
     description: 'Send data to external API (Zapier-style)',
-    color: 'orange'
+    color: 'orange',
   },
   {
     type: 'condition',
     label: 'Condition',
     icon: GitBranch,
     description: 'Branch based on a condition',
-    color: 'yellow'
+    color: 'yellow',
   },
   {
     type: 'wait',
     label: 'Wait/Delay',
     icon: Clock,
     description: 'Wait for a specified duration before next action',
-    color: 'amber'
+    color: 'amber',
   },
   {
     type: 'find_contact',
     label: 'Find Contact',
     icon: Search,
     description: 'Find a contact by email',
-    color: 'cyan'
+    color: 'cyan',
   },
   {
     type: 'update_contact',
     label: 'Update Contact',
     icon: Edit,
     description: 'Update contact fields',
-    color: 'teal'
+    color: 'teal',
   },
   {
     type: 'send_email',
     label: 'Send Email',
     icon: Mail,
     description: 'Send an email',
-    color: 'purple'
+    color: 'purple',
   },
   {
     type: 'send_sms',
     label: 'Send SMS',
     icon: MessageSquare,
     description: 'Send an SMS message',
-    color: 'fuchsia'
+    color: 'fuchsia',
   },
   {
     type: 'initiate_call',
     label: 'AI Call',
     icon: Phone,
     description: 'Initiate AI outbound call via CallFluent/Thoughtly',
-    color: 'rose'
-  }
-  ,
+    color: 'rose',
+  },
   // Account nodes
   {
     type: 'find_account',
     label: 'Find Account',
     icon: Building2,
     description: 'Find an account by name or email domain',
-    color: 'indigo'
+    color: 'indigo',
   },
   {
     type: 'update_account',
     label: 'Update Account',
     icon: Edit,
     description: 'Update account fields',
-    color: 'indigo'
+    color: 'indigo',
   },
   // Opportunity nodes
   {
@@ -109,14 +129,14 @@ const nodeTypes = [
     label: 'Create Opportunity',
     icon: Briefcase,
     description: 'Create a new sales opportunity',
-    color: 'pink'
+    color: 'pink',
   },
   {
     type: 'update_opportunity',
     label: 'Update Opportunity',
     icon: Edit,
     description: 'Update opportunity fields',
-    color: 'pink'
+    color: 'pink',
   },
   // Activities nodes
   {
@@ -124,7 +144,7 @@ const nodeTypes = [
     label: 'Create Activity',
     icon: Activity,
     description: 'Log an activity (email, call, task)',
-    color: 'violet'
+    color: 'violet',
   },
   // Assignment nodes
   {
@@ -132,44 +152,51 @@ const nodeTypes = [
     label: 'Assign Record',
     icon: UserCheck,
     description: 'Assign record to user or round-robin',
-    color: 'lime'
+    color: 'lime',
   },
   {
     type: 'update_status',
     label: 'Update Status',
     icon: CheckCircle,
     description: 'Update record status',
-    color: 'sky'
-  }
-  ,
+    color: 'sky',
+  },
+  // PEP Query node (Phase 5b)
+  {
+    type: 'pep_query',
+    label: 'PEP Query',
+    icon: Database,
+    description: 'Run a plain English query against CRM data',
+    color: 'emerald',
+  },
   // AI-driven nodes
   {
     type: 'ai_classify_opportunity_stage',
     label: 'AI: Classify Stage',
     icon: Brain,
     description: 'Classify opportunity stage from text/context',
-    color: 'purple'
+    color: 'purple',
   },
   {
     type: 'ai_generate_email',
     label: 'AI: Generate Email',
     icon: Sparkles,
     description: 'Draft personalized email from context',
-    color: 'pink'
+    color: 'pink',
   },
   {
     type: 'ai_enrich_account',
     label: 'AI: Enrich Account',
     icon: Brain,
     description: 'Enrich company data via MCP/API',
-    color: 'indigo'
+    color: 'indigo',
   },
   {
     type: 'ai_route_activity',
     label: 'AI: Route Activity',
     icon: Sparkles,
     description: 'Suggest next best action and priority',
-    color: 'cyan'
+    color: 'cyan',
   },
   // External Integration nodes
   {
@@ -177,29 +204,29 @@ const nodeTypes = [
     label: 'Thoughtly Message',
     icon: MessageSquare,
     description: 'Send SMS or email via Thoughtly AI',
-    color: 'sky'
+    color: 'sky',
   },
   {
     type: 'callfluent_message',
     label: 'CallFluent SMS',
     icon: MessageSquare,
     description: 'Send SMS via CallFluent AI',
-    color: 'lime'
+    color: 'lime',
   },
   {
     type: 'pabbly_webhook',
     label: 'Pabbly Webhook',
     icon: Send,
     description: 'Send data to Pabbly Connect',
-    color: 'pink'
+    color: 'pink',
   },
   {
     type: 'wait_for_webhook',
     label: 'Wait for Webhook',
     icon: Clock,
     description: 'Wait for external callback (call results, etc.)',
-    color: 'slate'
-  }
+    color: 'slate',
+  },
 ];
 
 export default function NodeLibrary({ onAddNode }) {

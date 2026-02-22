@@ -575,3 +575,91 @@ Added `/api/pep/compile`, `/api/pep/query`, and `/api/pep/saved-reports` to `exe
 
 **CSV export added to CustomQuery results toolbar**
 `src/components/reports/CustomQuery.jsx` — `handleExportCsv()` and Export CSV button added to results toolbar alongside Refresh and Save Report. Strips internal columns, derives filename from query text. Client-side only.
+
+---
+
+## Phase 5b — PEP Query Node for Workflow Builder
+
+**Branch:** `feature/pep-phase5b-query-node`
+**Status:** ✅ Complete — February 2026
+**Auditor:** Claude (Anthropic)
+
+### What Was Built
+
+| Artifact                               | Location                                                            | Description                                                                                                                                                  |
+| -------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Backend executor: `pep_query` case     | `backend/routes/workflows.js` → `execNode()`                        | Compiles (or uses cached IR), resolves workflow variables + date/employee tokens, executes Supabase query, stores results in `context.variables.pep_results` |
+| Backend executor: `care_trigger` no-op | `backend/routes/workflows.js` → `execNode()`                        | Prevents `Unknown node type` error on graph traversal                                                                                                        |
+| Frontend NodeLibrary entry             | `src/components/workflows/NodeLibrary.jsx`                          | `pep_query` node with Database icon, emerald color                                                                                                           |
+| Frontend WorkflowNode rendering        | `src/components/workflows/WorkflowNode.jsx`                         | Icon, color, title (`PEP Query`), description (truncated source or default)                                                                                  |
+| Frontend config panel                  | `src/components/workflows/WorkflowBuilder.jsx`                      | Textarea, variable hint chips, Compile button, status indicator, collapsible IR preview, runtime info                                                        |
+| Backend tests                          | `backend/__tests__/routes/pep.query-node.test.js`                   | 14 tests: variable resolution, date tokens, two-stage pipeline, tenant isolation, config shape                                                               |
+| Frontend tests                         | `src/components/workflows/__tests__/WorkflowNode.pepQuery.test.jsx` | 4 tests: title rendering, default/truncated descriptions                                                                                                     |
+| Spec document                          | `PHASE_5B_SPEC.md`                                                  | Full design spec with architecture, implementation steps, security considerations                                                                            |
+
+### Key Design: Two-Stage Variable Resolution
+
+The core architectural decision in Phase 5b. PEP queries in workflows can contain `{{variable}}` placeholders (e.g., `"show me activities for lead {{entity_id}}"`). These are resolved in two stages:
+
+1. **Compile time** — The PEP compiler sees `{{entity_id}}` as an opaque token and emits IR with `value: "{{entity_id}}"` in the filter. The IR is a **reusable template**.
+2. **Execution time** — The workflow executor's `replaceVariables()` substitutes `{{entity_id}}` with the actual UUID from the CARE trigger payload before the query runs.
+
+Three token types are handled:
+
+| Token Pattern                               | Resolved At    | By What                                           |
+| ------------------------------------------- | -------------- | ------------------------------------------------- |
+| `{{date: today}}`, `{{date: last_30_days}}` | Execution time | Date token resolver (inline in executor)          |
+| `{{resolve_employee: James}}`               | Execution time | Employee lookup via Supabase (inline in executor) |
+| `{{entity_id}}`, `{{email}}`, etc.          | Execution time | `replaceVariables()` from trigger payload         |
+| Literal values (`"open"`, `42`)             | Compile time   | PEP resolver (already works)                      |
+
+Benefits: compiled IR is cached and reused across all executions. The LLM runs once at compile time, never at execution time.
+
+### CARE Start + PEP Query Pipeline
+
+```
+CARE Start → PEP Query → Condition → Send Email
+(event)       (enrich)    (check)     (act)
+```
+
+Example: CARE detects `lead_stagnant` → PEP queries activities for that lead in last 30 days → Condition checks `pep_results.count == 0` → Send email to assigned rep if no activity found.
+
+### Architectural Decisions Made
+
+**1. No new API endpoints**
+The executor reuses existing `/api/pep/compile` logic (via imported functions) and builds Supabase queries inline. The frontend config panel calls `/api/pep/compile` which already exists from Phase 3.
+
+**2. No new database tables**
+Compiled IR is stored in the node's `config.compiled_ir` field within the workflow metadata JSONB. No migration needed.
+
+**3. `care_trigger` no-op case added**
+The executor's `execNode` switch now handles `care_trigger` as a passthrough instead of falling through to `Unknown node type` error. Payload validation still happens at webhook ingress.
+
+**4. Tenant isolation double-enforced**
+The PEP query executor always injects `tenant_id` from `workflow.tenant_id` via `.eq('tenant_id', workflow.tenant_id)`. The IR cannot override this. Same security model as Phase 3.
+
+**5. LLM not in the hot path**
+The LLM is called only when the user clicks "Compile" in the config panel. At workflow execution time, the pre-compiled IR is used. If no cached IR exists, the executor compiles on the fly (fallback), but the expected path is pre-compiled.
+
+**6. Results available to downstream nodes**
+Query results are stored in `context.variables.pep_results` with shape `{ rows, count, target, executed_at }`. Downstream condition nodes can reference `{{pep_results.count}}`.
+
+### Modified Files
+
+| File                                                                | Change                                                                                                               |
+| ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `backend/routes/workflows.js`                                       | Added PEP imports, `case 'care_trigger'` no-op, `case 'pep_query'` executor with full compile/resolve/query pipeline |
+| `src/components/workflows/NodeLibrary.jsx`                          | Added `pep_query` entry with Database icon                                                                           |
+| `src/components/workflows/WorkflowNode.jsx`                         | Added `pep_query` to icons, colors, title, description maps                                                          |
+| `src/components/workflows/WorkflowBuilder.jsx`                      | Added `case 'pep_query'` config panel (~140 lines)                                                                   |
+| `backend/__tests__/routes/pep.query-node.test.js`                   | New: 14 unit tests                                                                                                   |
+| `src/components/workflows/__tests__/WorkflowNode.pepQuery.test.jsx` | New: 4 vitest tests                                                                                                  |
+| `BRAID_PEP_JOURNAL.md`                                              | This entry                                                                                                           |
+
+### What Phase 5b Does NOT Do
+
+- No saved-report integration (queries run live each execution, results are not persisted)
+- No multi-step PEP programs — single `query_entity` per node
+- No aggregation or GROUP BY (same Phase 3 limitation)
+- No frontend visual query builder — input is a plain English textarea
+- No new npm dependencies
