@@ -266,6 +266,64 @@ entities:
         type: date
         operators: [eq, gt, gte, lt, lte]
 
+  # ── Phase 5a: C.A.R.E. queryable entities ─────────────────────────────────────
+  # Read-only surfaces into the C.A.R.E. state machine data.
+  # These tables have tenant-scoped RLS (authenticated SELECT only).
+
+  - id: CareState
+    description: Current C.A.R.E. relationship state for each entity (lead, contact, or account)
+    aisha_binding:
+      table: customer_care_state
+    fields:
+      - name: entity_type
+        type: string
+        operators: [eq, neq, in]  # lead | contact | account
+      - name: care_state
+        type: string
+        operators: [eq, neq, in]  # unaware | aware | engaged | evaluating | committed | active | at_risk | dormant | reactivated | lost
+      - name: hands_off_enabled
+        type: boolean
+        operators: [eq]
+      - name: escalation_status
+        type: string
+        operators: [eq, neq, in, is_null, is_not_null]  # open | closed | null
+      - name: last_signal_at
+        type: date
+        operators: [eq, gt, gte, lt, lte, is_null, is_not_null]
+      - name: created_at
+        type: date
+        operators: [eq, gt, gte, lt, lte]
+      - name: updated_at
+        type: date
+        operators: [eq, gt, gte, lt, lte]
+
+  - id: CareHistory
+    description: Audit trail of all C.A.R.E. state transitions and autonomous decisions
+    aisha_binding:
+      table: customer_care_state_history
+    fields:
+      - name: entity_type
+        type: string
+        operators: [eq, neq, in]  # lead | contact | account
+      - name: from_state
+        type: string
+        operators: [eq, neq, in, is_null, is_not_null]
+      - name: to_state
+        type: string
+        operators: [eq, neq, in, is_null, is_not_null]
+      - name: event_type
+        type: string
+        operators: [eq, neq, in, contains]  # state_proposed | state_applied | escalation_opened | action_candidate | action_skipped | etc.
+      - name: reason
+        type: string
+        operators: [contains, eq]
+      - name: actor_type
+        type: string
+        operators: [eq, neq, in]  # system | user | agent
+      - name: created_at
+        type: date
+        operators: [eq, gt, gte, lt, lte]
+
 # ── Phase 3 queryable views ───────────────────────────────────────────────────
 # Views are pre-joined surfaces. Queried directly via Supabase client (no backend route).
 

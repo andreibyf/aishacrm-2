@@ -90,6 +90,10 @@ capabilities:
         http: POST /api/pep/query
       v_opportunity_pipeline_by_stage:
         http: POST /api/pep/query
+      CareState:         # Phase 5a: C.A.R.E. current state per entity
+        http: POST /api/pep/query
+      CareHistory:       # Phase 5a: C.A.R.E. audit trail of all decisions
+        http: POST /api/pep/query
     effects: ["!net"]
     policy: READ_ONLY
     output:
