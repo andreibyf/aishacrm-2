@@ -9,6 +9,7 @@ AiSHA (AI Super Hi-performing Assistant) is the executive-assistant layer that r
 ## What's New
 
 ### v3.7.0 - Agent Workflow Delegation
+
 - **Delegate to Agents:** Say "Have the sales manager follow up" to trigger specialized agent workflows
 - **AI-Powered Actions:** Workflows now generate personalized emails, summaries, and notes using OpenAI
 - **Progress Tracking:** Check workflow status with "What has the sales manager done?"
@@ -29,15 +30,15 @@ AiSHA (AI Super Hi-performing Assistant) is the executive-assistant layer that r
 
 ## 2. Layout Overview
 
-| Region | Purpose |
-|--------|---------|
-| **Executive Hero Card** | Shows the AiSHA avatar, current tenant badge, user role, and realtime status chip (Live voice + chat, Chat ready, or Chat-only). This gives leadership a quick health glance before issuing commands. |
-| **Workspace Snapshot** | Highlights the active tenant and role, including whether guided forms are unlocked. If no tenant is selected, the card explains how to unlock forms and insights. |
-| **Quick Actions** | Two-column grid of high-frequency prompts ("Show leads", "View pipeline", "My tasks"). Each chip sends the prefilled instruction immediately. |
-| **Guided Creations** | Icon buttons for entity-specific conversational forms (Lead, Account, Contact, Opportunity, Activity). Selecting a chip opens an in-panel form with validation and success toasts. |
-| **Suggestions** | Context-aware nudges tied to the current page. Tapping a suggestion queues its prompt in the composer. |
-| **Transcript Stream** | Ordered list of user/assistant bubbles with Markdown rendering, inline action pills, and welcome card styling for the first assistant message. |
-| **Composer & Voice Controls** | Unified area for drafting messages, enabling realtime voice, managing push-to-talk (PTT), Wake Word detection, and monitoring telemetry/warnings. |
+| Region                        | Purpose                                                                                                                                                                                               |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Executive Hero Card**       | Shows the AiSHA avatar, current tenant badge, user role, and realtime status chip (Live voice + chat, Chat ready, or Chat-only). This gives leadership a quick health glance before issuing commands. |
+| **Workspace Snapshot**        | Highlights the active tenant and role, including whether guided forms are unlocked. If no tenant is selected, the card explains how to unlock forms and insights.                                     |
+| **Quick Actions**             | Two-column grid of high-frequency prompts ("Show leads", "View pipeline", "My tasks"). Each chip sends the prefilled instruction immediately.                                                         |
+| **Guided Creations**          | Icon buttons for entity-specific conversational forms (Lead, Account, Contact, Opportunity, Activity). Selecting a chip opens an in-panel form with validation and success toasts.                    |
+| **Suggestions**               | Context-aware nudges tied to the current page. Tapping a suggestion queues its prompt in the composer.                                                                                                |
+| **Transcript Stream**         | Ordered list of user/assistant bubbles with Markdown rendering, inline action pills, and welcome card styling for the first assistant message.                                                        |
+| **Composer & Voice Controls** | Unified area for drafting messages, enabling realtime voice, managing push-to-talk (PTT), Wake Word detection, and monitoring telemetry/warnings.                                                     |
 
 ---
 
@@ -61,10 +62,12 @@ The footer exposes all voice states so users always know whether the mic or spea
 5. Auto-sleep activates after 60 seconds of inactivity.
 
 **Recognized Wake Words:**
+
 - "Aisha", "Hey Aisha", "Hi Aisha"
 - "AI-SHA", "Isha", "Alisha", "Ayesha" (common pronunciations)
 
 **End Session Phrases:**
+
 - "Thanks", "Thank you", "Goodbye", "Bye"
 - "That's all", "I'm done", "Stop listening"
 
@@ -75,14 +78,14 @@ The footer exposes all voice states so users always know whether the mic or spea
 
 ### 3.4 Status Indicators
 
-| Indicator | Meaning | Suggested Action |
-|-----------|---------|------------------|
-| \`Connecting…\` | Realtime session establishing. | Wait a few seconds before speaking. |
-| \`Realtime voice requires a supported browser.\` | Browser lacks WebRTC support. | Switch to Chromium-based (Chrome/Edge 120+). |
-| Amber warning bar | Voice disabled for tenant. | Ask admins to enable **Realtime Voice** module. |
-| Rose error card | Realtime error with code/hint. | Review hint, click **Dismiss**, and retry (often toggling off/on fixes it). |
-| \`Continuous Listening\` card | Legacy STT is actively recording or transcribing. | Speak normally or click stop to end recording. |
-| Green LED on avatar | Wake Word is active and listening. | Say "Hey Aisha" to activate. |
+| Indicator                                        | Meaning                                           | Suggested Action                                                            |
+| ------------------------------------------------ | ------------------------------------------------- | --------------------------------------------------------------------------- |
+| \`Connecting…\`                                  | Realtime session establishing.                    | Wait a few seconds before speaking.                                         |
+| \`Realtime voice requires a supported browser.\` | Browser lacks WebRTC support.                     | Switch to Chromium-based (Chrome/Edge 120+).                                |
+| Amber warning bar                                | Voice disabled for tenant.                        | Ask admins to enable **Realtime Voice** module.                             |
+| Rose error card                                  | Realtime error with code/hint.                    | Review hint, click **Dismiss**, and retry (often toggling off/on fixes it). |
+| \`Continuous Listening\` card                    | Legacy STT is actively recording or transcribing. | Speak normally or click stop to end recording.                              |
+| Green LED on avatar                              | Wake Word is active and listening.                | Say "Hey Aisha" to activate.                                                |
 
 ---
 
@@ -95,6 +98,7 @@ AiSHA understands natural language and recognizes keywords associated with diffe
 **Keywords:** lead, leads, prospect, prospects, prospecting, inbound, outbound, cold lead, warm lead, hot lead, lead source, lead score, lead status, qualified lead, unqualified, nurture, nurturing
 
 **Example Commands:**
+
 - "Show me my hot leads"
 - "Create a new prospect"
 - "What leads came in this week?"
@@ -106,6 +110,7 @@ AiSHA understands natural language and recognizes keywords associated with diffe
 **Keywords:** account, accounts, company, companies, organization, organizations, business, businesses, client, clients, customer, customers, vendor, vendors, partner, partners, enterprise, SME, SMB, account manager, account owner, revenue, ARR, MRR
 
 **Example Commands:**
+
 - "List all enterprise accounts"
 - "What's the revenue for this client?"
 - "Show me partner companies"
@@ -117,6 +122,7 @@ AiSHA understands natural language and recognizes keywords associated with diffe
 **Keywords:** contact, contacts, person, people, individual, stakeholder, stakeholders, decision maker, decision-maker, buyer, buyers, champion, influencer, executive, CEO, CFO, CTO, phone number, email address, LinkedIn
 
 **Example Commands:**
+
 - "Find the decision maker at Acme Corp"
 - "Show me all CEOs in my contacts"
 - "Who's the champion for this deal?"
@@ -130,6 +136,7 @@ AiSHA understands natural language and recognizes keywords associated with diffe
 **Stage Names:** prospecting, qualification, qualified, needs analysis, value proposition, decision makers, perception analysis, proposal sent, negotiation review, closed-won, closed-lost
 
 **Example Commands:**
+
 - "What's in my pipeline?"
 - "Show deals closing this month"
 - "What's the forecast?"
@@ -144,6 +151,7 @@ AiSHA understands natural language and recognizes keywords associated with diffe
 **Time References:** today, tomorrow, this week, next week, Monday, Tuesday, Wednesday, Thursday, Friday, morning, afternoon, evening, 9am, 10am, 11am, 2pm, 3pm, etc.
 
 **Example Commands:**
+
 - "Schedule a call for Monday at 11am"
 - "What's on my calendar today?"
 - "Add a follow-up task"
@@ -157,6 +165,7 @@ AiSHA understands natural language and recognizes keywords associated with diffe
 **Keywords:** dashboard, overview, summary, report, reports, reporting, analytics, metrics, KPI, KPIs, performance, stats, statistics, chart, charts, graph, graphs, trend, trends, insight, insights
 
 **Example Commands:**
+
 - "Show me the dashboard"
 - "What are my KPIs?"
 - "Give me a summary of this week"
@@ -165,15 +174,15 @@ AiSHA understands natural language and recognizes keywords associated with diffe
 
 ### 4.7 Action Types
 
-| Action | Keywords | Examples |
-|--------|----------|----------|
-| **Create** | create, creating, add, adding, new, schedule, book | "Create a new lead", "Add a contact", "Schedule a meeting" |
-| **Update** | update, updating, edit, editing, modify, change, changing, move | "Update the account", "Change the status", "Move to next stage" |
-| **View/List** | list, show, display, view, see, find, search, lookup, look up, get | "Show me leads", "List all accounts", "Find overdue tasks" |
-| **Assign** | assign, assigning, reassign, transfer | "Assign this lead to Sarah", "Reassign the opportunity" |
-| **Convert** | convert, converting | "Convert this lead to an account" |
-| **Export** | export, download | "Export my contacts", "Download the report" |
-| **Delete** | delete, deleting, remove, removing | "Delete this task" (requires confirmation) |
+| Action        | Keywords                                                           | Examples                                                        |
+| ------------- | ------------------------------------------------------------------ | --------------------------------------------------------------- |
+| **Create**    | create, creating, add, adding, new, schedule, book                 | "Create a new lead", "Add a contact", "Schedule a meeting"      |
+| **Update**    | update, updating, edit, editing, modify, change, changing, move    | "Update the account", "Change the status", "Move to next stage" |
+| **View/List** | list, show, display, view, see, find, search, lookup, look up, get | "Show me leads", "List all accounts", "Find overdue tasks"      |
+| **Assign**    | assign, assigning, reassign, transfer                              | "Assign this lead to Sarah", "Reassign the opportunity"         |
+| **Convert**   | convert, converting                                                | "Convert this lead to an account"                               |
+| **Export**    | export, download                                                   | "Export my contacts", "Download the report"                     |
+| **Delete**    | delete, deleting, remove, removing                                 | "Delete this task" (requires confirmation)                      |
 
 ---
 
@@ -186,6 +195,7 @@ AiSHA understands natural language and recognizes keywords associated with diffe
 - Disabled while a message is sending to avoid duplicate submissions.
 
 **Available Quick Actions:**
+
 - Dashboard overview
 - Summarize my pipeline
 - Show today's tasks
@@ -231,6 +241,7 @@ AiSHA maintains **conversation context** within a session. This means you can ha
 8. **AiSHA:** "Done! I've added phone number 555-1234 to Jennifer Martinez's record."
 
 **How It Works:**
+
 - When AiSHA retrieves records (leads, accounts, contacts, etc.), it remembers them for the session
 - You can refer to records by name in follow-up questions
 - Actions like "update", "add a note", or "schedule a call" apply to the referenced record
@@ -248,6 +259,7 @@ AiSHA maintains **conversation context** within a session. This means you can ha
 ### 6.3 Confirmation for Actions
 
 AiSHA will ask for confirmation before:
+
 - Creating new records
 - Updating existing data
 - Deleting or removing items
@@ -260,9 +272,11 @@ Always review the proposed action before confirming.
 AiSHA keeps technical details (like UUIDs) behind the scenes. You'll see clean, natural responses:
 
 **What You See:**
+
 > "Yes, you have a lead named One Charge with status 'New', sourced from Website. Would you like me to do anything with this lead?"
 
 **What AiSHA Tracks Internally:**
+
 - Record UUID for follow-up actions
 - Entity type and metadata
 - Last-queried context
@@ -280,9 +294,9 @@ AiSHA can delegate complex, multi-step tasks to specialized **agent workflows** 
 
 ### Available Agent Workflows
 
-| Agent Workflow | Purpose | Example Tasks |
-|----------------|---------|---------------|
-| **Sales Manager Workflow** | Lead follow-ups, sales outreach, nurturing | "Follow up with this lead", "Send a sales email" |
+| Agent Workflow                        | Purpose                                          | Example Tasks                                            |
+| ------------------------------------- | ------------------------------------------------ | -------------------------------------------------------- |
+| **Sales Manager Workflow**            | Lead follow-ups, sales outreach, nurturing       | "Follow up with this lead", "Send a sales email"         |
 | **Customer Service Manager Workflow** | Support inquiries, response handling, escalation | "Handle this support request", "Send a resolution email" |
 
 ### How It Works
@@ -303,6 +317,7 @@ graph LR
 ### Delegation Examples
 
 **Delegating a lead follow-up:**
+
 ```
 You: "I just spoke with Jack from ABC Corp. Have the sales manager follow up with a personalized email."
 
@@ -316,12 +331,13 @@ I'll track the progress. Would you like me to notify you when it's complete?"
 ```
 
 **Checking workflow progress:**
+
 ```
 You: "What has the sales manager done?"
 
 AiSHA: "The Sales Manager Workflow for Jack (ABC Corp) has completed:
 ✓ Sent personalized email to jack@abccorp.com
-✓ Updated lead status to 'Contacted'  
+✓ Updated lead status to 'Contacted'
 ✓ Created follow-up task for next Monday
 ✓ Added 3 notes documenting each action
 
@@ -341,40 +357,40 @@ When you delegate to an agent workflow, it:
 
 ### Voice Commands for Delegation
 
-| Voice Command | What Happens |
-|---------------|--------------|
+| Voice Command                         | What Happens                                              |
+| ------------------------------------- | --------------------------------------------------------- |
 | "Have sales follow up with this lead" | Triggers Sales Manager Workflow with current lead context |
-| "Delegate this to customer service" | Triggers Customer Service Workflow |
-| "Start the sales workflow for [name]" | Triggers workflow for specific contact |
-| "What's the status of the workflow?" | Shows current progress |
-| "Cancel the workflow" | Stops execution (if still running) |
+| "Delegate this to customer service"   | Triggers Customer Service Workflow                        |
+| "Start the sales workflow for [name]" | Triggers workflow for specific contact                    |
+| "What's the status of the workflow?"  | Shows current progress                                    |
+| "Cancel the workflow"                 | Stops execution (if still running)                        |
 
 ---
 
 ## 7. Testing & Preview Workflow
 
-| Scenario | Recommended Workflow |
-|----------|---------------------|
-| UI/UX iteration | Run \`npm run dev\` (frontend) and \`npm run dev\` inside \`backend/\`. Preview at \`http://localhost:5173\` with hot reload. |
-| Docker validation | After finishing tweaks, run \`docker compose up -d --build frontend\` so the container picks up the latest bundle and opens \`http://localhost:4000\`. |
-| Voice QA | Use Chromium-based browsers with mic permissions. Test realtime voice, legacy STT, and Wake Word modes. Verify warning banners and telemetry debug card (enable via \`VITE_AI_DEBUG_TELEMETRY=true\`). |
-| Wake Word Testing | Enable Wake Word, say "Hey Aisha", verify greeting response, then say "Thanks" to end session. |
-| Asset updates | Replace \`public/assets/aisha-executive-portrait.jpg\` with a same-sized square image to keep the glow ring aligned. Clear cache or hard-refresh to see the change. |
+| Scenario          | Recommended Workflow                                                                                                                                                                                   |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| UI/UX iteration   | Run \`npm run dev\` (frontend) and \`npm run dev\` inside \`backend/\`. Preview at \`http://localhost:5173\` with hot reload.                                                                          |
+| Docker validation | After finishing tweaks, run \`docker compose up -d --build frontend\` so the container picks up the latest bundle and opens \`http://localhost:4000\`.                                                 |
+| Voice QA          | Use Chromium-based browsers with mic permissions. Test realtime voice, legacy STT, and Wake Word modes. Verify warning banners and telemetry debug card (enable via \`VITE_AI_DEBUG_TELEMETRY=true\`). |
+| Wake Word Testing | Enable Wake Word, say "Hey Aisha", verify greeting response, then say "Thanks" to end session.                                                                                                         |
+| Asset updates     | Replace \`public/assets/aisha-executive-portrait.jpg\` with a same-sized square image to keep the glow ring aligned. Clear cache or hard-refresh to see the change.                                    |
 
 ---
 
 ## 8. Troubleshooting
 
-| Symptom | Resolution |
-|---------|------------|
-| Panel width or layout hasn't changed | Ensure you're on the dev server (\`npm run dev\`). Docker containers require rebuilds to pick up \`src/\` edits. |
-| \`ReferenceError: Cannot access 've' before initialization\` in console | This occurs if local edits reorder constants improperly. Pull the latest \`AiSidebar.jsx\` or run linting to catch block-scoped hoisting issues. |
-| Voice commands stuck on "Transcribing…" | Check network tab for \`/api/ai/speech-to-text\` failures. If realtime mode is enabled, toggle it off/on to refresh the ephemeral token. |
-| "I'm not sure what action you want to take" | Your message may not include recognized CRM keywords. Try rephrasing with specific entity names (lead, account, deal, task, etc.). |
-| Wake Word not responding | Ensure microphone permissions are granted. Wake Word requires Web Speech API support (Chrome/Edge recommended). |
-| Guided forms disabled | Select a tenant from the global tenant picker. The Workspace card will update to **Active tenant** and unlock forms. |
-| Suggestions missing | They only populate on routes where telemetry has enough context (e.g., Accounts, Opportunities). Navigate to a supported view and wait a few seconds. |
-| AI returns "no leads found" when leads exist | Ensure you're connected to the correct tenant. Check the tenant badge in the header card. |
+| Symptom                                                                 | Resolution                                                                                                                                            |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Panel width or layout hasn't changed                                    | Ensure you're on the dev server (\`npm run dev\`). Docker containers require rebuilds to pick up \`src/\` edits.                                      |
+| \`ReferenceError: Cannot access 've' before initialization\` in console | This occurs if local edits reorder constants improperly. Pull the latest \`AiSidebar.jsx\` or run linting to catch block-scoped hoisting issues.      |
+| Voice commands stuck on "Transcribing…"                                 | Check network tab for \`/api/ai/speech-to-text\` failures. If realtime mode is enabled, toggle it off/on to refresh the ephemeral token.              |
+| "I'm not sure what action you want to take"                             | Your message may not include recognized CRM keywords. Try rephrasing with specific entity names (lead, account, deal, task, etc.).                    |
+| Wake Word not responding                                                | Ensure microphone permissions are granted. Wake Word requires Web Speech API support (Chrome/Edge recommended).                                       |
+| Guided forms disabled                                                   | Select a tenant from the global tenant picker. The Workspace card will update to **Active tenant** and unlock forms.                                  |
+| Suggestions missing                                                     | They only populate on routes where telemetry has enough context (e.g., Accounts, Opportunities). Navigate to a supported view and wait a few seconds. |
+| AI returns "no leads found" when leads exist                            | Ensure you're connected to the correct tenant. Check the tenant badge in the header card.                                                             |
 
 ---
 
@@ -383,33 +399,40 @@ When you delegate to an agent workflow, it:
 AiSHA has access to 52 specialized tools for CRM operations:
 
 ### Data Retrieval
+
 - \`fetch_tenant_snapshot\` - Get overview of all CRM data
 - \`listLeads\`, \`listAccounts\`, \`listContacts\`, \`listOpportunities\`, \`listActivities\` - List entities with filters
 - \`getLeadDetails\`, \`getAccountDetails\`, \`getContactDetails\`, \`getOpportunityDetails\` - Get specific record details
 - \`searchLeads\`, \`searchAccounts\`, \`searchContacts\`, \`searchOpportunities\`, \`searchActivities\` - Search by name/keyword
 
 ### Data Creation
+
 - \`createLead\`, \`createAccount\`, \`createContact\`, \`createOpportunity\`, \`createActivity\` - Create new records
 - \`createNote\` - Add notes to records
 
 ### Data Updates
+
 - \`updateLead\`, \`updateAccount\`, \`updateContact\`, \`updateOpportunity\`, \`updateActivity\` - Modify existing records
 - \`convertLeadToAccount\` - Convert qualified leads
 
 ### Workflows & Automation
+
 - \`listWorkflows\`, \`executeWorkflow\`, \`getWorkflowStatus\` - Manage automated workflows
 
 ### **Agent Delegation (v3.7.0+)**
+
 - \`delegate_to_workflow\` - Trigger named agent workflows (Sales Manager, Customer Service)
 - \`get_workflow_progress\` - Check execution status of delegated workflows
 - \`list_active_workflows\` - See all running workflow instances
 - \`get_workflow_notes\` - Retrieve AI-generated notes from workflow execution
 
 ### Telephony & Communication
+
 - \`initiateCall\`, \`logCallOutcome\`, \`scheduleCallback\` - Call management
 - \`sendSmsMessage\`, \`getSmsHistory\` - SMS communication
 
 ### Analytics
+
 - \`getDashboardStats\` - Dashboard metrics and KPIs
 
 ---
@@ -418,50 +441,54 @@ AiSHA has access to 52 specialized tools for CRM operations:
 
 - **Developer Manual:** \`docs/AISHA_CRM_DEVELOPER_MANUAL.md\` (see "AiSidebar overview for Phase 4 workstreams")
 - **Phase 4 Plan:** \`orchestra/phases/phase4/PHASE_4_FULL_CUTOVER.md\`
-- **Speech Hooks Tests:** \`src/components/ai/__tests__/AiSidebar.voice.test.jsx\`
+- **Speech Hooks Tests:** \`src/components/ai/**tests**/AiSidebar.voice.test.jsx\`
 - **Realtime Hook:** \`src/hooks/useRealtimeAiSHA.js\`
 - **Wake Word Hook:** \`src/hooks/useWakeWordDetection.js\`
 - **Keyword Categories:** \`src/lib/ambiguityResolver.ts\` (see \`CRM_KEYWORD_CATEGORIES\`)
-- **Braid Tools:** \`braid-llm-kit/examples/assistant/*.braid\`
+- **Braid Tools:** \`braid-llm-kit/examples/assistant/\*.braid\`
 
 ---
 
 ## 11. Quick Reference Card
 
 ### Voice Activation
-| Mode | How to Start | How to End |
-|------|--------------|------------|
-| Wake Word | Say "Hey Aisha" | Say "Thanks" or "Goodbye" |
-| Realtime Voice | Click "Realtime Voice" button | Click stop button |
-| Push-to-Talk | Click "Voice" button | Release button or click stop |
+
+| Mode           | How to Start                  | How to End                   |
+| -------------- | ----------------------------- | ---------------------------- |
+| Wake Word      | Say "Hey Aisha"               | Say "Thanks" or "Goodbye"    |
+| Realtime Voice | Click "Realtime Voice" button | Click stop button            |
+| Push-to-Talk   | Click "Voice" button          | Release button or click stop |
 
 ### Common Commands
-| What You Want | What to Say |
-|---------------|-------------|
-| See your leads | "Show me my leads" |
-| Check pipeline | "What's in my pipeline?" |
-| Today's tasks | "What's on my calendar today?" |
+
+| What You Want   | What to Say                              |
+| --------------- | ---------------------------------------- |
+| See your leads  | "Show me my leads"                       |
+| Check pipeline  | "What's in my pipeline?"                 |
+| Today's tasks   | "What's on my calendar today?"           |
 | Schedule a call | "Schedule a call with [name] for [time]" |
-| Create a lead | "Create a new lead for [company]" |
-| Get details | "Tell me about [name]" |
-| Dashboard | "Show me the dashboard" |
+| Create a lead   | "Create a new lead for [company]"        |
+| Get details     | "Tell me about [name]"                   |
+| Dashboard       | "Show me the dashboard"                  |
 
 ### Agent Delegation Commands (v3.7.0+)
-| What You Want | What to Say |
-|---------------|-------------|
-| Delegate to sales | "Have the sales manager follow up with this lead" |
-| Delegate to support | "Ask customer service to handle this" |
-| Check progress | "What has the sales manager done?" |
-| List workflows | "Show me active workflows" |
-| View notes | "What notes did the workflow create?" |
+
+| What You Want       | What to Say                                       |
+| ------------------- | ------------------------------------------------- |
+| Delegate to sales   | "Have the sales manager follow up with this lead" |
+| Delegate to support | "Ask customer service to handle this"             |
+| Check progress      | "What has the sales manager done?"                |
+| List workflows      | "Show me active workflows"                        |
+| View notes          | "What notes did the workflow create?"             |
 
 ---
 
 Maintain this guide alongside any future Phase 4-ready UI work so launch, training, and support teams can rely on a single source of truth for AiSHA-focused workflows.
+
 # Aisha CRM - AI Features Manual
 
 > **AI-SHA: AI Super Hi-performing Assistant**
-> 
+>
 > Comprehensive guide to AI capabilities, prompt engineering, expectations, and best practices.
 
 ---
@@ -532,6 +559,7 @@ AI-SHA (AI Super Hi-performing Assistant) is an integrated AI executive assistan
 ### Getting Started
 
 The AI Assistant is available via:
+
 - **Header Widget**: Click "✨ ASK AISHA" in the top header bar (shows "Executive Assistant • Ready" when available)
 - **Command Palette**: Press `Ctrl+K` / `Cmd+K` for quick access
 
@@ -539,20 +567,21 @@ The header widget opens a chat panel where you can type or speak your requests.
 
 ### Capabilities
 
-| Category | What You Can Ask |
-|----------|------------------|
-| **Accounts** | "Show me all accounts in California", "Create an account for Acme Corp" |
-| **Leads** | "List my hot leads", "Update John's lead status to qualified" |
-| **Contacts** | "Find contacts at Microsoft", "Add a new contact for lead #123" |
-| **Activities** | "What meetings do I have today?", "Schedule a follow-up call for tomorrow" |
-| **Opportunities** | "Show pipeline for Q4", "Move opportunity to negotiation stage" |
-| **Notes** | "Add a note to Acme account", "Search notes mentioning 'pricing'" |
-| **Research** | "Look up company info for TechCorp", "What does Acme Corp do?" |
-| **Calls** | "Call John at Acme Corp", "Check if calling is available" |
+| Category          | What You Can Ask                                                           |
+| ----------------- | -------------------------------------------------------------------------- |
+| **Accounts**      | "Show me all accounts in California", "Create an account for Acme Corp"    |
+| **Leads**         | "List my hot leads", "Update John's lead status to qualified"              |
+| **Contacts**      | "Find contacts at Microsoft", "Add a new contact for lead #123"            |
+| **Activities**    | "What meetings do I have today?", "Schedule a follow-up call for tomorrow" |
+| **Opportunities** | "Show pipeline for Q4", "Move opportunity to negotiation stage"            |
+| **Notes**         | "Add a note to Acme account", "Search notes mentioning 'pricing'"          |
+| **Research**      | "Look up company info for TechCorp", "What does Acme Corp do?"             |
+| **Calls**         | "Call John at Acme Corp", "Check if calling is available"                  |
 
 ### Example Conversations
 
 **Data Query:**
+
 ```
 You: Show me leads created this week
 
@@ -568,6 +597,7 @@ Would you like me to:
 ```
 
 **Record Creation:**
+
 ```
 You: Create a new lead for Mike Brown at CloudTech, email mike@cloudtech.com
 
@@ -584,10 +614,11 @@ Would you like me to:
 ```
 
 **Multi-Step Workflow:**
+
 ```
 You: Find all accounts without activities this month and create follow-up tasks
 
-AI-SHA: I found 8 accounts without recent activities. I'll create follow-up 
+AI-SHA: I found 8 accounts without recent activities. I'll create follow-up
 tasks for each:
 
 ✅ Created "Follow-up call" for Acme Corp (assigned to you, due in 3 days)
@@ -614,12 +645,14 @@ If more steps are needed, the AI will pause and ask for confirmation.
 Click the microphone button to speak your request. The AI uses OpenAI Whisper for transcription.
 
 **Best Practices:**
+
 - Speak clearly and at a normal pace
 - Pause between sentences for better parsing
 - Keep requests under 30 seconds for best results
 - Avoid background noise when possible
 
 **Limitations:**
+
 - Maximum audio size: 6MB
 - Supported formats: MP3, WAV, WebM
 - Language: English (primary), other languages supported with reduced accuracy
@@ -629,10 +662,12 @@ Click the microphone button to speak your request. The AI uses OpenAI Whisper fo
 AI responses can be read aloud using ElevenLabs or browser TTS.
 
 **Voice Options:**
+
 - **ElevenLabs** (if configured): High-quality, natural-sounding voice
 - **Browser TTS** (fallback): Built-in browser speech synthesis
 
 **Limitations:**
+
 - Maximum text: 4,000 characters per request
 - Long responses may be truncated for audio playback
 
@@ -641,6 +676,7 @@ AI responses can be read aloud using ElevenLabs or browser TTS.
 For live voice conversations, the AI uses OpenAI's Realtime API.
 
 **Safety Restrictions in Voice Mode:**
+
 - ❌ Delete operations are blocked
 - ❌ Bulk modifications are blocked
 - ✅ Read operations allowed
@@ -657,6 +693,7 @@ AI-SHA can initiate outbound calls using AI voice agents from CallFluent or Thou
 ### Initiating a Call
 
 **Via Chat:**
+
 ```
 You: Call John Smith at Acme Corp about the proposal follow-up
 
@@ -669,6 +706,7 @@ The call is in progress. I'll notify you when it completes with a summary.
 ```
 
 **Via Direct Command:**
+
 ```
 You: Check if calling is available
 
@@ -692,7 +730,7 @@ Would you like me to initiate a call?
    - Action items
    - Customer requests
    - Commitments made
-5. **CRM Updates**: 
+5. **CRM Updates**:
    - Activity logged
    - Note created with summary
    - Follow-up tasks auto-created
@@ -701,16 +739,17 @@ Would you like me to initiate a call?
 
 ### What to Expect
 
-| Outcome | What Happens |
-|---------|--------------|
-| **Answered** | Full transcript analysis, CRM updates, follow-up tasks |
-| **Voicemail** | Voicemail detected, activity logged, retry scheduled |
-| **Busy** | Call marked as busy, automatic retry queued |
-| **Failed** | Error logged, notification sent, manual follow-up suggested |
+| Outcome       | What Happens                                                |
+| ------------- | ----------------------------------------------------------- |
+| **Answered**  | Full transcript analysis, CRM updates, follow-up tasks      |
+| **Voicemail** | Voicemail detected, activity logged, retry scheduled        |
+| **Busy**      | Call marked as busy, automatic retry queued                 |
+| **Failed**    | Error logged, notification sent, manual follow-up suggested |
 
 ### Provider Configuration
 
 AI calling requires one of:
+
 - **CallFluent**: Configure API key and agent ID in tenant settings
 - **Thoughtly**: Configure API key and agent ID in tenant settings
 
@@ -726,11 +765,11 @@ Run automated outreach campaigns with AI-powered personalization.
 
 ### Campaign Types
 
-| Type | Description |
-|------|-------------|
-| **Email Campaign** | Send personalized emails to a list of contacts |
-| **Call Campaign** | AI agent calls each contact with customized talking points |
-| **Sequence** (Planned) | Multi-step campaigns combining emails and calls |
+| Type                   | Description                                                |
+| ---------------------- | ---------------------------------------------------------- |
+| **Email Campaign**     | Send personalized emails to a list of contacts             |
+| **Call Campaign**      | AI agent calls each contact with customized talking points |
+| **Sequence** (Planned) | Multi-step campaigns combining emails and calls            |
 
 ### Creating a Campaign
 
@@ -782,13 +821,14 @@ draft → scheduled → running → completed
 
 #### Use Natural Language
 
-❌ **Technical**: "SELECT * FROM leads WHERE status = 'qualified'"  
+❌ **Technical**: "SELECT \* FROM leads WHERE status = 'qualified'"  
 ✅ **Natural**: "Find all qualified leads"
 
 #### Break Down Complex Tasks
 
 ❌ **Too Much**: "Find all stale accounts, create tasks for each, assign to sales team, and send me a report"  
-✅ **Step by Step**: 
+✅ **Step by Step**:
+
 1. "Find accounts with no activity in 30 days"
 2. "Create follow-up tasks for these accounts"
 3. "Summarize what was created"
@@ -796,6 +836,7 @@ draft → scheduled → running → completed
 ### Prompt Templates
 
 **Data Queries:**
+
 ```
 Show me [entity type] where [condition] sorted by [field]
 
@@ -806,6 +847,7 @@ Examples:
 ```
 
 **Record Creation:**
+
 ```
 Create a [entity type] for [name] at [company] with [details]
 
@@ -815,6 +857,7 @@ Examples:
 ```
 
 **Updates:**
+
 ```
 Update [entity] [identifier] - set [field] to [value]
 
@@ -824,6 +867,7 @@ Examples:
 ```
 
 **Scheduling:**
+
 ```
 Schedule a [activity type] for [date/time] with [entity]
 
@@ -833,6 +877,7 @@ Examples:
 ```
 
 **Research:**
+
 ```
 Look up [what] for [company/entity]
 
@@ -844,18 +889,21 @@ Examples:
 ### Advanced Prompting
 
 **Chained Operations:**
+
 ```
-"Find all leads from last week, identify which don't have phone numbers, 
+"Find all leads from last week, identify which don't have phone numbers,
 and add a task to each saying 'Collect phone number'"
 ```
 
 **Conditional Logic:**
+
 ```
-"For each opportunity in Proposal stage for more than 2 weeks, 
+"For each opportunity in Proposal stage for more than 2 weeks,
 create a follow-up task with high priority"
 ```
 
 **Aggregations:**
+
 ```
 "Summarize my pipeline by stage with total values"
 "Count leads by source for this quarter"
@@ -875,6 +923,7 @@ create a follow-up task with high priority"
 ### Response Patterns
 
 **Confirmation Before Destructive Actions:**
+
 ```
 You: Delete all test leads
 
@@ -883,6 +932,7 @@ Are you sure you want to proceed?
 ```
 
 **Clarification When Ambiguous:**
+
 ```
 You: Update John's status
 
@@ -895,6 +945,7 @@ Which John did you mean?
 ```
 
 **Suggestions for Next Steps:**
+
 ```
 AI-SHA: ✅ Created lead for Mike Brown.
 
@@ -908,19 +959,19 @@ Would you like me to:
 
 AI-SHA operates with different confidence levels:
 
-| Level | Behavior |
-|-------|----------|
-| **High** | Executes action directly |
+| Level      | Behavior                                                  |
+| ---------- | --------------------------------------------------------- |
+| **High**   | Executes action directly                                  |
 | **Medium** | Executes but asks for confirmation on significant changes |
-| **Low** | Asks for clarification before proceeding |
+| **Low**    | Asks for clarification before proceeding                  |
 
 ### Tool Policies
 
-| Policy | Tools | Behavior |
-|--------|-------|----------|
-| **READ_ONLY** | search_, list_, get_, fetch_ | Always allowed |
-| **WRITE** | create_, update_, add_ | Allowed with context |
-| **DESTRUCTIVE** | delete_, remove_, bulk_ | Requires confirmation, blocked in voice mode |
+| Policy          | Tools                        | Behavior                                     |
+| --------------- | ---------------------------- | -------------------------------------------- |
+| **READ_ONLY**   | search*, list*, get*, fetch* | Always allowed                               |
+| **WRITE**       | create*, update*, add\_      | Allowed with context                         |
+| **DESTRUCTIVE** | delete*, remove*, bulk\_     | Requires confirmation, blocked in voice mode |
 
 ---
 
@@ -935,16 +986,18 @@ AI hallucination occurs when the AI generates information that sounds plausible 
 #### 1. Fabricated Data
 
 **Example:**
+
 ```
 You: What's John Smith's revenue contribution?
 
-AI-SHA (hallucinating): John Smith has contributed $150,000 in revenue 
+AI-SHA (hallucinating): John Smith has contributed $150,000 in revenue
 across 3 closed deals this quarter.
 ```
 
 **Reality:** No revenue data exists for John Smith. The AI invented specifics.
 
 **How to Detect:**
+
 - Ask for the source: "Which deals are you counting?"
 - Cross-reference with actual CRM data
 - Be suspicious of very specific numbers you haven't tracked
@@ -952,33 +1005,37 @@ across 3 closed deals this quarter.
 #### 2. Assumed Relationships
 
 **Example:**
+
 ```
 You: Who should I follow up with at Acme Corp?
 
-AI-SHA (hallucinating): Based on your previous calls with Sarah Johnson 
-(VP Sales) and Mike Brown (CTO), I recommend following up with Sarah 
+AI-SHA (hallucinating): Based on your previous calls with Sarah Johnson
+(VP Sales) and Mike Brown (CTO), I recommend following up with Sarah
 as she expressed interest in the enterprise plan.
 ```
 
 **Reality:** You never spoke with Mike Brown; the AI assumed based on patterns.
 
 **How to Detect:**
+
 - Verify with: "When did I last contact Mike Brown?"
 - Check activity history in CRM
 
 #### 3. Invented Features
 
 **Example:**
+
 ```
 You: Can you send a contract to John?
 
-AI-SHA (hallucinating): I'll generate the contract from the template 
+AI-SHA (hallucinating): I'll generate the contract from the template
 and send it to John's email now.
 ```
 
 **Reality:** Contract generation might not be an available feature.
 
 **How to Detect:**
+
 - Ask: "Do you have the ability to send contracts?"
 - Check feature documentation
 
@@ -987,6 +1044,7 @@ and send it to John's email now.
 #### 1. Verify Important Information
 
 Always verify critical data before taking action:
+
 ```
 You: Before scheduling this call, show me John's contact record first.
 ```
@@ -994,6 +1052,7 @@ You: Before scheduling this call, show me John's contact record first.
 #### 2. Ask for Sources
 
 Request the AI cite its sources:
+
 ```
 You: What data are you basing that recommendation on?
 You: Show me the records you're referencing.
@@ -1002,6 +1061,7 @@ You: Show me the records you're referencing.
 #### 3. Use Explicit Queries
 
 Don't rely on AI summaries for important decisions:
+
 ```
 You: List all activities with John in the last 30 days (exact records, not summary)
 ```
@@ -1009,6 +1069,7 @@ You: List all activities with John in the last 30 days (exact records, not summa
 #### 4. Validate Before Acting
 
 For updates or creations, review before confirming:
+
 ```
 AI-SHA: I'll create a task for follow-up with Acme Corp.
 
@@ -1022,14 +1083,15 @@ This is actually a **good sign**. The AI admitting uncertainty is more reliable 
 ```
 You: What's the best time to call John?
 
-AI-SHA: I don't have information about John's preferred contact times 
-in the system. Would you like me to check his past activity patterns 
+AI-SHA: I don't have information about John's preferred contact times
+in the system. Would you like me to check his past activity patterns
 or create a task to ask him directly?
 ```
 
 ### Reporting Hallucinations
 
 If you notice consistent hallucination patterns:
+
 1. Note the exact prompt and response
 2. Check if the issue is reproducible
 3. Report to your system administrator
@@ -1044,11 +1106,13 @@ If you notice consistent hallucination patterns:
 #### "AI is not responding"
 
 **Possible Causes:**
+
 - Network connectivity issues
 - OpenAI API rate limits
 - Server errors
 
 **Solutions:**
+
 1. Check internet connection
 2. Refresh the page
 3. Wait 30 seconds and retry
@@ -1057,11 +1121,13 @@ If you notice consistent hallucination patterns:
 #### "AI gives wrong data"
 
 **Possible Causes:**
+
 - Stale cache
 - Tenant context mismatch
 - Hallucination
 
 **Solutions:**
+
 1. Refresh and retry
 2. Be more specific in your query
 3. Ask AI to "search fresh" or "fetch latest"
@@ -1070,12 +1136,14 @@ If you notice consistent hallucination patterns:
 #### "Tool execution failed"
 
 **Possible Causes:**
+
 - Invalid parameters
 - Missing required fields
 - Permission issues
 - Database constraints
 
 **Solutions:**
+
 1. Check error message for specifics
 2. Provide missing information
 3. Simplify the request
@@ -1084,11 +1152,13 @@ If you notice consistent hallucination patterns:
 #### "Voice not working"
 
 **Possible Causes:**
+
 - Microphone permissions denied
 - Browser not supported
 - Audio format issues
 
 **Solutions:**
+
 1. Check browser microphone permissions
 2. Use Chrome or Firefox (recommended)
 3. Ensure microphone is connected and working
@@ -1097,11 +1167,13 @@ If you notice consistent hallucination patterns:
 #### "Calls not initiating"
 
 **Possible Causes:**
+
 - Provider not configured
 - Invalid phone number format
 - API quota exceeded
 
 **Solutions:**
+
 1. Run: "Check if calling is available"
 2. Verify phone number format (+1-XXX-XXX-XXXX)
 3. Check tenant integrations settings
@@ -1109,13 +1181,13 @@ If you notice consistent hallucination patterns:
 
 ### Error Messages
 
-| Error | Meaning | Solution |
-|-------|---------|----------|
-| "Tenant context missing" | Session lost | Refresh and re-login |
-| "Tool not available" | Feature disabled | Check mode (voice vs chat) |
-| "Rate limit exceeded" | Too many requests | Wait 60 seconds |
-| "Invalid entity ID" | Record not found | Verify the ID exists |
-| "Permission denied" | Access restricted | Contact admin |
+| Error                    | Meaning           | Solution                   |
+| ------------------------ | ----------------- | -------------------------- |
+| "Tenant context missing" | Session lost      | Refresh and re-login       |
+| "Tool not available"     | Feature disabled  | Check mode (voice vs chat) |
+| "Rate limit exceeded"    | Too many requests | Wait 60 seconds            |
+| "Invalid entity ID"      | Record not found  | Verify the ID exists       |
+| "Permission denied"      | Access restricted | Contact admin              |
 
 ---
 
@@ -1123,43 +1195,43 @@ If you notice consistent hallucination patterns:
 
 ### Environment Variables (System Admin)
 
-| Variable | Purpose | Required |
-|----------|---------|----------|
-| `OPENAI_API_KEY` | OpenAI GPT access | Yes |
-| `ELEVENLABS_API_KEY` | Premium TTS voice | No |
-| `BRAID_MCP_URL` | Braid tool server | Yes |
+| Variable             | Purpose           | Required |
+| -------------------- | ----------------- | -------- |
+| `OPENAI_API_KEY`     | OpenAI GPT access | Yes      |
+| `ELEVENLABS_API_KEY` | Premium TTS voice | No       |
+| `BRAID_MCP_URL`      | Braid tool server | Yes      |
 
 ### Per-Tenant Settings
 
-| Setting | Location | Purpose |
-|---------|----------|---------|
-| OpenAI API Key | tenant_integrations | Tenant-specific AI key |
-| CallFluent API Key | tenant_integrations | AI calling |
-| CallFluent Agent ID | tenant_integrations | Which AI agent to use |
-| Thoughtly API Key | tenant_integrations | Alternative AI calling |
-| Thoughtly Agent ID | tenant_integrations | Which agent to use |
+| Setting             | Location            | Purpose                |
+| ------------------- | ------------------- | ---------------------- |
+| OpenAI API Key      | tenant_integrations | Tenant-specific AI key |
+| CallFluent API Key  | tenant_integrations | AI calling             |
+| CallFluent Agent ID | tenant_integrations | Which AI agent to use  |
+| Thoughtly API Key   | tenant_integrations | Alternative AI calling |
+| Thoughtly Agent ID  | tenant_integrations | Which agent to use     |
 
 ### Tool Availability by Mode
 
-| Tool Category | Chat Mode | Voice Mode | Read-Only Mode |
-|---------------|-----------|------------|----------------|
-| Search/List | ✅ | ✅ | ✅ |
-| Get/Fetch | ✅ | ✅ | ✅ |
-| Create | ✅ | ✅ (with confirm) | ❌ |
-| Update | ✅ | ✅ (with confirm) | ❌ |
-| Delete | ✅ (with confirm) | ❌ | ❌ |
-| Bulk Operations | ✅ (with confirm) | ❌ | ❌ |
-| AI Calling | ✅ | ❌ | ❌ |
+| Tool Category   | Chat Mode         | Voice Mode        | Read-Only Mode |
+| --------------- | ----------------- | ----------------- | -------------- |
+| Search/List     | ✅                | ✅                | ✅             |
+| Get/Fetch       | ✅                | ✅                | ✅             |
+| Create          | ✅                | ✅ (with confirm) | ❌             |
+| Update          | ✅                | ✅ (with confirm) | ❌             |
+| Delete          | ✅ (with confirm) | ❌                | ❌             |
+| Bulk Operations | ✅ (with confirm) | ❌                | ❌             |
+| AI Calling      | ✅                | ❌                | ❌             |
 
 ### Rate Limits
 
-| Feature | Limit | Reset |
-|---------|-------|-------|
-| Chat requests | 60/minute | Rolling |
-| TTS requests | 30/minute | Rolling |
-| STT requests | 20/minute | Rolling |
-| Tool executions | 100/minute | Rolling |
-| AI calls | Depends on provider | Provider-specific |
+| Feature         | Limit               | Reset             |
+| --------------- | ------------------- | ----------------- |
+| Chat requests   | 60/minute           | Rolling           |
+| TTS requests    | 30/minute           | Rolling           |
+| STT requests    | 20/minute           | Rolling           |
+| Tool executions | 100/minute          | Rolling           |
+| AI calls        | Depends on provider | Provider-specific |
 
 ---
 
@@ -1167,84 +1239,84 @@ If you notice consistent hallucination patterns:
 
 ### CRM Operations
 
-| Tool | Description |
-|------|-------------|
-| `getCrmSnapshot` | Get overview of all CRM data |
-| `searchAccounts` | Search accounts by criteria |
-| `createAccount` | Create new account |
-| `updateAccount` | Update account fields |
-| `deleteAccount` | Delete an account |
-| `searchLeads` | Search leads by criteria |
-| `createLead` | Create new lead |
-| `updateLead` | Update lead fields |
-| `convertLead` | Convert lead to opportunity |
-| `searchContacts` | Search contacts |
-| `createContact` | Create new contact |
-| `updateContact` | Update contact fields |
-| `searchActivities` | Search activities |
-| `createActivity` | Schedule activity |
-| `updateActivity` | Update activity |
-| `completeActivity` | Mark activity complete |
-| `searchOpportunities` | Search opportunities |
-| `createOpportunity` | Create opportunity |
-| `updateOpportunity` | Update opportunity |
-| `searchNotes` | Search notes |
-| `createNote` | Create note |
-| `updateNote` | Update note |
+| Tool                  | Description                  |
+| --------------------- | ---------------------------- |
+| `getCrmSnapshot`      | Get overview of all CRM data |
+| `searchAccounts`      | Search accounts by criteria  |
+| `createAccount`       | Create new account           |
+| `updateAccount`       | Update account fields        |
+| `deleteAccount`       | Delete an account            |
+| `searchLeads`         | Search leads by criteria     |
+| `createLead`          | Create new lead              |
+| `updateLead`          | Update lead fields           |
+| `convertLead`         | Convert lead to opportunity  |
+| `searchContacts`      | Search contacts              |
+| `createContact`       | Create new contact           |
+| `updateContact`       | Update contact fields        |
+| `searchActivities`    | Search activities            |
+| `createActivity`      | Schedule activity            |
+| `updateActivity`      | Update activity              |
+| `completeActivity`    | Mark activity complete       |
+| `searchOpportunities` | Search opportunities         |
+| `createOpportunity`   | Create opportunity           |
+| `updateOpportunity`   | Update opportunity           |
+| `searchNotes`         | Search notes                 |
+| `createNote`          | Create note                  |
+| `updateNote`          | Update note                  |
 
 ### Research & Integration
 
-| Tool | Description |
-|------|-------------|
+| Tool               | Description                   |
+| ------------------ | ----------------------------- |
 | `fetchCompanyInfo` | Look up company info from web |
-| `webSearch` | General web search |
-| `fetchWebPage` | Fetch and summarize webpage |
+| `webSearch`        | General web search            |
+| `fetchWebPage`     | Fetch and summarize webpage   |
 
 ### Telephony
 
-| Tool | Description |
-|------|-------------|
-| `initiateCall` | Start AI call to phone number |
-| `callContact` | Call contact by ID |
-| `checkCallingProvider` | Verify calling is configured |
-| `getCallingAgents` | List available AI agents |
+| Tool                   | Description                   |
+| ---------------------- | ----------------------------- |
+| `initiateCall`         | Start AI call to phone number |
+| `callContact`          | Call contact by ID            |
+| `checkCallingProvider` | Verify calling is configured  |
+| `getCallingAgents`     | List available AI agents      |
 
 ### Workflows
 
-| Tool | Description |
-|------|-------------|
-| `listWorkflowTemplates` | List available templates |
+| Tool                         | Description                   |
+| ---------------------------- | ----------------------------- |
+| `listWorkflowTemplates`      | List available templates      |
 | `createWorkflowFromTemplate` | Create workflow from template |
-| `getWorkflowExecutions` | View workflow run history |
+| `getWorkflowExecutions`      | View workflow run history     |
 
 ---
 
 ## Appendix B: Keyboard Shortcuts
 
-| Shortcut | Action |
-|----------|--------|
+| Shortcut           | Action               |
+| ------------------ | -------------------- |
 | `Ctrl+K` / `Cmd+K` | Open command palette |
-| `Escape` | Close AI widget |
-| `Enter` | Send message |
-| `Shift+Enter` | New line in message |
-| `Ctrl+/` / `Cmd+/` | Toggle AI sidebar |
+| `Escape`           | Close AI widget      |
+| `Enter`            | Send message         |
+| `Shift+Enter`      | New line in message  |
+| `Ctrl+/` / `Cmd+/` | Toggle AI sidebar    |
 
 ---
 
 ## Appendix C: Glossary
 
-| Term | Definition |
-|------|------------|
-| **AI-SHA** | AI Super Hi-performing Assistant - the AI assistant system |
-| **Braid SDK** | Tool execution framework for CRM operations |
-| **CallFluent** | AI voice calling provider |
-| **Hallucination** | When AI generates plausible but incorrect information |
-| **MCP** | Model Context Protocol - tool integration standard |
-| **Tenant** | Isolated workspace for organization's data |
-| **Thoughtly** | Alternative AI voice calling provider |
-| **Tool** | A function the AI can execute (search, create, update, etc.) |
-| **TTS** | Text-to-Speech - AI reading responses aloud |
-| **STT** | Speech-to-Text - Voice input transcription |
+| Term              | Definition                                                   |
+| ----------------- | ------------------------------------------------------------ |
+| **AI-SHA**        | AI Super Hi-performing Assistant - the AI assistant system   |
+| **Braid SDK**     | Tool execution framework for CRM operations                  |
+| **CallFluent**    | AI voice calling provider                                    |
+| **Hallucination** | When AI generates plausible but incorrect information        |
+| **MCP**           | Model Context Protocol - tool integration standard           |
+| **Tenant**        | Isolated workspace for organization's data                   |
+| **Thoughtly**     | Alternative AI voice calling provider                        |
+| **Tool**          | A function the AI can execute (search, create, update, etc.) |
+| **TTS**           | Text-to-Speech - AI reading responses aloud                  |
+| **STT**           | Speech-to-Text - Voice input transcription                   |
 
 ---
 

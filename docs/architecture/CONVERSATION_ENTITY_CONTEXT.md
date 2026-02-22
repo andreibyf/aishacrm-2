@@ -7,6 +7,7 @@ The conversation_messages table metadata now includes **top-level entity IDs** e
 ## Metadata Structure
 
 ### Before (Original)
+
 ```json
 {
   "model": "gpt-4o-2024-08-06",
@@ -23,6 +24,7 @@ The conversation_messages table metadata now includes **top-level entity IDs** e
 ```
 
 ### After (With Entity Context)
+
 ```json
 {
   "model": "gpt-4o-2024-08-06",
@@ -54,6 +56,7 @@ The following entity IDs are automatically extracted when present in tool intera
 Entity IDs are extracted from three sources:
 
 ### 1. Tool Arguments (Explicit)
+
 ```javascript
 {
   name: 'get_lead_details',
@@ -62,6 +65,7 @@ Entity IDs are extracted from three sources:
 ```
 
 ### 2. Tool Name Pattern + Generic ID
+
 ```javascript
 {
   name: 'get_contact_details',  // ← "contact" in name
@@ -70,6 +74,7 @@ Entity IDs are extracted from three sources:
 ```
 
 ### 3. Tool Result JSON
+
 ```javascript
 {
   name: 'create_lead',
@@ -87,27 +92,31 @@ Entity context **persists across conversation turns**:
 3. `req.entityContext` is populated with `{ lead_id: A }` for tool execution
 
 This enables implicit references like:
+
 - "Tell me about this lead" (referring to previously mentioned lead)
 - "What's their email?" (system knows which entity "their" refers to)
 
 ## Query Examples
 
 ### Find All Messages About a Specific Lead
+
 ```sql
 SELECT * FROM conversation_messages
 WHERE metadata @> '{"lead_id": "a3af0a84-a16f-466e-aa82-62b462d1d998"}';
 ```
 
 ### Find Conversations That Mentioned Any Lead
+
 ```sql
-SELECT DISTINCT conversation_id 
+SELECT DISTINCT conversation_id
 FROM conversation_messages
 WHERE metadata ? 'lead_id';
 ```
 
 ### Count Messages by Entity Type
+
 ```sql
-SELECT 
+SELECT
   COUNT(CASE WHEN metadata ? 'lead_id' THEN 1 END) as lead_messages,
   COUNT(CASE WHEN metadata ? 'contact_id' THEN 1 END) as contact_messages,
   COUNT(CASE WHEN metadata ? 'account_id' THEN 1 END) as account_messages
@@ -115,9 +124,10 @@ FROM conversation_messages;
 ```
 
 ### Show Related Conversations on Entity Detail Page
+
 ```sql
 -- Get recent conversations about this lead
-SELECT 
+SELECT
   c.id,
   c.agent_name,
   c.created_date,
@@ -131,9 +141,10 @@ LIMIT 5;
 ```
 
 ### Track Which Leads Have Active AI Conversations
+
 ```sql
 -- Find leads with at least one AI conversation
-SELECT DISTINCT 
+SELECT DISTINCT
   l.id,
   l.name,
   l.status,
@@ -146,9 +157,10 @@ ORDER BY conversation_count DESC;
 ```
 
 ### Build Analytics on AI Usage Per Entity Type
+
 ```sql
 -- AI usage by entity type over last 7 days
-SELECT 
+SELECT
   DATE(cm.created_date) as date,
   COUNT(CASE WHEN metadata ? 'lead_id' THEN 1 END) as lead_conversations,
   COUNT(CASE WHEN metadata ? 'contact_id' THEN 1 END) as contact_conversations,
@@ -164,11 +176,13 @@ ORDER BY date DESC;
 ## Implementation Details
 
 ### Backend Code Location
+
 - **Helper Function**: `backend/routes/ai.js` - `extractEntityContext(toolInteractions)`
 - **Metadata Updates**: `backend/routes/ai.js` - Three `insertAssistantMessage` call sites
 - **Context Carry-Forward**: `backend/routes/ai.js` - Conversation history loading (~line 2000)
 
 ### Test Coverage
+
 - **Unit Tests**: `backend/__tests__/ai/entityContextExtraction.test.js` (9 tests)
 - **Integration Tests**: `backend/__tests__/ai/entityContextIntegration.test.js` (5 tests)
 
@@ -177,25 +191,31 @@ All 14 tests passing ✅
 ## Use Cases
 
 ### 1. Entity Detail Page - Related Conversations
+
 Show "Recent AI Conversations" section on lead/contact/account detail pages.
 
 ### 2. Conversation Search/Filter
+
 Filter conversations by entity type or specific entity ID in admin panel.
 
 ### 3. Context-Aware Suggestions
+
 When user opens a conversation, pre-populate entity context for smart suggestions.
 
 ### 4. Analytics Dashboard
+
 Show AI usage metrics broken down by entity type (leads vs contacts vs accounts).
 
 ### 5. Smart Routing
+
 Route follow-up questions to appropriate tools based on carried-forward entity context.
 
 ## Performance Considerations
 
 - **Index Recommendation**: Add GIN index on metadata column for fast JSONB queries:
+
   ```sql
-  CREATE INDEX idx_conversation_messages_metadata_gin 
+  CREATE INDEX idx_conversation_messages_metadata_gin
   ON conversation_messages USING GIN (metadata jsonb_path_ops);
   ```
 
@@ -226,6 +246,7 @@ No migration required! This feature works with existing data:
 ### Entity ID Not Being Extracted
 
 Check if:
+
 1. Tool name follows expected patterns (get_lead_details, update_contact, etc.)
 2. Tool arguments include explicit `{entity_type}_id` field
 3. Tool result JSON is valid and contains entity ID fields
@@ -234,6 +255,7 @@ Check if:
 ### Context Not Carrying Forward
 
 Verify:
+
 1. Conversation history query includes `metadata` column
 2. Previous messages have entity IDs in metadata
 3. `req.entityContext` is populated (check logs for "Carried forward entity context")
@@ -241,6 +263,7 @@ Verify:
 ### Query Performance Issues
 
 Solutions:
+
 1. Add GIN index on metadata column (see Performance Considerations above)
 2. Use `@>` operator instead of `->` for better index usage
 3. Limit query to recent messages (add `created_date` filter)

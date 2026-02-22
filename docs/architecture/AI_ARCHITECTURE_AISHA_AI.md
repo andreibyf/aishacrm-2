@@ -21,6 +21,7 @@
 AiSHA (AI Sales & Help Assistant) is the primary user-facing AI agent for Aisha CRM, designed to assist users with CRM operations through natural language conversation.
 
 **Key Characteristics:**
+
 - **Access Level:** All authenticated users (tenant-scoped)
 - **Model:** Multi-provider with failover (OpenAI GPT-4o → Anthropic Claude → Groq Llama)
 - **Execution Environment:** Backend API with Braid SDK integration
@@ -36,6 +37,7 @@ AiSHA (AI Sales & Help Assistant) is the primary user-facing AI agent for Aisha 
 **Migration Source:** `backend/migrations/014_conversations.sql`
 
 #### Conversations Table
+
 ```sql
 CREATE TABLE conversations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -54,6 +56,7 @@ CREATE TABLE conversations (
 **RLS:** Tenant-isolated via `tenant_id`
 
 #### Conversation Messages Table
+
 ```sql
 CREATE TABLE conversation_messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -94,17 +97,19 @@ sequenceDiagram
 **Key Implementation Details:**
 
 1. **User Message Persistence** (`backend/routes/ai.js`, lines 1868-1880)
+
    ```javascript
    await supabase.from('conversation_messages').insert({
      conversation_id: conversationId,
      role: 'user',
      content: lastUserMessage.content,
-     created_date: new Date().toISOString()
+     created_date: new Date().toISOString(),
      // ⚠️ NO updated_date - column doesn't exist!
    });
    ```
 
 2. **Assistant Message Persistence** (`backend/routes/ai.js`, lines 363-398)
+
    ```javascript
    const insertAssistantMessage = async (conversationId, content, metadata) => {
      const { data: inserted } = await supa
@@ -112,17 +117,19 @@ sequenceDiagram
        .insert({ conversation_id: conversationId, role: 'assistant', content, metadata })
        .select()
        .single();
-     
+
      // Update parent conversation timestamp
-     await supa.from('conversations')
+     await supa
+       .from('conversations')
        .update({ updated_date: new Date().toISOString() })
        .eq('id', conversationId);
-     
+
      return inserted;
    };
    ```
 
 3. **History Loading** (`backend/routes/ai.js`, lines 1847-1865)
+
    ```javascript
    // Load last 50 messages (efficient DB query)
    const { data: historyRows } = await supabase
@@ -131,26 +138,31 @@ sequenceDiagram
      .eq('conversation_id', conversationId)
      .order('created_date', { ascending: true })
      .limit(50);
-   
+
    // Limit to last 10 for LLM (token optimization)
    const recentHistory = historyRows.slice(-10);
    historicalMessages = recentHistory
-     .filter(row => row.role && row.content && row.role !== 'system')
-     .map(row => ({ role: row.role, content: row.content }));
-   
-   console.log('[AI Chat] Loaded', historicalMessages.length, 
-               'historical messages (from', historyRows.length, 'total)');
+     .filter((row) => row.role && row.content && row.role !== 'system')
+     .map((row) => ({ role: row.role, content: row.content }));
+
+   console.log(
+     '[AI Chat] Loaded',
+     historicalMessages.length,
+     'historical messages (from',
+     historyRows.length,
+     'total)',
+   );
    ```
 
 ### 3. **Conversation Lifecycle**
 
-| Event | Action | Location |
-|-------|--------|----------|
-| **Sidebar Mount** | Create new conversation | `useAiSidebarState.jsx` lines 137-155 |
-| **Reset Thread** | Create new conversation | `useAiSidebarState.jsx` lines 267-289 |
-| **Page Refresh** | Create new conversation | ⚠️ ISSUE: Orphans previous conversation |
-| **Chat Message** | INSERT user + assistant messages | `backend/routes/ai.js` |
-| **Conversation Delete** | CASCADE deletes all messages | Supabase ON DELETE CASCADE |
+| Event                   | Action                           | Location                                |
+| ----------------------- | -------------------------------- | --------------------------------------- |
+| **Sidebar Mount**       | Create new conversation          | `useAiSidebarState.jsx` lines 137-155   |
+| **Reset Thread**        | Create new conversation          | `useAiSidebarState.jsx` lines 267-289   |
+| **Page Refresh**        | Create new conversation          | ⚠️ ISSUE: Orphans previous conversation |
+| **Chat Message**        | INSERT user + assistant messages | `backend/routes/ai.js`                  |
+| **Conversation Delete** | CASCADE deletes all messages     | Supabase ON DELETE CASCADE              |
 
 ### 4. **Token Budget Manager (v3.6.39)**
 
@@ -159,16 +171,17 @@ sequenceDiagram
 
 **Configuration:** `backend/lib/aiBudgetConfig.js` (single source of truth)
 
-| Component | Default Cap | Env Override | Purpose |
-|-----------|-------------|--------------|--------|
-| **HARD_CEILING** | 4000 | `AI_TOKEN_HARD_CEILING` | Total token budget (input + reserved output) |
-| **SYSTEM_PROMPT** | 1200 | `AI_SYSTEM_PROMPT_CAP` | Max tokens for system prompt |
-| **TOOL_SCHEMA** | 800 | `AI_TOOL_SCHEMA_CAP` | Max tokens for tool JSON schemas |
-| **MEMORY** | 250 | `AI_MEMORY_CAP` | Max tokens for RAG memory context |
-| **TOOL_RESULT** | 700 | `AI_TOOL_RESULT_CAP` | Max tokens for tool result summaries |
-| **OUTPUT_MAX** | 350 | `AI_OUTPUT_MAX_TOKENS` | Reserved tokens for model output |
+| Component         | Default Cap | Env Override            | Purpose                                      |
+| ----------------- | ----------- | ----------------------- | -------------------------------------------- |
+| **HARD_CEILING**  | 4000        | `AI_TOKEN_HARD_CEILING` | Total token budget (input + reserved output) |
+| **SYSTEM_PROMPT** | 1200        | `AI_SYSTEM_PROMPT_CAP`  | Max tokens for system prompt                 |
+| **TOOL_SCHEMA**   | 800         | `AI_TOOL_SCHEMA_CAP`    | Max tokens for tool JSON schemas             |
+| **MEMORY**        | 250         | `AI_MEMORY_CAP`         | Max tokens for RAG memory context            |
+| **TOOL_RESULT**   | 700         | `AI_TOOL_RESULT_CAP`    | Max tokens for tool result summaries         |
+| **OUTPUT_MAX**    | 350         | `AI_OUTPUT_MAX_TOKENS`  | Reserved tokens for model output             |
 
 **Drop Order (when over budget):**
+
 ```
 1. Memory     → Trim/drop RAG context first (least critical)
 2. Tools      → Reduce tool schemas (keep core + forced tools)
@@ -177,15 +190,18 @@ sequenceDiagram
 ```
 
 **Core Tools (never removed):**
+
 - `fetch_tenant_snapshot`, `search_leads`, `search_contacts`
 - `search_accounts`, `create_activity`, `suggest_next_actions`
 
 **Token Savings (v3.6.39):**
+
 - Before: ~11,000-12,000 tokens/request
 - After: ~2,000-3,000 tokens/request
 - **Savings: ~75% reduction**
 
 **Budget Enforcement Flow:**
+
 ```javascript
 // In ai.js - both flows
 focusedTools = applyToolHardCap(tools, { maxTools: 12 });
@@ -196,6 +212,7 @@ logBudgetSummary(budgetResult.report, budgetResult.actionsTaken);
 ```
 
 **Budget Log Output:**
+
 ```
 [Budget] total=2847, system=423, tools=612, memory=0, history=1812
 [Budget] total=3891, system=423, tools=612, memory=156, history=2700, actions=trimmed_messages_to_5
@@ -206,9 +223,11 @@ logBudgetSummary(budgetResult.report, budgetResult.actionsTaken);
 ### 5. **Known Issues & Cleanup Strategy**
 
 #### Issue 1: Orphaned Conversations (CURRENT)
+
 **Problem:** New conversation created on every page load/mount  
 **Impact:** Database fills with abandoned conversations  
 **Example:**
+
 ```
 conversations:
   - id: abc-123 (Dec 25, 10:00 AM) → 45 messages (abandoned)
@@ -219,14 +238,17 @@ conversations:
 **Proposed Fix:** Reuse conversation across sessions instead of creating new on mount
 
 #### Issue 2: Unbounded Message Growth
+
 **Problem:** Messages never deleted, accumulate indefinitely  
 **Impact:** Database size + query performance degradation  
 **Proposed Solutions:**
+
 1. **Archive Strategy:** Move messages >30 days to `conversation_messages_archive`
 2. **Conversation Limits:** Max 100 messages per conversation, auto-create new
 3. **Retention Policy:** Delete conversations with no activity >90 days
 
 #### Issue 3: Column Name Bug (FIXED in v3.3.18)
+
 **Problem:** Code tried to INSERT `updated_date` into `conversation_messages`  
 **Impact:** ALL message persistence silently failed since November 2025  
 **Fix:** Removed invalid column from INSERT statement  
@@ -235,11 +257,12 @@ conversations:
 ### 6. **Debugging Message Persistence**
 
 **Check if messages are being saved:**
+
 ```sql
 -- Recent messages for a conversation
-SELECT 
-  id, 
-  role, 
+SELECT
+  id,
+  role,
   LEFT(content, 50) as preview,
   created_date
 FROM conversation_messages
@@ -248,7 +271,7 @@ ORDER BY created_date DESC
 LIMIT 20;
 
 -- Count messages per conversation
-SELECT 
+SELECT
   c.id,
   c.agent_name,
   COUNT(cm.id) as message_count,
@@ -263,6 +286,7 @@ LIMIT 10;
 ```
 
 **Backend Logs:**
+
 ```
 [AI Chat] Loaded 10 historical messages (from 50 total)
 [AI Chat] Persisted user message to conversation
@@ -275,12 +299,12 @@ LIMIT 10;
 
 ### 1. **Entry Points**
 
-| Endpoint | Purpose | Model Used |
-|----------|---------|------------|
-| `POST /api/ai/chat` | Primary chat interface | `chat_tools` capability (GPT-4o default) |
-| `POST /api/ai/flow-chat` | Multi-step workflows | `chat_tools` with flow routing |
-| `GET /api/ai/realtime` | Voice/streaming chat | `realtime_voice` capability |
-| `POST /api/ai/suggest` | Contextual suggestions | `chat_light` (faster responses) |
+| Endpoint                 | Purpose                | Model Used                               |
+| ------------------------ | ---------------------- | ---------------------------------------- |
+| `POST /api/ai/chat`      | Primary chat interface | `chat_tools` capability (GPT-4o default) |
+| `POST /api/ai/flow-chat` | Multi-step workflows   | `chat_tools` with flow routing           |
+| `GET /api/ai/realtime`   | Voice/streaming chat   | `realtime_voice` capability              |
+| `POST /api/ai/suggest`   | Contextual suggestions | `chat_light` (faster responses)          |
 
 ### 2. **Conversation Lifecycle**
 
@@ -313,6 +337,7 @@ graph TD
 **Problem Solved:** Users shouldn't need to repeat entity IDs (e.g., "Jack Russel") in every message.
 
 **Architecture:**
+
 ```javascript
 // Frontend (useAiSidebarState.jsx)
 1. Tool returns entity data → extractAndStoreEntities(data, type)
@@ -335,27 +360,29 @@ graph TD
    "**SESSION ENTITY CONTEXT (Background):**
    The user is currently discussing:
    - "Jack Russel" (lead, ID: abc-123) [also: jack, jack russel]
-   
+
    When user asks 'what should I do next?', use suggest_next_actions with entity_id from this context."
 
 6. AI now has entity_id → calls suggest_next_actions({ entity_type: "lead", entity_id: "abc-123" })
 ```
 
 **Critical Files:**
+
 - Frontend: `src/components/ai/useAiSidebarState.jsx` (lines 106-304)
 - Backend: `backend/routes/ai.js` (lines 1730, 1851-1860)
 
 ### 4. **Tool Calling Flow**
 
 **Braid SDK Integration:**
+
 ```
 User: "Create an activity for Jack Russel"
 ↓
 AiSHA AI:
 1. Recognizes intent → Tool: create_activity
 2. Resolves entity from session context → entity_id: "abc-123"
-3. Calls: executeBraidTool("create_activity", { 
-     entity_type: "lead", 
+3. Calls: executeBraidTool("create_activity", {
+     entity_type: "lead",
      entity_id: "abc-123",
      title: "Follow-up call",
      activity_type: "call"
@@ -367,6 +394,7 @@ AiSHA AI:
 ```
 
 **Tool Chain Example:**
+
 ```
 User: "Show me warm leads and create activities for the top 3"
 ↓
@@ -381,15 +409,16 @@ Tool Chain:
 
 **After Every Response, AiSHA MUST Provide Contextual Suggestions:**
 
-| User Action | AiSHA Suggestions |
-|-------------|-------------------|
-| **Views lead** | "Create activity", "Send email", "What should I do next?", "Show similar leads" |
-| **Creates account** | "Add contact", "Create opportunity", "Set up follow-up", "Link to lead" |
-| **Asks about entity** | "Show full details", "View activities", "What's the next step?", "Create note" |
-| **Completes action** | "What else can I help with?", "Create follow-up", "Mark as complete", "View related" |
-| **Gets suggestions** | "Create activity", "Send email now", "Schedule for later", "Show more options" |
+| User Action           | AiSHA Suggestions                                                                    |
+| --------------------- | ------------------------------------------------------------------------------------ |
+| **Views lead**        | "Create activity", "Send email", "What should I do next?", "Show similar leads"      |
+| **Creates account**   | "Add contact", "Create opportunity", "Set up follow-up", "Link to lead"              |
+| **Asks about entity** | "Show full details", "View activities", "What's the next step?", "Create note"       |
+| **Completes action**  | "What else can I help with?", "Create follow-up", "Mark as complete", "View related" |
+| **Gets suggestions**  | "Create activity", "Send email now", "Schedule for later", "Show more options"       |
 
 **Implementation:**
+
 1. **Proactive Tool** - `suggest_next_actions` (v3.3.5+)
    - Triggered when user asks "what should I do next?" or similar
    - Analyzes entity state (notes, activities, stage, last contact)
@@ -397,10 +426,11 @@ Tool Chain:
    - Returns 2-3 specific actionable suggestions
 
 2. **Context-Based Buttons** (Frontend)
+
    ```jsx
    // After AiSHA response
    <FollowUpSuggestions>
-     {suggestions.map(s => (
+     {suggestions.map((s) => (
        <Button onClick={() => sendMessage(s.text)}>
          {s.icon} {s.text}
        </Button>
@@ -426,6 +456,7 @@ Tool Chain:
 **Enhancement:** `backend/lib/entityLabelInjector.js` → `enhanceSystemPromptWithFullContext()`
 
 **Sections:**
+
 1. **Date & Time Awareness** - ⚠️ NEW: Dynamic current date injection (prevents AI date confusion)
 2. **Core Identity** - "You are AI-SHA, an executive assistant for Aisha CRM..."
 3. **Capabilities Overview** - 27+ tools, autonomous actions, proactive suggestions
@@ -440,6 +471,7 @@ Tool Chain:
 
 **Dynamic Date Awareness:**
 The system prompt is now generated by `getBraidSystemPrompt()` function, which injects the current date fresh on each request:
+
 ```javascript
 // Called per-request for fresh date
 const prompt = getBraidSystemPrompt();
@@ -448,6 +480,7 @@ const prompt = getBraidSystemPrompt();
 ```
 
 **Key Directives:**
+
 ```
 - ⚠️ NEW: NEVER set due dates in the past - always use future dates
 - ⚠️ NEW: Default to tomorrow at 9:00 AM if no date specified
@@ -463,6 +496,7 @@ const prompt = getBraidSystemPrompt();
 ```
 
 **⚠️ v3.3.7+ RAG Improvements:**
+
 - **Conversation History Awareness:** Last 6 messages (3 exchanges) injected into system prompt with 100-char preview
 - **Implicit Reference Handling:** Examples added to system prompt showing how to interpret "I think I only have 1" in context
 - **Strengthened suggest_next_actions Trigger:** Explicit mandate to call tool for ANY "next steps" question variation
@@ -473,52 +507,58 @@ const prompt = getBraidSystemPrompt();
 ## Available Tools (Braid SDK)
 
 ### **Search & Retrieval**
-| Tool | Purpose | Example |
-|------|---------|---------|
-| `search_leads` | Find leads by criteria | `{ status: "warm", limit: 10 }` |
-| `search_contacts` | Find contacts | `{ company: "ABC Corp" }` |
-| `search_accounts` | Find accounts | `{ industry: "Construction" }` |
-| `search_opportunities` | Find deals | `{ stage: "proposal", min_value: 10000 }` |
-| `get_lead` | Get full lead details | `{ lead_id: "uuid" }` |
-| `get_contact` | Get contact details | `{ contact_id: "uuid" }` |
+
+| Tool                   | Purpose                | Example                                   |
+| ---------------------- | ---------------------- | ----------------------------------------- |
+| `search_leads`         | Find leads by criteria | `{ status: "warm", limit: 10 }`           |
+| `search_contacts`      | Find contacts          | `{ company: "ABC Corp" }`                 |
+| `search_accounts`      | Find accounts          | `{ industry: "Construction" }`            |
+| `search_opportunities` | Find deals             | `{ stage: "proposal", min_value: 10000 }` |
+| `get_lead`             | Get full lead details  | `{ lead_id: "uuid" }`                     |
+| `get_contact`          | Get contact details    | `{ contact_id: "uuid" }`                  |
 
 ### **Create & Update**
-| Tool | Purpose | Example |
-|------|---------|---------|
-| `create_lead` | New lead | `{ first_name, last_name, email, company }` |
-| `create_contact` | New contact | `{ name, email, account_id }` |
-| `create_account` | New account | `{ company_name, industry }` |
+
+| Tool              | Purpose       | Example                                       |
+| ----------------- | ------------- | --------------------------------------------- |
+| `create_lead`     | New lead      | `{ first_name, last_name, email, company }`   |
+| `create_contact`  | New contact   | `{ name, email, account_id }`                 |
+| `create_account`  | New account   | `{ company_name, industry }`                  |
 | `create_activity` | Schedule task | `{ entity_type, entity_id, title, due_date }` |
-| `create_note` | Add note | `{ entity_type, entity_id, content }` |
-| `update_lead` | Modify lead | `{ lead_id, status: "converted" }` |
+| `create_note`     | Add note      | `{ entity_type, entity_id, content }`         |
+| `update_lead`     | Modify lead   | `{ lead_id, status: "converted" }`            |
 
 ### **Analysis & Intelligence**
-| Tool | Purpose | Example |
-|------|---------|---------|
+
+| Tool                   | Purpose              | Example                                      |
+| ---------------------- | -------------------- | -------------------------------------------- |
 | `suggest_next_actions` | Recommend next steps | `{ entity_type: "lead", entity_id: "uuid" }` |
-| `analyze_sentiment` | Email/note sentiment | `{ text: "..." }` |
-| `get_ai_memory` | RAG memory search | `{ query: "similar deals", limit: 5 }` |
+| `analyze_sentiment`    | Email/note sentiment | `{ text: "..." }`                            |
+| `get_ai_memory`        | RAG memory search    | `{ query: "similar deals", limit: 5 }`       |
 
 ### **Workflows**
-| Tool | Purpose | Example |
-|------|---------|---------|
-| `send_email` | Send via integration | `{ to, subject, body }` |
-| `schedule_meeting` | Calendar integration | `{ attendees, date, duration }` |
-| `convert_lead` | Lead → Account/Contact | `{ lead_id }` |
+
+| Tool               | Purpose                | Example                         |
+| ------------------ | ---------------------- | ------------------------------- |
+| `send_email`       | Send via integration   | `{ to, subject, body }`         |
+| `schedule_meeting` | Calendar integration   | `{ attendees, date, duration }` |
+| `convert_lead`     | Lead → Account/Contact | `{ lead_id }`                   |
 
 ### **Workflow Delegation (Agent Orchestration)** (v3.7.0+)
-| Tool | Purpose | Example |
-|------|---------|---------|
-| `delegate_to_workflow` | Delegate task to named agent workflow | `{ workflow_name: "Sales Manager Workflow", context: {...}, related_entity_type: "lead", related_entity_id: "uuid" }` |
-| `get_workflow_progress` | Check execution status | `{ execution_id: "uuid" }` |
-| `list_active_workflows` | See running workflows | `{ limit: 10 }` |
-| `get_workflow_notes` | Get progress notes from workflow | `{ execution_id: "uuid" }` |
+
+| Tool                    | Purpose                               | Example                                                                                                               |
+| ----------------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `delegate_to_workflow`  | Delegate task to named agent workflow | `{ workflow_name: "Sales Manager Workflow", context: {...}, related_entity_type: "lead", related_entity_id: "uuid" }` |
+| `get_workflow_progress` | Check execution status                | `{ execution_id: "uuid" }`                                                                                            |
+| `list_active_workflows` | See running workflows                 | `{ limit: 10 }`                                                                                                       |
+| `get_workflow_notes`    | Get progress notes from workflow      | `{ execution_id: "uuid" }`                                                                                            |
 
 ---
 
 ## Conversation Patterns
 
 ### **Pattern 1: Entity Inquiry**
+
 ```
 User: "Tell me about Jack Russel"
 ↓
@@ -526,7 +566,7 @@ AiSHA:
 1. search_leads({ name_contains: "Jack Russel" }) → Returns lead
 2. Response: "Jack Russel is a warm lead from ABC Corp. Last contact: 3 days ago."
    Stores in sessionEntityContext: { "jack russel": { id, type: "lead", ... } }
-   
+
 Follow-Up Suggestions:
 - "What should I do next?" [triggers suggest_next_actions]
 - "Show activities for Jack"
@@ -535,6 +575,7 @@ Follow-Up Suggestions:
 ```
 
 ### **Pattern 2: Proactive Next Actions** (v3.3.5+)
+
 ```
 User: "What should I do next?" [about Jack Russel - in session context]
 ↓
@@ -562,6 +603,7 @@ Follow-Up Suggestions:
 ```
 
 ### **Pattern 3: Bulk Operations**
+
 ```
 User: "Show all warm leads and create activities for the top 3"
 ↓
@@ -581,6 +623,7 @@ Follow-Up Suggestions:
 ```
 
 ### **Pattern 4: Error Recovery**
+
 ```
 User: "Create an activity for John" [no John in session context]
 ↓
@@ -597,6 +640,7 @@ Follow-Up Suggestions:
 ```
 
 ### **Pattern 5: Agent Workflow Delegation** (v3.7.0+)
+
 ```
 User: "Have the sales manager follow up with this lead"
 ↓
@@ -613,7 +657,7 @@ AiSHA:
    - find_lead → ai_summarize → ai_generate_note
    - ai_generate_email → send_email → update_lead
    - create_activity → ai_generate_note (completion)
-5. Response: "I've delegated the follow-up to the Sales Manager Workflow. 
+5. Response: "I've delegated the follow-up to the Sales Manager Workflow.
    It will send a personalized email and schedule a follow-up task."
 
 Follow-Up Suggestions:
@@ -639,7 +683,7 @@ graph TD
     D --> E[Find Workflow by Name]
     E --> F[Trigger Workflow Execution]
     F --> G[Workflow Engine]
-    
+
     subgraph "Workflow Execution"
         G --> H[find_lead/contact]
         H --> I[ai_summarize]
@@ -650,10 +694,10 @@ graph TD
         M --> N[create_activity]
         N --> O[ai_generate_note - completion]
     end
-    
+
     O --> P[Notes Logged to Record]
     P --> Q[AiSHA Reports Status]
-    
+
     style D fill:#violet
     style G fill:#blue
     style I fill:#purple
@@ -665,22 +709,23 @@ graph TD
 
 Two pre-built agent workflows are available for delegation:
 
-| Workflow | Purpose | Triggered By |
-|----------|---------|--------------|
-| **Sales Manager Workflow** | Lead follow-ups, personalized outreach, sales nurturing | "delegate to sales manager", "have sales follow up" |
-| **Customer Service Manager Workflow** | Support inquiries, response generation, escalation | "delegate to customer service", "have support handle" |
+| Workflow                              | Purpose                                                 | Triggered By                                          |
+| ------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------- |
+| **Sales Manager Workflow**            | Lead follow-ups, personalized outreach, sales nurturing | "delegate to sales manager", "have sales follow up"   |
+| **Customer Service Manager Workflow** | Support inquiries, response generation, escalation      | "delegate to customer service", "have support handle" |
 
 ### 3. **AI-Powered Workflow Nodes**
 
 The workflow engine includes specialized AI nodes that call OpenAI:
 
-| Node Type | Purpose | Configuration |
-|-----------|---------|---------------|
-| `ai_summarize` | Generate context summaries | `summary_type`: status_update, executive_summary, action_items, custom |
-| `ai_generate_note` | Create AI-generated notes | `note_type`: progress_update, call_summary, meeting_prep, custom |
-| `ai_generate_email` | Generate personalized emails | `tone`: professional, friendly, formal, casual, urgent |
+| Node Type           | Purpose                      | Configuration                                                          |
+| ------------------- | ---------------------------- | ---------------------------------------------------------------------- |
+| `ai_summarize`      | Generate context summaries   | `summary_type`: status_update, executive_summary, action_items, custom |
+| `ai_generate_note`  | Create AI-generated notes    | `note_type`: progress_update, call_summary, meeting_prep, custom       |
+| `ai_generate_email` | Generate personalized emails | `tone`: professional, friendly, formal, casual, urgent                 |
 
 **Node Implementation:**
+
 ```javascript
 // ai_summarize generates summaries stored in {{ai_summary}}
 case 'ai_summarize': {
@@ -713,14 +758,14 @@ sequenceDiagram
     participant WorkflowEngine
     participant OpenAI
     participant Database
-    
+
     User->>AiSHA: "Have sales manager follow up with Jack"
     AiSHA->>AiSHA: Detect WORKFLOW_DELEGATE intent
     AiSHA->>AiSHA: Get entity from session context
     AiSHA->>BraidTool: delegate_to_workflow({workflow_name, context, entity})
     BraidTool->>Database: Find workflow by name
     BraidTool->>WorkflowEngine: Trigger execution
-    
+
     loop Node Execution
         WorkflowEngine->>Database: find_lead
         WorkflowEngine->>OpenAI: ai_summarize
@@ -731,20 +776,20 @@ sequenceDiagram
         WorkflowEngine->>Database: create_activity
         WorkflowEngine->>Database: ai_generate_note (completion)
     end
-    
+
     BraidTool-->>AiSHA: Execution started, ID: xyz-789
     AiSHA-->>User: "Delegated to Sales Manager Workflow. I'll track progress."
 ```
 
 ### 5. **Intent Patterns for Delegation**
 
-| Pattern | Intent Code | Tool Called |
-|---------|-------------|-------------|
-| "delegate to sales manager" | `WORKFLOW_DELEGATE` | `delegate_to_workflow` |
-| "have customer service handle" | `WORKFLOW_DELEGATE` | `delegate_to_workflow` |
-| "start the sales workflow" | `WORKFLOW_DELEGATE` | `delegate_to_workflow` |
-| "what has the sales manager done" | `WORKFLOW_STATUS` | `get_workflow_progress` |
-| "check workflow progress" | `WORKFLOW_STATUS` | `get_workflow_progress` |
+| Pattern                           | Intent Code         | Tool Called             |
+| --------------------------------- | ------------------- | ----------------------- |
+| "delegate to sales manager"       | `WORKFLOW_DELEGATE` | `delegate_to_workflow`  |
+| "have customer service handle"    | `WORKFLOW_DELEGATE` | `delegate_to_workflow`  |
+| "start the sales workflow"        | `WORKFLOW_DELEGATE` | `delegate_to_workflow`  |
+| "what has the sales manager done" | `WORKFLOW_STATUS`   | `get_workflow_progress` |
+| "check workflow progress"         | `WORKFLOW_STATUS`   | `get_workflow_progress` |
 
 ### 6. **Progress Tracking**
 
@@ -753,7 +798,7 @@ Workflows log progress via AI-generated notes:
 ```sql
 -- Notes created by workflow execution
 SELECT content, metadata->'ai_generated' as ai_generated
-FROM notes 
+FROM notes
 WHERE metadata->>'workflow_execution_id' = 'xyz-789'
 ORDER BY created_at;
 
@@ -768,6 +813,7 @@ ORDER BY created_at;
 **Location:** `src/data/workflowTemplates.js`
 
 **Sales Manager Workflow:**
+
 ```javascript
 {
   id: 'sales-manager-workflow',
@@ -803,13 +849,13 @@ fn triggerWorkflowByName(
 ) -> Result<Object, CRMError> !net {
   // 1. Find workflow by name
   let searchResponse = http.get("/api/workflows", { params: { name: workflow_name } });
-  
+
   // 2. Trigger execution with context
-  let executeResponse = http.post("/api/workflows/execute", { 
+  let executeResponse = http.post("/api/workflows/execute", {
     params: { workflow_id: workflow.id },
     body: { trigger_source: "ai_delegation", entity_type, entity_id, context }
   });
-  
+
   return Ok({ workflow_id, execution_id, status: "started" });
 }
 ```
@@ -821,6 +867,7 @@ fn triggerWorkflowByName(
 **Purpose:** Learn from past conversations and suggest actions based on similar scenarios
 
 **Architecture:**
+
 ```sql
 -- ai_memory_chunks table (pgvector)
 id, tenant_id, chunk_text, embedding, metadata, entity_type, entity_id, created_at
@@ -833,20 +880,22 @@ id, tenant_id, chunk_text, embedding, metadata, entity_type, entity_id, created_
 
 **Configuration:** `backend/lib/aiBudgetConfig.js`
 
-| Setting | Default | Env Override | Purpose |
-|---------|---------|--------------|--------|
-| `enabled` | false | `MEMORY_ENABLED=true` | Master switch (must be true) |
-| `alwaysOn` | false | `AI_MEMORY_ALWAYS_ON=true` | Bypass pattern matching (testing) |
-| `alwaysOff` | false | `AI_MEMORY_ALWAYS_OFF=true` | Force off (overrides all) |
-| `topK` | 3 | `MEMORY_TOP_K` | Number of chunks to retrieve |
-| `maxChunkChars` | 300 | `MEMORY_MAX_CHUNK_CHARS` | Max chars per chunk |
+| Setting         | Default | Env Override                | Purpose                           |
+| --------------- | ------- | --------------------------- | --------------------------------- |
+| `enabled`       | false   | `MEMORY_ENABLED=true`       | Master switch (must be true)      |
+| `alwaysOn`      | false   | `AI_MEMORY_ALWAYS_ON=true`  | Bypass pattern matching (testing) |
+| `alwaysOff`     | false   | `AI_MEMORY_ALWAYS_OFF=true` | Force off (overrides all)         |
+| `topK`          | 3       | `MEMORY_TOP_K`              | Number of chunks to retrieve      |
+| `maxChunkChars` | 300     | `MEMORY_MAX_CHUNK_CHARS`    | Max chars per chunk               |
 
 **Gating Precedence:**
+
 ```
 ALWAYS_OFF > MEMORY_ENABLED > ALWAYS_ON > patterns
 ```
 
 **Trigger Patterns (memory only queried when matched):**
+
 - "last time", "previously", "earlier", "before"
 - "remind me", "what did we", "recap", "summary"
 - "what happened", "follow up", "next steps"
@@ -854,6 +903,7 @@ ALWAYS_OFF > MEMORY_ENABLED > ALWAYS_ON > patterns
 - "remember when", "do you remember"
 
 **Implementation:** `backend/lib/aiMemory/index.js`
+
 ```javascript
 // Check if memory should be used
 if (shouldUseMemory(userMessage)) {
@@ -872,7 +922,7 @@ if (shouldInjectConversationSummary(userMessage, messageCount)) {
 
 ```
 1. User action generates memory chunk:
-   "User asked about next steps for warm lead 'Jack Russel' (awaiting callback). 
+   "User asked about next steps for warm lead 'Jack Russel' (awaiting callback).
     AiSHA suggested: follow-up call, send email, schedule meeting."
 
 2. Embedding generated (OpenAI text-embedding-3-small)
@@ -882,9 +932,9 @@ if (shouldInjectConversationSummary(userMessage, messageCount)) {
 
 4. Future similar query (ONLY if trigger pattern matches):
    "What did we discuss last time?" [warm lead, awaiting callback]
-   
+
 5. RAG search (75%+ similarity, limited to topK=3):
-   SELECT * FROM ai_memory_chunks 
+   SELECT * FROM ai_memory_chunks
    WHERE tenant_id = ? AND entity_type = ?
    ORDER BY embedding <=> query_embedding
    LIMIT 3
@@ -893,6 +943,7 @@ if (shouldInjectConversationSummary(userMessage, messageCount)) {
 ```
 
 **Integration Point:**
+
 - `backend/lib/suggestNextActions.js` → `queryMemory()`
 - `backend/routes/ai.js` → `shouldUseMemory()` + `shouldInjectConversationSummary()`
 - Fallback to rule-based if RAG unavailable
@@ -912,6 +963,7 @@ if (shouldInjectConversationSummary(userMessage, messageCount)) {
 | `realtime_voice` | OpenAI gpt-4o-realtime | - | - |
 
 **Automatic Failover:**
+
 ```javascript
 // If OpenAI fails
 try {
@@ -923,6 +975,7 @@ try {
 ```
 
 **Per-Tenant Override:**
+
 ```bash
 # Force tenant to use Anthropic
 LLM_PROVIDER__TENANT_abc123=anthropic
@@ -933,19 +986,20 @@ LLM_PROVIDER__TENANT_abc123=anthropic
 ## Security & Privacy
 
 ### **Tenant Isolation**
+
 - All queries filtered by `tenant_id` (UUID)
 - RLS policies enforce data access
 - Session context scoped to tenant
 
 ### **Data Redaction**
+
 ```javascript
 // Before sending to LLM
-const sanitized = filterSensitiveFields(data, [
-  'password', 'api_key', 'ssn', 'credit_card'
-]);
+const sanitized = filterSensitiveFields(data, ['password', 'api_key', 'ssn', 'credit_card']);
 ```
 
 ### **Audit Logging**
+
 ```sql
 -- All tool calls logged
 INSERT INTO audit_logs (user_id, action, details, severity)
@@ -953,6 +1007,7 @@ VALUES (?, 'aisha.create_activity', '{"entity_id": "..."}', 'normal');
 ```
 
 ### **Rate Limiting**
+
 - 100 requests/minute per user
 - 500 requests/hour per tenant
 - Enforced by `backend/lib/rateLimiter.js`
@@ -962,6 +1017,7 @@ VALUES (?, 'aisha.create_activity', '{"entity_id": "..."}', 'normal');
 ## Error Handling
 
 ### **Tool Execution Failure**
+
 ```javascript
 {
   error: "Tool execution failed",
@@ -972,9 +1028,11 @@ VALUES (?, 'aisha.create_activity', '{"entity_id": "..."}', 'normal');
 ```
 
 **AiSHA Response:**
+
 > "I need a due date to create the activity. When should it be scheduled?"
 
 ### **Entity Not Found**
+
 ```javascript
 {
   error: "Entity not found",
@@ -984,9 +1042,11 @@ VALUES (?, 'aisha.create_activity', '{"entity_id": "..."}', 'normal');
 ```
 
 **AiSHA Response:**
+
 > "I couldn't find that lead. Let me search for you..." [Fallback to search]
 
 ### **Permission Denied**
+
 ```javascript
 {
   error: "Permission denied",
@@ -995,6 +1055,7 @@ VALUES (?, 'aisha.create_activity', '{"entity_id": "..."}', 'normal');
 ```
 
 **AiSHA Response:**
+
 > "You don't have access to opportunities. Contact your admin to enable this module."
 
 ---
@@ -1002,11 +1063,13 @@ VALUES (?, 'aisha.create_activity', '{"entity_id": "..."}', 'normal');
 ## Performance Optimization
 
 ### **Caching Strategy**
+
 - Tool results cached for 5 minutes (Redis)
 - Entity lookups cached by ID
 - Search queries NOT cached (data changes frequently)
 
 ### **Response Streaming**
+
 ```javascript
 // For long responses
 res.setHeader('Content-Type', 'text/event-stream');
@@ -1016,6 +1079,7 @@ for await (const chunk of llmStream) {
 ```
 
 ### **Batch Operations**
+
 ```javascript
 // Instead of N tool calls
 create_activity(lead1); create_activity(lead2); ...
@@ -1029,6 +1093,7 @@ bulk_create_activities([lead1, lead2, ...]);
 ## Testing AiSHA
 
 ### **Developer AI Integration**
+
 ```
 Developer AI → test_aisha({ message: "What should I do next about Jack Russel?" })
 ↓
@@ -1040,16 +1105,17 @@ Observes:
 ```
 
 ### **Unit Tests**
+
 ```javascript
 // backend/__tests__/ai/aisha.test.js
 test('suggests next actions with session context', async () => {
   const response = await aiChat({
-    message: "What should I do next?",
-    sessionEntities: [{ id: "abc-123", type: "lead", name: "Jack Russel" }]
+    message: 'What should I do next?',
+    sessionEntities: [{ id: 'abc-123', type: 'lead', name: 'Jack Russel' }],
   });
-  
+
   expect(response.tool_calls).toContainEqual({
-    function: { name: "suggest_next_actions" }
+    function: { name: 'suggest_next_actions' },
   });
 });
 ```
@@ -1059,11 +1125,13 @@ test('suggests next actions with session context', async () => {
 ## Deployment & Versioning
 
 **Version Tagging:**
+
 - Features: v3.3.x (e.g., v3.3.5 - suggest_next_actions)
 - Bugfixes: v3.3.x (e.g., v3.3.6 - sessionEntities fix)
 - Breaking changes: v3.4.0+
 
 **Deployment Flow:**
+
 ```
 1. Git tag pushed → v3.3.6
 2. GitHub Actions builds Docker image
@@ -1079,6 +1147,7 @@ test('suggests next actions with session context', async () => {
 ## Best Practices for Developers
 
 ### **When Adding New Tools**
+
 1. **Define in Braid SDK** - `braid-llm-kit/tools/`
 2. **Register in TOOL_DESCRIPTIONS** - `backend/lib/braidIntegration-v2.js`
 3. **Update System Prompt** - Add usage guidance
@@ -1087,6 +1156,7 @@ test('suggests next actions with session context', async () => {
 6. **Add Follow-Up Suggestions** - What should user do after using this tool?
 
 ### **When Debugging Conversation Flow**
+
 1. **Check Session Context** - Is entity in `sessionEntityContext`?
 2. **Verify Tool Registration** - Is tool in OpenAI function schema?
 3. **Review Logs** - `docker logs aishacrm-backend | grep tool_calls`
@@ -1094,6 +1164,7 @@ test('suggests next actions with session context', async () => {
 5. **Validate System Prompt** - Is directive clear and specific?
 
 ### **When Modifying Follow-Up Logic**
+
 1. **Update System Prompt** - `BRAID_SYSTEM_PROMPT` in braidIntegration-v2.js
 2. **Enhance Tool Schemas** - Add "typical_followups" metadata
 3. **Frontend Integration** - Update `useAiSidebarState.jsx`
@@ -1105,7 +1176,9 @@ test('suggests next actions with session context', async () => {
 ## RAG & Context Improvements (v3.3.7+)
 
 ### Problem Addressed
+
 AiSHA AI was failing to maintain conversation continuity, resulting in poor user experience:
+
 - **Issue 1:** Responding "I'm not sure what action you want to take" to vague statements like "I think I only have 1"
 - **Issue 2:** Not calling `suggest_next_actions` when users asked "What should be my next steps?"
 - **Issue 3:** Losing context of recently discussed entities
@@ -1113,15 +1186,17 @@ AiSHA AI was failing to maintain conversation continuity, resulting in poor user
 ### Solution Components
 
 #### 1. **Conversation History Injection**
+
 **File:** `backend/routes/ai.js` (lines 1854-1879)
 
 Added automatic injection of recent conversation context into system prompt:
+
 ```javascript
 // Last 6 messages (3 exchanges) with 100-char preview
 const recentMessages = messages.slice(-6);
 const summaryItems = recentMessages
-  .filter(m => m.role === 'user' || m.role === 'assistant')
-  .map(m => {
+  .filter((m) => m.role === 'user' || m.role === 'assistant')
+  .map((m) => {
     const preview = m.content?.slice(0, 100) || '';
     return `${m.role === 'user' ? 'User' : 'AiSHA'}: ${preview}`;
   })
@@ -1131,17 +1206,20 @@ const summaryItems = recentMessages
 **Effect:** AiSHA can now refer to what was just discussed to understand implicit references.
 
 #### 2. **Enhanced System Prompt**
+
 **File:** `backend/lib/braidIntegration-v2.js` (lines 618-665)
 
 Added new section: **CONVERSATION CONTINUITY & CONTEXT AWARENESS**
 
 Key improvements:
+
 - Explicit examples of implicit references: "I think I only have 1" → understand from context
 - Instruction to track recent discussion topics (last 3-5 messages)
 - Mandate to use conversation history instead of responding "I'm not sure"
 - Specific patterns for handling follow-up questions about entities
 
 #### 3. **Strengthened suggest_next_actions Trigger**
+
 **File:** `backend/lib/braidIntegration-v2.js` (lines 636-665)
 
 - Added comprehensive list of trigger patterns
@@ -1150,9 +1228,11 @@ Key improvements:
 - Examples showing correct tool usage with session context
 
 #### 4. **Improved Session Context Formatting**
+
 **File:** `backend/routes/ai.js` (lines 1870-1880)
 
 Enhanced session entity context injection:
+
 ```javascript
 systemPrompt += `${conversationSummary}\n\n**SESSION ENTITY CONTEXT (Background - CRITICAL FOR NEXT ACTIONS):**
 The user is currently discussing these entities:
@@ -1172,6 +1252,7 @@ DO NOT respond with "I'm not sure what action you want to take" - ALWAYS use the
 **Test Suite:** `backend/__tests__/ai/conversationContext.test.js`
 
 Coverage:
+
 - ✅ System prompt includes conversation continuity section
 - ✅ All suggest_next_actions trigger patterns present
 - ✅ Implicit reference handling examples included
@@ -1181,6 +1262,7 @@ Coverage:
 - ✅ Mandatory suggest_next_actions usage
 
 **Run tests:**
+
 ```bash
 cd backend
 CI_BACKEND_TESTS=true node --test __tests__/ai/conversationContext.test.js
@@ -1190,9 +1272,9 @@ CI_BACKEND_TESTS=true node --test __tests__/ai/conversationContext.test.js
 
 **Scenario from Problem Statement:**
 
-| Before (v3.3.6) | After (v3.3.7+) |
-|-----------------|-----------------|
-| User: "I think i only have 1"<br>AiSHA: "I'm not sure what action you want to take" | User: "I think i only have 1"<br>AiSHA: "Yes, you have 1 warm lead: Jack Russel. Would you like to see the details?" |
+| Before (v3.3.6)                                                                             | After (v3.3.7+)                                                                                                                                             |
+| ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| User: "I think i only have 1"<br>AiSHA: "I'm not sure what action you want to take"         | User: "I think i only have 1"<br>AiSHA: "Yes, you have 1 warm lead: Jack Russel. Would you like to see the details?"                                        |
 | User: "What should be my next steps?"<br>AiSHA: "I'm not sure what action you want to take" | User: "What should be my next steps?"<br>AiSHA: [Calls suggest_next_actions]<br>"Based on Jack's current state, I recommend: 1. Follow-up call (Urgent)..." |
 
 ### Performance Impact
@@ -1205,6 +1287,7 @@ CI_BACKEND_TESTS=true node --test __tests__/ai/conversationContext.test.js
 ### Rollback Plan
 
 If issues arise, revert commits:
+
 - `5f260c3` - Enhanced system prompt
 - Previous behavior: Session entities tracked but not referenced in conversation history
 
@@ -1212,10 +1295,10 @@ If issues arise, revert commits:
 
 ## Version History
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.1 | 2025-12-26 | Added Data Persistence Layer section, documented conversation_messages bug fix (v3.3.18) |
-| 1.0 | 2025-12-25 | RAG & context improvements: conversation history, implicit references, suggest_next_actions mandate |
+| Version | Date       | Changes                                                                                             |
+| ------- | ---------- | --------------------------------------------------------------------------------------------------- |
+| 1.1     | 2025-12-26 | Added Data Persistence Layer section, documented conversation_messages bug fix (v3.3.18)            |
+| 1.0     | 2025-12-25 | RAG & context improvements: conversation history, implicit references, suggest_next_actions mandate |
 
 ---
 

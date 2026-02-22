@@ -7,17 +7,20 @@ This guide documents testing practices, conventions, and coverage status for the
 ## Test Infrastructure
 
 ### Backend Testing
+
 - **Framework**: Node.js built-in test runner (`node:test`)
 - **Coverage Tool**: c8
 - **Test Location**: `backend/__tests__/`
 - **Test Pattern**: `*.test.js`
 
 ### Frontend Testing
+
 - **Framework**: Vitest
 - **Test Location**: `src/` (co-located with source)
 - **Test Pattern**: `*.test.js`, `*.test.jsx`, `*.test.ts`, `*.test.tsx`
 
 ### E2E Testing
+
 - **Framework**: Playwright
 - **Test Location**: `tests/e2e/`
 - **Test Pattern**: `*.spec.js`, `*.spec.ts`
@@ -81,13 +84,13 @@ import assert from 'node:assert/strict';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
-const SHOULD_RUN = process.env.CI ? (process.env.CI_BACKEND_TESTS === 'true') : true;
+const SHOULD_RUN = process.env.CI ? process.env.CI_BACKEND_TESTS === 'true' : true;
 
 describe('Route Name Routes', { skip: !SHOULD_RUN }, () => {
   test('GET /api/endpoint returns expected response', async () => {
     const res = await fetch(`${BASE_URL}/api/endpoint?tenant_id=${TENANT_ID}`);
     assert.ok([200, 401].includes(res.status), `expected 200/401, got ${res.status}`);
-    
+
     if (res.status === 200) {
       const json = await res.json();
       assert.ok(json, 'expected response data');
@@ -97,6 +100,7 @@ describe('Route Name Routes', { skip: !SHOULD_RUN }, () => {
 ```
 
 **Key Principles:**
+
 1. Use `fetch` for HTTP requests (not supertest)
 2. Test status codes, not exact responses
 3. Handle both success and auth-required cases
@@ -136,6 +140,7 @@ test('user can complete workflow', async ({ page }) => {
 ### Backend Routes
 
 **Tested Routes (41):**
+
 - ✅ accounts.js
 - ✅ activities.js
 - ✅ ai.js
@@ -168,6 +173,7 @@ test('user can complete workflow', async ({ page }) => {
 - ... (35 total with variants)
 
 **Untested Routes (41):**
+
 - ❌ accounts.v2.js
 - ❌ activities.v2.js
 - ❌ aiSummary.js
@@ -181,7 +187,7 @@ test('user can complete workflow', async ({ page }) => {
 - ❌ braidMetrics.js
 - ❌ cashflow.js
 - ❌ clients.js
-- ❌ construction-*.js
+- ❌ construction-\*.js
 - ❌ contacts.v2.js
 - ❌ dashboard-funnel.js
 - ❌ database.js
@@ -212,12 +218,12 @@ test('user can complete workflow', async ({ page }) => {
 
 ### Coverage Targets
 
-| Category | Current | Target |
-|----------|---------|--------|
-| Backend Routes | ~54% (41/76 routes) | 80% |
-| Backend Code | TBD | 60% |
-| Frontend Components | ~40% (27 files) | 50% |
-| E2E Critical Flows | ~50% (8 specs) | 90% |
+| Category            | Current             | Target |
+| ------------------- | ------------------- | ------ |
+| Backend Routes      | ~54% (41/76 routes) | 80%    |
+| Backend Code        | TBD                 | 60%    |
+| Frontend Components | ~40% (27 files)     | 50%    |
+| E2E Critical Flows  | ~50% (8 specs)      | 90%    |
 
 ## CI Integration
 
@@ -236,6 +242,7 @@ test('user can complete workflow', async ({ page }) => {
 ### Coverage Reporting
 
 Coverage is automatically generated on CI:
+
 1. Tests run with `npm run test:coverage`
 2. c8 generates HTML and JSON reports
 3. Reports uploaded as artifacts
@@ -306,7 +313,7 @@ assert.equal(res.status, 401);
 
 // Authenticated (when auth tokens available)
 const authedRes = await fetch(`${BASE_URL}/api/protected`, {
-  headers: { Authorization: `Bearer ${token}` }
+  headers: { Authorization: `Bearer ${token}` },
 });
 assert.equal(authedRes.status, 200);
 ```

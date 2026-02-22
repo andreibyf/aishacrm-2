@@ -8,11 +8,13 @@
 ## 1. Brand Identity
 
 ### Product Name
+
 - **Full Name:** AiSHA CRM (AI Super Hi-performing Assistant)
 - **Short Name:** AiSHA
 - **Assistant Title:** AiSHA Executive Assistant
 
 ### Brand Voice
+
 - Professional yet approachable
 - Confident and knowledgeable
 - Helpful without being pushy
@@ -24,21 +26,23 @@
 
 ### Current Production Avatar
 
-| Asset | Path | Dimensions | Format |
-|-------|------|------------|--------|
-| Executive Portrait | `/assets/aisha-executive-portrait.jpg` | 400×400 px | JPEG |
+| Asset              | Path                                   | Dimensions | Format |
+| ------------------ | -------------------------------------- | ---------- | ------ |
+| Executive Portrait | `/assets/aisha-executive-portrait.jpg` | 400×400 px | JPEG   |
 
 **File Location:** `public/assets/aisha-executive-portrait.jpg`
 
 ### Usage Guidelines
 
 **DO:**
+
 - Use the executive portrait for all AI assistant UI surfaces
 - Maintain 1:1 aspect ratio when resizing
 - Apply circular mask with appropriate border radius
 - Use consistent sizing within each component type
 
 **DON'T:**
+
 - Stretch or distort the portrait
 - Apply filters that alter the professional appearance
 - Use different avatars for the same assistant identity
@@ -46,15 +50,15 @@
 
 ### Component-Specific Sizing
 
-| Component | Size | Border Radius | Ring/Border |
-|-----------|------|---------------|-------------|
-| `AiSidebar.jsx` (Hero) | 160×160 px | `rounded-[28px]` | `ring-4 ring-white/80` |
-| `AvatarWidget.jsx` (Float) | 80×80 px | `50%` (circle) | 3px border with glow |
-| `AiAssistantLauncher.jsx` | 36×36 px | `rounded-2xl` | `ring-1 ring-indigo-300/50` |
-| `FloatingAIWidget.jsx` | 56×56 px | `rounded-2xl` | Shadow + ring |
-| `AIAssistantWidget.jsx` | 32×32 px | `rounded-xl` | `ring-2 ring-white/40` |
-| `AgentChat.jsx` (Header) | 40×40 px | `50%` (circle) | `border-2 border-cyan-500/30` |
-| `AgentChat.jsx` (Message) | 32×32 px | `50%` (circle) | None (inline) |
+| Component                  | Size       | Border Radius    | Ring/Border                   |
+| -------------------------- | ---------- | ---------------- | ----------------------------- |
+| `AiSidebar.jsx` (Hero)     | 160×160 px | `rounded-[28px]` | `ring-4 ring-white/80`        |
+| `AvatarWidget.jsx` (Float) | 80×80 px   | `50%` (circle)   | 3px border with glow          |
+| `AiAssistantLauncher.jsx`  | 36×36 px   | `rounded-2xl`    | `ring-1 ring-indigo-300/50`   |
+| `FloatingAIWidget.jsx`     | 56×56 px   | `rounded-2xl`    | Shadow + ring                 |
+| `AIAssistantWidget.jsx`    | 32×32 px   | `rounded-xl`     | `ring-2 ring-white/40`        |
+| `AgentChat.jsx` (Header)   | 40×40 px   | `50%` (circle)   | `border-2 border-cyan-500/30` |
+| `AgentChat.jsx` (Message)  | 32×32 px   | `50%` (circle)   | None (inline)                 |
 
 ---
 
@@ -62,8 +66,8 @@
 
 ### Legacy Avatar (Do Not Use)
 
-| Asset | Path | Status |
-|-------|------|--------|
+| Asset      | Path                | Status        |
+| ---------- | ------------------- | ------------- |
 | Old Avatar | `/aisha-avatar.jpg` | ❌ DEPRECATED |
 
 **Note:** The legacy avatar file remains in `public/` for backward compatibility but should NOT be referenced in new code. All references have been migrated to the executive portrait as of Phase 4.
@@ -74,21 +78,21 @@
 
 ### Primary Colors
 
-| Name | Value | Usage |
-|------|-------|-------|
+| Name       | Value     | Usage                              |
+| ---------- | --------- | ---------------------------------- |
 | Indigo-500 | `#6366F1` | Primary accent, links, focus rings |
-| Indigo-600 | `#4F46E5` | Hover states |
-| Slate-900 | `#0F172A` | Dark backgrounds |
-| White | `#FFFFFF` | Light backgrounds, text on dark |
+| Indigo-600 | `#4F46E5` | Hover states                       |
+| Slate-900  | `#0F172A` | Dark backgrounds                   |
+| White      | `#FFFFFF` | Light backgrounds, text on dark    |
 
 ### Status Indicators
 
-| State | Color | CSS Class |
-|-------|-------|-----------|
-| Voice Ready | Sky-400 `#38BDF8` | `bg-sky-400` |
-| Live/Active | Emerald-400 `#34D399` | `bg-emerald-400` |
-| Realtime | Red-500 `#EF4444` | `bg-red-500` (pulsing) |
-| Warning | Amber-400 `#FBBF24` | `bg-amber-400` |
+| State       | Color                 | CSS Class              |
+| ----------- | --------------------- | ---------------------- |
+| Voice Ready | Sky-400 `#38BDF8`     | `bg-sky-400`           |
+| Live/Active | Emerald-400 `#34D399` | `bg-emerald-400`       |
+| Realtime    | Red-500 `#EF4444`     | `bg-red-500` (pulsing) |
+| Warning     | Amber-400 `#FBBF24`   | `bg-amber-400`         |
 
 ### Dark Mode Variants
 
@@ -109,12 +113,12 @@ All UI surfaces support dark mode via Tailwind `dark:` classes:
 
 ### Assistant Labels
 
-| Context | Style |
-|---------|-------|
-| Main Title | `text-xl font-semibold` |
-| Subtitle | `text-sm text-slate-500` |
-| Status Badge | `text-[11px] font-semibold uppercase tracking-wide` |
-| Headlines | `text-[10px] font-semibold uppercase tracking-[0.25em]` |
+| Context      | Style                                                   |
+| ------------ | ------------------------------------------------------- |
+| Main Title   | `text-xl font-semibold`                                 |
+| Subtitle     | `text-sm text-slate-500`                                |
+| Status Badge | `text-[11px] font-semibold uppercase tracking-wide`     |
+| Headlines    | `text-[10px] font-semibold uppercase tracking-[0.25em]` |
 
 ### Common Patterns
 
@@ -165,20 +169,16 @@ radial-gradient(circle, rgba(234, 179, 8, 0.4) 0%, transparent 70%)
 All avatar images MUST include:
 
 ```jsx
-<img
-  src="/assets/aisha-executive-portrait.jpg"
-  alt="AiSHA Executive Assistant"
-  loading="lazy"
-/>
+<img src="/assets/aisha-executive-portrait.jpg" alt="AiSHA Executive Assistant" loading="lazy" />
 ```
 
 ### Alt Text Standards
 
-| Context | Alt Text |
-|---------|----------|
-| Hero/Main | `"AiSHA Executive Assistant portrait"` |
-| Inline/Small | `"AiSHA Executive Assistant"` |
-| Button/Toggle | `"AiSHA assistant"` |
+| Context       | Alt Text                               |
+| ------------- | -------------------------------------- |
+| Hero/Main     | `"AiSHA Executive Assistant portrait"` |
+| Inline/Small  | `"AiSHA Executive Assistant"`          |
+| Button/Toggle | `"AiSHA assistant"`                    |
 
 ---
 
@@ -196,4 +196,4 @@ When adding AiSHA avatar to a new component:
 
 ---
 
-*Last Updated: December 4, 2025 – Phase 4 Full Cutover*
+_Last Updated: December 4, 2025 – Phase 4 Full Cutover_

@@ -5,6 +5,7 @@
 This guide demonstrates how to leverage Intel integrated GPUs (iGPU) for accelerated local AI development using Twinny (primary), Continue.dev (secondary), IPEX-LLM, and Ollama. By utilizing Intel's SYCL acceleration framework, developers can achieve 2-3x performance improvements over CPU-only inference while maintaining complete data privacy and reducing cloud dependency costs.
 
 **Key Achievements:**
+
 - 2-3x faster LLM inference on Intel Iris Xe iGPU
 - Zero-cost local development with enterprise-grade AI assistance
 - Complete integration with VS Code via Twinny (primary) and Continue.dev extensions
@@ -62,13 +63,14 @@ ollama pull qwen2.5-coder:3b
   "twinny.chatModel": "qwen2.5-coder:3b",
   "twinny.enableCompletions": true,
   "twinny.enableChat": true,
-  
+
   // CONTINUE.DEV: Secondary (autocomplete DISABLED)
-  "continue.enableTabAutocomplete": false  // ⚠️ Critical: prevents conflict
+  "continue.enableTabAutocomplete": false, // ⚠️ Critical: prevents conflict
 }
 ```
 
 **Test it:**
+
 - **Twinny (daily use)**: Start typing → inline completions appear
 - **Twinny chat**: `Ctrl+Shift+T` → Quick code questions
 - **Continue.dev (complex)**: `Ctrl+L` → Multi-file refactoring, codebase analysis
@@ -110,11 +112,13 @@ ollama pull qwen2.5-coder:3b
 ### Component Responsibilities
 
 **IPEX-LLM (Intel Extension for PyTorch - LLM)**
+
 - Optimized LLM inference for Intel hardware
 - SYCL-based GPU acceleration
 - Memory-efficient model loading for iGPU shared memory
 
 **Twinny Extension (Primary AI Assistant)**
+
 - Locally-hosted AI code completion (FIM - Fill In Middle)
 - AI-powered chat interface for code questions
 - Zero telemetry, complete privacy
@@ -122,12 +126,14 @@ ollama pull qwen2.5-coder:3b
 - Fast inline suggestions and completions
 
 **Continue.dev Extension (Secondary AI Assistant)**
+
 - Advanced IDE integration for complex workflows
 - Multi-model routing and fallback logic
 - Context-aware prompt engineering
 - Code editing and refactoring assistance
 
 **Ollama Dual-Server Setup**
+
 - Primary: Intel GPU acceleration for routine tasks
 - Fallback: CPU processing for complex reasoning
 - Automatic load balancing and health checks
@@ -139,30 +145,35 @@ ollama pull qwen2.5-coder:3b
 ### Hardware Requirements
 
 **Minimum Requirements:**
+
 - Intel CPU with integrated graphics (Intel Iris Xe or newer recommended)
 - 16GB+ RAM (shared with iGPU)
 - Windows 10/11 or Ubuntu 20.04+
 
 **Recommended Specifications:**
+
 - Intel Core i5/i7 11th gen or newer
 - 32GB+ RAM for optimal shared memory allocation
 - Intel Arc discrete GPU (for enhanced performance)
 
 **Verified Compatible Hardware:**
+
 - Intel Core Ultra processors
-- Intel Core 11th-14th gen processors  
+- Intel Core 11th-14th gen processors
 - Intel Arc A-Series GPU
 - Intel Arc B-Series GPU (B580+)
 
 ### Software Prerequisites
 
 **Essential Components:**
+
 - Intel Graphics Driver ≥ 31.0.101.5522
 - VS Code with Twinny extension (primary AI assistant)
 - Git Bash or Windows Terminal
 - Administrative privileges for driver installation
 
 **Optional Enhancements:**
+
 - Continue.dev extension (advanced workflows and multi-model routing)
 - Intel oneAPI Toolkit (for development builds)
 - Intel VTune Profiler (for performance analysis)
@@ -183,6 +194,7 @@ Get-WmiObject Win32_VideoController | Select-Object Name, DriverVersion
 ```
 
 **Driver Update Process:**
+
 1. Download latest Intel Graphics Driver from [Intel Download Center](https://www.intel.com/content/www/us/en/download/785597/intel-arc-iris-xe-graphics-windows.html)
 2. Uninstall existing driver via Device Manager
 3. Install new driver with clean installation option
@@ -265,6 +277,7 @@ ollama.exe serve
 ### Twinny Extension Configuration (Primary)
 
 **Why Twinny?**
+
 - **Privacy-first**: 100% local, zero telemetry, no data leaves your machine
 - **Fast completions**: Optimized for FIM (Fill In Middle) with Ollama
 - **Lightweight**: Minimal resource overhead compared to cloud-based solutions
@@ -282,64 +295,64 @@ This is the actual configuration used in the AiSHA CRM project:
   // ========================================
   // Fast, private, local AI code completion and chat
   // Uses Intel GPU via IPEX-LLM Ollama (Port 11434)
-  
+
   "twinny.enabled": true,
-  
+
   // Ollama Server Configuration
   "twinny.ollamaApiUrl": "http://localhost:11434",
-  
+
   // Model Selection
-  "twinny.fimModel": "deepseek-coder:1.3b",        // Fast inline completions (FIM)
-  "twinny.chatModel": "qwen2.5-coder:3b",          // Conversational assistance
-  
+  "twinny.fimModel": "deepseek-coder:1.3b", // Fast inline completions (FIM)
+  "twinny.chatModel": "qwen2.5-coder:3b", // Conversational assistance
+
   // Completion Settings (Primary Feature)
   "twinny.enableCompletions": true,
   "twinny.enableSubsequentCompletions": true,
   "twinny.completionCacheEnabled": true,
-  "twinny.numLineContext": 100,                    // Context window lines
-  "twinny.debounceWait": 300,                      // Response delay (ms)
-  "twinny.temperature": 0.2,                       // Low for consistent code
-  "twinny.maxTokens": 500,                         // Inline completion length
-  
+  "twinny.numLineContext": 100, // Context window lines
+  "twinny.debounceWait": 300, // Response delay (ms)
+  "twinny.temperature": 0.2, // Low for consistent code
+  "twinny.maxTokens": 500, // Inline completion length
+
   // Chat Settings
   "twinny.enableChat": true,
   "twinny.chatTemperature": 0.3,
   "twinny.chatMaxTokens": 1024,
-  
+
   // Performance Optimization for Intel iGPU
-  "twinny.contextLength": 2048,                    // Conservative for shared memory
-  "twinny.keepAlive": "5m",                        // Model persistence
-  
+  "twinny.contextLength": 2048, // Conservative for shared memory
+  "twinny.keepAlive": "5m", // Model persistence
+
   // UI Preferences
   "twinny.enableInlineCompletion": true,
   "twinny.showLoadingIndicator": true,
   "twinny.enableStatusBarItem": true,
-  
+
   // ========================================
   // CONTINUE.DEV - SECONDARY (COMPLEX TASKS)
   // ========================================
   // Disabled autocomplete to avoid conflict with Twinny
   // Use for: multi-file refactoring, codebase analysis, advanced workflows
-  
-  "continue.enableTabAutocomplete": false,         // ⚠️ CRITICAL: Prevent conflict with Twinny
-  "continue.telemetryEnabled": false,              // Privacy
-  "continue.showInlineTip": false,                 // Reduce UI clutter
-  
+
+  "continue.enableTabAutocomplete": false, // ⚠️ CRITICAL: Prevent conflict with Twinny
+  "continue.telemetryEnabled": false, // Privacy
+  "continue.showInlineTip": false, // Reduce UI clutter
+
   // ========================================
   // PROJECT-SPECIFIC SETTINGS
   // ========================================
-  
+
   // AiSHA CRM Context (shared by both AI assistants)
   "twinny.systemPrompt": "You are an expert full-stack developer working on AiSHA CRM, a multi-tenant SaaS application. Tech stack: React 18, Node.js, Express, Supabase PostgreSQL. Always use UUID-based tenant isolation (req.tenant.id). Route API calls through fallbackFunctions.js. Follow V2 API patterns for new features.",
-  
+
   // Editor Settings (optimize for AI assistance)
   "editor.inlineSuggest.enabled": true,
   "editor.suggestOnTriggerCharacters": true,
   "editor.quickSuggestions": {
     "other": true,
     "comments": false,
-    "strings": true
-  }
+    "strings": true,
+  },
 }
 ```
 
@@ -352,11 +365,11 @@ This is the actual configuration used in the AiSHA CRM project:
 
 **Recommended Models for Twinny + Intel iGPU:**
 
-| Use Case | Model | Port | Performance |
-|----------|-------|------|-------------|
-| **Inline Completions** | `deepseek-coder:1.3b` | 11434 | 50-60 tokens/sec |
-| **Code Chat** | `qwen2.5-coder:3b` | 11434 | 30-35 tokens/sec |
-| **Complex Analysis** | `qwen2.5-coder:7b` | 11435 | 15-20 tokens/sec (CPU) |
+| Use Case               | Model                 | Port  | Performance            |
+| ---------------------- | --------------------- | ----- | ---------------------- |
+| **Inline Completions** | `deepseek-coder:1.3b` | 11434 | 50-60 tokens/sec       |
+| **Code Chat**          | `qwen2.5-coder:3b`    | 11434 | 30-35 tokens/sec       |
+| **Complex Analysis**   | `qwen2.5-coder:7b`    | 11435 | 15-20 tokens/sec (CPU) |
 
 **Twinny Keyboard Shortcuts:**
 
@@ -366,23 +379,23 @@ This is the actual configuration used in the AiSHA CRM project:
   {
     "key": "ctrl+shift+t",
     "command": "twinny.chat",
-    "when": "editorTextFocus"
+    "when": "editorTextFocus",
   },
   {
     "key": "ctrl+shift+/",
     "command": "twinny.explain",
-    "when": "editorHasSelection"
+    "when": "editorHasSelection",
   },
   {
     "key": "ctrl+shift+r",
     "command": "twinny.refactor",
-    "when": "editorHasSelection"
+    "when": "editorHasSelection",
   },
   {
     "key": "alt+\\",
     "command": "twinny.acceptSolution",
-    "when": "twinny.activeSolution"
-  }
+    "when": "twinny.activeSolution",
+  },
 ]
 ```
 
@@ -392,11 +405,11 @@ For complex tasks that exceed iGPU capacity, configure a secondary Ollama instan
 
 ```jsonc
 {
-  "twinny.ollamaApiUrl": "http://localhost:11434",           // Primary: Intel GPU
-  "twinny.ollamaApiUrlSecondary": "http://localhost:11435",  // Fallback: CPU
+  "twinny.ollamaApiUrl": "http://localhost:11434", // Primary: Intel GPU
+  "twinny.ollamaApiUrlSecondary": "http://localhost:11435", // Fallback: CPU
   "twinny.fimModel": "deepseek-coder:1.3b",
   "twinny.chatModel": "qwen2.5-coder:3b",
-  "twinny.chatModelFallback": "qwen2.5-coder:7b@localhost:11435"  // CPU for deep reasoning
+  "twinny.chatModelFallback": "qwen2.5-coder:7b@localhost:11435", // CPU for deep reasoning
 }
 ```
 
@@ -407,12 +420,12 @@ For the AiSHA CRM project, add workspace settings:
 ```jsonc
 {
   "twinny.systemPrompt": "You are an expert full-stack developer working on AiSHA CRM, a multi-tenant SaaS application. Tech stack: React 18, Node.js, Express, Supabase PostgreSQL. Always use UUID-based tenant isolation (req.tenant.id). Route API calls through fallbackFunctions.js. Follow V2 API patterns for new features.",
-  
+
   "twinny.customTemplates": {
     "react-component": "Create a React functional component with TypeScript, following project patterns",
     "api-endpoint": "Generate Express API endpoint with tenant validation and Supabase RLS",
-    "database-query": "Create Supabase query with proper tenant isolation using UUID"
-  }
+    "database-query": "Create Supabase query with proper tenant isolation using UUID",
+  },
 }
 ```
 
@@ -421,8 +434,9 @@ For the AiSHA CRM project, add workspace settings:
 ### Continue.dev Configuration (Secondary)
 
 **Important**: Continue.dev autocomplete is **DISABLED** in VS Code settings to avoid conflicts with Twinny. Use Continue.dev for:
+
 - Complex multi-file refactoring
-- Codebase-wide analysis  
+- Codebase-wide analysis
 - Advanced chat with repository context
 - Multi-step workflows
 
@@ -485,17 +499,17 @@ context:
   - repo-map
 
 rules:
-  - "Provide concise, actionable responses"
-  - "Use actual file content, not assumptions"
-  - "Prefer code examples over lengthy explanations"
+  - 'Provide concise, actionable responses'
+  - 'Use actual file content, not assumptions'
+  - 'Prefer code examples over lengthy explanations'
 
 docs:
-  - title: "React 18"
-    url: "https://react.dev"
-  - title: "Node.js"
-    url: "https://nodejs.org/docs"
-  - title: "TypeScript"
-    url: "https://typescriptlang.org/docs"
+  - title: 'React 18'
+    url: 'https://react.dev'
+  - title: 'Node.js'
+    url: 'https://nodejs.org/docs'
+  - title: 'TypeScript'
+    url: 'https://typescriptlang.org/docs'
 ```
 
 **Project-Specific Configuration** (`workspace/.continue/config.yaml`):
@@ -509,14 +523,14 @@ models:
     apiBase: http://127.0.0.1:11434
     systemMessage: |
       You are an expert developer assistant for the AiSHA CRM project.
-      
+
       Key project context:
       - Multi-tenant SaaS application
       - React 18 + Vite frontend
       - Node.js + Express backend
       - Supabase PostgreSQL with RLS
       - Docker containerized architecture
-      
+
       Always consider:
       - UUID-based tenant isolation
       - API fallback patterns via fallbackFunctions.js
@@ -529,20 +543,20 @@ models:
 
 prompts:
   architect:
-    name: "System Architect"
-    description: "High-level architecture analysis and design"
-    systemMessage: "Analyze architecture patterns, scalability, and system design decisions."
-    
+    name: 'System Architect'
+    description: 'High-level architecture analysis and design'
+    systemMessage: 'Analyze architecture patterns, scalability, and system design decisions.'
+
   codegen:
-    name: "Code Generator" 
-    description: "Generate production-ready code with patterns"
-    systemMessage: "Generate clean, maintainable code following project patterns and conventions."
+    name: 'Code Generator'
+    description: 'Generate production-ready code with patterns'
+    systemMessage: 'Generate clean, maintainable code following project patterns and conventions.'
 
 context:
   - repo-map
   - file
 
-includePattern: ["src/**", "backend/**", "docs/**"]
+includePattern: ['src/**', 'backend/**', 'docs/**']
 ```
 
 ### VS Code Workspace Integration
@@ -551,55 +565,55 @@ includePattern: ["src/**", "backend/**", "docs/**"]
 
 ```json
 {
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "Start Intel AI Development Environment",
-            "type": "shell",
-            "command": "cmd.exe",
-            "args": ["/c", "C:\\Intel-AI-Tools\\intel-ai-startup.bat"],
-            "options": {
-                "shell": {
-                    "executable": "cmd.exe",
-                    "args": ["/d", "/c"]
-                }
-            },
-            "group": "build",
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "new",
-                "showReuseMessage": true,
-                "clear": true
-            },
-            "problemMatcher": [],
-            "runOptions": {
-                "runOn": "folderOpen"
-            },
-            "detail": "Auto-starts Intel GPU acceleration for AI development"
-        },
-        {
-            "label": "Stop AI Services",
-            "type": "shell", 
-            "command": "taskkill",
-            "args": ["/F", "/IM", "ollama.exe"],
-            "options": {
-                "shell": {
-                    "executable": "cmd.exe",
-                    "args": ["/d", "/c"]
-                }
-            },
-            "group": "build",
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "shared"
-            },
-            "detail": "Stops all AI inference services"
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start Intel AI Development Environment",
+      "type": "shell",
+      "command": "cmd.exe",
+      "args": ["/c", "C:\\Intel-AI-Tools\\intel-ai-startup.bat"],
+      "options": {
+        "shell": {
+          "executable": "cmd.exe",
+          "args": ["/d", "/c"]
         }
-    ]
+      },
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "new",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "problemMatcher": [],
+      "runOptions": {
+        "runOn": "folderOpen"
+      },
+      "detail": "Auto-starts Intel GPU acceleration for AI development"
+    },
+    {
+      "label": "Stop AI Services",
+      "type": "shell",
+      "command": "taskkill",
+      "args": ["/F", "/IM", "ollama.exe"],
+      "options": {
+        "shell": {
+          "executable": "cmd.exe",
+          "args": ["/d", "/c"]
+        }
+      },
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "detail": "Stops all AI inference services"
+    }
+  ]
 }
 ```
 
@@ -611,28 +625,28 @@ includePattern: ["src/**", "backend/**", "docs/**"]
 
 **Workload Classification:**
 
-| Use Case | Recommended Model | Hardware Target | Expected Performance |
-|----------|-------------------|-----------------|---------------------|
-| Code completion | deepseek-coder:1.3b | Intel iGPU | <500ms response |
-| Code generation | qwen2.5-coder:3b | Intel iGPU | 2-3x CPU speed |
-| Code explanation | qwen2.5-coder:3b | Intel iGPU | 2-3x CPU speed |
-| Complex refactoring | qwen2.5-coder:7b | CPU fallback | High accuracy |
-| Architecture analysis | llama3.1:8b | CPU fallback | Deep reasoning |
+| Use Case              | Recommended Model   | Hardware Target | Expected Performance |
+| --------------------- | ------------------- | --------------- | -------------------- |
+| Code completion       | deepseek-coder:1.3b | Intel iGPU      | <500ms response      |
+| Code generation       | qwen2.5-coder:3b    | Intel iGPU      | 2-3x CPU speed       |
+| Code explanation      | qwen2.5-coder:3b    | Intel iGPU      | 2-3x CPU speed       |
+| Complex refactoring   | qwen2.5-coder:7b    | CPU fallback    | High accuracy        |
+| Architecture analysis | llama3.1:8b         | CPU fallback    | Deep reasoning       |
 
 **Memory Optimization for iGPU:**
 
 ```yaml
 # Optimized model configuration for shared memory systems
 defaultCompletionOptions:
-  maxTokens: 1024        # Balanced response length
-  temperature: 0.3       # Consistent, focused output  
-  contextWindow: 2048    # Conservative context for memory efficiency
-  
+  maxTokens: 1024 # Balanced response length
+  temperature: 0.3 # Consistent, focused output
+  contextWindow: 2048 # Conservative context for memory efficiency
+
 # Environment tuning
 environment:
-  OLLAMA_NUM_PARALLEL: 1     # Single request processing
-  OLLAMA_MAX_QUEUE: 5        # Limited queue depth
-  SYCL_DEVICE_FILTER: gpu    # GPU-only workloads
+  OLLAMA_NUM_PARALLEL: 1 # Single request processing
+  OLLAMA_MAX_QUEUE: 5 # Limited queue depth
+  SYCL_DEVICE_FILTER: gpu # GPU-only workloads
 ```
 
 ### Inference Performance Tuning
@@ -663,11 +677,11 @@ export IPEX_LLM_OPTIMIZE_FOR_THROUGHPUT=1               # Batch optimization
 
 **Benchmarking Results:**
 
-| Configuration | Model | Hardware | Tokens/Second | Memory Usage |
-|---------------|-------|----------|---------------|-------------|
-| CPU Only | qwen2.5-coder:3b | Intel i7-1265U | 12 t/s | 2.1GB |
-| Intel iGPU | qwen2.5-coder:3b | Intel Iris Xe | 31 t/s | 1.9GB shared |
-| Intel iGPU | deepseek-coder:1.3b | Intel Iris Xe | 52 t/s | 0.8GB shared |
+| Configuration | Model               | Hardware       | Tokens/Second | Memory Usage |
+| ------------- | ------------------- | -------------- | ------------- | ------------ |
+| CPU Only      | qwen2.5-coder:3b    | Intel i7-1265U | 12 t/s        | 2.1GB        |
+| Intel iGPU    | qwen2.5-coder:3b    | Intel Iris Xe  | 31 t/s        | 1.9GB shared |
+| Intel iGPU    | deepseek-coder:1.3b | Intel Iris Xe  | 52 t/s        | 0.8GB shared |
 
 ---
 
@@ -699,17 +713,18 @@ export IPEX_LLM_OPTIMIZE_FOR_THROUGHPUT=1               # Batch optimization
 
 **Twinny vs Continue.dev - When to Use Which:**
 
-| Scenario | Use Twinny | Use Continue.dev |
-|----------|-----------|------------------|
-| Fast inline completions | ✅ Primary | ❌ Slower |
-| Quick code chat | ✅ Primary | ⚠️ Alternative |
-| Explain selected code | ✅ Primary | ⚠️ Alternative |
-| Complex refactoring | ⚠️ Good | ✅ Better (multi-step) |
-| Codebase analysis | ❌ Limited | ✅ Context-aware |
-| Custom prompt workflows | ⚠️ Basic | ✅ Advanced |
-| Multi-file edits | ❌ Single file | ✅ Project-wide |
+| Scenario                | Use Twinny     | Use Continue.dev       |
+| ----------------------- | -------------- | ---------------------- |
+| Fast inline completions | ✅ Primary     | ❌ Slower              |
+| Quick code chat         | ✅ Primary     | ⚠️ Alternative         |
+| Explain selected code   | ✅ Primary     | ⚠️ Alternative         |
+| Complex refactoring     | ⚠️ Good        | ✅ Better (multi-step) |
+| Codebase analysis       | ❌ Limited     | ✅ Context-aware       |
+| Custom prompt workflows | ⚠️ Basic       | ✅ Advanced            |
+| Multi-file edits        | ❌ Single file | ✅ Project-wide        |
 
 **Best Practice Workflow:**
+
 - **80% Twinny**: Daily coding, completions, quick questions
 - **20% Continue.dev**: Complex tasks, multi-file refactoring, architecture decisions
 
@@ -730,25 +745,25 @@ interface ModelRoutingConfig {
 class IntelAIRouter {
   selectModel(config: ModelRoutingConfig): ModelEndpoint {
     if (config.urgency === 'immediate' && config.contextSize < 1000) {
-      return { 
+      return {
         endpoint: 'http://localhost:11434',
         model: 'deepseek-coder:1.3b',
-        target: 'intel-igpu'
+        target: 'intel-igpu',
       };
     }
-    
+
     if (config.taskType === 'analysis' || config.accuracy === 'precise') {
       return {
-        endpoint: 'http://localhost:11435', 
+        endpoint: 'http://localhost:11435',
         model: 'qwen2.5-coder:7b',
-        target: 'cpu-fallback'
+        target: 'cpu-fallback',
       };
     }
-    
+
     return {
       endpoint: 'http://localhost:11434',
-      model: 'qwen2.5-coder:3b', 
-      target: 'intel-igpu'
+      model: 'qwen2.5-coder:3b',
+      target: 'intel-igpu',
     };
   }
 }
@@ -763,25 +778,25 @@ class AIServiceMonitor {
   async checkHealth() {
     const services = [
       { name: 'Intel GPU Ollama', url: 'http://localhost:11434/api/tags' },
-      { name: 'CPU Fallback',     url: 'http://localhost:11435/api/tags' }
+      { name: 'CPU Fallback', url: 'http://localhost:11435/api/tags' },
     ];
-    
+
     const healthStatus = await Promise.allSettled(
       services.map(async (service) => {
         const start = Date.now();
-        const response = await fetch(service.url, { 
+        const response = await fetch(service.url, {
           timeout: 5000,
-          signal: AbortSignal.timeout(5000) 
+          signal: AbortSignal.timeout(5000),
         });
         return {
           name: service.name,
           status: response.ok ? 'healthy' : 'degraded',
           latency: Date.now() - start,
-          available: response.ok
+          available: response.ok,
         };
-      })
+      }),
     );
-    
+
     return healthStatus;
   }
 }
@@ -844,16 +859,16 @@ Get-WmiObject Win32_VideoController  # Windows
 # Performance troubleshooting checklist
 environment:
   SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS: 1
-  OLLAMA_NUM_PARALLEL: 1               # Critical for iGPU
+  OLLAMA_NUM_PARALLEL: 1 # Critical for iGPU
   ZES_ENABLE_SYSMAN: 1
-  
-# Model selection optimization  
+
+# Model selection optimization
 preferred_models:
-  - qwen2.5-coder:3b   # Optimal for Intel Iris Xe
+  - qwen2.5-coder:3b # Optimal for Intel Iris Xe
   - deepseek-coder:1.3b # Fast autocomplete
-  
+
 avoid_models:
-  - models > 7B parameters  # Exceeds iGPU memory efficiency
+  - models > 7B parameters # Exceeds iGPU memory efficiency
 ```
 
 **Issue 3: Memory-Related Crashes**
@@ -893,7 +908,7 @@ C:\Windows\System32\DriverStore\FileRepository\iigd_dch.inf*\IntelGraphicsContro
 set SYCL_PI_TRACE=1
 set IPEX_LLM_LOG_LEVEL=DEBUG
 
-# Ollama service diagnostics  
+# Ollama service diagnostics
 ollama ps              # List running models
 ollama logs            # Service logs
 ollama show model      # Model information
@@ -911,13 +926,13 @@ ollama show model      # Model information
 # Team configuration for shared development
 team_config:
   model_distribution:
-    development: intel-igpu     # Individual workstations
-    code_review: cpu-cluster    # Shared high-memory instances  
-    ci_cd: cloud-api           # GitHub Actions integration
-    
+    development: intel-igpu # Individual workstations
+    code_review: cpu-cluster # Shared high-memory instances
+    ci_cd: cloud-api # GitHub Actions integration
+
   resource_allocation:
-    max_concurrent_users: 8     # Per Intel GPU instance
-    model_caching: persistent   # Shared model storage
+    max_concurrent_users: 8 # Per Intel GPU instance
+    model_caching: persistent # Shared model storage
     load_balancing: round_robin # Request distribution
 ```
 
@@ -950,15 +965,15 @@ CMD ["./startup.sh"]
 
 ```yaml
 privacy_controls:
-  data_residency: local_only        # No cloud transmission
-  model_isolation: tenant_based     # Multi-tenant separation
-  audit_logging: enabled           # Request/response logging
-  encryption: in_transit           # TLS for API communication
-  
+  data_residency: local_only # No cloud transmission
+  model_isolation: tenant_based # Multi-tenant separation
+  audit_logging: enabled # Request/response logging
+  encryption: in_transit # TLS for API communication
+
 compliance_features:
-  gdpr: data_minimization          # Limited context retention
-  hipaa: local_processing          # No PHI cloud exposure
-  soc2: access_controls           # Authentication and authorization
+  gdpr: data_minimization # Limited context retention
+  hipaa: local_processing # No PHI cloud exposure
+  soc2: access_controls # Authentication and authorization
 ```
 
 **Network Security:**
@@ -974,15 +989,15 @@ upstream intel_ai_backend {
 server {
     listen 443 ssl;
     server_name ai.company.internal;
-    
+
     ssl_certificate     /etc/ssl/certs/ai-server.crt;
     ssl_certificate_key /etc/ssl/private/ai-server.key;
-    
+
     location /api/ {
         proxy_pass http://intel_ai_backend;
         proxy_set_header Authorization $auth_token;
         proxy_timeout 30s;
-        
+
         # Rate limiting
         limit_req zone=ai_requests burst=10;
     }
@@ -993,15 +1008,15 @@ server {
 
 **TCO Comparison (Annual Basis):**
 
-| Configuration | Initial Cost | Operation Cost | Performance | Privacy |
-|---------------|--------------|----------------|-------------|------|
-| Cloud API (GPT-4) | $0 | $12,000-24,000* | High | Limited |
-| Intel iGPU Local | $0-1,500** | $200*** | Medium-High | Complete |
-| Dedicated GPU | $500-2,000 | $300 | High | Complete |
+| Configuration     | Initial Cost | Operation Cost   | Performance | Privacy  |
+| ----------------- | ------------ | ---------------- | ----------- | -------- |
+| Cloud API (GPT-4) | $0           | $12,000-24,000\* | High        | Limited  |
+| Intel iGPU Local  | $0-1,500\*\* | $200\*\*\*       | Medium-High | Complete |
+| Dedicated GPU     | $500-2,000   | $300             | High        | Complete |
 
-*Based on 50,000 requests/month  
+\*Based on 50,000 requests/month  
 **Hardware upgrade cost for compatible Intel CPU  
-***Electricity and maintenance
+\***Electricity and maintenance
 
 ---
 
@@ -1013,11 +1028,12 @@ AiSHA CRM is a multi-tenant SaaS application serving executive assistants and sm
 
 - Email draft generation and optimization
 - Meeting summary creation
-- Contact insights and relationship mapping  
+- Contact insights and relationship mapping
 - Automated task prioritization
 - Code generation for custom integrations
 
 **Constraints:**
+
 - Strict data privacy requirements (financial services clients)
 - Cost optimization for small business pricing model
 - Multi-tenant architecture requiring isolation
@@ -1052,7 +1068,7 @@ AiSHA CRM Frontend (React 18 + Vite)
     │   ├── Primary: qwen2.5-coder:3b (chat/development)
     │   └── Secondary: deepseek-coder:1.3b (autocompletion)
     │
-    └── CPU Fallback Ollama (Port 11435) 
+    └── CPU Fallback Ollama (Port 11435)
         ├── Complex reasoning: qwen2.5-coder:7b
         └── Architecture decisions: llama3.1:8b
 ```
@@ -1064,11 +1080,11 @@ AiSHA CRM Frontend (React 18 + Vite)
 class AiSHAPromptGuard {
   sanitizeUserInput(userContent, tenantId) {
     const sanitized = userContent
-      .replace(/<<.*?>>/g, '')           // Remove prompt injection attempts
+      .replace(/<<.*?>>/g, '') // Remove prompt injection attempts
       .replace(/\bSYSTEM\b/gi, '[SYS]') // Neutralize system commands
       .trim()
-      .substring(0, 2000);              // Length limitation
-      
+      .substring(0, 2000); // Length limitation
+
     return `
 Context: AiSHA CRM tenant ${tenantId}
 Task: ${sanitized}
@@ -1084,12 +1100,12 @@ Constraints:
 // Intel GPU endpoint integration
 async function generateEmailDraft(req, res) {
   const { content, recipientContext, tenantId } = req.body;
-  
+
   const prompt = promptGuard.sanitizeUserInput(
-    `Draft professional email: ${content}. Recipient: ${recipientContext}`, 
-    tenantId
+    `Draft professional email: ${content}. Recipient: ${recipientContext}`,
+    tenantId,
   );
-  
+
   try {
     const response = await fetch('http://localhost:11434/api/generate', {
       method: 'POST',
@@ -1100,24 +1116,23 @@ async function generateEmailDraft(req, res) {
         stream: false,
         options: {
           temperature: 0.7,
-          max_tokens: 300
-        }
-      })
+          max_tokens: 300,
+        },
+      }),
     });
-    
+
     const result = await response.json();
-    
+
     // Audit logging for compliance
     auditLogger.log({
       tenant: tenantId,
-      action: 'ai_email_generation', 
+      action: 'ai_email_generation',
       model: 'intel-igpu',
       tokens: result.eval_count,
-      timestamp: new Date()
+      timestamp: new Date(),
     });
-    
+
     res.json({ draft: result.response });
-    
   } catch (error) {
     // Fallback to CPU model for reliability
     return fallbackToStandardModel(prompt, tenantId);
@@ -1128,13 +1143,15 @@ async function generateEmailDraft(req, res) {
 ### Development Productivity Metrics
 
 **Before Intel AI Integration:**
+
 - Code completion: Manual typing (100% developer effort)
 - API documentation: Manual research and reading
-- Bug fixes: Manual debugging and problem-solving  
+- Bug fixes: Manual debugging and problem-solving
 - Code review: Manual inspection by senior developers
 - Average feature delivery: 2-3 weeks
 
 **After Intel AI Integration (Twinny + Intel GPU):**
+
 - Code completion: 75% AI-assisted (Twinny FIM with `deepseek-coder:1.3b`)
 - API documentation: AI-generated examples and explanations via chat
 - Bug fixes: AI-assisted debugging with context-aware suggestions
@@ -1142,29 +1159,32 @@ async function generateEmailDraft(req, res) {
 - Average feature delivery: 1-1.5 weeks (25-30% improvement)
 
 **Tool-Specific Contributions:**
+
 - **Twinny (80% of daily usage)**: Fast inline completions, instant code chat, real-time debugging
 - **Continue.dev (20% of usage)**: Complex refactoring, architecture decisions, multi-file analysis
 
 **Quantified Benefits:**
 
-| Metric | Before | After (Twinny Primary) | Improvement |
-|--------|--------|------------------------|-------------|
-| Lines of code/day | 150 | 235 | +57% |
-| Inline completion acceptance | 0% | 68% | +68% |
-| Bug detection time | 45 min | 18 min | -60% |
-| Code review depth | Manual only | AI + Manual | +45% coverage |
-| Documentation quality | Inconsistent | AI-standardized | +65% completeness |
-| Developer onboarding | 2-3 weeks | 1 week | -50% time |
-| Context switching (docs lookup) | 12/day | 3/day | -75% |
+| Metric                          | Before       | After (Twinny Primary) | Improvement       |
+| ------------------------------- | ------------ | ---------------------- | ----------------- |
+| Lines of code/day               | 150          | 235                    | +57%              |
+| Inline completion acceptance    | 0%           | 68%                    | +68%              |
+| Bug detection time              | 45 min       | 18 min                 | -60%              |
+| Code review depth               | Manual only  | AI + Manual            | +45% coverage     |
+| Documentation quality           | Inconsistent | AI-standardized        | +65% completeness |
+| Developer onboarding            | 2-3 weeks    | 1 week                 | -50% time         |
+| Context switching (docs lookup) | 12/day       | 3/day                  | -75%              |
 
 ### ROI Analysis
 
 **Cost Avoidance:**
+
 - Eliminated $18,000/year in GitHub Copilot subscriptions (12 developers)
 - Reduced $8,000/year in OpenAI API costs
 - Prevented $15,000 in potential senior developer contractor costs
 
 **Productivity Gains:**
+
 - 30% faster feature delivery (Twinny boost) = $54,000 additional development capacity
 - Reduced bug fixing overhead = $12,000 in saved developer time
 - Improved code quality = $8,000 in reduced technical debt
@@ -1174,6 +1194,7 @@ async function generateEmailDraft(req, res) {
 ### Lessons Learned
 
 **Technical Insights:**
+
 1. **Model Selection Critical**: 3B parameter models provide optimal balance for iGPU
 2. **Twinny for Speed**: `deepseek-coder:1.3b` delivers sub-second FIM completions on iGPU
 3. **Context Management**: Limited context windows require strategic prompt engineering
@@ -1182,6 +1203,7 @@ async function generateEmailDraft(req, res) {
 6. **Tool Specialization**: Twinny excels at inline completions; Continue.dev at complex workflows
 
 **Twinny-Specific Learnings:**
+
 1. **Acceptance Rate Matters**: 68% completion acceptance rate indicates high quality
 2. **Fast Response Critical**: <500ms latency maintains natural coding flow
 3. **Chat Interface Value**: Quick code explanations reduce context switching by 75%
@@ -1189,6 +1211,7 @@ async function generateEmailDraft(req, res) {
 5. **Offline Reliability**: No internet dependency = no workflow disruption
 
 **Organizational Benefits:**
+
 1. **Privacy Compliance**: Complete data residency satisfaction for financial clients
 2. **Cost Predictability**: Fixed infrastructure costs vs. variable API billing
 3. **Offline Capability**: Development productivity maintained without internet
@@ -1196,6 +1219,7 @@ async function generateEmailDraft(req, res) {
 5. **Developer Satisfaction**: 90%+ team adoption rate with Twinny
 
 **Scaling Considerations:**
+
 1. **Team Size Limit**: Single Intel iGPU effectively supports 4-6 developers
 2. **Model Rotation**: Regular model updates improve capabilities over time
 3. **Hardware Refresh**: Annual evaluation of newer Intel GPU generations
@@ -1209,13 +1233,14 @@ async function generateEmailDraft(req, res) {
 ### Reference Commands
 
 **System Diagnostics:**
+
 ```bash
 # Hardware verification
 lspci | grep -i display                    # Linux GPU detection
 dxdiag                                     # Windows hardware info
 intel_gpu_top                              # Intel GPU monitoring
 
-# Service management  
+# Service management
 systemctl status ollama-intel             # Service status (Linux)
 sc query ollama-intel                     # Service status (Windows)
 
@@ -1226,6 +1251,7 @@ intel_gpu_top                              # Intel GPU utilization
 ```
 
 **Model Management:**
+
 ```bash
 # Model operations
 ollama list                                # Show installed models
@@ -1241,26 +1267,27 @@ ollama run qwen2.5-coder:3b "def fibonacci(n):"  # Test generation
 
 **Standardized Test Results:**
 
-| Test Case | Model | Hardware | Latency | Throughput | Memory |
-|-----------|-------|----------|---------|------------|--------|
-| Code completion (50 tokens) | deepseek-coder:1.3b | Intel Iris Xe | 0.8s | 62 t/s | 0.8GB |
-| Function generation (200 tokens) | qwen2.5-coder:3b | Intel Iris Xe | 2.1s | 35 t/s | 1.9GB |
-| Code explanation (300 tokens) | qwen2.5-coder:3b | Intel Iris Xe | 3.2s | 31 t/s | 1.9GB |
-| Architecture analysis (500 tokens) | qwen2.5-coder:7b | Intel i7 CPU | 8.7s | 18 t/s | 4.1GB |
+| Test Case                          | Model               | Hardware      | Latency | Throughput | Memory |
+| ---------------------------------- | ------------------- | ------------- | ------- | ---------- | ------ |
+| Code completion (50 tokens)        | deepseek-coder:1.3b | Intel Iris Xe | 0.8s    | 62 t/s     | 0.8GB  |
+| Function generation (200 tokens)   | qwen2.5-coder:3b    | Intel Iris Xe | 2.1s    | 35 t/s     | 1.9GB  |
+| Code explanation (300 tokens)      | qwen2.5-coder:3b    | Intel Iris Xe | 3.2s    | 31 t/s     | 1.9GB  |
+| Architecture analysis (500 tokens) | qwen2.5-coder:7b    | Intel i7 CPU  | 8.7s    | 18 t/s     | 4.1GB  |
 
 **Comparison with Cloud Services:**
 
-| Service | Average Latency | Monthly Cost (50k requests) | Data Privacy |
-|---------|----------------|---------------------------|------------|
-| OpenAI GPT-4 | 1.2s | $1,500 | Limited |
-| GitHub Copilot | 0.9s | $1,200 | Limited |
-| Intel iGPU Local | 2.1s | $15* | Complete |
+| Service          | Average Latency | Monthly Cost (50k requests) | Data Privacy |
+| ---------------- | --------------- | --------------------------- | ------------ |
+| OpenAI GPT-4     | 1.2s            | $1,500                      | Limited      |
+| GitHub Copilot   | 0.9s            | $1,200                      | Limited      |
+| Intel iGPU Local | 2.1s            | $15\*                       | Complete     |
 
-*Electricity cost only
+\*Electricity cost only
 
 ### Additional Resources
 
 **Documentation:**
+
 - [Twinny Extension](https://marketplace.visualstudio.com/items?itemName=rjmacarthy.twinny)
 - [Twinny GitHub Repository](https://github.com/rjmacarthy/twinny)
 - [Intel oneAPI Toolkit](https://software.intel.com/content/www/us/en/develop/tools/oneapi.html)
@@ -1269,6 +1296,7 @@ ollama run qwen2.5-coder:3b "def fibonacci(n):"  # Test generation
 - [Ollama Documentation](https://ollama.ai/docs)
 
 **Community:**
+
 - [Twinny Discussions](https://github.com/rjmacarthy/twinny/discussions)
 - [Intel AI Developer Forum](https://community.intel.com/t5/Intel-DevCloud/ct-p/devcloud)
 - [Continue.dev Discord](https://discord.gg/NWtdYexhMs)
@@ -1276,18 +1304,20 @@ ollama run qwen2.5-coder:3b "def fibonacci(n):"  # Test generation
 - [Ollama Discord](https://discord.gg/ollama)
 
 **Training Resources:**
+
 - [Intel AI Optimization Course](https://www.intel.com/content/www/us/en/developer/learn/course-ai-optimization.html)
 - [Local AI Development Best Practices](https://huggingface.co/docs/transformers/local_ml)
 - [Enterprise AI Implementation Guide](https://www.intel.com/content/www/us/en/artificial-intelligence/enterprise-ai.html)
 
 **Recommended Models for Twinny:**
+
 - [deepseek-coder models](https://ollama.com/library/deepseek-coder) - Fast FIM completions
 - [qwen2.5-coder models](https://ollama.com/library/qwen2.5-coder) - Balanced chat assistance
 - [codellama models](https://ollama.com/library/codellama) - Alternative code generation
 
 ---
 
-*This guide represents the state-of-the-art in local AI development as of February 2026. For updates and corrections, please refer to the official Intel AI documentation and community resources.*
+_This guide represents the state-of-the-art in local AI development as of February 2026. For updates and corrections, please refer to the official Intel AI documentation and community resources._
 
 **Document Version:** 2.0 (Updated for Twinny primary usage)
 **Last Updated:** February 2026  

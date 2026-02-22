@@ -1,9 +1,11 @@
 # Troubleshooting 401 Authentication Errors
 
 ## Problem
+
 API endpoints return `401 Unauthorized` errors in production, particularly for routes like `/api/ai/conversations`.
 
 ## Root Cause
+
 The most common cause is **cookies not being sent with API requests** due to:
 
 1. **Cross-subdomain configuration**: Frontend on `app.aishacrm.com` calling API on `api.aishacrm.com`
@@ -13,6 +15,7 @@ The most common cause is **cookies not being sent with API requests** due to:
 ## Solution
 
 ### Recommended Approach: Same-Domain Setup
+
 Keep frontend and backend on the **same domain** using path-based routing:
 
 ```bash
@@ -22,6 +25,7 @@ FRONTEND_URL=https://app.aishacrm.com
 ```
 
 This is the recommended setup from `.env.production.recommended`. With this configuration:
+
 - Frontend: `https://app.aishacrm.com`
 - Backend API: `https://app.aishacrm.com/api/*`
 - Cookies work automatically (same domain)
@@ -29,6 +33,7 @@ This is the recommended setup from `.env.production.recommended`. With this conf
 - No cookie domain configuration needed
 
 ### Alternative: Cross-Subdomain Setup
+
 If you must use separate subdomains (`api.aishacrm.com` and `app.aishacrm.com`), set the cookie domain:
 
 ```bash
@@ -44,7 +49,9 @@ ALLOWED_ORIGINS=https://app.aishacrm.com,https://api.aishacrm.com
 ## Verification Steps
 
 ### 1. Check Environment Variables
+
 Verify your production environment has:
+
 ```bash
 # Check if VITE_AISHACRM_BACKEND_URL matches your actual setup
 echo $VITE_AISHACRM_BACKEND_URL
@@ -54,6 +61,7 @@ echo $COOKIE_DOMAIN
 ```
 
 ### 2. Check Browser Cookies
+
 1. Open browser DevTools (F12)
 2. Go to Application/Storage → Cookies
 3. Look for `aisha_access` cookie
@@ -62,6 +70,7 @@ echo $COOKIE_DOMAIN
    - Cross-subdomain setup: Should be `.aishacrm.com` (with dot)
 
 ### 3. Check Network Requests
+
 1. Open browser DevTools (F12) → Network tab
 2. Make a request to `/api/ai/conversations`
 3. Check the request headers:
@@ -69,7 +78,9 @@ echo $COOKIE_DOMAIN
    - If cookie is missing, authentication will fail with 401
 
 ### 4. Check Backend Logs
+
 When NODE_ENV=production and authentication fails, the backend logs:
+
 ```json
 {
   "level": "warn",
@@ -85,28 +96,35 @@ When NODE_ENV=production and authentication fails, the backend logs:
 ## Common Mistakes
 
 ### ❌ Wrong: api.aishacrm.com without COOKIE_DOMAIN
+
 ```bash
 VITE_AISHACRM_BACKEND_URL=https://api.aishacrm.com
 # Missing: COOKIE_DOMAIN=.aishacrm.com
 ```
+
 **Result**: Cookies won't be sent, 401 errors
 
 ### ❌ Wrong: COOKIE_DOMAIN without leading dot
+
 ```bash
 COOKIE_DOMAIN=aishacrm.com  # Missing the dot!
 ```
+
 **Result**: Cookies won't work as expected
 
 ### ❌ Wrong: Mismatched frontend URL
+
 ```bash
 VITE_AISHACRM_BACKEND_URL=https://api.aishacrm.com
 FRONTEND_URL=https://app.aishacrm.com
 ALLOWED_ORIGINS=https://app.aishacrm.com
 # Missing: COOKIE_DOMAIN=.aishacrm.com
 ```
+
 **Result**: CORS headers allow the request, but cookies aren't sent
 
 ### ✅ Correct: Same-domain setup (recommended)
+
 ```bash
 VITE_AISHACRM_BACKEND_URL=https://app.aishacrm.com/api
 FRONTEND_URL=https://app.aishacrm.com
@@ -115,6 +133,7 @@ ALLOWED_ORIGINS=https://app.aishacrm.com
 ```
 
 ### ✅ Correct: Cross-subdomain setup
+
 ```bash
 VITE_AISHACRM_BACKEND_URL=https://api.aishacrm.com
 FRONTEND_URL=https://app.aishacrm.com
@@ -125,11 +144,13 @@ COOKIE_DOMAIN=.aishacrm.com  # With leading dot!
 ## Development vs Production
 
 ### Development (NODE_ENV=development)
+
 - Authentication is **optional** for AI routes
 - Mock superadmin user is created if no authentication is present
 - Allows testing without login
 
 ### Production (NODE_ENV=production)
+
 - Authentication is **required** for AI routes
 - Returns 401 if no valid user session is found
 - Requires proper cookie/auth token configuration
@@ -137,6 +158,7 @@ COOKIE_DOMAIN=.aishacrm.com  # With leading dot!
 ## Testing the Fix
 
 ### In Production
+
 1. Update environment variables (add COOKIE_DOMAIN or fix BACKEND_URL)
 2. Restart backend: `docker-compose restart aishacrm-backend`
 3. Clear browser cookies and localStorage
@@ -144,6 +166,7 @@ COOKIE_DOMAIN=.aishacrm.com  # With leading dot!
 5. Test `/api/ai/conversations` endpoint
 
 ### Quick Test via curl
+
 ```bash
 # Login first to get cookie
 curl -c cookies.txt -X POST https://app.aishacrm.com/api/auth/login \
@@ -155,6 +178,7 @@ curl -b cookies.txt https://app.aishacrm.com/api/ai/conversations?tenant_id=YOUR
 ```
 
 ## Related Files
+
 - `.env.production.recommended` - Reference production configuration
 - `backend/routes/auth.js` - Cookie configuration (cookieOpts function)
 - `backend/middleware/authenticate.js` - Authentication middleware
@@ -162,6 +186,7 @@ curl -b cookies.txt https://app.aishacrm.com/api/ai/conversations?tenant_id=YOUR
 - `src/api/conversations.js` - Frontend API calls with credentials: 'include'
 
 ## Further Reading
+
 - [MDN: SameSite cookies](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite)
 - [MDN: Cookie Domain attribute](https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies#define_where_cookies_are_sent)
 - [CORS with credentials](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#requests_with_credentials)

@@ -9,6 +9,7 @@
 ### 1. Documents v2 Lifecycle - 500 COALESCE Error ✅
 
 **Problem:**
+
 - All CRUD operations failing with: `function pg_catalog.coalesce(documents, documents) does not exist`
 - Affected: POST (create), GET (read), PUT (update), DELETE (delete)
 - Status code: 500 Internal Server Error
@@ -18,6 +19,7 @@ The `person_profile_after_document()` trigger function used `COALESCE(NEW, OLD)`
 
 **Solution:**
 Applied migration 128 following the same pattern as migration 127 (activities fix):
+
 ```sql
 -- Before (broken):
 RETURN COALESCE(NEW, OLD);
@@ -31,17 +33,19 @@ END IF;
 ```
 
 **Files Changed:**
+
 - `backend/migrations/128_fix_person_profile_after_document.sql` - New migration
 
 **Migration Applied:** ✅ Via doppler + run-sql.js
 
 **Test Results:**
+
 ```
 Documents v2 CREATE: 201 Created ✅
 - Returns full document + aiContext
 - AI classification applied automatically
 
-Documents v2 GET: 200 OK ✅  
+Documents v2 GET: 200 OK ✅
 - Returns document with full aiContext enrichment
 - Suggestions and insights included
 
@@ -54,6 +58,7 @@ Documents v2 DELETE: Expected to work ✅
 ### 2. Dashboard Stats - Missing aiContext Enrichment ✅
 
 **Problem:**
+
 - `/api/reports/dashboard-stats` returning 200 OK
 - Response included basic counts but no AI enrichment
 - Missing insights, suggestions, health score
@@ -62,6 +67,7 @@ Documents v2 DELETE: Expected to work ✅
 Added `buildDashboardAiContext()` function with intelligent analysis:
 
 **Features Added:**
+
 1. **Health Score (0-100)**
    - Based on conversion ratios, activity levels, opportunity coverage
    - Adjusted by data quality indicators
@@ -89,9 +95,11 @@ Added `buildDashboardAiContext()` function with intelligent analysis:
    - Confidence scores (0.0-1.0)
 
 **Files Changed:**
+
 - `backend/routes/reports.js` - Added buildDashboardAiContext() function
 
 **Test Results:**
+
 ```json
 {
   "aiContext": {
@@ -132,11 +140,13 @@ Added `buildDashboardAiContext()` function with intelligent analysis:
 **Test Script:** `test-api-fixes.js`
 
 **Coverage:**
+
 - ✅ Documents v2 CREATE (POST)
 - ✅ Documents v2 GET (with aiContext)
 - ✅ Dashboard stats (with full aiContext)
 
 **Execution:**
+
 ```bash
 doppler run -- node test-api-fixes.js
 ```
@@ -148,11 +158,13 @@ doppler run -- node test-api-fixes.js
 ## Impact
 
 **Documents v2:**
+
 - Fully functional CRUD lifecycle restored
 - AI classification working on create/update
 - Error-free document management
 
 **Dashboard Stats:**
+
 - Rich AI insights for decision-making
 - Health scoring for pipeline monitoring
 - Actionable suggestions with priorities
@@ -163,12 +175,14 @@ doppler run -- node test-api-fixes.js
 ## Migration Notes
 
 **Database Changes:**
+
 - Migration 128 applied successfully via Doppler
 - Function `person_profile_after_document()` updated
 - Trigger `trg_person_profile_documents` verified attached
 - No data changes, only function logic
 
 **Deployment:**
+
 - Backend routes updated via docker cp
 - Container restarted successfully
 - No frontend changes required
@@ -193,4 +207,3 @@ doppler run -- node test-api-fixes.js
 - Migration 127: Fixed similar COALESCE issue for activities
 - Phase 11: 93% test pass rate achievement
 - Documents v2: Part of broader v2 API enhancement
-

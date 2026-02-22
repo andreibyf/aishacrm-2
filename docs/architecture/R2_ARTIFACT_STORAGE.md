@@ -11,6 +11,7 @@ AiSHA CRM now supports **Cloudflare R2-backed artifact storage** for large AI-ge
 - Large variable-sized AI outputs
 
 **Architecture:**
+
 - **Postgres:** Stores lightweight pointer metadata in `artifact_refs` table (tenant-scoped, RLS-enabled)
 - **R2:** Stores actual payload as immutable object (S3-compatible storage)
 - **Backend:** Routes requests, enforces tenant isolation, manages uploads/retrievals
@@ -69,6 +70,7 @@ cd backend && node run-migration.js 107_artifact_refs.sql
 ```
 
 This creates:
+
 - `artifact_refs` table with tenant_id, kind, r2_key, metadata
 - Indexes for fast lookups: `(tenant_id, kind, created_at)`, `(entity_type, entity_id)`
 - RLS policy matching existing backend patterns
@@ -80,6 +82,7 @@ curl http://localhost:4001/api/storage/r2/check | jq .
 ```
 
 **Expected Response (Configured):**
+
 ```json
 {
   "status": "ok",
@@ -97,6 +100,7 @@ curl http://localhost:4001/api/storage/r2/check | jq .
 ```
 
 **Expected Response (Not Configured):**
+
 ```json
 {
   "status": "ok",
@@ -119,6 +123,7 @@ GET /api/storage/r2/check
 ```
 
 **Example:**
+
 ```bash
 curl http://localhost:4001/api/storage/r2/check | jq .
 ```
@@ -142,6 +147,7 @@ x-tenant-id: <tenant-uuid>
 ```
 
 **Example:**
+
 ```bash
 curl -X POST http://localhost:4001/api/storage/artifacts \
   -H "Content-Type: application/json" \
@@ -161,6 +167,7 @@ curl -X POST http://localhost:4001/api/storage/artifacts \
 ```
 
 **Response (201):**
+
 ```json
 {
   "status": "ok",
@@ -189,12 +196,14 @@ x-tenant-id: <tenant-uuid>
 ```
 
 **Example:**
+
 ```bash
 curl "http://localhost:4001/api/storage/artifacts/artifact-uuid" \
   -H "x-tenant-id: a11dfb63-4b18-4eb8-872e-747af2e37c46" | jq .
 ```
 
 **Response (200):**
+
 ```json
 {
   "status": "ok",
@@ -214,6 +223,7 @@ curl "http://localhost:4001/api/storage/artifacts/artifact-uuid" \
 ```
 
 **Query Parameters:**
+
 - `raw=1` — Return raw bytes (sets `Content-Type` from artifact metadata)
 
 ---
@@ -263,9 +273,10 @@ curl "http://localhost:4001/api/storage/artifacts/artifact-uuid" \
 1. **Keep old data as-is** — No need to backfill
 2. **New writes go to R2** — Update AI routes to use artifact storage
 3. **Read path handles both:**
+
    ```javascript
    // Prefer R2, fallback to Postgres for legacy
-   const transcript = await getArtifact(conversationId) || conversation.transcript_json;
+   const transcript = (await getArtifact(conversationId)) || conversation.transcript_json;
    ```
 
 4. **Optional backfill** (for large tenants):
@@ -276,11 +287,11 @@ curl "http://localhost:4001/api/storage/artifacts/artifact-uuid" \
        kind: 'chat_transcript',
        entity_type: 'conversation',
        entity_id: conv.id,
-       payload: conv.transcript_json
+       payload: conv.transcript_json,
      });
-     await db.update('conversations', conv.id, { 
+     await db.update('conversations', conv.id, {
        transcript_json: null, // Clear Postgres blob
-       artifact_id: artifact.id // Link to R2
+       artifact_id: artifact.id, // Link to R2
      });
    }
    ```
@@ -297,17 +308,20 @@ curl "http://localhost:4001/api/storage/artifacts/artifact-uuid" \
 - **Egress:** **FREE** (no bandwidth charges)
 
 **Comparison to Postgres JSON:**
+
 - Supabase Pro: $25/mo for 8GB database
 - Large AI transcripts (10MB each) → 800 conversations max before upgrade
 - R2: 1000 x 10MB = 10GB = **$0.15/month** + $0.005 in operations
 - **Savings:** ~$25/month per 10GB of AI data
 
 **When to use R2:**
+
 - Payloads > 100KB (chat transcripts, traces, large documents)
 - Variable/unpredictable growth (AI output sizes)
 - Compliance/archival (immutable storage)
 
 **When to use Postgres:**
+
 - Small metadata (<10KB)
 - Frequently updated data
 - Transactional integrity required
@@ -325,6 +339,7 @@ The AI chat system automatically offloads large metadata to R2 using a **two-pha
    - Keeps minimal envelope (model, iterations, usage, entity IDs)
 
 **Threshold Configuration:**
+
 ```bash
 # Default: 8KB (8000 bytes) - tuned for Postgres TOAST efficiency
 AI_ARTIFACT_META_THRESHOLD_BYTES=8000
@@ -348,11 +363,13 @@ docker exec aishacrm-backend sh -c 'printenv | grep R2_'
 ### "Bucket not found" / HeadBucket fails
 
 **Causes:**
+
 1. Bucket name mismatch: `R2_BUCKET` must match Cloudflare dashboard
 2. Wrong Account ID in endpoint URL
 3. API token doesn't have bucket access
 
 **Fix:**
+
 ```bash
 # Verify bucket exists
 curl "https://api.cloudflare.com/client/v4/accounts/$R2_ACCOUNT_ID/r2/buckets" \
@@ -362,10 +379,12 @@ curl "https://api.cloudflare.com/client/v4/accounts/$R2_ACCOUNT_ID/r2/buckets" \
 ### "Artifact not found" for valid UUID
 
 **Causes:**
+
 1. Tenant isolation: artifact belongs to different tenant
 2. Migration not applied: `artifact_refs` table missing
 
 **Fix:**
+
 ```bash
 # Check table exists
 psql $DATABASE_URL -c "\d artifact_refs"
@@ -377,6 +396,7 @@ psql $DATABASE_URL -c "SELECT id, tenant_id FROM artifact_refs WHERE id = 'artif
 ### Tests fail with "missing migration"
 
 **Fix:** Run migration before tests:
+
 ```bash
 cd backend
 node apply-single-sql.js migrations/107_artifact_refs.sql
@@ -402,6 +422,7 @@ node apply-single-sql.js migrations/107_artifact_refs.sql
 **Checklist:**
 
 1. **Secrets Management:**
+
    ```bash
    doppler secrets set R2_ACCOUNT_ID <value>
    doppler secrets set R2_ACCESS_KEY_ID <value>
@@ -410,6 +431,7 @@ node apply-single-sql.js migrations/107_artifact_refs.sql
    ```
 
 2. **Run Migration:**
+
    ```bash
    # Supabase SQL Editor
    # Paste backend/migrations/107_artifact_refs.sql
@@ -417,6 +439,7 @@ node apply-single-sql.js migrations/107_artifact_refs.sql
    ```
 
 3. **Verify Health:**
+
    ```bash
    curl https://api.aishacrm.com/api/storage/r2/check
    # Expect: { "r2": { "ok": true } }

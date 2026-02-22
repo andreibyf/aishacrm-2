@@ -39,11 +39,13 @@
 ## What is Braid?
 
 Braid is **NOT**:
+
 - ❌ A general-purpose programming language
 - ❌ A replacement for SQL or ORM frameworks
 - ❌ A complete application framework
 
 Braid **IS**:
+
 - ✅ A **constraint-based DSL** for database operations
 - ✅ A **safety layer** between AI agents and production data
 - ✅ A **tool definition language** with TypeScript-like syntax
@@ -84,12 +86,12 @@ Braid **IS**:
 
 **Traditional Approaches Fail for AI-Database Integration:**
 
-| Approach | Problem | Example |
-|----------|---------|---------|
-| **Raw SQL** | AI can hallucinate destructive queries | `DELETE FROM accounts WHERE 1=1;` |
-| **ORM Wrappers** | Leaky abstractions, no tenant enforcement | `Account.findAll()` returns cross-tenant data |
-| **JSON Schemas** | Verbose, hard to maintain at scale | 1200+ lines for 60 tools |
-| **Function Calling** | No type safety, runtime errors | `getLeads({ status: "oppen" })` typo not caught |
+| Approach             | Problem                                   | Example                                         |
+| -------------------- | ----------------------------------------- | ----------------------------------------------- |
+| **Raw SQL**          | AI can hallucinate destructive queries    | `DELETE FROM accounts WHERE 1=1;`               |
+| **ORM Wrappers**     | Leaky abstractions, no tenant enforcement | `Account.findAll()` returns cross-tenant data   |
+| **JSON Schemas**     | Verbose, hard to maintain at scale        | 1200+ lines for 60 tools                        |
+| **Function Calling** | No type safety, runtime errors            | `getLeads({ status: "oppen" })` typo not caught |
 
 ### The Braid Solution
 
@@ -114,6 +116,7 @@ fn searchLeads(
 ```
 
 **Guarantees:**
+
 - **Typed parameters**: Function signature enforces parameter names and types
 - **Tenant isolation**: `tenant` is always the first parameter, enforced by policy
 - **Effect tracking**: `!net` declares this function makes HTTP calls
@@ -154,6 +157,7 @@ fn searchLeads(
 ```
 
 **Why it matters:**
+
 - AI models hallucinate ~15-30% of the time
 - Production databases cannot afford exploratory errors
 - Constraints reduce attack surface by 95%+
@@ -199,6 +203,7 @@ fn convertLeadToAccount(...) -> Result<Object, CRMError> !net {
 ```
 
 **Benefits:**
+
 - Each tool has single responsibility
 - Easier to test in isolation
 - Application layer controls transaction boundaries
@@ -227,7 +232,8 @@ fn searchLeads(
 **Alternative Considered:** Embed SQL directly in .braid files
 
 **Why We Chose HTTP API Calls:**
-- **Separation of concerns:** Braid defines *what* to do, backend routes define *how*
+
+- **Separation of concerns:** Braid defines _what_ to do, backend routes define _how_
 - **RLS enforcement:** Backend routes use Supabase RLS, not Braid-level SQL
 - **Reusability:** Same API endpoints serve frontend, Braid tools, and external integrations
 - **Testability:** API routes are independently testable with standard HTTP testing tools
@@ -255,9 +261,9 @@ fn getLeadConversionReport(
 
 **Why Both:**
 
-| Mode | Use Case | Latency | Throughput |
-|------|----------|---------|------------|
-| **In-Process** | AI chat, real-time UI | <50ms | Low (10-50 req/s) |
+| Mode           | Use Case                          | Latency   | Throughput                    |
+| -------------- | --------------------------------- | --------- | ----------------------------- |
+| **In-Process** | AI chat, real-time UI             | <50ms     | Low (10-50 req/s)             |
 | **MCP Server** | Workflows, bulk ops, integrations | 100-200ms | High (1000+ req/s with queue) |
 
 **Example:** Chat uses in-process, n8n automation uses MCP
@@ -267,6 +273,7 @@ fn getLeadConversionReport(
 **Alternative Considered:** Infer from auth context
 
 **Why Explicit `tenant_id`:**
+
 - **Defense in Depth:** Even if auth context fails, query still scoped
 - **Audit Trail:** Every log entry shows which tenant
 - **Multi-Tenant Testing:** Easy to test cross-tenant isolation
@@ -301,6 +308,7 @@ fn deleteLead(tenant: String, lead_id: String) -> Result<Boolean, CRMError> !net
 ```
 
 **Policy:** Delete tools exist but:
+
 - Require admin role in backend middleware
 - Log to audit table before execution
 - AI agents use archive tools by default
@@ -342,27 +350,27 @@ fn functionName(
 
 ### Supported Types
 
-| Braid Type | JavaScript Type | Usage |
-|------------|-----------------|-------|
-| `String` | `string` | Names, IDs, URLs, dates as ISO strings |
-| `Number` | `number` | Counts, amounts, limits |
-| `Boolean` | `boolean` | Flags (active_only, confirmed) |
-| `Object` | `object` | Freeform update payloads, metadata |
-| `Array` | `Array` | Lists of records |
-| `JSONB` | `object` | Structured metadata fields |
-| `Result<T, E>` | `{ tag: 'Ok', value: T } \| { tag: 'Err', error: E }` | All fallible operations |
-| `Option<T>` | `{ tag: 'Some', value: T } \| { tag: 'None' }` | Optional values |
+| Braid Type     | JavaScript Type                                       | Usage                                  |
+| -------------- | ----------------------------------------------------- | -------------------------------------- |
+| `String`       | `string`                                              | Names, IDs, URLs, dates as ISO strings |
+| `Number`       | `number`                                              | Counts, amounts, limits                |
+| `Boolean`      | `boolean`                                             | Flags (active_only, confirmed)         |
+| `Object`       | `object`                                              | Freeform update payloads, metadata     |
+| `Array`        | `Array`                                               | Lists of records                       |
+| `JSONB`        | `object`                                              | Structured metadata fields             |
+| `Result<T, E>` | `{ tag: 'Ok', value: T } \| { tag: 'Err', error: E }` | All fallible operations                |
+| `Option<T>`    | `{ tag: 'Some', value: T } \| { tag: 'None' }`        | Optional values                        |
 
 ### Effect Declarations
 
 Effects are declared on functions to track what side effects they perform.
 The runtime enforces these via `cap()` checks against the execution policy.
 
-| Effect | Meaning | Example |
-|--------|---------|---------|
-| `!net` | HTTP/network access | API calls to backend |
-| `!clock` | Time access | `clock.now()` for timestamps |
-| `!fs` | File system access | Document operations |
+| Effect   | Meaning             | Example                      |
+| -------- | ------------------- | ---------------------------- |
+| `!net`   | HTTP/network access | API calls to backend         |
+| `!clock` | Time access         | `clock.now()` for timestamps |
+| `!fs`    | File system access  | Document operations          |
 
 ```braid
 // Pure function — no effects
@@ -388,18 +396,19 @@ The spec defines structured `CRMError` variants. In practice, `.braid` files
 currently return `APIError` (with HTTP status codes) and `NetworkError`. The
 backend `summarizeToolResult` function handles both patterns:
 
-| Error Tag | Fields | Produced By |
-|-----------|--------|-------------|
-| `APIError` | `url`, `code`, `operation`, `entity?`, `id?`, `query?` | All .braid HTTP error handlers |
-| `NetworkError` | `url`, `code` | Catch-all for unexpected failures |
-| `NotFound` | `entity`, `id` | Spec-defined (future use) |
-| `ValidationError` | `field`, `message` | Spec-defined (future use) |
-| `PermissionDenied` | `operation`, `reason` | Spec-defined (future use) |
-| `DatabaseError` | `query`, `message` | Spec-defined (future use) |
-| `PolicyViolation` | `effect`, `policy` | Runtime cap() enforcement |
+| Error Tag          | Fields                                                 | Produced By                       |
+| ------------------ | ------------------------------------------------------ | --------------------------------- |
+| `APIError`         | `url`, `code`, `operation`, `entity?`, `id?`, `query?` | All .braid HTTP error handlers    |
+| `NetworkError`     | `url`, `code`                                          | Catch-all for unexpected failures |
+| `NotFound`         | `entity`, `id`                                         | Spec-defined (future use)         |
+| `ValidationError`  | `field`, `message`                                     | Spec-defined (future use)         |
+| `PermissionDenied` | `operation`, `reason`                                  | Spec-defined (future use)         |
+| `DatabaseError`    | `query`, `message`                                     | Spec-defined (future use)         |
+| `PolicyViolation`  | `effect`, `policy`                                     | Runtime cap() enforcement         |
 
 The `APIError` tag acts as a catch-all that maps HTTP status codes to the
 appropriate semantic error type at the backend layer:
+
 - `400` → ValidationError semantics
 - `401`/`403` → PermissionDenied semantics
 - `404` → NotFound semantics
@@ -444,6 +453,7 @@ fn searchLeads(
 **Complete breakdown by file:**
 
 #### Accounts Management (`accounts.braid`) - 7 tools
+
 - `createAccount(tenant_id, name, industry, revenue, ...)`
 - `updateAccount(tenant_id, account_id, updates)`
 - `getAccountDetails(tenant_id, account_id)`
@@ -453,6 +463,7 @@ fn searchLeads(
 - `deleteAccount(tenant_id, account_id)`
 
 #### Activities & Tasks (`activities.braid`) - 9 tools
+
 - `createActivity(tenant_id, entity_type, entity_id, type, subject, ...)`
 - `updateActivity(tenant_id, activity_id, updates)`
 - `markActivityComplete(tenant_id, activity_id, completion_notes)`
@@ -464,6 +475,7 @@ fn searchLeads(
 - `searchActivities(tenant_id, search_text, activity_type, limit)`
 
 #### BizDev Sources (`bizdev-sources.braid`) - 8 tools
+
 - `createBizDevSource(tenant_id, name, source, notes, ...)`
 - `updateBizDevSource(tenant_id, source_id, updates)`
 - `getBizDevSourceDetails(tenant_id, source_id)`
@@ -474,6 +486,7 @@ fn searchLeads(
 - `archiveBizDevSources(tenant_id, source_ids[])`
 
 #### Contacts (`contacts.braid`) - 9 tools
+
 - `createContact(tenant_id, first_name, last_name, email, account_id, ...)`
 - `updateContact(tenant_id, contact_id, updates)`
 - `listContactsForAccount(tenant_id, account_id, limit)`
@@ -485,6 +498,7 @@ fn searchLeads(
 - `getContactDetails(tenant_id, contact_id)`
 
 #### Documents (`documents.braid`) - 6 tools
+
 - `listDocuments(tenant_id, entity_type, entity_id, limit)` - List documents for entity
 - `getDocumentDetails(tenant_id, document_id)` - Get document metadata
 - `createDocument(tenant_id, name, entity_type, entity_id, file_url, ...)`
@@ -494,6 +508,7 @@ fn searchLeads(
 - `searchDocuments(tenant_id, search_text, entity_type, limit)`
 
 #### Employees (`employees.braid`) - 7 tools
+
 - `listEmployees(tenant_id, role, department, active_only)` - List team members
 - `getEmployeeDetails(tenant_id, employee_id)` - Get employee profile
 - `createEmployee(tenant_id, first_name, last_name, email, role, ...)`
@@ -503,6 +518,7 @@ fn searchLeads(
 - `getEmployeeAssignments(tenant_id, employee_id)` - Get assigned tasks/leads
 
 #### Leads (`leads.braid`) - 9 tools
+
 - `createLead(tenant_id, first_name, last_name, company, source, ...)`
 - `deleteLead(tenant_id, lead_id)`
 - `qualifyLead(tenant_id, lead_id, qualification_notes)`
@@ -514,6 +530,7 @@ fn searchLeads(
 - `searchLeadsByStatus(tenant_id, status, limit)`
 
 #### Lifecycle Operations (`lifecycle.braid`) - 5 tools
+
 - `advanceToLead(tenant_id, bizdev_source_id)` - BizDev → Lead
 - `advanceToQualified(tenant_id, lead_id)` - Mark lead as qualified
 - `advanceToAccount(tenant_id, lead_id)` - Lead → Contact + Account + Opportunity
@@ -521,10 +538,12 @@ fn searchLeads(
 - `fullLifecycleAdvance(tenant_id, entity_type, entity_id)` - Auto-advance to next stage
 
 #### Navigation (`navigation.braid`) - 2 tools
+
 - `navigateTo(page, entity_id?)` - Navigate to CRM pages
 - `getCurrentPage()` - Get current page context
 
 #### Notes (`notes.braid`) - 6 tools
+
 - `createNote(tenant_id, entity_type, entity_id, content, ...)`
 - `updateNote(tenant_id, note_id, content)`
 - `searchNotes(tenant_id, search_text, entity_type, entity_id)`
@@ -533,6 +552,7 @@ fn searchLeads(
 - `deleteNote(tenant_id, note_id)`
 
 #### Opportunities (`opportunities.braid`) - 9 tools
+
 - `createOpportunity(tenant_id, name, account_id, value, stage, ...)`
 - `deleteOpportunity(tenant_id, opportunity_id)`
 - `updateOpportunity(tenant_id, opportunity_id, updates)`
@@ -544,6 +564,7 @@ fn searchLeads(
 - `markOpportunityWon(tenant_id, opportunity_id, close_date, actual_value)`
 
 #### Reports & Analytics (`reports.braid`) - 8 tools
+
 - `getDashboardBundle(tenant_id, time_range, include_forecasts)` - **⚡ Primary metrics tool**
 - `getHealthSummary(tenant_id)` - CRM health score
 - `getSalesReport(tenant_id, start_date, end_date)` - Sales performance
@@ -554,13 +575,16 @@ fn searchLeads(
 - `clearReportCache(tenant_id, report_type)` - Force refresh
 
 #### Snapshot (`snapshot.braid`) - 2 tools
+
 - `fetchSnapshot(tenant_id, scope, limit)` - Complete CRM overview
 - `probe()` - System health check
 
 #### AI Suggestions (`suggest-next-actions.braid`) - 1 tool
+
 - `suggestNextActions(tenant_id, entity_type, entity_id, limit)` - **RAG-powered** intelligent next steps
 
 #### Suggestions (Legacy) (`suggestions.braid`) - 7 tools
+
 - `listSuggestions(tenant_id, entity_type, entity_id)`
 - `getSuggestionDetails(tenant_id, suggestion_id)`
 - `getSuggestionStats(tenant_id, entity_type, entity_id)`
@@ -570,12 +594,14 @@ fn searchLeads(
 - `triggerSuggestionGeneration(tenant_id, entity_type, entity_id)`
 
 #### Telephony (AI Calling) (`telephony.braid`) - 4 tools
+
 - `initiateCall(tenant_id, to_phone, from_phone, entity_type, entity_id)`
 - `callContact(tenant_id, contact_id, call_type)` - Quick call to contact
 - `checkCallingProvider(tenant_id)` - Get configured provider (Bland, Thoughtly, etc.)
 - `getCallingAgents(tenant_id, provider)` - List available AI agents
 
 #### Users & Permissions (`users.braid`) - 9 tools
+
 - `listUsers(tenant_id, role, active_only)` - List users (admin only)
 - `getUserDetails(tenant_id, user_id)` - Get user profile
 - `getCurrentUserProfile(tenant_id)` - Get current user
@@ -587,17 +613,20 @@ fn searchLeads(
 - `inviteUser(tenant_id, email, role, send_invite_email)`
 
 #### Web Research (`web-research.braid`) - 3 tools
+
 - `searchWeb(query, num_results)` - External web search
 - `fetchWebPage(url)` - Scrape web page content
 - `lookupCompanyInfo(company_name)` - External company data lookup
 
 #### Workflow Delegation (`workflow-delegation.braid`) - 4 tools
+
 - `triggerWorkflowByName(tenant_id, workflow_name, context, entity_type, entity_id)` - Delegate to named workflow
 - `getWorkflowProgress(tenant_id, execution_id)` - Check workflow status
 - `listActiveWorkflows(tenant_id)` - List running workflows
 - `getWorkflowNotes(tenant_id, execution_id)` - Get workflow execution notes
 
 #### Workflows (`workflows.braid`) - 3 tools
+
 - `listWorkflowTemplates(tenant_id)` - List automation templates
 - `getWorkflowTemplate(tenant_id, template_id)` - Get template definition
 - `instantiateWorkflowTemplate(tenant_id, template_id, config)` - Create workflow from template
@@ -624,11 +653,12 @@ import { executeToolInProcess } from './braidIntegration-v2.js';
 const result = await executeToolInProcess('searchLeads', {
   tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
   status: 'qualified',
-  limit: 10
+  limit: 10,
 });
 ```
 
 **Characteristics:**
+
 - Low latency (<50ms)
 - Synchronous execution
 - Used for: AiSHA chat interface, dashboard widgets
@@ -644,6 +674,7 @@ docker compose -f braid-mcp-node-server/docker-compose.yml up -d
 ```
 
 **Characteristics:**
+
 - HTTP-based (REST API)
 - Redis job queue for concurrency
 - Used for: External integrations, bulk operations, n8n workflows
@@ -696,8 +727,8 @@ import { getBraidSystemPrompt } from './braidIntegration-v2.js';
 
 const systemPrompt = getBraidSystemPrompt({
   tenantId: 'a11dfb63-...',
-  entityLabels: customLabels,      // Optional tenant-specific terminology
-  tenantContext: additionalContext  // Optional business rules
+  entityLabels: customLabels, // Optional tenant-specific terminology
+  tenantContext: additionalContext, // Optional business rules
 });
 
 // Example output:
@@ -708,7 +739,7 @@ You have access to 60+ tools for managing:
 - ...
 
 Current date: December 12, 2025
-Always use tenant_id: a11dfb63-4b18-4eb8-872e-747af2e37c46 in all tool calls.`
+Always use tenant_id: a11dfb63-4b18-4eb8-872e-747af2e37c46 in all tool calls.`;
 ```
 
 ---
@@ -724,19 +755,16 @@ import { executeToolInProcess, getBraidSystemPrompt } from '../lib/braidIntegrat
 
 app.post('/api/ai/chat', async (req, res) => {
   const { messages, tenant_id } = req.body;
-  
+
   // Build system prompt with Braid context
   const systemPrompt = getBraidSystemPrompt({ tenantId: tenant_id });
-  
+
   // Call LLM with tools
   const response = await llm.chat({
-    messages: [
-      { role: 'system', content: systemPrompt },
-      ...messages
-    ],
-    tools: braidToolRegistry
+    messages: [{ role: 'system', content: systemPrompt }, ...messages],
+    tools: braidToolRegistry,
   });
-  
+
   // Execute tool calls
   if (response.tool_calls) {
     for (const call of response.tool_calls) {
@@ -759,7 +787,7 @@ case 'braid_tool':
     tenant_id: context.tenant_id,
     ...node.config.parameters
   };
-  
+
   const result = await executeToolInProcess(toolName, toolParams);
   context.variables[node.id] = result;
   break;
@@ -778,9 +806,9 @@ async function checkStagnantLeads(tenantId) {
     tenant_id: tenantId,
     status: 'qualified',
     created_before: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-    limit: 50
+    limit: 50,
   });
-  
+
   // Process results...
 }
 ```
@@ -795,7 +823,7 @@ async function checkStagnantLeads(tenantId) {
 
 **1. AI-Powered CRM Operations**
 
-User asks: *"Show me all qualified leads from Seattle created last week"*
+User asks: _"Show me all qualified leads from Seattle created last week"_
 
 ```javascript
 const leads = await executeToolInProcess('searchLeads', {
@@ -803,18 +831,19 @@ const leads = await executeToolInProcess('searchLeads', {
   status: 'qualified',
   city: 'Seattle',
   created_after: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-  limit: 20
+  limit: 20,
 });
 ```
 
 **Why Braid wins:**
+
 - Type-safe parameters (status validated at compile-time)
 - Tenant isolation guaranteed
 - Single tool call instead of multi-step ORM query
 
 **2. Workflow Automation**
 
-*Workflow: "When lead is qualified, create follow-up task for sales rep"*
+_Workflow: "When lead is qualified, create follow-up task for sales rep"_
 
 ```javascript
 // Workflow node execution
@@ -828,19 +857,20 @@ if (lead.status === 'qualified') {
     type: 'call',
     subject: `Follow up with ${lead.first_name}`,
     assigned_to: lead.owner_id,
-    due_date: new Date(Date.now() + 24 * 60 * 60 * 1000)
+    due_date: new Date(Date.now() + 24 * 60 * 60 * 1000),
   });
 }
 ```
 
 **Why Braid wins:**
+
 - Atomic operations (each tool is single responsibility)
 - Error handling per step
 - Auditable (each tool call logged)
 
 **3. Scheduled Jobs & Background Workers**
 
-*Task: "Every day at 9am, check for stagnant leads and notify sales team"*
+_Task: "Every day at 9am, check for stagnant leads and notify sales team"_
 
 ```javascript
 // backend/lib/scheduledJobs.js
@@ -848,15 +878,15 @@ import { executeToolInProcess } from './braidIntegration-v2.js';
 
 cron.schedule('0 9 * * *', async () => {
   const tenants = await getTenantList();
-  
+
   for (const tenant of tenants) {
     const stagnantLeads = await executeToolInProcess('searchLeads', {
       tenant_id: tenant.id,
       status: 'new',
       created_before: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-      limit: 50
+      limit: 50,
     });
-    
+
     if (stagnantLeads.length > 0) {
       await sendSlackNotification(tenant, stagnantLeads);
     }
@@ -883,6 +913,7 @@ POST http://localhost:8000/tools/execute
 ```
 
 **Why Braid wins:**
+
 - Standardized API across all CRM operations
 - Built-in tenant isolation (integration can't leak data)
 - Versioned tool definitions (breaking changes detected)
@@ -929,28 +960,30 @@ fn getAccountFullDetails(tenant: String, account_id: String) -> Result<Object, C
 
 #### Latency Benchmarks
 
-| Operation | In-Process | MCP Server | Raw SQL (psql) |
-|-----------|-----------|------------|----------------|
-| Simple SELECT (10 rows) | 15-30ms | 80-120ms | 5-10ms |
-| Complex JOIN (100 rows) | 50-100ms | 150-250ms | 30-60ms |
-| INSERT | 20-40ms | 90-150ms | 10-20ms |
-| Batch INSERT (100 rows) | 200-400ms | 500-800ms | 100-200ms |
+| Operation               | In-Process | MCP Server | Raw SQL (psql) |
+| ----------------------- | ---------- | ---------- | -------------- |
+| Simple SELECT (10 rows) | 15-30ms    | 80-120ms   | 5-10ms         |
+| Complex JOIN (100 rows) | 50-100ms   | 150-250ms  | 30-60ms        |
+| INSERT                  | 20-40ms    | 90-150ms   | 10-20ms        |
+| Batch INSERT (100 rows) | 200-400ms  | 500-800ms  | 100-200ms      |
 
 **Overhead Breakdown:**
+
 - In-Process: ~10ms (tool lookup + param validation)
 - MCP Server: ~70ms (HTTP + Redis queue + tool lookup)
 - Network: ~5-10ms (client → backend)
 
 #### Throughput Limits
 
-| Deployment | Max Throughput | Bottleneck |
-|-----------|----------------|------------|
-| Single backend (in-process) | 50-100 req/s | Node.js event loop |
-| MCP server (1 worker) | 200-400 req/s | Redis queue processing |
-| MCP server (5 workers) | 1000-2000 req/s | Database connection pool |
-| MCP server (10 workers) | 2000-5000 req/s | PostgreSQL max connections |
+| Deployment                  | Max Throughput  | Bottleneck                 |
+| --------------------------- | --------------- | -------------------------- |
+| Single backend (in-process) | 50-100 req/s    | Node.js event loop         |
+| MCP server (1 worker)       | 200-400 req/s   | Redis queue processing     |
+| MCP server (5 workers)      | 1000-2000 req/s | Database connection pool   |
+| MCP server (10 workers)     | 2000-5000 req/s | PostgreSQL max connections |
 
 **Optimization Tips:**
+
 - Use in-process for <100 req/s workloads
 - Use MCP server for >200 req/s or external integrations
 - Scale MCP workers horizontally for >1000 req/s
@@ -984,9 +1017,9 @@ async function handleEscalation({ tenant_id, entity_type, entity_id, reason }) {
     type: 'call',
     subject: `Follow up: ${reason}`,
     due_date: new Date(Date.now() + 24 * 60 * 60 * 1000), // Tomorrow
-    priority: 'high'
+    priority: 'high',
   });
-  
+
   return activity;
 }
 ```
@@ -1005,7 +1038,7 @@ async function transitionState({ tenant_id, entity_id, from, to, reason }) {
     previous_state: from,
     current_state: to,
     transition_reason: reason,
-    transitioned_at: new Date()
+    transitioned_at: new Date(),
   });
 }
 ```
@@ -1032,6 +1065,7 @@ fn searchLeads(
 ```
 
 **What this prevents:**
+
 - ❌ Cross-tenant data leakage (tenant_id in every request)
 - ❌ Accidental unscoped queries (backend API enforces tenant_id)
 - ❌ Tenant ID spoofing (normalizeToolArgs overrides AI-provided tenant with authorized context)
@@ -1048,6 +1082,7 @@ CREATE POLICY tenant_isolation ON leads
 ```
 
 **Defense in depth:**
+
 1. **Application layer (Braid)**: `tenant_id` required parameter
 2. **Query layer**: `WHERE tenant_id = $tenant_id` in SQL
 3. **Database layer (RLS)**: Policy enforcement (if Braid bypassed)
@@ -1060,35 +1095,41 @@ CREATE POLICY tenant_isolation ON leads
 // backend/lib/braidIntegration-v2.js
 async function executeToolInProcess(toolName, params) {
   const startTime = Date.now();
-  
+
   try {
     const result = await executeTool(toolName, params);
-    
+
     // Log success
-    await pgPool.query(`
+    await pgPool.query(
+      `
       INSERT INTO system_logs (level, category, message, metadata)
       VALUES ('info', 'braid_tool', $1, $2)
-    `, [
-      `Executed ${toolName}`,
-      JSON.stringify({ 
-        tool: toolName, 
-        tenant_id: params.tenant_id,
-        duration: Date.now() - startTime,
-        result_count: Array.isArray(result) ? result.length : 1
-      })
-    ]);
-    
+    `,
+      [
+        `Executed ${toolName}`,
+        JSON.stringify({
+          tool: toolName,
+          tenant_id: params.tenant_id,
+          duration: Date.now() - startTime,
+          result_count: Array.isArray(result) ? result.length : 1,
+        }),
+      ],
+    );
+
     return result;
   } catch (error) {
     // Log failure
-    await pgPool.query(`
+    await pgPool.query(
+      `
       INSERT INTO system_logs (level, category, message, metadata)
       VALUES ('error', 'braid_tool', $1, $2)
-    `, [
-      `Failed ${toolName}: ${error.message}`,
-      JSON.stringify({ tool: toolName, tenant_id: params.tenant_id, error: error.stack })
-    ]);
-    
+    `,
+      [
+        `Failed ${toolName}: ${error.message}`,
+        JSON.stringify({ tool: toolName, tenant_id: params.tenant_id, error: error.stack }),
+      ],
+    );
+
     throw error;
   }
 }
@@ -1097,7 +1138,7 @@ async function executeToolInProcess(toolName, params) {
 **Query audit logs:**
 
 ```sql
-SELECT 
+SELECT
   created_at,
   message,
   metadata->>'tool' as tool_name,
@@ -1129,22 +1170,22 @@ async function convertLeadToAccountWithOpportunity(tenantId, leadId, opportunity
   // Step 1: Get lead details
   const lead = await executeToolInProcess('getLeadDetails', {
     tenant_id: tenantId,
-    lead_id: leadId
+    lead_id: leadId,
   });
-  
+
   if (lead.status !== 'qualified') {
     throw new Error('Lead must be qualified before conversion');
   }
-  
+
   // Step 2: Create account
   const account = await executeToolInProcess('createAccount', {
     tenant_id: tenantId,
     name: lead.company,
     industry: lead.industry,
     source: lead.source,
-    metadata: { converted_from_lead_id: leadId }
+    metadata: { converted_from_lead_id: leadId },
   });
-  
+
   // Step 3: Create contact
   const contact = await executeToolInProcess('createContact', {
     tenant_id: tenantId,
@@ -1152,9 +1193,9 @@ async function convertLeadToAccountWithOpportunity(tenantId, leadId, opportunity
     first_name: lead.first_name,
     last_name: lead.last_name,
     email: lead.email,
-    phone: lead.phone
+    phone: lead.phone,
   });
-  
+
   // Step 4: Create opportunity
   const opportunity = await executeToolInProcess('createOpportunity', {
     tenant_id: tenantId,
@@ -1162,20 +1203,21 @@ async function convertLeadToAccountWithOpportunity(tenantId, leadId, opportunity
     name: `${lead.company} - Initial Deal`,
     value: opportunityValue,
     stage: 'discovery',
-    source: lead.source
+    source: lead.source,
   });
-  
+
   // Step 5: Archive lead
   await executeToolInProcess('archiveLead', {
     tenant_id: tenantId,
-    lead_id: leadId
+    lead_id: leadId,
   });
-  
+
   return { account, contact, opportunity };
 }
 ```
 
 **Benefits:**
+
 - Each step is atomic and testable
 - Rollback possible at any point
 - Audit log shows exact sequence
@@ -1213,11 +1255,11 @@ const ENTITY_TOOLS = {
 
 async function performOperation(entityType, operation, params) {
   const toolName = ENTITY_TOOLS[entityType]?.[operation];
-  
+
   if (!toolName) {
     throw new Error(`Unknown operation ${operation} for entity ${entityType}`);
   }
-  
+
   return executeToolInProcess(toolName, params);
 }
 
@@ -1238,30 +1280,30 @@ Need to process 100+ records without failing entire batch on single error
 async function batchCreateLeads(tenantId, leadsData) {
   const results = [];
   const errors = [];
-  
+
   // Process in chunks of 10 (avoid overwhelming DB)
   const chunks = chunkArray(leadsData, 10);
-  
+
   for (const chunk of chunks) {
     const promises = chunk.map(async (leadData, index) => {
       try {
         const lead = await executeToolInProcess('createLead', {
           tenant_id: tenantId,
-          ...leadData
+          ...leadData,
         });
         return { success: true, lead, index };
       } catch (error) {
-        return { 
-          success: false, 
-          error: error.message, 
-          data: leadData, 
-          index 
+        return {
+          success: false,
+          error: error.message,
+          data: leadData,
+          index,
         };
       }
     });
-    
+
     const chunkResults = await Promise.all(promises);
-    
+
     for (const result of chunkResults) {
       if (result.success) {
         results.push(result.lead);
@@ -1270,7 +1312,7 @@ async function batchCreateLeads(tenantId, leadsData) {
       }
     }
   }
-  
+
   return {
     created: results,
     failed: errors,
@@ -1278,8 +1320,8 @@ async function batchCreateLeads(tenantId, leadsData) {
       total: leadsData.length,
       succeeded: results.length,
       failed: errors.length,
-      successRate: (results.length / leadsData.length * 100).toFixed(2) + '%'
-    }
+      successRate: ((results.length / leadsData.length) * 100).toFixed(2) + '%',
+    },
   };
 }
 ```
@@ -1307,30 +1349,34 @@ function cacheKey(toolName, params) {
 
 async function executeToolWithCache(toolName, params, ttlSeconds = 300) {
   const key = cacheKey(toolName, params);
-  
+
   // Check cache
   const cached = await redis.get(key);
   if (cached) {
     console.log(`Cache HIT: ${toolName}`);
     return JSON.parse(cached);
   }
-  
+
   console.log(`Cache MISS: ${toolName}`);
-  
+
   // Execute tool
   const result = await executeToolInProcess(toolName, params);
-  
+
   // Cache result
   await redis.setex(key, ttlSeconds, JSON.stringify(result));
-  
+
   return result;
 }
 
 // Usage
-const report = await executeToolWithCache('getDashboardBundle', {
-  tenant_id: tenantId,
-  time_range: '30d'
-}, 600); // Cache for 10 minutes
+const report = await executeToolWithCache(
+  'getDashboardBundle',
+  {
+    tenant_id: tenantId,
+    time_range: '30d',
+  },
+  600,
+); // Cache for 10 minutes
 ```
 
 ### Pattern 5: Tool Result Validation
@@ -1350,31 +1396,33 @@ const TOOL_SCHEMAS = {
     first_name: Joi.string().min(1).max(100).required(),
     last_name: Joi.string().min(1).max(100).required(),
     email: Joi.string().email().optional(),
-    phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/).optional(),
+    phone: Joi.string()
+      .pattern(/^\+?[1-9]\d{1,14}$/)
+      .optional(),
     company: Joi.string().max(200).optional(),
-    source: Joi.string().valid('webform', 'referral', 'cold_call', 'event').required()
+    source: Joi.string().valid('webform', 'referral', 'cold_call', 'event').required(),
   }),
-  
+
   searchLeads: Joi.object({
     tenant_id: Joi.string().uuid().required(),
     status: Joi.string().valid('new', 'qualified', 'converted').optional(),
-    limit: Joi.number().min(1).max(100).default(10)
-  })
+    limit: Joi.number().min(1).max(100).default(10),
+  }),
 };
 
 async function executeToolWithValidation(toolName, params) {
   const schema = TOOL_SCHEMAS[toolName];
-  
+
   if (schema) {
     const { error, value } = schema.validate(params);
-    
+
     if (error) {
       throw new Error(`Validation failed for ${toolName}: ${error.message}`);
     }
-    
+
     params = value; // Use validated/sanitized params
   }
-  
+
   return executeToolInProcess(toolName, params);
 }
 ```
@@ -1392,12 +1440,12 @@ import { pgPool } from './database.js';
 
 async function executeToolsInTransaction(tenantId, operations) {
   const client = await pgPool.connect();
-  
+
   try {
     await client.query('BEGIN');
-    
+
     const results = [];
-    
+
     for (const { tool, params } of operations) {
       const result = await executeToolInProcess(tool, {
         tenant_id: tenantId,
@@ -1405,10 +1453,10 @@ async function executeToolsInTransaction(tenantId, operations) {
       });
       results.push(result);
     }
-    
+
     await client.query('COMMIT');
     return results;
-    
+
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -1442,11 +1490,11 @@ const toolMetrics = new Map();
 async function executeToolWithMetrics(toolName, params) {
   const startTime = Date.now();
   const toolKey = `${toolName}:${params.tenant_id}`;
-  
+
   try {
     const result = await executeToolInProcess(toolName, params);
     const duration = Date.now() - startTime;
-    
+
     // Update metrics
     if (!toolMetrics.has(toolKey)) {
       toolMetrics.set(toolKey, { calls: 0, totalDuration: 0, errors: 0 });
@@ -1454,28 +1502,27 @@ async function executeToolWithMetrics(toolName, params) {
     const metrics = toolMetrics.get(toolKey);
     metrics.calls++;
     metrics.totalDuration += duration;
-    
+
     // Log slow queries
     if (duration > 1000) {
       logger.warn(`Slow tool execution: ${toolName} took ${duration}ms`, {
         tool: toolName,
         tenant_id: params.tenant_id,
-        duration
+        duration,
       });
     }
-    
+
     return result;
-    
   } catch (error) {
     const metrics = toolMetrics.get(toolKey);
     if (metrics) metrics.errors++;
-    
+
     logger.error(`Tool execution failed: ${toolName}`, {
       tool: toolName,
       tenant_id: params.tenant_id,
-      error: error.message
+      error: error.message,
     });
-    
+
     throw error;
   }
 }
@@ -1489,10 +1536,10 @@ app.get('/api/internal/braid-metrics', (req, res) => {
       tenant_id: tenant,
       calls: data.calls,
       avgDuration: Math.round(data.totalDuration / data.calls),
-      errorRate: (data.errors / data.calls * 100).toFixed(2) + '%'
+      errorRate: ((data.errors / data.calls) * 100).toFixed(2) + '%',
     };
   });
-  
+
   res.json(metrics);
 });
 ```
@@ -1522,6 +1569,7 @@ braid codegen --output src/types/braid.d.ts
 #### 2. IDE Integration
 
 **VS Code Extension (Planned):**
+
 - Syntax highlighting for `.braid` files
 - IntelliSense for tool parameters
 - Inline SQL validation
@@ -1547,15 +1595,15 @@ import { setupTestTenant, teardownTestTenant } from '../helpers.js';
 
 describe('Braid Tool: searchLeads', () => {
   let tenantId;
-  
+
   beforeAll(async () => {
     tenantId = await setupTestTenant();
   });
-  
+
   afterAll(async () => {
     await teardownTestTenant(tenantId);
   });
-  
+
   test('returns leads filtered by status', async () => {
     // Create test leads
     await executeToolInProcess('createLead', {
@@ -1563,50 +1611,50 @@ describe('Braid Tool: searchLeads', () => {
       first_name: 'John',
       last_name: 'Doe',
       status: 'qualified',
-      source: 'webform'
+      source: 'webform',
     });
-    
+
     await executeToolInProcess('createLead', {
       tenant_id: tenantId,
       first_name: 'Jane',
       last_name: 'Smith',
       status: 'new',
-      source: 'referral'
+      source: 'referral',
     });
-    
+
     // Search for qualified leads
     const results = await executeToolInProcess('searchLeads', {
       tenant_id: tenantId,
       status: 'qualified',
-      limit: 10
+      limit: 10,
     });
-    
+
     expect(results).toHaveLength(1);
     expect(results[0].first_name).toBe('John');
     expect(results[0].status).toBe('qualified');
   });
-  
+
   test('respects tenant isolation', async () => {
     const otherTenantId = await setupTestTenant();
-    
+
     await executeToolInProcess('createLead', {
       tenant_id: otherTenantId,
       first_name: 'Alice',
       last_name: 'Brown',
       status: 'new',
-      source: 'cold_call'
+      source: 'cold_call',
     });
-    
+
     // Search in original tenant should not see other tenant's leads
     const results = await executeToolInProcess('searchLeads', {
       tenant_id: tenantId,
       status: 'new',
-      limit: 100
+      limit: 100,
     });
-    
-    expect(results.every(lead => lead.tenant_id === tenantId)).toBe(true);
-    expect(results.find(lead => lead.first_name === 'Alice')).toBeUndefined();
-    
+
+    expect(results.every((lead) => lead.tenant_id === tenantId)).toBe(true);
+    expect(results.find((lead) => lead.first_name === 'Alice')).toBeUndefined();
+
     await teardownTestTenant(otherTenantId);
   });
 });
@@ -1622,7 +1670,7 @@ const BRAID_DEBUG = process.env.BRAID_DEBUG === 'true';
 
 function logQuery(toolName, sql, params) {
   if (!BRAID_DEBUG) return;
-  
+
   console.log(`\n[BRAID DEBUG] ${toolName}`);
   console.log('SQL:', sql);
   console.log('Params:', JSON.stringify(params, null, 2));
@@ -1641,7 +1689,7 @@ export class BraidTracer {
   constructor() {
     this.calls = [];
   }
-  
+
   startTrace(toolName, params) {
     const traceId = Math.random().toString(36).substring(7);
     this.calls.push({
@@ -1649,13 +1697,13 @@ export class BraidTracer {
       tool: toolName,
       params,
       startTime: Date.now(),
-      status: 'running'
+      status: 'running',
     });
     return traceId;
   }
-  
+
   endTrace(traceId, result, error = null) {
-    const call = this.calls.find(c => c.id === traceId);
+    const call = this.calls.find((c) => c.id === traceId);
     if (call) {
       call.endTime = Date.now();
       call.duration = call.endTime - call.startTime;
@@ -1664,11 +1712,11 @@ export class BraidTracer {
       call.resultSize = JSON.stringify(result || {}).length;
     }
   }
-  
+
   getTrace() {
     return this.calls;
   }
-  
+
   exportToJSON() {
     return JSON.stringify(this.calls, null, 2);
   }
@@ -1694,40 +1742,40 @@ console.log(tracer.exportToJSON());
 import { performance } from 'perf_hooks';
 
 export function profileTool(toolName) {
-  return async function(params) {
+  return async function (params) {
     const marks = {
       start: performance.now(),
       paramValidation: 0,
       sqlExecution: 0,
       resultSerialization: 0,
-      end: 0
+      end: 0,
     };
-    
+
     // Param validation
     const validatedParams = validateParams(toolName, params);
     marks.paramValidation = performance.now();
-    
+
     // SQL execution
     const rawResult = await executeSQL(toolName, validatedParams);
     marks.sqlExecution = performance.now();
-    
+
     // Result serialization
     const serializedResult = serializeResult(rawResult);
     marks.resultSerialization = performance.now();
     marks.end = performance.now();
-    
+
     const profile = {
       tool: toolName,
       totalDuration: marks.end - marks.start,
       breakdown: {
         paramValidation: marks.paramValidation - marks.start,
         sqlExecution: marks.sqlExecution - marks.paramValidation,
-        resultSerialization: marks.resultSerialization - marks.sqlExecution
-      }
+        resultSerialization: marks.resultSerialization - marks.sqlExecution,
+      },
     };
-    
+
     console.log('[PROFILE]', JSON.stringify(profile));
-    
+
     return serializedResult;
   };
 }
@@ -1742,6 +1790,7 @@ npm run braid:check
 ```
 
 **Output:**
+
 ```
 ✓ accounts.braid is in sync
 ✓ leads.braid is in sync
@@ -1757,6 +1806,7 @@ npm run braid:sync
 ```
 
 **What it does:**
+
 1. Scans `braid-llm-kit/examples/assistant/*.braid`
 2. Parses tool definitions
 3. Validates SQL syntax
@@ -1780,6 +1830,7 @@ curl http://localhost:8000/health
 ```
 
 **Response:**
+
 ```json
 {
   "status": "healthy",
@@ -1826,13 +1877,13 @@ if (!tenantId || !isValidUUID(tenantId)) {
 
 const result = await executeToolInProcess('searchLeads', {
   tenant_id: tenantId,
-  status: 'qualified'
+  status: 'qualified',
 });
 
 // ❌ WRONG: Trust user input directly
 const result = await executeToolInProcess('searchLeads', {
-  tenant_id: req.body.tenant_id,  // User-controlled!
-  status: 'qualified'
+  tenant_id: req.body.tenant_id, // User-controlled!
+  status: 'qualified',
 });
 ```
 
@@ -1882,20 +1933,20 @@ fn updateLead(tenant: String, lead_id: String, updates: Object) -> Result<Lead, 
 test('searchLeads respects tenant boundaries', async () => {
   const tenant1 = 'a11dfb63-...';
   const tenant2 = 'b22cfd74-...';
-  
+
   // Create lead for tenant1
   await executeToolInProcess('createLead', {
     tenant_id: tenant1,
     first_name: 'John',
-    last_name: 'Doe'
+    last_name: 'Doe',
   });
-  
+
   // Query from tenant2 should return empty
   const results = await executeToolInProcess('searchLeads', {
     tenant_id: tenant2,
-    limit: 100
+    limit: 100,
   });
-  
+
   assert.equal(results.length, 0);
 });
 ```
@@ -1906,20 +1957,20 @@ test('searchLeads respects tenant boundaries', async () => {
 try {
   const result = await executeToolInProcess('getAccount', {
     tenant_id: tenantId,
-    account_id: accountId
+    account_id: accountId,
   });
-  
+
   if (!result) {
     return res.status(404).json({ error: 'Account not found' });
   }
-  
+
   return res.json(result);
 } catch (error) {
   logger.error('Braid tool failed', { tool: 'getAccount', error });
-  return res.status(500).json({ 
+  return res.status(500).json({
     error: 'Failed to retrieve account',
     // Do NOT leak internal details in production
-    details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    details: process.env.NODE_ENV === 'development' ? error.message : undefined,
   });
 }
 ```
@@ -1935,12 +1986,14 @@ try {
 **Error:** `Tool 'searchLeads' not found in registry`
 
 **Diagnosis:**
+
 ```bash
 # Check tool registry is up to date
 npm run braid:check
 ```
 
 **Fix:**
+
 ```bash
 # Sync registry with .braid files
 npm run braid:sync
@@ -1969,6 +2022,7 @@ fn searchLeadsByStatus(
 **Error:** Query returns cross-tenant data
 
 **Diagnosis:**
+
 ```sql
 -- Check if tenant_id is scoped correctly
 SELECT tenant_id, COUNT(*) FROM leads GROUP BY tenant_id;
@@ -1982,6 +2036,7 @@ tenant UUID, and that the backend route includes `tenant_id` in its WHERE clause
 **Error:** `Connection refused to http://localhost:8000`
 
 **Diagnosis:**
+
 ```bash
 # Check if MCP server is running
 docker compose -f braid-mcp-node-server/docker-compose.yml ps
@@ -1991,6 +2046,7 @@ docker compose -f braid-mcp-node-server/docker-compose.yml logs -f
 ```
 
 **Fix:**
+
 ```bash
 # Restart MCP server
 docker compose -f braid-mcp-node-server/docker-compose.yml restart
@@ -2036,7 +2092,7 @@ import { pgPool } from './database.js';
 
 // Monkey-patch query method for debugging
 const originalQuery = pgPool.query.bind(pgPool);
-pgPool.query = async function(sql, params) {
+pgPool.query = async function (sql, params) {
   console.log('[SQL]', sql);
   console.log('[PARAMS]', params);
   const start = Date.now();
@@ -2084,15 +2140,15 @@ import { executeToolInProcess } from '../lib/braidIntegration-v2.js';
 
 async function benchmark(toolName, params, iterations = 100) {
   const durations = [];
-  
+
   for (let i = 0; i < iterations; i++) {
     const start = Date.now();
     await executeToolInProcess(toolName, params);
     durations.push(Date.now() - start);
   }
-  
+
   durations.sort((a, b) => a - b);
-  
+
   return {
     tool: toolName,
     iterations,
@@ -2101,16 +2157,20 @@ async function benchmark(toolName, params, iterations = 100) {
     avg: durations.reduce((a, b) => a + b) / durations.length,
     p50: durations[Math.floor(durations.length * 0.5)],
     p95: durations[Math.floor(durations.length * 0.95)],
-    p99: durations[Math.floor(durations.length * 0.99)]
+    p99: durations[Math.floor(durations.length * 0.99)],
   };
 }
 
 // Run benchmark
-const results = await benchmark('searchLeads', {
-  tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
-  status: 'qualified',
-  limit: 10
-}, 100);
+const results = await benchmark(
+  'searchLeads',
+  {
+    tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
+    status: 'qualified',
+    limit: 10,
+  },
+  100,
+);
 
 console.table(results);
 // Output:
@@ -2126,6 +2186,7 @@ console.table(results);
 **Symptom:** Slow tool execution
 
 **Diagnosis:**
+
 ```sql
 -- Check query performance
 EXPLAIN ANALYZE
@@ -2138,7 +2199,7 @@ WHERE tenant_id = 'a11dfb63-4b18-4eb8-872e-747af2e37c46'
 **Fix:** Add database indexes
 
 ```sql
-CREATE INDEX CONCURRENTLY idx_leads_tenant_status_created 
+CREATE INDEX CONCURRENTLY idx_leads_tenant_status_created
 ON leads (tenant_id, status, created_at);
 ```
 
@@ -2169,15 +2230,15 @@ fn toolName(
 
 ### Common Type Patterns
 
-| Pattern | Example |
-|---------|---------|
+| Pattern          | Example                               |
+| ---------------- | ------------------------------------- |
 | Tenant parameter | `tenant: String` (always first param) |
-| Entity ID | `lead_id: String` |
-| Freeform updates | `updates: Object` |
-| Search term | `query: String` |
-| Result limit | `limit: Number` |
-| Result type | `-> Result<Lead, CRMError> !net` |
-| Pure function | `-> Number` (no effects) |
+| Entity ID        | `lead_id: String`                     |
+| Freeform updates | `updates: Object`                     |
+| Search term      | `query: String`                       |
+| Result limit     | `limit: Number`                       |
+| Result type      | `-> Result<Lead, CRMError> !net`      |
+| Pure function    | `-> Number` (no effects)              |
 
 ### Execution Commands
 
@@ -2206,7 +2267,7 @@ MCP_NODE_HEALTH_URL=http://localhost:8000/health
 ---
 
 **For more information:**
+
 - **Developer Manual:** [docs/DEVELOPER_MANUAL.md](./DEVELOPER_MANUAL.md) - Chapter 6 & 13
 - **Admin Guide:** [docs/ADMIN_GUIDE.md](./ADMIN_GUIDE.md) - Chapter 13
 - **Product Spec:** [docs/product/customer-care-v1.md](./product/customer-care-v1.md)
-

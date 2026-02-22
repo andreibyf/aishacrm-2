@@ -12,8 +12,9 @@
 **C.A.R.E. (Cognitive Adaptive Response Engine)** is AiSHA's decision layer that continuously evaluates customer signals, determines relationship state, detects risk or opportunity, and decides _when action is required_—before any automation or agent execution occurs.
 
 C.A.R.E. operates as a cognitive layer that:
+
 - **Monitors** customer behavior patterns and engagement signals
-- **Analyzes** relationship health and progression state  
+- **Analyzes** relationship health and progression state
 - **Detects** escalation scenarios requiring immediate attention
 - **Proposes** state transitions and action candidates
 - **Audits** all decisions for transparency and learning
@@ -23,7 +24,7 @@ C.A.R.E. operates as a cognitive layer that:
 
 1. **Signal-Driven**: All decisions based on observable customer signals
 2. **State-Aware**: Maintains relationship context and progression
-3. **Escalation-Focused**: Prioritizes scenarios requiring human attention  
+3. **Escalation-Focused**: Prioritizes scenarios requiring human attention
 4. **Audit-First**: Every decision is logged for analysis and improvement
 5. **Workflow-Ready**: Integrates seamlessly with external automation systems
 
@@ -42,15 +43,15 @@ Customer Signals → C.A.R.E. Engine → Decision Output → Workflow Integratio
 
 ### Core Components
 
-| Component | Purpose | Location |
-|-----------|---------|----------|
-| **Trigger Detector** | Identifies conditions requiring attention | `aiTriggersWorker.js` |
-| **State Engine** | Manages relationship progression states | `careStateEngine.js` |
-| **Escalation Detector** | Identifies high-priority scenarios | `careEscalationDetector.js` |
-| **Audit Emitter** | Logs all decisions and rationale | `careAuditEmitter.js` |
-| **Signal Adapter** | Converts triggers to C.A.R.E. signals | `careTriggerSignalAdapter.js` |
-| **Workflow Client** | Sends webhook notifications | `careWorkflowTriggerClient.js` |
-| **State Store** | Persists relationship states | `careStateStore.js` |
+| Component               | Purpose                                   | Location                       |
+| ----------------------- | ----------------------------------------- | ------------------------------ |
+| **Trigger Detector**    | Identifies conditions requiring attention | `aiTriggersWorker.js`          |
+| **State Engine**        | Manages relationship progression states   | `careStateEngine.js`           |
+| **Escalation Detector** | Identifies high-priority scenarios        | `careEscalationDetector.js`    |
+| **Audit Emitter**       | Logs all decisions and rationale          | `careAuditEmitter.js`          |
+| **Signal Adapter**      | Converts triggers to C.A.R.E. signals     | `careTriggerSignalAdapter.js`  |
+| **Workflow Client**     | Sends webhook notifications               | `careWorkflowTriggerClient.js` |
+| **State Store**         | Persists relationship states              | `careStateStore.js`            |
 
 ---
 
@@ -58,17 +59,17 @@ Customer Signals → C.A.R.E. Engine → Decision Output → Workflow Integratio
 
 C.A.R.E. tracks customers through a standardized relationship progression:
 
-| State | Description | Typical Signals |
-|-------|-------------|----------------|
-| `unaware` | No awareness of offering | No engagement, cold outreach |
-| `aware` | Knows we exist, no interaction | Website visits, content views |
-| `engaged` | Active conversation, exploring fit | Email replies, meeting attendance |
-| `evaluating` | Considering specific proposal | Proposal requests, technical discussions |
-| `committed` | Made commitment (verbal/written) | Contract discussions, verbal agreement |
-| `active` | Ongoing relationship (customer) | Regular usage, payments, expansion talks |
-| `at_risk` | Showing signs of disengagement | Reduced usage, support complaints |
-| `dormant` | Inactive for extended period | No activity for 30+ days |
-| `lost` | Relationship terminated | Churn, cancellation, competitor choice |
+| State        | Description                        | Typical Signals                          |
+| ------------ | ---------------------------------- | ---------------------------------------- |
+| `unaware`    | No awareness of offering           | No engagement, cold outreach             |
+| `aware`      | Knows we exist, no interaction     | Website visits, content views            |
+| `engaged`    | Active conversation, exploring fit | Email replies, meeting attendance        |
+| `evaluating` | Considering specific proposal      | Proposal requests, technical discussions |
+| `committed`  | Made commitment (verbal/written)   | Contract discussions, verbal agreement   |
+| `active`     | Ongoing relationship (customer)    | Regular usage, payments, expansion talks |
+| `at_risk`    | Showing signs of disengagement     | Reduced usage, support complaints        |
+| `dormant`    | Inactive for extended period       | No activity for 30+ days                 |
+| `lost`       | Relationship terminated            | Churn, cancellation, competitor choice   |
 
 ### State Transitions
 
@@ -96,42 +97,42 @@ C.A.R.E. continuously monitors for these trigger conditions:
 
 ### 1. Lead Management Triggers
 
-| Trigger | Condition | Default Threshold | Action Candidates |
-|---------|-----------|------------------|-------------------|
-| `lead_stagnant` | Lead inactive for extended period | 7+ days | Follow-up task, re-engagement campaign |
-| `lead_hot` | High engagement, quick response | Multiple touchpoints in 24h | Priority routing, immediate assignment |
-| `lead_regression` | Engagement decreasing | Response time increasing | Intervention call, value re-alignment |
+| Trigger           | Condition                         | Default Threshold           | Action Candidates                      |
+| ----------------- | --------------------------------- | --------------------------- | -------------------------------------- |
+| `lead_stagnant`   | Lead inactive for extended period | 7+ days                     | Follow-up task, re-engagement campaign |
+| `lead_hot`        | High engagement, quick response   | Multiple touchpoints in 24h | Priority routing, immediate assignment |
+| `lead_regression` | Engagement decreasing             | Response time increasing    | Intervention call, value re-alignment  |
 
 ### 2. Opportunity Management Triggers
 
-| Trigger | Condition | Default Threshold | Action Candidates |
-|---------|-----------|------------------|-------------------|
-| `deal_decay` | Opportunity with no activity | 14+ days | Check-in call, proposal refresh |
+| Trigger           | Condition                      | Default Threshold          | Action Candidates                     |
+| ----------------- | ------------------------------ | -------------------------- | ------------------------------------- |
+| `deal_decay`      | Opportunity with no activity   | 14+ days                   | Check-in call, proposal refresh       |
 | `opportunity_hot` | High probability, closing soon | 70%+ probability, <14 days | Closing meeting, contract preparation |
-| `deal_regression` | Stage movement backwards | Stage downgrade | Recovery call, objection handling |
+| `deal_regression` | Stage movement backwards       | Stage downgrade            | Recovery call, objection handling     |
 
 ### 3. Activity Management Triggers
 
-| Trigger | Condition | Default Threshold | Action Candidates |
-|---------|-----------|------------------|-------------------|
-| `activity_overdue` | Past due date, incomplete | 1+ days overdue | Reschedule task, completion reminder |
-| `meeting_no_show` | Scheduled meeting not attended | No attendance logged | Follow-up message, reschedule offer |
+| Trigger            | Condition                      | Default Threshold    | Action Candidates                    |
+| ------------------ | ------------------------------ | -------------------- | ------------------------------------ |
+| `activity_overdue` | Past due date, incomplete      | 1+ days overdue      | Reschedule task, completion reminder |
+| `meeting_no_show`  | Scheduled meeting not attended | No attendance logged | Follow-up message, reschedule offer  |
 
 ### 4. Account Health Triggers
 
-| Trigger | Condition | Default Threshold | Action Candidates |
-|---------|-----------|------------------|-------------------|
-| `account_risk` | Multiple negative signals | Low engagement + complaints | Account review, relationship audit |
-| `contact_inactive` | Key contact not responding | 21+ days silence | Alternative contact, escalation path |
-| `expansion_opportunity` | Usage patterns suggest growth | High activity, feature requests | Upgrade proposal, expansion meeting |
+| Trigger                 | Condition                     | Default Threshold               | Action Candidates                    |
+| ----------------------- | ----------------------------- | ------------------------------- | ------------------------------------ |
+| `account_risk`          | Multiple negative signals     | Low engagement + complaints     | Account review, relationship audit   |
+| `contact_inactive`      | Key contact not responding    | 21+ days silence                | Alternative contact, escalation path |
+| `expansion_opportunity` | Usage patterns suggest growth | High activity, feature requests | Upgrade proposal, expansion meeting  |
 
 ### 5. Behavioral Pattern Triggers
 
-| Trigger | Condition | Default Threshold | Action Candidates |
-|---------|-----------|------------------|-------------------|
-| `engagement_spike` | Unusual increase in activity | 3x normal engagement | Strike while hot, accelerate process |
-| `sentiment_decline` | Negative communication tone | Sentiment score <0.3 | Relationship repair, feedback session |
-| `competitor_mention` | References to alternatives | Competitor names detected | Competitive positioning, value demonstration |
+| Trigger              | Condition                    | Default Threshold         | Action Candidates                            |
+| -------------------- | ---------------------------- | ------------------------- | -------------------------------------------- |
+| `engagement_spike`   | Unusual increase in activity | 3x normal engagement      | Strike while hot, accelerate process         |
+| `sentiment_decline`  | Negative communication tone  | Sentiment score <0.3      | Relationship repair, feedback session        |
+| `competitor_mention` | References to alternatives   | Competitor names detected | Competitive positioning, value demonstration |
 
 ---
 
@@ -142,19 +143,19 @@ C.A.R.E. automatically identifies scenarios requiring immediate human interventi
 ### Escalation Criteria
 
 1. **High-Value Risk** - Large deals showing decay signals
-2. **Relationship Crisis** - Multiple negative signals simultaneously  
+2. **Relationship Crisis** - Multiple negative signals simultaneously
 3. **Time-Critical** - Opportunities with imminent close dates
 4. **Strategic Importance** - Key accounts showing concerning patterns
 5. **Repeated Failures** - Multiple failed intervention attempts
 
 ### Escalation Severity Levels
 
-| Level | Description | Response Time | Notification Method |
-|-------|-------------|---------------|-------------------|
-| `low` | Minor issue, standard process | 24-48 hours | Email notification |
-| `medium` | Notable concern, expedited handling | 4-8 hours | Slack + email |
-| `high` | Significant risk, urgent intervention | 1-2 hours | SMS + Slack + email |
-| `critical` | Immediate crisis, executive involvement | <30 minutes | Phone + all channels |
+| Level      | Description                             | Response Time | Notification Method  |
+| ---------- | --------------------------------------- | ------------- | -------------------- |
+| `low`      | Minor issue, standard process           | 24-48 hours   | Email notification   |
+| `medium`   | Notable concern, expedited handling     | 4-8 hours     | Slack + email        |
+| `high`     | Significant risk, urgent intervention   | 1-2 hours     | SMS + Slack + email  |
+| `critical` | Immediate crisis, executive involvement | <30 minutes   | Phone + all channels |
 
 ---
 
@@ -164,15 +165,15 @@ Every C.A.R.E. decision is logged for analysis and improvement:
 
 ### Audit Event Types
 
-| Event Type | Description | When Triggered |
-|------------|-------------|----------------|
-| `trigger_detected` | Condition requiring attention identified | Trigger threshold met |
-| `escalation_detected` | High-priority scenario flagged | Escalation criteria met |
-| `state_proposed` | Relationship state transition suggested | State engine analysis |
-| `state_applied` | Relationship state actually changed | State write enabled |
-| `action_candidate` | Specific action recommended | Action proposal generated |
-| `action_skipped` | Potential action not taken | Policy gate blocked |
-| `workflow_triggered` | External system notified | Webhook sent |
+| Event Type            | Description                              | When Triggered            |
+| --------------------- | ---------------------------------------- | ------------------------- |
+| `trigger_detected`    | Condition requiring attention identified | Trigger threshold met     |
+| `escalation_detected` | High-priority scenario flagged           | Escalation criteria met   |
+| `state_proposed`      | Relationship state transition suggested  | State engine analysis     |
+| `state_applied`       | Relationship state actually changed      | State write enabled       |
+| `action_candidate`    | Specific action recommended              | Action proposal generated |
+| `action_skipped`      | Potential action not taken               | Policy gate blocked       |
+| `workflow_triggered`  | External system notified                 | Webhook sent              |
 
 ### Audit Log Schema
 
@@ -180,7 +181,7 @@ Every C.A.R.E. decision is logged for analysis and improvement:
 {
   "tenant_id": "uuid",
   "entity_type": "lead|contact|account|opportunity|activity",
-  "entity_id": "uuid", 
+  "entity_id": "uuid",
   "event_type": "trigger_detected",
   "action_origin": "care_autonomous|user_directed",
   "reason": "Detailed explanation of why this decision was made",
@@ -221,6 +222,7 @@ C.A.R.E. can trigger external workflows through webhooks for seamless automation
    - **No manual API calls required!**
 
 **Important: One Config Per Tenant**
+
 - Each tenant can have MULTIPLE workflows with CARE Start nodes
 - Only the MOST RECENTLY SAVED workflow becomes active for that tenant
 - Saving a new CARE workflow updates the tenant's configuration
@@ -254,26 +256,26 @@ CARE_WORKFLOW_TRIGGERS_ENABLED=true          # Allow webhook triggers
   "type": "care.trigger_detected",
   "ts": "2026-01-25T17:48:58.197Z",
   "tenant_id": "a11dfb63-4b18-4eb8-872e-747af2e37c46",
-  
+
   "entity_type": "lead",
   "entity_id": "92d02dd6-ce91-472d-8d20-4f1631ef03f2",
-  
+
   "signal_entity_type": "lead",
   "signal_entity_id": "92d02dd6-ce91-472d-8d20-4f1631ef03f2",
-  
+
   "trigger_type": "lead_stagnant",
   "action_origin": "care_autonomous",
   "policy_gate_result": "allowed",
   "reason": "Lead stagnant 8 days (status=new)",
-  
+
   "care_state": "unaware",
   "previous_state": null,
   "escalation_detected": false,
   "escalation_status": null,
-  
+
   "deep_link": "/app/leads/92d02dd6-ce91-472d-8d20-4f1631ef03f2",
   "intent": "triage_trigger",
-  
+
   "meta": {
     "days_stagnant": 8,
     "lead_name": "John Smith",
@@ -287,12 +289,12 @@ CARE_WORKFLOW_TRIGGERS_ENABLED=true          # Allow webhook triggers
 
 ### Supported Webhook Events
 
-| Event Type | Description | When Sent |
-|------------|-------------|-----------|
-| `care.trigger_detected` | Standard trigger condition met | All trigger types |
-| `care.escalation_detected` | High-priority scenario identified | Escalation criteria met |
-| `care.state_changed` | Customer relationship state updated | State transitions |
-| `care.action_recommended` | Specific action proposed | Action candidates generated |
+| Event Type                 | Description                         | When Sent                   |
+| -------------------------- | ----------------------------------- | --------------------------- |
+| `care.trigger_detected`    | Standard trigger condition met      | All trigger types           |
+| `care.escalation_detected` | High-priority scenario identified   | Escalation criteria met     |
+| `care.state_changed`       | Customer relationship state updated | State transitions           |
+| `care.action_recommended`  | Specific action proposed            | Action candidates generated |
 
 ---
 
@@ -342,25 +344,25 @@ CARE_WORKFLOW_TRIGGERS_ENABLED=true          # Allow workflow webhooks
 app.post('/aishacare/webhook', (req, res) => {
   const signature = req.headers['x-care-signature'];
   const payload = req.body;
-  
+
   // Verify webhook authenticity
   if (!verifyWebhookSignature(payload, signature)) {
     return res.status(401).send('Unauthorized');
   }
-  
+
   // Process C.A.R.E. event
   switch (payload.type) {
     case 'care.trigger_detected':
       handleTriggerDetected(payload);
       break;
-    case 'care.escalation_detected':  
+    case 'care.escalation_detected':
       handleEscalationDetected(payload);
       break;
     case 'care.state_changed':
       handleStateChanged(payload);
       break;
   }
-  
+
   res.status(200).send('OK');
 });
 
@@ -372,7 +374,7 @@ function handleTriggerDetected(payload) {
     assignee: getAccountOwner(payload.entity_id),
     priority: payload.escalation_status ? 'high' : 'normal',
     due_date: calculateDueDate(payload.trigger_type),
-    crm_link: `https://aishacrm.com${payload.deep_link}`
+    crm_link: `https://aishacrm.com${payload.deep_link}`,
   });
 }
 
@@ -382,9 +384,9 @@ function handleEscalationDetected(payload) {
     channel: '#sales-alerts',
     message: `🚨 C.A.R.E. Escalation: ${payload.reason}`,
     entity_link: payload.deep_link,
-    severity: payload.escalation_status
+    severity: payload.escalation_status,
   });
-  
+
   // Create high-priority task
   createUrgentTask(payload);
 }
@@ -395,11 +397,11 @@ function handleEscalationDetected(payload) {
 ```javascript
 // Entity type mapping for your CRM
 const ENTITY_TYPE_MAPPING = {
-  'lead': 'Lead',
-  'contact': 'Contact', 
-  'account': 'Account',
-  'opportunity': 'Opportunity',
-  'activity': 'Task'
+  lead: 'Lead',
+  contact: 'Contact',
+  account: 'Account',
+  opportunity: 'Opportunity',
+  activity: 'Task',
 };
 
 function getCRMRecord(entityType, entityId) {
@@ -464,22 +466,22 @@ GET /api/internal/care/escalations?tenant_id=uuid&days=7
 
 ### Environment Variables
 
-| Variable | Description | Default | Required |
-|----------|-------------|---------|----------|
-| `AI_TRIGGERS_WORKER_ENABLED` | Enable C.A.R.E. trigger detection | `false` | Yes |
-| `CARE_STATE_WRITE_ENABLED` | Allow state persistence | `false` | No |
-| `CARE_WORKFLOW_TRIGGERS_ENABLED` | Enable webhook notifications | `false` | No |
-| `CARE_ESCALATION_ENABLED` | Enable escalation detection | `true` | No |
-| `CARE_AUDIT_ENABLED` | Enable decision logging | `true` | No |
+| Variable                         | Description                       | Default | Required |
+| -------------------------------- | --------------------------------- | ------- | -------- |
+| `AI_TRIGGERS_WORKER_ENABLED`     | Enable C.A.R.E. trigger detection | `false` | Yes      |
+| `CARE_STATE_WRITE_ENABLED`       | Allow state persistence           | `false` | No       |
+| `CARE_WORKFLOW_TRIGGERS_ENABLED` | Enable webhook notifications      | `false` | No       |
+| `CARE_ESCALATION_ENABLED`        | Enable escalation detection       | `true`  | No       |
+| `CARE_AUDIT_ENABLED`             | Enable decision logging           | `true`  | No       |
 
 ### Runtime Configuration
 
 ```javascript
 // Dynamically adjust trigger sensitivity
 await updateTriggerConfig({
-  lead_stagnant_days: 5,        // Faster lead follow-up
-  deal_decay_days: 7,           // More aggressive deal monitoring  
-  escalation_threshold: 0.8     // Higher escalation bar
+  lead_stagnant_days: 5, // Faster lead follow-up
+  deal_decay_days: 7, // More aggressive deal monitoring
+  escalation_threshold: 0.8, // Higher escalation bar
 });
 ```
 
@@ -490,7 +492,7 @@ await updateTriggerConfig({
 ### Key Metrics
 
 - **Trigger Detection Rate** - Triggers per hour/day
-- **Escalation Accuracy** - % of escalations requiring action  
+- **Escalation Accuracy** - % of escalations requiring action
 - **State Transition Velocity** - Time between state changes
 - **Workflow Response Time** - Webhook processing latency
 - **Action Success Rate** - % of suggested actions taken
@@ -499,21 +501,21 @@ await updateTriggerConfig({
 
 ```sql
 -- C.A.R.E. trigger volume by type (last 7 days)
-SELECT 
+SELECT
   trigger_type,
   COUNT(*) as trigger_count,
   AVG(CASE WHEN escalation_status IS NOT NULL THEN 1 ELSE 0 END) as escalation_rate
-FROM care_audit_logs 
+FROM care_audit_logs
 WHERE event_type = 'trigger_detected'
   AND ts >= NOW() - INTERVAL '7 days'
 GROUP BY trigger_type;
 
 -- Relationship state distribution by tenant
-SELECT 
+SELECT
   tenant_id,
   care_state,
   COUNT(*) as entity_count
-FROM care_states 
+FROM care_states
 GROUP BY tenant_id, care_state;
 ```
 
@@ -524,17 +526,20 @@ GROUP BY tenant_id, care_state;
 ### Common Issues
 
 **Triggers not firing:**
+
 - Check `AI_TRIGGERS_WORKER_ENABLED=true`
 - Verify cron job is running in monitor
 - Review trigger thresholds in configuration
 
 **Webhook failures:**
+
 - Validate webhook URL accessibility
-- Check webhook secret configuration  
+- Check webhook secret configuration
 - Review timeout settings
 - Monitor webhook retry attempts
 
 **State inconsistencies:**
+
 - Enable audit logging for full decision trail
 - Check entity type validation in C.A.R.E. engine
 - Verify tenant isolation in database queries
@@ -562,14 +567,16 @@ docker exec aishacrm-backend npm run care:webhook-test
 ### Adding Custom Triggers
 
 1. **Define trigger in `aiTriggersWorker.js`:**
+
 ```javascript
 const TRIGGER_TYPES = {
   // ... existing triggers
-  CUSTOM_PATTERN: 'custom_pattern'
+  CUSTOM_PATTERN: 'custom_pattern',
 };
 ```
 
 2. **Implement detection logic:**
+
 ```javascript
 async function detectCustomPattern(tenantUuid) {
   // Your detection logic here
@@ -578,6 +585,7 @@ async function detectCustomPattern(tenantUuid) {
 ```
 
 3. **Add to processing loop:**
+
 ```javascript
 // In processTriggersForTenant()
 const customPatterns = await detectCustomPattern(tenantUuid);
@@ -586,7 +594,7 @@ for (const entity of customPatterns) {
     triggerId: TRIGGER_TYPES.CUSTOM_PATTERN,
     recordType: 'lead', // or other type
     recordId: entity.id,
-    context: entity.customContext
+    context: entity.customContext,
   });
 }
 ```
@@ -594,19 +602,21 @@ for (const entity of customPatterns) {
 ### Custom Signal Types
 
 1. **Define in `careSignals.js`:**
+
 ```javascript
 export const CUSTOM_SIGNALS = {
   ENGAGEMENT_VELOCITY: 'engagement_velocity',
-  CONTENT_AFFINITY: 'content_affinity'
+  CONTENT_AFFINITY: 'content_affinity',
 };
 ```
 
 2. **Implement signal extraction:**
+
 ```javascript
 export function extractCustomSignals(triggerData) {
   return {
     engagement_velocity: calculateVelocity(triggerData),
-    content_affinity: analyzeContentInteraction(triggerData)
+    content_affinity: analyzeContentInteraction(triggerData),
   };
 }
 ```
@@ -614,6 +624,7 @@ export function extractCustomSignals(triggerData) {
 ### Custom Escalation Rules
 
 1. **Extend escalation detector:**
+
 ```javascript
 // In careEscalationDetector.js
 export function detectCustomEscalation(signals) {
@@ -621,7 +632,7 @@ export function detectCustomEscalation(signals) {
     return {
       is_escalation: true,
       severity: 'high',
-      reason: 'High-value prospect showing rapid disengagement'
+      reason: 'High-value prospect showing rapid disengagement',
     };
   }
   return { is_escalation: false };
@@ -632,22 +643,22 @@ export function detectCustomEscalation(signals) {
 
 ## Version History
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0 | 2024-Q4 | Initial C.A.R.E. implementation |
-| 2.0 | 2025-Q1 | State persistence, webhook integration |  
-| 3.0 | 2025-Q4 | Enhanced escalation detection, audit logging |
+| Version | Date    | Changes                                      |
+| ------- | ------- | -------------------------------------------- |
+| 1.0     | 2024-Q4 | Initial C.A.R.E. implementation              |
+| 2.0     | 2025-Q1 | State persistence, webhook integration       |
+| 3.0     | 2025-Q4 | Enhanced escalation detection, audit logging |
 
 ---
 
 ## References
 
 - **Implementation:** `backend/lib/care/` directory
-- **Configuration:** `backend/lib/aiTriggersWorker.js`  
+- **Configuration:** `backend/lib/aiTriggersWorker.js`
 - **API Routes:** `backend/routes/ai.js` → `/api/ai/*`
 - **Database Schema:** `backend/migrations/116_customer_care_state.sql`
 - **Webhook Client:** `backend/lib/care/careWorkflowTriggerClient.js`
-- **Related Docs:** 
+- **Related Docs:**
   - [AI Architecture - AiSHA AI](./AI_ARCHITECTURE_AISHA_AI.md)
   - [Database Guide](./DATABASE_GUIDE.md)
   - [Developer Manual](./DEVELOPER_MANUAL.md)

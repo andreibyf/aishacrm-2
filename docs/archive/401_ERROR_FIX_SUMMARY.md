@@ -1,9 +1,11 @@
 # 401 Error Fix Summary
 
 ## Issue
+
 Production API returns `401 Unauthorized` for `/api/ai/conversations` endpoint.
 
 Error message from issue:
+
 ```
 api.aishacrm.com/api/ai/conversations: 1 Failed to load resource: the server responded with a status of 401 ()
 ```
@@ -36,12 +38,14 @@ VITE_AISHACRM_BACKEND_URL=https://app.aishacrm.com/api
 ```
 
 **After changing:**
+
 1. Restart the backend service
 2. Clear browser cookies
 3. Log in again
 4. Test the endpoint
 
 **Why this works:**
+
 - Frontend and backend on same domain → cookies sent automatically
 - No CORS complications
 - Matches `.env.production.recommended` configuration
@@ -57,12 +61,14 @@ COOKIE_DOMAIN=.aishacrm.com  # Note the leading dot!
 ```
 
 **After changing:**
+
 1. Restart the backend service (cookies need to be reissued with new domain)
 2. Clear browser cookies (old cookies won't have the domain attribute)
 3. Log in again (get new cookies with `.aishacrm.com` domain)
 4. Test the endpoint
 
 **Why this works:**
+
 - Cookies with domain `.aishacrm.com` are sent to all `*.aishacrm.com` subdomains
 - Browser will send `aisha_access` cookie from `app.X` to `api.X`
 - Authentication context is established
@@ -80,7 +86,7 @@ logger.warn('[AI Security] Authentication required but no user context found', {
   hasCookie: !!req.cookies?.aisha_access,
   hasAuthHeader: !!req.headers.authorization,
   cookieDomain: process.env.COOKIE_DOMAIN || '(not set - cookies may not work across subdomains)',
-  hint: 'If using separate subdomains (api.X vs app.X), set COOKIE_DOMAIN=.X in .env'
+  hint: 'If using separate subdomains (api.X vs app.X), set COOKIE_DOMAIN=.X in .env',
 });
 ```
 
@@ -115,6 +121,7 @@ Added `COOKIE_DOMAIN` documentation and example:
 ### 4. Troubleshooting Guide (`docs/TROUBLESHOOTING_401_ERRORS.md`)
 
 Created comprehensive documentation covering:
+
 - Problem explanation
 - Root cause analysis
 - Step-by-step solutions (same-domain vs cross-subdomain)
@@ -147,6 +154,7 @@ echo $COOKIE_DOMAIN
 4. **Application tab → Cookies**: Check `aisha_access` cookie domain
 
 Expected cookie properties:
+
 - **Same-domain**: Domain = `app.aishacrm.com`
 - **Cross-subdomain**: Domain = `.aishacrm.com` (with dot)
 
@@ -158,8 +166,8 @@ After login, when making a request that returns 401:
 {
   "level": "warn",
   "message": "[AI Security] Authentication required but no user context found",
-  "hasCookie": false,  // <-- Should be true if cookie is being sent
-  "cookieDomain": "(not set - cookies may not work across subdomains)"  // <-- Shows config
+  "hasCookie": false, // <-- Should be true if cookie is being sent
+  "cookieDomain": "(not set - cookies may not work across subdomains)" // <-- Shows config
 }
 ```
 
@@ -168,17 +176,21 @@ If `hasCookie: false`, the cookie isn't being sent → configuration issue.
 ## Impact
 
 ### No Code Changes to Application Logic
+
 - Authentication flow unchanged
 - Security model unchanged
 - API behavior unchanged
 - Only diagnostics and documentation improved
 
 ### Requires Environment Configuration
+
 The actual fix is in the **production environment setup**, not the code:
+
 - Either change `VITE_AISHACRM_BACKEND_URL` (recommended)
 - Or add `COOKIE_DOMAIN` (if cross-subdomain required)
 
 ### Development Unchanged
+
 - Development mode allows unauthenticated access (existing behavior)
 - Tests pass without changes
 - Local development workflow unaffected
@@ -196,11 +208,13 @@ The actual fix is in the **production environment setup**, not the code:
 ## Conclusion
 
 This is a **production configuration issue**, not a code bug. The code changes provide:
+
 - Better diagnostic logging
 - Clear documentation
 - Configuration examples
 
 The actual fix requires updating the production environment to either:
+
 - Use same-domain setup (recommended): `VITE_AISHACRM_BACKEND_URL=https://app.aishacrm.com/api`
 - Or configure cookie domain: `COOKIE_DOMAIN=.aishacrm.com`
 

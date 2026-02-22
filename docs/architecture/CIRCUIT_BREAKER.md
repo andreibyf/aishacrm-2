@@ -36,14 +36,14 @@ Default configuration in `src/api/fallbackFunctions.js`:
 
 ```javascript
 const CIRCUIT_BREAKER_OPTIONS = {
-  timeout: 5000,                    // 5 second timeout for requests
-  errorThresholdPercentage: 50,     // Open circuit at 50% error rate
-  resetTimeout: 30000,              // Try to close circuit after 30 seconds
-  rollingCountTimeout: 10000,       // 10 second rolling window for errors
-  rollingCountBuckets: 10,          // 10 buckets in rolling window
-  volumeThreshold: 3,               // Minimum 3 requests before circuit can open
-  maxRetries: 2,                    // Retry up to 2 times with backoff
-  retryDelay: 1000,                 // Start with 1 second delay for retries
+  timeout: 5000, // 5 second timeout for requests
+  errorThresholdPercentage: 50, // Open circuit at 50% error rate
+  resetTimeout: 30000, // Try to close circuit after 30 seconds
+  rollingCountTimeout: 10000, // 10 second rolling window for errors
+  rollingCountBuckets: 10, // 10 buckets in rolling window
+  volumeThreshold: 3, // Minimum 3 requests before circuit can open
+  maxRetries: 2, // Retry up to 2 times with backoff
+  retryDelay: 1000, // Start with 1 second delay for retries
 };
 ```
 
@@ -57,27 +57,30 @@ export const myCustomFunction = createResilientFunction(
   localFunctions.myFunction,
   'myFunction',
   {
-    timeout: 10000,                 // Override: 10 second timeout
-    errorThresholdPercentage: 30,   // Override: Open at 30% error rate
+    timeout: 10000, // Override: 10 second timeout
+    errorThresholdPercentage: 30, // Override: Open at 30% error rate
     // Other options will use defaults
-  }
+  },
 );
 ```
 
 ## Circuit States
 
 ### Closed (Normal Operation)
+
 - Circuit is healthy and requests go to primary function (Base44)
 - Success and failure metrics are tracked
 - If error rate exceeds threshold, circuit opens
 
 ### Open (Failure Mode)
+
 - Too many failures detected
 - All requests automatically use fallback function (local backend)
 - No requests sent to failing service
 - After `resetTimeout`, circuit moves to half-open
 
 ### Half-Open (Recovery Testing)
+
 - Circuit attempts to recover
 - Limited requests sent to primary function to test health
 - If successful, circuit closes
@@ -88,10 +91,11 @@ export const myCustomFunction = createResilientFunction(
 When retries are configured, the circuit breaker uses exponential backoff with jitter:
 
 ```javascript
-delay = baseDelay * 2^attempt + (random * 0.3 * delay)
+delay = (baseDelay * 2) ^ (attempt + random * 0.3 * delay);
 ```
 
 **Example retry delays:**
+
 - Attempt 1: ~1000ms + jitter (1000-1300ms)
 - Attempt 2: ~2000ms + jitter (2000-2600ms)
 - Attempt 3: ~4000ms + jitter (4000-5200ms)
@@ -103,6 +107,7 @@ The jitter (30% random variation) prevents the **thundering herd problem** where
 ### Available Metrics
 
 Each circuit breaker tracks:
+
 - **Successes**: Number of successful requests
 - **Failures**: Number of failed requests
 - **Timeouts**: Number of requests that exceeded timeout
@@ -123,6 +128,7 @@ console.log(health);
 ```
 
 **Example output:**
+
 ```json
 {
   "timestamp": "2026-01-02T18:55:00.000Z",
@@ -161,12 +167,8 @@ import { useCircuitBreakerHealth } from '@/hooks/useCircuitBreakerHealth';
 
 function MyComponent() {
   const { health, isHealthy, hasOpenCircuits } = useCircuitBreakerHealth();
-  
-  return (
-    <div>
-      {isHealthy ? '✅ All systems operational' : '⚠️ Some circuits are open'}
-    </div>
-  );
+
+  return <div>{isHealthy ? '✅ All systems operational' : '⚠️ Some circuits are open'}</div>;
 }
 ```
 
@@ -178,7 +180,7 @@ Circuit state changes automatically log to console:
 
 ```
 ⚠️  Circuit breaker "base44_getDashboardStats" opened - too many failures
-🔄 Circuit breaker "base44_getDashboardStats" half-open - testing recovery  
+🔄 Circuit breaker "base44_getDashboardStats" half-open - testing recovery
 ✅ Circuit breaker "base44_getDashboardStats" closed - service recovered
 🔄 Using fallback for base44_getDashboardStats
 ```
@@ -201,7 +203,7 @@ To add circuit breaker protection to a new function:
 export const myNewFunction = createResilientFunction(
   cloudFunctions.myNewFunction,
   localFunctions.myNewFunction,
-  'myNewFunction'
+  'myNewFunction',
 );
 ```
 
@@ -237,13 +239,13 @@ import { useCircuitBreakerHealth } from '@/hooks/useCircuitBreakerHealth';
 
 function CustomStatus() {
   const { health, summary } = useCircuitBreakerHealth(10000); // Update every 10s
-  
+
   return (
     <div>
-      <p>{summary.healthy}/{summary.total} circuits healthy</p>
-      {summary.open > 0 && (
-        <p className="text-red-600">⚠️ {summary.open} circuits are open</p>
-      )}
+      <p>
+        {summary.healthy}/{summary.total} circuits healthy
+      </p>
+      {summary.open > 0 && <p className="text-red-600">⚠️ {summary.open} circuits are open</p>}
     </div>
   );
 }
@@ -285,6 +287,7 @@ npm run test:file src/lib/circuitBreaker.test.js
 **Symptoms:** Circuit remains closed despite failures
 
 **Solutions:**
+
 - Check `volumeThreshold` - need minimum requests before circuit can open
 - Check `errorThresholdPercentage` - may be too high
 - Verify failures are being tracked (check metrics)
@@ -294,6 +297,7 @@ npm run test:file src/lib/circuitBreaker.test.js
 **Symptoms:** Circuit stays open even when service recovers
 
 **Solutions:**
+
 - Check `resetTimeout` - may need to wait longer
 - Verify primary service is actually healthy
 - Check half-open state is working (logs should show testing)
@@ -303,6 +307,7 @@ npm run test:file src/lib/circuitBreaker.test.js
 **Symptoms:** Frequent circuit openings
 
 **Solutions:**
+
 - Increase `timeout` if requests are slow
 - Decrease `errorThresholdPercentage` to tolerate more errors
 - Increase `resetTimeout` to give service more recovery time
@@ -313,6 +318,7 @@ npm run test:file src/lib/circuitBreaker.test.js
 **Symptoms:** Errors even when circuit is open
 
 **Solutions:**
+
 - Verify fallback function exists in `src/functions/index.js`
 - Check fallback function signature matches primary
 - Ensure fallback function is properly implemented

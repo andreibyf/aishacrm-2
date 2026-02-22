@@ -12,6 +12,7 @@
 Developer AI is an autonomous coding assistant built on **Claude Sonnet 4** (Anthropic), designed exclusively for superadmin users to perform advanced development tasks within the Aisha CRM codebase.
 
 **Key Characteristics:**
+
 - **Access Level:** Superadmin only (verified via `isSuperadmin()`)
 - **Model:** Claude Sonnet 4 (claude-sonnet-4-20250514)
 - **Configuration:** Database-driven settings via `ai_settings` table
@@ -24,11 +25,13 @@ Developer AI is an autonomous coding assistant built on **Claude Sonnet 4** (Ant
 ## Conversation Flow Architecture
 
 ### 1. **Entry Point**
+
 ```
 User → POST /api/ai/developer-chat → developerChat(message, userId, tenantId)
 ```
 
 **Prerequisites:**
+
 - User must have `is_superadmin = true` in `users` table
 - Valid JWT token in request headers
 - Request routed through `backend/routes/ai.js`
@@ -58,6 +61,7 @@ graph TD
 ### 3. **Tool Calling Flow**
 
 **Standard Path:**
+
 1. Claude proposes tool use (e.g., `read_file`, `search_code`)
 2. Developer AI validates tool against whitelist
 3. Execute tool with security checks
@@ -65,8 +69,9 @@ graph TD
 5. Claude synthesizes and continues or returns final answer
 
 **Critical Tools Flow:**
+
 ```
-Destructive Tool (write_file, run_command) 
+Destructive Tool (write_file, run_command)
   → Require Explicit User Approval
   → Log to audit_logs table
   → Execute if approved
@@ -78,15 +83,16 @@ Destructive Tool (write_file, run_command)
 **After Every Response:**
 Developer AI MUST provide 2-4 contextual follow-up suggestions based on:
 
-| Scenario | Suggested Follow-Ups |
-|----------|---------------------|
-| **Code Read** | "Explain this function", "Show tests for this", "Find similar code", "Check for bugs" |
-| **Bug Found** | "Suggest a fix", "Show related code", "Check git history", "Run tests" |
-| **File Modified** | "Review changes", "Run tests", "Check syntax", "Compare with original" |
-| **Test Run** | "Show failing test", "Explain error", "Fix test", "Run specific test" |
-| **Search Complete** | "Read file", "Show usages", "Explain context", "Find related" |
+| Scenario            | Suggested Follow-Ups                                                                  |
+| ------------------- | ------------------------------------------------------------------------------------- |
+| **Code Read**       | "Explain this function", "Show tests for this", "Find similar code", "Check for bugs" |
+| **Bug Found**       | "Suggest a fix", "Show related code", "Check git history", "Run tests"                |
+| **File Modified**   | "Review changes", "Run tests", "Check syntax", "Compare with original"                |
+| **Test Run**        | "Show failing test", "Explain error", "Fix test", "Run specific test"                 |
+| **Search Complete** | "Read file", "Show usages", "Explain context", "Find related"                         |
 
 **Implementation:**
+
 ```javascript
 // In developerChat() response
 {
@@ -107,13 +113,14 @@ Developer AI MUST provide 2-4 contextual follow-up suggestions based on:
 **UI:** Settings page → Developer AI tab  
 **Loader:** `backend/lib/aiSettingsLoader.js`
 
-| Setting | Default | Range | Description |
-|---------|---------|-------|-------------|
-| **temperature** | 0.2 | 0-1 | Controls response randomness. Lower = more deterministic/precise code. |
-| **max_iterations** | 5 | 1-15 | Maximum tool-calling iterations per request. Higher = can handle complex multi-step tasks. |
-| **require_approval_for_destructive** | true | bool | When enabled, destructive operations (delete, drop) require explicit confirmation. |
+| Setting                              | Default | Range | Description                                                                                |
+| ------------------------------------ | ------- | ----- | ------------------------------------------------------------------------------------------ |
+| **temperature**                      | 0.2     | 0-1   | Controls response randomness. Lower = more deterministic/precise code.                     |
+| **max_iterations**                   | 5       | 1-15  | Maximum tool-calling iterations per request. Higher = can handle complex multi-step tasks. |
+| **require_approval_for_destructive** | true    | bool  | When enabled, destructive operations (delete, drop) require explicit confirmation.         |
 
 **Loading Flow:**
+
 ```javascript
 // In developerChat()
 const aiSettings = await loadAiSettings('developer', null);
@@ -130,6 +137,7 @@ const aiSettings = await loadAiSettings('developer', null);
 **Location:** `backend/lib/developerAI.js` → `buildDeveloperPrompt()`
 
 **Sections:**
+
 1. **Role Definition** - "You are Developer AI, a senior software engineer..."
 2. **Codebase Context** - Architecture overview, key directories
 3. **Tool Guidelines** - When to use each tool, security boundaries
@@ -138,6 +146,7 @@ const aiSettings = await loadAiSettings('developer', null);
 6. **Current Context** - File structure snapshot (refreshed per session)
 
 **Key Directives:**
+
 ```
 - Always read files before modifying
 - Use search_code to understand dependencies
@@ -153,32 +162,36 @@ const aiSettings = await loadAiSettings('developer', null);
 ## Available Tools
 
 ### **Read Operations** (Low Risk)
-| Tool | Purpose | Example |
-|------|---------|---------|
-| `read_file` | Read source code | `{ file_path: "backend/routes/ai.js" }` |
-| `list_directory` | Explore structure | `{ dir_path: "backend/lib", recursive: true }` |
-| `search_code` | Find patterns | `{ query: "suggest_next_actions", file_pattern: "*.js" }` |
-| `view_logs` | Debug issues | `{ filter: "error", max_lines: 50 }` |
-| `run_tests` | Validate code | `{ test_path: "backend/__tests__/ai" }` |
+
+| Tool             | Purpose           | Example                                                   |
+| ---------------- | ----------------- | --------------------------------------------------------- |
+| `read_file`      | Read source code  | `{ file_path: "backend/routes/ai.js" }`                   |
+| `list_directory` | Explore structure | `{ dir_path: "backend/lib", recursive: true }`            |
+| `search_code`    | Find patterns     | `{ query: "suggest_next_actions", file_pattern: "*.js" }` |
+| `view_logs`      | Debug issues      | `{ filter: "error", max_lines: 50 }`                      |
+| `run_tests`      | Validate code     | `{ test_path: "backend/__tests__/ai" }`                   |
 
 ### **Write Operations** (High Risk - Require Approval)
-| Tool | Purpose | Approval Required |
-|------|---------|-------------------|
-| `write_file` | Modify code | ✅ Yes (unless test file) |
-| `run_command` | Execute shell | ✅ Yes (unless read-only) |
-| `create_migration` | DB schema change | ✅ Yes (always) |
+
+| Tool               | Purpose          | Approval Required         |
+| ------------------ | ---------------- | ------------------------- |
+| `write_file`       | Modify code      | ✅ Yes (unless test file) |
+| `run_command`      | Execute shell    | ✅ Yes (unless read-only) |
+| `create_migration` | DB schema change | ✅ Yes (always)           |
 
 ### **AI Testing Tools**
-| Tool | Purpose | Use Case |
-|------|---------|----------|
-| `test_aisha` | Test AiSHA AI | Send message, observe tool calls, verify response |
-| `analyze_conversation` | Debug chat flow | Review tool sequences, identify failures |
+
+| Tool                   | Purpose         | Use Case                                          |
+| ---------------------- | --------------- | ------------------------------------------------- |
+| `test_aisha`           | Test AiSHA AI   | Send message, observe tool calls, verify response |
+| `analyze_conversation` | Debug chat flow | Review tool sequences, identify failures          |
 
 ---
 
 ## Conversation Patterns
 
 ### **Pattern 1: Code Investigation**
+
 ```
 User: "Why isn't suggest_next_actions being called?"
 ↓
@@ -191,6 +204,7 @@ Developer AI:
 ```
 
 ### **Pattern 2: Bug Fix**
+
 ```
 User: "Fix the sessionEntities bug"
 ↓
@@ -204,6 +218,7 @@ Developer AI:
 ```
 
 ### **Pattern 3: Testing AiSHA**
+
 ```
 User: "Test if AiSHA can suggest next actions"
 ↓
@@ -219,11 +234,13 @@ Developer AI:
 ## Security Boundaries
 
 ### **Allowed Paths**
+
 - `/app/backend/**`
 - `/app/braid-llm-kit/**`
 - `/app/src/**` (frontend)
 
 ### **Forbidden Operations**
+
 - Read/write `.env` files
 - Modify `doppler.yaml`
 - Access `/opt/` outside container
@@ -231,15 +248,16 @@ Developer AI:
 - Modify production database directly
 
 ### **Command Safety**
+
 ```javascript
 // Safe commands (auto-approved)
-[ "ls", "cat", "grep", "find", "tail", "head", "wc", "pwd" ]
-
-// Requires approval
-[ "rm", "mv", "cp", "npm install", "git push", "docker", "psql" ]
-
-// Forbidden
-[ "curl", "wget", "ssh", "scp", "nc", "chmod +x" ]
+['ls', 'cat', 'grep', 'find', 'tail', 'head', 'wc', 'pwd'][
+  // Requires approval
+  ('rm', 'mv', 'cp', 'npm install', 'git push', 'docker', 'psql')
+][
+  // Forbidden
+  ('curl', 'wget', 'ssh', 'scp', 'nc', 'chmod +x')
+];
 ```
 
 ---
@@ -247,6 +265,7 @@ Developer AI:
 ## Error Handling
 
 ### **Tool Execution Failure**
+
 ```javascript
 {
   error: "Tool execution failed",
@@ -257,11 +276,13 @@ Developer AI:
 ```
 
 **Developer AI Response:**
+
 > "The file doesn't exist. Let me check the available routes..."  
 > [Automatically calls list_directory]  
 > Suggestions: ["Show all route files", "Search for similar routes"]
 
 ### **Permission Denied**
+
 ```javascript
 {
   error: "Permission denied",
@@ -272,6 +293,7 @@ Developer AI:
 ```
 
 **Developer AI Response:**
+
 > "This change requires your approval. I'll wait for confirmation before proceeding."
 
 ---
@@ -279,16 +301,19 @@ Developer AI:
 ## Integration Points
 
 ### **With AiSHA AI**
+
 - `test_aisha` tool sends messages to AiSHA endpoint
 - Observes tool calls, response format, error handling
 - Validates AiSHA's conversation flow
 
 ### **With Braid SDK**
+
 - Can read Braid tool schemas
 - Test Braid tools via `test_aisha`
 - Debug Braid integration issues
 
 ### **With Database**
+
 - Read-only queries via `run_command("psql -c ...")`
 - Migration creation via `create_migration`
 - Never direct writes (use backend APIs)
@@ -298,12 +323,13 @@ Developer AI:
 ## Logging & Audit
 
 **All Actions Logged:**
+
 ```sql
 INSERT INTO audit_logs (
-  user_id, 
-  action, 
-  details, 
-  ip_address, 
+  user_id,
+  action,
+  details,
+  ip_address,
   user_agent,
   severity
 ) VALUES (
@@ -317,6 +343,7 @@ INSERT INTO audit_logs (
 ```
 
 **Metrics Tracked:**
+
 - Tool calls per session
 - Approval requests
 - Failed operations
@@ -327,6 +354,7 @@ INSERT INTO audit_logs (
 ## Best Practices for Developers
 
 ### **When Using Developer AI**
+
 1. **Be Specific** - "Fix sessionEntities bug in /chat endpoint" vs. "Fix AI"
 2. **Provide Context** - Include error messages, file paths, line numbers
 3. **Review Changes** - Always inspect code before approving writes
@@ -334,6 +362,7 @@ INSERT INTO audit_logs (
 5. **Use Follow-Ups** - Suggestions guide you through debugging workflow
 
 ### **When Modifying Developer AI**
+
 1. **Update System Prompt** - If changing behavior, update `buildDeveloperPrompt()`
 2. **Add Tools Carefully** - New tools need security review
 3. **Test Tool Chains** - Ensure multi-step workflows complete
@@ -344,9 +373,9 @@ INSERT INTO audit_logs (
 
 ## Version History
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0 | 2025-12-25 | Initial architecture documentation |
+| Version | Date       | Changes                            |
+| ------- | ---------- | ---------------------------------- |
+| 1.0     | 2025-12-25 | Initial architecture documentation |
 
 ---
 

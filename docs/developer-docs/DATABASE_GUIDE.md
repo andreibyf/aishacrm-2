@@ -11,18 +11,21 @@
 ### Part 1: Architecture & Setup
 
 #### Chapter 1: Database Architecture
+
 - [1.1 Architecture Overview](#11-architecture-overview)
 - [1.2 Technology Stack](#12-technology-stack)
 - [1.3 Supabase vs Self-Hosted](#13-supabase-vs-self-hosted)
 - [1.4 Connection Architecture](#14-connection-architecture)
 
 #### Chapter 2: Initial Setup
+
 - [2.1 Supabase Setup](#21-supabase-setup)
 - [2.2 Database Configuration](#22-database-configuration)
 - [2.3 Connection Strings](#23-connection-strings)
 - [2.4 Environment Variables](#24-environment-variables)
 
 #### Chapter 3: Schema Design
+
 - [3.1 Core Tables](#31-core-tables)
 - [3.2 Entity Relationships](#32-entity-relationships)
 - [3.3 Tenant Architecture](#33-tenant-architecture)
@@ -30,6 +33,7 @@
 - [3.5 Naming Conventions](#35-naming-conventions)
 
 #### Chapter 4: Migrations Management
+
 - [4.1 Migration Strategy](#41-migration-strategy)
 - [4.2 Migration Files](#42-migration-files)
 - [4.3 Applying Migrations](#43-applying-migrations)
@@ -37,6 +41,7 @@
 - [4.5 Migration History](#45-migration-history)
 
 #### Chapter 5: Indexing Strategy
+
 - [5.1 Index Types](#51-index-types)
 - [5.2 Primary Indexes](#52-primary-indexes)
 - [5.3 Foreign Key Indexes](#53-foreign-key-indexes)
@@ -44,6 +49,7 @@
 - [5.5 Index Maintenance](#55-index-maintenance)
 
 #### Chapter 6: Data Integrity
+
 - [6.1 Constraints](#61-constraints)
 - [6.2 Foreign Keys](#62-foreign-keys)
 - [6.3 Unique Constraints](#63-unique-constraints)
@@ -64,21 +70,21 @@ graph TB
         A[Frontend React App]
         B[Backend Express API]
     end
-    
+
     subgraph "Supabase Platform"
         C[PostgREST API]
         D[PostgreSQL 15+]
         E[Storage]
         F[Auth]
     end
-    
+
     subgraph "Database Features"
         G[Row-Level Security]
         H[Triggers & Functions]
         I[Indexes]
         J[JSONB Columns]
     end
-    
+
     A -->|Anon Key| C
     B -->|Service Role| D
     D --> G
@@ -99,15 +105,15 @@ graph TB
 
 ### 1.2 Technology Stack
 
-| Component | Technology | Version | Purpose |
-|-----------|-----------|---------|---------|
-| **Database** | PostgreSQL | 15+ | Core data storage |
-| **Hosting** | Supabase | Cloud | Managed PostgreSQL + extras |
-| **Connection Pool** | pg (node-postgres) | 8.x | Backend connection pooling |
-| **Extensions** | pgcrypto | - | UUID generation |
-| **Extensions** | pg_stat_statements | - | Query performance tracking |
-| **Data Types** | JSONB | - | Flexible metadata storage |
-| **Security** | Row-Level Security (RLS) | - | Tenant isolation |
+| Component           | Technology               | Version | Purpose                     |
+| ------------------- | ------------------------ | ------- | --------------------------- |
+| **Database**        | PostgreSQL               | 15+     | Core data storage           |
+| **Hosting**         | Supabase                 | Cloud   | Managed PostgreSQL + extras |
+| **Connection Pool** | pg (node-postgres)       | 8.x     | Backend connection pooling  |
+| **Extensions**      | pgcrypto                 | -       | UUID generation             |
+| **Extensions**      | pg_stat_statements       | -       | Query performance tracking  |
+| **Data Types**      | JSONB                    | -       | Flexible metadata storage   |
+| **Security**        | Row-Level Security (RLS) | -       | Tenant isolation            |
 
 ---
 
@@ -115,17 +121,17 @@ graph TB
 
 #### Why Supabase?
 
-| Feature | Supabase | Self-Hosted PostgreSQL |
-|---------|----------|----------------------|
-| **Setup Time** | 5 minutes | Several hours |
-| **Backups** | Automated daily | Manual configuration |
-| **Auth Integration** | Built-in | Requires custom solution |
-| **Storage** | Included | Requires separate service |
-| **RLS** | UI + SQL | SQL only |
-| **Monitoring** | Dashboard included | Requires setup (Grafana, etc.) |
-| **Scaling** | Automatic | Manual |
-| **SSL/TLS** | Included | Manual certificate management |
-| **Cost (small)** | Free tier available | Server + maintenance costs |
+| Feature              | Supabase            | Self-Hosted PostgreSQL         |
+| -------------------- | ------------------- | ------------------------------ |
+| **Setup Time**       | 5 minutes           | Several hours                  |
+| **Backups**          | Automated daily     | Manual configuration           |
+| **Auth Integration** | Built-in            | Requires custom solution       |
+| **Storage**          | Included            | Requires separate service      |
+| **RLS**              | UI + SQL            | SQL only                       |
+| **Monitoring**       | Dashboard included  | Requires setup (Grafana, etc.) |
+| **Scaling**          | Automatic           | Manual                         |
+| **SSL/TLS**          | Included            | Manual certificate management  |
+| **Cost (small)**     | Free tier available | Server + maintenance costs     |
 
 **Decision: Supabase Cloud Only**
 
@@ -145,11 +151,11 @@ const { Pool } = pg;
 export const pgPool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
-    rejectUnauthorized: false
+    rejectUnauthorized: false,
   },
-  max: 20,                    // Maximum connections
-  idleTimeoutMillis: 30000,   // Close idle connections after 30s
-  connectionTimeoutMillis: 2000
+  max: 20, // Maximum connections
+  idleTimeoutMillis: 30000, // Close idle connections after 30s
+  connectionTimeoutMillis: 2000,
 });
 
 // Test connection
@@ -163,6 +169,7 @@ pgPool.on('error', (err) => {
 ```
 
 **Connection String Format:**
+
 ```
 postgresql://postgres:PASSWORD@db.PROJECT.supabase.co:5432/postgres
 ```
@@ -178,20 +185,20 @@ export const supabase = createClient(
   {
     auth: {
       autoRefreshToken: true,
-      persistSession: true
-    }
-  }
+      persistSession: true,
+    },
+  },
 );
 ```
 
 **Key Differences:**
 
-| Aspect | Backend (Service Role) | Frontend (Anon Key) |
-|--------|----------------------|-------------------|
-| **Access Level** | Full database access | RLS-restricted access |
-| **Bypasses RLS** | Yes | No |
-| **Use Case** | API operations | Direct client queries (optional) |
-| **Security** | Server-side only | Can be exposed |
+| Aspect           | Backend (Service Role) | Frontend (Anon Key)              |
+| ---------------- | ---------------------- | -------------------------------- |
+| **Access Level** | Full database access   | RLS-restricted access            |
+| **Bypasses RLS** | Yes                    | No                               |
+| **Use Case**     | API operations         | Direct client queries (optional) |
+| **Security**     | Server-side only       | Can be exposed                   |
 
 ---
 
@@ -206,6 +213,7 @@ export const supabase = createClient(
    - Create account or sign in with GitHub
 
 2. **Create New Project**
+
    ```
    Organization: Your Company
    Project Name: aishacrm-prod (or aishacrm-dev)
@@ -258,6 +266,7 @@ postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres
 ```
 
 **Use for:**
+
 - Backend API (via pg-pool)
 - Database migrations
 - Direct SQL queries
@@ -270,16 +279,17 @@ postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].supabase.co:6543/postgres
 ```
 
 **Use for:**
+
 - Serverless environments (Railway, Vercel)
 - High-concurrency scenarios
 - Auto-scaling deployments
 
 **Differences:**
 
-| Port | Type | Max Connections | Latency | Use Case |
-|------|------|----------------|---------|----------|
-| **5432** | Direct | Limited by plan | Lower | Long-lived connections |
-| **6543** | Pooled | Higher | Slightly higher | Serverless, auto-scale |
+| Port     | Type   | Max Connections | Latency         | Use Case               |
+| -------- | ------ | --------------- | --------------- | ---------------------- |
+| **5432** | Direct | Limited by plan | Lower           | Long-lived connections |
+| **6543** | Pooled | Higher          | Slightly higher | Serverless, auto-scale |
 
 ---
 
@@ -329,6 +339,7 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 Aisha CRM has **50+ tables** organized into functional groups:
 
 #### CRM Core (7 tables)
+
 ```sql
 -- Primary entities for CRM functionality
 accounts         -- Companies/organizations
@@ -341,6 +352,7 @@ notifications    -- User notifications
 ```
 
 #### User Management (3 tables)
+
 ```sql
 users            -- Global users (superadmins)
 employees        -- Tenant-scoped users
@@ -348,6 +360,7 @@ tenant           -- Multi-tenant organizations
 ```
 
 #### Business Intelligence (3 tables)
+
 ```sql
 bizdev_sources   -- Business development sources
 cash_flow        -- Financial transactions
@@ -355,6 +368,7 @@ daily_sales_metrics -- Sales performance tracking
 ```
 
 #### System (6 tables)
+
 ```sql
 audit_log        -- Security and change tracking
 system_logs      -- Application logging
@@ -365,6 +379,7 @@ systembranding   -- White-label customization
 ```
 
 #### Workflow & Automation (4 tables)
+
 ```sql
 workflow         -- Automation definitions
 workflow_execution -- Workflow run history
@@ -374,6 +389,7 @@ conversation_messages -- Chat messages
 ```
 
 #### Documents & Storage (1 table)
+
 ```sql
 documents        -- Document metadata with AI classification
                  -- Stores file metadata, entity relationships, and AI-generated
@@ -392,30 +408,30 @@ erDiagram
     TENANT ||--o{ CONTACTS : owns
     TENANT ||--o{ LEADS : owns
     TENANT ||--o{ OPPORTUNITIES : owns
-    
+
     ACCOUNTS ||--o{ CONTACTS : "has many"
     ACCOUNTS ||--o{ OPPORTUNITIES : "has many"
     CONTACTS ||--o{ OPPORTUNITIES : "primary contact"
     CONTACTS ||--o{ ACTIVITIES : related
-    
+
     EMPLOYEES ||--o{ CONTACTS : "assigned to"
     EMPLOYEES ||--o{ LEADS : "assigned to"
     EMPLOYEES ||--o{ OPPORTUNITIES : "assigned to"
-    
+
     OPPORTUNITIES ||--o{ ACTIVITIES : related
     LEADS ||--o{ ACTIVITIES : related
 ```
 
 **Key Relationships:**
 
-| Parent | Child | Relationship | On Delete |
-|--------|-------|--------------|-----------|
-| `tenant` | `employees` | One-to-Many | CASCADE |
-| `tenant` | `accounts` | One-to-Many | CASCADE |
-| `accounts` | `contacts` | One-to-Many | SET NULL |
-| `accounts` | `opportunities` | One-to-Many | SET NULL |
-| `contacts` | `opportunities` | One-to-Many | SET NULL |
-| `employees` | `contacts` | One-to-Many (owner) | SET NULL |
+| Parent      | Child           | Relationship        | On Delete |
+| ----------- | --------------- | ------------------- | --------- |
+| `tenant`    | `employees`     | One-to-Many         | CASCADE   |
+| `tenant`    | `accounts`      | One-to-Many         | CASCADE   |
+| `accounts`  | `contacts`      | One-to-Many         | SET NULL  |
+| `accounts`  | `opportunities` | One-to-Many         | SET NULL  |
+| `contacts`  | `opportunities` | One-to-Many         | SET NULL  |
+| `employees` | `contacts`      | One-to-Many (owner) | SET NULL  |
 
 ---
 
@@ -426,11 +442,13 @@ erDiagram
 🚨 **CRITICAL:** Aisha CRM uses **UUID tenant IDs**, NOT slugs.
 
 **Correct:**
+
 ```sql
 SELECT * FROM contacts WHERE tenant_id = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
 ```
 
 **Incorrect:**
+
 ```sql
 SELECT * FROM contacts WHERE tenant_id = 'acme-corp'; -- ❌ Legacy slug, not supported
 ```
@@ -492,6 +510,7 @@ CREATE TABLE contacts (
 #### Metadata Use Cases
 
 **1. Custom Fields:**
+
 ```json
 {
   "custom_fields": {
@@ -503,6 +522,7 @@ CREATE TABLE contacts (
 ```
 
 **2. Integration Data:**
+
 ```json
 {
   "integrations": {
@@ -514,6 +534,7 @@ CREATE TABLE contacts (
 ```
 
 **3. UI State:**
+
 ```json
 {
   "ui_preferences": {
@@ -525,6 +546,7 @@ CREATE TABLE contacts (
 ```
 
 **4. Feature Flags:**
+
 ```json
 {
   "crm_access": true,
@@ -564,16 +586,19 @@ WHERE id = 'contact-uuid';
 ### 3.5 Naming Conventions
 
 #### Table Names
+
 - **Singular form:** `account`, `contact`, `lead` (not `accounts`, `contacts`, `leads`)
 - **Exception:** Some legacy tables use plural (`employees`, `bizdev_sources`, `conversations`)
 - **Snake_case:** `cash_flow`, `api_key`, `system_logs`
 
 #### Column Names
+
 - **Snake_case:** `first_name`, `tenant_id`, `created_at`
 - **Consistent timestamps:** `created_at`, `updated_at` (always TIMESTAMPTZ)
 - **IDs:** Always `id` for primary key, `{table}_id` for foreign keys
 
 #### Index Names
+
 ```sql
 -- Pattern: idx_{table}_{column}
 CREATE INDEX idx_contacts_tenant ON contacts(tenant_id);
@@ -585,6 +610,7 @@ CREATE INDEX idx_contacts_tenant_email ON contacts(tenant_id, email);
 ```
 
 #### Constraint Names
+
 ```sql
 -- Pattern: {table}_{column}_unique
 ALTER TABLE contacts ADD CONSTRAINT contacts_email_unique UNIQUE (email, tenant_id);
@@ -612,6 +638,7 @@ Aisha CRM uses **numbered sequential migrations** with the following principles:
 ### 4.2 Migration Files
 
 #### Location
+
 ```
 backend/migrations/
 ├── 001_init.sql                    # Initial schema
@@ -639,11 +666,11 @@ backend/migrations/
 BEGIN;
 
 -- Check if already applied (idempotency)
-DO $$ 
+DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM information_schema.tables 
+  IF NOT EXISTS (SELECT 1 FROM information_schema.tables
                  WHERE table_name = 'new_table') THEN
-    
+
     -- Create table
     CREATE TABLE new_table (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -653,17 +680,17 @@ BEGIN
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW()
     );
-    
+
     -- Create indexes
     CREATE INDEX idx_new_table_tenant ON new_table(tenant_id);
-    
+
     -- Enable RLS
     ALTER TABLE new_table ENABLE ROW LEVEL SECURITY;
-    
+
     -- Create RLS policy
     CREATE POLICY "tenant_isolation" ON new_table
       FOR ALL USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
-    
+
     RAISE NOTICE 'Migration XXX applied successfully';
   ELSE
     RAISE NOTICE 'Migration XXX already applied, skipping';
@@ -702,8 +729,8 @@ COMMIT;
    - Check **Table Editor** to confirm changes
    - Run validation query:
      ```sql
-     SELECT tablename FROM pg_tables 
-     WHERE schemaname = 'public' 
+     SELECT tablename FROM pg_tables
+     WHERE schemaname = 'public'
      AND tablename = 'new_table';
      ```
 
@@ -729,7 +756,7 @@ import { pgPool } from '../db.js';
 
 async function applyMigration(filename) {
   const sql = fs.readFileSync(`./migrations/${filename}`, 'utf8');
-  
+
   try {
     await pgPool.query(sql);
     console.log(`✅ Migration ${filename} applied successfully`);
@@ -768,24 +795,26 @@ ALTER TABLE tenant DROP COLUMN IF EXISTS status;
 #### Manual Rollback Steps
 
 1. **Identify Breaking Change**
+
    ```sql
    -- Check when table was created
-   SELECT schemaname, tablename, 
+   SELECT schemaname, tablename,
           obj_description((schemaname||'.'||tablename)::regclass)
    FROM pg_tables
    WHERE tablename = 'problematic_table';
    ```
 
 2. **Create Rollback Script**
+
    ```sql
    BEGIN;
-   
+
    -- Reverse the changes
    DROP TABLE IF EXISTS problematic_table CASCADE;
-   
+
    -- Restore previous state (if applicable)
    -- ...
-   
+
    COMMIT;
    ```
 
@@ -813,12 +842,12 @@ Maintain a document listing applied migrations:
 ```markdown
 ## Migration History
 
-| # | File | Date Applied | Applied By | Notes |
-|---|------|--------------|------------|-------|
-| 001 | 001_init.sql | 2025-01-15 | Admin | Initial schema |
-| 002 | 002_seed.sql | 2025-01-15 | Admin | Seed data |
-| 023 | 023_comprehensive_rls_security.sql | 2025-11-05 | Admin | RLS security |
-| 037 | 037_add_conversation_title_topic.sql | 2025-11-10 | Admin | AI features |
+| #   | File                                 | Date Applied | Applied By | Notes          |
+| --- | ------------------------------------ | ------------ | ---------- | -------------- |
+| 001 | 001_init.sql                         | 2025-01-15   | Admin      | Initial schema |
+| 002 | 002_seed.sql                         | 2025-01-15   | Admin      | Seed data      |
+| 023 | 023_comprehensive_rls_security.sql   | 2025-11-05   | Admin      | RLS security   |
+| 037 | 037_add_conversation_title_topic.sql | 2025-11-10   | Admin      | AI features    |
 ```
 
 **Option 2: Migration Table (Recommended for Future)**
@@ -844,15 +873,15 @@ SELECT * FROM schema_migrations WHERE migration_name = '023_comprehensive_rls_se
 
 #### Key Migrations Reference
 
-| Migration | Description | Impact |
-|-----------|-------------|--------|
-| **001_init.sql** | Initial schema | Creates core tables |
-| **006_tenant_table.sql** | Multi-tenancy | Adds tenant isolation |
-| **023_comprehensive_rls_security.sql** | RLS policies | Enables row-level security (CRITICAL) |
-| **024_fix_function_search_path.sql** | Function security | Fixes mutable search_path |
-| **032_normalize_foreign_keys.sql** | FK optimization | Improves referential integrity |
-| **037_add_conversation_title_topic.sql** | AI conversations | Adds title/topic fields |
-| **052_tenant_identifiers.sql** | UUID tenant IDs | Enforces UUID-based tenants |
+| Migration                                | Description       | Impact                                |
+| ---------------------------------------- | ----------------- | ------------------------------------- |
+| **001_init.sql**                         | Initial schema    | Creates core tables                   |
+| **006_tenant_table.sql**                 | Multi-tenancy     | Adds tenant isolation                 |
+| **023_comprehensive_rls_security.sql**   | RLS policies      | Enables row-level security (CRITICAL) |
+| **024_fix_function_search_path.sql**     | Function security | Fixes mutable search_path             |
+| **032_normalize_foreign_keys.sql**       | FK optimization   | Improves referential integrity        |
+| **037_add_conversation_title_topic.sql** | AI conversations  | Adds title/topic fields               |
+| **052_tenant_identifiers.sql**           | UUID tenant IDs   | Enforces UUID-based tenants           |
 
 ---
 
@@ -862,13 +891,13 @@ SELECT * FROM schema_migrations WHERE migration_name = '023_comprehensive_rls_se
 
 PostgreSQL supports multiple index types:
 
-| Type | Use Case | Example |
-|------|----------|---------|
-| **B-Tree** (default) | Equality, range queries | `CREATE INDEX idx_name ON table(column);` |
-| **Hash** | Equality only (faster) | `CREATE INDEX idx_name ON table USING HASH(column);` |
-| **GIN** | JSONB, arrays, full-text | `CREATE INDEX idx_name ON table USING GIN(jsonb_column);` |
-| **GiST** | Geometric data, full-text | `CREATE INDEX idx_name ON table USING GIST(column);` |
-| **BRIN** | Very large tables, time-series | `CREATE INDEX idx_name ON table USING BRIN(created_at);` |
+| Type                 | Use Case                       | Example                                                   |
+| -------------------- | ------------------------------ | --------------------------------------------------------- |
+| **B-Tree** (default) | Equality, range queries        | `CREATE INDEX idx_name ON table(column);`                 |
+| **Hash**             | Equality only (faster)         | `CREATE INDEX idx_name ON table USING HASH(column);`      |
+| **GIN**              | JSONB, arrays, full-text       | `CREATE INDEX idx_name ON table USING GIN(jsonb_column);` |
+| **GiST**             | Geometric data, full-text      | `CREATE INDEX idx_name ON table USING GIST(column);`      |
+| **BRIN**             | Very large tables, time-series | `CREATE INDEX idx_name ON table USING BRIN(created_at);`  |
 
 ---
 
@@ -897,6 +926,7 @@ ALTER TABLE contacts ADD CONSTRAINT contacts_pkey PRIMARY KEY (id);
 🚨 **CRITICAL:** Always index foreign key columns for performance.
 
 **Bad (No Index):**
+
 ```sql
 CREATE TABLE contacts (
   id UUID PRIMARY KEY,
@@ -906,6 +936,7 @@ CREATE TABLE contacts (
 ```
 
 **Good (With Index):**
+
 ```sql
 CREATE TABLE contacts (
   id UUID PRIMARY KEY,
@@ -948,6 +979,7 @@ CREATE INDEX idx_{table}_tenant ON {table}(tenant_id);
 ```
 
 **Why:** Most queries filter by `tenant_id` first:
+
 ```sql
 SELECT * FROM contacts WHERE tenant_id = 'uuid' AND email = 'test@example.com';
 -- Uses: idx_contacts_tenant
@@ -969,6 +1001,7 @@ CREATE INDEX idx_opportunities_tenant_status ON opportunities(tenant_id, status)
 ```
 
 **Column Order Matters:**
+
 ```sql
 -- Good: Most selective column first
 CREATE INDEX idx_users_email_tenant ON users(email, tenant_id);  -- email is unique
@@ -1077,12 +1110,12 @@ CREATE TABLE opportunities (
 
 **ON DELETE Actions:**
 
-| Action | Behavior | Use Case |
-|--------|----------|----------|
-| **CASCADE** | Delete child records | tenant → employees |
-| **SET NULL** | Set FK to NULL | account → contacts (optional) |
-| **RESTRICT** | Prevent deletion if children exist | Default if not specified |
-| **NO ACTION** | Same as RESTRICT | Compliance/audit scenarios |
+| Action        | Behavior                           | Use Case                      |
+| ------------- | ---------------------------------- | ----------------------------- |
+| **CASCADE**   | Delete child records               | tenant → employees            |
+| **SET NULL**  | Set FK to NULL                     | account → contacts (optional) |
+| **RESTRICT**  | Prevent deletion if children exist | Default if not specified      |
+| **NO ACTION** | Same as RESTRICT                   | Compliance/audit scenarios    |
 
 #### Circular References
 
@@ -1103,10 +1136,10 @@ CREATE TABLE contacts (
 );
 
 -- Add FK after both tables exist
-ALTER TABLE accounts 
-  ADD CONSTRAINT fk_accounts_primary_contact 
-  FOREIGN KEY (primary_contact_id) 
-  REFERENCES contacts(id) 
+ALTER TABLE accounts
+  ADD CONSTRAINT fk_accounts_primary_contact
+  FOREIGN KEY (primary_contact_id)
+  REFERENCES contacts(id)
   ON DELETE SET NULL;
 ```
 
@@ -1124,8 +1157,8 @@ ALTER TABLE users ADD CONSTRAINT users_email_unique UNIQUE (email);
 
 ```sql
 -- Email must be unique per tenant
-ALTER TABLE employees 
-  ADD CONSTRAINT employees_email_tenant_unique 
+ALTER TABLE employees
+  ADD CONSTRAINT employees_email_tenant_unique
   UNIQUE (email, tenant_id);
 ```
 
@@ -1133,8 +1166,8 @@ ALTER TABLE employees
 
 ```sql
 -- Only active users must have unique email
-CREATE UNIQUE INDEX users_email_unique_active 
-  ON users(email) 
+CREATE UNIQUE INDEX users_email_unique_active
+  ON users(email)
   WHERE status = 'active';
 ```
 
@@ -1144,23 +1177,23 @@ CREATE UNIQUE INDEX users_email_unique_active
 
 ```sql
 -- Amount must be positive
-ALTER TABLE opportunities 
-  ADD CONSTRAINT opportunities_amount_check 
+ALTER TABLE opportunities
+  ADD CONSTRAINT opportunities_amount_check
   CHECK (amount >= 0);
 
 -- Probability must be 0-100
-ALTER TABLE opportunities 
-  ADD CONSTRAINT opportunities_probability_check 
+ALTER TABLE opportunities
+  ADD CONSTRAINT opportunities_probability_check
   CHECK (probability >= 0 AND probability <= 100);
 
 -- Status must be valid value
-ALTER TABLE leads 
-  ADD CONSTRAINT leads_status_check 
+ALTER TABLE leads
+  ADD CONSTRAINT leads_status_check
   CHECK (status IN ('new', 'contacted', 'qualified', 'lost', 'converted'));
 
 -- Email format validation
-ALTER TABLE contacts 
-  ADD CONSTRAINT contacts_email_check 
+ALTER TABLE contacts
+  ADD CONSTRAINT contacts_email_check
   CHECK (email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}$');
 ```
 
@@ -1204,12 +1237,12 @@ BEGIN
   IF EXISTS (SELECT 1 FROM users WHERE LOWER(email) = LOWER(NEW.email)) THEN
     RAISE EXCEPTION 'Email already exists in users table';
   END IF;
-  
+
   -- Check in employees table
   IF EXISTS (SELECT 1 FROM employees WHERE LOWER(email) = LOWER(NEW.email)) THEN
     RAISE EXCEPTION 'Email already exists in employees table';
   END IF;
-  
+
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -1249,7 +1282,7 @@ BEGIN
     current_user,
     NOW()
   );
-  
+
   RETURN COALESCE(NEW, OLD);
 END;
 $$ LANGUAGE plpgsql;
@@ -1284,12 +1317,12 @@ BEGIN
   END IF;
 
   INSERT INTO public.person_profile AS pp (
-    person_id, person_type, tenant_id, first_name, last_name, email, phone, 
+    person_id, person_type, tenant_id, first_name, last_name, email, phone,
     job_title, status, account_id, account_name, updated_at
   ) VALUES (
     NEW.id, 'contact', NEW.tenant_id, NEW.first_name, NEW.last_name, NEW.email,
     -- CRITICAL: Cast BOTH arguments for polymorphic function resolution
-    COALESCE(NULLIF(NEW.mobile::text, ''::text), NEW.phone), 
+    COALESCE(NULLIF(NEW.mobile::text, ''::text), NEW.phone),
     NEW.job_title, NEW.status, NEW.account_id, NEW.account_name, now()
   )
   ON CONFLICT (person_id) DO UPDATE SET
@@ -1315,8 +1348,8 @@ RETURNS trigger
 LANGUAGE plpgsql
 SET search_path = public, pg_catalog
 AS $function$
-DECLARE 
-  v_person_id uuid; 
+DECLARE
+  v_person_id uuid;
   v_person_type text;
 BEGIN
   IF TG_OP = 'DELETE' THEN
@@ -1348,7 +1381,7 @@ BEGIN
   END IF;
 
   PERFORM public.recompute_last_activity_at(v_person_id);
-  
+
   -- CRITICAL: Cannot coalesce RECORD types - use explicit return
   IF TG_OP = 'DELETE' THEN
     RETURN OLD;
@@ -1411,9 +1444,10 @@ CREATE TRIGGER trg_person_profile_activities
 
 ---
 
-*Aisha CRM Database Administration Manual - Part 1*  
-*Copyright © 2025 4V Data Consulting. All rights reserved.*  
-*Version 1.0 - November 15, 2025*
+_Aisha CRM Database Administration Manual - Part 1_  
+_Copyright © 2025 4V Data Consulting. All rights reserved._  
+_Version 1.0 - November 15, 2025_
+
 # Aisha CRM Database Administration Manual - Part 2
 
 **Version:** 1.0  
@@ -1429,6 +1463,7 @@ CREATE TRIGGER trg_person_profile_activities
 **[← Return to Part 1](./AISHA_CRM_DATABASE_MANUAL_PART1.md)** for Chapters 1-6
 
 #### Chapter 7: Comprehensive Migration History
+
 - [7.1 Initial Schema (001-010)](#71-initial-schema-001-010)
 - [7.2 Security & RLS (011-024)](#72-security--rls-011-024)
 - [7.3 Features & Optimization (025-036)](#73-features--optimization-025-036)
@@ -1436,12 +1471,14 @@ CREATE TRIGGER trg_person_profile_activities
 - [7.5 Special Migrations](#75-special-migrations)
 
 #### Chapter 8: Data Operations & Best Practices
+
 - [8.1 Development Workflow](#81-development-workflow)
 - [8.2 Testing Migrations](#82-testing-migrations)
 - [8.3 Documentation Standards](#83-documentation-standards)
 - [8.4 Data Security Guidelines](#84-data-security-guidelines)
 
 #### Appendices
+
 - [Appendix A: Complete Table Reference](#appendix-a-complete-table-reference)
 - [Appendix B: Migration Quick Reference](#appendix-b-migration-quick-reference)
 - [Appendix C: Supabase Features](#appendix-c-supabase-features)
@@ -1456,10 +1493,12 @@ CREATE TRIGGER trg_person_profile_activities
 ### 7.1 Initial Schema (001-010)
 
 #### 001_init.sql
+
 **Date:** 2025-01-15  
 **Purpose:** Create core database schema with essential tables
 
 **Tables Created:**
+
 - `users` - Global user accounts (superadmins)
 - `accounts` - Companies/organizations
 - `contacts` - Individual people
@@ -1471,6 +1510,7 @@ CREATE TRIGGER trg_person_profile_activities
 - `employees` - Tenant-scoped users
 
 **Key Features:**
+
 - UUID primary keys with `gen_random_uuid()`
 - JSONB metadata columns for flexibility
 - Tenant isolation via `tenant_id`
@@ -1478,6 +1518,7 @@ CREATE TRIGGER trg_person_profile_activities
 - Foreign key relationships
 
 **Example:**
+
 ```sql
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
@@ -1504,10 +1545,12 @@ CREATE TABLE accounts (
 ---
 
 #### 002_seed.sql
+
 **Date:** 2025-01-15  
 **Purpose:** Seed initial data for development and testing
 
 **Data Inserted:**
+
 - Test superadmin user
 - Sample tenant
 - Demo accounts, contacts, leads
@@ -1516,13 +1559,16 @@ CREATE TABLE accounts (
 ---
 
 #### 003_create_apikey.sql
+
 **Date:** 2025-01-20  
 **Purpose:** Add API key management for external integrations
 
 **Tables Created:**
+
 - `api_key` - API authentication tokens
 
 **Features:**
+
 - bcrypt-hashed keys
 - Tenant-scoped keys
 - Expiration support
@@ -1542,41 +1588,50 @@ CREATE TABLE api_key (
 ---
 
 #### 004_tenant_integrations.sql
+
 **Date:** 2025-01-25  
 **Purpose:** Support third-party integrations per tenant
 
 **Tables Created:**
+
 - `tenant_integrations` - OAuth credentials, API keys, webhook URLs
 
 ---
 
 #### 005_bizdev_sources.sql
+
 **Date:** 2025-02-01  
 **Purpose:** Track business development lead sources
 
 **Tables Created:**
+
 - `bizdev_sources` - Lead generation channels and attribution
 
 ---
 
 #### 006_tenant_table.sql
+
 **Date:** 2025-02-05  
 **Purpose:** Formalize multi-tenant architecture
 
 **Tables Created:**
+
 - `tenant` - Organization/company records with plan, status, metadata
 
 **Changes:**
+
 - Added `tenant` as formal entity
 - Updated foreign keys to reference `tenant(id)`
 
 ---
 
 #### 007_crud_enhancements.sql
+
 **Date:** 2025-02-10  
 **Purpose:** Add missing fields for CRUD operations
 
 **Changes:**
+
 - Added `updated_at` to multiple tables
 - Added `deleted_at` for soft deletes (some tables)
 - Added owner/assignee fields
@@ -1584,10 +1639,12 @@ CREATE TABLE api_key (
 ---
 
 #### 008_rls_policies.sql
+
 **Date:** 2025-02-15  
 **Purpose:** Initial row-level security implementation
 
 **Features:**
+
 - Enabled RLS on core tables
 - Basic tenant isolation policies
 - Service role bypass
@@ -1602,10 +1659,12 @@ CREATE POLICY "tenant_isolation" ON accounts
 ---
 
 #### 009_complete_schema.sql
+
 **Date:** 2025-02-20  
 **Purpose:** Add remaining domain tables
 
 **Tables Created:**
+
 - `documents` - File storage metadata
 - `workflows` - Automation definitions
 - `permissions` - Role-based access control
@@ -1613,10 +1672,12 @@ CREATE POLICY "tenant_isolation" ON accounts
 ---
 
 #### 010_multiple_additions.sql
+
 **Date:** 2025-03-01  
 **Purpose:** Three separate additions merged into one migration
 
 **Changes:**
+
 - Added `revenue` column to `accounts`
 - Added `created_date` to `leads`
 - Added `role` to `users` table
@@ -1626,6 +1687,7 @@ CREATE POLICY "tenant_isolation" ON accounts
 ### 7.2 Security & RLS (011-024)
 
 #### 011_enable_rls.sql
+
 **Date:** 2025-03-05  
 **Purpose:** Enable RLS on all tenant-scoped tables
 
@@ -1634,36 +1696,43 @@ CREATE POLICY "tenant_isolation" ON accounts
 ---
 
 #### 012_extend_activities_fields.sql
+
 **Date:** 2025-03-10  
 **Purpose:** Enhance activities table with additional fields
 
 **Changes:**
+
 - Added `priority`, `status`, `due_date`
 - Added `assigned_to` foreign key
 
 ---
 
 #### 012_add_tenant_id_to_users.sql
+
 **Date:** 2025-03-10  
 **Purpose:** Link users to tenants (employees only)
 
 ---
 
 #### 013_allow_null_tenant_id.sql
+
 **Date:** 2025-03-15  
 **Purpose:** Support global users (superadmins) without tenant
 
 **Changes:**
+
 - Made `tenant_id` nullable on `users` table
 - Updated RLS policies to handle NULL
 
 ---
 
 #### 013_tighten_data_types.sql
+
 **Date:** 2025-03-15  
 **Purpose:** Enforce stricter data types for data integrity
 
 **Changes:**
+
 - Changed `VARCHAR` lengths to appropriate sizes
 - Added `CHECK` constraints
 - Changed `TEXT` to `VARCHAR(255)` where appropriate
@@ -1671,10 +1740,12 @@ CREATE POLICY "tenant_isolation" ON accounts
 ---
 
 #### 014_conversations.sql
+
 **Date:** 2025-03-20  
 **Purpose:** Add AI conversation tracking
 
 **Tables Created:**
+
 - `conversations` - AI chat threads
 - `conversation_messages` - Individual messages
 
@@ -1693,16 +1764,19 @@ CREATE TABLE conversations (
 ---
 
 #### 015_add_job_title_to_leads.sql
+
 **Date:** 2025-03-25  
 **Purpose:** Capture job title for lead qualification
 
 ---
 
 #### 019_cleanup_duplicate_emails.sql
+
 **Date:** 2025-04-10  
 **Purpose:** Remove duplicate emails before enforcing uniqueness
 
 **Process:**
+
 1. Identify duplicates across `users` and `employees`
 2. Keep oldest record, delete others
 3. Log deletions to audit_log
@@ -1710,10 +1784,12 @@ CREATE TABLE conversations (
 ---
 
 #### 020_enforce_email_uniqueness.sql
+
 **Date:** 2025-04-15  
 **Purpose:** Prevent duplicate emails across users and employees
 
 **Implementation:**
+
 1. **Database Constraint:** UNIQUE index on email (case-insensitive)
 2. **Trigger:** Cross-table email check
 3. **Backend Validation:** Explicit checks before INSERT/UPDATE
@@ -1741,52 +1817,62 @@ $$ LANGUAGE plpgsql;
 ---
 
 #### 020_performance_logs.sql
+
 **Date:** 2025-04-20  
 **Purpose:** Track API endpoint performance
 
 **Tables Created:**
+
 - `performance_logs` - Request timing, status codes, errors
 
 ---
 
 #### 021_make_email_optional.sql
+
 **Date:** 2025-04-25  
 **Purpose:** Allow contacts without email addresses
 
 **Changes:**
+
 - Made `email` nullable on `contacts` table
 - Updated validation to allow NULL
 
 ---
 
 #### 021_systembranding.sql
+
 **Date:** 2025-04-25  
 **Purpose:** White-label customization per tenant
 
 **Tables Created:**
+
 - `systembranding` - Logo, colors, custom domain
 
 ---
 
 #### 022_secure_performance_logs.sql
+
 **Date:** 2025-05-01  
 **Purpose:** Apply RLS to performance_logs
 
 ---
 
 #### 023_comprehensive_rls_security.sql
+
 **Date:** 2025-11-05  
 **Purpose:** Complete RLS implementation across all 48+ tables
 
 **Impact:** 🚨 **CRITICAL MIGRATION** - Enforces tenant isolation at database level
 
 **Features:**
+
 - Enabled RLS on 48 tables
 - Tenant isolation policies
 - Service role bypass for backend
 - Superadmin access policies
 
 **Example Policy:**
+
 ```sql
 -- Tenant isolation
 CREATE POLICY "tenant_isolation" ON contacts
@@ -1807,6 +1893,7 @@ ALTER TABLE contacts FORCE ROW LEVEL SECURITY;
 ---
 
 #### 024_fix_function_search_path.sql
+
 **Date:** 2025-11-06  
 **Purpose:** Fix security vulnerability in PostgreSQL functions
 
@@ -1815,6 +1902,7 @@ ALTER TABLE contacts FORCE ROW LEVEL SECURITY;
 **Solution:** Set explicit schema-qualified function calls
 
 **Functions Fixed:**
+
 - `check_email_uniqueness()`
 - `update_updated_at()`
 - `log_audit_changes()`
@@ -1830,6 +1918,7 @@ ALTER FUNCTION update_updated_at() SET search_path = public;
 ### 7.3 Features & Optimization (025-036)
 
 #### 025_add_foreign_key_indexes.sql
+
 **Date:** 2025-11-07  
 **Purpose:** Improve JOIN performance and foreign key checks
 
@@ -1845,31 +1934,37 @@ CREATE INDEX IF NOT EXISTS idx_activities_related_id ON activities(related_id);
 ```
 
 **Performance Impact:**
+
 - JOIN queries 5-10x faster
 - Foreign key constraint checks 3x faster
 
 ---
 
 #### 025_synchealth.sql
+
 **Date:** 2025-11-07  
 **Purpose:** Monitor integration sync status
 
 **Tables Created:**
+
 - `sync_health` - Integration sync status, last success, error tracking
 
 ---
 
 #### 026_create_test_user.sql
+
 **Date:** 2025-11-08  
 **Purpose:** Create standardized test user for development
 
 ---
 
 #### 027_create_superadmin_user.sql
+
 **Date:** 2025-11-08  
 **Purpose:** Create initial superadmin account
 
 **User Created:**
+
 - Email: admin@aishacrm.com
 - Role: superadmin
 - Password: (hashed, set during migration)
@@ -1877,37 +1972,43 @@ CREATE INDEX IF NOT EXISTS idx_activities_related_id ON activities(related_id);
 ---
 
 #### 028_fix_rls_apikey_systembranding.sql
+
 **Date:** 2025-11-08  
 **Purpose:** Fix missing RLS policies on api_key and systembranding
 
 ---
 
 #### 029_enforce_account_name_uniqueness.sql
+
 **Date:** 2025-11-09  
 **Purpose:** Prevent duplicate account names per tenant
 
 ```sql
-CREATE UNIQUE INDEX accounts_name_tenant_unique 
+CREATE UNIQUE INDEX accounts_name_tenant_unique
   ON accounts(LOWER(name), tenant_id);
 ```
 
 ---
 
 #### 030_update_port_references.sql
+
 **Date:** 2025-11-09  
 **Purpose:** Update Docker port references (4000/4001)
 
 **Changes:**
+
 - Updated `FRONTEND_URL` in tenant metadata
 - Updated webhook URLs in integrations
 
 ---
 
 #### 031_create_ai_campaigns.sql
+
 **Date:** 2025-11-09  
 **Purpose:** AI-powered marketing campaigns
 
 **Tables Created:**
+
 - `ai_campaigns` - Campaign definitions
 - `campaign_recipients` - Target list
 - `campaign_analytics` - Performance metrics
@@ -1915,16 +2016,19 @@ CREATE UNIQUE INDEX accounts_name_tenant_unique
 ---
 
 #### 031_rename_cash_flow_type_to_transaction_type.sql
+
 **Date:** 2025-11-09  
 **Purpose:** Clarify column naming in cash_flow table
 
 ---
 
 #### 032_normalize_foreign_keys.sql
+
 **Date:** 2025-11-10  
 **Purpose:** Standardize foreign key behavior
 
 **Changes:**
+
 - Updated ON DELETE actions to consistent values
 - Added missing foreign keys
 - Removed orphaned records
@@ -1932,13 +2036,16 @@ CREATE UNIQUE INDEX accounts_name_tenant_unique
 ---
 
 #### 033_entity_lifecycle_with_id_preservation.sql
+
 **Date:** 2025-11-10  
 **Purpose:** Support lead → contact → opportunity conversion with ID preservation
 
 **Tables Created:**
+
 - `entity_transitions` - Track conversions between entity types
 
 **Features:**
+
 - Preserve UUID when converting lead to contact
 - Maintain history of entity transformations
 - Support rollback to previous entity type
@@ -1958,6 +2065,7 @@ CREATE TABLE entity_transitions (
 ---
 
 #### 034_consolidate_tenant_integrations.sql
+
 **Date:** 2025-11-10  
 **Purpose:** Merge multiple integration tables into one
 
@@ -1966,12 +2074,14 @@ CREATE TABLE entity_transitions (
 ---
 
 #### 035_consolidate_ai_campaigns.sql
+
 **Date:** 2025-11-10  
 **Purpose:** Merge campaign tables into single table with JSONB
 
 ---
 
 #### 036_cleanup_ai_campaign_residue.sql
+
 **Date:** 2025-11-11  
 **Purpose:** Remove obsolete campaign-related tables and columns
 
@@ -1980,10 +2090,12 @@ CREATE TABLE entity_transitions (
 ### 7.4 Major Refactoring (037-052)
 
 #### 037_add_conversation_title_topic.sql
+
 **Date:** 2025-11-10  
 **Purpose:** Enhance conversations with title and topic fields
 
 **Changes:**
+
 ```sql
 ALTER TABLE conversations ADD COLUMN title VARCHAR(255);
 ALTER TABLE conversations ADD COLUMN topic VARCHAR(255);
@@ -1994,10 +2106,12 @@ CREATE INDEX idx_conversations_topic ON conversations(topic);
 ---
 
 #### 038_add_tenant_uuid_to_users.sql
+
 **Date:** 2025-11-11  
 **Purpose:** Migrate tenant references from slug to UUID
 
 **Process:**
+
 1. Add `tenant_uuid` column to `users` table
 2. Populate from `tenant(slug → id)` mapping
 3. Create foreign key to `tenant(id)`
@@ -2005,10 +2119,12 @@ CREATE INDEX idx_conversations_topic ON conversations(topic);
 ---
 
 #### 039_align_ui_schema.sql
+
 **Date:** 2025-11-11  
 **Purpose:** Ensure database schema matches UI expectations
 
 **Changes:**
+
 - Added missing columns shown in UI
 - Renamed columns for consistency
 - Updated default values
@@ -2016,17 +2132,19 @@ CREATE INDEX idx_conversations_topic ON conversations(topic);
 ---
 
 #### 040_moves_and_views.sql
+
 **Date:** 2025-11-11  
 **Purpose:** Create database views for common queries
 
 **Views Created:**
+
 - `v_contact_full` - Contacts with account info
 - `v_opportunity_pipeline` - Sales pipeline summary
 - `v_activity_calendar` - Calendar view of activities
 
 ```sql
 CREATE OR REPLACE VIEW v_contact_full AS
-SELECT 
+SELECT
   c.*,
   a.name AS account_name,
   a.industry AS account_industry,
@@ -2039,27 +2157,31 @@ LEFT JOIN employees e ON c.owner_id = e.id;
 ---
 
 #### 041_calendar_view_metadata_fallback.sql
+
 **Date:** 2025-11-11  
 **Purpose:** Support legacy metadata-based calendar events
 
 ---
 
 #### 042_fix_entity_transitions_tenant_id_type.sql
+
 **Date:** 2025-11-11  
 **Purpose:** Change `tenant_id` from TEXT to UUID in entity_transitions
 
 ```sql
-ALTER TABLE entity_transitions 
+ALTER TABLE entity_transitions
   ALTER COLUMN tenant_id TYPE UUID USING tenant_id::uuid;
 ```
 
 ---
 
 #### 050_flatten_tenant_metadata.sql
+
 **Date:** 2025-11-12  
 **Purpose:** Move critical tenant fields from metadata JSONB to columns
 
 **Changes:**
+
 ```sql
 ALTER TABLE tenant ADD COLUMN plan VARCHAR(50);
 ALTER TABLE tenant ADD COLUMN status VARCHAR(50);
@@ -2076,6 +2198,7 @@ UPDATE tenant SET metadata = metadata - 'plan' - 'status' - 'settings';
 ```
 
 **Benefits:**
+
 - Faster queries (no JSONB parsing)
 - Better indexing
 - Type safety
@@ -2083,10 +2206,12 @@ UPDATE tenant SET metadata = metadata - 'plan' - 'status' - 'settings';
 ---
 
 #### 051_fix_table_name_consistency.sql
+
 **Date:** 2025-11-13  
 **Purpose:** Standardize table naming (singular vs plural)
 
 **Changes:**
+
 - Renamed `employees` → `employee`
 - Renamed `bizdev_sources` → `bizdev_source`
 - Updated foreign keys and indexes
@@ -2096,16 +2221,19 @@ UPDATE tenant SET metadata = metadata - 'plan' - 'status' - 'settings';
 ---
 
 #### 052_tenant_identifiers.sql
+
 **Date:** 2025-11-14  
 **Purpose:** 🚨 **CRITICAL** - Enforce UUID-based tenant identification
 
 **Changes:**
+
 1. Changed `tenant_id` type to UUID on all tables
 2. Removed `tenant_id` slug column (renamed to `slug`)
 3. Updated RLS policies to use UUID
 4. Updated foreign keys
 
 **Migration Process:**
+
 ```sql
 -- Step 1: Add new UUID column
 ALTER TABLE contacts ADD COLUMN tenant_uuid UUID;
@@ -2121,12 +2249,13 @@ ALTER TABLE contacts DROP COLUMN tenant_id;
 ALTER TABLE contacts RENAME COLUMN tenant_uuid TO tenant_id;
 
 -- Step 5: Add foreign key
-ALTER TABLE contacts 
-  ADD CONSTRAINT fk_contacts_tenant 
+ALTER TABLE contacts
+  ADD CONSTRAINT fk_contacts_tenant
   FOREIGN KEY (tenant_id) REFERENCES tenant(id) ON DELETE CASCADE;
 ```
 
 **Impact:**
+
 - ✅ Proper foreign key relationships
 - ✅ Better performance (UUID indexing)
 - ✅ No more slug → UUID conversions in application
@@ -2172,43 +2301,52 @@ async function resolveTenantId(slug, db) {
 ```
 
 #### 075_agent_memory_archive.sql
+
 **Date:** 2025-11-16  
 **Purpose:** Introduce long-term archival tables for ephemeral agent memory.
 
 **Tables Created:**
+
 - `agent_sessions_archive` – Archived session metadata and payload
 - `agent_events_archive` – Archived individual agent events
 
 **Features:**
+
 - JSONB payload storage for flexible schema evolution
 - Service-role controlled (RLS enabled, only backend writes)
 - Indexed by `tenant_id`, `user_id`, `session_id`, `created_at` for efficient querying
 
 #### 076_agent_sessions_archive_unique.sql
+
 **Date:** 2025-11-16  
 **Purpose:** Enforce uniqueness and idempotent archival.
 
 **Actions:**
+
 1. Deduplicate existing rows keeping earliest per `(tenant_id, user_id, session_id)`.
 2. Add unique constraint `agent_sessions_archive_unique`.
 3. Update archival job to use `UPSERT` on conflict for idempotent writes.
 
 **Operational Impact:**
+
 - Multiple archive attempts for the same session do not create duplicates.
 - Prevents compliance/audit tooling from miscounting session volume.
 
 ### Canonical Tenant Resolution & Caching
+
 To support UUID-first enforcement while allowing legacy identifiers, a canonical resolver normalizes inputs and adds light caching:
 
 **Backend Module:** `backend/lib/tenantCanonicalResolver.js`
 
 **Endpoints:**
+
 - Single resolve: `GET /api/tenantresolve/:identifier?stats=true`
 - Batch resolve: `GET /api/tenantresolve?ids=a,b,c&stats=true`
 - Reset cache: `POST /api/tenantresolve/reset`
 - Prometheus metrics: `GET /api/tenantresolve/metrics`
 
 **Response Fields:**
+
 - `uuid` – Canonical tenant UUID (or null if unresolved)
 - `slug` – Display-friendly slug (or original input if unknown)
 - `found` – Boolean indicating successful DB lookup
@@ -2218,6 +2356,7 @@ To support UUID-first enforcement while allowing legacy identifiers, a canonical
 **Caching:** In-memory TTL (default 60s via `TENANT_RESOLVE_CACHE_TTL_MS`) reduces repeat Supabase lookups under load.
 
 **Cache Instrumentation:**
+
 - **Hit/Miss Counters:** Track cache efficiency with global counters (`_cacheHits`, `_cacheMisses`)
 - **Stats Export:** Append `?stats=true` to resolve endpoints to include cache metrics in JSON response
 - **Prometheus Metrics:** Visit `/api/tenantresolve/metrics` for scraper-compatible text format:
@@ -2231,6 +2370,7 @@ To support UUID-first enforcement while allowing legacy identifiers, a canonical
 **System Tenant:** Set `SYSTEM_TENANT_ID` in `backend/.env` so `'system'` always resolves to a stable UUID.
 
 **Archival Provenance:** Archived session/event JSON includes `_tenant` object for auditing:
+
 ```json
 {
   "_tenant": {
@@ -2243,6 +2383,7 @@ To support UUID-first enforcement while allowing legacy identifiers, a canonical
 ```
 
 **Best Practices:**
+
 1. Resolve tenant once at session start; reuse UUID.
 2. Reject ambiguous or missing identifiers early (HTTP 400).
 3. Never perform authorization logic on slugs; always use UUID.
@@ -2250,16 +2391,17 @@ To support UUID-first enforcement while allowing legacy identifiers, a canonical
 5. Use `POST /api/tenantresolve/reset` after bulk tenant operations to ensure fresh data.
 6. Integrate `/api/tenantresolve/metrics` with your Prometheus/Grafana stack for continuous monitoring.
 
-
 ---
 
 ### 7.5 Special Migrations
 
 #### 999_enable_rls_policies.sql
+
 **Date:** 2025-11-14  
 **Purpose:** Final RLS enforcement across all tables
 
 **Actions:**
+
 ```sql
 -- Force RLS even for table owner
 ALTER TABLE contacts FORCE ROW LEVEL SECURITY;
@@ -2267,8 +2409,8 @@ ALTER TABLE accounts FORCE ROW LEVEL SECURITY;
 -- ... 48 more tables
 
 -- Verify RLS enabled
-SELECT tablename, rowsecurity 
-FROM pg_tables 
+SELECT tablename, rowsecurity
+FROM pg_tables
 WHERE schemaname = 'public' AND rowsecurity = false;
 -- Should return no rows
 ```
@@ -2276,9 +2418,11 @@ WHERE schemaname = 'public' AND rowsecurity = false;
 ---
 
 #### ROLLBACK_050_flatten_tenant_metadata.sql
+
 **Purpose:** Rollback migration 050 if needed
 
 **Process:**
+
 1. Restore fields to metadata JSONB
 2. Drop new columns
 3. Verify data integrity
@@ -2286,30 +2430,32 @@ WHERE schemaname = 'public' AND rowsecurity = false;
 ---
 
 #### FIX_deactivate_test_admins.sql
+
 **Purpose:** Deactivate test users in production
 
 ```sql
-UPDATE users 
-SET status = 'inactive' 
+UPDATE users
+SET status = 'inactive'
 WHERE email LIKE '%test%' OR email LIKE '%@example.com';
 ```
 
 ---
 
 #### DIAGNOSTIC_check_users.sql
+
 **Purpose:** Verify user data integrity
 
 ```sql
 -- Check for duplicate emails
-SELECT email, COUNT(*) 
-FROM users 
-GROUP BY email 
+SELECT email, COUNT(*)
+FROM users
+GROUP BY email
 HAVING COUNT(*) > 1;
 
 -- Check for orphaned tenant references
-SELECT u.email, u.tenant_id 
-FROM users u 
-LEFT JOIN tenant t ON u.tenant_id = t.id 
+SELECT u.email, u.tenant_id
+FROM users u
+LEFT JOIN tenant t ON u.tenant_id = t.id
 WHERE u.tenant_id IS NOT NULL AND t.id IS NULL;
 
 -- Check role distribution
@@ -2330,16 +2476,17 @@ SELECT role, COUNT(*) FROM users GROUP BY role;
    - Apply migrations in dev first
 
 2. **Migration Development**
+
    ```bash
    # Create migration
    touch backend/migrations/053_new_feature.sql
-   
+
    # Test in dev
    psql $DEV_DATABASE_URL < backend/migrations/053_new_feature.sql
-   
+
    # Verify
    psql $DEV_DATABASE_URL -c "\d new_table"
-   
+
    # Apply to production (after testing)
    psql $PROD_DATABASE_URL < backend/migrations/053_new_feature.sql
    ```
@@ -2410,7 +2557,7 @@ psql $PROD_DATABASE_URL < backend/migrations/053_new_feature.sql
 #### Checklist
 
 - ✅ Enable RLS on all tenant-scoped tables
-- ✅ Create tenant isolation policies  
+- ✅ Create tenant isolation policies
 - ✅ Use `FORCE ROW LEVEL SECURITY`
 - ✅ Set function `search_path` explicitly
 - ✅ Never expose service role key in frontend
@@ -2422,22 +2569,24 @@ psql $PROD_DATABASE_URL < backend/migrations/053_new_feature.sql
 
 #### Data Classification
 
-| Level | Examples | Access Control |
-|-------|----------|----------------|
-| **Public** | Marketing content, public profiles | Any authenticated user |
-| **Internal** | Account names, activity logs | Tenant members only |
-| **Confidential** | Financial data, contracts | Role-based (managers+) |
-| **Restricted** | Passwords, API keys, PII | Encrypted, service role only |
+| Level            | Examples                           | Access Control               |
+| ---------------- | ---------------------------------- | ---------------------------- |
+| **Public**       | Marketing content, public profiles | Any authenticated user       |
+| **Internal**     | Account names, activity logs       | Tenant members only          |
+| **Confidential** | Financial data, contracts          | Role-based (managers+)       |
+| **Restricted**   | Passwords, API keys, PII           | Encrypted, service role only |
 
 #### PII (Personally Identifiable Information)
 
 Tables containing PII that require special handling:
+
 - `users.email`, `users.password_hash`
 - `contacts.email`, `contacts.phone`
 - `leads.email`, `leads.phone`
 - `employees.email`, `employees.phone`
 
 **Protection measures:**
+
 - RLS policies enforce tenant isolation
 - Never log PII in plaintext to `system_logs`
 - Mask PII in audit logs: `email: 'j***@example.com'`
@@ -2460,13 +2609,13 @@ await pool.query('SELECT * FROM users WHERE email = $1', [email]);
 
 #### Access Control Matrix
 
-| Role | Read Own Tenant | Write Own Tenant | Read Other Tenants | Write Other Tenants | Admin Functions |
-|------|----------------|------------------|-------------------|---------------------|----------------|
-| **Superadmin** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Tenant Admin** | ✅ | ✅ | ❌ | ❌ | Tenant only |
-| **Manager** | ✅ | ✅ | ❌ | ❌ | ❌ |
-| **User** | ✅ | Limited | ❌ | ❌ | ❌ |
-| **Read-Only** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Role             | Read Own Tenant | Write Own Tenant | Read Other Tenants | Write Other Tenants | Admin Functions |
+| ---------------- | --------------- | ---------------- | ------------------ | ------------------- | --------------- |
+| **Superadmin**   | ✅              | ✅               | ✅                 | ✅                  | ✅              |
+| **Tenant Admin** | ✅              | ✅               | ❌                 | ❌                  | Tenant only     |
+| **Manager**      | ✅              | ✅               | ❌                 | ❌                  | ❌              |
+| **User**         | ✅              | Limited          | ❌                 | ❌                  | ❌              |
+| **Read-Only**    | ✅              | ❌               | ❌                 | ❌                  | ❌              |
 
 ---
 
@@ -2474,12 +2623,12 @@ await pool.query('SELECT * FROM users WHERE email = $1', [email]);
 
 #### Backup Types
 
-| Type | Frequency | Retention | Purpose |
-|------|-----------|-----------|---------|
-| **Automated Daily** | Daily 3am UTC | 7 days (Free) / 30 days (Pro) | Point-in-time recovery |
-| **Weekly Full** | Sunday 2am UTC | 4 weeks | Long-term recovery |
-| **Pre-Migration** | Before each migration | 7 days | Rollback safety |
-| **On-Demand** | As needed | 7 days | Before major changes |
+| Type                | Frequency             | Retention                     | Purpose                |
+| ------------------- | --------------------- | ----------------------------- | ---------------------- |
+| **Automated Daily** | Daily 3am UTC         | 7 days (Free) / 30 days (Pro) | Point-in-time recovery |
+| **Weekly Full**     | Sunday 2am UTC        | 4 weeks                       | Long-term recovery     |
+| **Pre-Migration**   | Before each migration | 7 days                        | Rollback safety        |
+| **On-Demand**       | As needed             | 7 days                        | Before major changes   |
 
 ---
 
@@ -2488,11 +2637,13 @@ await pool.query('SELECT * FROM users WHERE email = $1', [email]);
 Supabase automatically backs up your database:
 
 #### Free Tier
+
 - **Frequency:** Daily
 - **Retention:** 7 days
 - **Recovery Window:** Up to 7 days ago
 
 #### Pro Tier
+
 - **Frequency:** Daily + hourly snapshots
 - **Retention:** 30 days
 - **Point-in-Time Recovery:** Any second within 30 days
@@ -2557,6 +2708,7 @@ pg_restore --table=users \
 **Pro Tier Feature:** Restore database to any second within retention period
 
 #### Use Cases
+
 - Accidental DELETE without WHERE clause
 - Bulk UPDATE with incorrect values
 - User error (dropped table)
@@ -2565,10 +2717,11 @@ pg_restore --table=users \
 #### Recovery Process
 
 1. **Identify Target Time**
+
    ```sql
    -- Check audit_log for problematic change
-   SELECT * FROM audit_log 
-   WHERE action = 'DELETE' 
+   SELECT * FROM audit_log
+   WHERE action = 'DELETE'
      AND table_name = 'contacts'
      AND changed_at > '2025-11-15 10:00:00'
    ORDER BY changed_at DESC
@@ -2596,23 +2749,24 @@ pg_restore --table=users \
 
 #### Disaster Scenarios
 
-| Scenario | Recovery Method | RTO | RPO |
-|----------|----------------|-----|-----|
-| **Accidental DELETE** | Point-in-Time Recovery | 15 min | Seconds |
-| **Corrupted Data** | Restore from backup | 30 min | 24 hours |
-| **Dropped Table** | PITR or manual backup | 15 min | Seconds |
-| **Supabase Outage** | Wait for restoration | Varies | 0 (replicated) |
-| **Region Failure** | Restore to new region | 2-4 hours | 24 hours |
+| Scenario              | Recovery Method        | RTO       | RPO            |
+| --------------------- | ---------------------- | --------- | -------------- |
+| **Accidental DELETE** | Point-in-Time Recovery | 15 min    | Seconds        |
+| **Corrupted Data**    | Restore from backup    | 30 min    | 24 hours       |
+| **Dropped Table**     | PITR or manual backup  | 15 min    | Seconds        |
+| **Supabase Outage**   | Wait for restoration   | Varies    | 0 (replicated) |
+| **Region Failure**    | Restore to new region  | 2-4 hours | 24 hours       |
 
 #### Disaster Recovery Plan
 
 **Step 1: Assess Damage**
+
 ```sql
 -- Check table existence
 SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';
 
 -- Check row counts
-SELECT 
+SELECT
   schemaname,
   tablename,
   n_live_tup AS row_count
@@ -2621,6 +2775,7 @@ ORDER BY n_live_tup DESC;
 ```
 
 **Step 2: Determine Recovery Strategy**
+
 - If < 1 hour ago → PITR
 - If > 1 hour ago → Daily backup
 - If schema corruption → Manual backup + migration replay
@@ -2628,6 +2783,7 @@ ORDER BY n_live_tup DESC;
 **Step 3: Execute Recovery**
 
 **Step 4: Verify Data Integrity**
+
 ```sql
 -- Run diagnostic queries
 SELECT COUNT(*) FROM users;
@@ -2642,6 +2798,7 @@ WHERE c.account_id IS NOT NULL AND a.id IS NULL;
 ```
 
 **Step 5: Document Incident**
+
 - Record time of incident
 - Record recovery method used
 - Document data loss (if any)
@@ -2656,6 +2813,7 @@ WHERE c.account_id IS NOT NULL AND a.id IS NULL;
 #### Key Metrics
 
 **Database → Reports**
+
 1. **Database Health**
    - CPU usage (should be < 70%)
    - Memory usage (should be < 80%)
@@ -2729,7 +2887,7 @@ LIMIT 50;
 
 ```sql
 -- Current connections
-SELECT 
+SELECT
   datname,
   usename,
   application_name,
@@ -2740,8 +2898,8 @@ FROM pg_stat_activity
 WHERE datname = 'postgres';
 
 -- Connection counts by state
-SELECT state, COUNT(*) 
-FROM pg_stat_activity 
+SELECT state, COUNT(*)
+FROM pg_stat_activity
 WHERE datname = 'postgres'
 GROUP BY state;
 ```
@@ -2754,9 +2912,9 @@ const { Pool } = require('pg');
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  max: 20,                    // Maximum connections
-  idleTimeoutMillis: 30000,   // Close idle after 30s
-  connectionTimeoutMillis: 2000
+  max: 20, // Maximum connections
+  idleTimeoutMillis: 30000, // Close idle after 30s
+  connectionTimeoutMillis: 2000,
 });
 
 // Monitor pool
@@ -2808,7 +2966,7 @@ LIMIT 20;
 - ✅ Index WHERE clause columns
 - ✅ Index ORDER BY columns
 - ✅ Use composite indexes for common patterns
-- ✅ Avoid SELECT * (specify columns)
+- ✅ Avoid SELECT \* (specify columns)
 - ✅ Use LIMIT for pagination
 - ✅ Use prepared statements
 - ✅ Batch INSERT operations
@@ -2816,20 +2974,22 @@ LIMIT 20;
 #### Example: Optimize Contact Search
 
 **Before (Slow):**
+
 ```sql
-SELECT * FROM contacts 
+SELECT * FROM contacts
 WHERE LOWER(email) LIKE '%@example.com%';
 -- Sequential scan, no index usage
 ```
 
 **After (Fast):**
+
 ```sql
 -- Create GIN index for pattern matching
 CREATE INDEX idx_contacts_email_gin ON contacts USING GIN (email gin_trgm_ops);
 
 -- Use index
-SELECT id, first_name, last_name, email 
-FROM contacts 
+SELECT id, first_name, last_name, email
+FROM contacts
 WHERE email ILIKE '%@example.com%';
 ```
 
@@ -2840,18 +3000,21 @@ WHERE email ILIKE '%@example.com%';
 ### 10.1 Routine Maintenance
 
 #### Weekly Tasks
+
 - Review slow query log
 - Check disk usage
 - Monitor connection pool
 - Review error logs
 
 #### Monthly Tasks
+
 - VACUUM ANALYZE all tables
 - Reindex frequently updated tables
 - Review and remove unused indexes
 - Update table statistics
 
 #### Quarterly Tasks
+
 - Full database backup to external storage
 - Security audit
 - Performance baseline comparison
@@ -2887,11 +3050,11 @@ Supabase enables auto-vacuum by default:
 
 ```sql
 -- Check auto-vacuum settings
-SELECT name, setting FROM pg_settings 
+SELECT name, setting FROM pg_settings
 WHERE name LIKE 'autovacuum%';
 
 -- Check last vacuum time
-SELECT 
+SELECT
   schemaname,
   tablename,
   last_vacuum,
@@ -2909,7 +3072,7 @@ ORDER BY n_dead_tup DESC;
 
 ```sql
 -- Tables with sequential scans
-SELECT 
+SELECT
   schemaname,
   tablename,
   seq_scan,
@@ -2924,12 +3087,12 @@ SELECT
   tc.table_name,
   kcu.column_name
 FROM information_schema.table_constraints tc
-JOIN information_schema.key_column_usage kcu 
+JOIN information_schema.key_column_usage kcu
   ON tc.constraint_name = kcu.constraint_name
 WHERE tc.constraint_type = 'FOREIGN KEY'
   AND NOT EXISTS (
-    SELECT 1 FROM pg_indexes 
-    WHERE tablename = tc.table_name 
+    SELECT 1 FROM pg_indexes
+    WHERE tablename = tc.table_name
       AND indexdef LIKE '%' || kcu.column_name || '%'
   );
 ```
@@ -2975,7 +3138,7 @@ ANALYZE contacts;
 ANALYZE;
 
 -- Check statistics staleness
-SELECT 
+SELECT
   schemaname,
   tablename,
   last_analyze,
@@ -2995,16 +3158,19 @@ ORDER BY n_mod_since_analyze DESC;
 #### "relation does not exist"
 
 **Error:**
+
 ```
 ERROR: relation "contacts" does not exist
 ```
 
 **Causes:**
+
 1. Table not created yet
 2. Wrong database connection
 3. Wrong schema (public vs. other)
 
 **Solutions:**
+
 ```sql
 -- Check if table exists
 SELECT * FROM information_schema.tables WHERE table_name = 'contacts';
@@ -3026,12 +3192,14 @@ SELECT current_setting('DATABASE_URL');
 #### "duplicate key value violates unique constraint"
 
 **Error:**
+
 ```
 ERROR: duplicate key value violates unique constraint "users_email_unique"
 DETAIL: Key (email)=(test@example.com) already exists.
 ```
 
 **Solutions:**
+
 ```sql
 -- Find existing record
 SELECT * FROM users WHERE email = 'test@example.com';
@@ -3052,16 +3220,19 @@ ON CONFLICT (email) DO UPDATE SET
 #### "permission denied for table"
 
 **Error:**
+
 ```
 ERROR: permission denied for table contacts
 ```
 
 **Causes:**
+
 1. RLS blocking access
 2. Wrong user role
 3. Missing policy
 
 **Solutions:**
+
 ```sql
 -- Check RLS status
 SELECT tablename, rowsecurity FROM pg_tables WHERE tablename = 'contacts';
@@ -3083,18 +3254,20 @@ ALTER TABLE contacts DISABLE ROW LEVEL SECURITY;
 #### "too many connections"
 
 **Error:**
+
 ```
 FATAL: remaining connection slots are reserved for non-replication superuser connections
 ```
 
 **Solutions:**
+
 ```sql
 -- Check current connections
 SELECT COUNT(*) FROM pg_stat_activity;
 
 -- Kill idle connections
-SELECT pg_terminate_backend(pid) 
-FROM pg_stat_activity 
+SELECT pg_terminate_backend(pid)
+FROM pg_stat_activity
 WHERE state = 'idle' AND state_change < NOW() - INTERVAL '10 minutes';
 
 -- Increase max_connections (Supabase Pro)
@@ -3106,12 +3279,14 @@ WHERE state = 'idle' AND state_change < NOW() - INTERVAL '10 minutes';
 #### "connection timeout"
 
 **Causes:**
+
 1. Network issues
 2. Firewall blocking port 5432
 3. Incorrect connection string
 4. Supabase project paused (Free tier inactivity)
 
 **Solutions:**
+
 ```bash
 # Test connection
 psql "postgresql://postgres:PASSWORD@db.PROJECT.supabase.co:5432/postgres" -c "SELECT 1;"
@@ -3139,7 +3314,7 @@ ALTER TABLE contacts ADD COLUMN phone VARCHAR(50);
 DO $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
+    SELECT 1 FROM information_schema.columns
     WHERE table_name = 'contacts' AND column_name = 'phone'
   ) THEN
     ALTER TABLE contacts ADD COLUMN phone VARCHAR(50);
@@ -3197,7 +3372,7 @@ ALTER TABLE contacts ENABLE ROW LEVEL SECURITY;
 
 ```sql
 -- View policy definition
-SELECT 
+SELECT
   schemaname,
   tablename,
   policyname,
@@ -3234,11 +3409,11 @@ WHERE o.contact_id IS NOT NULL AND c.id IS NULL;
 
 ```sql
 -- Option 1: Set FK to NULL
-UPDATE contacts SET account_id = NULL 
+UPDATE contacts SET account_id = NULL
 WHERE account_id NOT IN (SELECT id FROM accounts);
 
 -- Option 2: Delete orphaned records
-DELETE FROM contacts 
+DELETE FROM contacts
 WHERE account_id NOT IN (SELECT id FROM accounts);
 ```
 
@@ -3256,16 +3431,17 @@ WHERE account_id NOT IN (SELECT id FROM accounts);
    - Apply migrations in dev first
 
 2. **Migration Development**
+
    ```bash
    # Create migration
    touch backend/migrations/053_new_feature.sql
-   
+
    # Test in dev
    psql $DEV_DATABASE_URL < backend/migrations/053_new_feature.sql
-   
+
    # Verify
    psql $DEV_DATABASE_URL -c "\d new_table"
-   
+
    # Apply to production (after testing)
    psql $PROD_DATABASE_URL < backend/migrations/053_new_feature.sql
    ```
@@ -3352,27 +3528,23 @@ psql $PROD_DATABASE_URL < backend/migrations/053_new_feature.sql
 
 #### Vertical Scaling (Supabase)
 
-| Tier | vCPU | RAM | Storage | Max Connections |
-|------|------|-----|---------|----------------|
-| **Free** | Shared | 500MB | 500MB | 60 |
-| **Pro** | 2 vCPU | 1GB | 8GB | 100 |
-| **Team** | 4 vCPU | 4GB | 100GB | 200 |
-| **Enterprise** | Custom | Custom | Custom | Custom |
+| Tier           | vCPU   | RAM    | Storage | Max Connections |
+| -------------- | ------ | ------ | ------- | --------------- |
+| **Free**       | Shared | 500MB  | 500MB   | 60              |
+| **Pro**        | 2 vCPU | 1GB    | 8GB     | 100             |
+| **Team**       | 4 vCPU | 4GB    | 100GB   | 200             |
+| **Enterprise** | Custom | Custom | Custom  | Custom          |
 
 #### Horizontal Scaling (Read Replicas)
 
 **Pro Tier and Above:**
+
 ```javascript
 // Write to primary
-const { data, error } = await supabase
-  .from('contacts')
-  .insert({ name: 'John Doe' });
+const { data, error } = await supabase.from('contacts').insert({ name: 'John Doe' });
 
 // Read from replica
-const { data, error } = await supabase
-  .from('contacts')
-  .select('*')
-  .limit(100);
+const { data, error } = await supabase.from('contacts').select('*').limit(100);
 // Automatically routed to read replica
 ```
 
@@ -3393,30 +3565,30 @@ CREATE TABLE activities_2026 PARTITION OF activities
 
 ### Core CRM Tables
 
-| Table | Description | Key Columns | Indexes |
-|-------|-------------|-------------|---------|
-| **accounts** | Companies/organizations | id, tenant_id, name, industry, website | tenant, name |
-| **contacts** | Individual people | id, tenant_id, first_name, last_name, email, account_id | tenant, email, account |
-| **leads** | Potential customers | id, tenant_id, first_name, last_name, email, company, status | tenant, status |
-| **opportunities** | Sales deals | id, tenant_id, name, stage, amount, probability, account_id, contact_id | tenant, stage, account, contact |
-| **activities** | Tasks/calls/emails | id, tenant_id, type, subject, status, related_id | tenant, related_id, status |
+| Table             | Description             | Key Columns                                                             | Indexes                         |
+| ----------------- | ----------------------- | ----------------------------------------------------------------------- | ------------------------------- |
+| **accounts**      | Companies/organizations | id, tenant_id, name, industry, website                                  | tenant, name                    |
+| **contacts**      | Individual people       | id, tenant_id, first_name, last_name, email, account_id                 | tenant, email, account          |
+| **leads**         | Potential customers     | id, tenant_id, first_name, last_name, email, company, status            | tenant, status                  |
+| **opportunities** | Sales deals             | id, tenant_id, name, stage, amount, probability, account_id, contact_id | tenant, stage, account, contact |
+| **activities**    | Tasks/calls/emails      | id, tenant_id, type, subject, status, related_id                        | tenant, related_id, status      |
 
 ### User Management Tables
 
-| Table | Description | Key Columns | Indexes |
-|-------|-------------|-------------|---------|
-| **users** | Global superadmins | id, email, password_hash, role | email, role |
+| Table         | Description         | Key Columns                                       | Indexes       |
+| ------------- | ------------------- | ------------------------------------------------- | ------------- |
+| **users**     | Global superadmins  | id, email, password_hash, role                    | email, role   |
 | **employees** | Tenant-scoped users | id, tenant_id, email, first_name, last_name, role | tenant, email |
-| **tenant** | Organizations | id, name, slug, status, plan | slug, status |
+| **tenant**    | Organizations       | id, name, slug, status, plan                      | slug, status  |
 
 ### System Tables
 
-| Table | Description | Key Columns | Indexes |
-|-------|-------------|-------------|---------|
-| **audit_log** | Change tracking | id, action, table_name, record_id, changed_by, changed_at | changed_at, table_name |
-| **system_logs** | Application logs | id, tenant_id, level, message, source | tenant, level, created_at |
-| **performance_logs** | API performance | id, endpoint, duration, status_code | endpoint, created_at |
-| **api_key** | API authentication | id, tenant_id, key_hash, expires_at | tenant |
+| Table                | Description        | Key Columns                                               | Indexes                   |
+| -------------------- | ------------------ | --------------------------------------------------------- | ------------------------- |
+| **audit_log**        | Change tracking    | id, action, table_name, record_id, changed_by, changed_at | changed_at, table_name    |
+| **system_logs**      | Application logs   | id, tenant_id, level, message, source                     | tenant, level, created_at |
+| **performance_logs** | API performance    | id, endpoint, duration, status_code                       | endpoint, created_at      |
+| **api_key**          | API authentication | id, tenant_id, key_hash, expires_at                       | tenant                    |
 
 (See complete list in Supabase Table Editor)
 
@@ -3446,17 +3618,20 @@ The `ai_campaigns` table stores campaign definitions with flexible JSONB fields 
   - `created_at/updated_at TIMESTAMPTZ` — Timestamps (updated via trigger)
 
 Notes:
+
 - The application persists channel-specific settings under `metadata` to keep the table narrow and extensible.
 - `target_contacts` items include either `phone` (calls) or `email` (emails) based on `campaign_type`.
 - Webhooks and external automation (e.g., n8n) can consume lifecycle events emitted by the backend layer; store configuration pointers under `metadata` as needed (e.g., `webhook_url`).
 
 Tenant Enforcement:
+
 - All campaign operations are strictly tenant-scoped. The UI only exposes integrations where `tenant_id` equals the current session’s tenant and `is_active = true`.
 - Email campaigns must reference a tenant-owned sending profile via `ai_email_config.sending_profile_id`.
 - Call campaigns must reference a tenant-owned provider/agent via `ai_call_integration_id`.
 - Backend validates that referenced IDs belong to the same `tenant_id`; cross-tenant references are rejected with 403/404.
 
 Campaign Execution Endpoints
+
 - `POST /api/aicampaigns/:id/start` — Queues a campaign for execution. Body must include `tenant_id`. Server validates:
   - Email: `metadata.ai_email_config.sending_profile_id` exists and belongs to `tenant_id` and is active in `tenant_integrations`.
   - Call: `metadata.ai_call_integration_id` exists and belongs to `tenant_id` and is active.
@@ -3466,6 +3641,7 @@ Campaign Execution Endpoints
 - `POST /api/aicampaigns/:id/resume` — Resumes a paused campaign. Body must include `tenant_id`. Sets `status='scheduled'` and stamps `metadata.lifecycle.resumed_at`, `resumed_by`.
 
 Webhook Events (Optional)
+
 - Enable by setting `WEBHOOKS_ENABLED=true` in backend env. Subscriptions are read from `webhook` table filtered by `tenant_id`, `is_active=true`, and `event_types` containing the event name or `*`.
 - Emitted events: `aicampaign.created`, `aicampaign.start`, `aicampaign.pause`, `aicampaign.resume`, `aicampaign.progress`, `aicampaign.completed`, `aicampaign.failed`
 - Delivery: JSON POST to subscriber `url` with optional `X-Webhook-Signature` header (HMAC-SHA256 over body using subscriber `secret`). Failures are non-blocking and not retried by default.
@@ -3489,20 +3665,20 @@ VALUES (
 
 ## Appendix B: Migration Quick Reference
 
-| # | File | Description |
-|---|------|-------------|
-| 001 | init.sql | Initial schema with 8 core tables |
-| 006 | tenant_table.sql | Multi-tenancy support |
-| 014 | conversations.sql | AI conversation tracking |
-| 020 | enforce_email_uniqueness.sql | Cross-table email validation |
-| 023 | comprehensive_rls_security.sql | Full RLS implementation (CRITICAL) |
-| 024 | fix_function_search_path.sql | Security fix for functions |
-| 025 | add_foreign_key_indexes.sql | Performance optimization (30+ indexes) |
-| 031 | create_ai_campaigns.sql | AI marketing campaigns |
-| 033 | entity_lifecycle_with_id_preservation.sql | Lead/contact conversion |
-| 050 | flatten_tenant_metadata.sql | Move tenant fields from JSONB to columns |
-| 052 | tenant_identifiers.sql | UUID-based tenant IDs (BREAKING) |
-| 999 | enable_rls_policies.sql | Force RLS on all tables |
+| #   | File                                      | Description                              |
+| --- | ----------------------------------------- | ---------------------------------------- |
+| 001 | init.sql                                  | Initial schema with 8 core tables        |
+| 006 | tenant_table.sql                          | Multi-tenancy support                    |
+| 014 | conversations.sql                         | AI conversation tracking                 |
+| 020 | enforce_email_uniqueness.sql              | Cross-table email validation             |
+| 023 | comprehensive_rls_security.sql            | Full RLS implementation (CRITICAL)       |
+| 024 | fix_function_search_path.sql              | Security fix for functions               |
+| 025 | add_foreign_key_indexes.sql               | Performance optimization (30+ indexes)   |
+| 031 | create_ai_campaigns.sql                   | AI marketing campaigns                   |
+| 033 | entity_lifecycle_with_id_preservation.sql | Lead/contact conversion                  |
+| 050 | flatten_tenant_metadata.sql               | Move tenant fields from JSONB to columns |
+| 052 | tenant_identifiers.sql                    | UUID-based tenant IDs (BREAKING)         |
+| 999 | enable_rls_policies.sql                   | Force RLS on all tables                  |
 
 ---
 
@@ -3514,29 +3690,20 @@ Auto-generated REST API from database schema:
 
 ```javascript
 // GET /rest/v1/contacts?tenant_id=eq.uuid
-const { data, error } = await supabase
-  .from('contacts')
-  .select('*')
-  .eq('tenant_id', 'uuid');
+const { data, error } = await supabase.from('contacts').select('*').eq('tenant_id', 'uuid');
 
 // POST /rest/v1/contacts
-const { data, error } = await supabase
-  .from('contacts')
-  .insert({ name: 'John Doe' });
+const { data, error } = await supabase.from('contacts').insert({ name: 'John Doe' });
 ```
 
 ### Storage
 
 ```javascript
 // Upload file
-const { data, error } = await supabase.storage
-  .from('documents')
-  .upload('public/avatar.png', file);
+const { data, error } = await supabase.storage.from('documents').upload('public/avatar.png', file);
 
 // Get public URL
-const { publicURL } = supabase.storage
-  .from('documents')
-  .getPublicUrl('public/avatar.png');
+const { publicURL } = supabase.storage.from('documents').getPublicUrl('public/avatar.png');
 ```
 
 ### Auth
@@ -3545,13 +3712,13 @@ const { publicURL } = supabase.storage
 // Sign up
 const { user, error } = await supabase.auth.signUp({
   email: 'user@example.com',
-  password: 'password123'
+  password: 'password123',
 });
 
 // Sign in
 const { user, error } = await supabase.auth.signIn({
   email: 'user@example.com',
-  password: 'password123'
+  password: 'password123',
 });
 ```
 
@@ -3561,7 +3728,7 @@ const { user, error } = await supabase.auth.signIn({
 // Subscribe to changes
 const subscription = supabase
   .from('contacts')
-  .on('INSERT', payload => {
+  .on('INSERT', (payload) => {
     console.log('New contact:', payload.new);
   })
   .subscribe();
@@ -3574,8 +3741,9 @@ const subscription = supabase
 ### Common Queries
 
 #### Get Contact with Account Info
+
 ```sql
-SELECT 
+SELECT
   c.id,
   c.first_name,
   c.last_name,
@@ -3590,8 +3758,9 @@ LIMIT 50;
 ```
 
 #### Sales Pipeline Summary
+
 ```sql
-SELECT 
+SELECT
   stage,
   COUNT(*) AS count,
   SUM(amount) AS total_value,
@@ -3601,7 +3770,7 @@ FROM opportunities
 WHERE tenant_id = 'tenant-uuid'
   AND stage != 'closed_lost'
 GROUP BY stage
-ORDER BY 
+ORDER BY
   CASE stage
     WHEN 'qualification' THEN 1
     WHEN 'proposal' THEN 2
@@ -3611,8 +3780,9 @@ ORDER BY
 ```
 
 #### Activity Report
+
 ```sql
-SELECT 
+SELECT
   DATE(created_at) AS date,
   type,
   COUNT(*) AS count
@@ -3624,6 +3794,7 @@ ORDER BY date DESC, type;
 ```
 
 #### JSONB Queries
+
 ```sql
 -- Find contacts with specific custom field
 SELECT * FROM contacts
@@ -3655,12 +3826,12 @@ WHERE id = 'contact-uuid';
 For operational topics not covered in this database manual, please refer to:
 
 - **[System Administrator Guide](./AISHA_CRM_ADMIN_GUIDE.md)** - Backup/recovery, performance monitoring, maintenance tasks, troubleshooting, campaign worker management
-- **[Developer Manual](./AISHA_CRM_DEVELOPER_MANUAL.md)** - Application code, API endpoints, frontend components  
+- **[Developer Manual](./AISHA_CRM_DEVELOPER_MANUAL.md)** - Application code, API endpoints, frontend components
 - **[Security Manual Part 1](./AISHA_CRM_SECURITY_MANUAL_PART1.md)** - Authentication, authorization, RLS policies
 - **[Security Manual Part 2](./AISHA_CRM_SECURITY_MANUAL_PART2.md)** - Security hardening, compliance, audit procedures
 
 ---
 
-*Aisha CRM Database Administration Manual - Part 2*  
-*Copyright © 2025 4V Data Consulting. All rights reserved.*  
-*Version 1.0 - November 16, 2025*
+_Aisha CRM Database Administration Manual - Part 2_  
+_Copyright © 2025 4V Data Consulting. All rights reserved._  
+_Version 1.0 - November 16, 2025_

@@ -12,35 +12,35 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Key Architecture
 
-| Component | Technology |
-|-----------|------------|
-| **Frontend** | React 18 + Vite, TailwindCSS, shadcn/ui |
-| **Backend** | Node.js 22 + Express, 210+ API endpoints |
-| **Database** | PostgreSQL 15+ on Supabase, 50+ tables with RLS |
-| **AI Tools** | Braid DSL (60+ tools in `braid-llm-kit/`) |
-| **AI Engine** | Multi-provider failover: OpenAI, Anthropic, Groq, Local |
-| **Secrets** | Doppler for production, `.env` for local |
-| **Caching** | Redis (memory layer + cache layer) |
-| **Containers** | Docker Compose with health checks |
+| Component      | Technology                                              |
+| -------------- | ------------------------------------------------------- |
+| **Frontend**   | React 18 + Vite, TailwindCSS, shadcn/ui                 |
+| **Backend**    | Node.js 22 + Express, 210+ API endpoints                |
+| **Database**   | PostgreSQL 15+ on Supabase, 50+ tables with RLS         |
+| **AI Tools**   | Braid DSL (60+ tools in `braid-llm-kit/`)               |
+| **AI Engine**  | Multi-provider failover: OpenAI, Anthropic, Groq, Local |
+| **Secrets**    | Doppler for production, `.env` for local                |
+| **Caching**    | Redis (memory layer + cache layer)                      |
+| **Containers** | Docker Compose with health checks                       |
 
 ---
 
 ## 📚 Documentation
 
-| Document | Description |
-|----------|-------------|
-| [COPILOT_PLAYBOOK.md](./COPILOT_PLAYBOOK.md) | **⭐ START HERE** - Operations guide, testing, migrations |
-| [docs/Intel-iGPU-Local-AI-Development-Guide.md](./docs/Intel-iGPU-Local-AI-Development-Guide.md) | **Local AI Setup** - Twinny + Continue.dev with Intel GPU |
-| [docs/USER_GUIDE.md](./docs/USER_GUIDE.md) | End-user guide for CRM operations |
-| [docs/ADMIN_GUIDE.md](./docs/ADMIN_GUIDE.md) | System administration, deployment |
-| [docs/AI_ASSISTANT_GUIDE.md](./docs/AI_ASSISTANT_GUIDE.md) | AiSHA AI assistant features |
-| [docs/CARE_SETUP_GUIDE.md](./docs/CARE_SETUP_GUIDE.md) | **C.A.R.E.** configuration (UI-driven via Workflow Builder) |
-| [docs/DEVELOPER_MANUAL.md](./docs/DEVELOPER_MANUAL.md) | Development setup, architecture |
-| [docs/DATABASE_GUIDE.md](./docs/DATABASE_GUIDE.md) | Database schema, migrations, **trigger patterns** |
-| [docs/SECURITY_GUIDE.md](./docs/SECURITY_GUIDE.md) | Security, RLS, authentication |
-| [docs/BRANDING_GUIDE.md](./docs/BRANDING_GUIDE.md) | Brand assets, colors |
+| Document                                                                                                   | Description                                                 |
+| ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| [COPILOT_PLAYBOOK.md](./docs/developer-docs/COPILOT_PLAYBOOK.md)                                           | **⭐ START HERE** - Operations guide, testing, migrations   |
+| [Intel-iGPU-Local-AI-Development-Guide.md](./docs/developer-docs/Intel-iGPU-Local-AI-Development-Guide.md) | **Local AI Setup** - Twinny + Continue.dev with Intel GPU   |
+| [USER_GUIDE.md](./docs/user-guides/USER_GUIDE.md)                                                          | End-user guide for CRM operations                           |
+| [ADMIN_GUIDE.md](./docs/admin-guides/ADMIN_GUIDE.md)                                                       | System administration, deployment                           |
+| [AI_ASSISTANT_GUIDE.md](./docs/user-guides/AI_ASSISTANT_GUIDE.md)                                          | AiSHA AI assistant features                                 |
+| [CARE_SETUP_GUIDE.md](./docs/user-guides/CARE_SETUP_GUIDE.md)                                              | **C.A.R.E.** configuration (UI-driven via Workflow Builder) |
+| [DEVELOPER_MANUAL.md](./docs/developer-docs/DEVELOPER_MANUAL.md)                                           | Development setup, architecture                             |
+| [DATABASE_GUIDE.md](./docs/developer-docs/DATABASE_GUIDE.md)                                               | Database schema, migrations, **trigger patterns**           |
+| [SECURITY_GUIDE.md](./docs/admin-guides/SECURITY_GUIDE.md)                                                 | Security, RLS, authentication                               |
+| [BRANDING_GUIDE.md](./docs/references/BRANDING_GUIDE.md)                                                   | Brand assets, colors                                        |
 
-**⚠️ IMPORTANT**: Before making ANY changes, read [COPILOT_PLAYBOOK.md](./COPILOT_PLAYBOOK.md) for operational procedures, migration workflows, and critical lessons learned.
+**⚠️ IMPORTANT**: Before making ANY changes, read [COPILOT_PLAYBOOK.md](./docs/developer-docs/COPILOT_PLAYBOOK.md) for operational procedures, migration workflows, and critical lessons learned.
 
 Legacy documentation is archived in `docs/archive/`.
 
@@ -51,6 +51,7 @@ Legacy documentation is archived in `docs/archive/`.
 This project uses a **dual-AI assistant setup** for enhanced developer productivity:
 
 **Primary: Twinny** (`rjmacarthy.twinny`)
+
 - Fast inline code completions (FIM) via `deepseek-coder:1.3b`
 - Real-time code chat via `qwen2.5-coder:3b`
 - 100% local, zero telemetry, complete privacy
@@ -58,12 +59,14 @@ This project uses a **dual-AI assistant setup** for enhanced developer productiv
 - **Use for**: 80% of daily coding - completions, quick questions, debugging
 
 **Secondary: Continue.dev** (`continue.continue`)
+
 - Autocomplete **DISABLED** to prevent conflicts with Twinny
 - Advanced codebase-wide analysis and multi-file refactoring
 - Complex workflows with repository context
 - **Use for**: 20% of tasks - architecture decisions, large refactorings
 
 **Configuration:**
+
 - `.vscode/settings.json` - Workspace AI settings (Twinny primary, Continue secondary)
 - `.continue/config.yaml` - Continue.dev models and context providers
 - Both tools use Ollama server on `http://localhost:11434` (Intel GPU)
@@ -228,11 +231,13 @@ braid-llm-kit/examples/assistant/  # All Braid tool definitions
 ### When to Modify Braid Tools
 
 **Modify .braid files when:**
+
 - Adding new AI tool capabilities (new CRUD operations, searches, etc.)
 - Changing tool parameters or return types
 - Adding new entity types for AI to manage
 
 **Modify backend integration when:**
+
 - Changing how tools are loaded or registered
 - Adding new system prompts or context (use `getBraidSystemPrompt()` for dynamic content)
 - Implementing new MCP server features
@@ -280,23 +285,26 @@ cd C:\Users\andre\Documents\GitHub\ai-sha-crm-copy-c872be53
 
 ### Docker vs Local Development
 
-| Mode | Frontend | Backend |
-|------|----------|---------|-----|
+| Mode          | Frontend              | Backend               |
+| ------------- | --------------------- | --------------------- |
 | **Local Dev** | http://localhost:5173 | http://localhost:3001 |
-| **Docker** | http://localhost:4000 | http://localhost:4001 |
+| **Docker**    | http://localhost:4000 | http://localhost:4001 |
 
 **Local Dev Mode (faster iteration):**
+
 ```bash
 npm run dev                    # Frontend (port 5173)
 cd backend && npm run dev      # Backend (port 3001)
 ```
 
 **Docker Mode (production-like):**
+
 ```bash
 docker compose up -d --build
 ```
 
 **Doppler Integration:**
+
 - Production uses `doppler run --` prefix for secret injection
 - Local development uses `.env` and `backend/.env` files
 - Docker uses `.env.local` with DOPPLER_TOKEN
@@ -312,17 +320,20 @@ docker compose up -d --build
 The AI Engine supports automatic failover between multiple LLM providers:
 
 **Exports:**
+
 - `selectLLMConfigForTenant(tenantId, capability)` — Get provider/model for tenant
 - `resolveLLMApiKey(provider, tenantId)` — Resolve API key hierarchy
 - `generateChatCompletion(messages, tools, config)` — Call LLM with failover
 
 **Providers:**
+
 - OpenAI (gpt-4o, gpt-4o-mini)
 - Anthropic (claude-3-5-sonnet, claude-3-5-haiku)
 - Groq (llama-3.3-70b)
 - Local LLMs (ollama, lmstudio)
 
 **Capability-Based Routing:**
+
 - `chat_tools` — Full tool use support
 - `json_strict` — Structured JSON output
 - `brain_read_only` — Read-only operations
@@ -330,6 +341,7 @@ The AI Engine supports automatic failover between multiple LLM providers:
 
 **Per-Tenant Configuration:**
 Override provider/model via environment variables:
+
 ```bash
 LLM_PROVIDER__TENANT_<UUID>=anthropic
 LLM_MODEL__TENANT_<UUID>=claude-3-5-sonnet-20241022
@@ -376,15 +388,18 @@ LLM_MODEL__TENANT_<UUID>=claude-3-5-sonnet-20241022
 ## Backend Route Organization
 
 **Core CRM:**
+
 - `accounts.js`, `contacts.js`, `leads.js`, `opportunities.js`
 - `activities.js`, `notes.js`, `bizdevsources.js`
 
 **AI & Automation:**
+
 - `ai.js` — AI chat, summarization, tools (loads Braid context at lines 491, 1706)
 - `aicampaigns.js` — AI campaigns
 - `workflows.js` — Workflow automation
 
 **System:**
+
 - `system.js` — Health checks, diagnostics
 - `reports.js` — Dashboard stats
 - `tenants.js`, `users.js`, `permissions.js`
@@ -394,6 +409,7 @@ LLM_MODEL__TENANT_<UUID>=claude-3-5-sonnet-20241022
 ## Security & Performance
 
 **Security:**
+
 - Row-Level Security (RLS) on all tables
 - JWT authentication via Supabase Auth
 - Helmet.js security headers
@@ -401,6 +417,7 @@ LLM_MODEL__TENANT_<UUID>=claude-3-5-sonnet-20241022
 - Tenant isolation via UUID (never use `tenant_id_text`)
 
 **Performance:**
+
 - Redis caching (memory + cache layers)
   - `REDIS_MEMORY_URL` (port 6379) — ephemeral: presence, session, real-time
   - `REDIS_CACHE_URL` (port 6380) — persistent: stats, aggregations, response caches
@@ -413,17 +430,20 @@ LLM_MODEL__TENANT_<UUID>=claude-3-5-sonnet-20241022
 ## Common Pitfalls & Debugging
 
 ### Backend Not Restarting
+
 1. Use `npm run dev` (not `npm start`) — dev mode uses nodemon
 2. Check terminal for errors
 3. Manual restart: `Ctrl+C` then `npm run dev`
 
 ### Frontend Not Updating
+
 1. Check browser console for errors
 2. Hard refresh: `Ctrl+Shift+R`
 3. Clear Vite cache: Delete `.vite/` directory
 4. Restart dev server
 
 ### Port Conflicts (Windows)
+
 ```powershell
 # Find and kill process on port 3001
 Get-NetTCPConnection -LocalPort 3001 | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
@@ -433,6 +453,7 @@ Get-NetTCPConnection -LocalPort 5173 | ForEach-Object { Stop-Process -Id $_.Owni
 ```
 
 ### Docker Container Issues
+
 ```bash
 # Check container status and health
 docker compose ps
@@ -454,11 +475,13 @@ docker compose up -d --build
 ### Database Issues
 
 **Common Errors:**
+
 - `invalid input syntax for type uuid` → Use `req.tenant.id` (UUID), not `tenant.tenant_id` (slug)
 - Timestamp errors → Check migration files: some tables use `created_at`/`updated_at`, others use `created_date`/`updated_date`
 - RLS policy violations → Verify tenant isolation in queries
 
 **Debugging:**
+
 ```bash
 # Check database connection
 docker exec aishacrm-backend node -e "const {supabase}=require('./lib/supabaseAdmin');supabase.from('tenants').select('count').then(console.log)"
@@ -468,6 +491,7 @@ npm run db:exec -- backend/migrations/checks/show_idx_leads_tenant_account.sql
 ```
 
 ### API Response Issues
+
 - Stale UI data → Call `clearCacheByKey("EntityName")` after mutations
 - Missing fields in response → Check backend serializers/DTOs match frontend expectations
 - 500 errors → Check backend logs: `docker compose logs -f backend`
@@ -486,6 +510,7 @@ Before modifying code, **always read**:
 ### Rules
 
 **Default Mode: BUGFIX-FIRST**
+
 - Only work on tasks listed as **Active** in `PLAN.md`
 - No new features unless explicitly marked
 - Keep changes small and localized
@@ -493,12 +518,14 @@ Before modifying code, **always read**:
 
 **Allowed Exceptions (Security/Stability/Performance):**
 Larger rewrites only if **required** for:
+
 - Security: auth, access control, sensitive data handling
 - Stability: recurrent crashes, corrupt state
 - Performance: existing design cannot meet latency/throughput
 - Resource efficiency: race conditions, deadlocks, pathological resource usage
 
 **Constraints:**
+
 - Preserve Docker ports (4000/4001)
 - Preserve Supabase setup and RLS policies
 - Preserve tenant isolation (always use UUID `tenant_id`)
@@ -521,11 +548,11 @@ Larger rewrites only if **required** for:
 
 ## Routes: V1 vs V2
 
-| V1 `/api/accounts` | V2 `/api/v2/accounts` |
-|---|---|
-| Nested metadata | Flattened fields |
-| Legacy compatibility | **New features here** |
-| May have inconsistencies | Canonical source |
+| V1 `/api/accounts`       | V2 `/api/v2/accounts` |
+| ------------------------ | --------------------- |
+| Nested metadata          | Flattened fields      |
+| Legacy compatibility     | **New features here** |
+| May have inconsistencies | Canonical source      |
 
 Always prefer V2 routes for new development. V1 maintained for backwards compatibility only.
 
@@ -536,18 +563,21 @@ Always prefer V2 routes for new development. V1 maintained for backwards compati
 When debugging an issue, follow this checklist:
 
 1. **Check Active Services**
+
    ```bash
    docker compose ps
    curl http://localhost:4001/api/system/health
    ```
 
 2. **Review Recent Logs**
+
    ```bash
    docker compose logs --tail=50 backend
    docker compose logs --tail=50 frontend
    ```
 
 3. **Verify Environment**
+
    ```bash
    # Check .env files exist
    ls -la .env backend/.env .env.local
@@ -557,18 +587,21 @@ When debugging an issue, follow this checklist:
    ```
 
 4. **Test Database Connection**
+
    ```bash
    # From backend container
    docker exec aishacrm-backend npm run test:auth
    ```
 
 5. **Verify Redis Connection**
+
    ```bash
    docker exec aishacrm-redis-memory redis-cli ping
    docker exec aishacrm-redis-cache redis-cli ping
    ```
 
 6. **Check Port Availability**
+
    ```powershell
    # Windows
    netstat -ano | findstr "3001 4001 5173 4000"
@@ -585,12 +618,14 @@ When debugging an issue, follow this checklist:
 ## API Routes: V1 vs V2
 
 ### V1 Routes (`/api/*`)
+
 - **Legacy compatibility layer**
 - Nested metadata structures
 - May have field inconsistencies
 - Use only for backwards compatibility
 
 ### V2 Routes (`/api/v2/*`)
+
 - **Canonical source for new features**
 - Flattened field structures
 - Consistent serialization
@@ -604,22 +639,27 @@ When updating entities, always update V2 routes first, then backport to V1 if ne
 ## Testing Strategy
 
 ### Unit Tests (Vitest)
+
 - **Location:** `src/**/*.test.{js,jsx}`
 - **Run:** `npm run test`
 - **Coverage:** Component logic, hooks, utilities
 
 ### Backend Tests (Node.js native)
+
 - **Location:** `backend/__tests__/`
 - **Run:** `cd backend && npm test`
 - **Coverage:** API routes, middleware, services
 
 ### E2E Tests (Playwright)
+
 - **Location:** `tests/e2e/`
 - **Run:** `npm run test:e2e`
 - **Coverage:** Full user workflows, integrations
 
 ### Regression Testing
+
 **CRITICAL:** After ANY change, run:
+
 ```bash
 docker exec aishacrm-backend npm test
 ```
@@ -629,6 +669,7 @@ docker exec aishacrm-backend npm test
 ## Multi-Tenancy Rules
 
 **Always use UUID tenant isolation:**
+
 ```javascript
 // ✅ CORRECT
 const { data } = await supabase
@@ -641,6 +682,7 @@ const { data } = await supabase
 ```
 
 **Tenant Context:**
+
 - Backend: `req.tenant.id` (middleware injected)
 - Frontend: `useUser()` hook or `TenantContext`
 - Database: All tables have `tenant_id UUID` column with RLS

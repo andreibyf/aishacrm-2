@@ -33,6 +33,7 @@ git branch --show-current
 ```
 
 **Branch Strategy**:
+
 - `main` - Production deployments, stable code only
 - `feature/*` - Preview/development branches
 - **NEVER commit directly to main without testing**
@@ -62,22 +63,18 @@ docker ps --format "table {{.Names}}\t{{.Status}}" | grep -E "aisha-|redpanda"
 **Required Containers** (10 total):
 
 **Main Application** (4):
+
 1. `aishacrm-backend` - Main API server (port 4001)
 2. `aishacrm-frontend` - React app (port 4000)
 3. `aishacrm-redis-memory` - Ephemeral cache (port 6379)
 4. `aishacrm-redis-cache` - Persistent cache (port 6380)
 
-**Braid MCP** (3):
-5. `braid-mcp-server` - MCP server main (port 8000)
-6. `braid-mcp-1` - MCP worker 1
-7. `braid-mcp-2` - MCP worker 2
+**Braid MCP** (3): 5. `braid-mcp-server` - MCP server main (port 8000) 6. `braid-mcp-1` - MCP worker 1 7. `braid-mcp-2` - MCP worker 2
 
-**Agent Office Addon** (3):
-8. `aisha-redpanda` - Event bus (Kafka-compatible, port 9092)
-9. `aisha-telemetry-sidecar` - Telemetry collector
-10. `aisha-office-viz` - Office visualization UI
+**Agent Office Addon** (3): 8. `aisha-redpanda` - Event bus (Kafka-compatible, port 9092) 9. `aisha-telemetry-sidecar` - Telemetry collector 10. `aisha-office-viz` - Office visualization UI
 
 **Start Missing Containers**:
+
 ```bash
 # Main containers
 docker compose up -d
@@ -100,29 +97,32 @@ cd addons/agent-office && docker compose -f docker-compose.agent-office.yml up -
 #### Problem: Finding the RIGHT Function to Fix
 
 **What Went Wrong**:
-- Created migration 123 to fix `sync_contact_to_person_profile()` 
+
+- Created migration 123 to fix `sync_contact_to_person_profile()`
 - Tests still failed because **triggers called different functions**
 - Actual functions: `person_profile_upsert_from_contact()`, `person_profile_after_activity()`
 
 **How to Prevent**:
+
 ```sql
 -- ALWAYS identify the actual triggered function first
-SELECT 
+SELECT
   tgname AS trigger_name,
   tgrelid::regclass AS table_name,
   tgfoid::regprocedure AS actual_function
-FROM pg_trigger 
+FROM pg_trigger
 WHERE tgrelid = 'your_table_name'::regclass;
 
 -- Then inspect that function's code
-SELECT pg_get_functiondef(oid) 
-FROM pg_proc 
+SELECT pg_get_functiondef(oid)
+FROM pg_proc
 WHERE proname = 'function_name_from_above';
 ```
 
 #### PostgreSQL Polymorphic Function Type Casting
 
 **Rule 1: NULLIF with search_path**
+
 ```sql
 -- ❌ FAILS when search_path includes pg_catalog
 NULLIF(column, '')                    -- Error: nullif(text, unknown)
@@ -133,6 +133,7 @@ NULLIF(column::text, ''::text)        -- Success!
 ```
 
 **Rule 2: COALESCE on Composite Types**
+
 ```sql
 -- ❌ NEVER coalesce RECORD types
 RETURN COALESCE(NEW, OLD);            -- Error: coalesce(table, table)
@@ -170,6 +171,7 @@ doppler run -- env NODE_TLS_REJECT_UNAUTHORIZED=0 node backend/apply-single-sql.
 ```
 
 **Why Doppler?**
+
 - Secures DATABASE_URL (Supabase connection string)
 - Prevents committing secrets to git
 - Consistent across dev/staging/prod environments
@@ -195,14 +197,14 @@ doppler run -- bash -c 'psql "$DATABASE_URL" -c "INSERT INTO your_table (require
 
 ### Common Migration Pitfalls
 
-| Pitfall | Symptom | Solution |
-|---------|---------|----------|
-| **Wrong function fixed** | Tests still fail after migration | Use `pg_trigger` query to find ACTUAL function |
-| **Type mismatch** | `function does not exist` error | Cast ALL args: `NULLIF(col::text, ''::text)` |
-| **RECORD coalesce** | `coalesce(table, table)` error | Use IF/ELSE, return explicit OLD or NEW |
-| **Multiple functions** | Unpredictable behavior | Check `SELECT oid FROM pg_proc WHERE proname=...` |
-| **Search path** | Functions not found | Set `search_path = public, pg_catalog` in function |
-| **Supabase cache** | Changes not visible | Wait 1-2 min OR use port 6543 (transaction pooler) |
+| Pitfall                  | Symptom                          | Solution                                           |
+| ------------------------ | -------------------------------- | -------------------------------------------------- |
+| **Wrong function fixed** | Tests still fail after migration | Use `pg_trigger` query to find ACTUAL function     |
+| **Type mismatch**        | `function does not exist` error  | Cast ALL args: `NULLIF(col::text, ''::text)`       |
+| **RECORD coalesce**      | `coalesce(table, table)` error   | Use IF/ELSE, return explicit OLD or NEW            |
+| **Multiple functions**   | Unpredictable behavior           | Check `SELECT oid FROM pg_proc WHERE proname=...`  |
+| **Search path**          | Functions not found              | Set `search_path = public, pg_catalog` in function |
+| **Supabase cache**       | Changes not visible              | Wait 1-2 min OR use port 6543 (transaction pooler) |
 
 ---
 
@@ -283,12 +285,12 @@ doppler run -- bash -c 'psql "$DATABASE_URL" -c "INSERT INTO contacts (...) VALU
 
 ### Test Success Criteria
 
-| Test Type | Passing Threshold | Notes |
-|-----------|-------------------|-------|
-| Backend unit tests | 100% | Zero tolerance for failures |
-| Field parity tests | 26/26 (100%) | Critical for schema integrity |
-| Frontend unit tests | 100% | May skip slow tests in quick mode |
-| E2E tests | 95%+ | Flaky network tests acceptable |
+| Test Type           | Passing Threshold | Notes                             |
+| ------------------- | ----------------- | --------------------------------- |
+| Backend unit tests  | 100%              | Zero tolerance for failures       |
+| Field parity tests  | 26/26 (100%)      | Critical for schema integrity     |
+| Frontend unit tests | 100%              | May skip slow tests in quick mode |
+| E2E tests           | 95%+              | Flaky network tests acceptable    |
 
 ---
 
@@ -326,12 +328,12 @@ curl http://localhost:4001/api/system/health
 
 ### Common Container Issues
 
-| Issue | Diagnosis | Fix |
-|-------|-----------|-----|
-| **Port already in use** | `netstat -ano \| findstr "4001"` | Kill process or change port in .env |
-| **Container won't start** | `docker compose logs backend` | Check for missing env vars in .env |
-| **Database connection fails** | Check DATABASE_URL in Doppler | Verify Supabase project is running |
-| **Redis connection fails** | `docker compose ps redis-memory redis-cache` | Restart Redis: `docker compose restart redis-memory redis-cache` |
+| Issue                         | Diagnosis                                    | Fix                                                              |
+| ----------------------------- | -------------------------------------------- | ---------------------------------------------------------------- |
+| **Port already in use**       | `netstat -ano \| findstr "4001"`             | Kill process or change port in .env                              |
+| **Container won't start**     | `docker compose logs backend`                | Check for missing env vars in .env                               |
+| **Database connection fails** | Check DATABASE_URL in Doppler                | Verify Supabase project is running                               |
+| **Redis connection fails**    | `docker compose ps redis-memory redis-cache` | Restart Redis: `docker compose restart redis-memory redis-cache` |
 
 ### Restarting After Code Changes
 
@@ -374,6 +376,7 @@ doppler --version
 ### Local Development (.env files)
 
 **Files**:
+
 - `.env` - Frontend config
 - `backend/.env` - Backend config
 - `.env.local` - Docker override (contains DOPPLER_TOKEN)
@@ -568,7 +571,7 @@ AI_TRIGGERS_WORKER_INTERVAL_MS=15000         # Poll every 15 seconds
 CARE_STATE_WRITE_ENABLED=true                # Allow state persistence globally
 CARE_WORKFLOW_TRIGGERS_ENABLED=true          # Allow workflow webhook triggers
 
-# Development (dev_personal Doppler config)  
+# Development (dev_personal Doppler config)
 AI_TRIGGERS_WORKER_ENABLED=false             # Disable automatic polling (manual only)
 AI_TRIGGERS_WORKER_INTERVAL_MS=15000         # Interval if enabled
 CARE_STATE_WRITE_ENABLED=true                # Allow state persistence
@@ -606,6 +609,7 @@ When you save a workflow with a CARE Start node, the backend automatically:
 ### Important Constraints
 
 **One C.A.R.E. Workflow Per Tenant**:
+
 - `care_workflow_config` table has PRIMARY KEY on `tenant_id`
 - Each tenant can have MULTIPLE workflows with CARE Start nodes
 - Only the MOST RECENTLY SAVED workflow becomes active
@@ -616,11 +620,11 @@ When you save a workflow with a CARE Start node, the backend automatically:
 **Check Database Configuration**:
 
 ```sql
-SELECT 
-  tenant_id, 
-  workflow_id, 
-  webhook_url, 
-  is_enabled, 
+SELECT
+  tenant_id,
+  workflow_id,
+  webhook_url,
+  is_enabled,
   shadow_mode,
   state_write_enabled
 FROM care_workflow_config
@@ -661,11 +665,13 @@ See [docs/CARE_SETUP_GUIDE.md](./docs/CARE_SETUP_GUIDE.md) for complete setup in
 **Root Cause**: Triggers called `person_profile_upsert_from_contact()` and `person_profile_after_activity()` instead.
 
 **Investigation Steps**:
+
 1. Direct psql INSERT succeeded → ruled out PostgREST cache theory
 2. Error showed actual function: `person_profile_upsert_from_contact()`
 3. Query: `SELECT tgfoid::regprocedure FROM pg_trigger` revealed real trigger targets
 
 **Solution**:
+
 - Migration 126: Fixed `person_profile_upsert_from_contact()` with `NULLIF(col::text, ''::text)`
 - Migration 127: Fixed `person_profile_after_activity()` with explicit IF/ELSE instead of COALESCE
 
@@ -675,22 +681,24 @@ See [docs/CARE_SETUP_GUIDE.md](./docs/CARE_SETUP_GUIDE.md) for complete setup in
 
 ## 🔗 RELATED DOCUMENTATION
 
-- [CLAUDE.md](./CLAUDE.md) - Comprehensive project guide for Claude Code
-- [docs/DATABASE_GUIDE.md](./docs/DATABASE_GUIDE.md) - Database schema and architecture
-- [docs/DEVELOPER_MANUAL.md](./docs/DEVELOPER_MANUAL.md) - Development setup
-- [orchestra/PLAN.md](./orchestra/PLAN.md) - Active task queue and conventions
+- [CLAUDE.md](../CLAUDE.md) - Comprehensive project guide for Claude Code
+- [DATABASE_GUIDE.md](./DATABASE_GUIDE.md) - Database schema and architecture
+- [DEVELOPER_MANUAL.md](./DEVELOPER_MANUAL.md) - Development setup
+- [PLAN.md](../project-management/PLAN.md) - Active task queue and conventions
 
 ---
 
 ## 📞 TROUBLESHOOTING CONTACTS
 
 **When things break**:
+
 1. Check this playbook first
 2. Review [CLAUDE.md](./CLAUDE.md) for architecture details
 3. Check [orchestra/PLAN.md](./orchestra/PLAN.md) for known issues
 4. Search git history: `git log --all --grep="your error message"`
 
 **Common Support Channels**:
+
 - Supabase: https://supabase.com/dashboard
 - Doppler: https://dashboard.doppler.com
 - Docker: `docker compose logs service_name`

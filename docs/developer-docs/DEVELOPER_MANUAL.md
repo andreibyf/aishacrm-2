@@ -7,12 +7,14 @@
 ## 📖 Table of Contents
 
 ### Chapter 1: Development Environment Setup
+
 - [1.1 Prerequisites](#11-prerequisites)
 - [1.2 Repository Setup](#12-repository-setup)
 - [1.3 IDE Configuration](#13-ide-configuration)
 - [1.4 Development Workflow](#14-development-workflow)
 
 ### Chapter 2: Architecture Overview
+
 - [2.1 System Architecture](#21-system-architecture)
 - [2.2 Technology Stack](#22-technology-stack)
 - [2.3 Project Structure](#23-project-structure)
@@ -20,6 +22,7 @@
 - [2.5 Design Patterns](#25-design-patterns)
 
 ### Chapter 3: Frontend Development
+
 - [3.1 React Application Structure](#31-react-application-structure)
 - [3.2 Component Architecture](#32-component-architecture)
 - [3.3 State Management](#33-state-management)
@@ -29,6 +32,7 @@
 - [3.7 Styling](#37-styling)
 
 ### Chapter 4: Backend Development
+
 - [4.1 Express Server Architecture](#41-express-server-architecture)
 - [4.2 API Routes](#42-api-routes)
 - [4.3 Database Integration](#43-database-integration)
@@ -36,18 +40,21 @@
 - [4.5 Error Handling](#45-error-handling)
 
 ### Chapter 5: Database Development
+
 - [5.1 Schema Design](#51-schema-design)
 - [5.2 Migrations](#52-migrations)
 - [5.3 Supabase Integration](#53-supabase-integration)
 - [5.4 Query Optimization](#54-query-optimization)
 
 ### Chapter 6: AI & Braid SDK Integration
+
 - [6.1 Braid SDK Overview](#61-braid-sdk-overview)
 - [6.2 Agent Development](#62-agent-development)
 - [6.3 AI Conversations](#63-ai-conversations)
 - [6.4 Tool Integration](#64-tool-integration)
 
 ### Chapter 7: API Development
+
 - [7.1 REST API Design](#71-rest-api-design)
 - [7.2 API Documentation](#72-api-documentation)
 - [7.3 Authentication & Authorization](#73-authentication--authorization)
@@ -57,6 +64,7 @@
 - [7.7 Deprecation Headers](#77-deprecation-headers)
 
 ### Chapter 8: Testing
+
 - [8.1 Testing Strategy](#81-testing-strategy)
 - [8.2 Unit Testing](#82-unit-testing)
 - [8.3 Integration Testing](#83-integration-testing)
@@ -64,30 +72,35 @@
 - [8.5 Test Coverage](#85-test-coverage)
 
 ### Chapter 9: Docker & Deployment
+
 - [9.1 Docker Configuration](#91-docker-configuration)
 - [9.2 Multi-Container Setup](#92-multi-container-setup)
 - [9.3 Environment Configuration](#93-environment-configuration)
 - [9.4 Production Build](#94-production-build)
 
 ### Chapter 10: Troubleshooting & Debugging
+
 - [10.1 Common Development Issues](#101-common-development-issues)
 - [10.2 Debugging Tools](#102-debugging-tools)
 - [10.3 Performance Profiling](#103-performance-profiling)
 - [10.4 Error Tracking](#104-error-tracking)
 
 ### Chapter 11: Code Standards & Best Practices
+
 - [11.1 Coding Conventions](#111-coding-conventions)
 - [11.2 Git Workflow](#112-git-workflow)
 - [11.3 Code Review Process](#113-code-review-process)
 - [11.4 Documentation Standards](#114-documentation-standards)
 
 ### Chapter 12: Contributing
+
 - [12.1 Getting Started](#121-getting-started)
 - [12.2 Feature Development](#122-feature-development)
 - [12.3 Bug Fixes](#123-bug-fixes)
 - [12.4 Pull Request Guidelines](#124-pull-request-guidelines)
 
 ### Chapter 13: Developing for C.A.R.E.
+
 - [13.1 C.A.R.E. Architecture for Developers](#131-care-architecture-for-developers)
 - [13.2 Adding Custom Escalation Detectors](#132-adding-custom-escalation-detectors)
 - [13.3 Extending Policy Gates](#133-extending-policy-gates)
@@ -96,6 +109,7 @@
 - [13.6 Debugging C.A.R.E. Operations](#136-debugging-care-operations)
 
 ### Appendices
+
 - [Appendix A: API Reference](#appendix-a-api-reference)
 - [Appendix B: Component Library](#appendix-b-component-library)
 - [Appendix C: Database Schema](#appendix-c-database-schema)
@@ -110,24 +124,26 @@
 
 ### Required Software
 
-| Software | Version | Purpose |
-|----------|---------|---------|
-| **Node.js** | 22.x LTS | Runtime environment |
-| **npm** | 10.x+ | Package manager |
-| **Docker Desktop** | 24.x+ | Containerization |
-| **Git** | 2.40+ | Version control |
-| **VS Code** | Latest | IDE (recommended) |
-| **PostgreSQL** | 15+ | Database (optional for local dev) |
+| Software           | Version  | Purpose                           |
+| ------------------ | -------- | --------------------------------- |
+| **Node.js**        | 22.x LTS | Runtime environment               |
+| **npm**            | 10.x+    | Package manager                   |
+| **Docker Desktop** | 24.x+    | Containerization                  |
+| **Git**            | 2.40+    | Version control                   |
+| **VS Code**        | Latest   | IDE (recommended)                 |
+| **PostgreSQL**     | 15+      | Database (optional for local dev) |
 
 ### Hardware Requirements
 
 **Minimum:**
+
 - CPU: 4 cores
 - RAM: 8GB
 - Disk: 20GB free space
 - Network: Stable internet connection
 
 **Recommended:**
+
 - CPU: 8+ cores
 - RAM: 16GB+
 - Disk: 50GB+ SSD
@@ -247,10 +263,7 @@ Create `.vscode/settings.json`:
   "editor.codeActionsOnSave": {
     "source.fixAll.eslint": true
   },
-  "eslint.validate": [
-    "javascript",
-    "javascriptreact"
-  ],
+  "eslint.validate": ["javascript", "javascriptreact"],
   "tailwindCSS.experimental.classRegex": [
     ["cva\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"],
     ["cn\\(([^)]*)\\)", "(?:'|\"|`)([^']*)(?:'|\"|`)"]
@@ -299,10 +312,7 @@ export default [
       ...react.configs['jsx-runtime'].rules,
       ...reactHooks.configs.recommended.rules,
       'react/jsx-no-target-blank': 'off',
-      'react-refresh/only-export-components': [
-        'warn',
-        { allowConstantExport: true },
-      ],
+      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
   },
 ];
@@ -330,6 +340,7 @@ docker compose down
 ```
 
 **Access Points:**
+
 - Frontend: http://localhost:4000
 - Backend: http://localhost:4001
 - API Docs: http://localhost:4001/api-docs
@@ -352,6 +363,7 @@ npm run dev
 ### Auto-Restart Features
 
 **Backend Auto-Restart Policy:**
+
 - ✅ Changes to `.js` files trigger automatic restart
 - ✅ **10 restarts per minute limit** (prevents crash loops)
 - ✅ **2-second cooldown** between restarts
@@ -368,6 +380,7 @@ npm run dev:unlimited
 ### Hot Module Replacement (HMR)
 
 Frontend uses Vite HMR:
+
 - Changes to React components update instantly
 - State preserved where possible
 - Full reload on certain file types
@@ -385,40 +398,40 @@ graph TB
     subgraph "Client Layer"
         A[Web Browser] --> B[React SPA]
     end
-    
+
     subgraph "Application Layer - Docker"
         B --> C[Frontend Container :4000]
         B --> D[Backend Container :4001]
     end
-    
+
     subgraph "API Layer"
         D --> E[Express Server]
         E --> F[210+ API Endpoints]
         E --> G[Swagger/OpenAPI Docs]
     end
-    
+
     subgraph "Caching Layer"
         E --> REDIS1[(Redis Memory<br/>:6379<br/>Ephemeral)]
         E --> REDIS2[(Redis Cache<br/>:6380<br/>Persistent)]
     end
-    
+
     subgraph "Data Layer"
         F --> H[(PostgreSQL/Supabase)]
         F --> I[Supabase Storage]
     end
-    
+
     subgraph "AI Layer"
         F --> J[Braid AI SDK]
         J --> K[OpenAI/GitHub Models]
         J --> L[MCP Tools]
     end
-    
+
     subgraph "Integration Layer"
         F --> M[Email Service]
         F --> N[n8n Workflows]
         F --> O[Webhooks]
     end
-    
+
     style C fill:#4F46E5,color:#fff
     style D fill:#10B981,color:#fff
     style REDIS1 fill:#DC2626,color:#fff
@@ -432,6 +445,7 @@ graph TB
 The application uses **two separate Redis instances** for different purposes:
 
 #### 1. Memory Layer (Ephemeral - Port 6379)
+
 - **Purpose:** Temporary operational data
 - **Container:** `aishacrm-redis`
 - **Use Cases:**
@@ -442,6 +456,7 @@ The application uses **two separate Redis instances** for different purposes:
 - **Configuration:** `REDIS_MEMORY_URL=redis://aishacrm-redis:6379`
 
 #### 2. Cache Layer (Persistent - Port 6380)
+
 - **Purpose:** Performance optimization via caching
 - **Container:** `aishacrm-redis-cache`
 - **Use Cases:**
@@ -463,7 +478,7 @@ sequenceDiagram
     participant API
     participant DB
     participant AI
-    
+
     User->>React: Click "Create Contact"
     React->>API: POST /api/contacts
     API->>DB: INSERT INTO contacts
@@ -472,7 +487,7 @@ sequenceDiagram
     AI-->>API: Enriched data
     API-->>React: Success + data
     React-->>User: Show confirmation
-    
+
     Note over React,AI: All operations logged<br/>for audit trail
 ```
 
@@ -480,51 +495,51 @@ sequenceDiagram
 
 ### Frontend Stack
 
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| **React** | 18.3+ | UI framework |
-| **Vite** | 5.x | Build tool & dev server |
-| **React Router** | 6.x | Client-side routing |
-| **Tailwind CSS** | 3.x | Utility-first styling |
-| **shadcn/ui** | Latest | Component library |
-| **Lucide React** | Latest | Icon library |
-| **TanStack Query** | 5.x | Server state management |
-| **Sonner** | Latest | Toast notifications |
+| Technology         | Version | Purpose                 |
+| ------------------ | ------- | ----------------------- |
+| **React**          | 18.3+   | UI framework            |
+| **Vite**           | 5.x     | Build tool & dev server |
+| **React Router**   | 6.x     | Client-side routing     |
+| **Tailwind CSS**   | 3.x     | Utility-first styling   |
+| **shadcn/ui**      | Latest  | Component library       |
+| **Lucide React**   | Latest  | Icon library            |
+| **TanStack Query** | 5.x     | Server state management |
+| **Sonner**         | Latest  | Toast notifications     |
 
 ### Backend Stack
 
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| **Node.js** | 22.x | Runtime environment |
-| **Express** | 4.x | Web framework |
-| **PostgreSQL** | 15+ | Primary database |
-| **Supabase** | Latest | Database + Auth + Storage |
-| **Redis** (Memory) | 7.x | Ephemeral session/presence data |
-| **Redis** (Cache) | 7.x | Persistent performance caching |
-| **Swagger/OpenAPI** | 3.0 | API documentation |
-| **Helmet.js** | Latest | Security middleware |
-| **Express Rate Limit** | Latest | Rate limiting |
+| Technology             | Version | Purpose                         |
+| ---------------------- | ------- | ------------------------------- |
+| **Node.js**            | 22.x    | Runtime environment             |
+| **Express**            | 4.x     | Web framework                   |
+| **PostgreSQL**         | 15+     | Primary database                |
+| **Supabase**           | Latest  | Database + Auth + Storage       |
+| **Redis** (Memory)     | 7.x     | Ephemeral session/presence data |
+| **Redis** (Cache)      | 7.x     | Persistent performance caching  |
+| **Swagger/OpenAPI**    | 3.0     | API documentation               |
+| **Helmet.js**          | Latest  | Security middleware             |
+| **Express Rate Limit** | Latest  | Rate limiting                   |
 
 ### AI & Integration Stack
 
-| Technology | Purpose |
-|------------|---------|
-| **Braid SDK** | AI agent framework |
-| **OpenAI API** | LLM capabilities |
-| **GitHub Models** | Alternative LLM provider |
-| **MCP (Model Context Protocol)** | Tool integration |
-| **n8n** | Workflow automation |
+| Technology                       | Purpose                  |
+| -------------------------------- | ------------------------ |
+| **Braid SDK**                    | AI agent framework       |
+| **OpenAI API**                   | LLM capabilities         |
+| **GitHub Models**                | Alternative LLM provider |
+| **MCP (Model Context Protocol)** | Tool integration         |
+| **n8n**                          | Workflow automation      |
 
 ### DevOps Stack
 
-| Technology | Purpose |
-|------------|---------|
-| **Docker** | Containerization |
+| Technology         | Purpose                       |
+| ------------------ | ----------------------------- |
+| **Docker**         | Containerization              |
 | **Docker Compose** | Multi-container orchestration |
-| **Git** | Version control |
-| **GitHub Actions** | CI/CD (optional) |
-| **ESLint** | Code linting |
-| **Prettier** | Code formatting |
+| **Git**            | Version control               |
+| **GitHub Actions** | CI/CD (optional)              |
+| **ESLint**         | Code linting                  |
+| **Prettier**       | Code formatting               |
 
 ## 2.3 Project Structure
 
@@ -667,7 +682,7 @@ graph LR
     N --> O[Cache Store]
     O --> P[Response]
     P --> B
-    
+
     style D fill:#FCD34D,color:#000
     style H fill:#EF4444,color:#fff
     style M fill:#10B981,color:#fff
@@ -728,7 +743,9 @@ export function useUser() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    User.me().then(setUser).finally(() => setLoading(false));
+    User.me()
+      .then(setUser)
+      .finally(() => setLoading(false));
   }, []);
 
   return { user, loading };
@@ -750,7 +767,7 @@ function DataFetcher({ endpoint, render }) {
 
   useEffect(() => {
     fetch(endpoint)
-      .then(r => r.json())
+      .then((r) => r.json())
       .then(setData)
       .finally(() => setLoading(false));
   }, [endpoint]);
@@ -759,12 +776,10 @@ function DataFetcher({ endpoint, render }) {
 }
 
 // Usage
-<DataFetcher 
+<DataFetcher
   endpoint="/api/contacts"
-  render={({ data, loading }) => (
-    loading ? <Loader /> : <Table data={data} />
-  )}
-/>
+  render={({ data, loading }) => (loading ? <Loader /> : <Table data={data} />)}
+/>;
 ```
 
 #### 4. **Higher-Order Component (HOC) Pattern**
@@ -792,13 +807,13 @@ export default withAuth(DashboardPage);
 
 ```javascript
 // server.js
-app.use(helmet());                    // Security headers
-app.use(cors(corsOptions));           // CORS
-app.use(express.json());              // Body parsing
-app.use(rateLimiter);                 // Rate limiting
-app.use(authenticateUser);            // Auth (optional)
-app.use('/api', routes);              // Route handlers
-app.use(errorHandler);                // Error handling
+app.use(helmet()); // Security headers
+app.use(cors(corsOptions)); // CORS
+app.use(express.json()); // Body parsing
+app.use(rateLimiter); // Rate limiting
+app.use(authenticateUser); // Auth (optional)
+app.use('/api', routes); // Route handlers
+app.use(errorHandler); // Error handling
 ```
 
 #### 2. **Repository Pattern**
@@ -807,26 +822,15 @@ app.use(errorHandler);                // Error handling
 // Abstraction over data access
 class ContactRepository {
   async findAll(tenantId) {
-    return await supabase
-      .from('contacts')
-      .select('*')
-      .eq('tenant_id', tenantId);
+    return await supabase.from('contacts').select('*').eq('tenant_id', tenantId);
   }
 
   async findById(id) {
-    return await supabase
-      .from('contacts')
-      .select('*')
-      .eq('id', id)
-      .single();
+    return await supabase.from('contacts').select('*').eq('id', id).single();
   }
 
   async create(data) {
-    return await supabase
-      .from('contacts')
-      .insert(data)
-      .select()
-      .single();
+    return await supabase.from('contacts').insert(data).select().single();
   }
 }
 ```
@@ -870,10 +874,9 @@ function createCrudRoutes(entityName, pool) {
 
   router.get('/', async (req, res) => {
     const { tenant_id } = req.query;
-    const result = await pool.query(
-      `SELECT * FROM ${entityName} WHERE tenant_id = $1`,
-      [tenant_id]
-    );
+    const result = await pool.query(`SELECT * FROM ${entityName} WHERE tenant_id = $1`, [
+      tenant_id,
+    ]);
     res.json({ status: 'success', data: result.rows });
   });
 
@@ -911,7 +914,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <BrowserRouter>
       <App />
     </BrowserRouter>
-  </React.StrictMode>
+  </React.StrictMode>,
 );
 ```
 
@@ -976,6 +979,7 @@ Layout (Root)
 ### Component Categories
 
 #### 1. **Page Components** (`src/pages/`)
+
 Top-level route components that compose features.
 
 ```jsx
@@ -993,6 +997,7 @@ function ContactsPage() {
 ```
 
 #### 2. **Feature Components** (`src/components/[domain]/`)
+
 Domain-specific components with business logic.
 
 ```jsx
@@ -1010,21 +1015,18 @@ function ContactsTable() {
 ```
 
 #### 3. **UI Components** (`src/components/ui/`)
+
 Reusable, presentational components (shadcn/ui).
 
 ```jsx
 // components/ui/button.jsx
 export function Button({ className, variant, size, ...props }) {
-  return (
-    <button
-      className={cn(buttonVariants({ variant, size, className }))}
-      {...props}
-    />
-  );
+  return <button className={cn(buttonVariants({ variant, size, className }))} {...props} />;
 }
 ```
 
 #### 4. **Shared Components** (`src/components/shared/`)
+
 Cross-cutting concerns: contexts, utilities, hooks.
 
 ```jsx
@@ -1049,6 +1051,7 @@ export function useUser() {
 ### State Management Strategies
 
 #### 1. **Local Component State**
+
 For UI-only state (dropdowns, modals, forms).
 
 ```jsx
@@ -1056,13 +1059,13 @@ function ContactForm() {
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
-    email: ''
+    email: '',
   });
 
   const handleChange = (e) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [e.target.name]: e.target.value
+      [e.target.name]: e.target.value,
     }));
   };
 
@@ -1071,6 +1074,7 @@ function ContactForm() {
 ```
 
 #### 2. **Context API**
+
 For shared state across components.
 
 ```jsx
@@ -1099,6 +1103,7 @@ function SomeComponent() {
 ```
 
 #### 3. **API Manager (Caching)**
+
 For server state with caching.
 
 ```jsx
@@ -1131,14 +1136,13 @@ export function ApiProvider({ children }) {
   }, []);
 
   return (
-    <ApiContext.Provider value={{ cachedRequest, clearCache }}>
-      {children}
-    </ApiContext.Provider>
+    <ApiContext.Provider value={{ cachedRequest, clearCache }}>{children}</ApiContext.Provider>
   );
 }
 ```
 
 #### 4. **TanStack Query (Optional)**
+
 For advanced server state management.
 
 ```jsx
@@ -1150,7 +1154,7 @@ function ContactsList() {
   // Fetch contacts
   const { data: contacts, isLoading } = useQuery({
     queryKey: ['contacts'],
-    queryFn: () => Contact.list()
+    queryFn: () => Contact.list(),
   });
 
   // Create contact mutation
@@ -1158,7 +1162,7 @@ function ContactsList() {
     mutationFn: (newContact) => Contact.create(newContact),
     onSuccess: () => {
       queryClient.invalidateQueries(['contacts']);
-    }
+    },
   });
 
   // ... component logic
@@ -1191,21 +1195,21 @@ function ContactsPage() {
   <Route path="/" element={<Layout />}>
     {/* Public routes */}
     <Route index element={<Dashboard />} />
-    
+
     {/* CRM routes */}
     <Route path="contacts" element={<Contacts />} />
     <Route path="contacts/:id" element={<ContactDetail />} />
     <Route path="accounts" element={<Accounts />} />
     <Route path="leads" element={<Leads />} />
     <Route path="opportunities" element={<Opportunities />} />
-    
+
     {/* Admin routes */}
     <Route path="settings" element={<Settings />} />
     <Route path="users" element={<Users />} />
-    
+
     {/* AI routes */}
     <Route path="agent" element={<Agent />} />
-    
+
     {/* Catch-all */}
     <Route path="*" element={<NotFound />} />
   </Route>
@@ -1229,14 +1233,14 @@ function RouteGuard({ children, requiredRole }) {
 }
 
 // Usage
-<Route 
-  path="admin" 
+<Route
+  path="admin"
   element={
     <RouteGuard requiredRole="admin">
       <AdminPanel />
     </RouteGuard>
-  } 
-/>
+  }
+/>;
 ```
 
 ### Navigation
@@ -1295,7 +1299,7 @@ class EntityAPI {
     const response = await fetch(this.baseUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
     });
     return await response.json();
   }
@@ -1304,14 +1308,14 @@ class EntityAPI {
     const response = await fetch(`${this.baseUrl}/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
     });
     return await response.json();
   }
 
   async delete(id) {
     const response = await fetch(`${this.baseUrl}/${id}`, {
-      method: 'DELETE'
+      method: 'DELETE',
     });
     return await response.json();
   }
@@ -1320,7 +1324,7 @@ class EntityAPI {
     const response = await fetch(`${this.baseUrl}/bulk`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items })
+      body: JSON.stringify({ items }),
     });
     return await response.json();
   }
@@ -1346,7 +1350,7 @@ export async function createAuditLog(logData) {
   const response = await fetch(`${BACKEND_URL}/api/system/audit-log`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(logData)
+    body: JSON.stringify(logData),
   });
   return await response.json();
 }
@@ -1355,15 +1359,13 @@ export async function findDuplicates(entity, tenantId) {
   const response = await fetch(`${BACKEND_URL}/api/validation/find-duplicates`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ entity, tenant_id: tenantId })
+    body: JSON.stringify({ entity, tenant_id: tenantId }),
   });
   return await response.json();
 }
 
 export async function getDashboardStats(tenantId) {
-  const response = await fetch(
-    `${BACKEND_URL}/api/reports/dashboard-stats?tenant_id=${tenantId}`
-  );
+  const response = await fetch(`${BACKEND_URL}/api/reports/dashboard-stats?tenant_id=${tenantId}`);
   return await response.json();
 }
 
@@ -1385,11 +1387,7 @@ class ApiError extends Error {
 async function handleResponse(response) {
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new ApiError(
-      error.message || 'Request failed',
-      response.status,
-      error
-    );
+    throw new ApiError(error.message || 'Request failed', response.status, error);
   }
   return response.json();
 }
@@ -1458,26 +1456,38 @@ import { Button } from '@/components/ui/button';
 #### Card
 
 ```jsx
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+} from '@/components/ui/card';
 
 <Card>
   <CardHeader>
     <CardTitle>Contact Details</CardTitle>
     <CardDescription>View and edit contact information</CardDescription>
   </CardHeader>
-  <CardContent>
-    {/* Content here */}
-  </CardContent>
+  <CardContent>{/* Content here */}</CardContent>
   <CardFooter>
     <Button>Save Changes</Button>
   </CardFooter>
-</Card>
+</Card>;
 ```
 
 #### Dialog
 
 ```jsx
-import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 
 <Dialog>
   <DialogTrigger asChild>
@@ -1490,13 +1500,20 @@ import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, Dialog
     </DialogHeader>
     {/* Dialog content */}
   </DialogContent>
-</Dialog>
+</Dialog>;
 ```
 
 #### Table
 
 ```jsx
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '@/components/ui/table';
 
 <Table>
   <TableHeader>
@@ -1507,7 +1524,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
     </TableRow>
   </TableHeader>
   <TableBody>
-    {contacts.map(contact => (
+    {contacts.map((contact) => (
       <TableRow key={contact.id}>
         <TableCell>{contact.name}</TableCell>
         <TableCell>{contact.email}</TableCell>
@@ -1517,7 +1534,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
       </TableRow>
     ))}
   </TableBody>
-</Table>
+</Table>;
 ```
 
 ## 3.7 Styling
@@ -1530,32 +1547,29 @@ The project uses Tailwind CSS for styling with custom configuration.
 
 ```javascript
 export default {
-  darkMode: ["class"],
-  content: [
-    './index.html',
-    './src/**/*.{js,jsx,ts,tsx}',
-  ],
+  darkMode: ['class'],
+  content: ['./index.html', './src/**/*.{js,jsx,ts,tsx}'],
   theme: {
     extend: {
       colors: {
-        border: "hsl(var(--border))",
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
+        border: 'hsl(var(--border))',
+        background: 'hsl(var(--background))',
+        foreground: 'hsl(var(--foreground))',
         primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
+          DEFAULT: 'hsl(var(--primary))',
+          foreground: 'hsl(var(--primary-foreground))',
         },
         // ... more colors
       },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        lg: 'var(--radius)',
+        md: 'calc(var(--radius) - 2px)',
+        sm: 'calc(var(--radius) - 4px)',
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
-}
+  plugins: [require('tailwindcss-animate')],
+};
 ```
 
 ### Styling Conventions
@@ -1611,7 +1625,7 @@ export default {
 
 ---
 
-*[Continue with Chapters 4-5...]*
+_[Continue with Chapters 4-5...]_
 
 ---
 
@@ -1626,11 +1640,13 @@ export default {
 ### Why Braid Exists
 
 Traditional approaches fall short:
+
 - **Raw SQL is dangerous**: LLMs can hallucinate destructive queries
-- **ORM wrappers are leaky**: No tenant isolation guarantees  
+- **ORM wrappers are leaky**: No tenant isolation guarantees
 - **JSON schemas are verbose**: Tool definitions become unwieldy at scale
 
 Braid provides:
+
 - ✅ **Type-safe database operations** with automatic tenant isolation
 - ✅ **Compile-time validation** of tool definitions
 - ✅ **Read-only by default** with explicit write permissions
@@ -1675,7 +1691,7 @@ tool searchLeads(
   // 2. Adds tenant isolation to query
   // 3. Logs execution
   // 4. Returns type-safe results
-  
+
   SELECT id, name, email, status, value, created_at
   FROM leads
   WHERE tenant_id = $tenant_id
@@ -1704,16 +1720,18 @@ npm run braid:generate
 ### Dual Execution Modes
 
 **1. In-Process (Primary)**
+
 ```javascript
 // backend/lib/braidIntegration-v2.js
 const result = await executeToolInProcess('searchLeads', {
   tenant_id: 'uuid',
   search: 'John',
-  status: 'qualified'
+  status: 'qualified',
 });
 ```
 
 **2. Distributed MCP**
+
 ```bash
 # Start Braid MCP server (distributed mode)
 npm run serve:braid
@@ -1733,7 +1751,7 @@ function getBraidSystemPrompt(tenantId) {
   const tenantContext = getTenantContextDictionary(tenantId);
   const entityLabels = getEntityLabelInjector(tenantId);
   const toolDescriptions = getAllToolDescriptions();
-  
+
   return `
 You are AiSHA, an AI-native CRM assistant.
 
@@ -1741,7 +1759,7 @@ Tenant: ${tenantContext.name}
 Entity Labels: ${JSON.stringify(entityLabels)}
 
 Available Tools:
-${toolDescriptions.map(t => `- ${t.name}: ${t.description}`).join('\n')}
+${toolDescriptions.map((t) => `- ${t.name}: ${t.description}`).join('\n')}
 
 Rules:
 - ALWAYS use tenant_id: "${tenantId}"
@@ -1757,25 +1775,25 @@ Rules:
 // backend/routes/ai.js (lines 491, 1706)
 router.post('/chat', async (req, res) => {
   const { tenant_id, user_id, message, mode } = req.body;
-  
+
   // 1. Load tenant context
   const tenantContext = getTenantContextDictionary(tenant_id);
   const systemPrompt = getBraidSystemPrompt(tenant_id);
-  
+
   // 2. Build conversation history
   const messages = [
     { role: 'system', content: systemPrompt },
     ...conversationHistory,
-    { role: 'user', content: message }
+    { role: 'user', content: message },
   ];
-  
+
   // 3. Call LLM with tools
   const response = await generateChatCompletion(messages, braidTools, {
     provider: 'openai',
     model: 'gpt-4o',
-    temperature: 0.7
+    temperature: 0.7,
   });
-  
+
   // 4. Execute tool calls if present
   for (const toolCall of response.tool_calls) {
     const result = await executeToolInProcess(toolCall.name, toolCall.arguments);
@@ -1797,7 +1815,7 @@ tool getMonthlyRevenue(
   year: number,
   month: number
 ): RevenueReport {
-  SELECT 
+  SELECT
     DATE_TRUNC('month', created_at) as month,
     SUM(amount) as total_revenue,
     COUNT(*) as deal_count
@@ -1835,20 +1853,20 @@ tool deleteEntity(tenant_id: UUID, entity_id: UUID) {
 
 // ✅ SAFE: Read-only with tenant isolation
 tool getEntity(tenant_id: UUID, entity_id: UUID): Entity {
-  SELECT * FROM entities 
-  WHERE tenant_id = $tenant_id 
+  SELECT * FROM entities
+  WHERE tenant_id = $tenant_id
   AND id = $entity_id
 }
 
 // ✅ SAFE: Update with validation
 tool updateEntityStatus(
-  tenant_id: UUID, 
+  tenant_id: UUID,
   entity_id: UUID,
   status: string
 ): Entity {
-  UPDATE entities 
+  UPDATE entities
   SET status = $status, updated_at = NOW()
-  WHERE tenant_id = $tenant_id 
+  WHERE tenant_id = $tenant_id
   AND id = $entity_id
   RETURNING *
 }
@@ -1864,16 +1882,16 @@ As of December 2025, AiSHA CRM provides AI-enhanced v2 API endpoints that return
 
 ### Available v2 Endpoints
 
-| Endpoint | Description |
-|----------|-------------|
+| Endpoint                | Description                                          |
+| ----------------------- | ---------------------------------------------------- |
 | `/api/v2/opportunities` | Deal management with win probability, health scoring |
-| `/api/v2/activities` | Activity tracking with sentiment, urgency detection |
-| `/api/v2/contacts` | Contact management with engagement scoring |
-| `/api/v2/accounts` | Account management with health and churn prediction |
-| `/api/v2/leads` | Lead management with AI scoring and qualification |
-| `/api/v2/reports` | Dashboard stats with trend analysis |
-| `/api/v2/workflows` | Workflow management with health analysis |
-| `/api/v2/documents` | Document management with AI classification |
+| `/api/v2/activities`    | Activity tracking with sentiment, urgency detection  |
+| `/api/v2/contacts`      | Contact management with engagement scoring           |
+| `/api/v2/accounts`      | Account management with health and churn prediction  |
+| `/api/v2/leads`         | Lead management with AI scoring and qualification    |
+| `/api/v2/reports`       | Dashboard stats with trend analysis                  |
+| `/api/v2/workflows`     | Workflow management with health analysis             |
+| `/api/v2/documents`     | Document management with AI classification           |
 
 ### Response Structure
 
@@ -1911,9 +1929,7 @@ export default function createOpportunityV2Routes() {
 
   router.get('/', async (req, res) => {
     const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from('opportunities')
-      .select('*');
+    const { data, error } = await supabase.from('opportunities').select('*');
 
     // Add AI context enrichment
     const aiContext = await buildEntityAiContext('opportunity', data);
@@ -1922,7 +1938,7 @@ export default function createOpportunityV2Routes() {
       status: 'success',
       data,
       aiContext,
-      meta: { api_version: 'v2' }
+      meta: { api_version: 'v2' },
     });
   });
 
@@ -1951,13 +1967,13 @@ The AI Brain exposes workflow management capabilities through MCP tools. These a
 
 ### Available Tools
 
-| Tool | Purpose | Requires tenant_id |
-|------|---------|-------------------|
-| `crm.list_workflow_templates` | List all available templates | ❌ No |
-| `crm.get_workflow_template` | Get template details with nodes/connections | ❌ No |
-| `crm.instantiate_workflow_template` | Create workflow from template | ✅ Yes |
-| `crm.update_workflow` | Update workflow config (name, nodes, connections) | ✅ Yes |
-| `crm.toggle_workflow_status` | Activate/deactivate workflow | ✅ Yes |
+| Tool                                | Purpose                                           | Requires tenant_id |
+| ----------------------------------- | ------------------------------------------------- | ------------------ |
+| `crm.list_workflow_templates`       | List all available templates                      | ❌ No              |
+| `crm.get_workflow_template`         | Get template details with nodes/connections       | ❌ No              |
+| `crm.instantiate_workflow_template` | Create workflow from template                     | ✅ Yes             |
+| `crm.update_workflow`               | Update workflow config (name, nodes, connections) | ✅ Yes             |
+| `crm.toggle_workflow_status`        | Activate/deactivate workflow                      | ✅ Yes             |
 
 ### Architecture
 
@@ -2037,11 +2053,11 @@ app.use('/api', addDeprecationHeaders);
 
 ### Timeline
 
-| Date | Milestone |
-|------|-----------|
+| Date          | Milestone                                |
+| ------------- | ---------------------------------------- |
 | December 2025 | v2 available, deprecation headers active |
-| February 2027 | Official deprecation date |
-| August 2027 | v1 sunset - endpoints return 410 Gone |
+| February 2027 | Official deprecation date                |
+| August 2027   | v1 sunset - endpoints return 410 Gone    |
 
 For full deprecation details, see [Deprecation Headers](./DEPRECATION_HEADERS.md).
 
@@ -2205,6 +2221,7 @@ curl http://localhost:4001/api/contacts
 Install React DevTools extension for Chrome/Firefox.
 
 **Features:**
+
 - Component tree inspection
 - Props and state viewing
 - Performance profiling
@@ -2309,14 +2326,7 @@ try {
 ```jsx
 import { Profiler } from 'react';
 
-function onRenderCallback(
-  id,
-  phase,
-  actualDuration,
-  baseDuration,
-  startTime,
-  commitTime
-) {
+function onRenderCallback(id, phase, actualDuration, baseDuration, startTime, commitTime) {
   console.log(`${id} (${phase}) took ${actualDuration}ms`);
 }
 
@@ -2374,9 +2384,7 @@ class ErrorBoundary extends React.Component {
         <div className="error-container">
           <h1>Something went wrong</h1>
           <pre>{this.state.error?.message}</pre>
-          <Button onClick={() => window.location.reload()}>
-            Reload Page
-          </Button>
+          <Button onClick={() => window.location.reload()}>Reload Page</Button>
         </div>
       );
     }
@@ -2388,7 +2396,7 @@ class ErrorBoundary extends React.Component {
 // Usage
 <ErrorBoundary>
   <App />
-</ErrorBoundary>
+</ErrorBoundary>;
 ```
 
 ### Global Error Handling
@@ -2415,105 +2423,105 @@ window.addEventListener('error', (event) => {
 
 ### System Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Basic health check |
-| GET | `/api/status` | Detailed system status |
-| POST | `/api/system/diagnostics` | Run system diagnostics |
-| GET | `/api/system/metrics` | Performance metrics |
-| POST | `/api/system/audit-log` | Create audit log entry |
+| Method | Endpoint                  | Description            |
+| ------ | ------------------------- | ---------------------- |
+| GET    | `/health`                 | Basic health check     |
+| GET    | `/api/status`             | Detailed system status |
+| POST   | `/api/system/diagnostics` | Run system diagnostics |
+| GET    | `/api/system/metrics`     | Performance metrics    |
+| POST   | `/api/system/audit-log`   | Create audit log entry |
 
 ### Reports Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/reports/dashboard-stats` | Dashboard statistics |
-| GET | `/api/reports/lead-sources` | Lead source analysis |
-| GET | `/api/reports/activity-summary` | Activity summary |
-| POST | `/api/reports/export` | Export data to CSV/Excel |
+| Method | Endpoint                        | Description              |
+| ------ | ------------------------------- | ------------------------ |
+| GET    | `/api/reports/dashboard-stats`  | Dashboard statistics     |
+| GET    | `/api/reports/lead-sources`     | Lead source analysis     |
+| GET    | `/api/reports/activity-summary` | Activity summary         |
+| POST   | `/api/reports/export`           | Export data to CSV/Excel |
 
 ### Validation Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/validation/find-duplicates` | Find duplicate records |
-| POST | `/api/validation/merge-duplicates` | Merge duplicate records |
-| GET | `/api/validation/data-quality` | Data quality report |
+| Method | Endpoint                           | Description             |
+| ------ | ---------------------------------- | ----------------------- |
+| POST   | `/api/validation/find-duplicates`  | Find duplicate records  |
+| POST   | `/api/validation/merge-duplicates` | Merge duplicate records |
+| GET    | `/api/validation/data-quality`     | Data quality report     |
 
 ### Database Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/database/sync` | Sync from Base44 |
-| POST | `/api/database/archive` | Archive old records |
-| POST | `/api/database/cleanup` | Clean up orphaned data |
-| GET | `/api/database/test-connection` | Test database connection |
+| Method | Endpoint                        | Description              |
+| ------ | ------------------------------- | ------------------------ |
+| POST   | `/api/database/sync`            | Sync from Base44         |
+| POST   | `/api/database/archive`         | Archive old records      |
+| POST   | `/api/database/cleanup`         | Clean up orphaned data   |
+| GET    | `/api/database/test-connection` | Test database connection |
 
 ### Contact Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/contacts` | List all contacts |
-| GET | `/api/contacts/:id` | Get single contact |
-| POST | `/api/contacts` | Create contact |
-| PUT | `/api/contacts/:id` | Update contact |
-| DELETE | `/api/contacts/:id` | Delete contact |
-| POST | `/api/contacts/bulk` | Bulk create contacts |
-| POST | `/api/contacts/bulk-delete` | Bulk delete contacts |
+| Method | Endpoint                    | Description          |
+| ------ | --------------------------- | -------------------- |
+| GET    | `/api/contacts`             | List all contacts    |
+| GET    | `/api/contacts/:id`         | Get single contact   |
+| POST   | `/api/contacts`             | Create contact       |
+| PUT    | `/api/contacts/:id`         | Update contact       |
+| DELETE | `/api/contacts/:id`         | Delete contact       |
+| POST   | `/api/contacts/bulk`        | Bulk create contacts |
+| POST   | `/api/contacts/bulk-delete` | Bulk delete contacts |
 
 ### Account Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/accounts` | List all accounts |
-| GET | `/api/accounts/:id` | Get single account |
-| POST | `/api/accounts` | Create account |
-| PUT | `/api/accounts/:id` | Update account |
-| DELETE | `/api/accounts/:id` | Delete account |
+| Method | Endpoint            | Description        |
+| ------ | ------------------- | ------------------ |
+| GET    | `/api/accounts`     | List all accounts  |
+| GET    | `/api/accounts/:id` | Get single account |
+| POST   | `/api/accounts`     | Create account     |
+| PUT    | `/api/accounts/:id` | Update account     |
+| DELETE | `/api/accounts/:id` | Delete account     |
 
 ### Lead Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/leads` | List all leads |
-| GET | `/api/leads/:id` | Get single lead |
-| POST | `/api/leads` | Create lead |
-| PUT | `/api/leads/:id` | Update lead |
-| DELETE | `/api/leads/:id` | Delete lead |
-| POST | `/api/leads/:id/convert` | Convert lead to opportunity |
+| Method | Endpoint                 | Description                 |
+| ------ | ------------------------ | --------------------------- |
+| GET    | `/api/leads`             | List all leads              |
+| GET    | `/api/leads/:id`         | Get single lead             |
+| POST   | `/api/leads`             | Create lead                 |
+| PUT    | `/api/leads/:id`         | Update lead                 |
+| DELETE | `/api/leads/:id`         | Delete lead                 |
+| POST   | `/api/leads/:id/convert` | Convert lead to opportunity |
 
 ### Opportunity Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/opportunities` | List all opportunities |
-| GET | `/api/opportunities/:id` | Get single opportunity |
-| POST | `/api/opportunities` | Create opportunity |
-| PUT | `/api/opportunities/:id` | Update opportunity |
-| DELETE | `/api/opportunities/:id` | Delete opportunity |
+| Method | Endpoint                 | Description            |
+| ------ | ------------------------ | ---------------------- |
+| GET    | `/api/opportunities`     | List all opportunities |
+| GET    | `/api/opportunities/:id` | Get single opportunity |
+| POST   | `/api/opportunities`     | Create opportunity     |
+| PUT    | `/api/opportunities/:id` | Update opportunity     |
+| DELETE | `/api/opportunities/:id` | Delete opportunity     |
 
 ### User Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/users` | List all users |
-| GET | `/api/users/me` | Get current user |
-| POST | `/api/users` | Create user |
-| PUT | `/api/users/:id` | Update user |
-| DELETE | `/api/users/:id` | Delete user |
-| POST | `/api/users/sync-from-auth` | Sync from auth system |
+| Method | Endpoint                    | Description           |
+| ------ | --------------------------- | --------------------- |
+| GET    | `/api/users`                | List all users        |
+| GET    | `/api/users/me`             | Get current user      |
+| POST   | `/api/users`                | Create user           |
+| PUT    | `/api/users/:id`            | Update user           |
+| DELETE | `/api/users/:id`            | Delete user           |
+| POST   | `/api/users/sync-from-auth` | Sync from auth system |
 
 ### AI Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/ai/chat` | Send chat message |
-| GET | `/api/ai/conversations` | List conversations |
-| POST | `/api/ai/conversations` | Create conversation |
-| PUT | `/api/ai/conversations/:id` | Update conversation |
+| Method | Endpoint                    | Description         |
+| ------ | --------------------------- | ------------------- |
+| POST   | `/api/ai/chat`              | Send chat message   |
+| GET    | `/api/ai/conversations`     | List conversations  |
+| POST   | `/api/ai/conversations`     | Create conversation |
+| PUT    | `/api/ai/conversations/:id` | Update conversation |
 | DELETE | `/api/ai/conversations/:id` | Delete conversation |
 
-*[More endpoints - 197 total across 26 categories]*
+_[More endpoints - 197 total across 26 categories]_
 
 ---
 
@@ -2570,11 +2578,13 @@ C.A.R.E. (Cognitive Adaptive Response Engine) is built as a modular autonomous s
 ### Integration Points
 
 **1. Call Flow Handler** (`backend/lib/callFlowHandler.js`)
+
 - Processes inbound/outbound calls
 - Detects sentiment escalations
 - 2 integration points for C.A.R.E. triggers
 
 **2. AI Triggers Worker** (`backend/lib/aiTriggersWorker.js`)
+
 - Scheduled checks for stagnant data
 - 4 integration points:
   - Lead stagnant
@@ -2589,18 +2599,18 @@ C.A.R.E. (Cognitive Adaptive Response Engine) is built as a modular autonomous s
 ```javascript
 // backend/lib/care/escalationDetector.js
 export function detectEscalation({
-  text,           // Communication text to analyze
-  sentiment,      // Sentiment score (0.0-1.0, optional)
-  entity_type,    // 'lead', 'contact', 'account', 'opportunity'
-  last_contact,   // Date of last interaction
-  metadata        // Additional context (optional)
+  text, // Communication text to analyze
+  sentiment, // Sentiment score (0.0-1.0, optional)
+  entity_type, // 'lead', 'contact', 'account', 'opportunity'
+  last_contact, // Date of last interaction
+  metadata, // Additional context (optional)
 }) {
   return {
-    is_escalation: boolean,      // Is this an escalation?
-    reason: string,               // Human-readable explanation
-    trigger_type: string,         // Categorization slug
-    confidence: number,           // 0.0-1.0 confidence score
-    recommended_action: string    // Suggested next step (optional)
+    is_escalation: boolean, // Is this an escalation?
+    reason: string, // Human-readable explanation
+    trigger_type: string, // Categorization slug
+    confidence: number, // 0.0-1.0 confidence score
+    recommended_action: string, // Suggested next step (optional)
   };
 }
 ```
@@ -2614,41 +2624,39 @@ export function detectEscalation({
  * SaaS-specific escalation detector
  * Detects when trial users mention specific issues
  */
-export function detectTrialCancellationRisk({
-  text,
-  entity_type,
-  metadata = {}
-}) {
+export function detectTrialCancellationRisk({ text, entity_type, metadata = {} }) {
   // Trial-specific keywords
   const cancellationKeywords = [
-    'cancel', 'too expensive', 'not worth it',
-    'don\'t need', 'going with competitor',
-    'too complicated', 'doesn\'t work'
+    'cancel',
+    'too expensive',
+    'not worth it',
+    "don't need",
+    'going with competitor',
+    'too complicated',
+    "doesn't work",
   ];
-  
+
   const textLower = text.toLowerCase();
-  const hasCancellationIntent = cancellationKeywords.some(
-    keyword => textLower.includes(keyword)
-  );
-  
+  const hasCancellationIntent = cancellationKeywords.some((keyword) => textLower.includes(keyword));
+
   // Only escalate for trial accounts
   const isTrial = metadata.account_status === 'trial';
-  
+
   if (hasCancellationIntent && isTrial) {
     return {
       is_escalation: true,
       reason: `Trial user expressing cancellation intent: "${text.substring(0, 50)}..."`,
       trigger_type: 'trial_cancellation_risk',
       confidence: 0.85,
-      recommended_action: 'urgent_call_from_success_team'
+      recommended_action: 'urgent_call_from_success_team',
     };
   }
-  
+
   return {
     is_escalation: false,
     reason: 'No cancellation risk detected',
     trigger_type: null,
-    confidence: 0.0
+    confidence: 0.0,
   };
 }
 ```
@@ -2666,18 +2674,16 @@ const metadata = { account_status: account.status };
 
 // Run both detectors
 const standardEscalation = detectEscalation({ text, entity_type: 'account' });
-const trialRiskEscalation = detectTrialCancellationRisk({ 
-  text, 
+const trialRiskEscalation = detectTrialCancellationRisk({
+  text,
   entity_type: 'account',
-  metadata 
+  metadata,
 });
 
 // Escalate if either detector triggers
 if (standardEscalation.is_escalation || trialRiskEscalation.is_escalation) {
-  const escalation = trialRiskEscalation.is_escalation 
-    ? trialRiskEscalation 
-    : standardEscalation;
-  
+  const escalation = trialRiskEscalation.is_escalation ? trialRiskEscalation : standardEscalation;
+
   // Log and handle escalation...
 }
 ```
@@ -2692,17 +2698,17 @@ export const CarePolicyGateResult = {
   ALLOWED: 'allowed',
   BLOCKED: 'blocked',
   WARN: 'warn',
-  DEFER: 'defer'
+  DEFER: 'defer',
 };
 
 export function evaluatePolicy({
-  action_type,      // 'send_message', 'update_state', 'create_task', etc.
-  action_origin,    // 'human' | 'care_autonomous'
-  current_state,    // C.A.R.E. state: 'cold', 'warm', 'hot', etc.
-  entity_type,      // 'lead', 'contact', 'account', 'opportunity'
-  entity_id,        // UUID of the entity
-  tenant_id,        // UUID of the tenant
-  metadata          // Additional context
+  action_type, // 'send_message', 'update_state', 'create_task', etc.
+  action_origin, // 'human' | 'care_autonomous'
+  current_state, // C.A.R.E. state: 'cold', 'warm', 'hot', etc.
+  entity_type, // 'lead', 'contact', 'account', 'opportunity'
+  entity_id, // UUID of the entity
+  tenant_id, // UUID of the tenant
+  metadata, // Additional context
 }) {
   // Return one of: ALLOWED, BLOCKED, WARN, DEFER
 }
@@ -2720,27 +2726,27 @@ export function evaluateBusinessHoursPolicy({
   action_type,
   action_origin,
   tenant_id,
-  metadata = {}
+  metadata = {},
 }) {
   // Only restrict autonomous messaging
   if (action_origin !== 'care_autonomous') {
     return CarePolicyGateResult.ALLOWED;
   }
-  
+
   if (action_type !== 'send_message') {
     return CarePolicyGateResult.ALLOWED;
   }
-  
+
   // Get tenant timezone (default: UTC)
   const timezone = metadata.tenant_timezone || 'UTC';
   const now = new Date();
   const hour = now.getHours(); // 0-23
-  
+
   // Business hours: 9 AM - 5 PM
   if (hour >= 9 && hour < 17) {
     return CarePolicyGateResult.ALLOWED;
   }
-  
+
   // Outside business hours: defer until tomorrow
   return CarePolicyGateResult.DEFER;
 }
@@ -2756,22 +2762,22 @@ export function evaluateHighValuePolicy({
   action_type,
   action_origin,
   entity_type,
-  metadata = {}
+  metadata = {},
 }) {
   if (action_origin !== 'care_autonomous') {
     return CarePolicyGateResult.ALLOWED;
   }
-  
+
   // Check if this is a high-value opportunity
   if (entity_type === 'opportunity') {
     const dealValue = metadata.value || 0;
-    
+
     if (dealValue > 50000) {
       // High-value deals require human approval
       return CarePolicyGateResult.DEFER;
     }
   }
-  
+
   return CarePolicyGateResult.ALLOWED;
 }
 ```
@@ -2786,22 +2792,22 @@ export function evaluatePolicy(params) {
   const businessHours = evaluateBusinessHoursPolicy(params);
   const highValue = evaluateHighValuePolicy(params);
   const standard = evaluateStandardPolicy(params);
-  
+
   // Most restrictive policy wins
   const results = [businessHours, highValue, standard];
-  
+
   if (results.includes(CarePolicyGateResult.BLOCKED)) {
     return CarePolicyGateResult.BLOCKED;
   }
-  
+
   if (results.includes(CarePolicyGateResult.DEFER)) {
     return CarePolicyGateResult.DEFER;
   }
-  
+
   if (results.includes(CarePolicyGateResult.WARN)) {
     return CarePolicyGateResult.WARN;
   }
-  
+
   return CarePolicyGateResult.ALLOWED;
 }
 ```
@@ -2819,7 +2825,7 @@ export function evaluatePolicy(params) {
  */
 export async function checkAbandonedCarts({ tenantId, pgPool }) {
   const escalations = [];
-  
+
   // Query abandoned carts
   const query = `
     SELECT cart_id, user_id, total_value, created_at
@@ -2829,9 +2835,9 @@ export async function checkAbandonedCarts({ tenantId, pgPool }) {
     AND created_at < NOW() - INTERVAL '24 hours'
     AND created_at > NOW() - INTERVAL '48 hours'
   `;
-  
+
   const result = await pgPool.query(query, [tenantId]);
-  
+
   for (const cart of result.rows) {
     // Build escalation
     const escalation = {
@@ -2843,13 +2849,13 @@ export async function checkAbandonedCarts({ tenantId, pgPool }) {
       meta: {
         cart_id: cart.cart_id,
         cart_value: cart.total_value,
-        hours_abandoned: getHoursSince(cart.created_at)
-      }
+        hours_abandoned: getHoursSince(cart.created_at),
+      },
     };
-    
+
     escalations.push(escalation);
   }
-  
+
   return escalations;
 }
 
@@ -2868,16 +2874,16 @@ import { checkAbandonedCarts } from './care/customCareWorkers.js';
 // In the main worker loop:
 async function runAllTriggers(tenantId) {
   const escalations = [];
-  
+
   // Standard triggers
-  escalations.push(...await checkLeadStagnant(tenantId));
-  escalations.push(...await checkDealDecay(tenantId));
-  escalations.push(...await checkActivityOverdue(tenantId));
-  escalations.push(...await checkOpportunityHot(tenantId));
-  
+  escalations.push(...(await checkLeadStagnant(tenantId)));
+  escalations.push(...(await checkDealDecay(tenantId)));
+  escalations.push(...(await checkActivityOverdue(tenantId)));
+  escalations.push(...(await checkOpportunityHot(tenantId)));
+
   // Custom triggers
-  escalations.push(...await checkAbandonedCarts({ tenantId, pgPool }));
-  
+  escalations.push(...(await checkAbandonedCarts({ tenantId, pgPool })));
+
   // Process all escalations
   for (const escalation of escalations) {
     await handleEscalation(escalation);
@@ -2899,9 +2905,9 @@ test('detectEscalation - negative sentiment', () => {
   const result = detectEscalation({
     text: 'This product is terrible and I want a refund',
     sentiment: 0.2,
-    entity_type: 'lead'
+    entity_type: 'lead',
   });
-  
+
   assert.equal(result.is_escalation, true);
   assert.equal(result.trigger_type, 'negative_sentiment');
   assert.ok(result.confidence > 0.7);
@@ -2911,9 +2917,9 @@ test('detectEscalation - neutral sentiment', () => {
   const result = detectEscalation({
     text: 'Thank you for the information',
     sentiment: 0.7,
-    entity_type: 'lead'
+    entity_type: 'lead',
   });
-  
+
   assert.equal(result.is_escalation, false);
 });
 ```
@@ -2930,9 +2936,9 @@ test('policy gate - allow human actions', () => {
   const result = evaluatePolicy({
     action_type: 'send_message',
     action_origin: 'human',
-    current_state: 'cold'
+    current_state: 'cold',
   });
-  
+
   assert.equal(result, CarePolicyGateResult.ALLOWED);
 });
 
@@ -2940,9 +2946,9 @@ test('policy gate - block autonomous on cold leads', () => {
   const result = evaluatePolicy({
     action_type: 'send_message',
     action_origin: 'care_autonomous',
-    current_state: 'cold'
+    current_state: 'cold',
   });
-  
+
   assert.equal(result, CarePolicyGateResult.BLOCKED);
 });
 ```
@@ -2958,26 +2964,26 @@ test('C.A.R.E. full flow - stagnant lead escalation', async () => {
   // 1. Create a stagnant lead (no activity for 7+ days)
   const lead = await createTestLead({
     status: 'qualified',
-    last_contact: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000) // 8 days ago
+    last_contact: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000), // 8 days ago
   });
-  
+
   // 2. Run escalation detection
   const escalation = await detectLeadStagnant(lead);
   assert.equal(escalation.is_escalation, true);
-  
+
   // 3. Evaluate policy
   const policyResult = evaluatePolicy({
     action_type: 'workflow_trigger',
     action_origin: 'care_autonomous',
     current_state: 'warm',
-    entity_type: 'lead'
+    entity_type: 'lead',
   });
   assert.equal(policyResult, CarePolicyGateResult.ALLOWED);
-  
+
   // 4. Verify audit log entry created
   const auditLog = await pgPool.query(
     `SELECT * FROM care_audit_log WHERE entity_id = $1 ORDER BY created_at DESC LIMIT 1`,
-    [lead.id]
+    [lead.id],
   );
   assert.equal(auditLog.rows[0].event_type, 'ESCALATION_DETECTED');
 });
@@ -2995,13 +3001,13 @@ export function detectEscalation(params) {
   if (DEBUG) {
     console.log('[CARE_DEBUG] Escalation detection input:', params);
   }
-  
+
   const result = /* ... detection logic ... */;
-  
+
   if (DEBUG) {
     console.log('[CARE_DEBUG] Escalation detection result:', result);
   }
-  
+
   return result;
 }
 ```
@@ -3010,7 +3016,7 @@ export function detectEscalation(params) {
 
 ```sql
 -- View escalations for a specific entity
-SELECT 
+SELECT
   event_type,
   reason,
   metadata->>'trigger_type' as trigger,
@@ -3020,7 +3026,7 @@ WHERE entity_id = 'YOUR_ENTITY_UUID'
 ORDER BY created_at DESC;
 
 -- View policy gate decisions
-SELECT 
+SELECT
   metadata->>'action_type' as action,
   metadata->>'policy_gate_result' as decision,
   reason,
@@ -3119,13 +3125,14 @@ docker system prune -a
 **End of Developer Technical Manual**
 
 For additional documentation, see:
+
 - [User Guide](AISHA_CRM_USER_GUIDE.md)
 - [System Administrator Guide](AISHA_CRM_ADMIN_GUIDE.md)
-- [Security & Compliance Manual](AISHA_CRM_SECURITY_MANUAL.md) *(coming soon)*
-- [Database Administration Manual](AISHA_CRM_DATABASE_MANUAL.md) *(coming soon)*
+- [Security & Compliance Manual](AISHA_CRM_SECURITY_MANUAL.md) _(coming soon)_
+- [Database Administration Manual](AISHA_CRM_DATABASE_MANUAL.md) _(coming soon)_
 
 ---
 
-*Document Version: 2.0*  
-*Last Updated: November 15, 2025*  
-*© 2025 Aisha CRM. All rights reserved.*
+_Document Version: 2.0_  
+_Last Updated: November 15, 2025_  
+_© 2025 Aisha CRM. All rights reserved._

@@ -7,13 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] - 2026-02-23
+
+### Changed
+
+- **Documentation Reorganization:** Restructured all markdown documentation into logical subdirectories
+  - Created `docs/user-guides/` for end-user documentation
+  - Created `docs/admin-guides/` for system administrator guides
+  - Created `docs/developer-docs/` for developer documentation
+  - Created `docs/architecture/` for system architecture documents
+  - Created `docs/project-management/` for planning and tracking
+  - Created `docs/references/` for quick reference guides
+  - Created `docs/archive/` for historical/deprecated documentation
+  - Moved 40+ files to appropriate subdirectories
+  - Updated all cross-references in README.md and CLAUDE.md
+  - Created master documentation index in `docs/README.md`
+
+---
+
 ## [4.7.5] - 2026-02-14
 
 ### Added
+
 - **Braid type system** — Type checker module (`braid-types.js`) for Braid DSL
 - **Braid integration tests** — Integration test suite (`braid-integration.test.js`) for cross-module validation
 
 ### Changed
+
 - **Braid DSL v0.5 .braid files updated** — All 17 assistant tool definitions updated to latest syntax
 - **Braid checker & LSP** — Updated `braid-check.js` and `braid-lsp.js` for new type system
 - **Braid Python emitter** — Updated `braid-emit-py.js`
@@ -24,9 +44,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [4.7.4] - 2026-02-14
 
 ### Added
+
 - **Braid E2E test suite** — End-to-end v0.5 test (`e2e-v05.test.js`) with companion `.braid` fixture
 
 ### Changed
+
 - **Braid adapter** — Updated `braid-adapter.js` with expanded functionality
 - **VS Code extension** — Updated `.vscodeignore` and server `package.json`
 
@@ -35,11 +57,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [4.7.3] - 2026-02-14
 
 ### Added
+
 - **Braid IR layer** — Intermediate representation module (`braid-ir.js`) with test suite (`braid-ir.test.js`)
 - **Braid multi-target emitters** — JavaScript (`braid-emit-js.js`) and Python (`braid-emit-py.js`) code emitters
 - **Pre-commit Braid tests** — Braid core tests (`braid-llm-kit/core/*.test.js`) now run as part of pre-commit hook
 
 ### Changed
+
 - **Pre-commit hook enhanced** — Now runs ESLint + Braid core tests (was ESLint only)
 - **Braid core grammar updated** — Updated `grammar.ebnf` and `package.json` exports
 
@@ -48,10 +72,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [4.7.2] - 2026-02-14
 
 ### Added
+
 - **Braid LSP Server** — Language Server Protocol implementation for Braid DSL (`braid-llm-kit/core/braid-lsp.js`) with VS Code extension client, providing real-time diagnostics, hover info, and completions
 - **VS Code extension LSP integration** — Added `extension-client.js` and bundled server files for LSP support
 
 ### Changed
+
 - **Braid transpiler improvements** — Enhanced transpilation pipeline with expanded test coverage
 - **Braid core tests updated** — Refactored and extended test suite for transpiler changes
 
@@ -60,11 +86,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [4.7.1] - 2026-02-14
 
 ### Fixed
+
 - **Backend test port conflicts** — Remapped overlapping ports: system-logs (3109→3119), metrics (3107→3117), system port2 (3102→3112)
 - **Backend test timeouts** — Increased timeout for users.listing-retrieval, users.profile, and users.creation tests (5s→15s)
 - **System test teardown race** — Added `server.listening` guard and `closeAllConnections()` to prevent dangling promise warnings
 
 ### Changed
+
 - **Pre-push hook enhanced** — Now runs 4-step quality gate: ESLint → Vite build → Frontend tests (Vitest) → Backend tests (Docker, auto-skips if container not running)
 - **Braid DSL v0.6.0** — Updated parser, runtime, and transpiler; added `braid-llm-kit/core/` module with grammar EBNF, sandbox, and checker; refreshed VS Code extension (snippets, syntax highlighting, language configuration)
 
@@ -73,6 +101,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [4.7.0] - 2026-02-13
 
 ### Added
+
 - **Contacts Select-All Infrastructure** — Full select-all support added to Contacts page
   - Restored `selectAllMode` state getter (was destructured away)
   - Added two-tier select-all banners (page-level + all-records)
@@ -94,6 +123,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updated Braid MCP server (executor, policy, CRM adapter, server entry)
 
 ### Fixed
+
 - **Bulk Delete Partial Failures** — `Promise.all` → `Promise.allSettled` across all 3 entity pages
   - Leads, Accounts, Contacts: One failed delete no longer kills the entire batch
   - Added success/fail counting with separate toast notifications per operation
@@ -122,10 +152,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Braid Parser/Runtime** — Fixed `braid-parse.test.js` and core modules
 
 ### Changed
+
 - **Backend Braid modules** — Updated `analysis.js`, `execution.js`, `index.js`, `registry.js`, `utils.js`
 - **Braid issues tracker** — Updated `issues/2-braid-refactoring-issues.md`
 
 ### Removed
+
 - **13 stale test report files** — Consolidated into single `TEST_REPORT.md`
   - `braid-mcp-node-server/TEST_RESULTS.md`
   - `docs/.archive-v1-deprecated/legacy-docs/TEST_COVERAGE_REPORT.md`
@@ -137,6 +169,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `scripts/TEST_ALIGNMENT_README.md`
 
 ### Test Results
+
 - **Backend:** 1420 pass / 0 fail / 17 skip / 1 cancelled (includes 183 C.A.R.E.)
 - **Frontend:** 286 pass / 0 fail / 5 skip
 
@@ -145,6 +178,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
 - **Dynamic Date Awareness for AI** - System prompt now includes current date/time dynamically
   - Converted `BRAID_SYSTEM_PROMPT` to `getBraidSystemPrompt()` function for fresh dates per request
   - AI always knows current date (e.g., "Thursday, January 9, 2026")
@@ -157,6 +191,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - "Jackie Knight" now searches first_name OR last_name for "Jackie" OR "Knight"
 
 ### Fixed
+
 - **Braid contacts.braid syntax** - Simplified `getContactByName` match pattern (Braid doesn't support let/if-else in match arms)
 - **Notes type storage** - `create_note` now stores type in `metadata.type` instead of top-level field
 - **AI date confusion** - Fixed AI setting dates in 2024 when current year is 2026
@@ -164,6 +199,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added explicit date format rules (ISO 8601)
 
 ### Changed
+
 - `create_activity` tool description updated with critical date rules
 - `update_activity` tool description updated with date validation guidance
 - `create_note` tool description now lists all valid note types (general, call_log, meeting, email, task, follow_up, important, demo, proposal)
@@ -171,6 +207,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [4.5.24] - 2026-02-10
 
 ### Fixed
+
 - **AiSHA lead correction & updates**
   - Adjusted intent classifier and routing so phrases like "please correct the name for this lead" reliably map to the `update_lead` tool
   - Updated AiSHA's system prompt to explicitly state she can update CRM records (including leads) via tools and should not claim she "cannot update leads" when update tools are available
@@ -179,6 +216,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [4.5.23] - 2026-02-10
 
 ### Fixed
+
 - **Developer AI log access behavior**
   - Ensure `readLogs` always retrieves and analyzes logs via `system_logs` instead of redirecting users to external platform dashboards
   - Updated execution context metadata so Developer AI accurately reports its log access method in Docker/production environments
@@ -188,6 +226,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - 2026-01-01
 
 ### Added
+
 - **TokenBudgetManager** - centralized token budget enforcement (`backend/lib/aiBudgetConfig.js`)
   - Hard ceiling of 4000 tokens (configurable via `AI_TOKEN_HARD_CEILING`)
   - Component caps: system prompt (1200), tools (800), memory (250), tool results (700)
@@ -211,11 +250,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `listAllContacts` tool for retrieving all contacts with full details
 
 ### Changed
+
 - **AI token usage reduced from ~11k-12k to ~2k-3k tokens per interaction** (75% reduction)
 - Budget enforcement applied consistently in both `generateAssistantResponse` and `/api/ai/chat` flows
 - Updated `AI_ARCHITECTURE_AISHA_AI.md` with Token Budget Manager and Memory Gating sections
 
 ### Fixed
+
 - CodeQL analysis - exclude .http files and api-tests from analysis (REST Client test files)
 - AI hallucination prevention - AI must use exact record names from tool results
   - Added 'EXACT Name:' prefix in summarizers for all entities
@@ -228,6 +269,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bizdevsources route: case-insensitive status filter, filter out 'undefined' string params
 
 ### Changed
+
 - Intent classifier: only match valid lead statuses (new, contacted, qualified, converted, rejected)
 - E2E tests: mark created records with is_test_data=true
 - Enhanced tenantContextDictionary with custom entity/status terminology handling
@@ -237,6 +279,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [3.6.19] - 2025-12-31
 
 ### Added
+
 - AI thumbs up/down feedback for AI responses
   - PATCH `/api/ai/conversations/:id/messages/:messageId/feedback` endpoint
   - Stores feedback in conversation_messages.metadata.feedback JSONB
@@ -244,6 +287,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cache invalidation to user CRUD operations (POST, PUT, DELETE routes)
 
 ### Fixed
+
 - AI sidebar - skip conversation creation for users without tenant_id
   - SuperAdmins can assign themselves to a tenant via User Management
   - AI sidebar gracefully skips conversation creation instead of throwing auth error
@@ -253,6 +297,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Display error_message from performance logs
 
 ### Changed
+
 - Complete Phase 7 RAG implementation with memory retrieval and conversation summaries
   - Memory chunks now correctly injected with UNTRUSTED boundary marker
   - Conversation summaries provide rolling context for AI conversations
@@ -264,6 +309,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [3.6.18] - 2025-12-30
 
 ### Added
+
 - Dashboard bundle optimization with pre-aggregated data (45% faster: 389ms → 214ms)
   - `leadsBySource` pre-aggregation (eliminates LeadSourceChart API call)
   - Increase bundle limits: 100 leads (was 5), 50 opps (was 5)
@@ -273,6 +319,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Caching to funnel-counts (120s TTL, 37% faster: 133ms → 84ms)
 
 ### Fixed
+
 - Testing support for GH_TOKEN env var from Doppler (check both GITHUB_TOKEN and GH_TOKEN)
 - E2E test selectors for leads, opportunities, system logs (all 12 CRUD E2E tests pass)
 - System logs cache invalidation after delete operations
@@ -280,6 +327,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - System logs tenant_id=system alias handling for UUID column (fixes 24% API error rate)
 
 ### Changed
+
 - CLS Optimization: Enlarge Recent Activities chart + Graphics centering
   - Recent Activities: h-72 → h-[26rem] (288px → 416px)
   - Chart width: max-w-2xl → max-w-3xl
@@ -292,6 +340,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [3.6.14] - 2025-12-30
 
 ### Security (BREAKING CHANGE)
+
 - Enforce tenant isolation + add caching to 16 endpoints
   - Enforce mandatory tenant_id validation on bizdevsources, cashflow, modulesettings, synchealths, notifications, announcements, audit-logs, notes, webhooks, cron, accounts
   - Prevents multi-tenant data leakage vulnerability
@@ -301,6 +350,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Performance gains: 11-77% faster response times on cached requests
 
 ### Fixed
+
 - Superadmin access, JWT payload enhancement, and robust tenant validation
 - Production 401/403 errors by fixing token refresh and auth status codes
 - JWT secret fallback alignment in authenticate middleware
@@ -310,6 +360,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Authenticate middleware to /api/ai routes to enable Bearer token auth
 
 ### Changed
+
 - Fixed cron.route.test.js to include tenant_id in all requests
 
 ---
@@ -317,6 +368,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [3.5.0 - 3.5.9] - 2025-12-27 to 2025-12-30
 
 ### Added
+
 - Token burn reduction by capping history + tool summaries
   - MAX_INCOMING = 8 messages limit
   - MAX_CHARS = 1500 per message content
@@ -336,6 +388,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Status label resolver for tenant terminology normalization
 
 ### Fixed
+
 - Lead search functionality and OpenAI API authentication
   - Fixed broken text search in /api/v2/leads endpoint
   - Updated OpenAI API key from deprecated sk-svcacct to sk-proj key
@@ -348,6 +401,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sales Pipeline chart vertical centering
 
 ### Changed
+
 - Refine intent classifier patterns and add comprehensive test coverage (28 tests)
 - Frontend entity extraction - read from result.data not result
 - Entity extraction for bare array tool results (search_leads)
@@ -363,6 +417,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [3.5.13] - 2025-12-28
 
 ### Fixed
+
 - **Lead Search Functionality:** Fixed broken text search in `/api/v2/leads` endpoint
   - Changed from word-splitting logic to full-query pattern matching
   - Search now correctly finds leads like "Iso Check" with query `%Iso Check%`
@@ -379,11 +434,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Chat endpoint now successfully authenticates and processes requests
 
 ### Added
+
 - **Debug Logging:** Added HTTP GET debug logging to Braid SDK
   - Logs full URL, response status, and data keys for troubleshooting
   - Helps identify search result issues and API response structure
 
 ### Changed
+
 - **Docker Compose:** Added explicit `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` environment variables to backend service
 
 ---
@@ -391,6 +448,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [3.1.6] - 2025-12-21
 
 ### Fixed
+
 - **Braid SDK Endpoint Configuration:** Fixed all Braid .braid tool files to use correct API endpoints
   - Replaced non-existent `/search` endpoints with list endpoints using query parameters
   - Updated accounts.braid: `/api/v2/accounts/search` → `/api/v2/accounts?search=`
@@ -408,6 +466,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Tests now use `CRM_BACKEND_URL` when running inside Docker containers
 
 ### Added
+
 - **Braid SDK Scenario Tests:** New comprehensive end-to-end test suite (`braidScenarios.test.js`)
   - 14 scenario tests covering real CRM data retrieval and updates
   - Retrieval scenarios: accounts, contacts, leads, opportunities, activities
@@ -417,6 +476,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Audit scenarios: tool execution logging
 
 ### Testing
+
 - All 40 Braid SDK tests passing (14 scenario + 26 execution)
 
 ---
@@ -424,6 +484,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.3.6] - 2025-12-14
 
 ### Added
+
 - **AI Profile Summary Feature:** Implemented AI-powered executive summaries for lead/contact profiles
   - New endpoint: `POST /api/ai/summarize-person-profile` with 24-hour intelligent caching
   - Prevents excessive LLM API calls by checking cache on both frontend and backend
@@ -441,6 +502,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Includes cached AI-generated summary for each profile
 
 ### Fixed
+
 - **AI Summary Route Implementation:** Corrected aiSummary.js module imports and exports
   - Fixed incorrect import of non-existent `supabaseClient.js` → now uses `getSupabaseClient()` from `supabase-db.js`
   - Fixed incorrect import of non-existent `callLLMWithFailover()` → now properly uses `generateChatCompletion()`, `resolveLLMApiKey()`, `selectLLMConfigForTenant()` from AI engine
@@ -448,6 +510,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - All AI engine tests pass ✅ (routes, triggers, campaigns)
 
 ### Updated
+
 - **Documentation:** Added comprehensive AI architecture and profile feature documentation
   - Updated CLAUDE.md with AI Engine Architecture section
   - Added AI Profile Summaries section to CLAUDE.md (standalone page features and API integration)
@@ -458,6 +521,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.3.5] - 2025-12-13
 
 ### Fixed
+
 - **UUID Validation for System Tenant ID:** Fixed `invalid input syntax for type uuid: "system"` errors after Supabase UUID migration
   - Applied `sanitizeUuidInput()` to convert 'system' literal to NULL for UUID columns
   - Updated `logBackendEvent` in server.js to handle system-level logging with UUID tenant_id column
@@ -471,6 +535,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.3.4] - 2025-12-13
 
 ### Fixed
+
 - **Opportunities Unassigned Filter UUID Error:** Fixed `invalid input syntax for type uuid: ""` in Opportunities v2 backend route
   - Sanitized `assigned_to` filter to use NULL instead of empty string for unassigned opportunities
   - Updated frontend Opportunities.jsx to preserve $or filters via $and merging
@@ -481,6 +546,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.2.37] - 2025-06-19
 
 ### Fixed
+
 - **Employee Assignment (assigned_to) Field Migration:** Fixed critical bug where assigning employees to entities failed
   - `assigned_to` column migrated from TEXT (email) to UUID (employee.id) in migration 081
   - Backend routes (contacts, leads, opportunities) now properly handle `assigned_to` and `assigned_to_name` fields
@@ -492,6 +558,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Changed field check from `user_email` to `email || user_email` for proper field detection
 
 ### Added
+
 - **Doppler Documentation:** Added secrets management documentation to `copilot-instructions.md`
   - Documented `doppler run -- command` pattern for running commands with secrets
   - Listed key environment variable names (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, etc.)
@@ -505,9 +572,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.2.36] - 2025-12-10
 
 ### Added
-  - Activities, Leads, Contacts, Accounts, Opportunities, and BizDevSources pages updated
-  - Example: If "Leads" is renamed to "Prospects" in settings, buttons show "Add Prospect" instead of "Add Lead"
-  - Dialog titles, tooltips, and empty state messages all use the dynamic labels
+
+- Activities, Leads, Contacts, Accounts, Opportunities, and BizDevSources pages updated
+- Example: If "Leads" is renamed to "Prospects" in settings, buttons show "Add Prospect" instead of "Add Lead"
+- Dialog titles, tooltips, and empty state messages all use the dynamic labels
 
 - **Automatic GitHub Issue Creation for Critical API Errors:** Production environments now auto-create GitHub issues when critical/high severity API errors occur
   - New `_createGitHubIssueAsync` method in apiHealthMonitor
@@ -515,9 +583,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Shows toast notification with link to created issue
 
 ### Fixed
-  - All 4 detection functions (leads, opportunities, activities, hot opportunities) now filter out `is_test_data: true` records
-  - Test file `activities.filters.test.js` now correctly marks all test activities as `is_test_data: true`
-  - AI suggestion rejection cooldown increased from 24 hours to 7 days
+
+- All 4 detection functions (leads, opportunities, activities, hot opportunities) now filter out `is_test_data: true` records
+- Test file `activities.filters.test.js` now correctly marks all test activities as `is_test_data: true`
+- AI suggestion rejection cooldown increased from 24 hours to 7 days
 
 - **AI Suggestions Badge Visibility & Information:**
   - Suggestions now display the actual record name (activity subject, lead name, deal name) instead of generic "activity"
@@ -536,6 +605,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Construction Projects Icon:** Changed from generic Building2 to HardHat icon in navigation
 
 ### Changed
+
 - **AI Suggestions Cooldown:** Increased from 24 hours to 7 days to reduce notification fatigue
 
 ---
@@ -543,6 +613,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.2.35] - 2025-12-10
 
 ### Added
+
 - **Construction Projects Module:** New toggleable module for staffing companies supplying workers to construction clients
   - **Database:** Migration 097 adds `construction_projects` and `construction_assignments` tables with full RLS
   - **Backend API:** `/api/construction/projects` and `/api/construction/assignments` endpoints with full CRUD
@@ -562,6 +633,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.2.34] - 2025-12-09
 
 ### Fixed
+
 - **Navigation Order Per-Tenant Isolation:** Fixed bug where dragging navigation items to reorder affected all tenants
   - Root cause: localStorage keys for navigation order were global (`aisha_crm_nav_order`)
   - Fix: Keys now include tenant ID (`aisha_crm_nav_order_${tenantId}`) for per-tenant isolation
@@ -573,6 +645,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.2.33] - 2025-12-09
 
 ### Added
+
 - **Enhanced View Panels:** All entity view panels now show comprehensive field information
   - Account, Contact, Lead, Opportunity views display all available fields without requiring Edit
   - Activity views unified to use UniversalDetailPanel for consistent styling
@@ -594,6 +667,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Includes Notes & Activity section with full note management
 
 ### Fixed
+
 - **Entity Labels Per-Tenant Isolation:** Fixed critical bug where changing entity labels affected all tenants
   - Root cause: Supabase SQL adapter regex failed when SQL lacked ORDER BY/LIMIT/OFFSET clauses
   - Fixed `extractClause` regex in `supabase-db.js` to include `$` as fallback end pattern
@@ -604,6 +678,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - 2025-12-06
 
 ### Added
+
 - **Multi-Provider LLM Support:** AI engine now supports multiple LLM providers with automatic failover
   - **OpenAI:** gpt-4o, gpt-4o-mini, gpt-4o-realtime-preview
   - **Anthropic:** claude-3-5-sonnet-20241022, claude-3-haiku-20240307
@@ -647,6 +722,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Stage Filter for Opportunities:** `GET /api/opportunities` now supports `stage` query parameter
 
 ### Fixed
+
 - **Braid Syntax Errors:** Fixed critical syntax errors preventing 33 tools from loading
   - Removed `type:` reserved keyword usage in `activities.braid`
   - Removed unsupported `if` statements from `leads.braid`, `activities.braid`, `workflows.braid`
@@ -659,6 +735,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `opportunities.js` - stage filter ignores "all", "any", ""
 
 ### Changed
+
 - **Tool Descriptions:** Updated all `list_*` tool descriptions with clarification and limit guidance
   - AI now prompted to ask user for status/stage preference before listing
   - If >5 results, AI summarizes count and refers user to UI for full list
@@ -669,6 +746,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Never read out more than 5 items - refer to UI for browsing
 
 ### Documentation
+
 - Added `docs/SESSION_HANDOFF_20251206.md` for session continuity
 
 ---
@@ -676,6 +754,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.1.41] - 2025-01-31
 
 ### Fixed
+
 - **AI Tenant Context Resolution:** AI assistant now uses authenticated user's assigned `tenant_id` as the primary source
   - Previously relied on `localStorage.selected_tenant_id` which could be stale or wrong
   - Regular users without TenantSwitcher now automatically get correct tenant context
@@ -692,6 +771,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - This prevents AI from creating records in wrong tenants (e.g., Labor Depot instead of Local Dev)
 
 ### Security
+
 - **Superadmin Tenant Restriction:** Superadmins are now restricted to their assigned tenant in AI routes
   - Previously superadmins bypassed all tenant checks and could access any tenant
   - Now ALL users (including superadmins) are bound to their `user.tenant_id`
@@ -699,6 +779,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Superadmins can still use TenantSwitcher UI to view other tenants, but AI stays scoped
 
 ### Added
+
 - **Activity Tools for AI:** Added missing `list_activities` and `get_activity_details` Braid tools
   - AI can now list all activities with status/limit filters
   - AI can get details of a specific activity by ID
@@ -728,9 +809,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
 - Phase 4 closure documentation
 
 ### Security
+
 - **[CRITICAL] AI Tenant Authorization:** Added `validateUserTenantAccess` helper function to `ai.js` routes
   - Prevents cross-tenant data access via AI assistant
   - All AI conversation and chat endpoints now validate user is authorized for requested tenant
@@ -753,6 +836,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Phase 4 – Full Cutover Complete
 
 #### Changed
+
 - **AiSHA Executive Avatar:** New branded portrait applied across all AI assistant surfaces
   - `AiSidebar.jsx` - Main assistant panel hero
   - `AiAssistantLauncher.jsx` - Header pill avatar
@@ -763,10 +847,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `Layout.jsx` - Navigation sidebar (updated)
 
 #### Fixed
+
 - Legacy `/aisha-avatar.jpg` references migrated to `/assets/aisha-executive-portrait.jpg`
 - Documentation updated with correct avatar paths
 
 #### Documentation
+
 - Created `PHASE_4_CLOSURE_SUMMARY.md`
 - Created `BRANDING_GUIDE.md`
 - Created `UI_STANDARDS.md`
@@ -781,15 +867,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security & Monitoring Improvements
 
 #### Fixed
+
 - MCP/N8N container health check false negatives
 - IDR dashboard blocked IPs display
 - False positive bulk extraction alerts
 
 #### Added
+
 - External threat intelligence integration (GreyNoise, AbuseIPDB)
 - Blocked IPs management UI in Internal Performance Dashboard
 
 #### Changed
+
 - Renamed duplicate "Security" tabs to "Auth & Access" and "Intrusion Detection"
 
 ---
@@ -799,6 +888,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Dashboard Fixes
 
 #### Fixed
+
 - Phantom counts showing incorrect data when tables empty
 - Cross-tenant cache leakage in dashboard bundle
 - Superadmin global view regression
@@ -810,6 +900,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Performance
 
 #### Fixed
+
 - Tenant resolution cache consolidated to single canonical resolver
 - AI routes now use shared cache (previously bypassed)
 
@@ -820,6 +911,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Integrations
 
 #### Fixed
+
 - GitHub health issue reporter idempotency
 - Duplicate issue prevention with Redis-backed deduplication
 - Retry logic with exponential backoff
@@ -831,6 +923,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### MCP/Braid Integration
 
 #### Fixed
+
 - MCP connectivity restored in production
 - Health proxy endpoint enhanced with diagnostics
 - GitHub token injection for container authentication
@@ -842,6 +935,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### API
 
 #### Added
+
 - Backend endpoint for `generateUniqueId` function
 - Eliminated console warnings in production
 
@@ -852,6 +946,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Infrastructure
 
 #### Fixed
+
 - `APP_BUILD_VERSION` runtime injection via `env-config.js`
 - Tenant/employee fetch failures resolved
 
@@ -863,4 +958,4 @@ See `orchestra/PLAN.md` for detailed history of bugfixes and features.
 
 ---
 
-*This changelog was created as part of Phase 4 closure on December 4, 2025.*
+_This changelog was created as part of Phase 4 closure on December 4, 2025._

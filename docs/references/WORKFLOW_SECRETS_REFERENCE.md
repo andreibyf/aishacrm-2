@@ -9,6 +9,7 @@ This document provides a quick reference for all secrets used across GitHub Acti
 **File:** `.github/workflows/test-alignment-report.yml`
 
 **Required Secrets:**
+
 - ✅ `GITHUB_TOKEN` (automatically provided by GitHub Actions)
 
 **Custom Secrets:** None required
@@ -21,29 +22,30 @@ This document provides a quick reference for all secrets used across GitHub Acti
 
 ### Workflows with No Custom Secrets (GITHUB_TOKEN Only)
 
-| Workflow | Purpose |
-|----------|---------|
-| `test-alignment-report.yml` | Generate test coverage reports |
-| `security-audit.yml` | Run npm security audits |
-| `backend-tests.yml` | Run backend unit tests |
-| `lint.yml` | Code linting and formatting |
-| `pg-import-guard.yml` | Prevent direct PostgreSQL imports |
-| `rls-check.yml` | Verify RLS policies |
+| Workflow                    | Purpose                           |
+| --------------------------- | --------------------------------- |
+| `test-alignment-report.yml` | Generate test coverage reports    |
+| `security-audit.yml`        | Run npm security audits           |
+| `backend-tests.yml`         | Run backend unit tests            |
+| `lint.yml`                  | Code linting and formatting       |
+| `pg-import-guard.yml`       | Prevent direct PostgreSQL imports |
+| `rls-check.yml`             | Verify RLS policies               |
 
 ### Workflows Requiring Custom Secrets
 
-| Workflow | Secrets Required | Purpose |
-|----------|-----------------|---------|
-| `docker-release.yml` | `PROD_VPS_HOST`<br>`PROD_VPS_USER`<br>`PROD_VPS_KEY`<br>`PROD_MCP_GITHUB_TOKEN` | Production deployment |
-| `api-schema-tests.yml` | `SUPABASE_URL`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`DATABASE_URL` | Database integration tests |
-| `e2e.yml` | `VITE_SUPABASE_URL`<br>`VITE_SUPABASE_ANON_KEY`<br>`BASE44_API_KEY` | End-to-end tests |
-| `mcp-audit-test.yml` | `SUPABASE_URL`<br>`SUPABASE_SERVICE_ROLE_KEY` | MCP server tests |
+| Workflow               | Secrets Required                                                                | Purpose                    |
+| ---------------------- | ------------------------------------------------------------------------------- | -------------------------- |
+| `docker-release.yml`   | `PROD_VPS_HOST`<br>`PROD_VPS_USER`<br>`PROD_VPS_KEY`<br>`PROD_MCP_GITHUB_TOKEN` | Production deployment      |
+| `api-schema-tests.yml` | `SUPABASE_URL`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`DATABASE_URL`                 | Database integration tests |
+| `e2e.yml`              | `VITE_SUPABASE_URL`<br>`VITE_SUPABASE_ANON_KEY`<br>`BASE44_API_KEY`             | End-to-end tests           |
+| `mcp-audit-test.yml`   | `SUPABASE_URL`<br>`SUPABASE_SERVICE_ROLE_KEY`                                   | MCP server tests           |
 
 ## Secret Categories
 
 ### 1. Automatic Secrets (No Configuration)
 
 **GITHUB_TOKEN**
+
 - Automatically provided by GitHub Actions
 - Scoped to current repository
 - Expires after workflow completion
@@ -52,46 +54,56 @@ This document provides a quick reference for all secrets used across GitHub Acti
 ### 2. Database Secrets
 
 **SUPABASE_URL**
+
 - Supabase project URL
 - Example: `https://xxxxx.supabase.co`
 
 **SUPABASE_SERVICE_ROLE_KEY**
+
 - Supabase service role key (bypasses RLS)
 - ⚠️ Highly sensitive - only for backend/testing
 
 **SUPABASE_ANON_KEY**
+
 - Supabase anonymous/publishable key
 - Used in frontend (less sensitive)
 
 **DATABASE_URL**
+
 - Direct PostgreSQL connection string
 - Format: `postgresql://user:pass@host:5432/db`
 
 ### 3. Deployment Secrets
 
 **PROD_VPS_HOST**
+
 - Production VPS hostname/IP
 - Example: `prod.example.com`
 
 **PROD_VPS_USER**
+
 - SSH username for VPS
 - Example: `deploy`
 
 **PROD_VPS_KEY**
+
 - SSH private key for VPS authentication
 - ⚠️ Keep secure - full server access
 
 **PROD_MCP_GITHUB_TOKEN**
+
 - GitHub token for accessing private MCP repos
 - Scope: `repo` (read access)
 
 ### 4. API Keys
 
 **BASE44_API_KEY**
+
 - API key for Base44 cloud service
 - Used for AI/LLM features
 
-**VITE_* Prefixed**
+**VITE\_\* Prefixed**
+
 - Frontend environment variables
 - Exposed in browser (use with caution)
 

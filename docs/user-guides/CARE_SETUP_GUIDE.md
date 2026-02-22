@@ -56,14 +56,14 @@ CARE_SHADOW_MODE=true                        # System-wide observe-only mode (de
 
 ### What Each Variable Does
 
-| Variable | Purpose | Production | Development |
-|----------|---------|------------|-------------|
-| `AI_TRIGGERS_WORKER_ENABLED` | Enable background worker to automatically detect triggers | `true` | `false` |
-| `AI_TRIGGERS_WORKER_INTERVAL_MS` | How often worker polls for triggers (milliseconds) | `15000` | `15000` |
-| `CARE_STATE_WRITE_ENABLED` | Allow C.A.R.E. to write relationship state changes to database | `true` | `true` |
-| `CARE_WORKFLOW_TRIGGERS_ENABLED` | Allow C.A.R.E. to send webhook notifications to workflows | `true` | `true` |
-| `CARE_AUTONOMY_ENABLED` | **Master kill switch** for autonomous actions (requires explicit opt-in) | `false` | `false` |
-| `CARE_SHADOW_MODE` | System-wide observe-only mode (logs decisions but never executes) | `true` | `true` |
+| Variable                         | Purpose                                                                  | Production | Development |
+| -------------------------------- | ------------------------------------------------------------------------ | ---------- | ----------- |
+| `AI_TRIGGERS_WORKER_ENABLED`     | Enable background worker to automatically detect triggers                | `true`     | `false`     |
+| `AI_TRIGGERS_WORKER_INTERVAL_MS` | How often worker polls for triggers (milliseconds)                       | `15000`    | `15000`     |
+| `CARE_STATE_WRITE_ENABLED`       | Allow C.A.R.E. to write relationship state changes to database           | `true`     | `true`      |
+| `CARE_WORKFLOW_TRIGGERS_ENABLED` | Allow C.A.R.E. to send webhook notifications to workflows                | `true`     | `true`      |
+| `CARE_AUTONOMY_ENABLED`          | **Master kill switch** for autonomous actions (requires explicit opt-in) | `false`    | `false`     |
+| `CARE_SHADOW_MODE`               | System-wide observe-only mode (logs decisions but never executes)        | `true`     | `true`      |
 
 **Note**: These control **system behavior**, not per-tenant configuration. Per-tenant settings come from the Workflow Builder UI.
 
@@ -80,11 +80,13 @@ For C.A.R.E. to execute autonomous actions (without human approval), **ALL** of 
 **If ANY gate fails → Action is blocked or escalated to human.**
 
 **Safe Defaults** (when variables not set in Doppler):
+
 - `CARE_AUTONOMY_ENABLED` defaults to `false` (no autonomous actions)
 - `CARE_SHADOW_MODE` defaults to `true` (observe-only)
 - This means C.A.R.E. will **only log and observe**, never execute actions
 
 **Shadow Mode Behavior:**
+
 - **System-wide** (`CARE_SHADOW_MODE=true`): Global observe-only, overrides all tenant settings
 - **Per-tenant** (CARE Start node config): Tenant-specific shadow mode (only applies if system-wide is `false`)
 - Use system-wide shadow mode for initial deployment, then enable per-tenant for gradual rollout
@@ -215,14 +217,14 @@ To completely disable C.A.R.E. for a tenant:
 **Database Query** (via Supabase SQL Editor or backend):
 
 ```sql
-SELECT 
-  tenant_id, 
-  workflow_id, 
-  webhook_url, 
-  is_enabled, 
-  shadow_mode, 
+SELECT
+  tenant_id,
+  workflow_id,
+  webhook_url,
+  is_enabled,
+  shadow_mode,
   state_write_enabled,
-  webhook_timeout_ms, 
+  webhook_timeout_ms,
   webhook_max_retries
 FROM care_workflow_config
 WHERE tenant_id = 'YOUR_TENANT_UUID';
@@ -266,7 +268,7 @@ console.log('Config Source:', config._source); // Should be "database"
   "state_write_enabled": false,
   "webhook_timeout_ms": 3000,
   "webhook_max_retries": 2,
-  "_source": "database"  // ← Confirms database-first configuration
+  "_source": "database" // ← Confirms database-first configuration
 }
 ```
 
@@ -291,15 +293,15 @@ console.log('Config Source:', config._source); // Should be "database"
 SELECT * FROM care_workflow_config WHERE tenant_id = 'YOUR_TENANT_UUID';
 
 -- Check recent C.A.R.E. audit logs
-SELECT * FROM care_audit_log 
-WHERE tenant_id = 'YOUR_TENANT_UUID' 
-ORDER BY ts DESC 
+SELECT * FROM care_audit_log
+WHERE tenant_id = 'YOUR_TENANT_UUID'
+ORDER BY ts DESC
 LIMIT 10;
 
 -- Check workflow execution history
-SELECT * FROM workflow_executions 
-WHERE workflow_id = 'YOUR_WORKFLOW_UUID' 
-ORDER BY started_at DESC 
+SELECT * FROM workflow_executions
+WHERE workflow_id = 'YOUR_WORKFLOW_UUID'
+ORDER BY started_at DESC
 LIMIT 10;
 ```
 
@@ -376,7 +378,7 @@ Since each tenant can only have **one active C.A.R.E. workflow**:
 C.A.R.E. logs all decisions to `care_audit_log` table:
 
 ```sql
-SELECT 
+SELECT
   event_type,
   trigger_type,
   entity_type,
@@ -391,6 +393,7 @@ LIMIT 50;
 ```
 
 Review logs regularly to:
+
 - Verify triggers are being detected
 - Identify false positives or missed triggers
 - Optimize workflow logic based on actual behavior
@@ -425,16 +428,19 @@ By default, C.A.R.E. webhooks are sent without authentication (internal service-
 When `state_write_enabled: true`, C.A.R.E. can update relationship states in the database:
 
 **Conservative Approach** (Recommended for initial setup):
+
 ```javascript
-state_write_enabled: false  // C.A.R.E. only proposes state changes
+state_write_enabled: false; // C.A.R.E. only proposes state changes
 ```
 
 **Aggressive Approach** (After validation):
+
 ```javascript
-state_write_enabled: true   // C.A.R.E. automatically updates states
+state_write_enabled: true; // C.A.R.E. automatically updates states
 ```
 
 **Hybrid Approach** (Best Practice):
+
 - Start with `state_write_enabled: false`
 - Monitor proposed state changes in audit logs
 - Enable `state_write_enabled: true` for specific trigger types only
@@ -490,4 +496,3 @@ For additional help:
 - **Backend Code**: `backend/lib/care/` directory
 - **Workflow Sync**: `backend/routes/workflows.js` → `syncCareWorkflowConfig()`
 - **Database Schema**: `care_workflow_config` table definition
-

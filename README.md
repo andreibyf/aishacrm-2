@@ -10,15 +10,15 @@ Built with React + Vite frontend and Node.js backend, featuring 60+ AI-native to
 
 ## 📚 Documentation
 
-| Document | Description |
-|----------|-------------|
-| [USER_GUIDE.md](./docs/USER_GUIDE.md) | Complete end-user guide for CRM operations |
-| [ADMIN_GUIDE.md](./docs/ADMIN_GUIDE.md) | System administration, deployment, tenant management |
-| [AI_ASSISTANT_GUIDE.md](./docs/AI_ASSISTANT_GUIDE.md) | AiSHA AI assistant features and capabilities |
-| [DEVELOPER_MANUAL.md](./docs/DEVELOPER_MANUAL.md) | Development setup, architecture, API reference |
-| [DATABASE_GUIDE.md](./docs/DATABASE_GUIDE.md) | Database schema, migrations, Supabase configuration |
-| [SECURITY_GUIDE.md](./docs/SECURITY_GUIDE.md) | Security best practices, RLS policies, authentication |
-| [BRANDING_GUIDE.md](./docs/BRANDING_GUIDE.md) | Brand assets, colors, typography |
+| Document                                                          | Description                                           |
+| ----------------------------------------------------------------- | ----------------------------------------------------- |
+| [USER_GUIDE.md](./docs/user-guides/USER_GUIDE.md)                 | Complete end-user guide for CRM operations            |
+| [ADMIN_GUIDE.md](./docs/admin-guides/ADMIN_GUIDE.md)              | System administration, deployment, tenant management  |
+| [AI_ASSISTANT_GUIDE.md](./docs/user-guides/AI_ASSISTANT_GUIDE.md) | AiSHA AI assistant features and capabilities          |
+| [DEVELOPER_MANUAL.md](./docs/developer-docs/DEVELOPER_MANUAL.md)  | Development setup, architecture, API reference        |
+| [DATABASE_GUIDE.md](./docs/developer-docs/DATABASE_GUIDE.md)      | Database schema, migrations, Supabase configuration   |
+| [SECURITY_GUIDE.md](./docs/admin-guides/SECURITY_GUIDE.md)        | Security best practices, RLS policies, authentication |
+| [BRANDING_GUIDE.md](./docs/references/BRANDING_GUIDE.md)          | Brand assets, colors, typography                      |
 
 **Legacy docs** are archived in `docs/archive/` for reference.
 
@@ -93,6 +93,7 @@ BizDev Source → promote → Lead → qualify → Lead (qualified) → convert 
 #### Why Braid Was Created
 
 Traditional approaches to AI+database integration have critical flaws:
+
 - **Raw SQL is dangerous**: LLMs can hallucinate destructive queries
 - **ORM wrappers are leaky**: No tenant isolation guarantees
 - **JSON schemas are verbose**: Tool definitions become unwieldy at scale
@@ -114,14 +115,14 @@ fn createLead(tenant: String, first_name: String, last_name: String, email: Stri
 
 #### Key Braid Features
 
-| Feature | Benefit |
-|---------|---------|
-| **Type-Safe Parameters** | LLMs generate correct tool calls — no parameter hallucination |
-| **Automatic Tenant Injection** | Every operation is scoped to the current tenant |
-| **Effect Declarations** | `!net`, `!fs`, `!clock` make side effects explicit |
-| **Result Types** | `Result<T, E>` forces explicit error handling |
-| **Whitelist Enforcement** | Tools can only access pre-approved endpoints |
-| **60+ Production Tools** | CRM, calendar, notes, telephony, workflows, navigation |
+| Feature                        | Benefit                                                       |
+| ------------------------------ | ------------------------------------------------------------- |
+| **Type-Safe Parameters**       | LLMs generate correct tool calls — no parameter hallucination |
+| **Automatic Tenant Injection** | Every operation is scoped to the current tenant               |
+| **Effect Declarations**        | `!net`, `!fs`, `!clock` make side effects explicit            |
+| **Result Types**               | `Result<T, E>` forces explicit error handling                 |
+| **Whitelist Enforcement**      | Tools can only access pre-approved endpoints                  |
+| **60+ Production Tools**       | CRM, calendar, notes, telephony, workflows, navigation        |
 
 #### Dual Execution Modes
 
@@ -161,15 +162,15 @@ See `braid-llm-kit/README.md` for complete Braid documentation.
 
 ### 🏗️ Architecture
 
-| Component | Technology |
-|-----------|------------|
-| **Frontend** | React 18 + Vite, TailwindCSS, shadcn/ui |
-| **Backend** | Node.js + Express, 210+ API endpoints |
-| **Database** | PostgreSQL 15+ on Supabase, 50+ tables with RLS |
-| **AI Tools** | Braid DSL (`.braid` files in `braid-llm-kit/`) |
-| **Secrets** | Doppler for production, `.env` for local |
-| **Caching** | Redis (memory + cache layers) |
-| **Containers** | Docker Compose with health checks |
+| Component      | Technology                                      |
+| -------------- | ----------------------------------------------- |
+| **Frontend**   | React 18 + Vite, TailwindCSS, shadcn/ui         |
+| **Backend**    | Node.js + Express, 210+ API endpoints           |
+| **Database**   | PostgreSQL 15+ on Supabase, 50+ tables with RLS |
+| **AI Tools**   | Braid DSL (`.braid` files in `braid-llm-kit/`)  |
+| **Secrets**    | Doppler for production, `.env` for local        |
+| **Caching**    | Redis (memory + cache layers)                   |
+| **Containers** | Docker Compose with health checks               |
 
 ---
 
@@ -227,11 +228,11 @@ docker compose down              # Stop all services
 
 ### Port Reference
 
-| Service | Local Dev | Docker |
-|---------|-----------|--------|
-| Frontend | 5173 | 4000 |
-| Backend | 3001 | 4001 |
-| Braid MCP | — | 8000 |
+| Service   | Local Dev | Docker |
+| --------- | --------- | ------ |
+| Frontend  | 5173      | 4000   |
+| Backend   | 3001      | 4001   |
+| Braid MCP | —         | 8000   |
 
 ---
 
@@ -317,4 +318,5 @@ Proprietary. All rights reserved.
 - **Changelog**: [CHANGELOG.md](./CHANGELOG.md)
 - **Claude Instructions**: [CLAUDE.md](./CLAUDE.md)
 - **Docs Index**: [docs/README.md](./docs/README.md)
+
 # Trigger workflow

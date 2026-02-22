@@ -7,12 +7,14 @@
 ## 📖 Table of Contents
 
 ### Chapter 1: Administration Overview
+
 - [1.1 Administrator Role](#11-administrator-role)
 - [1.2 System Architecture](#12-system-architecture)
 - [1.3 Access Requirements](#13-access-requirements)
 - [1.4 Document Conventions](#14-document-conventions)
 
 ### Chapter 2: Initial Setup and Installation
+
 - [2.1 Pre-Installation Checklist](#21-pre-installation-checklist)
 - [2.2 Docker Installation](#22-docker-installation)
 - [2.3 Environment Configuration](#23-environment-configuration)
@@ -20,18 +22,21 @@
 - [2.5 First-Time Configuration](#25-first-time-configuration)
 
 ### Chapter 3: User Management
+
 - [3.1 Creating Users](#31-creating-users)
 - [3.2 User Roles and Permissions](#32-user-roles-and-permissions)
 - [3.3 Employee Management](#33-employee-management)
 - [3.4 Access Control](#34-access-control)
 
 ### Chapter 4: Tenant Management
+
 - [4.1 Multi-Tenant Architecture](#41-multi-tenant-architecture)
 - [4.2 Creating Tenants](#42-creating-tenants)
 - [4.3 Tenant Isolation](#43-tenant-isolation)
 - [4.4 Tenant Configuration](#44-tenant-configuration)
 
 ### Chapter 5: Security Administration
+
 - [5.1 Authentication Configuration](#51-authentication-configuration)
 - [5.2 Row-Level Security (RLS)](#52-row-level-security-rls)
 - [5.3 API Security](#53-api-security)
@@ -39,6 +44,7 @@
 - [5.5 Security Best Practices](#55-security-best-practices)
 
 ### Chapter 6: System Configuration
+
 - [6.1 General Settings](#61-general-settings)
 - [6.2 Email Configuration](#62-email-configuration)
 - [6.3 Integration Settings](#63-integration-settings)
@@ -47,18 +53,21 @@
 - [6.6 Entity Label Customization](#66-entity-label-customization)
 
 ### Chapter 7: Performance Monitoring
+
 - [7.1 System Health Dashboard](#71-system-health-dashboard)
 - [7.2 Performance Metrics](#72-performance-metrics)
 - [7.3 Query Performance](#73-query-performance)
 - [7.4 Optimization Techniques](#74-optimization-techniques)
 
 ### Chapter 8: Backup and Recovery
+
 - [8.1 Backup Strategy](#81-backup-strategy)
 - [8.2 Database Backups](#82-database-backups)
 - [8.3 Disaster Recovery](#83-disaster-recovery)
 - [8.4 Testing Recovery Procedures](#84-testing-recovery-procedures)
 
 ### Chapter 9: Maintenance Operations
+
 - [9.1 System Updates](#91-system-updates)
 - [9.2 Database Maintenance](#92-database-maintenance)
 - [9.3 Log Management](#93-log-management)
@@ -68,24 +77,28 @@
 - [9.7 Braid MCP Server](#97-braid-mcp-server)
 
 ### Chapter 10: Troubleshooting
+
 - [10.1 Common Issues](#101-common-issues)
 - [10.2 Diagnostic Tools](#102-diagnostic-tools)
 - [10.3 Log Analysis](#103-log-analysis)
 - [10.4 Emergency Procedures](#104-emergency-procedures)
 
 ### Chapter 11: Production Deployment
+
 - [11.1 Pre-Deployment Checklist](#111-pre-deployment-checklist)
 - [11.2 Deployment Process](#112-deployment-process)
 - [11.3 Post-Deployment Verification](#113-post-deployment-verification)
 - [11.4 Rollback Procedures](#114-rollback-procedures)
 
 ### Chapter 12: Monitoring and Alerting
+
 - [12.1 Monitoring Setup](#121-monitoring-setup)
 - [12.2 Alert Configuration](#122-alert-configuration)
 - [12.3 Incident Response](#123-incident-response)
 - [12.4 Reporting](#124-reporting)
 
 ### Chapter 13: C.A.R.E. v1 - Autonomous Relationship Management
+
 - [13.1 C.A.R.E. Overview](#131-care-overview)
 - [13.2 Kill Switch Configuration](#132-kill-switch-configuration)
 - [13.3 State Engine and Transitions](#133-state-engine-and-transitions)
@@ -97,6 +110,7 @@
 - [13.9 Troubleshooting C.A.R.E.](#139-troubleshooting-care)
 
 ### Appendices
+
 - [Appendix A: Environment Variables](#appendix-a-environment-variables)
 - [Appendix B: API Endpoints](#appendix-b-api-endpoints)
 - [Appendix C: Database Schema](#appendix-c-database-schema)
@@ -135,12 +149,12 @@ mindmap
 
 ### Administrator Types
 
-| Role | Access Level | Primary Duties |
-|------|-------------|----------------|
-| **Superadmin** | Full system access | Infrastructure, security, all tenants |
-| **Admin** | Tenant-level access | User management, configuration within tenant |
-| **Manager** | Department access | Team oversight, reporting |
-| **Support** | Read access | User assistance, troubleshooting |
+| Role           | Access Level        | Primary Duties                               |
+| -------------- | ------------------- | -------------------------------------------- |
+| **Superadmin** | Full system access  | Infrastructure, security, all tenants        |
+| **Admin**      | Tenant-level access | User management, configuration within tenant |
+| **Manager**    | Department access   | Team oversight, reporting                    |
+| **Support**    | Read access         | User assistance, troubleshooting             |
 
 ## 1.2 System Architecture
 
@@ -151,28 +165,28 @@ graph TB
     subgraph "Client Layer"
         A[Web Browser] --> B[React Frontend]
     end
-    
+
     subgraph "Application Layer"
         B --> C[Docker Container: Frontend]
         B --> D[Docker Container: Backend]
     end
-    
+
     subgraph "Service Layer"
         D --> E[Express API Server]
         E --> F[Swagger API Docs]
     end
-    
+
     subgraph "Data Layer"
         E --> G[(PostgreSQL/Supabase)]
         E --> H[(File Storage)]
     end
-    
+
     subgraph "Integration Layer"
         E --> I[Email Service]
         E --> J[Calendar Sync]
         E --> K[Braid AI SDK]
     end
-    
+
     style C fill:#4F46E5,color:#fff
     style D fill:#10B981,color:#fff
     style G fill:#F59E0B,color:#000
@@ -180,20 +194,20 @@ graph TB
 
 ### Technology Stack
 
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| **Frontend** | React 18 + Vite | User interface |
-| **Backend** | Node.js 22 + Express | API server |
-| **Database** | PostgreSQL 15+ / Supabase | Data storage |
-| **Containerization** | Docker + Docker Compose | Deployment |
-| **AI Framework** | Braid SDK | Intelligent features |
-| **Cache** | In-memory + File system | Performance |
-| **Storage** | Supabase Storage | File management |
+| Layer                | Technology                | Purpose              |
+| -------------------- | ------------------------- | -------------------- |
+| **Frontend**         | React 18 + Vite           | User interface       |
+| **Backend**          | Node.js 22 + Express      | API server           |
+| **Database**         | PostgreSQL 15+ / Supabase | Data storage         |
+| **Containerization** | Docker + Docker Compose   | Deployment           |
+| **AI Framework**     | Braid SDK                 | Intelligent features |
+| **Cache**            | In-memory + File system   | Performance          |
+| **Storage**          | Supabase Storage          | File management      |
 
 ### Port Configuration
 
 > **🚨 CRITICAL: Docker Port Configuration**
-> 
+>
 > This project runs in Docker containers with fixed port mappings. **Never modify these ports** without updating all related configuration.
 
 ```
@@ -219,12 +233,14 @@ graph TB
 ### Administrator Workstation Requirements
 
 **Hardware:**
+
 - CPU: 4+ cores recommended
 - RAM: 8GB minimum, 16GB recommended
 - Disk: 50GB+ free space
 - Network: Stable 10+ Mbps connection
 
 **Software:**
+
 - Docker Desktop 20.10+ or Docker Engine + Docker Compose
 - Modern web browser (Chrome, Firefox, Edge)
 - SSH client (for remote management)
@@ -234,31 +250,33 @@ graph TB
 ### Network Access
 
 Required ports must be accessible:
+
 - **4000**: Frontend (HTTP)
 - **4001**: Backend API (HTTP)
 - **5432**: PostgreSQL (if direct access needed)
 - **22**: SSH (for remote administration)
 
 > **⚠️ WARNING**
-> 
+>
 > In production, ports 4000/4001 should be behind a reverse proxy (nginx, Apache) with HTTPS enabled.
 
 ## 1.4 Document Conventions
 
 This guide uses standard notation conventions:
 
-| Symbol | Meaning |
-|--------|---------|
-| 💡 | Best practice or helpful tip |
-| ⚠️ | Important warning or caution |
-| 🚨 | Critical information - must read! |
-| ✅ | Verification step or success indicator |
-| ❌ | Incorrect action or error |
-| 📝 | Additional information or note |
-| 🔒 | Security-related information |
-| 🐳 | Docker-specific information |
+| Symbol | Meaning                                |
+| ------ | -------------------------------------- |
+| 💡     | Best practice or helpful tip           |
+| ⚠️     | Important warning or caution           |
+| 🚨     | Critical information - must read!      |
+| ✅     | Verification step or success indicator |
+| ❌     | Incorrect action or error              |
+| 📝     | Additional information or note         |
+| 🔒     | Security-related information           |
+| 🐳     | Docker-specific information            |
 
 **Command Notation:**
+
 ```powershell
 # PowerShell commands shown with PS prompt
 PS C:\> Get-Location
@@ -297,14 +315,14 @@ Prerequisites Checklist:
 
 Collect these details before starting:
 
-| Item | Example | Notes |
-|------|---------|-------|
-| **Database URL** | `postgresql://user:pass@host:5432/db` | Connection string |
-| **Supabase URL** | `https://xxx.supabase.co` | If using Supabase |
-| **Supabase Keys** | Service role key | For backend operations |
-| **Frontend URL** | `https://crm.example.com` | Production domain |
-| **Email SMTP** | `smtp.gmail.com:587` | For notifications |
-| **Admin Email** | `admin@example.com` | First superadmin |
+| Item              | Example                               | Notes                  |
+| ----------------- | ------------------------------------- | ---------------------- |
+| **Database URL**  | `postgresql://user:pass@host:5432/db` | Connection string      |
+| **Supabase URL**  | `https://xxx.supabase.co`             | If using Supabase      |
+| **Supabase Keys** | Service role key                      | For backend operations |
+| **Frontend URL**  | `https://crm.example.com`             | Production domain      |
+| **Email SMTP**    | `smtp.gmail.com:587`                  | For notifications      |
+| **Admin Email**   | `admin@example.com`                   | First superadmin       |
 
 ## 2.2 Docker Installation
 
@@ -325,12 +343,13 @@ CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
 ```
 
 > **💡 TIP**
-> 
+>
 > If Docker commands fail, ensure Docker Desktop is running (Windows/Mac) or the Docker daemon is started (Linux).
 
 ### Project Setup
 
 1. **Clone or extract project:**
+
    ```powershell
    PS C:\> cd C:\Projects
    PS C:\Projects> git clone <repository-url> aishacrm
@@ -397,7 +416,7 @@ NODE_ENV=production
 ```
 
 > **📝 NOTE**
-> 
+>
 > In Docker, frontend connects to backend via `http://localhost:4001`. The Docker internal network uses different ports, but external access is via 4001.
 
 ### Backend Environment File (backend/.env)
@@ -479,7 +498,7 @@ ENABLE_PERFORMANCE_LOGGING=true
 ```
 
 > **🔒 SECURITY WARNING**
-> 
+>
 > **Never commit .env files to version control!** Use .env.example as a template. Add `.env` to `.gitignore`.
 
 ### Environment Variable Validation
@@ -529,8 +548,8 @@ PS C:\backend> node run-migrations.js
 
 ```sql
 -- Check tables exist
-SELECT table_name 
-FROM information_schema.tables 
+SELECT table_name
+FROM information_schema.tables
 WHERE table_schema = 'public'
 ORDER BY table_name;
 
@@ -579,7 +598,7 @@ DATABASE_URL=postgresql://aishacrm_user:secure_password@localhost:5432/aishacrm
 ### Building and Starting Containers
 
 > **🚨 CRITICAL: Terminal Location**
-> 
+>
 > **Always verify you're in the project root before running Docker commands!**
 
 ```powershell
@@ -657,6 +676,7 @@ PS C:\> Invoke-RestMethod -Uri http://localhost:4001/api/users `
 ✅ **Installation Complete!**
 
 You can now access:
+
 - Frontend: http://localhost:4000
 - Backend API: http://localhost:4001
 - API Documentation: http://localhost:4001/api-docs
@@ -675,10 +695,10 @@ You can now access:
 2. Navigate to **Settings → User Management**
 3. Click **Add User**
 4. Fill form:
-   - Email* (required, must be unique)
-   - First Name* (required)
-   - Last Name* (required)
-   - Role* (required)
+   - Email\* (required, must be unique)
+   - First Name\* (required)
+   - Last Name\* (required)
+   - Role\* (required)
    - Tenant Assignment
 5. Click **Send Invitation** or **Create & Set Password**
 
@@ -725,7 +745,7 @@ sequenceDiagram
     participant System
     participant Email
     participant NewUser
-    
+
     Admin->>System: Create user + Send invitation
     System->>Email: Send invitation email
     Email->>NewUser: Deliver invitation
@@ -733,12 +753,12 @@ sequenceDiagram
     System->>NewUser: Show password setup page
     NewUser->>System: Set password
     System->>NewUser: Login successful
-    
+
     Note over System,NewUser: Invitation expires in 7 days
 ```
 
 > **📝 NOTE**
-> 
+>
 > Invitation links expire after 7 days. After expiration, resend invitation or manually set password.
 
 ## 3.2 User Roles and Permissions
@@ -777,23 +797,23 @@ sequenceDiagram
 
 ### Permission Matrix
 
-| Action | Superadmin | Admin | Manager | Employee |
-|--------|-----------|-------|---------|----------|
-| **System Config** | ✅ | ❌ | ❌ | ❌ |
-| **Tenant Management** | ✅ | ❌ | ❌ | ❌ |
-| **User Management** | ✅ | ✅* | ❌ | ❌ |
-| **View All Records** | ✅ | ✅ | ✅** | ❌ |
-| **Edit All Records** | ✅ | ✅ | ❌ | ❌ |
-| **Edit Team Records** | ✅ | ✅ | ✅ | ❌ |
-| **Edit Own Records** | ✅ | ✅ | ✅ | ✅ |
-| **Delete Records** | ✅ | ✅ | ❌ | ❌ |
-| **Export Data** | ✅ | ✅ | ✅ | ❌ |
-| **Advanced Reports** | ✅ | ✅ | ✅ | ❌ |
-| **API Access** | ✅ | ✅ | ✅ | ✅*** |
+| Action                | Superadmin | Admin | Manager | Employee |
+| --------------------- | ---------- | ----- | ------- | -------- |
+| **System Config**     | ✅         | ❌    | ❌      | ❌       |
+| **Tenant Management** | ✅         | ❌    | ❌      | ❌       |
+| **User Management**   | ✅         | ✅\*  | ❌      | ❌       |
+| **View All Records**  | ✅         | ✅    | ✅\*\*  | ❌       |
+| **Edit All Records**  | ✅         | ✅    | ❌      | ❌       |
+| **Edit Team Records** | ✅         | ✅    | ✅      | ❌       |
+| **Edit Own Records**  | ✅         | ✅    | ✅      | ✅       |
+| **Delete Records**    | ✅         | ✅    | ❌      | ❌       |
+| **Export Data**       | ✅         | ✅    | ✅      | ❌       |
+| **Advanced Reports**  | ✅         | ✅    | ✅      | ❌       |
+| **API Access**        | ✅         | ✅    | ✅      | ✅\*\*\* |
 
-*Within their tenant only  
+\*Within their tenant only  
 **Department records only  
-***Read-only API access
+\***Read-only API access
 
 ### Custom Permissions
 
@@ -802,14 +822,14 @@ Create fine-grained permissions for specific needs:
 ```sql
 -- Example: Create custom permission
 INSERT INTO permissions (name, description, resource, action)
-VALUES 
+VALUES
   ('view_sensitive_data', 'View financial information', 'accounts', 'read'),
   ('bulk_delete', 'Perform bulk delete operations', '*', 'delete');
 
 -- Assign to role
 INSERT INTO role_permissions (role, permission_id)
-SELECT 'financial_manager', id 
-FROM permissions 
+SELECT 'financial_manager', id
+FROM permissions
 WHERE name = 'view_sensitive_data';
 ```
 
@@ -819,12 +839,12 @@ WHERE name = 'view_sensitive_data';
 
 **Understanding the Distinction:**
 
-| Aspect | User | Employee |
-|--------|------|----------|
-| **Scope** | Global (system-wide) | Tenant-specific |
-| **Purpose** | Authentication | CRM entity |
-| **Permissions** | Role-based | Data scope |
-| **Assignment** | Records owned by user | Records visible to employee |
+| Aspect          | User                  | Employee                    |
+| --------------- | --------------------- | --------------------------- |
+| **Scope**       | Global (system-wide)  | Tenant-specific             |
+| **Purpose**     | Authentication        | CRM entity                  |
+| **Permissions** | Role-based            | Data scope                  |
+| **Assignment**  | Records owned by user | Records visible to employee |
 
 ```mermaid
 graph LR
@@ -833,7 +853,7 @@ graph LR
     A -->|Mapped to| D[Employee Record]
     D -->|Belongs to| E[Tenant]
     D -->|Sees records| F[Data Scope]
-    
+
     style A fill:#4F46E5,color:#fff
     style D fill:#10B981,color:#fff
 ```
@@ -928,7 +948,7 @@ USING (
 ```
 
 > **🔒 SECURITY BEST PRACTICE**
-> 
+>
 > Always enable RLS on tables containing sensitive data. Test policies thoroughly before production deployment.
 
 ### API Access Control
@@ -1007,21 +1027,21 @@ graph TB
         A[Request] --> B[Authentication]
         B --> C[Tenant Resolution]
     end
-    
+
     subgraph "Database Layer"
         C --> D{Tenant ID}
         D -->|Tenant A| E[Data A]
         D -->|Tenant B| F[Data B]
         D -->|Tenant C| G[Data C]
     end
-    
+
     subgraph "Security Layer"
         E --> H[RLS Policies]
         F --> H
         G --> H
         H --> I[Filtered Results]
     end
-    
+
     style C fill:#4F46E5,color:#fff
     style H fill:#EF4444,color:#fff
 ```
@@ -1029,7 +1049,7 @@ graph TB
 ### Tenant Scoping Rules
 
 > **🚨 CRITICAL: UUID-First Tenant Identification**
-> 
+>
 > **Always use tenant UUID for all database operations!** Never use slug or legacy tenant_id.
 
 ```
@@ -1038,6 +1058,7 @@ graph TB
 ```
 
 **Why UUID-First:**
+
 - UUIDs are globally unique
 - Slugs can be changed by users
 - UUIDs prevent tenant data leakage
@@ -1079,18 +1100,18 @@ sequenceDiagram
     participant System
     participant Database
     participant FirstUser
-    
+
     Admin->>System: Create tenant
     System->>Database: INSERT tenant record
     System->>Database: Apply RLS policies
     System->>Database: Create default settings
     System->>Admin: Return tenant UUID
-    
+
     Admin->>System: Create first admin user
     System->>Database: INSERT user + employee
     System->>Database: Assign admin role
     System->>FirstUser: Send invitation email
-    
+
     FirstUser->>System: Accept invitation
     System->>FirstUser: Grant access
 ```
@@ -1117,7 +1138,7 @@ Every query automatically filtered by tenant:
 SELECT * FROM contacts WHERE email LIKE '%@acme.com';
 
 -- Actual query (after RLS applied)
-SELECT * FROM contacts 
+SELECT * FROM contacts
 WHERE email LIKE '%@acme.com'
   AND tenant_id = '550e8400-...'  -- ← Automatically added
   AND (                            -- ← Permission check
@@ -1135,20 +1156,20 @@ Backend middleware enforces tenant isolation:
 export function validateTenantAccess(req, res, next) {
   const { tenant_id } = req.query || req.body;
   const userTenantId = req.user.tenant_id;
-  
+
   // Superadmin can access any tenant
   if (req.user.role === 'superadmin') {
     return next();
   }
-  
+
   // Others must match tenant
   if (tenant_id !== userTenantId) {
     return res.status(403).json({
       status: 'error',
-      message: 'Access denied: Invalid tenant'
+      message: 'Access denied: Invalid tenant',
     });
   }
-  
+
   next();
 }
 ```
@@ -1166,16 +1187,17 @@ JOIN contacts c2 ON c1.id = c2.id
 WHERE c1.tenant_id != c2.tenant_id;
 
 -- Verify RLS is enabled
-SELECT tablename, rowsecurity 
-FROM pg_tables 
+SELECT tablename, rowsecurity
+FROM pg_tables
 WHERE schemaname = 'public'
   AND rowsecurity = false;
 -- Should return empty for all tenant-scoped tables
 ```
 
 > **⚠️ WARNING**
-> 
+>
 > If the above query returns any tables with `rowsecurity = false`, enable RLS immediately:
+>
 > ```sql
 > ALTER TABLE <table_name> ENABLE ROW LEVEL SECURITY;
 > ```
@@ -1189,7 +1211,7 @@ Enable/disable modules per tenant:
 ```sql
 -- Module settings table
 INSERT INTO module_settings (tenant_id, module_name, is_enabled, settings)
-VALUES 
+VALUES
   ('tenant-uuid', 'opportunities', true, '{"stages":["prospect","qualified","proposal","negotiation","closed"]}'),
   ('tenant-uuid', 'workflows', true, '{"max_workflows":50}'),
   ('tenant-uuid', 'document_processing', false, NULL),
@@ -1200,11 +1222,11 @@ VALUES
 
 The Realtime Voice module enables AI voice interaction features:
 
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| `is_enabled` | boolean | true | Enables voice mode toggle in AI sidebar |
-| `ptt_enabled` | boolean | true | Enables push-to-talk via spacebar |
-| `auto_play_responses` | boolean | true | Auto-plays TTS for AI responses |
+| Setting               | Type    | Default | Description                             |
+| --------------------- | ------- | ------- | --------------------------------------- |
+| `is_enabled`          | boolean | true    | Enables voice mode toggle in AI sidebar |
+| `ptt_enabled`         | boolean | true    | Enables push-to-talk via spacebar       |
+| `auto_play_responses` | boolean | true    | Auto-plays TTS for AI responses         |
 
 > **⚠️ NOTE**
 >
@@ -1339,11 +1361,11 @@ WEBHOOKS_ENABLED=false
 
 **Variable Reference:**
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CAMPAIGN_WORKER_ENABLED` | `false` | Set to `true` to enable background campaign execution |
-| `CAMPAIGN_WORKER_INTERVAL_MS` | `30000` | Polling interval in milliseconds (30 seconds) |
-| `WEBHOOKS_ENABLED` | `false` | Enable webhook emissions for lifecycle events |
+| Variable                      | Default | Description                                           |
+| ----------------------------- | ------- | ----------------------------------------------------- |
+| `CAMPAIGN_WORKER_ENABLED`     | `false` | Set to `true` to enable background campaign execution |
+| `CAMPAIGN_WORKER_INTERVAL_MS` | `30000` | Polling interval in milliseconds (30 seconds)         |
+| `WEBHOOKS_ENABLED`            | `false` | Enable webhook emissions for lifecycle events         |
 
 ### Enabling the Worker
 
@@ -1414,6 +1436,7 @@ $campaign.metadata.progress
 #### 1. Polling Phase
 
 Every `CAMPAIGN_WORKER_INTERVAL_MS`:
+
 - Query for campaigns with `status='scheduled'`
 - Limit to 10 campaigns per poll
 - Order by `created_at ASC` (FIFO)
@@ -1421,6 +1444,7 @@ Every `CAMPAIGN_WORKER_INTERVAL_MS`:
 #### 2. Locking Phase
 
 For each campaign:
+
 - Hash campaign UUID to 32-bit integer
 - Acquire Postgres advisory lock: `pg_try_advisory_lock(lock_id)`
 - If lock fails, another worker is processing - skip
@@ -1428,6 +1452,7 @@ For each campaign:
 #### 3. Execution Phase
 
 **Email Campaigns:**
+
 1. Load `ai_email_config.sending_profile_id` from campaign metadata
 2. Fetch tenant integration credentials from `tenant_integrations`
 3. Validate tenant ownership (reject cross-tenant references)
@@ -1436,6 +1461,7 @@ For each campaign:
 6. Update contact status and progress counters
 
 **Call Campaigns:**
+
 1. Load `ai_call_integration_id` from campaign metadata
 2. Fetch tenant integration credentials (CallFluent/Thoughtly)
 3. Validate tenant ownership
@@ -1466,11 +1492,11 @@ For each campaign:
 
 When `WEBHOOKS_ENABLED=true`, the worker emits:
 
-| Event | When | Payload |
-|-------|------|---------|
-| `aicampaign.progress` | Every 10 contacts | `{ id, status, progress: { total, processed, success, failed } }` |
-| `aicampaign.completed` | Successful completion | `{ id, status: 'completed', progress, details }` |
-| `aicampaign.failed` | Execution failure | `{ id, status: 'failed', progress, details: { error } }` |
+| Event                  | When                  | Payload                                                           |
+| ---------------------- | --------------------- | ----------------------------------------------------------------- |
+| `aicampaign.progress`  | Every 10 contacts     | `{ id, status, progress: { total, processed, success, failed } }` |
+| `aicampaign.completed` | Successful completion | `{ id, status: 'completed', progress, details }`                  |
+| `aicampaign.failed`    | Execution failure     | `{ id, status: 'failed', progress, details: { error } }`          |
 
 Webhooks are read from `webhook` table (tenant-scoped, active, subscribed to event or `*`).
 
@@ -1479,6 +1505,7 @@ Webhooks are read from `webhook` table (tenant-scoped, active, subscribed to eve
 #### Worker Not Starting
 
 **Check configuration:**
+
 ```powershell
 # Verify env vars
 docker exec aishacrm-backend env | Select-String "CAMPAIGN"
@@ -1489,6 +1516,7 @@ docker exec aishacrm-backend env | Select-String "CAMPAIGN"
 ```
 
 **Check logs:**
+
 ```powershell
 docker logs aishacrm-backend | Select-String "CampaignWorker"
 
@@ -1508,24 +1536,26 @@ docker logs aishacrm-backend | Select-String "CampaignWorker"
    SELECT pg_advisory_unlock_all();
    ```
 3. **Invalid integration** - Campaign references missing/inactive integration
+
    ```sql
    -- Check campaign metadata
-   SELECT metadata->>'ai_email_config' 
+   SELECT metadata->>'ai_email_config'
    FROM ai_campaigns WHERE id = 'campaign-uuid';
-   
+
    -- Verify integration exists and is active
-   SELECT * FROM tenant_integrations 
+   SELECT * FROM tenant_integrations
    WHERE id = 'integration-id' AND is_active = true;
    ```
 
 #### Execution Errors
 
 **Check error in campaign metadata:**
+
 ```sql
-SELECT 
-  id, 
-  name, 
-  status, 
+SELECT
+  id,
+  name,
+  status,
   metadata->'error' as error_message,
   metadata->'lifecycle'->>'failed_at' as failed_at
 FROM ai_campaigns
@@ -1561,7 +1591,7 @@ Advisory locks ensure safe multi-instance deployment:
 services:
   backend:
     deploy:
-      replicas: 3  # Run 3 backend workers
+      replicas: 3 # Run 3 backend workers
     environment:
       - CAMPAIGN_WORKER_ENABLED=true
 ```
@@ -1573,9 +1603,10 @@ Each instance polls independently; only one acquires the lock per campaign.
 To avoid provider rate limits:
 
 1. **Add delay between contacts** - Modify `campaignWorker.js`:
+
    ```javascript
    // After each contact send
-   await new Promise(resolve => setTimeout(resolve, 1000)); // 1s delay
+   await new Promise((resolve) => setTimeout(resolve, 1000)); // 1s delay
    ```
 
 2. **Configure provider-specific limits** - Store in `tenant_integrations.credentials`:
@@ -1596,12 +1627,14 @@ To avoid provider rate limits:
 ### Security Considerations
 
 ✅ **Enforced by Design:**
+
 - Tenant validation before credential access
 - Server-side integration ownership checks
 - No cross-tenant references allowed
 - Credentials never exposed to frontend
 
 ⚠️ **Admin Responsibilities:**
+
 - Rotate integration credentials regularly
 - Monitor failed webhook deliveries
 - Review `system_logs` for anomalies
@@ -1621,27 +1654,27 @@ The Call Flow System processes inbound and outbound call webhooks from telephony
 graph TD
     A[Telephony Provider] -->|Webhook| B[Call Flow Handler]
     B --> C{Inbound/Outbound?}
-    
+
     C -->|Inbound| D[Find/Create Contact]
     C -->|Outbound| E[Validate Contact]
-    
+
     D --> F[Phone Lookup]
     F -->|Found| G[Existing Contact]
     F -->|Not Found| H[Create Lead]
-    
+
     E --> I[Log Call Activity]
     G --> I
     H --> I
-    
+
     I --> J{Transcript Provided?}
     J -->|Yes| K[Analyze with AI]
     J -->|No| L[Basic Logging Only]
-    
+
     K --> M[Extract Action Items]
     M --> N[Create Formatted Note]
     N --> O[Create Follow-up Activities]
     O --> P[Complete Fulfilled Activities]
-    
+
     P --> Q[Update Campaign Progress]
     L --> Q
     Q --> R[Emit Webhook]
@@ -1671,22 +1704,24 @@ TRANSCRIPT_ANALYSIS_MODEL=gpt-4o-mini
 
 **Variable Reference:**
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `USE_BRAID_MCP_TRANSCRIPT_ANALYSIS` | `false` | Enable AI-powered transcript analysis via Braid MCP |
-| `BRAID_MCP_URL` | `http://braid-mcp-node-server:8000` | Braid MCP Server endpoint |
-| `TRANSCRIPT_ANALYSIS_MODEL` | `gpt-4o-mini` | OpenAI model for transcript analysis |
+| Variable                            | Default                             | Description                                         |
+| ----------------------------------- | ----------------------------------- | --------------------------------------------------- |
+| `USE_BRAID_MCP_TRANSCRIPT_ANALYSIS` | `false`                             | Enable AI-powered transcript analysis via Braid MCP |
+| `BRAID_MCP_URL`                     | `http://braid-mcp-node-server:8000` | Braid MCP Server endpoint                           |
+| `TRANSCRIPT_ANALYSIS_MODEL`         | `gpt-4o-mini`                       | OpenAI model for transcript analysis                |
 
 #### Webhook Endpoints
 
 Configure these URLs in your telephony provider dashboard:
 
 **Inbound Calls:**
+
 ```
 https://your-domain.com/api/telephony/webhook/{provider}/inbound?tenant_id={UUID}
 ```
 
 **Outbound Calls:**
+
 ```
 https://your-domain.com/api/telephony/webhook/{provider}/outbound?tenant_id={UUID}
 ```
@@ -1712,17 +1747,17 @@ Call flow logs include `[CallFlow]` prefix:
 
 ```sql
 -- Recent call activities
-SELECT 
-    id, 
-    related_type, 
-    subject, 
+SELECT
+    id,
+    related_type,
+    subject,
     created_at,
     metadata->'call_sid' as call_sid,
     metadata->'duration' as duration,
     metadata->'sentiment' as sentiment
-FROM activities 
-WHERE type = 'call' 
-ORDER BY created_at DESC 
+FROM activities
+WHERE type = 'call'
+ORDER BY created_at DESC
 LIMIT 10;
 ```
 
@@ -1730,7 +1765,7 @@ LIMIT 10;
 
 ```sql
 -- Auto-created follow-up tasks
-SELECT 
+SELECT
     id,
     type,
     subject,
@@ -1748,7 +1783,7 @@ LIMIT 20;
 
 ```sql
 -- Activities closed by transcript analysis
-SELECT 
+SELECT
     id,
     subject,
     status,
@@ -1768,6 +1803,7 @@ The system supports two analysis modes:
 #### 1. Braid MCP Server (Recommended)
 
 **Benefits:**
+
 - Tenant-specific OpenAI key resolution
 - Structured JSON responses
 - Better action item extraction
@@ -1775,6 +1811,7 @@ The system supports two analysis modes:
 - Unified AI operations interface
 
 **How It Works:**
+
 1. Transcript sent to Braid MCP Server
 2. Braid resolves API key (tenant → system → env var)
 3. GPT-4o-mini analyzes transcript
@@ -1784,6 +1821,7 @@ The system supports two analysis modes:
 #### 2. Pattern Matching (Fallback)
 
 If Braid MCP unavailable, uses regex patterns to extract:
+
 - "send me..." → Email task
 - "schedule..." → Meeting task
 - "call me back" → Follow-up call
@@ -1820,6 +1858,7 @@ POST /api/telephony/prepare-call
 ```
 
 **Returns:**
+
 - Contact details (name, phone, email, company, title)
 - Recent interactions (last 5 activities)
 - Campaign script and goals
@@ -1830,16 +1869,19 @@ POST /api/telephony/prepare-call
 #### No Transcript Analysis
 
 **Check Braid MCP Status:**
+
 ```powershell
 Invoke-RestMethod -Uri "http://localhost:8000/health"
 ```
 
 **Check Logs:**
+
 ```powershell
 docker logs aishacrm-backend | Select-String "CallFlow.*transcript"
 ```
 
 **Common Issues:**
+
 - Braid MCP not running: `cd braid-mcp-node-server && docker compose up -d --build`
 - No OpenAI key configured
 - Transcript field empty in webhook payload
@@ -1847,13 +1889,14 @@ docker logs aishacrm-backend | Select-String "CallFlow.*transcript"
 #### Activities Not Auto-Creating
 
 **Check:**
+
 1. Transcript provided in webhook
 2. Action items extracted (check note metadata)
 3. Priority is high or medium (low doesn't auto-create)
 
 ```sql
 -- Check action items in notes
-SELECT 
+SELECT
     content,
     metadata->'action_items' as action_items
 FROM notes
@@ -1865,11 +1908,13 @@ LIMIT 1;
 #### Activities Not Auto-Completing
 
 **Fulfillment patterns must be present:**
+
 - "I sent..." or "emailed you"
 - "I scheduled" or "booked"
 - "Following up as promised"
 
 **Check for pending activities:**
+
 ```sql
 -- Must have pending activity to complete
 SELECT * FROM activities
@@ -1882,12 +1927,14 @@ ORDER BY created_at DESC;
 ### Security Considerations
 
 ✅ **Enforced by Design:**
+
 - Tenant ID required in all webhook URLs
 - Phone number validation
 - Provider signature verification (production)
 - Rate limiting on webhook endpoints
 
 ⚠️ **Admin Responsibilities:**
+
 - Configure webhook URLs with correct tenant_id
 - Enable webhook signature verification in production
 - Monitor for suspicious call patterns
@@ -1896,6 +1943,7 @@ ORDER BY created_at DESC;
 ### Documentation
 
 See also:
+
 - `backend/CALL_FLOW_DOCUMENTATION.md` - Complete technical reference
 - `CALL_FLOW_QUICK_TEST.md` - PowerShell test examples
 - `CALL_FLOW_IMPLEMENTATION_SUMMARY.md` - Implementation overview
@@ -1915,17 +1963,17 @@ graph TD
     A[Call Flow System] -->|Transcript Analysis| B[Braid MCP Server]
     C[Campaign Worker] -->|AI Operations| B
     D[Frontend AI Tools] -->|Requests| B
-    
+
     B --> E[LLM Adapter]
     B --> F[CRM Adapter]
     B --> G[Web Adapter]
     B --> H[GitHub Adapter]
     B --> I[Memory Adapter]
-    
+
     E -->|API Key Resolution| J[Tenant Integrations]
     E -->|Fallback| K[System Settings]
     E -->|Last Resort| L[Environment Variable]
-    
+
     E -->|Analyze| M[OpenAI GPT-4]
     F -->|Query/Update| N[Supabase Database]
     G -->|Research| O[Wikipedia API]
@@ -1973,13 +2021,13 @@ GITHUB_TOKEN=your-github-token
 
 **Variable Reference:**
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `8000` | HTTP server port |
-| `CRM_BACKEND_URL` | `http://backend:3001` | Aisha CRM backend URL |
-| `USE_DIRECT_SUPABASE_ACCESS` | `false` | Bypass backend, query Supabase directly |
-| `DEFAULT_OPENAI_MODEL` | `gpt-4o-mini` | Default LLM model |
-| `REDIS_URL` | - | Redis connection string for agent memory |
+| Variable                     | Default               | Description                              |
+| ---------------------------- | --------------------- | ---------------------------------------- |
+| `PORT`                       | `8000`                | HTTP server port                         |
+| `CRM_BACKEND_URL`            | `http://backend:3001` | Aisha CRM backend URL                    |
+| `USE_DIRECT_SUPABASE_ACCESS` | `false`               | Bypass backend, query Supabase directly  |
+| `DEFAULT_OPENAI_MODEL`       | `gpt-4o-mini`         | Default LLM model                        |
+| `REDIS_URL`                  | -                     | Redis connection string for agent memory |
 
 ### Starting the Server
 
@@ -2006,15 +2054,18 @@ Invoke-RestMethod -Uri "http://localhost:8000/health"
 OpenAI integration with intelligent API key resolution.
 
 **Supported Operations:**
+
 - `generate-json` - Generate structured JSON from prompts
 
 **Key Resolution Priority:**
+
 1. Explicit `api_key` in payload
 2. Tenant integration (`tenant_integrations` table)
 3. System settings (`system_settings` table)
 4. Environment variable `OPENAI_API_KEY`
 
 **Example:**
+
 ```json
 POST /mcp/run
 {
@@ -2040,9 +2091,11 @@ POST /mcp/run
 Direct Supabase or backend API access for CRM operations.
 
 **Supported Kinds:**
+
 - `accounts`, `leads`, `contacts`, `opportunities`, `activities`
 
 **Supported Verbs:**
+
 - `read`, `search`, `create`, `update`, `delete`
 
 #### Web Adapter (`system: "web"`)
@@ -2050,6 +2103,7 @@ Direct Supabase or backend API access for CRM operations.
 Wikipedia research for market intelligence.
 
 **Supported Kinds:**
+
 - `wikipedia-search` - Search articles
 - `wikipedia-page` - Fetch full content
 
@@ -2058,6 +2112,7 @@ Wikipedia research for market intelligence.
 Redis-backed agent memory for multi-turn conversations.
 
 **Supported Operations:**
+
 - Store/retrieve conversation context
 - Agent session persistence
 - Cross-request memory
@@ -2111,6 +2166,7 @@ The call flow system uses Braid MCP for transcript analysis:
 #### Server Won't Start
 
 **Check:**
+
 ```powershell
 # View logs
 docker logs braid-mcp-node-server
@@ -2122,6 +2178,7 @@ docker logs braid-mcp-node-server
 ```
 
 **Fix:**
+
 ```powershell
 # Restart Redis
 docker compose up -d redis
@@ -2134,6 +2191,7 @@ docker compose up -d --build
 #### LLM Operations Failing
 
 **Check API Key Resolution:**
+
 ```sql
 -- Check tenant integration
 SELECT * FROM tenant_integrations
@@ -2147,6 +2205,7 @@ WHERE setting_key = 'openai_api_key';
 ```
 
 **Check Logs:**
+
 ```powershell
 docker logs braid-mcp-node-server | Select-String "OpenAI"
 ```
@@ -2154,6 +2213,7 @@ docker logs braid-mcp-node-server | Select-String "OpenAI"
 #### Memory Layer Unavailable
 
 **Check Redis:**
+
 ```powershell
 # Test Redis connection
 docker exec braid-mcp-node-server redis-cli PING
@@ -2166,12 +2226,14 @@ docker ps | Select-String "redis"
 ### Security Considerations
 
 ✅ **Enforced by Design:**
+
 - Tenant validation before database access
 - OpenAI API key isolation per tenant
 - No cross-tenant data leakage
 - Redis memory isolation by tenant_id
 
 ⚠️ **Admin Responsibilities:**
+
 - Secure `SUPABASE_SERVICE_ROLE_KEY` (bypasses RLS)
 - Monitor OpenAI usage per tenant
 - Review Redis memory usage
@@ -2180,6 +2242,7 @@ docker ps | Select-String "redis"
 ### Documentation
 
 See also:
+
 - `braid-mcp-node-server/README-braid-mcp-node.md` - Complete reference
 - Braid v0 Framework documentation
 - OpenAI API documentation
@@ -2199,15 +2262,17 @@ See also:
 ✅ **Solutions:**
 
 1. **Check port conflicts:**
+
    ```powershell
    # Check if ports 4000/4001 are in use
    PS C:\> Get-NetTCPConnection -LocalPort 4000,4001
-   
+
    # Kill conflicting processes if found
    PS C:\> Stop-Process -Id <PID> -Force
    ```
 
 2. **Verify .env files exist:**
+
    ```powershell
    PS C:\> Test-Path .env
    PS C:\> Test-Path backend/.env
@@ -2231,6 +2296,7 @@ See also:
 ✅ **Solutions:**
 
 1. **Check backend logs:**
+
    ```powershell
    PS C:\> docker logs aishacrm-backend
    ```
@@ -2246,7 +2312,7 @@ See also:
    ```
 
 > **📝 NOTE**
-> 
+>
 > For ESM-specific debugging, see `backend/TROUBLESHOOTING_NODE_ESM.md`
 
 ### Database Connection Issues
@@ -2274,12 +2340,12 @@ PS C:\> psql $env:DATABASE_URL -c "SELECT 1;"
 
 **Common Causes:**
 
-| Error | Cause | Solution |
-|-------|-------|----------|
-| **"ECONNREFUSED"** | DB not running | Start PostgreSQL service |
-| **"Authentication failed"** | Wrong credentials | Update `backend/.env` |
-| **"ENOTFOUND"** | Wrong hostname | Check `DATABASE_URL` |
-| **"SSL required"** | Missing SSL params | Add `?sslmode=require` |
+| Error                       | Cause              | Solution                 |
+| --------------------------- | ------------------ | ------------------------ |
+| **"ECONNREFUSED"**          | DB not running     | Start PostgreSQL service |
+| **"Authentication failed"** | Wrong credentials  | Update `backend/.env`    |
+| **"ENOTFOUND"**             | Wrong hostname     | Check `DATABASE_URL`     |
+| **"SSL required"**          | Missing SSL params | Add `?sslmode=require`   |
 
 #### Slow Database Queries
 
@@ -2344,6 +2410,7 @@ PS C:\> Invoke-RestMethod http://localhost:4001/api/status
    - Or clear browser data
 
 3. **Rebuild frontend:**
+
    ```powershell
    PS C:\> docker-compose up -d --build frontend
    ```
@@ -2404,7 +2471,7 @@ PS C:\> Invoke-RestMethod http://localhost:4001/api/system/metrics
 
 ```
 ERROR   - Critical issues requiring immediate attention
-WARN    - Important issues that don't stop operation  
+WARN    - Important issues that don't stop operation
 INFO    - General informational messages
 DEBUG   - Detailed debugging information
 ```
@@ -2444,19 +2511,19 @@ graph TD
     A[Service Down] --> B{Can access server?}
     B -->|Yes| C[Check container status]
     B -->|No| D[Network/DNS issue]
-    
+
     C --> E{Containers running?}
     E -->|No| F[Restart containers]
     E -->|Yes| G[Check logs]
-    
+
     F --> H{Started successfully?}
     H -->|No| I[Check .env files]
     H -->|Yes| J[Monitor]
-    
+
     G --> K{Found error?}
     K -->|Yes| L[Fix error & restart]
     K -->|No| M[Escalate]
-    
+
     style A fill:#EF4444,color:#fff
     style J fill:#10B981,color:#fff
 ```
@@ -2506,8 +2573,9 @@ PS C:\> psql $env:DATABASE_URL < backup-before-upgrade.sql
 **C.A.R.E. (Cognitive Adaptive Response Engine)** is AiSHA's autonomous relationship management system that maintains customer relationship momentum without requiring constant human supervision.
 
 **C.A.R.E.** stands for:
+
 - **Communication** – maintaining presence and responsiveness
-- **Acquisition** – moving intent toward commitment  
+- **Acquisition** – moving intent toward commitment
 - **Retention** – preventing decay before loss occurs
 - **Engagement** – sustaining relationship value between events
 
@@ -2536,14 +2604,14 @@ graph TB
 
 ### Components
 
-| Component | Purpose | Location |
-|-----------|---------|----------|
-| **Kill Switch** | Emergency stop for autonomous operations | `backend/lib/care/isCareEnabled.js` |
-| **State Engine** | Manages C.A.R.E. state transitions | `backend/lib/care/careStateEngine.js` |
-| **Escalation Detector** | Identifies when intervention is needed | `backend/lib/care/escalationDetector.js` |
-| **Policy Gate** | Controls what autonomous actions are allowed | `backend/lib/care/carePolicyGate.js` |
-| **Action Classifier** | Determines origin of actions | `backend/lib/care/actionOriginClassifier.js` |
-| **Workflow Triggers** | Invokes external workflow systems | `backend/lib/care/careWorkflowTriggerClient.js` |
+| Component               | Purpose                                      | Location                                        |
+| ----------------------- | -------------------------------------------- | ----------------------------------------------- |
+| **Kill Switch**         | Emergency stop for autonomous operations     | `backend/lib/care/isCareEnabled.js`             |
+| **State Engine**        | Manages C.A.R.E. state transitions           | `backend/lib/care/careStateEngine.js`           |
+| **Escalation Detector** | Identifies when intervention is needed       | `backend/lib/care/escalationDetector.js`        |
+| **Policy Gate**         | Controls what autonomous actions are allowed | `backend/lib/care/carePolicyGate.js`            |
+| **Action Classifier**   | Determines origin of actions                 | `backend/lib/care/actionOriginClassifier.js`    |
+| **Workflow Triggers**   | Invokes external workflow systems            | `backend/lib/care/careWorkflowTriggerClient.js` |
 
 ---
 
@@ -2570,6 +2638,7 @@ CARE_ENABLED=false
 ### Behavior When Disabled
 
 When `CARE_ENABLED=false`:
+
 - ✅ Escalation detection **still runs** (monitoring continues)
 - ✅ Audit logs **still written** (visibility maintained)
 - ❌ No autonomous actions taken (safe read-only mode)
@@ -2608,15 +2677,15 @@ docker logs aishacrm-backend --tail=50 | grep "\[CARE_AUDIT\]"
 
 The state engine manages behavioral states for customer relationships:
 
-| State | Description | Typical Duration | Exit Conditions |
-|-------|-------------|-----------------|-----------------|
-| **cold** | No recent engagement | N/A | First interaction |
-| **warm** | Recent contact made | Days-weeks | Follow-up scheduled |
-| **hot** | Active negotiation | Hours-days | Deal closes or stalls |
-| **won** | Successfully converted | Permanent | Account created |
-| **lost** | Relationship ended | Permanent | Marked unrecoverable |
-| **nurture** | Long-term engagement | Weeks-months | Engagement resumes |
-| **stale** | Momentum lost | N/A | Re-engagement attempt |
+| State       | Description            | Typical Duration | Exit Conditions       |
+| ----------- | ---------------------- | ---------------- | --------------------- |
+| **cold**    | No recent engagement   | N/A              | First interaction     |
+| **warm**    | Recent contact made    | Days-weeks       | Follow-up scheduled   |
+| **hot**     | Active negotiation     | Hours-days       | Deal closes or stalls |
+| **won**     | Successfully converted | Permanent        | Account created       |
+| **lost**    | Relationship ended     | Permanent        | Marked unrecoverable  |
+| **nurture** | Long-term engagement   | Weeks-months     | Engagement resumes    |
+| **stale**   | Momentum lost          | N/A              | Re-engagement attempt |
 
 ### State Transitions
 
@@ -2659,7 +2728,7 @@ CREATE TABLE care_states (
 
 ```sql
 -- View recent state transitions
-SELECT 
+SELECT
     entity_type,
     entity_id,
     previous_state,
@@ -2679,6 +2748,7 @@ LIMIT 20;
 ### What is an Escalation?
 
 An **escalation** occurs when the system detects a relationship issue that requires intervention:
+
 - Negative sentiment in communication
 - Extended silence from prospect
 - Deal stagnation
@@ -2702,6 +2772,7 @@ Detected during inbound/outbound calls:
 ```
 
 **Configuration**:
+
 ```bash
 # Sentiment threshold (0.0-1.0)
 CARE_SENTIMENT_THRESHOLD=0.5
@@ -2711,14 +2782,15 @@ CARE_SENTIMENT_THRESHOLD=0.5
 
 Detected by scheduled checks:
 
-| Trigger | Condition | Default Threshold |
-|---------|-----------|-------------------|
-| **Lead Stagnant** | No activity for N days | 7 days |
-| **Deal Decay** | High-value deal inactive | 3 days |
-| **Activity Overdue** | Task past due date | 1 day |
-| **Opportunity Hot** | High probability, no recent contact | 2 days |
+| Trigger              | Condition                           | Default Threshold |
+| -------------------- | ----------------------------------- | ----------------- |
+| **Lead Stagnant**    | No activity for N days              | 7 days            |
+| **Deal Decay**       | High-value deal inactive            | 3 days            |
+| **Activity Overdue** | Task past due date                  | 1 day             |
+| **Opportunity Hot**  | High probability, no recent contact | 2 days            |
 
 **Configuration**:
+
 ```bash
 CARE_LEAD_STAGNANT_DAYS=7
 CARE_DEAL_DECAY_DAYS=3
@@ -2731,12 +2803,12 @@ CARE_OPPORTUNITY_HOT_DAYS=2
 Location: `backend/lib/care/escalationDetector.js`
 
 ```javascript
-function detectEscalation({ 
-  text,           // Communication text
-  sentiment,      // Sentiment score
-  entity_type,    // 'lead', 'contact', etc.
-  last_contact,   // Date of last interaction
-  metadata        // Additional context
+function detectEscalation({
+  text, // Communication text
+  sentiment, // Sentiment score
+  entity_type, // 'lead', 'contact', etc.
+  last_contact, // Date of last interaction
+  metadata, // Additional context
 }) {
   // Returns: { is_escalation, reason, trigger_type, confidence }
 }
@@ -2746,7 +2818,7 @@ function detectEscalation({
 
 ```sql
 -- Query escalation audit logs
-SELECT 
+SELECT
     event_type,
     entity_type,
     entity_id,
@@ -2767,6 +2839,7 @@ LIMIT 50;
 ### Purpose
 
 The **Policy Gate** determines whether an autonomous action is allowed to proceed based on:
+
 - Current C.A.R.E. state
 - Action origin (human vs autonomous)
 - Tenant-specific rules
@@ -2776,22 +2849,22 @@ The **Policy Gate** determines whether an autonomous action is allowed to procee
 
 ```javascript
 CarePolicyGateResult = {
-  ALLOWED: 'allowed',      // Action permitted
-  BLOCKED: 'blocked',      // Action denied
-  WARN: 'warn',           // Allowed with warning
-  DEFER: 'defer'          // Requires human approval
-}
+  ALLOWED: 'allowed', // Action permitted
+  BLOCKED: 'blocked', // Action denied
+  WARN: 'warn', // Allowed with warning
+  DEFER: 'defer', // Requires human approval
+};
 ```
 
 ### Default Policy Rules
 
-| Action | State | Origin | Result |
-|--------|-------|--------|--------|
-| Send message | Any | Human | ALLOWED |
-| Send message | cold/stale | Autonomous | BLOCKED |
-| Send message | warm/hot | Autonomous | ALLOWED |
-| Update state | Any | Autonomous | ALLOWED |
-| Delete entity | Any | Autonomous | BLOCKED |
+| Action        | State      | Origin     | Result  |
+| ------------- | ---------- | ---------- | ------- |
+| Send message  | Any        | Human      | ALLOWED |
+| Send message  | cold/stale | Autonomous | BLOCKED |
+| Send message  | warm/hot   | Autonomous | ALLOWED |
+| Update state  | Any        | Autonomous | ALLOWED |
+| Delete entity | Any        | Autonomous | BLOCKED |
 
 ### Configuration
 
@@ -2813,12 +2886,12 @@ CARE_POLICY_MODE=readonly
 Edit `backend/lib/care/carePolicyGate.js`:
 
 ```javascript
-function evaluatePolicy({ 
-  action_type,     // 'send_message', 'update_state', etc.
-  action_origin,   // 'human' | 'care_autonomous'
-  current_state,   // C.A.R.E. state
-  entity_type,     // 'lead', 'contact', etc.
-  tenant_id        // For tenant-specific rules
+function evaluatePolicy({
+  action_type, // 'send_message', 'update_state', etc.
+  action_origin, // 'human' | 'care_autonomous'
+  current_state, // C.A.R.E. state
+  entity_type, // 'lead', 'contact', etc.
+  tenant_id, // For tenant-specific rules
 }) {
   // Custom logic here
   return CarePolicyGateResult.ALLOWED;
@@ -2829,7 +2902,7 @@ function evaluatePolicy({
 
 ```sql
 -- View blocked autonomous actions
-SELECT 
+SELECT
     metadata->>'action_origin' as origin,
     metadata->>'policy_gate_result' as decision,
     reason,
@@ -2858,7 +2931,7 @@ sequenceDiagram
     participant WT as Workflow Trigger
     participant WH as Webhook Endpoint
     participant WS as Workflow System
-    
+
     CD->>PG: Escalation Detected
     PG->>PG: Check Policy
     PG-->>WT: ALLOWED
@@ -2930,11 +3003,8 @@ function verifyWebhook(payload, signature, secret) {
     .createHmac('sha256', secret)
     .update(JSON.stringify(payload))
     .digest('hex');
-  
-  return crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(expectedSig)
-  );
+
+  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig));
 }
 ```
 
@@ -2970,7 +3040,7 @@ function verifyWebhook(payload, signature, secret) {
 
 ```sql
 -- View recent workflow trigger attempts
-SELECT 
+SELECT
     metadata->>'event_id' as event_id,
     metadata->>'trigger_type' as trigger,
     metadata->>'http_status' as status,
@@ -3019,19 +3089,19 @@ CREATE TABLE care_audit_log (
 
 ### Event Types
 
-| Event Type | Description | When Logged |
-|------------|-------------|-------------|
-| `ESCALATION_DETECTED` | Issue identified | Every escalation |
-| `ACTION_ALLOWED` | Policy gate approved | When action proceeds |
-| `ACTION_BLOCKED` | Policy gate denied | When action blocked |
-| `STATE_TRANSITION` | C.A.R.E. state changed | Every state change |
-| `WORKFLOW_TRIGGERED` | External webhook invoked | Every webhook attempt |
+| Event Type            | Description              | When Logged           |
+| --------------------- | ------------------------ | --------------------- |
+| `ESCALATION_DETECTED` | Issue identified         | Every escalation      |
+| `ACTION_ALLOWED`      | Policy gate approved     | When action proceeds  |
+| `ACTION_BLOCKED`      | Policy gate denied       | When action blocked   |
+| `STATE_TRANSITION`    | C.A.R.E. state changed   | Every state change    |
+| `WORKFLOW_TRIGGERED`  | External webhook invoked | Every webhook attempt |
 
 ### Monitoring Queries
 
 ```sql
 -- Escalation rate over time
-SELECT 
+SELECT
     DATE(created_at) as date,
     COUNT(*) as escalations
 FROM care_audit_log
@@ -3042,7 +3112,7 @@ GROUP BY DATE(created_at)
 ORDER BY date DESC;
 
 -- Action approval rate
-SELECT 
+SELECT
     event_type,
     COUNT(*) as count,
     ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) as percentage
@@ -3053,7 +3123,7 @@ AND created_at > NOW() - INTERVAL '7 days'
 GROUP BY event_type;
 
 -- Most common escalation reasons
-SELECT 
+SELECT
     reason,
     metadata->>'trigger_type' as trigger,
     COUNT(*) as count
@@ -3144,6 +3214,7 @@ CARE_LEAD_STAGNANT_DAYS=1             # Faster escalations for testing
 **Symptoms**: Escalations detected but no autonomous actions
 
 **Diagnosis**:
+
 ```bash
 # 1. Check kill switch
 docker exec aishacrm-backend printenv | grep CARE_ENABLED
@@ -3151,13 +3222,14 @@ docker exec aishacrm-backend printenv | grep CARE_ENABLED
 
 # 2. Check audit logs for blocked actions
 docker exec aishacrm-backend psql $DATABASE_URL -c \
-  "SELECT event_type, reason, COUNT(*) 
-   FROM care_audit_log 
-   WHERE created_at > NOW() - INTERVAL '1 hour' 
+  "SELECT event_type, reason, COUNT(*)
+   FROM care_audit_log
+   WHERE created_at > NOW() - INTERVAL '1 hour'
    GROUP BY event_type, reason;"
 ```
 
 **Solutions**:
+
 - Verify `CARE_ENABLED=true` in `.env`
 - Check policy mode isn't set to `readonly`
 - Review policy gate rules for overly strict blocking
@@ -3167,6 +3239,7 @@ docker exec aishacrm-backend psql $DATABASE_URL -c \
 **Symptoms**: `Workflow trigger failed` in logs
 
 **Diagnosis**:
+
 ```bash
 # Check configuration
 docker exec aishacrm-backend printenv | grep CARE_WORKFLOW
@@ -3176,6 +3249,7 @@ docker logs aishacrm-backend --tail=100 | grep "workflow"
 ```
 
 **Solutions**:
+
 - Verify `CARE_WORKFLOW_TRIGGERS_ENABLED=true`
 - Test webhook URL manually: `curl -X POST https://your-webhook-url`
 - Check network connectivity from container
@@ -3187,9 +3261,10 @@ docker logs aishacrm-backend --tail=100 | grep "workflow"
 **Symptoms**: Escalations triggered constantly
 
 **Diagnosis**:
+
 ```sql
 -- Check escalation rate
-SELECT 
+SELECT
     DATE(created_at) as date,
     COUNT(*) as escalations
 FROM care_audit_log
@@ -3200,6 +3275,7 @@ LIMIT 7;
 ```
 
 **Solutions**:
+
 - Increase thresholds: `CARE_LEAD_STAGNANT_DAYS=14`
 - Raise sentiment threshold: `CARE_SENTIMENT_THRESHOLD=0.6`
 - Review escalation logic in `escalationDetector.js`
@@ -3209,15 +3285,17 @@ LIMIT 7;
 **Symptoms**: C.A.R.E. states remain unchanged
 
 **Diagnosis**:
+
 ```sql
 -- Check state transition history
-SELECT entity_type, current_state, COUNT(*) 
-FROM care_states 
+SELECT entity_type, current_state, COUNT(*)
+FROM care_states
 WHERE updated_at > NOW() - INTERVAL '24 hours'
 GROUP BY entity_type, current_state;
 ```
 
 **Solutions**:
+
 - Verify state engine is invoked (check audit logs for `STATE_TRANSITION`)
 - Check database permissions for `care_states` table
 - Review state transition logic in `careStateEngine.js`
@@ -3241,7 +3319,7 @@ docker logs aishacrm-backend --tail=20 | grep CARE_ENABLED
 
 ```sql
 -- Last 100 C.A.R.E. events
-SELECT 
+SELECT
     TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') as time,
     event_type,
     entity_type,
@@ -3278,7 +3356,7 @@ sequenceDiagram
     participant EXT as External Workflow
     participant MSG as Messaging System
     participant CUST as Customer
-    
+
     CARE->>EXT: POST /webhook (escalation)
     EXT->>EXT: Route by trigger_type
     EXT->>MSG: Trigger Thoughtly/CallFluent
@@ -3401,6 +3479,7 @@ Use AiSHA's workflow system as a **routing and enrichment layer** before calling
 **Step 2: Build Workflow Nodes**
 
 **Node 1: Webhook Trigger** (auto-created)
+
 ```json
 {
   "id": "trigger-1",
@@ -3408,10 +3487,12 @@ Use AiSHA's workflow system as a **routing and enrichment layer** before calling
   "config": {}
 }
 ```
+
 - This node receives the C.A.R.E. payload
 - Available variables: `{{payload.entity_id}}`, `{{payload.trigger_type}}`, `{{payload.meta.days_stagnant}}`
 
 **Node 2: Condition - Check Trigger Type**
+
 ```json
 {
   "id": "condition-1",
@@ -3423,10 +3504,12 @@ Use AiSHA's workflow system as a **routing and enrichment layer** before calling
   }
 }
 ```
+
 - Ensures workflow only processes lead stagnant escalations
 - Prevents execution for other escalation types
 
 **Node 3: Get Lead (CRUD)**
+
 ```json
 {
   "id": "get-lead-1",
@@ -3436,10 +3519,12 @@ Use AiSHA's workflow system as a **routing and enrichment layer** before calling
   }
 }
 ```
+
 - Fetches full lead details from database
 - Populates `{{lead}}` variable with: name, email, phone, value, etc.
 
 **Node 4: Condition - Check Lead Value**
+
 ```json
 {
   "id": "condition-2",
@@ -3451,10 +3536,12 @@ Use AiSHA's workflow system as a **routing and enrichment layer** before calling
   }
 }
 ```
+
 - Routes high-value leads (>$10k) to AI calling system
 - Routes low-value leads to email nurture
 
 **Node 5a: HTTP Request - Thoughtly AI Call** (TRUE branch)
+
 ```json
 {
   "id": "http-thoughtly-1",
@@ -3471,11 +3558,13 @@ Use AiSHA's workflow system as a **routing and enrichment layer** before calling
   }
 }
 ```
+
 - Triggers Thoughtly AI phone call
 - Uses lead phone number and personalized script
 - Script includes escalation context (days stagnant)
 
 **Node 5b: HTTP Request - SendGrid Email** (FALSE branch)
+
 ```json
 {
   "id": "http-sendgrid-1",
@@ -3492,6 +3581,7 @@ Use AiSHA's workflow system as a **routing and enrichment layer** before calling
   }
 }
 ```
+
 - Sends nurture email via SendGrid
 - Uses lead email and personalized message
 - Includes escalation context
@@ -3528,6 +3618,7 @@ curl -X POST http://localhost:4001/api/workflows/wf_abc123/execute \
 ```
 
 **Expected flow:**
+
 1. Workflow receives payload at webhook_trigger
 2. Condition checks `trigger_type === "lead_stagnant"` → TRUE
 3. get_lead fetches lead from database
@@ -3558,6 +3649,7 @@ condition (tenant.metadata.messaging_provider)
 **Implementation:**
 
 **Node: Get Tenant**
+
 ```json
 {
   "type": "get_tenant",
@@ -3568,6 +3660,7 @@ condition (tenant.metadata.messaging_provider)
 ```
 
 **Node: Condition by Provider**
+
 ```json
 {
   "type": "condition",
@@ -3580,6 +3673,7 @@ condition (tenant.metadata.messaging_provider)
 ```
 
 **Tenant Configuration** (in tenant metadata):
+
 ```json
 {
   "messaging_provider": "thoughtly",
@@ -3594,7 +3688,7 @@ condition (tenant.metadata.messaging_provider)
 
 ```sql
 -- View recent C.A.R.E. workflow executions
-SELECT 
+SELECT
     we.id,
     we.workflow_id,
     w.name as workflow_name,
@@ -3610,7 +3704,7 @@ ORDER BY we.started_at DESC
 LIMIT 50;
 
 -- Execution success rate for C.A.R.E. workflows
-SELECT 
+SELECT
     status,
     COUNT(*) as count,
     ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) as percentage
@@ -3647,6 +3741,7 @@ Even for internal workflows, verify HMAC signature to prevent spoofing.
 #### 4. **Handle Errors Gracefully**
 
 Add error handling nodes:
+
 ```
 http_request (Thoughtly)
    ├─ SUCCESS → log_success
@@ -3656,6 +3751,7 @@ http_request (Thoughtly)
 #### 5. **Monitor Execution Metrics**
 
 Set up alerts for:
+
 - Workflow execution failures (>10% error rate)
 - Slow execution times (>5 seconds)
 - Missing trigger payloads (malformed C.A.R.E. events)
@@ -3667,6 +3763,7 @@ Set up alerts for:
 #### Issue: Workflow Not Executing
 
 **Check:**
+
 ```sql
 -- Verify workflow exists and is active
 SELECT id, name, status FROM workflow WHERE id = 'wf_abc123';
@@ -3674,6 +3771,7 @@ SELECT id, name, status FROM workflow WHERE id = 'wf_abc123';
 ```
 
 **Solution:**
+
 ```bash
 # Activate workflow via API
 curl -X PATCH http://localhost:4001/api/workflows/wf_abc123 \
@@ -3688,9 +3786,10 @@ curl -X PATCH http://localhost:4001/api/workflows/wf_abc123 \
 **Cause**: Variable context not populated correctly
 
 **Fix**: Check trigger payload in execution log:
+
 ```sql
-SELECT trigger_payload, execution_log 
-FROM workflow_execution 
+SELECT trigger_payload, execution_log
+FROM workflow_execution
 WHERE id = 'exec_xyz789';
 ```
 
@@ -3704,62 +3803,62 @@ Ensure `trigger_payload` contains the C.A.R.E. escalation data.
 
 ### Root .env (Frontend Configuration)
 
-| Variable | Type | Required | Example | Description |
-|----------|------|----------|---------|-------------|
-| `VITE_AISHACRM_BACKEND_URL` | URL | Yes | `http://localhost:4001` | Backend API URL (Docker port) |
-| `VITE_BASE44_APP_ID` | String | No | `app_xyz123` | Base44 app ID (migration only) |
-| `VITE_ENABLE_AI` | Boolean | No | `true` | Enable AI features |
-| `VITE_ENABLE_DOCS` | Boolean | No | `true` | Enable document processing |
-| `VITE_ENABLE_ANALYTICS` | Boolean | No | `true` | Enable analytics |
-| `NODE_ENV` | String | No | `production` | Environment mode |
+| Variable                    | Type    | Required | Example                 | Description                    |
+| --------------------------- | ------- | -------- | ----------------------- | ------------------------------ |
+| `VITE_AISHACRM_BACKEND_URL` | URL     | Yes      | `http://localhost:4001` | Backend API URL (Docker port)  |
+| `VITE_BASE44_APP_ID`        | String  | No       | `app_xyz123`            | Base44 app ID (migration only) |
+| `VITE_ENABLE_AI`            | Boolean | No       | `true`                  | Enable AI features             |
+| `VITE_ENABLE_DOCS`          | Boolean | No       | `true`                  | Enable document processing     |
+| `VITE_ENABLE_ANALYTICS`     | Boolean | No       | `true`                  | Enable analytics               |
+| `NODE_ENV`                  | String  | No       | `production`            | Environment mode               |
 
 ### backend/.env (Backend Configuration)
 
 #### Server Settings
 
-| Variable | Type | Required | Default | Description |
-|----------|------|----------|---------|-------------|
-| `PORT` | Number | No | `3001` | Internal container port |
-| `FRONTEND_URL` | URL | Yes | `http://localhost:4000` | Frontend URL for CORS |
-| `ALLOWED_ORIGINS` | String | Yes | `http://localhost:4000` | Comma-separated allowed origins |
+| Variable          | Type   | Required | Default                 | Description                     |
+| ----------------- | ------ | -------- | ----------------------- | ------------------------------- |
+| `PORT`            | Number | No       | `3001`                  | Internal container port         |
+| `FRONTEND_URL`    | URL    | Yes      | `http://localhost:4000` | Frontend URL for CORS           |
+| `ALLOWED_ORIGINS` | String | Yes      | `http://localhost:4000` | Comma-separated allowed origins |
 
 #### Database Settings
 
-| Variable | Type | Required | Example | Description |
-|----------|------|----------|---------|-------------|
-| `USE_SUPABASE_PROD` | Boolean | No | `true` | Use Supabase vs direct PostgreSQL |
-| `SUPABASE_URL` | URL | If Supabase | `https://xxx.supabase.co` | Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | String | If Supabase | `eyJ...` | Service role key |
-| `DATABASE_URL` | URL | If PostgreSQL | `postgresql://user:pass@host:5432/db` | Direct PostgreSQL connection |
+| Variable                    | Type    | Required      | Example                               | Description                       |
+| --------------------------- | ------- | ------------- | ------------------------------------- | --------------------------------- |
+| `USE_SUPABASE_PROD`         | Boolean | No            | `true`                                | Use Supabase vs direct PostgreSQL |
+| `SUPABASE_URL`              | URL     | If Supabase   | `https://xxx.supabase.co`             | Supabase project URL              |
+| `SUPABASE_SERVICE_ROLE_KEY` | String  | If Supabase   | `eyJ...`                              | Service role key                  |
+| `DATABASE_URL`              | URL     | If PostgreSQL | `postgresql://user:pass@host:5432/db` | Direct PostgreSQL connection      |
 
 #### Security Settings
 
-| Variable | Type | Required | Default | Description |
-|----------|------|----------|---------|-------------|
-| `JWT_SECRET` | String | Yes | - | Secret for JWT signing (generate strong random) |
-| `API_KEY` | String | No | - | API key for webhooks |
-| `RATE_LIMIT_WINDOW_MS` | Number | No | `60000` | Rate limit window (milliseconds) |
-| `RATE_LIMIT_MAX` | Number | No | `120` | Max requests per window |
-| `AUTH_RATE_LIMIT_MAX` | Number | No | `5` | Max auth attempts per window |
-| `PRODUCTION_READONLY` | Boolean | No | `false` | Block write operations (safety toggle) |
+| Variable               | Type    | Required | Default | Description                                     |
+| ---------------------- | ------- | -------- | ------- | ----------------------------------------------- |
+| `JWT_SECRET`           | String  | Yes      | -       | Secret for JWT signing (generate strong random) |
+| `API_KEY`              | String  | No       | -       | API key for webhooks                            |
+| `RATE_LIMIT_WINDOW_MS` | Number  | No       | `60000` | Rate limit window (milliseconds)                |
+| `RATE_LIMIT_MAX`       | Number  | No       | `120`   | Max requests per window                         |
+| `AUTH_RATE_LIMIT_MAX`  | Number  | No       | `5`     | Max auth attempts per window                    |
+| `PRODUCTION_READONLY`  | Boolean | No       | `false` | Block write operations (safety toggle)          |
 
 #### Integration Settings
 
-| Variable | Type | Required | Example | Description |
-|----------|------|----------|---------|-------------|
-| `SMTP_HOST` | String | No | `smtp.gmail.com` | Email server hostname |
-| `SMTP_PORT` | Number | No | `587` | Email server port |
-| `SMTP_USER` | String | No | `user@gmail.com` | Email username |
-| `SMTP_PASS` | String | No | `app-password` | Email password |
-| `N8N_HOST` | URL | No | `http://n8n:5678` | n8n automation URL |
-| `N8N_API_KEY` | String | No | - | n8n API key |
+| Variable      | Type   | Required | Example           | Description           |
+| ------------- | ------ | -------- | ----------------- | --------------------- |
+| `SMTP_HOST`   | String | No       | `smtp.gmail.com`  | Email server hostname |
+| `SMTP_PORT`   | Number | No       | `587`             | Email server port     |
+| `SMTP_USER`   | String | No       | `user@gmail.com`  | Email username        |
+| `SMTP_PASS`   | String | No       | `app-password`    | Email password        |
+| `N8N_HOST`    | URL    | No       | `http://n8n:5678` | n8n automation URL    |
+| `N8N_API_KEY` | String | No       | -                 | n8n API key           |
 
 #### Logging Settings
 
-| Variable | Type | Required | Default | Description |
-|----------|------|----------|---------|-------------|
-| `LOG_LEVEL` | String | No | `info` | Log level: error, warn, info, debug |
-| `ENABLE_PERFORMANCE_LOGGING` | Boolean | No | `true` | Enable query performance logging |
+| Variable                     | Type    | Required | Default | Description                         |
+| ---------------------------- | ------- | -------- | ------- | ----------------------------------- |
+| `LOG_LEVEL`                  | String  | No       | `info`  | Log level: error, warn, info, debug |
+| `ENABLE_PERFORMANCE_LOGGING` | Boolean | No       | `true`  | Enable query performance logging    |
 
 ---
 
@@ -3769,36 +3868,36 @@ Ensure `trigger_payload` contains the C.A.R.E. escalation data.
 
 ### System Endpoints
 
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| GET | `/health` | Simple health check | No |
-| GET | `/api/status` | Detailed system status | No |
-| POST | `/api/system/diagnostics` | Run diagnostics | Yes |
-| GET | `/api/system/metrics` | Performance metrics | Yes |
+| Method | Endpoint                  | Description            | Auth Required |
+| ------ | ------------------------- | ---------------------- | ------------- |
+| GET    | `/health`                 | Simple health check    | No            |
+| GET    | `/api/status`             | Detailed system status | No            |
+| POST   | `/api/system/diagnostics` | Run diagnostics        | Yes           |
+| GET    | `/api/system/metrics`     | Performance metrics    | Yes           |
 
 ### Authentication Endpoints
 
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| POST | `/api/auth/login` | User login | No |
-| POST | `/api/auth/logout` | User logout | Yes |
-| POST | `/api/auth/refresh` | Refresh JWT token | Yes |
-| POST | `/api/auth/forgot-password` | Request password reset | No |
-| POST | `/api/auth/reset-password` | Complete password reset | No |
+| Method | Endpoint                    | Description             | Auth Required |
+| ------ | --------------------------- | ----------------------- | ------------- |
+| POST   | `/api/auth/login`           | User login              | No            |
+| POST   | `/api/auth/logout`          | User logout             | Yes           |
+| POST   | `/api/auth/refresh`         | Refresh JWT token       | Yes           |
+| POST   | `/api/auth/forgot-password` | Request password reset  | No            |
+| POST   | `/api/auth/reset-password`  | Complete password reset | No            |
 
 ### User Management
 
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| GET | `/api/users` | List users | Yes (Admin) |
-| GET | `/api/users/:id` | Get user by ID | Yes |
-| POST | `/api/users` | Create user | Yes (Admin) |
-| PUT | `/api/users/:id` | Update user | Yes |
-| DELETE | `/api/users/:id` | Delete user | Yes (Admin) |
-| POST | `/api/users/sync-from-auth` | Sync from auth | Yes |
-| POST | `/api/users/heartbeat` | Update presence | Yes |
+| Method | Endpoint                    | Description     | Auth Required |
+| ------ | --------------------------- | --------------- | ------------- |
+| GET    | `/api/users`                | List users      | Yes (Admin)   |
+| GET    | `/api/users/:id`            | Get user by ID  | Yes           |
+| POST   | `/api/users`                | Create user     | Yes (Admin)   |
+| PUT    | `/api/users/:id`            | Update user     | Yes           |
+| DELETE | `/api/users/:id`            | Delete user     | Yes (Admin)   |
+| POST   | `/api/users/sync-from-auth` | Sync from auth  | Yes           |
+| POST   | `/api/users/heartbeat`      | Update presence | Yes           |
 
-*[Complete endpoint list continues...]*
+_[Complete endpoint list continues...]_
 
 ---
 
@@ -3811,30 +3910,30 @@ graph TD
     A[Service Won't Start] --> B{Docker running?}
     B -->|No| C[Start Docker Desktop]
     B -->|Yes| D{.env files exist?}
-    
+
     D -->|No| E[Create from .env.example]
     D -->|Yes| F{Ports available?}
-    
+
     F -->|No| G[Stop conflicting services]
     F -->|Yes| H{Enough resources?}
-    
+
     H -->|No| I[Increase Docker resources]
     H -->|Yes| J{Build errors?}
-    
+
     J -->|Yes| K[Check logs, fix errors]
     J -->|No| L[Check database connection]
-    
+
     L --> M{Database reachable?}
     M -->|No| N[Fix database/network]
     M -->|Yes| O[Escalate to developer]
-    
+
     C --> B
     E --> D
     G --> F
     I --> H
     K --> J
     N --> M
-    
+
     style A fill:#EF4444,color:#fff
     style O fill:#F59E0B,color:#000
 ```
@@ -3844,6 +3943,7 @@ graph TD
 **End of System Administrator Guide**
 
 For additional technical documentation, see:
+
 - [User Guide](AISHA_CRM_USER_GUIDE.md)
 - [Developer Technical Manual](AISHA_CRM_DEVELOPER_MANUAL.md)
 - [Security & Compliance Manual](AISHA_CRM_SECURITY_MANUAL.md)
@@ -3851,6 +3951,6 @@ For additional technical documentation, see:
 
 ---
 
-*Document Version: 2.0*  
-*Last Updated: November 15, 2025*  
-*© 2025 Aisha CRM. All rights reserved.*
+_Document Version: 2.0_  
+_Last Updated: November 15, 2025_  
+_© 2025 Aisha CRM. All rights reserved._
