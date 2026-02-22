@@ -231,14 +231,15 @@ describe('Phase 5a — resolveQuery for C.A.R.E. entities', () => {
       target_kind: 'entity',
       filters: [{ field: 'care_state', operator: 'in', value: ['dormant', 'lost'] }],
       sort: null,
-      limit: 200,
+      // Request a limit above the maximum to exercise clamp behavior
+      limit: 1000,
     };
     const result = resolveQuery(frame, entityCatalog);
     assert.strictEqual(result.resolved, true);
     // The /query executor uses result.table to query Supabase directly
     assert.strictEqual(result.table, 'customer_care_state');
-    // Limit should be clamped to 200
-    assert.strictEqual(result.limit, 200);
+    // Limit should be clamped to 500
+    assert.strictEqual(result.limit, 500);
   });
 });
 
