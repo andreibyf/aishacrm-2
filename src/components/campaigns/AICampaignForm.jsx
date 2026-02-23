@@ -31,7 +31,8 @@ import {
   Share2,
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Contact, Lead, TenantIntegration } from '@/api/entities';
+// [2026-02-23 Claude] — added BizDevSource for campaign targeting
+import { Contact, Lead, BizDevSource, TenantIntegration } from '@/api/entities';
 // Replaced direct User.me() usage with global user context hook
 import { useUser } from '@/components/shared/useUser.js';
 import { getTenantFilter } from '../shared/tenantUtils';
@@ -127,10 +128,27 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
 
         const contactsData = await Contact.filter(tenantFilter);
         const leadsData = await Lead.filter(tenantFilter);
+        // [2026-02-23 Claude] — include BizDevSources (Potential Sources) as campaign targets
+        let sourcesData = [];
+        try {
+          sourcesData = await BizDevSource.filter(tenantFilter);
+        } catch (e) {
+          console.warn('[AICampaignForm] Could not load BizDev Sources:', e.message);
+        }
 
         const combinedContactsAll = [
           ...contactsData.map((c) => ({ ...c, type: 'contact' })),
           ...leadsData.map((l) => ({ ...l, type: 'lead' })),
+          ...sourcesData.map((s) => ({
+            ...s,
+            type: 'source',
+            // Normalize field names to match contact/lead shape
+            first_name: s.contact_person?.split(' ')[0] || s.company_name || s.source || '',
+            last_name: s.contact_person?.split(' ').slice(1).join(' ') || '',
+            email: s.contact_email || s.email || null,
+            phone: s.contact_phone || s.phone_number || null,
+            company: s.company_name || s.source || '',
+          })),
         ];
 
         // Filter by channel: require phone for calls, email for emails
@@ -339,23 +357,47 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
       };
     });
 
-    // Channel-specific config goes in metadata
-    const metadata = {
-      ai_provider: formData.ai_provider,
-      ai_prompt_template: formData.ai_prompt_template,
-      call_objective: formData.call_objective,
-      call_settings: formData.call_settings,
-      schedule_config: formData.schedule_config,
-      ai_email_config: emailTypes.includes(formData.campaign_type)
-        ? {
-            subject: formData.email_subject,
-            body_template: formData.email_body_template,
-            sending_profile_id: formData.email_sending_profile_id || '',
-          }
-        : undefined,
-      ai_call_integration_id:
-        formData.campaign_type === 'call' ? formData.call_integration_id || '' : undefined,
-    };
+    // [2026-02-23 Claude] — pack channel-specific fields into metadata
+    const metadata = { schedule_config: formData.schedule_config };
+    const ct = formData.campaign_type;
+    if (ct === 'call') {
+      metadata.ai_provider = formData.ai_provider;
+      metadata.ai_prompt_template = formData.ai_prompt_template;
+      metadata.call_objective = formData.call_objective;
+      metadata.call_settings = formData.call_settings;
+      metadata.ai_call_integration_id = formData.call_integration_id || '';
+    } else if (ct === 'email') {
+      metadata.ai_email_config = {
+        subject: formData.email_subject,
+        body_template: formData.email_body_template,
+        sending_profile_id: formData.email_sending_profile_id || '',
+      };
+    } else if (ct === 'sms') {
+      metadata.sms_body = formData.sms_body || '';
+    } else if (ct === 'linkedin') {
+      metadata.linkedin_action = formData.linkedin_action || 'message';
+      metadata.linkedin_message = formData.linkedin_message || '';
+    } else if (ct === 'whatsapp') {
+      metadata.whatsapp_template_name = formData.whatsapp_template_name || '';
+      metadata.whatsapp_body = formData.whatsapp_body || '';
+    } else if (ct === 'sendfox') {
+      metadata.sendfox_list_id = formData.sendfox_list_id || '';
+      metadata.ai_email_config = {
+        subject: formData.email_subject,
+        body_template: formData.email_body_template,
+      };
+    } else if (ct === 'api_connector') {
+      metadata.api_webhook_url = formData.api_webhook_url || '';
+      metadata.api_method = formData.api_method || 'POST';
+      metadata.api_auth_header = formData.api_auth_header || '';
+      metadata.api_payload_template = formData.api_payload_template || '';
+    } else if (ct === 'social_post') {
+      metadata.social_platforms = formData.social_platforms || [];
+      metadata.social_post_content = formData.social_post_content || '';
+      metadata.social_image_url = formData.social_image_url || '';
+    } else if (ct === 'sequence') {
+      metadata.sequence_description = formData.sequence_description || '';
+    }
 
     const submissionData = {
       name: formData.name,
@@ -538,13 +580,25 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
 
           <Separator className="bg-slate-700" />
 
-          {/* AI/Email Configuration */}
+          {/* [2026-02-23 Claude] — Channel-specific configuration panels */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold flex items-center gap-2 text-slate-100">
               <Target className="w-5 h-5" />
-              {formData.campaign_type === 'email' ? 'Email Configuration' : 'AI Configuration'}
+              {{
+                call: 'Call Configuration',
+                email: 'Email Configuration',
+                sms: 'SMS Configuration',
+                linkedin: 'LinkedIn Configuration',
+                whatsapp: 'WhatsApp Configuration',
+                sendfox: 'SendFox Newsletter Configuration',
+                api_connector: 'API Connector Configuration',
+                social_post: 'Social Post Configuration',
+                sequence: 'Multi-Step Sequence',
+              }[formData.campaign_type] || 'Channel Configuration'}
             </h3>
-            {formData.campaign_type === 'call' ? (
+
+            {/* ── CALL CONFIG ────────────────── */}
+            {formData.campaign_type === 'call' && (
               <>
                 <div>
                   <Label htmlFor="call_objective" className="text-slate-200">
@@ -601,7 +655,10 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                   </div>
                 )}
               </>
-            ) : (
+            )}
+
+            {/* ── EMAIL CONFIG ────────────────── */}
+            {formData.campaign_type === 'email' && (
               <>
                 <div>
                   <Label className="text-slate-200">Email Sending Profile</Label>
@@ -663,6 +720,341 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                 </div>
               </>
             )}
+
+            {/* ── SMS CONFIG ─────────────────── */}
+            {formData.campaign_type === 'sms' && (
+              <>
+                <Alert className="bg-slate-800 border-slate-700">
+                  <MessageSquare className="h-4 w-4 text-blue-400" />
+                  <AlertDescription className="text-slate-400">
+                    SMS messages are limited to 160 characters per segment. Messages exceeding this
+                    will be split.
+                  </AlertDescription>
+                </Alert>
+                <div>
+                  <Label className="text-slate-200">SMS Message</Label>
+                  <Textarea
+                    value={formData.sms_body || ''}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, sms_body: e.target.value }))}
+                    rows={4}
+                    maxLength={480}
+                    placeholder="Hi {{contact_name}}, just following up from {{company_name}}…"
+                    required
+                    className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">
+                    {(formData.sms_body || '').length}/480 chars ·{' '}
+                    {Math.ceil((formData.sms_body || '').length / 160) || 0} segment(s)
+                  </p>
+                </div>
+              </>
+            )}
+
+            {/* ── LINKEDIN CONFIG ─────────────── */}
+            {formData.campaign_type === 'linkedin' && (
+              <>
+                <Alert className="bg-slate-800 border-slate-700">
+                  <Linkedin className="h-4 w-4 text-blue-400" />
+                  <AlertDescription className="text-slate-400">
+                    LinkedIn campaigns send connection requests or direct messages. Requires
+                    LinkedIn integration configured for your tenant.
+                  </AlertDescription>
+                </Alert>
+                <div>
+                  <Label className="text-slate-200">LinkedIn Action</Label>
+                  <Select
+                    value={formData.linkedin_action || 'message'}
+                    onValueChange={(v) => setFormData((prev) => ({ ...prev, linkedin_action: v }))}
+                  >
+                    <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
+                      <SelectItem value="connection_request" className="focus:bg-slate-700">
+                        Connection Request
+                      </SelectItem>
+                      <SelectItem value="message" className="focus:bg-slate-700">
+                        Direct Message
+                      </SelectItem>
+                      <SelectItem value="inmail" className="focus:bg-slate-700">
+                        InMail
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-slate-200">Message Template</Label>
+                  <Textarea
+                    value={formData.linkedin_message || ''}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, linkedin_message: e.target.value }))
+                    }
+                    rows={5}
+                    placeholder="Hi {{contact_name}}, I came across your profile and…"
+                    required
+                    className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">
+                    {formData.linkedin_action === 'connection_request'
+                      ? 'Max 300 characters for connection notes'
+                      : 'Use variables: {{contact_name}}, {{company}}'}
+                  </p>
+                </div>
+              </>
+            )}
+
+            {/* ── WHATSAPP CONFIG ─────────────── */}
+            {formData.campaign_type === 'whatsapp' && (
+              <>
+                <Alert className="bg-slate-800 border-slate-700">
+                  <Phone className="h-4 w-4 text-green-400" />
+                  <AlertDescription className="text-slate-400">
+                    WhatsApp Business API required. First-contact messages must use pre-approved
+                    templates.
+                  </AlertDescription>
+                </Alert>
+                <div>
+                  <Label className="text-slate-200">WhatsApp Template Name</Label>
+                  <Input
+                    value={formData.whatsapp_template_name || ''}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, whatsapp_template_name: e.target.value }))
+                    }
+                    placeholder="e.g., follow_up_v1 (must match approved template)"
+                    className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                  />
+                </div>
+                <div>
+                  <Label className="text-slate-200">Message Body</Label>
+                  <Textarea
+                    value={formData.whatsapp_body || ''}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, whatsapp_body: e.target.value }))
+                    }
+                    rows={5}
+                    placeholder="Hi {{contact_name}}, thanks for your interest in {{company_name}}…"
+                    className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                  />
+                </div>
+              </>
+            )}
+
+            {/* ── SENDFOX CONFIG ──────────────── */}
+            {formData.campaign_type === 'sendfox' && (
+              <>
+                <Alert className="bg-slate-800 border-slate-700">
+                  <Send className="h-4 w-4 text-orange-400" />
+                  <AlertDescription className="text-slate-400">
+                    SendFox newsletter broadcast. Contacts will be synced to your SendFox list and a
+                    campaign triggered via API.
+                  </AlertDescription>
+                </Alert>
+                <div>
+                  <Label className="text-slate-200">SendFox List ID</Label>
+                  <Input
+                    value={formData.sendfox_list_id || ''}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, sendfox_list_id: e.target.value }))
+                    }
+                    placeholder="e.g., 12345 (from your SendFox dashboard)"
+                    className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                  />
+                </div>
+                <div>
+                  <Label className="text-slate-200">Email Subject</Label>
+                  <Input
+                    value={formData.email_subject}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, email_subject: e.target.value }))
+                    }
+                    placeholder="Your newsletter subject line"
+                    required
+                    className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                  />
+                </div>
+                <div>
+                  <Label className="text-slate-200">Email Body (HTML supported)</Label>
+                  <Textarea
+                    value={formData.email_body_template}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, email_body_template: e.target.value }))
+                    }
+                    rows={8}
+                    placeholder={'<h1>Hello {{contact_name}}</h1>\n<p>Check out our latest…</p>'}
+                    required
+                    className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400 font-mono text-sm"
+                  />
+                </div>
+              </>
+            )}
+
+            {/* ── API CONNECTOR CONFIG ─────────── */}
+            {formData.campaign_type === 'api_connector' && (
+              <>
+                <Alert className="bg-slate-800 border-slate-700">
+                  <Globe className="h-4 w-4 text-purple-400" />
+                  <AlertDescription className="text-slate-400">
+                    Generic API connector. Define an endpoint and payload template. Fires a webhook
+                    per contact.
+                  </AlertDescription>
+                </Alert>
+                <div>
+                  <Label className="text-slate-200">Webhook URL</Label>
+                  <Input
+                    value={formData.api_webhook_url || ''}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, api_webhook_url: e.target.value }))
+                    }
+                    placeholder="https://api.example.com/webhook"
+                    required
+                    className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400 font-mono"
+                  />
+                </div>
+                <div>
+                  <Label className="text-slate-200">HTTP Method</Label>
+                  <Select
+                    value={formData.api_method || 'POST'}
+                    onValueChange={(v) => setFormData((prev) => ({ ...prev, api_method: v }))}
+                  >
+                    <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
+                      <SelectItem value="POST" className="focus:bg-slate-700">
+                        POST
+                      </SelectItem>
+                      <SelectItem value="PUT" className="focus:bg-slate-700">
+                        PUT
+                      </SelectItem>
+                      <SelectItem value="PATCH" className="focus:bg-slate-700">
+                        PATCH
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-slate-200">Auth Header (optional)</Label>
+                  <Input
+                    value={formData.api_auth_header || ''}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, api_auth_header: e.target.value }))
+                    }
+                    placeholder="Bearer sk-... or Api-Key your-key"
+                    className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400 font-mono"
+                  />
+                </div>
+                <div>
+                  <Label className="text-slate-200">Payload Template (JSON)</Label>
+                  <Textarea
+                    value={
+                      formData.api_payload_template ||
+                      '{\n  "contact_name": "{{contact_name}}",\n  "email": "{{email}}",\n  "phone": "{{phone}}"\n}'
+                    }
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, api_payload_template: e.target.value }))
+                    }
+                    rows={6}
+                    className="bg-slate-800 border-slate-700 text-slate-200 font-mono text-sm"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">
+                    Variables: {'{{contact_name}}'}, {'{{email}}'}, {'{{phone}}'}, {'{{company}}'}
+                  </p>
+                </div>
+              </>
+            )}
+
+            {/* ── SOCIAL POST CONFIG ──────────── */}
+            {formData.campaign_type === 'social_post' && (
+              <>
+                <Alert className="bg-slate-800 border-slate-700">
+                  <Share2 className="h-4 w-4 text-pink-400" />
+                  <AlertDescription className="text-slate-400">
+                    Publish to connected social accounts. Requires social platform integrations for
+                    your tenant.
+                  </AlertDescription>
+                </Alert>
+                <div>
+                  <Label className="text-slate-200">Target Platforms</Label>
+                  <div className="flex flex-wrap gap-3 mt-2">
+                    {['facebook', 'instagram', 'twitter_x', 'linkedin_page'].map((platform) => (
+                      <label
+                        key={platform}
+                        className="flex items-center gap-2 p-2 rounded border border-slate-700 hover:bg-slate-800 cursor-pointer"
+                      >
+                        <Checkbox
+                          checked={(formData.social_platforms || []).includes(platform)}
+                          onCheckedChange={(checked) => {
+                            setFormData((prev) => ({
+                              ...prev,
+                              social_platforms: checked
+                                ? [...(prev.social_platforms || []), platform]
+                                : (prev.social_platforms || []).filter((p) => p !== platform),
+                            }));
+                          }}
+                        />
+                        <span className="text-slate-200 capitalize text-sm">
+                          {platform.replace('_', '/')}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-slate-200">Post Content</Label>
+                  <Textarea
+                    value={formData.social_post_content || ''}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, social_post_content: e.target.value }))
+                    }
+                    rows={5}
+                    placeholder="Write your social media post…"
+                    required
+                    className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">
+                    {(formData.social_post_content || '').length} characters · Twitter/X limit: 280
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-slate-200">Image URL (optional)</Label>
+                  <Input
+                    value={formData.social_image_url || ''}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, social_image_url: e.target.value }))
+                    }
+                    placeholder="https://…"
+                    className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                  />
+                </div>
+              </>
+            )}
+
+            {/* ── SEQUENCE CONFIG ─────────────── */}
+            {formData.campaign_type === 'sequence' && (
+              <>
+                <Alert className="bg-slate-800 border-slate-700">
+                  <Zap className="h-4 w-4 text-yellow-400" />
+                  <AlertDescription className="text-slate-400">
+                    Multi-step sequences combine channels (email → wait → call → SMS). Full sequence
+                    builder coming soon.
+                  </AlertDescription>
+                </Alert>
+                <div>
+                  <Label className="text-slate-200">Sequence Description</Label>
+                  <Textarea
+                    value={formData.sequence_description || ''}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, sequence_description: e.target.value }))
+                    }
+                    rows={4}
+                    placeholder={
+                      'Describe the sequence steps…\nStep 1: Send intro email\nStep 2: Wait 3 days\nStep 3: Follow-up call'
+                    }
+                    className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                  />
+                </div>
+              </>
+            )}
           </div>
 
           <Separator className="bg-slate-700" />
@@ -671,7 +1063,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
           <div className="space-y-4">
             <h3 className="text-lg font-semibold flex items-center gap-2 text-slate-100">
               <Users className="w-5 h-5" />
-              Target Contacts ({selectedContacts.length} selected)
+              Target Recipients ({selectedContacts.length} selected)
             </h3>
 
             <div className="flex items-center gap-2 mb-4">
@@ -694,9 +1086,11 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
             <div className="max-h-60 overflow-y-auto border border-slate-700 rounded-md p-4 space-y-2">
               {availableContacts.length === 0 ? (
                 <p className="text-sm text-slate-500">
-                  {formData.campaign_type === 'email'
+                  {['email', 'sendfox'].includes(formData.campaign_type)
                     ? 'No contacts with email addresses found'
-                    : 'No contacts with phone numbers found'}
+                    : ['call', 'sms', 'whatsapp'].includes(formData.campaign_type)
+                      ? 'No contacts with phone numbers found'
+                      : 'No contacts found'}
                 </p>
               ) : (
                 availableContacts.map((contact) => (
@@ -713,9 +1107,15 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                       <div className="flex items-center gap-2">
                         <Badge
                           variant="outline"
-                          className="text-xs border-slate-600 text-slate-300"
+                          className={`text-xs ${
+                            contact.type === 'contact'
+                              ? 'border-blue-600 text-blue-300'
+                              : contact.type === 'lead'
+                                ? 'border-green-600 text-green-300'
+                                : 'border-amber-600 text-amber-300'
+                          }`}
                         >
-                          {contact.type}
+                          {contact.type === 'source' ? 'potential' : contact.type}
                         </Badge>
                         <span className="font-medium text-slate-200">
                           {contact.first_name} {contact.last_name}
@@ -725,7 +1125,11 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                         )}
                       </div>
                       <div className="text-sm text-slate-400">
-                        {formData.campaign_type === 'email' ? contact.email : contact.phone}
+                        {['email', 'sendfox'].includes(formData.campaign_type)
+                          ? contact.email
+                          : ['call', 'sms', 'whatsapp'].includes(formData.campaign_type)
+                            ? contact.phone
+                            : contact.email || contact.phone || '—'}
                       </div>
                     </div>
                   </div>
