@@ -1,12 +1,19 @@
-import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Checkbox } from "@/components/ui/checkbox";
+import { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { Checkbox } from '@/components/ui/checkbox';
+// [2026-02-23 Claude] — AiCampaigns overhaul: expanded campaign types, fixed form rendering
 import {
   Users,
   Bot,
@@ -14,22 +21,46 @@ import {
   X,
   Save,
   Zap,
-} from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Contact, Lead, TenantIntegration } from "@/api/entities";
+  Calendar,
+  Mail,
+  Phone,
+  MessageSquare,
+  Linkedin,
+  Globe,
+  Send,
+  Share2,
+} from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Contact, Lead, TenantIntegration } from '@/api/entities';
 // Replaced direct User.me() usage with global user context hook
-import { useUser } from "@/components/shared/useUser.js";
-import { getTenantFilter } from "../shared/tenantUtils";
-import { useTenant } from "../shared/tenantContext";
+import { useUser } from '@/components/shared/useUser.js';
+import { getTenantFilter } from '../shared/tenantUtils';
+import { useTenant } from '../shared/tenantContext';
 
 const callObjectives = [
-  { value: "follow_up", label: "Follow Up", description: "General follow-up calls" },
-  { value: "qualification", label: "Lead Qualification", description: "Qualify prospect needs and budget" },
-  { value: "appointment_setting", label: "Appointment Setting", description: "Schedule meetings or demos" },
-  { value: "nurture", label: "Lead Nurturing", description: "Build relationships over time" },
-  { value: "customer_service", label: "Customer Service", description: "Address customer concerns" },
-  { value: "survey", label: "Survey/Feedback", description: "Collect feedback or survey responses" },
-  { value: "custom", label: "Custom", description: "Custom call objective" }
+  { value: 'follow_up', label: 'Follow Up', description: 'General follow-up calls' },
+  {
+    value: 'qualification',
+    label: 'Lead Qualification',
+    description: 'Qualify prospect needs and budget',
+  },
+  {
+    value: 'appointment_setting',
+    label: 'Appointment Setting',
+    description: 'Schedule meetings or demos',
+  },
+  { value: 'nurture', label: 'Lead Nurturing', description: 'Build relationships over time' },
+  {
+    value: 'customer_service',
+    label: 'Customer Service',
+    description: 'Address customer concerns',
+  },
+  {
+    value: 'survey',
+    label: 'Survey/Feedback',
+    description: 'Collect feedback or survey responses',
+  },
+  { value: 'custom', label: 'Custom', description: 'Custom call objective' },
 ];
 
 const promptTemplates = {
@@ -43,37 +74,37 @@ const promptTemplates = {
 
   customer_service: `Hi {{contact_name}}, I'm calling from {{company_name}} customer service. I wanted to personally check in and make sure everything is going well with your recent purchase/service. Do you have any questions or concerns I can help address?`,
 
-  survey: `Hello {{contact_name}}, I'm calling from {{company_name}} to get your valuable feedback on our recent service. This will only take 2-3 minutes of your time. Would you mind sharing your experience with us?`
+  survey: `Hello {{contact_name}}, I'm calling from {{company_name}} to get your valuable feedback on our recent service. This will only take 2-3 minutes of your time. Would you mind sharing your experience with us?`,
 };
 
 export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
   const [formData, setFormData] = useState({
-    campaign_type: "call",
-    name: "",
-    description: "",
-    ai_provider: "callfluent",
-    ai_prompt_template: "",
-    call_objective: "follow_up",
+    campaign_type: 'call',
+    name: '',
+    description: '',
+    ai_provider: 'callfluent',
+    ai_prompt_template: '',
+    call_objective: 'follow_up',
     // Email-only fields
-    email_subject: "",
-    email_body_template: "",
+    email_subject: '',
+    email_body_template: '',
     target_contacts: [],
     call_settings: {
       max_duration: 300,
       retry_attempts: 2,
       business_hours_only: true,
-      timezone: "America/New_York",
-      delay_between_calls: 60
+      timezone: 'America/New_York',
+      delay_between_calls: 60,
     },
     schedule_config: {
-      start_date: "",
-      end_date: "",
+      start_date: '',
+      end_date: '',
       preferred_hours: {
-        start: "09:00",
-        end: "17:00"
+        start: '09:00',
+        end: '17:00',
       },
-      excluded_days: ["saturday", "sunday"]
-    }
+      excluded_days: ['saturday', 'sunday'],
+    },
   });
 
   const [allContacts, setAllContacts] = useState([]);
@@ -83,7 +114,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
   const [callProviders, setCallProviders] = useState([]);
   // Global user context (replaces prior local fetch via User.me())
   const { user: currentUser } = useUser();
-  const [previewPrompt, setPreviewPrompt] = useState("");
+  const [previewPrompt, setPreviewPrompt] = useState('');
   const { selectedTenantId } = useTenant();
 
   useEffect(() => {
@@ -98,14 +129,15 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
         const leadsData = await Lead.filter(tenantFilter);
 
         const combinedContactsAll = [
-          ...contactsData.map(c => ({ ...c, type: 'contact' })),
-          ...leadsData.map(l => ({ ...l, type: 'lead' }))
+          ...contactsData.map((c) => ({ ...c, type: 'contact' })),
+          ...leadsData.map((l) => ({ ...l, type: 'lead' })),
         ];
 
         // Filter by channel: require phone for calls, email for emails
-        const combinedContacts = (formData.campaign_type === 'email')
-          ? combinedContactsAll.filter(c => c.email)
-          : combinedContactsAll.filter(c => c.phone);
+        const combinedContacts =
+          formData.campaign_type === 'email'
+            ? combinedContactsAll.filter((c) => c.email)
+            : combinedContactsAll.filter((c) => c.phone);
 
         setAllContacts(combinedContactsAll);
         setAvailableContacts(combinedContacts);
@@ -113,35 +145,54 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
         if (campaign) {
           const meta = campaign.metadata || {};
           setFormData({
-            campaign_type: meta.campaign_type || campaign.campaign_type || "call",
-            name: campaign.name || "",
-            description: campaign.description || "",
-            ai_provider: meta.ai_provider || campaign.ai_provider || "callfluent",
-            ai_prompt_template: campaign.ai_prompt_template || meta.ai_prompt_template || "",
-            call_objective: campaign.call_objective || meta.call_objective || "follow_up",
-            email_subject: meta.ai_email_config?.subject || "",
-            email_body_template: meta.ai_email_config?.body_template || "",
+            campaign_type: meta.campaign_type || campaign.campaign_type || 'call',
+            name: campaign.name || '',
+            description: campaign.description || '',
+            ai_provider: meta.ai_provider || campaign.ai_provider || 'callfluent',
+            ai_prompt_template: campaign.ai_prompt_template || meta.ai_prompt_template || '',
+            call_objective: campaign.call_objective || meta.call_objective || 'follow_up',
+            email_subject: meta.ai_email_config?.subject || '',
+            email_body_template: meta.ai_email_config?.body_template || '',
             target_contacts: campaign.target_contacts || [],
             call_settings: {
-              max_duration: campaign.call_settings?.max_duration || meta.call_settings?.max_duration || 300,
-              retry_attempts: campaign.call_settings?.retry_attempts || meta.call_settings?.retry_attempts || 2,
-              business_hours_only: (campaign.call_settings?.business_hours_only ?? meta.call_settings?.business_hours_only ?? true),
-              timezone: campaign.call_settings?.timezone || meta.call_settings?.timezone || "America/New_York",
-              delay_between_calls: campaign.call_settings?.delay_between_calls || meta.call_settings?.delay_between_calls || 60
+              max_duration:
+                campaign.call_settings?.max_duration || meta.call_settings?.max_duration || 300,
+              retry_attempts:
+                campaign.call_settings?.retry_attempts || meta.call_settings?.retry_attempts || 2,
+              business_hours_only:
+                campaign.call_settings?.business_hours_only ??
+                meta.call_settings?.business_hours_only ??
+                true,
+              timezone:
+                campaign.call_settings?.timezone ||
+                meta.call_settings?.timezone ||
+                'America/New_York',
+              delay_between_calls:
+                campaign.call_settings?.delay_between_calls ||
+                meta.call_settings?.delay_between_calls ||
+                60,
             },
             schedule_config: {
-              start_date: campaign.schedule_config?.start_date || meta.schedule_config?.start_date || "",
-              end_date: campaign.schedule_config?.end_date || meta.schedule_config?.end_date || "",
+              start_date:
+                campaign.schedule_config?.start_date || meta.schedule_config?.start_date || '',
+              end_date: campaign.schedule_config?.end_date || meta.schedule_config?.end_date || '',
               preferred_hours: {
-                start: campaign.schedule_config?.preferred_hours?.start || meta.schedule_config?.preferred_hours?.start || "09:00",
-                end: campaign.schedule_config?.preferred_hours?.end || meta.schedule_config?.preferred_hours?.end || "17:00"
+                start:
+                  campaign.schedule_config?.preferred_hours?.start ||
+                  meta.schedule_config?.preferred_hours?.start ||
+                  '09:00',
+                end:
+                  campaign.schedule_config?.preferred_hours?.end ||
+                  meta.schedule_config?.preferred_hours?.end ||
+                  '17:00',
               },
-              excluded_days: campaign.schedule_config?.excluded_days || meta.schedule_config?.excluded_days || ["saturday", "sunday"]
-            }
+              excluded_days: campaign.schedule_config?.excluded_days ||
+                meta.schedule_config?.excluded_days || ['saturday', 'sunday'],
+            },
           });
 
           if (campaign.target_contacts) {
-            const contactIds = campaign.target_contacts.map(tc => tc.contact_id);
+            const contactIds = campaign.target_contacts.map((tc) => tc.contact_id);
             setSelectedContacts(contactIds);
           }
         } else {
@@ -150,17 +201,17 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
           const nextWeek = new Date();
           nextWeek.setDate(nextWeek.getDate() + 7);
 
-          setFormData(prev => ({
+          setFormData((prev) => ({
             ...prev,
             schedule_config: {
               ...prev.schedule_config,
               start_date: tomorrow.toISOString().split('T')[0],
-              end_date: nextWeek.toISOString().split('T')[0]
-            }
+              end_date: nextWeek.toISOString().split('T')[0],
+            },
           }));
         }
       } catch (error) {
-        console.error("Failed to load data:", error);
+        console.error('Failed to load data:', error);
       }
     };
 
@@ -176,10 +227,10 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
       try {
         const integrations = await TenantIntegration.filter({ tenant_id, is_active: true });
         const list = Array.isArray(integrations) ? integrations : [];
-        const lower = (s) => (s || "").toString().toLowerCase();
-        const emailProfiles = list.filter((i) => [
-          'gmail', 'outlook_email', 'webhook_email'
-        ].includes(lower(i.integration_type)));
+        const lower = (s) => (s || '').toString().toLowerCase();
+        const emailProfiles = list.filter((i) =>
+          ['gmail', 'outlook_email', 'webhook_email'].includes(lower(i.integration_type)),
+        );
         const callList = list.filter((i) => {
           const name = lower(i.integration_name);
           const type = lower(i.integration_type);
@@ -195,15 +246,15 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
 
   useEffect(() => {
     if (!formData.ai_prompt_template) {
-      setPreviewPrompt("");
+      setPreviewPrompt('');
       return;
     }
 
     let preview = formData.ai_prompt_template;
 
-    const sampleContactName = "John Doe";
-    const sampleCompany = "ABC Company";
-    const ourCompanyName = "Ai-SHA CRM";
+    const sampleContactName = 'John Doe';
+    const sampleCompany = 'ABC Company';
+    const ourCompanyName = 'Ai-SHA CRM';
 
     preview = preview.replace(/\{\{contact_name\}\}/g, sampleContactName);
     preview = preview.replace(/\{\{company\}\}/g, sampleCompany);
@@ -213,104 +264,129 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
   }, [formData.ai_prompt_template]);
 
   const handleObjectiveChange = (objective) => {
-    const template = promptTemplates[objective] || "";
-    setFormData(prev => ({
+    const template = promptTemplates[objective] || '';
+    setFormData((prev) => ({
       ...prev,
       call_objective: objective,
-      ai_prompt_template: template
+      ai_prompt_template: template,
     }));
   };
 
+  // [2026-02-23 Claude] — expanded campaign type handling with contact filtering per channel
   const handleCampaignTypeChange = (value) => {
-    setFormData(prev => ({ ...prev, campaign_type: value }));
-    // When switching types, clear current selections and refilter contacts
+    setFormData((prev) => ({ ...prev, campaign_type: value }));
     setSelectedContacts([]);
-    const filtered = (value === 'email') ? allContacts.filter(c => c.email) : allContacts.filter(c => c.phone);
-    setAvailableContacts(filtered);
+    // Filter contacts by channel requirement
+    const emailTypes = ['email', 'sendfox', 'social_post'];
+    const phoneTypes = ['call', 'sms', 'whatsapp'];
+    if (emailTypes.includes(value)) {
+      setAvailableContacts(allContacts.filter((c) => c.email));
+    } else if (phoneTypes.includes(value)) {
+      setAvailableContacts(allContacts.filter((c) => c.phone));
+    } else {
+      // linkedin, api_connector, sequence — show all contacts
+      setAvailableContacts(allContacts);
+    }
   };
 
   const handleContactSelection = (contactId, checked) => {
     if (checked) {
-      setSelectedContacts(prev => [...prev, contactId]);
+      setSelectedContacts((prev) => [...prev, contactId]);
     } else {
-      setSelectedContacts(prev => prev.filter(id => id !== contactId));
+      setSelectedContacts((prev) => prev.filter((id) => id !== contactId));
     }
   };
 
   const handleSelectAllContacts = (checked) => {
     if (checked) {
-      setSelectedContacts(availableContacts.map(c => c.id));
+      setSelectedContacts(availableContacts.map((c) => c.id));
     } else {
       setSelectedContacts([]);
     }
   };
 
+  // [2026-02-23 Claude] — aligned submission with backend schema (campaign_type as top-level column)
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!currentUser?.tenant_id && !selectedTenantId) {
-      alert("Cannot save: No client selected");
+      alert('Cannot save: No client selected');
       return;
     }
 
-    if (selectedContacts.length === 0) {
-      alert("Please select at least one contact for the campaign");
+    // Social posts and API connector don't require target contacts
+    const noContactTypes = ['social_post', 'api_connector'];
+    if (!noContactTypes.includes(formData.campaign_type) && selectedContacts.length === 0) {
+      alert('Please select at least one contact for the campaign');
       return;
     }
 
-    const targetContacts = selectedContacts.map(contactId => {
-      const contact = availableContacts.find(c => c.id === contactId);
+    const emailTypes = ['email', 'sendfox', 'social_post'];
+    const targetContacts = selectedContacts.map((contactId) => {
+      const contact = availableContacts.find((c) => c.id === contactId);
       const contactName = contact ? `${contact.first_name} ${contact.last_name}`.trim() : '';
-      const contactCompany = contact ? contact.company || "" : "";
+      const contactCompany = contact ? contact.company || '' : '';
 
       return {
         contact_id: contact?.id,
         contact_name: contactName,
-        ...(formData.campaign_type === 'email' ? { email: contact?.email } : { phone: contact?.phone }),
+        email: contact?.email || null,
+        phone: contact?.phone || null,
         company: contactCompany,
         scheduled_date: formData.schedule_config.start_date,
         scheduled_time: formData.schedule_config.preferred_hours.start,
-        status: "pending"
+        status: 'pending',
       };
     });
 
+    // Channel-specific config goes in metadata
     const metadata = {
-      campaign_type: formData.campaign_type,
       ai_provider: formData.ai_provider,
+      ai_prompt_template: formData.ai_prompt_template,
       call_objective: formData.call_objective,
       call_settings: formData.call_settings,
       schedule_config: formData.schedule_config,
-      ai_email_config: formData.campaign_type === 'email' ? {
-        subject: formData.email_subject,
-        body_template: formData.email_body_template,
-        sending_profile_id: formData.email_sending_profile_id || "",
-      } : undefined,
-      ai_call_integration_id: formData.campaign_type === 'call' ? (formData.call_integration_id || "") : undefined,
+      ai_email_config: emailTypes.includes(formData.campaign_type)
+        ? {
+            subject: formData.email_subject,
+            body_template: formData.email_body_template,
+            sending_profile_id: formData.email_sending_profile_id || '',
+          }
+        : undefined,
+      ai_call_integration_id:
+        formData.campaign_type === 'call' ? formData.call_integration_id || '' : undefined,
     };
 
     const submissionData = {
       name: formData.name,
       description: formData.description,
+      campaign_type: formData.campaign_type,
       target_contacts: targetContacts,
       tenant_id: currentUser?.tenant_id || selectedTenantId,
       assigned_to: currentUser?.email,
-      status: "draft",
+      status: 'draft',
       metadata,
       performance_metrics: {
+        total_sent: 0,
+        total_delivered: 0,
+        total_failed: 0,
+        total_opened: 0,
+        total_clicked: 0,
+        total_replied: 0,
         total_calls: 0,
         successful_calls: 0,
         failed_calls: 0,
         average_duration: 0,
         appointments_set: 0,
-        leads_qualified: 0
-      }
+        leads_qualified: 0,
+      },
     };
 
     try {
       await onSubmit(submissionData);
     } catch (error) {
-      console.error("Failed to save AI campaign:", error);
-      alert("Failed to save AI campaign");
+      console.error('Failed to save AI campaign:', error);
+      alert('Failed to save AI campaign');
     }
   };
 
@@ -322,7 +398,12 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
             <Bot className="w-5 h-5 text-blue-400" />
             {campaign ? 'Edit AI Campaign' : 'Create AI Campaign'}
           </h2>
-          <Button variant="ghost" size="icon" onClick={onCancel} className="text-slate-400 hover:text-slate-200">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onCancel}
+            className="text-slate-400 hover:text-slate-200"
+          >
             <X className="w-5 h-5" />
           </Button>
         </div>
@@ -332,23 +413,52 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
           {/* Basic Info */}
           <div className="space-y-4">
             <div>
-              <Label htmlFor="campaign_type" className="text-slate-200">Campaign Type</Label>
+              <Label htmlFor="campaign_type" className="text-slate-200">
+                Campaign Type
+              </Label>
               <Select value={formData.campaign_type} onValueChange={handleCampaignTypeChange}>
                 <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                  <SelectItem value="call" className="focus:bg-slate-700">Phone Calls</SelectItem>
-                  <SelectItem value="email" className="focus:bg-slate-700">Emails</SelectItem>
+                  <SelectItem value="call" className="focus:bg-slate-700">
+                    📞 Phone Calls
+                  </SelectItem>
+                  <SelectItem value="email" className="focus:bg-slate-700">
+                    📧 Email
+                  </SelectItem>
+                  <SelectItem value="sms" className="focus:bg-slate-700">
+                    💬 SMS / Text
+                  </SelectItem>
+                  <SelectItem value="linkedin" className="focus:bg-slate-700">
+                    💼 LinkedIn
+                  </SelectItem>
+                  <SelectItem value="whatsapp" className="focus:bg-slate-700">
+                    📱 WhatsApp
+                  </SelectItem>
+                  <SelectItem value="sendfox" className="focus:bg-slate-700">
+                    🦊 SendFox Newsletter
+                  </SelectItem>
+                  <SelectItem value="api_connector" className="focus:bg-slate-700">
+                    🔌 API Connector
+                  </SelectItem>
+                  <SelectItem value="social_post" className="focus:bg-slate-700">
+                    📣 Social Post (FB/IG/X)
+                  </SelectItem>
+                  <SelectItem value="sequence" className="focus:bg-slate-700">
+                    🔄 Multi-Step Sequence
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label htmlFor="name" className="text-slate-200">Campaign Name</Label>
+              <Label htmlFor="name" className="text-slate-200">
+                Campaign Name
+              </Label>
               <Input
                 id="name"
                 value={formData.name}
-                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
                 placeholder="e.g., Q1 Follow-up Campaign"
                 required
                 className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400"
@@ -356,11 +466,13 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
             </div>
 
             <div>
-              <Label htmlFor="description" className="text-slate-200">Description</Label>
+              <Label htmlFor="description" className="text-slate-200">
+                Description
+              </Label>
               <Textarea
                 id="description"
                 value={formData.description}
-                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
                 placeholder="Describe the goal and purpose of this campaign..."
                 rows={3}
                 className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400"
@@ -371,33 +483,54 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
             {formData.campaign_type === 'call' && (
               <div className="space-y-3">
                 <div>
-                  <Label htmlFor="ai_provider" className="text-slate-200">AI Calling Provider</Label>
-                  <Select value={formData.ai_provider} onValueChange={(value) => setFormData(prev => ({ ...prev, ai_provider: value }))}>
+                  <Label htmlFor="ai_provider" className="text-slate-200">
+                    AI Calling Provider
+                  </Label>
+                  <Select
+                    value={formData.ai_provider}
+                    onValueChange={(value) =>
+                      setFormData((prev) => ({ ...prev, ai_provider: value }))
+                    }
+                  >
                     <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
                       <SelectValue placeholder="Select AI provider" />
                     </SelectTrigger>
                     <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                      <SelectItem value="callfluent" className="focus:bg-slate-700">CallFluent</SelectItem>
-                      <SelectItem value="thoughtly" className="focus:bg-slate-700">Thoughtly</SelectItem>
+                      <SelectItem value="callfluent" className="focus:bg-slate-700">
+                        CallFluent
+                      </SelectItem>
+                      <SelectItem value="thoughtly" className="focus:bg-slate-700">
+                        Thoughtly
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
                   <Label className="text-slate-200">Tenant Call Provider/Agent</Label>
-                  <Select value={formData.call_integration_id || ""} onValueChange={(v) => setFormData(prev => ({ ...prev, call_integration_id: v }))}>
+                  <Select
+                    value={formData.call_integration_id || '__none__'}
+                    onValueChange={(v) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        call_integration_id: v === '__none__' ? '' : v,
+                      }))
+                    }
+                  >
                     <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
                       <SelectValue placeholder="Select provider/agent" />
                     </SelectTrigger>
                     <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                      <SelectItem value="">Select provider…</SelectItem>
-                      {callProviders.map(p => (
+                      <SelectItem value="__none__">Select provider…</SelectItem>
+                      {callProviders.map((p) => (
                         <SelectItem key={p.id} value={p.id} className="focus:bg-slate-700">
-                          {(p.display_name || p.integration_name || p.id)}
+                          {p.display_name || p.integration_name || p.id}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-sm text-slate-500 mt-1">Only integrations belonging to your tenant are listed.</p>
+                  <p className="text-sm text-slate-500 mt-1">
+                    Only integrations belonging to your tenant are listed.
+                  </p>
                 </div>
               </div>
             )}
@@ -414,14 +547,20 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
             {formData.campaign_type === 'call' ? (
               <>
                 <div>
-                  <Label htmlFor="call_objective" className="text-slate-200">Call Objective</Label>
+                  <Label htmlFor="call_objective" className="text-slate-200">
+                    Call Objective
+                  </Label>
                   <Select value={formData.call_objective} onValueChange={handleObjectiveChange}>
                     <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
                       {callObjectives.map((objective) => (
-                        <SelectItem key={objective.value} value={objective.value} className="focus:bg-slate-700">
+                        <SelectItem
+                          key={objective.value}
+                          value={objective.value}
+                          className="focus:bg-slate-700"
+                        >
                           <div>
                             <div className="font-medium">{objective.label}</div>
                             <div className="text-xs text-slate-400">{objective.description}</div>
@@ -433,18 +572,22 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                 </div>
 
                 <div>
-                  <Label htmlFor="ai_prompt_template" className="text-slate-200">AI Prompt Template</Label>
+                  <Label htmlFor="ai_prompt_template" className="text-slate-200">
+                    AI Prompt Template
+                  </Label>
                   <Textarea
                     id="ai_prompt_template"
                     value={formData.ai_prompt_template}
-                    onChange={(e) => setFormData(prev => ({ ...prev, ai_prompt_template: e.target.value }))}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, ai_prompt_template: e.target.value }))
+                    }
                     rows={6}
                     placeholder="Enter the AI prompt template for this campaign..."
                     required
                     className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400"
                   />
                   <p className="text-xs text-slate-500 mt-1">
-                    Use variables: {"{{contact_name}}"}, {"{{company}}"}, {"{{company_name}}"}
+                    Use variables: {'{{contact_name}}'}, {'{{company}}'}, {'{{company_name}}'}
                   </p>
                 </div>
 
@@ -462,38 +605,56 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
               <>
                 <div>
                   <Label className="text-slate-200">Email Sending Profile</Label>
-                  <Select value={formData.email_sending_profile_id || ""} onValueChange={(v) => setFormData(prev => ({ ...prev, email_sending_profile_id: v }))}>
+                  <Select
+                    value={formData.email_sending_profile_id || '__none__'}
+                    onValueChange={(v) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        email_sending_profile_id: v === '__none__' ? '' : v,
+                      }))
+                    }
+                  >
                     <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
                       <SelectValue placeholder="Select sending profile" />
                     </SelectTrigger>
                     <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                      <SelectItem value="">Select profile…</SelectItem>
-                      {emailSendingProfiles.map(p => (
+                      <SelectItem value="__none__">Select profile…</SelectItem>
+                      {emailSendingProfiles.map((p) => (
                         <SelectItem key={p.id} value={p.id} className="focus:bg-slate-700">
-                          {(p.display_name || p.integration_name || p.id)}
+                          {p.display_name || p.integration_name || p.id}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-sm text-slate-500 mt-1">Profiles are limited to the current tenant.</p>
+                  <p className="text-sm text-slate-500 mt-1">
+                    Profiles are limited to the current tenant.
+                  </p>
                 </div>
                 <div>
-                  <Label htmlFor="email_subject" className="text-slate-200">Email Subject</Label>
+                  <Label htmlFor="email_subject" className="text-slate-200">
+                    Email Subject
+                  </Label>
                   <Input
                     id="email_subject"
                     value={formData.email_subject}
-                    onChange={(e) => setFormData(prev => ({ ...prev, email_subject: e.target.value }))}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, email_subject: e.target.value }))
+                    }
                     placeholder="e.g., Quick follow-up from {{company_name}}"
                     required
                     className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="email_body_template" className="text-slate-200">Email Body Template</Label>
+                  <Label htmlFor="email_body_template" className="text-slate-200">
+                    Email Body Template
+                  </Label>
                   <Textarea
                     id="email_body_template"
                     value={formData.email_body_template}
-                    onChange={(e) => setFormData(prev => ({ ...prev, email_body_template: e.target.value }))}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, email_body_template: e.target.value }))
+                    }
                     rows={8}
                     placeholder="Write the email body... Use variables: {{contact_name}}, {{company}}, {{company_name}}"
                     required
@@ -516,21 +677,33 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
             <div className="flex items-center gap-2 mb-4">
               <Checkbox
                 id="select-all"
-                checked={selectedContacts.length === availableContacts.length && availableContacts.length > 0}
+                checked={
+                  selectedContacts.length === availableContacts.length &&
+                  availableContacts.length > 0
+                }
                 onCheckedChange={handleSelectAllContacts}
-                indeterminate={selectedContacts.length > 0 && selectedContacts.length < availableContacts.length}
+                indeterminate={
+                  selectedContacts.length > 0 && selectedContacts.length < availableContacts.length
+                }
               />
-              <Label htmlFor="select-all" className="text-slate-200">Select All ({availableContacts.length} contacts)</Label>
+              <Label htmlFor="select-all" className="text-slate-200">
+                Select All ({availableContacts.length} contacts)
+              </Label>
             </div>
 
             <div className="max-h-60 overflow-y-auto border border-slate-700 rounded-md p-4 space-y-2">
               {availableContacts.length === 0 ? (
                 <p className="text-sm text-slate-500">
-                  {formData.campaign_type === 'email' ? 'No contacts with email addresses found' : 'No contacts with phone numbers found'}
+                  {formData.campaign_type === 'email'
+                    ? 'No contacts with email addresses found'
+                    : 'No contacts with phone numbers found'}
                 </p>
               ) : (
                 availableContacts.map((contact) => (
-                  <div key={contact.id} className="flex items-center gap-3 p-2 hover:bg-slate-800 rounded">
+                  <div
+                    key={contact.id}
+                    className="flex items-center gap-3 p-2 hover:bg-slate-800 rounded"
+                  >
                     <Checkbox
                       id={`contact-${contact.id}`}
                       checked={selectedContacts.includes(contact.id)}
@@ -538,15 +711,22 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                     />
                     <div className="flex-grow">
                       <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-xs border-slate-600 text-slate-300">
+                        <Badge
+                          variant="outline"
+                          className="text-xs border-slate-600 text-slate-300"
+                        >
                           {contact.type}
                         </Badge>
                         <span className="font-medium text-slate-200">
                           {contact.first_name} {contact.last_name}
                         </span>
-                        {contact.company && <span className="text-slate-400">- {contact.company}</span>}
+                        {contact.company && (
+                          <span className="text-slate-400">- {contact.company}</span>
+                        )}
                       </div>
-                      <div className="text-sm text-slate-400">{formData.campaign_type === 'email' ? contact.email : contact.phone}</div>
+                      <div className="text-sm text-slate-400">
+                        {formData.campaign_type === 'email' ? contact.email : contact.phone}
+                      </div>
                     </div>
                   </div>
                 ))
@@ -559,35 +739,43 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
           {/* Schedule Configuration */}
           <div className="space-y-6">
             <h3 className="text-lg font-semibold flex items-center gap-2 text-slate-100">
-              <img src="/icons/calendar.svg" alt="Calendar" className="w-5 h-5" />
+              <Calendar className="w-5 h-5" />
               Schedule
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <Label htmlFor="start_date" className="text-slate-200">Start Date</Label>
+                <Label htmlFor="start_date" className="text-slate-200">
+                  Start Date
+                </Label>
                 <Input
                   id="start_date"
                   type="date"
                   value={formData.schedule_config.start_date}
-                  onChange={(e) => setFormData(prev => ({
-                    ...prev,
-                    schedule_config: { ...prev.schedule_config, start_date: e.target.value }
-                  }))}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      schedule_config: { ...prev.schedule_config, start_date: e.target.value },
+                    }))
+                  }
                   className="w-full bg-slate-800 border-slate-700 text-slate-200"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="end_date" className="text-slate-200">End Date</Label>
+                <Label htmlFor="end_date" className="text-slate-200">
+                  End Date
+                </Label>
                 <Input
                   id="end_date"
                   type="date"
                   value={formData.schedule_config.end_date}
-                  onChange={(e) => setFormData(prev => ({
-                    ...prev,
-                    schedule_config: { ...prev.schedule_config, end_date: e.target.value }
-                  }))}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      schedule_config: { ...prev.schedule_config, end_date: e.target.value },
+                    }))
+                  }
                   className="w-full bg-slate-800 border-slate-700 text-slate-200"
                 />
               </div>
@@ -595,35 +783,49 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <Label htmlFor="start_time" className="text-slate-200">Preferred Start Time</Label>
+                <Label htmlFor="start_time" className="text-slate-200">
+                  Preferred Start Time
+                </Label>
                 <Input
                   id="start_time"
                   type="time"
                   value={formData.schedule_config.preferred_hours.start}
-                  onChange={(e) => setFormData(prev => ({
-                    ...prev,
-                    schedule_config: {
-                      ...prev.schedule_config,
-                      preferred_hours: { ...prev.schedule_config.preferred_hours, start: e.target.value }
-                    }
-                  }))}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      schedule_config: {
+                        ...prev.schedule_config,
+                        preferred_hours: {
+                          ...prev.schedule_config.preferred_hours,
+                          start: e.target.value,
+                        },
+                      },
+                    }))
+                  }
                   className="w-full bg-slate-800 border-slate-700 text-slate-200"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="end_time" className="text-slate-200">Preferred End Time</Label>
+                <Label htmlFor="end_time" className="text-slate-200">
+                  Preferred End Time
+                </Label>
                 <Input
                   id="end_time"
                   type="time"
                   value={formData.schedule_config.preferred_hours.end}
-                  onChange={(e) => setFormData(prev => ({
-                    ...prev,
-                    schedule_config: {
-                      ...prev.schedule_config,
-                      preferred_hours: { ...prev.schedule_config.preferred_hours, end: e.target.value }
-                    }
-                  }))}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      schedule_config: {
+                        ...prev.schedule_config,
+                        preferred_hours: {
+                          ...prev.schedule_config.preferred_hours,
+                          end: e.target.value,
+                        },
+                      },
+                    }))
+                  }
                   className="w-full bg-slate-800 border-slate-700 text-slate-200"
                 />
               </div>
@@ -634,74 +836,99 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
 
           {/* Call Settings (Calls only) */}
           {formData.campaign_type === 'call' && (
-          <div className="space-y-6">
-            <h3 className="text-lg font-semibold flex items-center gap-2 text-slate-100">
-              <Zap className="w-5 h-5" />
-              Call Settings
-            </h3>
+            <div className="space-y-6">
+              <h3 className="text-lg font-semibold flex items-center gap-2 text-slate-100">
+                <Zap className="w-5 h-5" />
+                Call Settings
+              </h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="space-y-2">
-                <Label htmlFor="max_duration" className="text-slate-200">Max Duration (seconds)</Label>
-                <Input
-                  id="max_duration"
-                  type="number"
-                  value={formData.call_settings.max_duration}
-                  onChange={(e) => setFormData(prev => ({
-                    ...prev,
-                    call_settings: { ...prev.call_settings, max_duration: parseInt(e.target.value) }
-                  }))}
-                  min="60"
-                  max="1800"
-                  className="w-full bg-slate-800 border-slate-700 text-slate-200"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="max_duration" className="text-slate-200">
+                    Max Duration (seconds)
+                  </Label>
+                  <Input
+                    id="max_duration"
+                    type="number"
+                    value={formData.call_settings.max_duration}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        call_settings: {
+                          ...prev.call_settings,
+                          max_duration: parseInt(e.target.value),
+                        },
+                      }))
+                    }
+                    min="60"
+                    max="1800"
+                    className="w-full bg-slate-800 border-slate-700 text-slate-200"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="retry_attempts" className="text-slate-200">
+                    Retry Attempts
+                  </Label>
+                  <Input
+                    id="retry_attempts"
+                    type="number"
+                    value={formData.call_settings.retry_attempts}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        call_settings: {
+                          ...prev.call_settings,
+                          retry_attempts: parseInt(e.target.value),
+                        },
+                      }))
+                    }
+                    min="0"
+                    max="5"
+                    className="w-full bg-slate-800 border-slate-700 text-slate-200"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="delay_between_calls" className="text-slate-200">
+                    Delay Between Calls (seconds)
+                  </Label>
+                  <Input
+                    id="delay_between_calls"
+                    type="number"
+                    value={formData.call_settings.delay_between_calls}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        call_settings: {
+                          ...prev.call_settings,
+                          delay_between_calls: parseInt(e.target.value),
+                        },
+                      }))
+                    }
+                    min="30"
+                    max="300"
+                    className="w-full bg-slate-800 border-slate-700 text-slate-200"
+                  />
+                </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="retry_attempts" className="text-slate-200">Retry Attempts</Label>
-                <Input
-                  id="retry_attempts"
-                  type="number"
-                  value={formData.call_settings.retry_attempts}
-                  onChange={(e) => setFormData(prev => ({
-                    ...prev,
-                    call_settings: { ...prev.call_settings, retry_attempts: parseInt(e.target.value) }
-                  }))}
-                  min="0"
-                  max="5"
-                  className="w-full bg-slate-800 border-slate-700 text-slate-200"
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="business_hours_only"
+                  checked={formData.call_settings.business_hours_only}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      call_settings: { ...prev.call_settings, business_hours_only: checked },
+                    }))
+                  }
                 />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="delay_between_calls" className="text-slate-200">Delay Between Calls (seconds)</Label>
-                <Input
-                  id="delay_between_calls"
-                  type="number"
-                  value={formData.call_settings.delay_between_calls}
-                  onChange={(e) => setFormData(prev => ({
-                    ...prev,
-                    call_settings: { ...prev.call_settings, delay_between_calls: parseInt(e.target.value) }
-                  }))}
-                  min="30"
-                  max="300"
-                  className="w-full bg-slate-800 border-slate-700 text-slate-200"
-                />
+                <Label htmlFor="business_hours_only" className="text-slate-200">
+                  Only call during business hours
+                </Label>
               </div>
             </div>
-
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="business_hours_only"
-                checked={formData.call_settings.business_hours_only}
-                onCheckedChange={(checked) => setFormData(prev => ({
-                  ...prev,
-                  call_settings: { ...prev.call_settings, business_hours_only: checked }
-                }))}
-              />
-              <Label htmlFor="business_hours_only" className="text-slate-200">Only call during business hours</Label>
-            </div>
-          </div>
           )}
 
           {formData.campaign_type === 'call' && (
@@ -709,8 +936,11 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
               <Alert className="bg-slate-800 border-slate-700">
                 <Zap className="h-4 w-4 text-blue-400" />
                 <AlertDescription className="text-slate-400">
-                  <strong>{formData.ai_provider === 'callfluent' ? 'CallFluent' : 'Thoughtly'}</strong> will be used for all calls in this campaign.
-                  Make sure the provider is configured for your tenant.
+                  <strong>
+                    {formData.ai_provider === 'callfluent' ? 'CallFluent' : 'Thoughtly'}
+                  </strong>{' '}
+                  will be used for all calls in this campaign. Make sure the provider is configured
+                  for your tenant.
                 </AlertDescription>
               </Alert>
             </div>
@@ -718,7 +948,12 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
 
           {/* Form Actions */}
           <div className="flex justify-end gap-3 pt-6 border-t border-slate-700">
-            <Button type="button" variant="outline" onClick={onCancel} className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onCancel}
+              className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
+            >
               Cancel
             </Button>
             <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
