@@ -1427,18 +1427,23 @@ function extractBasicPatterns(transcript) {
   }
 
   // Extract follow-up requests
+  // Avoids nested quantifiers (CodeQL ReDoS) by using string ops instead of a single regex.
   if (lowerTranscript.includes('send me') || lowerTranscript.includes('email me')) {
-    const match = transcript.match(
-      /send(?:ing)?\s+(?:me\s+)?((?:\w+(?:\s+\w+){0,20})?)\s*(?:[.,?]|$)/i,
-    );
-    if (match) {
-      actionItems.push({
-        task: `Send ${match[1].trim()}`,
-        priority: 'high',
-        dueDate: null,
-        type: 'email',
-      });
-      customerRequests.push(`Requested: ${match[1].trim()}`);
+    const prefixMatch = transcript.match(/send(?:ing)?\s+(?:me\s+)?/i);
+    if (prefixMatch) {
+      const afterSend = transcript.substring(prefixMatch.index + prefixMatch[0].length);
+      const punctIdx = afterSend.search(/[.,?]/);
+      const raw = (punctIdx >= 0 ? afterSend.substring(0, punctIdx) : afterSend).trim();
+      const content = raw.split(/\s+/).slice(0, 20).join(' ');
+      if (content) {
+        actionItems.push({
+          task: `Send ${content}`,
+          priority: 'high',
+          dueDate: null,
+          type: 'email',
+        });
+        customerRequests.push(`Requested: ${content}`);
+      }
     }
   }
 
