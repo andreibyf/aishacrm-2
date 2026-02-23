@@ -66,15 +66,10 @@ const callObjectives = [
 
 const promptTemplates = {
   follow_up: `Hi {{contact_name}}, this is an AI assistant from {{company_name}}. I'm calling to follow up on your recent inquiry about our services. Do you have a few minutes to discuss how we can help you achieve your goals?`,
-
   qualification: `Hello {{contact_name}}, I'm calling from {{company_name}} to learn more about your current challenges and see if our solutions might be a good fit. Could you tell me about your biggest pain points with [relevant area]?`,
-
   appointment_setting: `Hi {{contact_name}}, I'm reaching out from {{company_name}} because we have some solutions that might interest you based on your profile. I'd love to schedule a brief 15-minute call with our team. What does your schedule look like this week?`,
-
   nurture: `Hello {{contact_name}}, I wanted to check in and see how things are going with your [relevant project/challenge]. We've been helping companies like {{company}} achieve great results, and I thought you might find our recent case study interesting.`,
-
   customer_service: `Hi {{contact_name}}, I'm calling from {{company_name}} customer service. I wanted to personally check in and make sure everything is going well with your recent purchase/service. Do you have any questions or concerns I can help address?`,
-
   survey: `Hello {{contact_name}}, I'm calling from {{company_name}} to get your valuable feedback on our recent service. This will only take 2-3 minutes of your time. Would you mind sharing your experience with us?`,
 };
 
@@ -86,7 +81,6 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
     ai_provider: 'callfluent',
     ai_prompt_template: '',
     call_objective: 'follow_up',
-    // Email-only fields
     email_subject: '',
     email_body_template: '',
     target_contacts: [],
@@ -100,10 +94,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
     schedule_config: {
       start_date: '',
       end_date: '',
-      preferred_hours: {
-        start: '09:00',
-        end: '17:00',
-      },
+      preferred_hours: { start: '09:00', end: '17:00' },
       excluded_days: ['saturday', 'sunday'],
     },
   });
@@ -113,13 +104,11 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
   const [selectedContacts, setSelectedContacts] = useState([]);
   const [emailSendingProfiles, setEmailSendingProfiles] = useState([]);
   const [callProviders, setCallProviders] = useState([]);
-  // Global user context (replaces prior local fetch via User.me())
   const { user: currentUser } = useUser();
   const [previewPrompt, setPreviewPrompt] = useState('');
   const { selectedTenantId } = useTenant();
 
   useEffect(() => {
-    // Wait until user context is available
     if (!currentUser) return;
 
     const loadData = async () => {
@@ -128,7 +117,6 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
 
         const contactsData = await Contact.filter(tenantFilter);
         const leadsData = await Lead.filter(tenantFilter);
-        // [2026-02-23 Claude] — include BizDevSources (Potential Sources) as campaign targets
         let sourcesData = [];
         try {
           sourcesData = await BizDevSource.filter(tenantFilter);
@@ -142,7 +130,6 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
           ...sourcesData.map((s) => ({
             ...s,
             type: 'source',
-            // Normalize field names to match contact/lead shape
             first_name: s.contact_person?.split(' ')[0] || s.company_name || s.source || '',
             last_name: s.contact_person?.split(' ').slice(1).join(' ') || '',
             email: s.contact_email || s.email || null,
@@ -151,8 +138,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
           })),
         ];
 
-        // [2026-02-23 Claude] — initial filter based on default campaign_type;
-        // subsequent type changes are handled by handleCampaignTypeChange
+        // [2026-02-23 Claude] — initial filter; subsequent changes handled by handleCampaignTypeChange
         const emailTypes = ['email', 'sendfox', 'social_post'];
         const phoneTypes = ['call', 'sms', 'whatsapp'];
         const ct = formData.campaign_type;
@@ -243,7 +229,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
     // re-triggering loadData on type change (handleCampaignTypeChange handles re-filtering)
   }, [campaign, selectedTenantId, currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load tenant integrations to enforce tenant-specific profiles
+  // Load tenant integrations
   useEffect(() => {
     if (!currentUser && !selectedTenantId) return;
     const tenant_id = currentUser?.tenant_id || selectedTenantId;
@@ -274,34 +260,22 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
       setPreviewPrompt('');
       return;
     }
-
     let preview = formData.ai_prompt_template;
-
-    const sampleContactName = 'John Doe';
-    const sampleCompany = 'ABC Company';
-    const ourCompanyName = 'Ai-SHA CRM';
-
-    preview = preview.replace(/\{\{contact_name\}\}/g, sampleContactName);
-    preview = preview.replace(/\{\{company\}\}/g, sampleCompany);
-    preview = preview.replace(/\{\{company_name\}\}/g, ourCompanyName);
-
+    preview = preview.replace(/\{\{contact_name\}\}/g, 'John Doe');
+    preview = preview.replace(/\{\{company\}\}/g, 'ABC Company');
+    preview = preview.replace(/\{\{company_name\}\}/g, 'Ai-SHA CRM');
     setPreviewPrompt(preview);
   }, [formData.ai_prompt_template]);
 
   const handleObjectiveChange = (objective) => {
     const template = promptTemplates[objective] || '';
-    setFormData((prev) => ({
-      ...prev,
-      call_objective: objective,
-      ai_prompt_template: template,
-    }));
+    setFormData((prev) => ({ ...prev, call_objective: objective, ai_prompt_template: template }));
   };
 
   // [2026-02-23 Claude] — expanded campaign type handling with contact filtering per channel
   const handleCampaignTypeChange = (value) => {
     setFormData((prev) => ({ ...prev, campaign_type: value }));
     setSelectedContacts([]);
-    // Filter contacts by channel requirement
     const emailTypes = ['email', 'sendfox', 'social_post'];
     const phoneTypes = ['call', 'sms', 'whatsapp'];
     if (emailTypes.includes(value)) {
@@ -309,7 +283,6 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
     } else if (phoneTypes.includes(value)) {
       setAvailableContacts(allContacts.filter((c) => c.phone));
     } else {
-      // linkedin, api_connector, sequence — show all contacts
       setAvailableContacts(allContacts);
     }
   };
@@ -330,7 +303,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
     }
   };
 
-  // [2026-02-23 Claude] — aligned submission with backend schema (campaign_type as top-level column)
+  // [2026-02-23 Claude] — aligned submission with backend schema
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -339,25 +312,21 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
       return;
     }
 
-    // Social posts and API connector don't require target contacts
     const noContactTypes = ['social_post', 'api_connector'];
     if (!noContactTypes.includes(formData.campaign_type) && selectedContacts.length === 0) {
       alert('Please select at least one contact for the campaign');
       return;
     }
 
-    const emailTypes = ['email', 'sendfox', 'social_post'];
     const targetContacts = selectedContacts.map((contactId) => {
       const contact = availableContacts.find((c) => c.id === contactId);
       const contactName = contact ? `${contact.first_name} ${contact.last_name}`.trim() : '';
-      const contactCompany = contact ? contact.company || '' : '';
-
       return {
         contact_id: contact?.id,
         contact_name: contactName,
         email: contact?.email || null,
         phone: contact?.phone || null,
-        company: contactCompany,
+        company: contact?.company || '',
         scheduled_date: formData.schedule_config.start_date,
         scheduled_time: formData.schedule_config.preferred_hours.start,
         status: 'pending',
@@ -469,7 +438,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                 <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
+                <SelectContent className="bg-slate-800 border-slate-700 text-slate-200 z-[10000]">
                   <SelectItem value="call" className="focus:bg-slate-700">
                     📞 Phone Calls
                   </SelectItem>
@@ -513,7 +482,6 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                 className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400"
               />
             </div>
-
             <div>
               <Label htmlFor="description" className="text-slate-200">
                 Description
@@ -544,7 +512,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                     <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
                       <SelectValue placeholder="Select AI provider" />
                     </SelectTrigger>
-                    <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
+                    <SelectContent className="bg-slate-800 border-slate-700 text-slate-200 z-[10000]">
                       <SelectItem value="callfluent" className="focus:bg-slate-700">
                         CallFluent
                       </SelectItem>
@@ -568,7 +536,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                     <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
                       <SelectValue placeholder="Select provider/agent" />
                     </SelectTrigger>
-                    <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
+                    <SelectContent className="bg-slate-800 border-slate-700 text-slate-200 z-[10000]">
                       <SelectItem value="__none__">Select provider…</SelectItem>
                       {callProviders.map((p) => (
                         <SelectItem key={p.id} value={p.id} className="focus:bg-slate-700">
@@ -604,7 +572,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
               }[formData.campaign_type] || 'Channel Configuration'}
             </h3>
 
-            {/* ── CALL CONFIG ────────────────── */}
+            {/* ── CALL CONFIG ── */}
             {formData.campaign_type === 'call' && (
               <>
                 <div>
@@ -615,7 +583,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                     <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
+                    <SelectContent className="bg-slate-800 border-slate-700 text-slate-200 z-[10000]">
                       {callObjectives.map((objective) => (
                         <SelectItem
                           key={objective.value}
@@ -631,7 +599,6 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                     </SelectContent>
                   </Select>
                 </div>
-
                 <div>
                   <Label htmlFor="ai_prompt_template" className="text-slate-200">
                     AI Prompt Template
@@ -651,8 +618,6 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                     Use variables: {'{{contact_name}}'}, {'{{company}}'}, {'{{company_name}}'}
                   </p>
                 </div>
-
-                {/* Prompt Preview */}
                 {previewPrompt && (
                   <div>
                     <Label className="text-slate-200">Prompt Preview</Label>
@@ -664,7 +629,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
               </>
             )}
 
-            {/* ── EMAIL CONFIG ────────────────── */}
+            {/* ── EMAIL CONFIG ── */}
             {formData.campaign_type === 'email' && (
               <>
                 <div>
@@ -681,7 +646,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                     <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
                       <SelectValue placeholder="Select sending profile" />
                     </SelectTrigger>
-                    <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
+                    <SelectContent className="bg-slate-800 border-slate-700 text-slate-200 z-[10000]">
                       <SelectItem value="__none__">Select profile…</SelectItem>
                       {emailSendingProfiles.map((p) => (
                         <SelectItem key={p.id} value={p.id} className="focus:bg-slate-700">
@@ -728,7 +693,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
               </>
             )}
 
-            {/* ── SMS CONFIG ─────────────────── */}
+            {/* ── SMS CONFIG ── */}
             {formData.campaign_type === 'sms' && (
               <>
                 <Alert className="bg-slate-800 border-slate-700">
@@ -757,7 +722,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
               </>
             )}
 
-            {/* ── LINKEDIN CONFIG ─────────────── */}
+            {/* ── LINKEDIN CONFIG ── */}
             {formData.campaign_type === 'linkedin' && (
               <>
                 <Alert className="bg-slate-800 border-slate-700">
@@ -776,7 +741,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                     <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
+                    <SelectContent className="bg-slate-800 border-slate-700 text-slate-200 z-[10000]">
                       <SelectItem value="connection_request" className="focus:bg-slate-700">
                         Connection Request
                       </SelectItem>
@@ -810,7 +775,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
               </>
             )}
 
-            {/* ── WHATSAPP CONFIG ─────────────── */}
+            {/* ── WHATSAPP CONFIG ── */}
             {formData.campaign_type === 'whatsapp' && (
               <>
                 <Alert className="bg-slate-800 border-slate-700">
@@ -846,7 +811,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
               </>
             )}
 
-            {/* ── SENDFOX CONFIG ──────────────── */}
+            {/* ── SENDFOX CONFIG ── */}
             {formData.campaign_type === 'sendfox' && (
               <>
                 <Alert className="bg-slate-800 border-slate-700">
@@ -895,7 +860,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
               </>
             )}
 
-            {/* ── API CONNECTOR CONFIG ─────────── */}
+            {/* ── API CONNECTOR CONFIG ── */}
             {formData.campaign_type === 'api_connector' && (
               <>
                 <Alert className="bg-slate-800 border-slate-700">
@@ -926,7 +891,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                     <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
+                    <SelectContent className="bg-slate-800 border-slate-700 text-slate-200 z-[10000]">
                       <SelectItem value="POST" className="focus:bg-slate-700">
                         POST
                       </SelectItem>
@@ -970,7 +935,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
               </>
             )}
 
-            {/* ── SOCIAL POST CONFIG ──────────── */}
+            {/* ── SOCIAL POST CONFIG ── */}
             {formData.campaign_type === 'social_post' && (
               <>
                 <Alert className="bg-slate-800 border-slate-700">
@@ -1036,7 +1001,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
               </>
             )}
 
-            {/* ── SEQUENCE CONFIG ─────────────── */}
+            {/* ── SEQUENCE CONFIG ── */}
             {formData.campaign_type === 'sequence' && (
               <>
                 <Alert className="bg-slate-800 border-slate-700">
@@ -1081,12 +1046,9 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                   availableContacts.length > 0
                 }
                 onCheckedChange={handleSelectAllContacts}
-                indeterminate={
-                  selectedContacts.length > 0 && selectedContacts.length < availableContacts.length
-                }
               />
               <Label htmlFor="select-all" className="text-slate-200">
-                Select All ({availableContacts.length} contacts)
+                Select All ({availableContacts.length} recipients)
               </Label>
             </div>
 
@@ -1153,7 +1115,6 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
               <Calendar className="w-5 h-5" />
               Schedule
             </h3>
-
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="start_date" className="text-slate-200">
@@ -1172,7 +1133,6 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                   className="w-full bg-slate-800 border-slate-700 text-slate-200"
                 />
               </div>
-
               <div className="space-y-2">
                 <Label htmlFor="end_date" className="text-slate-200">
                   End Date
@@ -1191,7 +1151,6 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                 />
               </div>
             </div>
-
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="start_time" className="text-slate-200">
@@ -1216,7 +1175,6 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                   className="w-full bg-slate-800 border-slate-700 text-slate-200"
                 />
               </div>
-
               <div className="space-y-2">
                 <Label htmlFor="end_time" className="text-slate-200">
                   Preferred End Time
@@ -1252,7 +1210,6 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                 <Zap className="w-5 h-5" />
                 Call Settings
               </h3>
-
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="max_duration" className="text-slate-200">
@@ -1276,7 +1233,6 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                     className="w-full bg-slate-800 border-slate-700 text-slate-200"
                   />
                 </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="retry_attempts" className="text-slate-200">
                     Retry Attempts
@@ -1299,7 +1255,6 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                     className="w-full bg-slate-800 border-slate-700 text-slate-200"
                   />
                 </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="delay_between_calls" className="text-slate-200">
                     Delay Between Calls (seconds)
@@ -1323,7 +1278,6 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                   />
                 </div>
               </div>
-
               <div className="flex items-center space-x-2">
                 <Checkbox
                   id="business_hours_only"

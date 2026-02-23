@@ -38,6 +38,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import AICampaignForm from '../components/campaigns/AICampaignForm';
 import AICampaignDetailPanel from '../components/campaigns/AICampaignDetailPanel';
 import CampaignMonitor from '../components/campaigns/CampaignMonitor';
@@ -607,24 +608,29 @@ export default function AICampaigns() {
         </Card>
       </div>
 
-      {/* Campaign Form Dialog */}
-      {showForm && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999] p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="flex-grow overflow-y-auto">
-              <AICampaignForm
-                campaign={editingCampaign}
-                onSubmit={handleSubmit}
-                onCancel={() => {
-                  console.log('Cancel clicked');
-                  setShowForm(false);
-                  setEditingCampaign(null);
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      {/* [2026-02-23 Claude] — Replaced custom modal div with Radix Dialog for proper
+         portal stacking (fixes Select dropdowns not clickable inside modal) */}
+      <Dialog
+        open={showForm}
+        onOpenChange={(open) => {
+          if (!open) {
+            setShowForm(false);
+            setEditingCampaign(null);
+          }
+        }}
+      >
+        <DialogContent className="bg-slate-900 border-slate-700 max-w-4xl w-full max-h-[90vh] overflow-y-auto p-0 gap-0">
+          <AICampaignForm
+            campaign={editingCampaign}
+            onSubmit={handleSubmit}
+            onCancel={() => {
+              console.log('Cancel clicked');
+              setShowForm(false);
+              setEditingCampaign(null);
+            }}
+          />
+        </DialogContent>
+      </Dialog>
 
       {/* Campaign Detail Panel */}
       <AICampaignDetailPanel
