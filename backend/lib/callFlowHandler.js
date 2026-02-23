@@ -1429,7 +1429,7 @@ function extractBasicPatterns(transcript) {
   // Extract follow-up requests
   if (lowerTranscript.includes('send me') || lowerTranscript.includes('email me')) {
     const match = transcript.match(
-      /send(?:ing)?\s+(?:me\s+)?((?:\w+(?:\s+\w+){0,10})?)\s*(?:[.,?]|$)/i,
+      /send(?:ing)?\s+(?:me\s+)?((?:\w+(?:\s+\w+){0,20})?)\s*(?:[.,?]|$)/i,
     );
     if (match) {
       actionItems.push({
