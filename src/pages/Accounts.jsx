@@ -1,30 +1,25 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Account } from "@/api/entities";
-import { Contact } from "@/api/entities";
-import { Employee } from "@/api/entities";
-import { useApiManager } from "../components/shared/ApiManager";
-import { useConfirmDialog } from "../components/shared/ConfirmDialog";
-import { loadUsersSafely } from "../components/shared/userLoader"; // TODO: remove after refactor if unused
-import { useUser } from "@/components/shared/useUser.js";
-import AccountCard from "../components/accounts/AccountCard";
-import AccountForm from "../components/accounts/AccountForm";
-import AccountDetailPanel from "../components/accounts/AccountDetailPanel";
-import BulkActionsMenu from "../components/accounts/BulkActionsMenu";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Account } from '@/api/entities';
+import { Contact } from '@/api/entities';
+import { Employee } from '@/api/entities';
+import { useApiManager } from '../components/shared/ApiManager';
+import { useConfirmDialog } from '../components/shared/ConfirmDialog';
+import { loadUsersSafely } from '../components/shared/userLoader'; // TODO: remove after refactor if unused
+import { useUser } from '@/components/shared/useUser.js';
+import AccountCard from '../components/accounts/AccountCard';
+import AccountForm from '../components/accounts/AccountForm';
+import AccountDetailPanel from '../components/accounts/AccountDetailPanel';
+import BulkActionsMenu from '../components/accounts/BulkActionsMenu';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from '@/components/ui/select';
 import {
   AlertCircle,
   Edit,
@@ -38,31 +33,26 @@ import {
   Trash2,
   Upload,
   X,
-} from "lucide-react";
-import CsvExportButton from "../components/shared/CsvExportButton";
-import CsvImportDialog from "../components/shared/CsvImportDialog";
-import { useTenant } from "../components/shared/tenantContext";
-import Pagination from "../components/shared/Pagination";
-import { toast } from "sonner";
-import TagFilter from "../components/shared/TagFilter";
-import { useEmployeeScope } from "../components/shared/EmployeeScopeContext";
-import { useLoadingToast } from "@/hooks/useLoadingToast";
-import { useProgress } from "@/components/shared/ProgressOverlay";
-import RefreshButton from "../components/shared/RefreshButton";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import StatusHelper from "../components/shared/StatusHelper";
-import { ComponentHelp } from "../components/shared/ComponentHelp";
-import { formatIndustry } from "@/utils/industryUtils";
-import { useEntityLabel } from "@/components/shared/entityLabelsHooks";
-import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
-import { useAiShaEvents } from "@/hooks/useAiShaEvents";
+} from 'lucide-react';
+import CsvExportButton from '../components/shared/CsvExportButton';
+import CsvImportDialog from '../components/shared/CsvImportDialog';
+import { useTenant } from '../components/shared/tenantContext';
+import Pagination from '../components/shared/Pagination';
+import { toast } from 'sonner';
+import TagFilter from '../components/shared/TagFilter';
+import { useEmployeeScope } from '../components/shared/EmployeeScopeContext';
+import { useLoadingToast } from '@/hooks/useLoadingToast';
+import { useProgress } from '@/components/shared/ProgressOverlay';
+import RefreshButton from '../components/shared/RefreshButton';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import StatusHelper from '../components/shared/StatusHelper';
+import { ComponentHelp } from '../components/shared/ComponentHelp';
+import { formatIndustry } from '@/utils/industryUtils';
+import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
+import { useStatusCardPreferences } from '@/hooks/useStatusCardPreferences';
+import { useAiShaEvents } from '@/hooks/useAiShaEvents';
 
 export default function AccountsPage() {
   const { plural: accountsLabel, singular: accountLabel } = useEntityLabel('accounts');
@@ -75,11 +65,11 @@ export default function AccountsPage() {
   const [employees, setEmployees] = useState([]);
   const [supportingDataReady, setSupportingDataReady] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [typeFilter, setTypeFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState(null);
-  const [viewMode, setViewMode] = useState("list");
+  const [viewMode, setViewMode] = useState('list');
   const [selectedAccounts, setSelectedAccounts] = useState(() => new Set());
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -91,19 +81,22 @@ export default function AccountsPage() {
   const [showTestData] = useState(true); // Default to showing all data
 
   // Sort state
-  const [sortField, setSortField] = useState("created_at");
-  const [sortDirection, setSortDirection] = useState("desc");
+  const [sortField, setSortField] = useState('created_at');
+  const [sortDirection, setSortDirection] = useState('desc');
 
   // Sort options for accounts
-  const sortOptions = useMemo(() => [
-    { label: "Newest First", field: "created_at", direction: "desc" },
-    { label: "Oldest First", field: "created_at", direction: "asc" },
-    { label: "Name A-Z", field: "name", direction: "asc" },
-    { label: "Name Z-A", field: "name", direction: "desc" },
-    { label: "Industry A-Z", field: "industry", direction: "asc" },
-    { label: "Type", field: "type", direction: "asc" },
-    { label: "Recently Updated", field: "updated_at", direction: "desc" },
-  ], []);
+  const sortOptions = useMemo(
+    () => [
+      { label: 'Newest First', field: 'created_at', direction: 'desc' },
+      { label: 'Oldest First', field: 'created_at', direction: 'asc' },
+      { label: 'Name A-Z', field: 'name', direction: 'asc' },
+      { label: 'Name Z-A', field: 'name', direction: 'desc' },
+      { label: 'Industry A-Z', field: 'industry', direction: 'asc' },
+      { label: 'Type', field: 'type', direction: 'asc' },
+      { label: 'Recently Updated', field: 'updated_at', direction: 'desc' },
+    ],
+    [],
+  );
 
   // Stats for ALL accounts (not just current page)
   const [totalStats, setTotalStats] = useState({
@@ -130,12 +123,12 @@ export default function AccountsPage() {
 
   // Type colors matching stat cards - semi-transparent backgrounds
   const typeBadgeColors = {
-    prospect: "bg-blue-900/20 text-blue-300 border-blue-700",
-    customer: "bg-emerald-900/20 text-emerald-300 border-emerald-700",
-    partner: "bg-purple-900/20 text-purple-300 border-purple-700",
-    competitor: "bg-red-900/20 text-red-300 border-red-700",
-    vendor: "bg-amber-900/20 text-amber-300 border-amber-700",
-    inactive: "bg-gray-900/20 text-gray-300 border-gray-700",
+    prospect: 'bg-blue-900/20 text-blue-300 border-blue-700',
+    customer: 'bg-emerald-900/20 text-emerald-300 border-emerald-700',
+    partner: 'bg-purple-900/20 text-purple-300 border-purple-700',
+    competitor: 'bg-red-900/20 text-red-300 border-red-700',
+    vendor: 'bg-amber-900/20 text-amber-300 border-amber-700',
+    inactive: 'bg-gray-900/20 text-gray-300 border-gray-700',
   };
 
   // Local getTenantFilter function that incorporates employee scope and test data
@@ -145,7 +138,7 @@ export default function AccountsPage() {
     let filter = {};
 
     // Tenant filtering
-    if (user.role === "superadmin" || user.role === "admin") {
+    if (user.role === 'superadmin' || user.role === 'admin') {
       if (selectedTenantId) {
         filter.tenant_id = selectedTenantId;
       }
@@ -156,21 +149,23 @@ export default function AccountsPage() {
     const filterObj = {}; // For accumulating JSON filter properties
 
     // Employee scope filtering from context
-    if (selectedEmail && selectedEmail !== "all") {
-      if (selectedEmail === "unassigned") {
+    if (selectedEmail && selectedEmail !== 'all') {
+      if (selectedEmail === 'unassigned') {
         // Only filter by null
         filterObj.$or = [{ assigned_to: null }];
       } else {
         // assigned_to is a UUID field, so only use UUID for filtering
         // Check if selectedEmail looks like a UUID
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedEmail);
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          selectedEmail,
+        );
 
         if (isUuid) {
           // Use the UUID directly
           filter.assigned_to = selectedEmail;
         } else if (employees && employees.length > 0) {
           // Find employee by email and use their ID (UUID)
-          const emp = employees.find(e => e.email === selectedEmail);
+          const emp = employees.find((e) => e.email === selectedEmail);
           if (emp && emp.id) {
             filter.assigned_to = emp.id;
           } else {
@@ -182,12 +177,13 @@ export default function AccountsPage() {
         }
       }
     } else if (
-      user.employee_role === "employee" && user.role !== "admin" &&
-      user.role !== "superadmin"
+      user.employee_role === 'employee' &&
+      user.role !== 'admin' &&
+      user.role !== 'superadmin'
     ) {
       // Regular employees: lookup user's UUID from employees list
       if (employees && employees.length > 0) {
-        const currentEmp = employees.find(e => e.email === user.email);
+        const currentEmp = employees.find((e) => e.email === user.email);
         if (currentEmp && currentEmp.id) {
           filter.assigned_to = currentEmp.id;
         } else {
@@ -226,7 +222,7 @@ export default function AccountsPage() {
         // We revert to basic tenant filter for supporting data for now.
         // Base tenant filter without employee scope for Account and Employee entities
         let baseTenantFilter = {};
-        if (user.role === "superadmin" || user.role === "admin") {
+        if (user.role === 'superadmin' || user.role === 'admin') {
           if (selectedTenantId) {
             baseTenantFilter.tenant_id = selectedTenantId;
           }
@@ -237,7 +233,7 @@ export default function AccountsPage() {
         // Guard: Don't load if no tenant_id for superadmin (must select a tenant first)
         if ((user.role === 'superadmin' || user.role === 'admin') && !baseTenantFilter.tenant_id) {
           if (import.meta.env.DEV) {
-            console.log("[Accounts] Skipping data load - no tenant selected");
+            console.log('[Accounts] Skipping data load - no tenant selected');
           }
           supportingDataLoaded.current = true;
           return;
@@ -245,35 +241,40 @@ export default function AccountsPage() {
 
         // PERFORMANCE OPTIMIZATION: Load all data concurrently
         // This reduces the 'UUID -> Email -> Name' transition flicker
-        const [
-          accountsData,
-          contactsData,
-          usersData,
-          employeesData
-        ] = await Promise.all([
+        const [accountsData, contactsData, usersData, employeesData] = await Promise.all([
           // Load accounts for lookups (e.g. parent accounts)
-          cachedRequest("Account", "filter", {
-            filter: baseTenantFilter,
-          }, () => Account.filter(baseTenantFilter)),
-
-          // Load contacts
-          cachedRequest("Contact", "filter", {
-            filter: baseTenantFilter,
-          }, () => Contact.filter(baseTenantFilter)),
-
-          // Load users safely (limit 1000)
-          loadUsersSafely(
-            user,
-            selectedTenantId,
-            cachedRequest,
-            1000
+          cachedRequest(
+            'Account',
+            'filter',
+            {
+              filter: baseTenantFilter,
+            },
+            () => Account.filter(baseTenantFilter),
           ),
 
+          // Load contacts
+          cachedRequest(
+            'Contact',
+            'filter',
+            {
+              filter: baseTenantFilter,
+            },
+            () => Contact.filter(baseTenantFilter),
+          ),
+
+          // Load users safely (limit 1000)
+          loadUsersSafely(user, selectedTenantId, cachedRequest, 1000),
+
           // Load employees (limit 1000)
-          cachedRequest("Employee", "filter", {
-            filter: baseTenantFilter,
-            limit: 1000
-          }, () => Employee.filter(baseTenantFilter, 'created_at', 1000))
+          cachedRequest(
+            'Employee',
+            'filter',
+            {
+              filter: baseTenantFilter,
+              limit: 1000,
+            },
+            () => Employee.filter(baseTenantFilter, 'created_at', 1000),
+          ),
         ]);
 
         // Batch updates to reduce render cycles
@@ -285,7 +286,7 @@ export default function AccountsPage() {
         supportingDataLoaded.current = true; // Mark as loaded
         setSupportingDataReady(true);
       } catch (error) {
-        console.error("[Accounts] Failed to load supporting data:", error);
+        console.error('[Accounts] Failed to load supporting data:', error);
         // Even on error, allow accounts to load (will just show UUIDs)
         setSupportingDataReady(true);
       }
@@ -298,7 +299,7 @@ export default function AccountsPage() {
   useEffect(() => {
     const loadAccountFromUrl = async () => {
       const urlParams = new URLSearchParams(window.location.search);
-      const accountId = urlParams.get("accountId");
+      const accountId = urlParams.get('accountId');
 
       if (accountId) {
         try {
@@ -309,11 +310,11 @@ export default function AccountsPage() {
             setIsDetailOpen(true);
           }
         } catch (error) {
-          console.error("[Accounts] Failed to load account from URL:", error);
-          toast.error("Account not found");
+          console.error('[Accounts] Failed to load account from URL:', error);
+          toast.error('Account not found');
         } finally {
           // Clear the URL parameter
-          window.history.replaceState({}, "", "/Accounts");
+          window.history.replaceState({}, '', '/Accounts');
         }
       }
     };
@@ -328,7 +329,7 @@ export default function AccountsPage() {
 
     try {
       const currentTenantFilter = getTenantFilter();
-      
+
       // Guard: Don't load stats if no tenant_id for superadmin
       if ((user.role === 'superadmin' || user.role === 'admin') && !currentTenantFilter.tenant_id) {
         setTotalStats({
@@ -340,28 +341,28 @@ export default function AccountsPage() {
         });
         return;
       }
-      
+
       // Include limit parameter to fetch all accounts (not just default 50)
       const filterWithLimit = { ...currentTenantFilter, limit: 10000 };
       const allAccounts = await cachedRequest(
-        "Account",
-        "filter",
+        'Account',
+        'filter',
         { filter: filterWithLimit },
         () => Account.filter(filterWithLimit),
       );
 
       const stats = {
         total: allAccounts.length,
-        customer: allAccounts.filter((a) => a.type === "customer").length,
-        prospect: allAccounts.filter((a) => a.type === "prospect").length,
-        partner: allAccounts.filter((a) => a.type === "partner").length,
-        competitor: allAccounts.filter((a) => a.type === "competitor").length,
-        inactive: allAccounts.filter((a) => a.type === "inactive").length || 0,
+        customer: allAccounts.filter((a) => a.type === 'customer').length,
+        prospect: allAccounts.filter((a) => a.type === 'prospect').length,
+        partner: allAccounts.filter((a) => a.type === 'partner').length,
+        competitor: allAccounts.filter((a) => a.type === 'competitor').length,
+        inactive: allAccounts.filter((a) => a.type === 'inactive').length || 0,
       };
 
       setTotalStats(stats);
     } catch (error) {
-      console.error("[Accounts] Failed to load stats:", error);
+      console.error('[Accounts] Failed to load stats:', error);
     }
   }, [user, cachedRequest, getTenantFilter]);
 
@@ -384,13 +385,13 @@ export default function AccountsPage() {
 
       // Include limit parameter to fetch all accounts for client-side filtering
       const filterWithLimit = { ...currentTenantFilter, limit: 10000 };
-      
+
       // Build sort string: prefix with - for descending
-      const sortString = sortDirection === "desc" ? `-${sortField}` : sortField;
-      
+      const sortString = sortDirection === 'desc' ? `-${sortField}` : sortField;
+
       const allAccounts = await cachedRequest(
-        "Account",
-        "filter",
+        'Account',
+        'filter',
         { filter: filterWithLimit, sort: sortString },
         () => Account.filter(filterWithLimit, sortString),
       );
@@ -400,29 +401,28 @@ export default function AccountsPage() {
       // Apply client-side filters
       if (searchTerm) {
         const search = searchTerm.toLowerCase();
-        filtered = filtered.filter((account) =>
-          account.name?.toLowerCase().includes(search) ||
-          account.website?.toLowerCase().includes(search) ||
-          account.email?.toLowerCase().includes(search) ||
-          account.phone?.includes(searchTerm)
+        filtered = filtered.filter(
+          (account) =>
+            account.name?.toLowerCase().includes(search) ||
+            account.website?.toLowerCase().includes(search) ||
+            account.email?.toLowerCase().includes(search) ||
+            account.phone?.includes(searchTerm),
         );
       }
 
-      if (typeFilter !== "all") {
+      if (typeFilter !== 'all') {
         filtered = filtered.filter((account) => account.type === typeFilter);
       }
 
       if (selectedTags.length > 0) {
-        filtered = filtered.filter((account) =>
-          Array.isArray(account.tags) &&
-          selectedTags.every((tag) => account.tags.includes(tag))
+        filtered = filtered.filter(
+          (account) =>
+            Array.isArray(account.tags) && selectedTags.every((tag) => account.tags.includes(tag)),
         );
       }
 
       // Sort by created_date descending
-      filtered.sort((a, b) =>
-        new Date(b.created_date) - new Date(a.created_date)
-      );
+      filtered.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
 
       setTotalItems(filtered.length);
 
@@ -440,7 +440,7 @@ export default function AccountsPage() {
       setAccounts(paginatedAccounts);
       loadingToast.showSuccess(`${accountsLabel} loading! ✨`);
     } catch (error) {
-      console.error("[Accounts] Failed to load accounts:", error);
+      console.error('[Accounts] Failed to load accounts:', error);
       loadingToast.showError(`Failed to load ${accountsLabel.toLowerCase()}`);
       setAccounts([]);
     } finally {
@@ -498,29 +498,29 @@ export default function AccountsPage() {
           // Apply client-side filters
           if (searchTerm) {
             const search = searchTerm.toLowerCase();
-            filtered = filtered.filter((account) =>
-              account.name?.toLowerCase().includes(search) ||
-              account.website?.toLowerCase().includes(search) ||
-              account.email?.toLowerCase().includes(search) ||
-              account.phone?.includes(searchTerm)
+            filtered = filtered.filter(
+              (account) =>
+                account.name?.toLowerCase().includes(search) ||
+                account.website?.toLowerCase().includes(search) ||
+                account.email?.toLowerCase().includes(search) ||
+                account.phone?.includes(searchTerm),
             );
           }
 
-          if (typeFilter !== "all") {
+          if (typeFilter !== 'all') {
             filtered = filtered.filter((account) => account.type === typeFilter);
           }
 
           if (selectedTags.length > 0) {
-            filtered = filtered.filter((account) =>
-              Array.isArray(account.tags) &&
-              selectedTags.every((tag) => account.tags.includes(tag))
+            filtered = filtered.filter(
+              (account) =>
+                Array.isArray(account.tags) &&
+                selectedTags.every((tag) => account.tags.includes(tag)),
             );
           }
 
           // Sort by created_date descending
-          filtered.sort((a, b) =>
-            new Date(b.created_date) - new Date(a.created_date)
-          );
+          filtered.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
 
           setTotalItems(filtered.length);
 
@@ -532,11 +532,11 @@ export default function AccountsPage() {
           // Update stats
           const stats = {
             total: freshData.length,
-            customer: freshData.filter((a) => a.type === "customer").length,
-            prospect: freshData.filter((a) => a.type === "prospect").length,
-            partner: freshData.filter((a) => a.type === "partner").length,
-            competitor: freshData.filter((a) => a.type === "competitor").length,
-            inactive: freshData.filter((a) => a.type === "inactive").length || 0,
+            customer: freshData.filter((a) => a.type === 'customer').length,
+            prospect: freshData.filter((a) => a.type === 'prospect').length,
+            partner: freshData.filter((a) => a.type === 'partner').length,
+            competitor: freshData.filter((a) => a.type === 'competitor').length,
+            inactive: freshData.filter((a) => a.type === 'inactive').length || 0,
           };
           setTotalStats(stats);
         } catch (error) {
@@ -548,7 +548,15 @@ export default function AccountsPage() {
     };
     window.addEventListener('entity-modified', handleEntityModified);
     return () => window.removeEventListener('entity-modified', handleEntityModified);
-  }, [clearCacheByKey, getTenantFilter, searchTerm, typeFilter, selectedTags, currentPage, pageSize]);
+  }, [
+    clearCacheByKey,
+    getTenantFilter,
+    searchTerm,
+    typeFilter,
+    selectedTags,
+    currentPage,
+    pageSize,
+  ]);
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -560,7 +568,7 @@ export default function AccountsPage() {
   // Handle page change
   const handlePageChange = useCallback((newPage) => {
     setCurrentPage(newPage);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
   // Handle page size change
@@ -577,7 +585,7 @@ export default function AccountsPage() {
     accounts.forEach((account) => {
       if (Array.isArray(account.tags)) {
         account.tags.forEach((tag) => {
-          if (tag && typeof tag === "string") {
+          if (tag && typeof tag === 'string') {
             tagCounts[tag] = (tagCounts[tag] || 0) + 1;
           }
         });
@@ -614,27 +622,20 @@ export default function AccountsPage() {
 
   const handleSave = async () => {
     const wasEditing = !!editingAccount;
-    
+
     try {
       // Clear cache and reload BEFORE closing the dialog
-      clearCacheByKey("Account");
-      await Promise.all([
-        loadAccounts(),
-        loadTotalStats(),
-      ]);
-      
+      clearCacheByKey('Account');
+      await Promise.all([loadAccounts(), loadTotalStats()]);
+
       // Now close the dialog after data is fresh
       setIsFormOpen(false);
       setEditingAccount(null);
-      
-      toast.success(
-        wasEditing
-          ? "Account updated successfully"
-          : "Account created successfully",
-      );
+
+      toast.success(wasEditing ? 'Account updated successfully' : 'Account created successfully');
     } catch (error) {
       console.error('[Accounts] Error in handleSave:', error);
-      toast.error("Failed to refresh account list");
+      toast.error('Failed to refresh account list');
       // Still close the dialog even on error
       setIsFormOpen(false);
       setEditingAccount(null);
@@ -643,30 +644,26 @@ export default function AccountsPage() {
 
   const handleDelete = async (id) => {
     const confirmed = await confirm({
-      title: "Delete account?",
-      description: "This action cannot be undone.",
-      variant: "destructive",
-      confirmText: "Delete",
-      cancelText: "Cancel",
+      title: 'Delete account?',
+      description: 'This action cannot be undone.',
+      variant: 'destructive',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
     });
     if (!confirmed) return;
 
     try {
       await Account.delete(id);
-      clearCacheByKey("Account");
-      
+      clearCacheByKey('Account');
+
       // Reload data properly
-      await Promise.all([
-        loadAccounts(),
-        loadTotalStats()
-      ]);
-      
-      toast.success("Account deleted successfully");
+      await Promise.all([loadAccounts(), loadTotalStats()]);
+
+      toast.success('Account deleted successfully');
     } catch (error) {
-      console.error("Failed to delete account:", error);
-      const errorMsg = error?.response?.status === 404 
-        ? "Account already deleted" 
-        : "Failed to delete account";
+      console.error('Failed to delete account:', error);
+      const errorMsg =
+        error?.response?.status === 404 ? 'Account already deleted' : 'Failed to delete account';
       toast.error(errorMsg);
       // Reload to sync UI state
       await loadAccounts();
@@ -680,38 +677,44 @@ export default function AccountsPage() {
         !window.confirm(
           `Delete ALL ${totalItems} account(s) matching current filters? This cannot be undone!`,
         )
-      ) return;
+      )
+        return;
 
       try {
         startProgress({ message: 'Fetching accounts to delete...' });
         // Re-fetch all matching accounts (bypass cache to get fresh data)
         const currentTenantFilter = { ...getTenantFilter(), limit: 10000 };
-        const sortString = sortDirection === "desc" ? `-${sortField}` : sortField;
+        const sortString = sortDirection === 'desc' ? `-${sortField}` : sortField;
         const allAccounts = await Account.filter(currentTenantFilter, sortString);
 
         // Apply client-side filters to match what the user sees
         let filtered = allAccounts || [];
         if (searchTerm) {
           const search = searchTerm.toLowerCase();
-          filtered = filtered.filter((a) =>
-            a.name?.toLowerCase().includes(search) ||
-            a.website?.toLowerCase().includes(search) ||
-            a.email?.toLowerCase().includes(search) ||
-            a.phone?.includes(searchTerm)
+          filtered = filtered.filter(
+            (a) =>
+              a.name?.toLowerCase().includes(search) ||
+              a.website?.toLowerCase().includes(search) ||
+              a.email?.toLowerCase().includes(search) ||
+              a.phone?.includes(searchTerm),
           );
         }
-        if (typeFilter !== "all") {
+        if (typeFilter !== 'all') {
           filtered = filtered.filter((a) => a.type === typeFilter);
         }
         if (selectedTags.length > 0) {
-          filtered = filtered.filter((a) =>
-            Array.isArray(a.tags) && selectedTags.every((tag) => a.tags.includes(tag))
+          filtered = filtered.filter(
+            (a) => Array.isArray(a.tags) && selectedTags.every((tag) => a.tags.includes(tag)),
           );
         }
 
         const deleteCount = filtered.length;
 
-        updateProgress({ message: `Deleting ${deleteCount} accounts...`, total: deleteCount, current: 0 });
+        updateProgress({
+          message: `Deleting ${deleteCount} accounts...`,
+          total: deleteCount,
+          current: 0,
+        });
 
         // Delete in batches using allSettled to handle partial failures
         const BATCH_SIZE = 50;
@@ -724,27 +727,27 @@ export default function AccountsPage() {
             if (r.status === 'fulfilled') successCount++;
             else failCount++;
           });
-          updateProgress({ current: successCount + failCount, message: `Deleted ${successCount} of ${deleteCount} accounts...` });
+          updateProgress({
+            current: successCount + failCount,
+            message: `Deleted ${successCount} of ${deleteCount} accounts...`,
+          });
         }
 
         completeProgress();
         setSelectedAccounts(new Set());
         setSelectAllMode(false);
-        clearCacheByKey("Account");
-        await Promise.all([
-          loadAccounts(),
-          loadTotalStats(),
-        ]);
+        clearCacheByKey('Account');
+        await Promise.all([loadAccounts(), loadTotalStats()]);
         if (successCount > 0) toast.success(`${successCount} account(s) deleted`);
         if (failCount > 0) toast.error(`${failCount} account(s) failed to delete`);
       } catch (error) {
         completeProgress();
-        console.error("Failed to delete accounts:", error);
-        toast.error("Failed to delete accounts");
+        console.error('Failed to delete accounts:', error);
+        toast.error('Failed to delete accounts');
       }
     } else {
       if (!selectedAccounts || selectedAccounts.size === 0) {
-        toast.error("No accounts selected");
+        toast.error('No accounts selected');
         return;
       }
 
@@ -754,52 +757,58 @@ export default function AccountsPage() {
 
       try {
         const accountIds = [...selectedAccounts];
-        console.log('[Accounts] Starting bulk delete:', { count: accountIds.length, ids: accountIds });
-        
+        console.log('[Accounts] Starting bulk delete:', {
+          count: accountIds.length,
+          ids: accountIds,
+        });
+
         if (accountIds.length === 0) {
-          toast.error("No accounts selected for deletion");
+          toast.error('No accounts selected for deletion');
           return;
         }
-        
+
         const selectedCount = accountIds.length;
-        startProgress({ message: `Deleting ${selectedCount} accounts...`, total: selectedCount, current: 0 });
-        
+        startProgress({
+          message: `Deleting ${selectedCount} accounts...`,
+          total: selectedCount,
+          current: 0,
+        });
+
         const BATCH_SIZE = 50;
         let succeeded = 0;
         let failed = 0;
-        
+
         for (let i = 0; i < accountIds.length; i += BATCH_SIZE) {
           const batch = accountIds.slice(i, i + BATCH_SIZE);
-          const batchResults = await Promise.allSettled(
-            batch.map((id) => Account.delete(id)),
-          );
+          const batchResults = await Promise.allSettled(batch.map((id) => Account.delete(id)));
           batchResults.forEach((r) => {
             if (r.status === 'fulfilled') succeeded++;
             else {
               const is404 = r.reason?.response?.status === 404;
-              if (is404) succeeded++; // Count 404s as already deleted
+              if (is404)
+                succeeded++; // Count 404s as already deleted
               else {
                 console.error('[Accounts] Delete failed:', r.reason);
                 failed++;
               }
             }
           });
-          updateProgress({ current: succeeded + failed, message: `Deleted ${succeeded} of ${selectedCount} accounts...` });
+          updateProgress({
+            current: succeeded + failed,
+            message: `Deleted ${succeeded} of ${selectedCount} accounts...`,
+          });
         }
-        
+
         completeProgress();
         console.log('[Accounts] Bulk delete results:', { succeeded, failed });
-        
+
         // Clear selection BEFORE reloading to prevent race condition
         setSelectedAccounts(new Set());
-        
+
         // Clear cache and reload data properly
-        clearCacheByKey("Account");
-        await Promise.all([
-          loadAccounts(),
-          loadTotalStats()
-        ]);
-        
+        clearCacheByKey('Account');
+        await Promise.all([loadAccounts(), loadTotalStats()]);
+
         if (failed > 0) {
           toast.error(`${succeeded} deleted, ${failed} failed`);
         } else {
@@ -807,8 +816,8 @@ export default function AccountsPage() {
         }
       } catch (error) {
         completeProgress();
-        console.error("Failed to delete accounts:", error);
-        toast.error("Failed to delete accounts");
+        console.error('Failed to delete accounts:', error);
+        toast.error('Failed to delete accounts');
         setSelectedAccounts(new Set());
         await Promise.all([loadAccounts(), loadTotalStats()]);
       }
@@ -821,18 +830,19 @@ export default function AccountsPage() {
         !window.confirm(
           `Update type for ALL ${totalItems} account(s) matching current filters to ${newType}?`,
         )
-      ) return;
+      )
+        return;
 
       try {
         let currentTenantFilter = getTenantFilter();
         // The employee scope filter is already applied within getTenantFilter()
 
-        if (typeFilter !== "all") {
+        if (typeFilter !== 'all') {
           currentTenantFilter = { ...currentTenantFilter, type: typeFilter };
         }
 
         if (searchTerm) {
-          const searchRegex = { $regex: searchTerm, $options: "i" };
+          const searchRegex = { $regex: searchTerm, $options: 'i' };
           currentTenantFilter = {
             ...currentTenantFilter,
             $or: [
@@ -852,91 +862,83 @@ export default function AccountsPage() {
           };
         }
 
-        const allAccountsToUpdate = await cachedRequest("Account", "filter", {
-          filter: currentTenantFilter,
-          sort: "id",
-          limit: 10000,
-        }, () => Account.filter(currentTenantFilter, "id", 10000));
+        const allAccountsToUpdate = await cachedRequest(
+          'Account',
+          'filter',
+          {
+            filter: currentTenantFilter,
+            sort: 'id',
+            limit: 10000,
+          },
+          () => Account.filter(currentTenantFilter, 'id', 10000),
+        );
         const updateCount = allAccountsToUpdate.length;
 
         // Update in batches
         const BATCH_SIZE = 50;
         for (let i = 0; i < allAccountsToUpdate.length; i += BATCH_SIZE) {
           const batch = allAccountsToUpdate.slice(i, i + BATCH_SIZE);
-          await Promise.all(
-            batch.map((a) => Account.update(a.id, { type: newType })),
-          );
+          await Promise.all(batch.map((a) => Account.update(a.id, { type: newType })));
         }
 
         setSelectedAccounts(new Set());
         setSelectAllMode(false);
-        clearCacheByKey("Account");
-        await Promise.all([
-          loadAccounts(),
-          loadTotalStats(),
-        ]);
+        clearCacheByKey('Account');
+        await Promise.all([loadAccounts(), loadTotalStats()]);
         toast.success(`Updated ${updateCount} account(s) to ${newType}`);
       } catch (error) {
-        console.error("Failed to update accounts:", error);
-        toast.error("Failed to update accounts");
+        console.error('Failed to update accounts:', error);
+        toast.error('Failed to update accounts');
       }
     } else {
       if (!selectedAccounts || selectedAccounts.size === 0) {
-        toast.error("No accounts selected");
+        toast.error('No accounts selected');
         return;
       }
 
       try {
-        const promises = [...selectedAccounts].map((id) =>
-          Account.update(id, { type: newType })
-        );
+        const promises = [...selectedAccounts].map((id) => Account.update(id, { type: newType }));
 
         await Promise.all(promises);
         setSelectedAccounts(new Set());
-        clearCacheByKey("Account");
-        await Promise.all([
-          loadAccounts(),
-          loadTotalStats(),
-        ]);
+        clearCacheByKey('Account');
+        await Promise.all([loadAccounts(), loadTotalStats()]);
         toast.success(`Updated ${promises.length} account(s) to ${newType}`);
       } catch (error) {
-        console.error("Failed to update accounts:", error);
-        toast.error("Failed to update accounts");
+        console.error('Failed to update accounts:', error);
+        toast.error('Failed to update accounts');
       }
     }
   };
 
   const handleBulkAssign = async (assignedTo) => {
     if (selectAllMode) {
-      if (
-        !window.confirm(
-          `Assign ALL ${totalItems} account(s) matching current filters?`,
-        )
-      ) return;
+      if (!window.confirm(`Assign ALL ${totalItems} account(s) matching current filters?`)) return;
 
       try {
         // Re-fetch all matching accounts (bypass cache to get fresh data)
         const currentTenantFilter = { ...getTenantFilter(), limit: 10000 };
-        const sortString = sortDirection === "desc" ? `-${sortField}` : sortField;
+        const sortString = sortDirection === 'desc' ? `-${sortField}` : sortField;
         const allAccounts = await Account.filter(currentTenantFilter, sortString);
 
         // Apply client-side filters to match what the user sees
         let filtered = allAccounts || [];
         if (searchTerm) {
           const search = searchTerm.toLowerCase();
-          filtered = filtered.filter((a) =>
-            a.name?.toLowerCase().includes(search) ||
-            a.website?.toLowerCase().includes(search) ||
-            a.email?.toLowerCase().includes(search) ||
-            a.phone?.includes(searchTerm)
+          filtered = filtered.filter(
+            (a) =>
+              a.name?.toLowerCase().includes(search) ||
+              a.website?.toLowerCase().includes(search) ||
+              a.email?.toLowerCase().includes(search) ||
+              a.phone?.includes(searchTerm),
           );
         }
-        if (typeFilter !== "all") {
+        if (typeFilter !== 'all') {
           filtered = filtered.filter((a) => a.type === typeFilter);
         }
         if (selectedTags.length > 0) {
-          filtered = filtered.filter((a) =>
-            Array.isArray(a.tags) && selectedTags.every((tag) => a.tags.includes(tag))
+          filtered = filtered.filter(
+            (a) => Array.isArray(a.tags) && selectedTags.every((tag) => a.tags.includes(tag)),
           );
         }
 
@@ -949,9 +951,7 @@ export default function AccountsPage() {
         for (let i = 0; i < filtered.length; i += BATCH_SIZE) {
           const batch = filtered.slice(i, i + BATCH_SIZE);
           const results = await Promise.allSettled(
-            batch.map((a) =>
-              Account.update(a.id, { assigned_to: assignedTo || null })
-            ),
+            batch.map((a) => Account.update(a.id, { assigned_to: assignedTo || null })),
           );
           results.forEach((r) => {
             if (r.status === 'fulfilled') successCount++;
@@ -961,39 +961,33 @@ export default function AccountsPage() {
 
         setSelectedAccounts(new Set());
         setSelectAllMode(false);
-        clearCacheByKey("Account");
-        await Promise.all([
-          loadAccounts(),
-          loadTotalStats(),
-        ]);
+        clearCacheByKey('Account');
+        await Promise.all([loadAccounts(), loadTotalStats()]);
         if (successCount > 0) toast.success(`Assigned ${successCount} account(s)`);
         if (failCount > 0) toast.error(`${failCount} account(s) failed to assign`);
       } catch (error) {
-        console.error("Failed to assign accounts:", error);
-        toast.error("Failed to assign accounts");
+        console.error('Failed to assign accounts:', error);
+        toast.error('Failed to assign accounts');
       }
     } else {
       if (!selectedAccounts || selectedAccounts.size === 0) {
-        toast.error("No accounts selected");
+        toast.error('No accounts selected');
         return;
       }
 
       try {
         const promises = [...selectedAccounts].map((id) =>
-          Account.update(id, { assigned_to: assignedTo || null })
+          Account.update(id, { assigned_to: assignedTo || null }),
         );
 
         await Promise.all(promises);
         setSelectedAccounts(new Set());
-        clearCacheByKey("Account");
-        await Promise.all([
-          loadAccounts(),
-          loadTotalStats(),
-        ]);
+        clearCacheByKey('Account');
+        await Promise.all([loadAccounts(), loadTotalStats()]);
         toast.success(`Assigned ${promises.length} account(s)`);
       } catch (error) {
-        console.error("Failed to assign accounts:", error);
-        toast.error("Failed to assign accounts");
+        console.error('Failed to assign accounts:', error);
+        toast.error('Failed to assign accounts');
       }
     }
   };
@@ -1035,17 +1029,14 @@ export default function AccountsPage() {
   };
 
   const handleRefresh = async () => {
-    clearCacheByKey("Account");
-    clearCacheByKey("Employee");
-    clearCacheByKey("User"); // Clear User cache as well since it's loaded with cachedRequest
-    clearCacheByKey("Contact"); // Clear Contact cache
+    clearCacheByKey('Account');
+    clearCacheByKey('Employee');
+    clearCacheByKey('User'); // Clear User cache as well since it's loaded with cachedRequest
+    clearCacheByKey('Contact'); // Clear Contact cache
     // Also reset supportingDataLoaded ref so it can reload
     supportingDataLoaded.current = false;
-    await Promise.all([
-      loadAccounts(),
-      loadTotalStats(),
-    ]);
-    toast.success("Accounts refreshed");
+    await Promise.all([loadAccounts(), loadTotalStats()]);
+    toast.success('Accounts refreshed');
   };
 
   const handleTypeFilterClick = (type) => {
@@ -1054,28 +1045,28 @@ export default function AccountsPage() {
   };
 
   const handleClearFilters = () => {
-    setSearchTerm("");
-    setTypeFilter("all");
+    setSearchTerm('');
+    setTypeFilter('all');
     setSelectedTags([]);
     // currentPage reset handled by useEffect for filters
     handleClearSelection();
   };
 
   const hasActiveFilters = useMemo(() => {
-    return searchTerm !== "" || typeFilter !== "all" || selectedTags.length > 0;
+    return searchTerm !== '' || typeFilter !== 'all' || selectedTags.length > 0;
   }, [searchTerm, typeFilter, selectedTags]);
 
   // AiSHA events listener - allows AI to trigger page actions
   useAiShaEvents({
     entityType: 'accounts',
     onOpenEdit: ({ id }) => {
-      const account = accounts.find(a => a.id === id);
+      const account = accounts.find((a) => a.id === id);
       if (account) {
         setEditingAccount(account);
         setIsFormOpen(true);
       } else {
         // Account not in current page, try to fetch it
-        Account.get(id).then(result => {
+        Account.get(id).then((result) => {
           if (result) {
             setEditingAccount(result);
             setIsFormOpen(true);
@@ -1085,7 +1076,7 @@ export default function AccountsPage() {
     },
     onSelectRow: ({ id }) => {
       // Highlight the row and open detail panel
-      const account = accounts.find(a => a.id === id);
+      const account = accounts.find((a) => a.id === id);
       if (account) {
         setDetailAccount(account);
         setIsDetailOpen(true);
@@ -1108,353 +1099,350 @@ export default function AccountsPage() {
 
   return (
     <>
-    <TooltipProvider>
-      <div className="space-y-6">
-        <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-800 border-slate-700 text-slate-200">
-            <DialogHeader>
-              <DialogTitle className="text-slate-100">
-                {editingAccount ? `Edit ${accountLabel}` : `Add New ${accountLabel}`}
-              </DialogTitle>
-            </DialogHeader>
-            <AccountForm
-              account={editingAccount}
-              // AccountForm now handles Account.create/update internally, just handle refresh
-              onSubmit={async (result) => {
-                console.log('[Accounts] Account saved:', result);
-                await handleSave();
-              }}
-              onCancel={() => {
-                setIsFormOpen(false);
-                setEditingAccount(null);
-              }}
-              user={user}
-            />
-          </DialogContent>
-        </Dialog>
-
-        <CsvImportDialog
-          open={isImportOpen}
-          onOpenChange={setIsImportOpen}
-          schema={Account.schema ? Account.schema() : null}
-          onSuccess={async () => {
-            clearCacheByKey("Account");
-            await Promise.all([
-              loadAccounts(),
-              loadTotalStats(),
-            ]);
-          }}
-        />
-
-        <AccountDetailPanel
-          account={detailAccount}
-          assignedUserName={assignedToMap[detailAccount?.assigned_to] || detailAccount?.assigned_to}
-          open={isDetailOpen}
-          onOpenChange={() => {
-            setIsDetailOpen(false);
-            setDetailAccount(null);
-          }}
-          onEdit={(account) => {
-            setEditingAccount(account);
-            setIsFormOpen(true);
-            setIsDetailOpen(false);
-          }}
-          onDelete={async (id) => {
-            await handleDelete(id);
-            setIsDetailOpen(false);
-          }}
-          onRefresh={() => loadAccounts()}
-          user={user}
-        />
-
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-3xl font-bold text-slate-100">{accountsLabel}</h1>
-              <ComponentHelp 
-                title="Accounts Management Guide" 
-                description="Learn how to create, filter, and manage your accounts effectively."
-                videoUrl="https://www.youtube.com/embed/dQw4w9WgXcQ" 
+      <TooltipProvider>
+        <div className="space-y-6">
+          <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-800 border-slate-700 text-slate-200">
+              <DialogHeader>
+                <DialogTitle className="text-slate-100">
+                  {editingAccount ? `Edit ${accountLabel}` : `Add New ${accountLabel}`}
+                </DialogTitle>
+              </DialogHeader>
+              <AccountForm
+                account={editingAccount}
+                // AccountForm now handles Account.create/update internally, just handle refresh
+                onSubmit={async (result) => {
+                  console.log('[Accounts] Account saved:', result);
+                  await handleSave();
+                }}
+                onCancel={() => {
+                  setIsFormOpen(false);
+                  setEditingAccount(null);
+                }}
+                user={user}
               />
-            </div>
-            <p className="text-slate-400 mt-1">
-              Manage your company {accountsLabel.toLowerCase()} and partnerships.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <RefreshButton onClick={handleRefresh} loading={loading} />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  onClick={() =>
-                    setViewMode(viewMode === "list" ? "grid" : "list")}
-                  className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
-                >
-                  {viewMode === "list"
-                    ? <Grid className="w-4 h-4" />
-                    : <List className="w-4 h-4" />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Switch to {viewMode === "list" ? "card" : "list"} view</p>
-              </TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsImportOpen(true)}
-                  className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
-                >
-                  <Upload className="w-4 h-4 mr-2" />
-                  Import
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Import accounts from CSV</p>
-              </TooltipContent>
-            </Tooltip>
-            <CsvExportButton
-              entityName="Account"
-              data={accounts}
-              filename="accounts_export"
-            />
-            {(selectedAccounts.size > 0 || selectAllMode) && (
-              <BulkActionsMenu
-                selectedCount={selectAllMode
-                  ? totalItems
-                  : selectedAccounts.size}
-                onBulkTypeChange={handleBulkTypeChange}
-                onBulkAssign={handleBulkAssign}
-                onBulkDelete={handleBulkDelete}
-                employees={employees}
-                selectAllMode={selectAllMode}
-                totalCount={totalItems}
-              />
-            )}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  onClick={() => {
-                    setEditingAccount(null);
-                    setIsFormOpen(true);
-                  }}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add {accountLabel}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Create new {accountLabel.toLowerCase()}</p>
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        </div>
+            </DialogContent>
+          </Dialog>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-          {[
-            {
-              label: `Total ${accountsLabel}`,
-              value: totalStats.total,
-              filter: "all",
-              bgColor: "bg-slate-800",
-              tooltip: "total_all",
-            },
-            {
-              label: "Prospects",
-              value: totalStats.prospect,
-              filter: "prospect",
-              bgColor: "bg-blue-900/20",
-              borderColor: "border-blue-700",
-              tooltip: "account_prospect",
-            },
-            {
-              label: "Customers",
-              value: totalStats.customer,
-              filter: "customer",
-              bgColor: "bg-emerald-900/20",
-              borderColor: "border-emerald-700",
-              tooltip: "account_customer",
-            },
-            {
-              label: "Partners",
-              value: totalStats.partner,
-              filter: "partner",
-              bgColor: "bg-purple-900/20",
-              borderColor: "border-purple-700",
-              tooltip: "account_partner",
-            },
-            {
-              label: "Competitors",
-              value: totalStats.competitor,
-              filter: "competitor",
-              bgColor: "bg-red-900/20",
-              borderColor: "border-red-700",
-              tooltip: "account_competitor",
-            },
-            {
-              label: "Inactive",
-              value: totalStats.inactive,
-              filter: "inactive",
-              bgColor: "bg-gray-900/20",
-              borderColor: "border-gray-700",
-              tooltip: "account_inactive",
-            },
-          ].filter(stat => stat.tooltip === 'total_all' || isCardVisible(stat.tooltip)).map((stat) => (
-            <div
-              key={stat.label}
-              className={`${stat.bgColor} ${
-                stat.borderColor || "border-slate-700"
-              } border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
-                typeFilter === stat.filter
-                  ? "ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900"
-                  : ""
-              }`}
-              onClick={() => handleTypeFilterClick(stat.filter)}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-sm text-slate-400">{getCardLabel(stat.tooltip) || stat.label}</p>
-                <StatusHelper statusKey={stat.tooltip} />
+          <CsvImportDialog
+            open={isImportOpen}
+            onOpenChange={setIsImportOpen}
+            schema={Account.schema ? Account.schema() : null}
+            onSuccess={async () => {
+              clearCacheByKey('Account');
+              await Promise.all([loadAccounts(), loadTotalStats()]);
+            }}
+          />
+
+          <AccountDetailPanel
+            account={detailAccount}
+            assignedUserName={
+              assignedToMap[detailAccount?.assigned_to] || detailAccount?.assigned_to
+            }
+            open={isDetailOpen}
+            onOpenChange={() => {
+              setIsDetailOpen(false);
+              setDetailAccount(null);
+            }}
+            onEdit={(account) => {
+              setEditingAccount(account);
+              setIsFormOpen(true);
+              setIsDetailOpen(false);
+            }}
+            onDelete={async (id) => {
+              await handleDelete(id);
+              setIsDetailOpen(false);
+            }}
+            onRefresh={() => loadAccounts()}
+            user={user}
+          />
+
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-3xl font-bold text-slate-100">{accountsLabel}</h1>
+                <ComponentHelp
+                  title="Accounts Management Guide"
+                  description="Learn how to create, filter, and manage your accounts effectively."
+                  videoUrl="https://www.youtube.com/embed/dQw4w9WgXcQ"
+                />
               </div>
-              <p className="text-2xl font-bold text-slate-100">{stat.value}</p>
+              <p className="text-slate-400 mt-1">
+                Manage your company {accountsLabel.toLowerCase()} and partnerships.
+              </p>
             </div>
-          ))}
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-3 w-5 h-5 text-slate-500" />
-            <Input
-              placeholder="Search accounts by name, website, email, phone, city or industry..."
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                // currentPage reset handled by useEffect for filters
-              }}
-              className="pl-10 bg-slate-800 border-slate-700 text-slate-200"
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <TagFilter
-              allTags={allTags}
-              selectedTags={selectedTags}
-              onTagsChange={(newTags) => {
-                setSelectedTags(newTags);
-                // currentPage reset handled by useEffect for filters
-              }}
-            />
-
-            {/* Sort Dropdown */}
-            <Select
-              value={`${sortField}:${sortDirection}`}
-              onValueChange={(value) => {
-                const option = sortOptions.find(o => `${o.field}:${o.direction}` === value);
-                if (option) {
-                  setSortField(option.field);
-                  setSortDirection(option.direction);
-                  setCurrentPage(1);
-                }
-              }}
-            >
-              <SelectTrigger className="w-44 bg-slate-800 border-slate-700 text-slate-200">
-                <SelectValue placeholder="Sort by..." />
-              </SelectTrigger>
-              <SelectContent className="bg-slate-800 border-slate-700">
-                {sortOptions.map((option) => (
-                  <SelectItem
-                    key={`${option.field}:${option.direction}`}
-                    value={`${option.field}:${option.direction}`}
-                    className="text-slate-200 hover:bg-slate-700"
-                  >
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {hasActiveFilters && (
+            <div className="flex flex-wrap items-center gap-2">
+              <RefreshButton onClick={handleRefresh} loading={loading} />
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="outline"
-                    size="sm"
-                    onClick={handleClearFilters}
+                    onClick={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
                     className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
                   >
-                    <X className="w-4 h-4 mr-1" />
-                    Clear
+                    {viewMode === 'list' ? (
+                      <Grid className="w-4 h-4" />
+                    ) : (
+                      <List className="w-4 h-4" />
+                    )}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Clear all filters</p>
+                  <p>Switch to {viewMode === 'list' ? 'card' : 'list'} view</p>
                 </TooltipContent>
               </Tooltip>
-            )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsImportOpen(true)}
+                    className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
+                  >
+                    <Upload className="w-4 h-4 mr-2" />
+                    Import
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Import accounts from CSV</p>
+                </TooltipContent>
+              </Tooltip>
+              <CsvExportButton entityName="Account" data={accounts} filename="accounts_export" />
+              {(selectedAccounts.size > 0 || selectAllMode) && (
+                <BulkActionsMenu
+                  selectedCount={selectAllMode ? totalItems : selectedAccounts.size}
+                  onBulkTypeChange={handleBulkTypeChange}
+                  onBulkAssign={handleBulkAssign}
+                  onBulkDelete={handleBulkDelete}
+                  employees={employees}
+                  selectAllMode={selectAllMode}
+                  totalCount={totalItems}
+                />
+              )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={() => {
+                      setEditingAccount(null);
+                      setIsFormOpen(true);
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add {accountLabel}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Create new {accountLabel.toLowerCase()}</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
           </div>
-        </div>
 
-        {/* Select All Banner */}
-        {selectedAccounts.size === accounts.length && accounts.length > 0 &&
-          !selectAllMode && totalItems > accounts.length && (
-          <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-blue-400" />
-              <span className="text-blue-200">
-                All {accounts.length} accounts on this page are selected.
-              </span>
-              <Button
-                variant="link"
-                onClick={handleSelectAllRecords}
-                className="text-blue-400 hover:text-blue-300 p-0 h-auto"
+          {/* Stats Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+            {[
+              {
+                label: `Total ${accountsLabel}`,
+                value: totalStats.total,
+                filter: 'all',
+                bgColor: 'bg-slate-800',
+                tooltip: 'total_all',
+              },
+              {
+                label: 'Prospects',
+                value: totalStats.prospect,
+                filter: 'prospect',
+                bgColor: 'bg-blue-900/20',
+                borderColor: 'border-blue-700',
+                tooltip: 'account_prospect',
+              },
+              {
+                label: 'Customers',
+                value: totalStats.customer,
+                filter: 'customer',
+                bgColor: 'bg-emerald-900/20',
+                borderColor: 'border-emerald-700',
+                tooltip: 'account_customer',
+              },
+              {
+                label: 'Partners',
+                value: totalStats.partner,
+                filter: 'partner',
+                bgColor: 'bg-purple-900/20',
+                borderColor: 'border-purple-700',
+                tooltip: 'account_partner',
+              },
+              {
+                label: 'Competitors',
+                value: totalStats.competitor,
+                filter: 'competitor',
+                bgColor: 'bg-red-900/20',
+                borderColor: 'border-red-700',
+                tooltip: 'account_competitor',
+              },
+              {
+                label: 'Inactive',
+                value: totalStats.inactive,
+                filter: 'inactive',
+                bgColor: 'bg-gray-900/20',
+                borderColor: 'border-gray-700',
+                tooltip: 'account_inactive',
+              },
+            ]
+              .filter((stat) => stat.tooltip === 'total_all' || isCardVisible(stat.tooltip))
+              .map((stat) => (
+                <div
+                  key={stat.label}
+                  className={`${stat.bgColor} ${
+                    stat.borderColor || 'border-slate-700'
+                  } border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
+                    typeFilter === stat.filter
+                      ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900'
+                      : ''
+                  }`}
+                  onClick={() => handleTypeFilterClick(stat.filter)}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-sm text-slate-400">
+                      {getCardLabel(stat.tooltip) || stat.label}
+                    </p>
+                    <StatusHelper statusKey={stat.tooltip} />
+                  </div>
+                  <p className="text-2xl font-bold text-slate-100">{stat.value}</p>
+                </div>
+              ))}
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-3 w-5 h-5 text-slate-500" />
+              <Input
+                placeholder="Search accounts by name, website, email, phone, city or industry..."
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  // currentPage reset handled by useEffect for filters
+                }}
+                className="pl-10 bg-slate-800 border-slate-700 text-slate-200"
+              />
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <TagFilter
+                allTags={allTags}
+                selectedTags={selectedTags}
+                onTagsChange={(newTags) => {
+                  setSelectedTags(newTags);
+                  // currentPage reset handled by useEffect for filters
+                }}
+              />
+
+              {/* Sort Dropdown */}
+              <Select
+                value={`${sortField}:${sortDirection}`}
+                onValueChange={(value) => {
+                  const option = sortOptions.find((o) => `${o.field}:${o.direction}` === value);
+                  if (option) {
+                    setSortField(option.field);
+                    setSortDirection(option.direction);
+                    setCurrentPage(1);
+                  }
+                }}
               >
-                Select all {totalItems} accounts matching current filters
+                <SelectTrigger className="w-44 bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue placeholder="Sort by..." />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  {sortOptions.map((option) => (
+                    <SelectItem
+                      key={`${option.field}:${option.direction}`}
+                      value={`${option.field}:${option.direction}`}
+                      className="text-slate-200 hover:bg-slate-700"
+                    >
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {hasActiveFilters && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleClearFilters}
+                      className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
+                    >
+                      <X className="w-4 h-4 mr-1" />
+                      Clear
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Clear all filters</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
+          </div>
+
+          {/* Select All Banner */}
+          {selectedAccounts.size === accounts.length &&
+            accounts.length > 0 &&
+            !selectAllMode &&
+            totalItems > accounts.length && (
+              <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5 text-blue-400" />
+                  <span className="text-blue-200">
+                    All {accounts.length} accounts on this page are selected.
+                  </span>
+                  <Button
+                    variant="link"
+                    onClick={handleSelectAllRecords}
+                    className="text-blue-400 hover:text-blue-300 p-0 h-auto"
+                  >
+                    Select all {totalItems} accounts matching current filters
+                  </Button>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleClearSelection}
+                  className="text-slate-400 hover:text-slate-200"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
+
+          {selectAllMode && (
+            <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-blue-400" />
+                <span className="text-blue-200 font-semibold">
+                  All {totalItems} accounts matching current filters are selected.
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleClearSelection}
+                className="text-slate-400 hover:text-slate-200"
+              >
+                Clear selection
               </Button>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleClearSelection}
-              className="text-slate-400 hover:text-slate-200"
-            >
-              <X className="w-4 h-4" />
-            </Button>
-          </div>
-        )}
+          )}
 
-        {selectAllMode && (
-          <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-blue-400" />
-              <span className="text-blue-200 font-semibold">
-                All {totalItems} accounts matching current filters are selected.
-              </span>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleClearSelection}
-              className="text-slate-400 hover:text-slate-200"
-            >
-              Clear selection
-            </Button>
-          </div>
-        )}
-
-        {loading && !initialLoadDone.current
-          ? (
+          {loading && !initialLoadDone.current ? (
             <div className="flex items-center justify-center py-20">
               <div className="text-center">
                 <Loader2 className="w-8 h-8 animate-spin text-blue-400 mx-auto mb-4" />
                 <p className="text-slate-400">Loading accounts...</p>
               </div>
             </div>
-          )
-          : accounts.length === 0
-          ? (
+          ) : accounts.length === 0 ? (
             <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-12 text-center">
               <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-slate-300 mb-2">
@@ -1462,7 +1450,7 @@ export default function AccountsPage() {
               </h3>
               <p className="text-slate-500 mb-6">
                 {hasActiveFilters
-                  ? "Try adjusting your filters or search term"
+                  ? 'Try adjusting your filters or search term'
                   : `Get started by adding your first ${accountLabel.toLowerCase()}`}
               </p>
               {!hasActiveFilters && (
@@ -1475,9 +1463,7 @@ export default function AccountsPage() {
                 </Button>
               )}
             </div>
-          )
-          : viewMode === "list"
-          ? (
+          ) : viewMode === 'list' ? (
             <>
               {/* List/Table View */}
               <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
@@ -1487,72 +1473,65 @@ export default function AccountsPage() {
                       <tr>
                         <th className="px-4 py-3 text-left">
                           <Checkbox
-                            checked={selectedAccounts.size ===
-                                accounts.length &&
-                              accounts.length > 0 && !selectAllMode}
+                            checked={
+                              selectedAccounts.size === accounts.length &&
+                              accounts.length > 0 &&
+                              !selectAllMode
+                            }
                             onCheckedChange={toggleSelectAll}
                             className="border-slate-600"
                           />
                         </th>
-                        <th className="px-4 py-3 text-left text-base font-medium text-slate-300">
+                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
                           Name
                         </th>
-                        <th className="px-4 py-3 text-left text-base font-medium text-slate-300">
+                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
                           Website
                         </th>
-                        <th className="px-4 py-3 text-left text-base font-medium text-slate-300">
+                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
                           Phone
                         </th>
-                        <th className="px-4 py-3 text-left text-base font-medium text-slate-300">
+                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
                           Industry
                         </th>
-                        <th className="px-4 py-3 text-left text-base font-medium text-slate-300">
+                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
                           Assigned To
                         </th>
-                        <th className="px-4 py-3 text-left text-base font-medium text-slate-300">
+                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
                           Type
                         </th>
-                        <th className="px-4 py-3 text-left text-base font-medium text-slate-300">
+                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
                           Actions
                         </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-700">
                       {accounts.map((account) => (
-                        <tr
-                          key={account.id}
-                          className="hover:bg-slate-700/30 transition-colors"
-                        >
+                        <tr key={account.id} className="hover:bg-slate-700/30 transition-colors">
                           <td className="px-4 py-3">
                             <Checkbox
-                              checked={selectedAccounts.has(account.id) ||
-                                selectAllMode}
-                              onCheckedChange={() =>
-                                toggleSelection(account.id)}
+                              checked={selectedAccounts.has(account.id) || selectAllMode}
+                              onCheckedChange={() => toggleSelection(account.id)}
                               className="border-slate-600"
                             />
                           </td>
+                          <td className="px-4 py-3 text-base text-slate-300">{account.name}</td>
                           <td className="px-4 py-3 text-base text-slate-300">
-                            {account.name}
-                          </td>
-                          <td className="px-4 py-3 text-base text-slate-300">
-                            {account.website
-                              ? (
-                                <a
-                                  href={account.website}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-blue-400 hover:text-blue-300"
-                                >
-                                  {account.website}
-                                </a>
-                              )
-                              : <span className="text-slate-500">—</span>}
-                          </td>
-                          <td className="px-4 py-3 text-base text-slate-300">
-                            {account.phone || (
+                            {account.website ? (
+                              <a
+                                href={account.website}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-400 hover:text-blue-300"
+                              >
+                                {account.website}
+                              </a>
+                            ) : (
                               <span className="text-slate-500">—</span>
                             )}
+                          </td>
+                          <td className="px-4 py-3 text-base text-slate-300">
+                            {account.phone || <span className="text-slate-500">—</span>}
                           </td>
                           <td className="px-4 py-3 text-base text-slate-300">
                             {formatIndustry(account.industry) || (
@@ -1560,8 +1539,7 @@ export default function AccountsPage() {
                             )}
                           </td>
                           <td className="px-4 py-3 text-base text-slate-300">
-                            {assignedToMap[account.assigned_to] ||
-                              account.assigned_to || (
+                            {assignedToMap[account.assigned_to] || account.assigned_to || (
                               <span className="text-slate-500">Unassigned</span>
                             )}
                           </td>
@@ -1577,7 +1555,7 @@ export default function AccountsPage() {
                               data-variant="status"
                               data-status={account.type}
                             >
-                              {account.type?.replace(/_/g, " ")}
+                              {account.type?.replace(/_/g, ' ')}
                             </Badge>
                           </td>
                           <td className="px-4 py-3">
@@ -1679,8 +1657,7 @@ export default function AccountsPage() {
                 loading={loading}
               />
             </>
-          )
-          : (
+          ) : (
             <>
               {/* Card View */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1696,8 +1673,7 @@ export default function AccountsPage() {
                     onDelete={handleDelete}
                     onViewDetails={handleViewDetails}
                     onClick={() => handleViewDetails(account)}
-                    isSelected={selectedAccounts.has(account.id) ||
-                      selectAllMode}
+                    isSelected={selectedAccounts.has(account.id) || selectAllMode}
                     onSelect={() => toggleSelection(account.id)}
                     user={user}
                   />
@@ -1715,9 +1691,9 @@ export default function AccountsPage() {
               />
             </>
           )}
-      </div>
-    </TooltipProvider>
-    {ConfirmDialogPortal}
+        </div>
+      </TooltipProvider>
+      {ConfirmDialogPortal}
     </>
   );
 }

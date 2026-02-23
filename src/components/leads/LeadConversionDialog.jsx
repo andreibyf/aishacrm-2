@@ -72,8 +72,6 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
 
       // Create or use existing account
       if (createAccount && accountName.trim()) {
-        console.log('Creating new account:', accountName);
-
         const newAccountData = {
           name: accountName,
           tenant_id: effectiveTenantId,
@@ -108,13 +106,11 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
         }
       } else if (!createAccount && selectedAccountId) {
         accountId = selectedAccountId;
-        console.log('Using existing account:', accountId);
       } else if (createAccount && !accountName.trim()) {
         throw new Error('Account name is required to create a new account.');
       }
 
       // Create contact from lead
-      console.log('Creating contact from lead');
       const newContact = await cachedRequest(
         'Contact',
         'create',
@@ -174,7 +170,6 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
       // Create opportunity if requested
       let opportunityId = null;
       if (createOpportunity && opportunityName.trim()) {
-        console.log('Creating opportunity');
         const newOpportunity = await cachedRequest(
           'Opportunity',
           'create',
@@ -216,7 +211,6 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
       }
 
       // Update lead as converted
-      console.log('Updating lead status to converted');
       await cachedRequest(
         'Lead',
         'update',
@@ -235,8 +229,6 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
             converted_account_id: accountId,
           }),
       );
-
-      console.log('Lead conversion completed successfully');
 
       if (cachedRequest.invalidate) {
         cachedRequest.invalidate('Lead', 'filter');
@@ -396,6 +388,17 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
             )}
           </div>
         </div>
+
+        {/* Warn when no account will be associated */}
+        {!createAccount && (!selectedAccountId || selectedAccountId === '__none__') && (
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 flex items-start gap-2">
+            <span className="mt-0.5">&#9888;</span>
+            <span>
+              No account selected. The contact will be created without an account association.
+              Consider selecting an existing account or creating a new one.
+            </span>
+          </div>
+        )}
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={isConverting}>

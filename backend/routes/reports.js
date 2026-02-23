@@ -943,10 +943,13 @@ export default function createReportRoutes(_pgPool) {
           })
         : Promise.resolve({});
 
-      // Fetch ALL opportunities for pipeline value calculation
-      const allOppsP = profileQuery('allOpportunities', async () => {
+      // Pipeline value: SUM(amount) for open opportunities (not closed_won/closed_lost/won/lost)
+      const pipelineValueP = profileQuery('pipelineValue', async () => {
         try {
-          let q = supabase.from('opportunities').select('id,name,amount,stage,created_date');
+          let q = supabase
+            .from('opportunities')
+            .select('amount')
+            .not('stage', 'in', '(won,closed_won,lost,closed_lost)');
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
           if (!includeTestData) {
             try {
@@ -956,9 +959,31 @@ export default function createReportRoutes(_pgPool) {
             }
           }
           const { data } = await q;
-          return Array.isArray(data) ? data : [];
+          return (data || []).reduce((sum, row) => sum + (parseFloat(row.amount) || 0), 0);
         } catch {
-          return [];
+          return 0;
+        }
+      });
+
+      // Won value: SUM(amount) for won/closed_won opportunities
+      const wonValueP = profileQuery('wonValue', async () => {
+        try {
+          let q = supabase
+            .from('opportunities')
+            .select('amount')
+            .in('stage', ['won', 'closed_won']);
+          if (tenant_id) q = q.eq('tenant_id', tenant_id);
+          if (!includeTestData) {
+            try {
+              q = q.or('is_test_data.is.false,is_test_data.is.null');
+            } catch {
+              /* ignore */
+            }
+          }
+          const { data } = await q;
+          return (data || []).reduce((sum, row) => sum + (parseFloat(row.amount) || 0), 0);
+        } catch {
+          return 0;
         }
       });
 
@@ -975,7 +1000,8 @@ export default function createReportRoutes(_pgPool) {
         recentActivities,
         recentLeads,
         recentOpportunities,
-        allOpps,
+        pipelineValue,
+        wonValue,
         funnelAggregates,
         leadSources,
       ] = await Promise.all([
@@ -991,25 +1017,11 @@ export default function createReportRoutes(_pgPool) {
         recentActivitiesP,
         recentLeadsP,
         recentOppsP,
-        allOppsP,
+        pipelineValueP,
+        wonValueP,
         funnelAggregatesP,
         leadSourcesP,
       ]);
-
-      // Calculate pipeline value from ALL opportunities
-      const pipelineValue = allOpps.reduce((sum, opp) => {
-        if (!['won', 'closed_won', 'lost', 'closed_lost'].includes(opp.stage)) {
-          return sum + (parseFloat(opp.amount) || 0);
-        }
-        return sum;
-      }, 0);
-
-      const wonValue = allOpps.reduce((sum, opp) => {
-        if (opp.stage === 'won' || opp.stage === 'closed_won') {
-          return sum + (parseFloat(opp.amount) || 0);
-        }
-        return sum;
-      }, 0);
 
       /**
        * Dashboard Bundle Structure

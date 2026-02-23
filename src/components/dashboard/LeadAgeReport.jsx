@@ -56,8 +56,6 @@ function LeadAgeReport(props) {
       try {
         const tenantFilter = props && props.tenantFilter ? props.tenantFilter : {};
 
-        console.log('LeadAgeReport: Using tenant filter from Dashboard:', tenantFilter);
-
         // Guard: Don't fetch if no tenant_id is present
         if (!tenantFilter?.tenant_id) {
           setLeads([]);
@@ -90,7 +88,7 @@ function LeadAgeReport(props) {
               let effectiveFilter = {
                 ...tenantFilter,
                 status: { $nin: ['converted', 'lost'] },
-                limit: 10000, // Fetch all leads, not just default 50
+                limit: 500, // Fetch enough for age distribution, not entire table
               };
               const activeLeadsFull = await cachedRequest(
                 'Lead',
@@ -121,10 +119,8 @@ function LeadAgeReport(props) {
         let effectiveFilter = {
           ...tenantFilter,
           status: { $nin: ['converted', 'lost'] },
-          limit: 10000, // Fetch all leads, not just default 50
+          limit: 500, // Fetch enough for age distribution, not entire table
         };
-
-        console.log('LeadAgeReport: Using effective filter:', effectiveFilter);
 
         const activeLeads = await cachedRequest(
           'Lead',
@@ -133,18 +129,6 @@ function LeadAgeReport(props) {
           function () {
             return Lead.filter(effectiveFilter);
           },
-        );
-
-        console.log('LeadAgeReport: Found active leads:', (activeLeads || []).length);
-        console.log(
-          'LeadAgeReport: Sample lead data:',
-          (activeLeads || []).slice(0, 3).map((l) => ({
-            id: l.id,
-            name: `${l.first_name} ${l.last_name}`,
-            status: l.status,
-            created_date: l.created_date,
-            created_at: l.created_at,
-          })),
         );
 
         const leadsWithAge = (activeLeads || []).map((lead) => {
@@ -167,16 +151,6 @@ function LeadAgeReport(props) {
             ...lead,
             ageInDays: isNaN(ageInDays) || ageInDays < 0 ? 0 : ageInDays,
           };
-        });
-
-        console.log('LeadAgeReport: Leads with calculated ages:', leadsWithAge.length);
-        console.log('LeadAgeReport: Age distribution sample:', {
-          total: leadsWithAge.length,
-          '0-7days': leadsWithAge.filter((l) => l.ageInDays >= 0 && l.ageInDays <= 7).length,
-          '8-14days': leadsWithAge.filter((l) => l.ageInDays >= 8 && l.ageInDays <= 14).length,
-          '15-21days': leadsWithAge.filter((l) => l.ageInDays >= 15 && l.ageInDays <= 21).length,
-          '22-30days': leadsWithAge.filter((l) => l.ageInDays >= 22 && l.ageInDays <= 30).length,
-          '30+days': leadsWithAge.filter((l) => l.ageInDays >= 31).length,
         });
 
         setLeads(leadsWithAge);
@@ -211,7 +185,6 @@ function LeadAgeReport(props) {
   }, [leads]);
 
   const handleRefresh = () => {
-    console.log('LeadAgeReport: Manual refresh triggered');
     clearCacheByKey('Lead');
     setRefreshKey((prev) => prev + 1);
   };

@@ -1,9 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { BizDevSource } from '@/api/entities';
-import { Account } from '@/api/entities';
+import { BizDevSource, Account } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import {
@@ -14,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  AlertCircle,
   Building2,
   Plus,
   Search,
@@ -23,6 +22,16 @@ import {
   TrendingUp,
   Trash2,
 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { useTenant } from '../components/shared/tenantContext';
 import { useApiManager } from '../components/shared/ApiManager';
@@ -55,6 +64,7 @@ export default function BizDevSourcesPage() {
   const [showBulkArchive, setShowBulkArchive] = useState(false);
   const [showBulkDelete, setShowBulkDelete] = useState(false);
   const [showArchiveIndex, setShowArchiveIndex] = useState(false);
+  const [confirmAction, setConfirmAction] = useState(null); // { type, source, title, description }
 
   const [searchTerm, setSearchTerm] = useState('');
   const [searchInput, setSearchInput] = useState('');
@@ -91,13 +101,15 @@ export default function BizDevSourcesPage() {
   const { logError } = useErrorLog();
   const loadingRef = useRef(false);
 
-  // DEBUG: Log what tenant ID we're getting
+  // Tenant value tracking (dev only)
   useEffect(() => {
-    console.log('🏢 BizDevSources tenant values:', {
-      selectedTenantId,
-      userTenantId: user?.tenant_id,
-      effectiveTenant: selectedTenantId || user?.tenant_id,
-    });
+    if (import.meta.env.DEV) {
+      console.log('BizDevSources tenant values:', {
+        selectedTenantId,
+        userTenantId: user?.tenant_id,
+        effectiveTenant: selectedTenantId || user?.tenant_id,
+      });
+    }
   }, [selectedTenantId, user?.tenant_id]);
 
   useEffect(() => {
@@ -185,7 +197,8 @@ export default function BizDevSourcesPage() {
     const tenantSwitched = prevTenantRef.current && prevTenantRef.current !== currentTenant;
 
     if (tenantSwitched) {
-      console.log('🔄 Tenant switched from', prevTenantRef.current, 'to', currentTenant);
+      if (import.meta.env.DEV)
+        console.log('Tenant switched from', prevTenantRef.current, 'to', currentTenant);
       // Tenant switched - clear cache and reload immediately
       // Cache clear is synchronous, so no delay needed
       clearCache();
@@ -241,13 +254,16 @@ export default function BizDevSourcesPage() {
     }
   };
 
-  const handleArchive = async (source) => {
-    if (
-      !confirm(`Archive "${source.company_name}"? This will mark it as archived but not delete it.`)
-    ) {
-      return;
-    }
+  const handleArchive = (source) => {
+    setConfirmAction({
+      type: 'archive',
+      source,
+      title: 'Archive BizDev Source',
+      description: `Archive "${source.company_name}"? This will mark it as archived but not delete it.`,
+    });
+  };
 
+  const executeArchive = async (source) => {
     try {
       await BizDevSource.update(source.id, {
         status: 'Archived',
@@ -302,19 +318,8 @@ export default function BizDevSourcesPage() {
       throw new Error('No tenant_id available');
     }
 
-    console.log('[BizDevSources] Promoting source:', {
-      id: sourceToPromote.id,
-      company_name: sourceToPromote.company_name,
-      tenant_id: tenantId,
-    });
-
     try {
-      console.log('[BizDevSources] About to call BizDevSource.promote with:', {
-        id: sourceToPromote.id,
-        tenantId,
-      });
       const result = await BizDevSource.promote(sourceToPromote.id, tenantId);
-      console.log('[BizDevSources] Promotion result:', result);
 
       // Optimistically update local state so stats reflect immediately
       setSources((prev) =>
@@ -352,8 +357,17 @@ export default function BizDevSourcesPage() {
         );
       }
 
+      const leadId = result?.lead?.id;
       toast.success('BizDev source promoted to lead', {
         description: `Created lead from: ${sourceToPromote.company_name || sourceToPromote.contact_person || 'prospect'}`,
+        action: leadId
+          ? {
+              label: 'View Lead',
+              onClick: () => {
+                window.location.href = `/Leads?highlight=${leadId}`;
+              },
+            }
+          : undefined,
       });
 
       // Clear only the BizDevSource cache to prevent stale data, but don't reload
@@ -428,15 +442,16 @@ export default function BizDevSourcesPage() {
     }
   };
 
-  const handleDeleteSingle = async (source) => {
-    if (
-      !window.confirm(
-        `Are you sure you want to delete "${source.company_name || source.source || 'this source'}"?`,
-      )
-    ) {
-      return;
-    }
+  const handleDeleteSingle = (source) => {
+    setConfirmAction({
+      type: 'delete',
+      source,
+      title: 'Delete BizDev Source',
+      description: `Are you sure you want to delete "${source.company_name || source.source || 'this source'}"? This action cannot be undone.`,
+    });
+  };
 
+  const executeDelete = async (source) => {
     try {
       await BizDevSource.delete(source.id);
       clearCacheByKey('BizDevSource');
@@ -447,6 +462,17 @@ export default function BizDevSourcesPage() {
         logError(handleApiError('Delete BizDev Source', error));
       }
       toast.error('Failed to delete BizDev source');
+    }
+  };
+
+  const handleConfirmAction = async () => {
+    if (!confirmAction) return;
+    const { type, source } = confirmAction;
+    setConfirmAction(null);
+    if (type === 'archive') {
+      await executeArchive(source);
+    } else if (type === 'delete') {
+      await executeDelete(source);
     }
   };
 
@@ -563,7 +589,7 @@ export default function BizDevSourcesPage() {
 
   return (
     <TooltipProvider>
-      <div className="min-h-screen bg-slate-900 p-4 sm:p-6">
+      <div className="space-y-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 flex items-center justify-center rounded-full bg-blue-900/30 border border-blue-700/50">
@@ -587,7 +613,7 @@ export default function BizDevSourcesPage() {
             <Button
               variant="outline"
               onClick={() => setShowArchiveIndex(true)}
-              className="border-slate-700 text-slate-300 hover:bg-slate-800"
+              className="border-slate-700 text-slate-200 hover:bg-slate-700"
             >
               <Archive className="w-4 h-4 mr-2" />
               View Archives
@@ -595,7 +621,7 @@ export default function BizDevSourcesPage() {
             <Button
               variant="outline"
               onClick={() => setShowImportDialog(true)}
-              className="border-slate-700 text-slate-300 hover:bg-slate-800"
+              className="border-slate-700 text-slate-200 hover:bg-slate-700"
             >
               <Upload className="w-4 h-4 mr-2" />
               Import
@@ -695,241 +721,235 @@ export default function BizDevSourcesPage() {
           </div>
         </div>
 
-        <Card className="bg-slate-800 border-slate-700 mb-6">
-          <CardContent className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-              <div className="md:col-span-2">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input
-                    placeholder="Search sources..."
-                    value={searchInput}
-                    onChange={(e) => setSearchInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        setSearchTerm(searchInput);
-                        setCurrentPage(1);
-                      }
-                    }}
-                    className="pl-10 bg-slate-700 border-slate-600 text-slate-100"
-                  />
-                </div>
-                {searchTerm && (
-                  <p className="text-xs text-slate-400 mt-1">
-                    {filteredSources.length} result{filteredSources.length !== 1 ? 's' : ''} found
-                  </p>
-                )}
+        <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+            <div className="md:col-span-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Input
+                  placeholder="Search sources..."
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      setSearchTerm(searchInput);
+                      setCurrentPage(1);
+                    }
+                  }}
+                  className="pl-10 bg-slate-700 border-slate-600 text-slate-100"
+                />
               </div>
-              <Select
-                value={statusFilter}
-                onValueChange={(value) => {
-                  setStatusFilter(value);
-                  setCurrentPage(1);
-                }}
-              >
-                <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-100">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="Active">Active</SelectItem>
-                  <SelectItem value="Promoted">Promoted</SelectItem>
-                  <SelectItem value="Archived">Archived</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select
-                value={licenseStatusFilter}
-                onValueChange={(value) => {
-                  setLicenseStatusFilter(value);
-                  setCurrentPage(1);
-                }}
-              >
-                <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-100">
-                  <SelectValue placeholder="License Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Licenses</SelectItem>
-                  <SelectItem value="Active">Active</SelectItem>
-                  <SelectItem value="Suspended">Suspended</SelectItem>
-                  <SelectItem value="Revoked">Revoked</SelectItem>
-                  <SelectItem value="Expired">Expired</SelectItem>
-                  <SelectItem value="Unknown">Unknown</SelectItem>
-                  <SelectItem value="Not Required">Not Required</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select
-                value={batchFilter}
-                onValueChange={(value) => {
-                  setBatchFilter(value);
-                  setCurrentPage(1);
-                }}
-              >
-                <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-100">
-                  <SelectValue placeholder="Batch" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Batches</SelectItem>
-                  {uniqueBatches.map((batch) => (
-                    <SelectItem key={batch} value={batch}>
-                      {batch}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={sourceFilter}
-                onValueChange={(value) => {
-                  setSourceFilter(value);
-                  setCurrentPage(1);
-                }}
-              >
-                <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-100">
-                  <SelectValue placeholder="Source" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Sources</SelectItem>
-                  {uniqueSources.map((source) => (
-                    <SelectItem key={source} value={source}>
-                      {source}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={`${sortField}:${sortDirection}`}
-                onValueChange={(value) => {
-                  const option = sortOptions.find((o) => `${o.field}:${o.direction}` === value);
-                  if (option) {
-                    setSortField(option.field);
-                    setSortDirection(option.direction);
-                    setCurrentPage(1);
-                  }
-                }}
-              >
-                <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-100 w-44">
-                  <SelectValue placeholder="Sort by..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {sortOptions.map((option) => (
-                    <SelectItem
-                      key={`${option.field}:${option.direction}`}
-                      value={`${option.field}:${option.direction}`}
-                    >
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-slate-800 border-slate-700 mb-6">
-          <CardContent className="p-4">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="flex items-center gap-2">
-                {/* Select All Checkbox */}
-                <div className="flex items-center gap-2 pr-4 border-r border-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={isAllSelected}
-                    ref={(el) => {
-                      if (el) {
-                        el.indeterminate = isSomeSelected;
-                      }
-                    }}
-                    onChange={handleSelectAll}
-                    className="w-4 h-4 text-blue-600 bg-slate-700 border-slate-600 rounded focus:ring-blue-500"
-                  />
-                  <span className="text-sm text-slate-400">
-                    {isAllSelected
-                      ? 'Deselect All'
-                      : isSomeSelected
-                        ? `${selectedSources.length} Selected`
-                        : 'Select All'}
-                  </span>
-                </div>
-
-                {selectedSources.length > 0 && (
-                  <>
-                    <Badge variant="outline" className="border-blue-600 text-blue-400">
-                      {selectedSources.length} selected
-                    </Badge>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleBulkArchive}
-                      className="border-blue-600 text-blue-400 hover:bg-blue-900/30"
-                    >
-                      <Archive className="w-4 h-4 mr-2" />
-                      Archive Selected
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleBulkDelete}
-                      className="border-red-600 text-red-400 hover:bg-red-900/30"
-                    >
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      Delete Selected
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setSelectedSources([])}
-                      className="text-slate-400 hover:text-slate-300"
-                    >
-                      Clear Selection
-                    </Button>
-                  </>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-slate-800 border-slate-700">
-          <CardContent className="p-6">
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-              </div>
-            ) : filteredSources.length === 0 ? (
-              <div className="text-center py-12">
-                <Building2 className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-slate-300 mb-2">
-                  No {bizdevLabel.toLowerCase()} found
-                </h3>
-                <p className="text-slate-400 mb-4">
-                  {sources.length === 0
-                    ? `Get started by adding your first ${bizdevSourceLabel.toLowerCase()}.`
-                    : 'Try adjusting your filters or search term.'}
+              {searchTerm && (
+                <p className="text-xs text-slate-400 mt-1">
+                  {filteredSources.length} result{filteredSources.length !== 1 ? 's' : ''} found
                 </p>
-                {sources.length === 0 && (
-                  <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add First {bizdevSourceLabel}
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {paginatedSources.map((source) => (
-                  <BizDevSourceCard
-                    key={source.id}
-                    source={source}
-                    tenantId={user?.tenant_id || selectedTenantId}
-                    onClick={handleViewDetails}
-                    isSelected={selectedSources.includes(source.id)}
-                    onSelect={handleSelectSource}
-                    onEdit={handleEdit}
-                    onDelete={handleDeleteSingle}
-                    onUpdate={handleUpdate}
-                  />
+              )}
+            </div>
+            <Select
+              value={statusFilter}
+              onValueChange={(value) => {
+                setStatusFilter(value);
+                setCurrentPage(1);
+              }}
+            >
+              <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-100">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="Active">Active</SelectItem>
+                <SelectItem value="Promoted">Promoted</SelectItem>
+                <SelectItem value="Archived">Archived</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              value={licenseStatusFilter}
+              onValueChange={(value) => {
+                setLicenseStatusFilter(value);
+                setCurrentPage(1);
+              }}
+            >
+              <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-100">
+                <SelectValue placeholder="License Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Licenses</SelectItem>
+                <SelectItem value="Active">Active</SelectItem>
+                <SelectItem value="Suspended">Suspended</SelectItem>
+                <SelectItem value="Revoked">Revoked</SelectItem>
+                <SelectItem value="Expired">Expired</SelectItem>
+                <SelectItem value="Unknown">Unknown</SelectItem>
+                <SelectItem value="Not Required">Not Required</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              value={batchFilter}
+              onValueChange={(value) => {
+                setBatchFilter(value);
+                setCurrentPage(1);
+              }}
+            >
+              <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-100">
+                <SelectValue placeholder="Batch" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Batches</SelectItem>
+                {uniqueBatches.map((batch) => (
+                  <SelectItem key={batch} value={batch}>
+                    {batch}
+                  </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={sourceFilter}
+              onValueChange={(value) => {
+                setSourceFilter(value);
+                setCurrentPage(1);
+              }}
+            >
+              <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-100">
+                <SelectValue placeholder="Source" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sources</SelectItem>
+                {uniqueSources.map((source) => (
+                  <SelectItem key={source} value={source}>
+                    {source}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={`${sortField}:${sortDirection}`}
+              onValueChange={(value) => {
+                const option = sortOptions.find((o) => `${o.field}:${o.direction}` === value);
+                if (option) {
+                  setSortField(option.field);
+                  setSortDirection(option.direction);
+                  setCurrentPage(1);
+                }
+              }}
+            >
+              <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-100 w-44">
+                <SelectValue placeholder="Sort by..." />
+              </SelectTrigger>
+              <SelectContent>
+                {sortOptions.map((option) => (
+                  <SelectItem
+                    key={`${option.field}:${option.direction}`}
+                    value={`${option.field}:${option.direction}`}
+                  >
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              {/* Select All Checkbox */}
+              <div className="flex items-center gap-2 pr-4 border-r border-slate-700">
+                <input
+                  type="checkbox"
+                  checked={isAllSelected}
+                  ref={(el) => {
+                    if (el) {
+                      el.indeterminate = isSomeSelected;
+                    }
+                  }}
+                  onChange={handleSelectAll}
+                  className="w-4 h-4 text-blue-600 bg-slate-700 border-slate-600 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm text-slate-400">
+                  {isAllSelected
+                    ? 'Deselect All'
+                    : isSomeSelected
+                      ? `${selectedSources.length} Selected`
+                      : 'Select All'}
+                </span>
               </div>
-            )}
-          </CardContent>
+
+              {selectedSources.length > 0 && (
+                <>
+                  <Badge variant="outline" className="border-blue-600 text-blue-400">
+                    {selectedSources.length} selected
+                  </Badge>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleBulkArchive}
+                    className="border-blue-600 text-blue-400 hover:bg-blue-900/30"
+                  >
+                    <Archive className="w-4 h-4 mr-2" />
+                    Archive Selected
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleBulkDelete}
+                    className="border-red-600 text-red-400 hover:bg-red-900/30"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete Selected
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedSources([])}
+                    className="text-slate-400 hover:text-slate-300"
+                  >
+                    Clear Selection
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden p-6">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+            </div>
+          ) : filteredSources.length === 0 ? (
+            <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-12 text-center">
+              <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-slate-300 mb-2">
+                No {bizdevLabel.toLowerCase()} found
+              </h3>
+              <p className="text-slate-400 mb-4">
+                {sources.length === 0
+                  ? `Get started by adding your first ${bizdevSourceLabel.toLowerCase()}.`
+                  : 'Try adjusting your filters or search term.'}
+              </p>
+              {sources.length === 0 && (
+                <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add First {bizdevSourceLabel}
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {paginatedSources.map((source) => (
+                <BizDevSourceCard
+                  key={source.id}
+                  source={source}
+                  tenantId={user?.tenant_id || selectedTenantId}
+                  onClick={handleViewDetails}
+                  isSelected={selectedSources.includes(source.id)}
+                  onSelect={handleSelectSource}
+                  onEdit={handleEdit}
+                  onDelete={handleDeleteSingle}
+                  onUpdate={handleUpdate}
+                />
+              ))}
+            </div>
+          )}
 
           {!loading && filteredSources.length > 0 && (
             <Pagination
@@ -942,7 +962,7 @@ export default function BizDevSourcesPage() {
               loading={loading}
             />
           )}
-        </Card>
+        </div>
 
         {showForm && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -1014,6 +1034,28 @@ export default function BizDevSourcesPage() {
             onRetrieved={handleArchiveRetrieved}
           />
         )}
+
+        {/* Styled confirmation dialog for archive/delete */}
+        <AlertDialog
+          open={!!confirmAction}
+          onOpenChange={(open) => !open && setConfirmAction(null)}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{confirmAction?.title}</AlertDialogTitle>
+              <AlertDialogDescription>{confirmAction?.description}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleConfirmAction}
+                className={confirmAction?.type === 'delete' ? 'bg-red-600 hover:bg-red-700' : ''}
+              >
+                {confirmAction?.type === 'delete' ? 'Delete' : 'Archive'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </TooltipProvider>
   );
