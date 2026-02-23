@@ -21,14 +21,13 @@ import {
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { BizDevSource } from "@/api/entities";
-import { useTenant } from "@/components/shared/tenantContext";
+
 
 export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, isSelected, onSelect, onUpdate, tenantId, businessModel = 'b2b' }) {
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesText, setNotesText] = useState(source.notes || "");
   const [savingNotes, setSavingNotes] = useState(false);
   const isPromoted = source.status?.toLowerCase() === 'promoted' || source.status?.toLowerCase() === 'converted';
-  const { selectedTenantId } = useTenant();
   // New state to hold parsed lead IDs for UI checks
   const [leadIdsArray, setLeadIdsArray] = useState([]);
 

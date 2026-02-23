@@ -335,7 +335,7 @@ function RecentActivities(props) {
 
   const descriptionText =
     memoTenantFilter && memoTenantFilter.tenant_id
-      ? `Client: ${user?.tenant_name || user?.tenant_id_text || memoTenantFilter.tenant_id.slice(0, 8) + '...'}`
+      ? `Client: ${user?.tenant_name || memoTenantFilter.tenant_id.slice(0, 8) + '...'}`
       : 'All clients';
 
   const handleRefresh = async () => {

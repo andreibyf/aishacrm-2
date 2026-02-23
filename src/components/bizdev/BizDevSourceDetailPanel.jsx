@@ -35,7 +35,7 @@ import { Link } from 'react-router-dom';
 import { Opportunity } from '@/api/entities';
 import { Activity } from '@/api/entities';
 import { Lead } from '@/api/entities';
-import { useTenant } from '@/components/shared/tenantContext';
+
 
 export default function BizDevSourceDetailPanel({
   bizDevSource,
@@ -54,7 +54,7 @@ export default function BizDevSourceDetailPanel({
   const [creatingOpportunity, setCreatingOpportunity] = useState(false);
   const [linkedOpportunities, setLinkedOpportunities] = useState([]);
   const [currentSource, setCurrentSource] = useState(bizDevSource);
-  const { selectedTenantId } = useTenant();
+
 
   // Determine if we're in B2C mode (person-first display)
   const isB2C = businessModel === 'b2c';

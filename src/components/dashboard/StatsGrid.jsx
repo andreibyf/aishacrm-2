@@ -103,7 +103,10 @@ export default function StatsGrid({ stats }) {
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <HelpCircle className="w-4 h-4 text-slate-500 hover:text-slate-400 transition-colors cursor-help" />
+                    <HelpCircle
+                      className="w-4 h-4 text-slate-500 hover:text-slate-400 transition-colors cursor-help"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                    />
                   </TooltipTrigger>
                   <TooltipContent className="bg-slate-800 border-slate-700 text-slate-200">
                     <p>{stat.description}</p>

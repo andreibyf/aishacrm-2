@@ -205,7 +205,7 @@ export default function BizDevSourcesPage() {
       setLoading(false);
       loadingRef.current = false;
     }
-  }, [user, selectedTenantId, cachedRequest, logError]);
+  }, [user, selectedTenantId, cachedRequest, logError, bizdevLabel]);
 
   // Track current tenant to detect switches and clear cache
   const prevTenantRef = useRef(null);
@@ -515,7 +515,8 @@ export default function BizDevSourcesPage() {
 
     const matchesStatus = statusFilter === 'all' || source.status?.toLowerCase() === statusFilter.toLowerCase();
     const matchesLicenseStatus =
-      licenseStatusFilter === 'all' || source.license_status === licenseStatusFilter;
+      licenseStatusFilter === 'all' ||
+      source.license_status?.toLowerCase() === licenseStatusFilter.toLowerCase();
     const matchesBatch = batchFilter === 'all' || source.batch_id === batchFilter;
     const matchesSource = sourceFilter === 'all' || source.source === sourceFilter;
 
@@ -992,7 +993,7 @@ export default function BizDevSourcesPage() {
                 <BizDevSourceCard
                   key={source.id}
                   source={source}
-                  tenantId={user?.tenant_id || selectedTenantId}
+                  tenantId={selectedTenantId || user?.tenant_id}
                   businessModel={businessModel}
                   onClick={handleViewDetails}
                   isSelected={selectedSources.includes(source.id)}
@@ -1084,7 +1085,7 @@ export default function BizDevSourcesPage() {
 
         {showArchiveIndex && (
           <ArchiveIndexViewer
-            tenantId={user?.tenant_id || selectedTenantId}
+            tenantId={selectedTenantId || user?.tenant_id}
             onClose={() => setShowArchiveIndex(false)}
             onRetrieved={handleArchiveRetrieved}
           />
