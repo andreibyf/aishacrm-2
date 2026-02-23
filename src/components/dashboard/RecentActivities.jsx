@@ -48,21 +48,21 @@ const activityIcons = {
 };
 
 const activityColors = {
-  call: 'bg-blue-100 text-blue-700 border-blue-200',
-  email: 'bg-purple-100 text-purple-700 border-purple-200',
-  meeting: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-  task: 'bg-orange-100 text-orange-700 border-orange-200',
-  note: 'bg-slate-100 text-slate-700 border-slate-200',
-  demo: 'bg-pink-100 text-pink-700 border-pink-200',
-  proposal: 'bg-amber-100 text-amber-700 border-amber-200',
-  scheduled_ai_call: 'bg-cyan-100 text-cyan-700 border-cyan-200',
+  call: 'bg-blue-900/30 text-blue-400 border-blue-700',
+  email: 'bg-purple-900/30 text-purple-400 border-purple-700',
+  meeting: 'bg-emerald-900/30 text-emerald-400 border-emerald-700',
+  task: 'bg-orange-900/30 text-orange-400 border-orange-700',
+  note: 'bg-slate-700/50 text-slate-300 border-slate-600',
+  demo: 'bg-pink-900/30 text-pink-400 border-pink-700',
+  proposal: 'bg-amber-900/30 text-amber-400 border-amber-700',
+  scheduled_ai_call: 'bg-cyan-900/30 text-cyan-400 border-cyan-700',
 };
 
 const priorityColors = {
-  low: 'bg-blue-100 text-blue-800 border-blue-200',
-  normal: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-  high: 'bg-orange-100 text-orange-800 border-orange-200',
-  urgent: 'bg-red-100 text-red-800 border-red-200',
+  low: 'bg-blue-900/30 text-blue-400 border-blue-700',
+  normal: 'bg-emerald-900/30 text-emerald-400 border-emerald-700',
+  high: 'bg-orange-900/30 text-orange-400 border-orange-700',
+  urgent: 'bg-red-900/30 text-red-400 border-red-700',
 };
 
 function RecentActivities(props) {
@@ -85,7 +85,7 @@ function RecentActivities(props) {
 
   const { cachedRequest } = useApiManager();
   const { selectedEmail } = useEmployeeScope();
-  const { loading: userLoading } = useUser();
+  const { user, loading: userLoading } = useUser();
   const { authCookiesReady } = useAuthCookiesReady();
   const { getVisibleCardsForEntity } = useStatusCardPreferences();
   const { plural: activitiesLabel } = useEntityLabel('activities');
@@ -335,7 +335,7 @@ function RecentActivities(props) {
 
   const descriptionText =
     memoTenantFilter && memoTenantFilter.tenant_id
-      ? `Client: ${memoTenantFilter.tenant_id.slice(0, 8)}...`
+      ? `Client: ${user?.tenant_name || user?.tenant_id_text || memoTenantFilter.tenant_id.slice(0, 8) + '...'}`
       : 'All clients';
 
   const handleRefresh = async () => {
@@ -370,9 +370,9 @@ function RecentActivities(props) {
         <CardHeader className="border-b border-slate-700">
           <CardTitle className="flex items-center gap-2 text-slate-100">
             <ActivityIcon className="w-5 h-5 text-indigo-400" />
-            Recent Activities
+            Recent {activitiesLabel}
           </CardTitle>
-          <CardDescription className="text-slate-400">Loading recent activities...</CardDescription>
+          <CardDescription className="text-slate-400">Loading recent {activitiesLabel.toLowerCase()}...</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {Array.from({ length: 5 }).map((_, i) => (
@@ -396,7 +396,7 @@ function RecentActivities(props) {
           <div className="min-w-0">
             <CardTitle className="flex items-center gap-2 text-slate-100">
               <ActivityIcon className="w-5 h-5 text-indigo-400 flex-shrink-0" />
-              Recent Activities
+              Recent {activitiesLabel}
             </CardTitle>
             <CardDescription className="text-slate-400 text-sm mt-1">
               {descriptionText} • Last {timeframeWeeks} week{timeframeWeeks === '1' ? '' : 's'}

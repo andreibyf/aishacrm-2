@@ -15,20 +15,20 @@ import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
 import { useEmployeeScope } from '@/components/shared/EmployeeScopeContext';
 
 const AGE_BUCKETS = [
-  { label: '0-7 days', min: 0, max: 7, color: 'bg-green-100 text-green-800 border-green-200' },
-  { label: '8-14 days', min: 8, max: 14, color: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
+  { label: '0-7 days', min: 0, max: 7, color: 'bg-green-900/30 text-green-400 border-green-700' },
+  { label: '8-14 days', min: 8, max: 14, color: 'bg-yellow-900/30 text-yellow-400 border-yellow-700' },
   {
     label: '15-21 days',
     min: 15,
     max: 21,
-    color: 'bg-orange-100 text-orange-800 border-orange-200',
+    color: 'bg-orange-900/30 text-orange-400 border-orange-700',
   },
-  { label: '22-30 days', min: 22, max: 30, color: 'bg-red-100 text-red-800 border-red-200' },
+  { label: '22-30 days', min: 22, max: 30, color: 'bg-red-900/30 text-red-400 border-red-700' },
   {
     label: '30+ days',
     min: 31,
     max: Infinity,
-    color: 'bg-purple-100 text-purple-800 border-purple-200',
+    color: 'bg-purple-900/30 text-purple-400 border-purple-700',
   },
 ];
 
