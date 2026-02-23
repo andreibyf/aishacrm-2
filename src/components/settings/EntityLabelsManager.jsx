@@ -112,11 +112,13 @@ export default function EntityLabelsManager({ isTenantAdmin = false }) {
         if (response.ok) {
           const data = await response.json();
           if (data.status === 'success') {
-            console.log(
-              '[EntityLabelsManager] Loaded labels for tenant:',
-              selectedTenantId,
-              data.data.labels,
-            );
+            if (import.meta.env.DEV) {
+              console.log(
+                '[EntityLabelsManager] Loaded labels for tenant:',
+                selectedTenantId,
+                data.data.labels,
+              );
+            }
             setLabels(data.data.labels);
             setCustomized(data.data.customized || []);
           }
@@ -153,12 +155,14 @@ export default function EntityLabelsManager({ isTenantAdmin = false }) {
 
     try {
       setSaving(true);
-      console.log('[EntityLabelsManager] Saving labels for tenant:', selectedTenantId);
-      console.log(
-        '[EntityLabelsManager] Selected tenant name:',
-        tenants.find((t) => t.id === selectedTenantId)?.name,
-      );
-      console.log('[EntityLabelsManager] Labels being saved:', labels);
+      if (import.meta.env.DEV) {
+        console.log('[EntityLabelsManager] Saving labels for tenant:', selectedTenantId);
+        console.log(
+          '[EntityLabelsManager] Selected tenant name:',
+          tenants.find((t) => t.id === selectedTenantId)?.name,
+        );
+        console.log('[EntityLabelsManager] Labels being saved:', labels);
+      }
       const response = await fetch(`${BACKEND_URL}/api/entity-labels/${selectedTenantId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

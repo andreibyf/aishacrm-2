@@ -473,8 +473,8 @@ function RecentActivities(props) {
                       allowDecimals={false}
                       tick={{ fontSize: 13, fill: '#94a3b8' }}
                       stroke="#475569"
-                      domain={[0, 18]}
-                      ticks={[0, 3, 6, 9, 12, 15, 18]}
+                      domain={[0, (dataMax) => Math.max(6, Math.ceil(dataMax * 1.2))]}
+                      allowDataOverflow={false}
                     />
                     <RTooltip
                       contentStyle={{

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { BizDevSource, Account } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,6 +52,7 @@ import { useUser } from '../components/shared/useUser.js';
 import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
 
 export default function BizDevSourcesPage() {
+  const navigate = useNavigate();
   const { plural: bizdevLabel, singular: bizdevSourceLabel } = useEntityLabel('bizdev_sources');
   const [sources, setSources] = useState([]);
   const [accounts, setAccounts] = useState([]);
@@ -364,7 +366,7 @@ export default function BizDevSourcesPage() {
           ? {
               label: 'View Lead',
               onClick: () => {
-                window.location.href = `/Leads?highlight=${leadId}`;
+                navigate(`/Leads?highlight=${leadId}`);
               },
             }
           : undefined,

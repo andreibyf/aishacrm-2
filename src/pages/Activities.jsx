@@ -357,18 +357,20 @@ export default function ActivitiesPage() {
         // Build sort string: prefix with - for descending
         const sortString = sortDirection === 'desc' ? `-${sortField}` : sortField;
 
-        console.log(
-          '[Activities] Loading page:',
-          page,
-          'size:',
-          size,
-          'skip:',
-          skip,
-          'filter:',
-          currentFilter,
-          'sort:',
-          sortString,
-        );
+        if (import.meta.env.DEV) {
+          console.log(
+            '[Activities] Loading page:',
+            page,
+            'size:',
+            size,
+            'skip:',
+            skip,
+            'filter:',
+            currentFilter,
+            'sort:',
+            sortString,
+          );
+        }
 
         const activitiesResult = await Activity.filter(currentFilter, sortString, size, skip);
         // activitiesResult may be array (legacy) or object with meta

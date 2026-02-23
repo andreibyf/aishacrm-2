@@ -421,8 +421,21 @@ export default function AccountsPage() {
         );
       }
 
-      // Sort by created_date descending
-      filtered.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+      // Apply client-side sort using current sort state
+      filtered.sort((a, b) => {
+        const aVal = a[sortField] ?? '';
+        const bVal = b[sortField] ?? '';
+        const dateFields = ['created_date', 'created_at', 'updated_date', 'updated_at'];
+        let cmp;
+        if (dateFields.includes(sortField)) {
+          cmp = new Date(aVal) - new Date(bVal);
+        } else if (typeof aVal === 'number' && typeof bVal === 'number') {
+          cmp = aVal - bVal;
+        } else {
+          cmp = String(aVal).localeCompare(String(bVal));
+        }
+        return sortDirection === 'desc' ? -cmp : cmp;
+      });
 
       setTotalItems(filtered.length);
 
