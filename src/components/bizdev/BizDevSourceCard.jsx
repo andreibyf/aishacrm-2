@@ -20,36 +20,16 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { BizDevSource, Tenant } from "@/api/entities";
-import { useTenant } from "@/components/shared/tenantContext";
+import { BizDevSource } from "@/api/entities";
 
-export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, isSelected, onSelect, onUpdate, tenantId }) {
+
+export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, isSelected, onSelect, onUpdate, tenantId, businessModel = 'b2b' }) {
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesText, setNotesText] = useState(source.notes || "");
   const [savingNotes, setSavingNotes] = useState(false);
-  const [businessModel, setBusinessModel] = useState("b2b"); // Default to B2B for backward compatibility
-  const isPromoted = source.status === 'Promoted' || source.status === 'converted';
-  const { selectedTenantId } = useTenant();
+  const isPromoted = source.status?.toLowerCase() === 'promoted' || source.status?.toLowerCase() === 'converted';
   // New state to hold parsed lead IDs for UI checks
   const [leadIdsArray, setLeadIdsArray] = useState([]);
-
-  // Load tenant's business model to determine display mode
-  useEffect(() => {
-    const loadTenantModel = async () => {
-      try {
-        const tid = source.tenant_id || tenantId || selectedTenantId;
-        if (!tid) return;
-        const tenantData = await Tenant.get(tid);
-        console.log('[BizDevSourceCard] Tenant data loaded:', { tid, business_model: tenantData?.business_model });
-        if (tenantData?.business_model) {
-          setBusinessModel(tenantData.business_model);
-        }
-      } catch (err) {
-        console.error('[BizDevSourceCard] Failed to load tenant model:', err);
-      }
-    };
-    loadTenantModel();
-  }, [source.tenant_id, tenantId, selectedTenantId]);
 
   // Parse lead_ids which may be stored as JSON string or array
   useEffect(() => {
@@ -72,7 +52,6 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
   }, [source.lead_ids]);
   // Determine if we're in B2C mode (person-first display)
   const isB2C = businessModel === 'b2c';
-  const _isHybrid = businessModel === 'hybrid';
   
   const handleSaveNotes = async () => {
     try {
@@ -100,12 +79,12 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
   };
   
   const getStatusColor = (status) => {
-    switch (status) {
-      case "Active":
+    switch (status?.toLowerCase()) {
+      case "active":
         return "bg-green-900/30 text-green-400 border-green-700";
-      case "Promoted":
+      case "promoted":
         return "bg-blue-900/30 text-blue-400 border-blue-700";
-      case "Archived":
+      case "archived":
         return "bg-slate-700 text-slate-400 border-slate-600";
       default:
         return "bg-slate-700 text-slate-300 border-slate-600";
@@ -113,23 +92,22 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
   };
 
   const getLicenseStatusColor = (status) => {
-    switch (status) {
-      case "Active":
+    switch (status?.toLowerCase()) {
+      case "active":
         return "bg-green-900/30 text-green-400 border-green-700";
-      case "Suspended":
-      case "Revoked":
+      case "suspended":
+      case "revoked":
         return "bg-red-900/30 text-red-400 border-red-700";
-      case "Expired":
+      case "expired":
         return "bg-yellow-900/30 text-yellow-400 border-yellow-700";
-      case "Unknown":
-      case "Not Required":
+      case "unknown":
+      case "not required":
         return "bg-slate-700 text-slate-400 border-slate-600";
       default:
         return "bg-slate-700 text-slate-300 border-slate-600";
     }
   };
 
-  const linkedAccount = null;
   const statusColorClass = getStatusColor(source.status || 'Active');
 
   const handleCardClick = (e) => {
@@ -171,8 +149,6 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
   // Get contact info
   const phone = source.phone_number || source.contact_phone;
   const email = source.email || source.contact_email;
-  const _contactPerson = source.contact_person;
-  
   // Get address
   const addressShort = [source.city, source.state_province].filter(Boolean).join(', ');
 
@@ -496,14 +472,6 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
             {source.tags.length > 5 && (
               <span className="px-2 py-1 text-xs text-slate-400">+{source.tags.length - 5} more</span>
             )}
-          </div>
-        )}
-
-        {linkedAccount && (
-          <div className="flex items-center gap-2 text-sm">
-            <Badge variant="outline" className="border-blue-600 text-blue-400">
-              Linked to Account: {linkedAccount.name}
-            </Badge>
           </div>
         )}
 

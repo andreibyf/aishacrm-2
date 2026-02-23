@@ -13,11 +13,7 @@ import {
   sortableKeyboardCoordinates,
   rectSortingStrategy,
 } from '@dnd-kit/sortable';
-import { User } from '@/api/entities';
-import { Lead } from '@/api/entities';
-import { Contact } from '@/api/entities';
-import { Opportunity } from '@/api/entities';
-import { Activity } from '@/api/entities';
+import { User, Lead, Contact, Opportunity, Activity } from '@/api/entities';
 
 import { useTenant } from '../components/shared/tenantContext';
 import { useApiManager } from '../components/shared/ApiManager';
@@ -299,43 +295,7 @@ export default function DashboardPage() {
         setRefreshing(true);
       }
       try {
-        // Inline tenant filter logic to avoid dependency issues
-        let tenantFilter = {};
-
-        // Tenant filtering (mirrors getTenantFilter logic)
-        if (user.role === 'superadmin') {
-          if (selectedTenantId) {
-            tenantFilter.tenant_id = selectedTenantId;
-          }
-        } else {
-          if (selectedTenantId) {
-            tenantFilter.tenant_id = selectedTenantId;
-          } else if (user.tenant_id) {
-            tenantFilter.tenant_id = user.tenant_id;
-          }
-        }
-
-        // Employee scope filtering from context
-        if (selectedEmail && selectedEmail !== 'all') {
-          if (selectedEmail === 'unassigned') {
-            // Unassigned should strictly check for NULL UUID
-            tenantFilter.$or = [{ assigned_to: null }];
-          } else {
-            tenantFilter.assigned_to = selectedEmail;
-          }
-        } else if (
-          user.employee_role === 'employee' &&
-          user.role !== 'admin' &&
-          user.role !== 'superadmin'
-        ) {
-          // Regular employees only see their own data when no filter is selected
-          tenantFilter.assigned_to = user.email;
-        }
-
-        // Test data filtering - use simple boolean
-        if (!showTestData) {
-          tenantFilter.is_test_data = false;
-        }
+        const tenantFilter = getTenantFilter();
 
         // Guard: ensure we have a valid tenant_id before loading data
         // For non-superadmin roles, tenantFilter.tenant_id MUST be present; guard just superadmin global.
@@ -677,34 +637,17 @@ export default function DashboardPage() {
   }, [
     user,
     authCookiesReady,
-    selectedTenantId,
-    showTestData,
-    selectedEmail,
+    getTenantFilter,
     cachedRequest,
     logger,
     loadingToast,
   ]);
-  // Removed getTenantFilter from dependencies - it's called inside the effect instead
 
   // Refresh handler - forces fresh data fetch
   const handleRefresh = useCallback(async () => {
     if (!user || !authCookiesReady) return;
 
-    // Re-trigger loadStats with forceRefresh flag
-
-    // Call loadStats with forceRefresh = true
-    // This requires we wrap it in a way that the component's loadStats can be called
-    // For now, we'll trigger a full reload by clearing cache and reloading
-    const tenantFilter = {};
-    if (user.role === 'superadmin') {
-      if (selectedTenantId) tenantFilter.tenant_id = selectedTenantId;
-    } else {
-      if (selectedTenantId) {
-        tenantFilter.tenant_id = selectedTenantId;
-      } else if (user.tenant_id) {
-        tenantFilter.tenant_id = user.tenant_id;
-      }
-    }
+    const tenantFilter = getTenantFilter();
 
     setRefreshing(true);
 
@@ -763,7 +706,7 @@ export default function DashboardPage() {
     } finally {
       setRefreshing(false);
     }
-  }, [user, authCookiesReady, selectedTenantId, showTestData, cachedRequest, clearCacheByKey]);
+  }, [user, authCookiesReady, getTenantFilter, showTestData, cachedRequest, clearCacheByKey]);
 
   const handleSaveWidgetPreferences = async (newPreferences) => {
     try {

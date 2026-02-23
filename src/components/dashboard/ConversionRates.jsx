@@ -107,12 +107,12 @@ export default function ConversionRates({ stats = {} }) {
       </CardHeader>
       <CardContent className="space-y-4">
         {funnelSteps.map((step, index) => (
-          <div 
-            key={index} 
+          <div
+            key={index}
             className={`p-3 rounded-lg transition-all ${
-              step.isHighlight 
-                ? 'bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/30 dark:to-cyan-900/30 border border-cyan-200 dark:border-cyan-500/30' 
-                : 'bg-slate-100/80 hover:bg-slate-100 dark:bg-slate-700/30 dark:hover:bg-slate-700/50'
+              step.isHighlight
+                ? 'bg-gradient-to-r from-blue-900/30 to-cyan-900/30 border border-cyan-500/30'
+                : 'bg-slate-700/30 hover:bg-slate-700/50'
             }`}
           >
             {/* Header row */}
@@ -134,8 +134,8 @@ export default function ConversionRates({ stats = {} }) {
             <p className="text-xs text-slate-500 mb-2">{step.description}</p>
             
             {/* Ratio display */}
-            <div className="flex items-center gap-2 text-xs mb-2">
-              <span className={`px-2 py-0.5 rounded ${step.bgColor} ${step.textColor} font-medium`}>
+            <div className="flex items-center gap-2 text-sm mb-2">
+              <span className={`px-2.5 py-0.5 rounded font-semibold ${step.bgColor} ${step.textColor} border border-current/20`}>
                 {step.numerator.toLocaleString()}
               </span>
               <ArrowRight className="w-3 h-3 text-slate-500" />

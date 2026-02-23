@@ -271,10 +271,11 @@ function LeadSourceChart(props) { // Changed to receive `props`
                           return {
                             value: item.name,
                             type: "circle",
+                            id: item.originalKey,
                             color: item.value > 0
                               ? COLORS[itemInVisibleIndex % COLORS.length]
                               : "#64748b", // Grey for zero values
-                            payload: item,
+                            payload: { name: item.name, value: item.value, originalKey: item.originalKey },
                           };
                         })}
                         formatter={(value, entry) => {
