@@ -2117,6 +2117,144 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
     }
   });
 
+  // POST /api/users/bulk-delete - Delete multiple users in one request
+  router.post('/bulk-delete', invalidateCache('users'), async (req, res) => {
+    try {
+      const { ids } = req.body || {};
+
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ status: 'error', message: 'ids must be a non-empty array' });
+      }
+      if (ids.length > 100) {
+        return res.status(400).json({ status: 'error', message: 'Maximum 100 ids per request' });
+      }
+
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const callerEmail = getUserEmailFromRequest(req);
+
+      // 🔒 Immutable superadmin emails that cannot be deleted
+      const IMMUTABLE_SUPERADMINS = [];
+
+      let deleted = 0;
+      let skipped = 0;
+      const errors = [];
+
+      for (const id of ids) {
+        try {
+          // Look up user in users table first, then employees
+          let tableName = 'users';
+          let { data: row } = await supabase
+            .from('users')
+            .select('id, email, role, tenant_id')
+            .eq('id', id)
+            .maybeSingle();
+
+          if (!row) {
+            const { data: empRow } = await supabase
+              .from('employees')
+              .select('id, email, tenant_id')
+              .eq('id', id)
+              .maybeSingle();
+            row = empRow;
+            tableName = 'employees';
+          }
+
+          if (!row) {
+            skipped++;
+            continue;
+          }
+
+          // Block immutable superadmins
+          if (
+            IMMUTABLE_SUPERADMINS.some((e) => e.toLowerCase() === (row.email || '').toLowerCase())
+          ) {
+            skipped++;
+            errors.push({ id, reason: 'immutable_account' });
+            continue;
+          }
+
+          // Block deleting last superadmin
+          if (tableName === 'users' && (row.role || '').toLowerCase() === 'superadmin') {
+            const { count: remaining } = await supabase
+              .from('users')
+              .select('id', { count: 'exact', head: true })
+              .eq('role', 'superadmin')
+              .neq('id', id);
+            if (remaining <= 0) {
+              skipped++;
+              errors.push({ id, reason: 'last_superadmin' });
+              continue;
+            }
+          }
+
+          // Delete from Supabase Auth
+          try {
+            const { user: authUser } = await getAuthUserByEmail(row.email);
+            if (authUser?.id) {
+              await deleteAuthUser(authUser.id);
+            }
+          } catch (authErr) {
+            logger.warn(`[BULK-DELETE] Auth delete failed for ${row.email}:`, authErr.message);
+          }
+
+          // Delete from database
+          const { data: deletedRow, error: delErr } = await supabase
+            .from(tableName)
+            .delete()
+            .eq('id', id)
+            .select('id, email')
+            .maybeSingle();
+
+          if (delErr) {
+            skipped++;
+            errors.push({ id, reason: delErr.message });
+            continue;
+          }
+
+          if (deletedRow) {
+            deleted++;
+            // Audit log
+            try {
+              await createAuditLog(supabase, {
+                tenant_id: row.tenant_id || 'system',
+                user_email: callerEmail,
+                action: 'delete',
+                entity_type: 'user',
+                entity_id: id,
+                changes: { deleted_email: row.email, deleted_from_table: tableName, bulk: true },
+                ip_address: getClientIP(req),
+                user_agent: req.headers['user-agent'],
+              });
+            } catch {
+              // audit failure is non-fatal
+            }
+          } else {
+            skipped++;
+          }
+        } catch (itemErr) {
+          skipped++;
+          errors.push({ id, reason: itemErr.message });
+        }
+      }
+
+      logger.info(`[BULK-DELETE] Deleted ${deleted}, skipped ${skipped} of ${ids.length} users`);
+
+      res.json({
+        status: 'success',
+        data: {
+          deleted,
+          skipped,
+          requested: ids.length,
+          errors: errors.length > 0 ? errors : undefined,
+        },
+      });
+    } catch (error) {
+      logger.error('[BULK-DELETE] Error:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   // DELETE /api/users/:id - Delete user (checks both users and employees tables)
   router.delete('/:id', mutateLimiter, invalidateCache('users'), async (req, res) => {
     try {

@@ -110,22 +110,21 @@ export default function BizDevSourceDetailPanel({
         // sync state for UI checks
         setLeadIdsArray(parsedLeadIds);
 
-        // Load linked leads using the parsed array
+        // Load linked leads by ID (fetch only the specific leads, not the entire table)
         if (parsedLeadIds.length > 0) {
-          const leads = await Lead.list();
-          const filtered = leads.filter((l) => parsedLeadIds.includes(l.id));
-          setLinkedLeads(filtered);
+          const leadResults = await Promise.all(
+            parsedLeadIds.map((id) => Lead.get(id).catch(() => null)),
+          );
+          setLinkedLeads(leadResults.filter(Boolean));
         } else {
           setLinkedLeads([]);
         }
 
-        // Load linked opportunities (search by description containing source ID)
-        const opps = await Opportunity.list();
-        const linkedOpps = opps.filter(
-          (opp) =>
-            opp.description && opp.description.includes(`[BizDevSource:${currentSource.id}]`),
-        );
-        setLinkedOpportunities(linkedOpps);
+        // Load linked opportunities by searching description for the BizDevSource tag
+        const linkedOpps = await Opportunity.filter({
+          $or: [{ description: { $icontains: `[BizDevSource:${currentSource.id}]` } }],
+        });
+        setLinkedOpportunities(Array.isArray(linkedOpps) ? linkedOpps : []);
       } catch (error) {
         console.error('Failed to load linked data:', error);
         toast.error('Failed to load linked data.');
@@ -142,13 +141,6 @@ export default function BizDevSourceDetailPanel({
       return;
     }
 
-    console.log('[DetailPanel] Starting promotion:', {
-      id: currentSource.id,
-      company_name: currentSource.company_name,
-      status: currentSource.status,
-      has_onPromote: !!onPromote,
-    });
-
     setPromoting(true);
     setShowPromoteConfirm(false);
 
@@ -156,18 +148,14 @@ export default function BizDevSourceDetailPanel({
       // Delegate to parent to perform the actual promotion (avoids double API call)
       let result = null;
       if (onPromote) {
-        console.log('[DetailPanel] Calling parent onPromote...');
         result = await onPromote(currentSource);
-        console.log('[DetailPanel] Parent onPromote returned:', result);
 
         // If parent returns null (e.g., user cancelled confirm dialog), bail out
         if (result === null) {
-          console.log('[DetailPanel] Parent returned null, cancelling promotion');
           return;
         }
       } else {
         // Fallback: if no parent handler provided, call API directly
-        console.log('[DetailPanel] No parent handler, calling API directly');
         result = await BizDevSource.promote(currentSource.id, currentSource.tenant_id);
       }
 
@@ -247,8 +235,6 @@ export default function BizDevSourceDetailPanel({
       return;
     }
 
-    console.log('[BizDevSource] Creating opportunity from source:', currentSource.company_name);
-
     setCreatingOpportunity(true);
     try {
       const closeDate = new Date();
@@ -282,11 +268,7 @@ export default function BizDevSourceDetailPanel({
         },
       };
 
-      console.log('[BizDevSource] Creating opportunity with payload:', oppPayload);
-
       const newOpp = await Opportunity.create(oppPayload);
-
-      console.log('[BizDevSource] Opportunity created:', newOpp);
 
       // Create initial follow-up activity
       try {
