@@ -178,9 +178,4 @@
   "npm.packageManager": "npm",
   "explorer.confirmDelete": false,
   "explorer.confirmDragAndDrop": false,
-  "yaml.schemas": {
-    ".continue/**/*.yaml": [
-      ".continue/**/*.yaml"
-    ]
-  }
 }

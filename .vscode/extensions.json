@@ -1,31 +1,30 @@
 {
   "recommendations": [
     // AI Assistants (Intel iGPU optimized)
-    "rjmacarthy.twinny",                          // Primary: Fast local AI completion
-    "continue.continue",                          // Secondary: Complex workflows
-    
+    "rjmacarthy.twinny", // Primary: Fast local AI completion
+
     // Code Quality & Formatting
-    "dbaeumer.vscode-eslint",                     // JavaScript/TypeScript linting
-    "esbenp.prettier-vscode",                     // Code formatter
-    
+    "dbaeumer.vscode-eslint", // JavaScript/TypeScript linting
+    "esbenp.prettier-vscode", // Code formatter
+
     // Development Tools
-    "denoland.vscode-deno",                       // Supabase Edge Functions
+    "denoland.vscode-deno", // Supabase Edge Functions
     "supabase-snippets.supabase-javascript-snippets",
-    "ms-playwright.playwright",                   // E2E testing integration
-    "humao.rest-client",                          // API testing (.http files)
-    
+    "ms-playwright.playwright", // E2E testing integration
+    "humao.rest-client", // API testing (.http files)
+
     // Database
-    "ckolkman.vscode-postgres",                   // PostgreSQL support
-    
+    "ckolkman.vscode-postgres", // PostgreSQL support
+
     // Docker & Containers
-    "ms-azuretools.vscode-docker",                // Docker support
-    "ms-vscode-remote.remote-containers",         // Dev Containers
-    
+    "ms-azuretools.vscode-docker", // Docker support
+    "ms-vscode-remote.remote-containers", // Dev Containers
+
     // Git
-    "eamodio.gitlens",                            // Git supercharged
-    
+    "eamodio.gitlens", // Git supercharged
+
     // Productivity
-    "christian-kohler.path-intellisense",         // Path autocomplete
-    "usernamehw.errorlens"                        // Inline errors/warnings
+    "christian-kohler.path-intellisense", // Path autocomplete
+    "usernamehw.errorlens" // Inline errors/warnings
   ]
 }

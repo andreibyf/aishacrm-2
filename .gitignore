@@ -15,6 +15,7 @@ dist-ssr
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
+.continue/
 # Thunder Client test data (may contain sensitive info)
 .vscode/thunder-tests/
 .idea
