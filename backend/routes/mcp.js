@@ -17,6 +17,7 @@ import {
 } from '../lib/aiEngine/index.js';
 import { logLLMActivity } from '../lib/aiEngine/activityLogger.js';
 import { executeMcpToolViaBraid, getExecutionStrategy } from '../lib/braidMcpBridge.js';
+import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
 import logger from '../lib/logger.js';
 
 // Admin helper: restrict access to users with emails defined in ADMIN_EMAILS env variable.
@@ -601,8 +602,15 @@ export default function createMCPRoutes(_pgPool) {
             });
           }
 
-          // Build tenant record for Braid execution
-          const tenantRecord = { id: tenant_id, tenant_id };
+          // Resolve tenant_id (may be UUID or slug) to canonical {uuid, slug}
+          const resolved = await resolveCanonicalTenant(tenant_id);
+          if (!resolved.found) {
+            return res.status(400).json({
+              status: 'error',
+              message: `Unknown tenant: ${tenant_id.substring(0, 8)}…`,
+            });
+          }
+          const tenantRecord = { id: resolved.uuid, tenant_id: resolved.slug };
           const userId = req.user?.id || req.headers['x-user-id'] || null;
 
           logger.debug('[MCP→Braid] Routing through Braid bridge', {
@@ -1630,27 +1638,26 @@ export default function createMCPRoutes(_pgPool) {
           : tenant.country || GEO;
 
       // CRM stats (reuse logic from crm.get_tenant_stats)
+      // Use tenant.id (UUID) — CRM data tables store the UUID in tenant_id TEXT column
+      const tenantUuid = tenant.id || tenantId;
       const [accounts, contacts, leads, opps, activities] = await Promise.all([
         supa
           .from('accounts')
           .select('*', { count: 'exact', head: true })
-          .eq('tenant_id', tenant.tenant_id || tenantId),
+          .eq('tenant_id', tenantUuid),
         supa
           .from('contacts')
           .select('*', { count: 'exact', head: true })
-          .eq('tenant_id', tenant.tenant_id || tenantId),
-        supa
-          .from('leads')
-          .select('*', { count: 'exact', head: true })
-          .eq('tenant_id', tenant.tenant_id || tenantId),
+          .eq('tenant_id', tenantUuid),
+        supa.from('leads').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantUuid),
         supa
           .from('opportunities')
           .select('*', { count: 'exact', head: true })
-          .eq('tenant_id', tenant.tenant_id || tenantId),
+          .eq('tenant_id', tenantUuid),
         supa
           .from('activities')
           .select('*', { count: 'exact', head: true })
-          .eq('tenant_id', tenant.tenant_id || tenantId),
+          .eq('tenant_id', tenantUuid),
       ]);
       const tenantStats = {
         accounts: accounts.count || 0,
@@ -2366,14 +2373,12 @@ Be SPECIFIC to ${INDUSTRY} in ${LOCATION}. Do NOT provide generic advice like "i
       }
 
       // No fallback available - return original error
-      return res
-        .status(502)
-        .json({
-          status: 'error',
-          message: 'MCP run-proxy failed',
-          error: err.message,
-          attempted: baseCandidates,
-        });
+      return res.status(502).json({
+        status: 'error',
+        message: 'MCP run-proxy failed',
+        error: err.message,
+        attempted: baseCandidates,
+      });
     }
   });
 

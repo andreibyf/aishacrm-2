@@ -23,6 +23,7 @@
 // In Docker, /backend is a symlink to /app (set in Dockerfile), so this path
 // resolves correctly in both local dev and the container.
 import { executeBraidTool, TOOL_ACCESS_TOKEN } from '../../backend/lib/braid/execution.js';
+import { resolveCanonicalTenant } from '../../backend/lib/tenantCanonicalResolver.js';
 
 /**
  * Validate a compiled PEP program has the correct shape and required fields.
@@ -133,8 +134,23 @@ export async function executePepProgram(compiledProgram, runtimeContext) {
   const ir = compiledProgram.braid_ir;
   const auditTrail = [];
 
-  // Build a mock tenant record for the Braid execution engine
-  const tenantRecord = { id: tenant_id, tenant_id };
+  // Resolve tenant_id (may be UUID or slug) to canonical form
+  const resolved = await resolveCanonicalTenant(tenant_id);
+  if (!resolved.found) {
+    return {
+      success: false,
+      result: null,
+      audit_trail: [
+        {
+          step: 'tenant_resolution',
+          status: 'failed',
+          errors: [`Unknown tenant: ${String(tenant_id).substring(0, 8)}`],
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    };
+  }
+  const tenantRecord = { id: resolved.uuid, tenant_id: resolved.slug };
 
   try {
     // Execute each instruction in the IR sequentially
