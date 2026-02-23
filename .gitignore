@@ -29,6 +29,7 @@ dist-ssr
 .env
 .env.local
 .env.production
+.env.production.recommended
 .env.*.local
 .env.docker
 .doppler-token
@@ -36,6 +37,7 @@ dist-ssr
 backend/.env
 
 # Test artifacts (Playwright reports, coverage, etc.)
+test-output.txt
 playwright-report/
 coverage/
 test-results/

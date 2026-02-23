@@ -9,21 +9,22 @@
 #### Setup Steps:
 
 1. **Add Environment Variables in Platform UI:**
+
    ```
    # Supabase Configuration
-   VITE_SUPABASE_URL=https://efzqxjpfewkrgpdootte.supabase.co
-   VITE_SUPABASE_ANON_KEY=sb_publishable_6AFc_XdEzOF0SAE6ivUL2A_fpdZZdBq
-   SUPABASE_SERVICE_ROLE_KEY=sb_secret_TEMOH-6ussfhYOelUYG-iQ_lBmInIki
-   
+   VITE_SUPABASE_URL=https://your-project.supabase.co
+   VITE_SUPABASE_ANON_KEY=<your-anon-key>
+   SUPABASE_SERVICE_ROLE_KEY=<REDACTED — use Doppler>
+
    # Backend Configuration
    VITE_AISHACRM_BACKEND_URL=https://your-backend-domain.com
    ALLOWED_ORIGINS=https://your-frontend-domain.com
    FRONTEND_URL=https://your-frontend-domain.com
-   
+
    # JWT Secrets (generate with: openssl rand -hex 32)
    JWT_ACCESS_SECRET=your-generated-secret-here
    JWT_REFRESH_SECRET=your-generated-secret-here
-   
+
    # System Configuration
    NODE_ENV=production
    SYSTEM_TENANT_ID=a11dfb63-4b18-4eb8-872e-747af2e37c46
@@ -35,6 +36,7 @@
 3. **Verify:** Check logs for "Missing credentials" - should be gone
 
 **Benefits:**
+
 - ✅ No `.env` file in repo (secure)
 - ✅ Easy to update without redeploying
 - ✅ Different values per environment
@@ -48,45 +50,47 @@
 #### Setup Steps:
 
 1. **Create `.env.production` on server (NEVER commit to git):**
+
    ```bash
    # SSH into your server
    ssh user@your-server.com
    cd /opt/aishacrm
-   
+
    # Create production env file
    cat > .env.production << 'EOF'
    # Supabase
-   VITE_SUPABASE_URL=https://efzqxjpfewkrgpdootte.supabase.co
-   VITE_SUPABASE_ANON_KEY=sb_publishable_6AFc_XdEzOF0SAE6ivUL2A_fpdZZdBq
-   SUPABASE_SERVICE_ROLE_KEY=sb_secret_TEMOH-6ussfhYOelUYG-iQ_lBmInIki
-   SUPABASE_ANON_KEY=sb_publishable_6AFc_XdEzOF0SAE6ivUL2A_fpdZZdBq
-   
+   VITE_SUPABASE_URL=https://your-project.supabase.co
+   VITE_SUPABASE_ANON_KEY=<your-anon-key>
+   SUPABASE_SERVICE_ROLE_KEY=<REDACTED — use Doppler>
+   SUPABASE_ANON_KEY=<your-anon-key>
+
    # Backend
    VITE_AISHACRM_BACKEND_URL=https://api.yourdomain.com
    ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
    FRONTEND_URL=https://yourdomain.com
-   
+
    # JWT (generate new secrets!)
    JWT_ACCESS_SECRET=$(openssl rand -hex 32)
    JWT_REFRESH_SECRET=$(openssl rand -hex 32)
-   
+
    # System
    NODE_ENV=production
    SYSTEM_TENANT_ID=a11dfb63-4b18-4eb8-872e-747af2e37c46
    ALLOW_PRODUCTION_WRITES=true
    EOF
-   
+
    # Secure the file
    chmod 600 .env.production
    ```
 
 2. **Update docker-compose.prod.yml to use it:**
+
    ```yaml
    services:
      backend:
        env_file:
          - .env.production
-     
+
      frontend:
        env_file:
          - .env.production
@@ -98,6 +102,7 @@
    ```
 
 **Benefits:**
+
 - ✅ Full control over environment
 - ✅ Easy to edit on server
 - ✅ Works with any Docker host
@@ -126,6 +131,7 @@ Your `frontend-entrypoint.sh` already supports this! It creates `env-config.js` 
 3. **App reads:** `src/lib/supabase.js` reads from `window._env_`
 
 #### Usage:
+
 ```bash
 # Set env vars on host
 export VITE_SUPABASE_URL=https://efzqxjpfewkrgpdootte.supabase.co
@@ -137,6 +143,7 @@ docker run -e VITE_SUPABASE_URL -e VITE_SUPABASE_ANON_KEY \
 ```
 
 **Benefits:**
+
 - ✅ No rebuild needed to change env vars
 - ✅ Same image works in multiple environments
 - ✅ Platform-agnostic
@@ -146,6 +153,7 @@ docker run -e VITE_SUPABASE_URL -e VITE_SUPABASE_ANON_KEY \
 ## 🔒 Security Best Practices
 
 ### DO:
+
 - ✅ Use platform environment variables when possible
 - ✅ Generate unique JWT secrets per environment
 - ✅ Restrict `.env` file permissions to `600` (owner read/write only)
@@ -155,6 +163,7 @@ docker run -e VITE_SUPABASE_URL -e VITE_SUPABASE_ANON_KEY \
 - ✅ Rotate secrets regularly
 
 ### DON'T:
+
 - ❌ Commit `.env` files to git
 - ❌ Use the same JWT secrets in dev and prod
 - ❌ Use `SUPABASE_SERVICE_ROLE_KEY` in frontend (backend only!)
@@ -166,6 +175,7 @@ docker run -e VITE_SUPABASE_URL -e VITE_SUPABASE_ANON_KEY \
 ## 🛠️ Deployment Examples
 
 ### Railway (Easiest):
+
 ```bash
 # 1. Push to GitHub
 git push origin main
@@ -184,6 +194,7 @@ git push origin main
 ```
 
 ### DigitalOcean Droplet:
+
 ```bash
 # 1. SSH into droplet
 ssh root@your-droplet-ip
@@ -203,6 +214,7 @@ docker-compose -f docker-compose.prod.yml up -d
 ```
 
 ### AWS ECS/Fargate:
+
 ```bash
 # 1. Store secrets in AWS Secrets Manager or Parameter Store
 aws secretsmanager create-secret \
@@ -244,6 +256,7 @@ docker-compose --env-file .env.prod-test -f docker-compose.prod.yml up
 ## 📋 Required Environment Variables
 
 ### Frontend (Build Args + Runtime):
+
 ```bash
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbG...  # Public key, safe for frontend
@@ -254,6 +267,7 @@ VITE_USER_HEARTBEAT_INTERVAL_MS=90000
 ```
 
 ### Backend (Runtime Only):
+
 ```bash
 # Supabase
 SUPABASE_URL=https://your-project.supabase.co
@@ -283,16 +297,19 @@ REDIS_CACHE_URL=redis://redis-cache:6379
 ## 🚨 Troubleshooting
 
 ### "Missing credentials" error in production:
+
 1. Check container env vars: `docker exec aishacrm-frontend env | grep VITE`
 2. Verify `/app/dist/env-config.js` exists: `docker exec aishacrm-frontend cat /app/dist/env-config.js`
 3. Check browser console for `window._env_`
 
 ### Build fails with "VITE_SUPABASE_URL is not defined":
+
 1. Ensure build args are passed in `docker-compose.prod.yml`
 2. Set them on host before building: `export VITE_SUPABASE_URL=...`
 3. Or use `--build-arg`: `docker build --build-arg VITE_SUPABASE_URL=...`
 
 ### Different env vars in dev vs prod:
+
 - **Dev:** Uses `.env` file (committed with placeholders)
 - **Prod:** Uses platform env vars or `.env.production` (NOT committed)
 

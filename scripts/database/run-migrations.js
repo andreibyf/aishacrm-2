@@ -1,8 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'fs';
 
-const supabaseUrl = 'https://ehjlenywplgyiahgxkfj.supabase.co';
-const serviceRoleKey = 'sb_secret_pLoIHa4X_eyHaIx0ds-D5g_qTn9_gS4';
+const supabaseUrl = process.env.SUPABASE_URL;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!supabaseUrl || !serviceRoleKey) {
+  console.error(
+    'Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. Run via: doppler run -- node scripts/database/run-migrations.js',
+  );
+  process.exit(1);
+}
 
 const supabase = createClient(supabaseUrl, serviceRoleKey);
 
@@ -10,23 +16,23 @@ async function runMigrations() {
   try {
     console.log('📦 Reading migration SQL...');
     const sql = readFileSync('flatten-all-tables.sql', 'utf8');
-    
+
     console.log('🚀 Executing migrations via Supabase...');
-    
+
     // Split SQL into individual statements and execute them
     const statements = sql
       .split(';')
-      .map(s => s.trim())
-      .filter(s => s.length > 0 && !s.startsWith('--'));
-    
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0 && !s.startsWith('--'));
+
     for (let i = 0; i < statements.length; i++) {
       const stmt = statements[i];
-      console.log(`\n[${i+1}/${statements.length}] Executing: ${stmt.substring(0, 80)}...`);
-      
+      console.log(`\n[${i + 1}/${statements.length}] Executing: ${stmt.substring(0, 80)}...`);
+
       const { error } = await supabase.rpc('exec_sql', { sql: stmt });
-      
+
       if (error) {
-        console.error(`❌ Error on statement ${i+1}:`, error.message);
+        console.error(`❌ Error on statement ${i + 1}:`, error.message);
         // Try direct query as fallback
         const { error: queryError } = await supabase.from('_sql').select(stmt);
         if (queryError) {
@@ -36,7 +42,7 @@ async function runMigrations() {
         console.log(`   ✅ Success`);
       }
     }
-    
+
     console.log('\n✨ All migrations completed!');
   } catch (error) {
     console.error('❌ Migration failed:', error.message);

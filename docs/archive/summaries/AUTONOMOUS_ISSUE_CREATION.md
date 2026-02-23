@@ -1,7 +1,9 @@
 # Autonomous GitHub Issue Creation System
 
 ## Overview
+
 AishaCRM now has **autonomous issue creation** capabilities. When health monitors detect failures, they automatically:
+
 1. **Create GitHub issues** with structured diagnostics
 2. **Generate AI-suggested fixes** with code examples
 3. **Assign GitHub Copilot** to review and implement fixes
@@ -33,7 +35,8 @@ AishaCRM now has **autonomous issue creation** capabilities. When health monitor
      - `additionalContext`: Optional context (markdown)
 
 **Issue Structure:**
-```markdown
+
+````markdown
 ## 🔴 Health Monitor Alert
 
 **Type:** MCP  
@@ -44,9 +47,11 @@ AishaCRM now has **autonomous issue creation** capabilities. When health monitor
 ---
 
 ## Problem Description
+
 The MCP adapter test "GitHub Repos" is failing...
 
 ## Diagnostic Context
+
 ```json
 {
   "testName": "GitHub Repos",
@@ -55,18 +60,22 @@ The MCP adapter test "GitHub Repos" is failing...
   "environment": "development"
 }
 ```
+````
 
 ## Suggested Fix
+
 ### Suggested Fix
 
 **Missing Credentials**: GitHub Repos
 
 1. Add environment variable to `braid-mcp-node-server/.env`:
+
 ```bash
 GITHUB_TOKEN=ghp_your_github_personal_access_token
 ```
 
 2. Restart MCP server:
+
 ```bash
 docker-compose restart braid-mcp-node-server
 ```
@@ -74,6 +83,7 @@ docker-compose restart braid-mcp-node-server
 ---
 
 ## Action Items
+
 - [ ] Review diagnostic information
 - [ ] Implement suggested fix
 - [ ] Add tests for regression prevention
@@ -82,7 +92,8 @@ docker-compose restart braid-mcp-node-server
 
 ---
 
-*🤖 This issue was automatically created by the AishaCRM Health Monitoring System.*
+_🤖 This issue was automatically created by the AishaCRM Health Monitoring System._
+
 ```
 
 **Labels Applied:**
@@ -127,10 +138,12 @@ docker-compose restart braid-mcp-node-server
 
 **User Experience:**
 ```
+
 ✅ Test suite complete: 9/12 passed in 1234ms
 🤖 Creating GitHub issues for 3 failure(s)...
 ✓ GitHub issue created: #42 - https://github.com/andreibyf/aishacrm-2/issues/42
 [Toast] Issue #42 created - Copilot assigned to fix "Memory Store"
+
 ```
 
 ### API Health Dashboard (`src/components/settings/ApiHealthDashboard.jsx`)
@@ -144,11 +157,13 @@ docker-compose restart braid-mcp-node-server
 
 **User Experience:**
 ```
+
 Full endpoint scan complete: 58/64 responsive
 🤖 Creating GitHub issues for 6 failure(s)...
 Issue #43 created for /api/missing-endpoint
 [Toast with View button]
-```
+
+````
 
 ## Configuration
 
@@ -158,19 +173,20 @@ Already configured for autonomous operation:
 
 ```bash
 # GitHub Integration (ALREADY SET)
-GITHUB_TOKEN=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
+GITHUB_TOKEN=<REDACTED — use Doppler>
 GITHUB_REPO_OWNER=andreibyf
 GITHUB_REPO_NAME=aishacrm-2
 
 # Optional: Trigger GitHub Actions workflow for Copilot review
 TRIGGER_COPILOT_REVIEW=false  # Set to 'true' to enable workflow dispatch
-```
+````
 
 ## Usage
 
 ### Manual Testing
 
 1. **Trigger MCP Monitor Issues:**
+
    ```
    Navigate to: Settings → MCP Monitor
    Click: "Run Full Test Suite"
@@ -200,16 +216,19 @@ When an issue is created, the system adds a comment:
 🤖 **GitHub Copilot Review Requested**
 
 @github-copilot please analyze this issue and:
+
 1. Review the diagnostic information and suggested fix
 2. Implement the fix with comprehensive error handling
 3. Add tests to prevent regression
 4. Create a PR for review
 
 ---
-*This is an automated request from the AishaCRM health monitoring system.*
+
+_This is an automated request from the AishaCRM health monitoring system._
 ```
 
 **Expected Workflow:**
+
 1. Health monitor detects failure
 2. System creates GitHub issue with diagnostics + suggested fix
 3. Copilot receives @-mention in issue comment
@@ -283,24 +302,28 @@ docker exec -it aishacrm-redis redis-cli ping
 ## Severity Levels
 
 **Critical:**
+
 - Core system failures (database, auth)
 - Braid Health failures
 - CRM adapter failures
 - **Action:** Immediate attention required
 
 **High:**
+
 - Server errors (5xx)
 - Batch processing failures
 - Error handling issues
 - **Action:** Fix within 24 hours
 
 **Medium:**
+
 - Missing endpoints (404)
 - Optional adapter failures (GitHub, LLM)
 - Client errors (4xx)
 - **Action:** Fix within 1 week
 
 **Low:**
+
 - Performance degradation
 - Non-critical warnings
 - **Action:** Backlog for next sprint
@@ -313,26 +336,30 @@ docker exec -it aishacrm-redis redis-cli ping
 ✅ **Structured Information** - Labels, severity, component tags for easy triage  
 ✅ **Immediate Feedback** - Toast notifications with direct links to issues  
 ✅ **Production Ready** - Handles optional features gracefully (no false alarms)  
-✅ **Comprehensive Coverage** - Both API endpoints and MCP adapters monitored  
+✅ **Comprehensive Coverage** - Both API endpoints and MCP adapters monitored
 
 ## Production Considerations
 
 ### Rate Limiting
+
 - Backend creates max 1 issue per failure per scan
 - Deduplication handled by reviewing existing open issues
 - Future enhancement: Check for existing issues before creating duplicates
 
 ### Credential Security
+
 - GitHub token stored in backend `.env` (not exposed to frontend)
 - Token scopes: `repo` (read/write issues, code)
 - Rotate token quarterly for security
 
 ### Notification Management
+
 - Users can disable toast notifications if desired
 - Issues remain in GitHub regardless of notification preference
 - Email notifications configured via GitHub repository settings
 
 ### False Positives
+
 - Optional adapters (GitHub, Memory, LLM) are **skipped**, not failed
 - Only true failures trigger issue creation
 - Severity levels ensure proper prioritization
