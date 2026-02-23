@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
-import { BizDevSource, Tenant } from '@/api/entities';
+import { BizDevSource } from '@/api/entities';
 import { createPageUrl } from '@/utils';
 import { Link } from 'react-router-dom';
 import { Opportunity } from '@/api/entities';
@@ -45,6 +45,7 @@ export default function BizDevSourceDetailPanel({
   onPromote,
   onUpdate,
   onRefresh,
+  businessModel = 'b2b',
 }) {
   const [promoting, setPromoting] = useState(false);
   const [showPromoteConfirm, setShowPromoteConfirm] = useState(false);
@@ -53,12 +54,10 @@ export default function BizDevSourceDetailPanel({
   const [creatingOpportunity, setCreatingOpportunity] = useState(false);
   const [linkedOpportunities, setLinkedOpportunities] = useState([]);
   const [currentSource, setCurrentSource] = useState(bizDevSource);
-  const [businessModel, setBusinessModel] = useState('b2b'); // Default to B2B
   const { selectedTenantId } = useTenant();
 
   // Determine if we're in B2C mode (person-first display)
   const isB2C = businessModel === 'b2c';
-  const _isHybrid = businessModel === 'hybrid';
 
   // Update currentSource when bizDevSource prop changes
   useEffect(() => {
@@ -66,23 +65,6 @@ export default function BizDevSourceDetailPanel({
       setCurrentSource(bizDevSource);
     }
   }, [bizDevSource]);
-
-  // Load tenant's business model
-  useEffect(() => {
-    const loadTenantModel = async () => {
-      try {
-        const tid = bizDevSource?.tenant_id || selectedTenantId;
-        if (!tid) return;
-        const tenantData = await Tenant.get(tid);
-        if (tenantData?.business_model) {
-          setBusinessModel(tenantData.business_model);
-        }
-      } catch (err) {
-        console.error('[BizDevSourceDetailPanel] Failed to load tenant model:', err);
-      }
-    };
-    loadTenantModel();
-  }, [bizDevSource?.tenant_id, selectedTenantId]);
 
   // Load linked data (leads and opportunities)
   useEffect(() => {
@@ -206,27 +188,27 @@ export default function BizDevSourceDetailPanel({
 
   const getLicenseStatusColor = (status) => {
     const colors = {
-      Active: 'bg-green-100 text-green-800 border-green-300',
-      Suspended: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-      Revoked: 'bg-red-100 text-red-800 border-red-300',
-      Expired: 'bg-orange-100 text-orange-800 border-orange-300',
-      Unknown: 'bg-gray-100 text-gray-800 border-gray-300',
-      'Not Required': 'bg-blue-100 text-blue-800 border-blue-300',
+      Active: 'bg-green-900/30 text-green-400 border-green-700',
+      Suspended: 'bg-yellow-900/30 text-yellow-400 border-yellow-700',
+      Revoked: 'bg-red-900/30 text-red-400 border-red-700',
+      Expired: 'bg-orange-900/30 text-orange-400 border-orange-700',
+      Unknown: 'bg-slate-700 text-slate-400 border-slate-600',
+      'Not Required': 'bg-slate-700 text-slate-400 border-slate-600',
     };
-    return colors[status] || 'bg-gray-100 text-gray-800 border-gray-300';
+    return colors[status] || 'bg-slate-700 text-slate-400 border-slate-600';
   };
 
   const getStatusColor = (status) => {
     const colors = {
-      Active: 'bg-blue-100 text-blue-800 border-blue-300',
-      Promoted: 'bg-green-100 text-green-800 border-green-300',
-      Archived: 'bg-gray-100 text-gray-800 border-gray-300',
+      Active: 'bg-green-900/30 text-green-400 border-green-700',
+      Promoted: 'bg-blue-900/30 text-blue-400 border-blue-700',
+      Archived: 'bg-slate-700 text-slate-400 border-slate-600',
     };
-    return colors[status] || 'bg-gray-100 text-gray-800 border-gray-300';
+    return colors[status] || 'bg-slate-700 text-slate-400 border-slate-600';
   };
 
-  const isPromoted = currentSource.status === 'Promoted' || currentSource.status === 'converted';
-  const isArchived = currentSource.status === 'Archived';
+  const isPromoted = currentSource.status?.toLowerCase() === 'promoted' || currentSource.status?.toLowerCase() === 'converted';
+  const isArchived = currentSource.status?.toLowerCase() === 'archived';
   const canPromote = !isPromoted && !isArchived;
 
   const handleCreateOpportunity = async () => {
@@ -402,7 +384,7 @@ export default function BizDevSourceDetailPanel({
             {currentSource.status}
           </Badge>
           {hasActivity && (
-            <Badge className="bg-green-100 text-green-800 border-green-300 font-semibold">
+            <Badge className="bg-green-900/30 text-green-400 border-green-700 font-semibold">
               <CheckCircle className="w-3 h-3 mr-1" />
               Contacted
             </Badge>
@@ -411,8 +393,8 @@ export default function BizDevSourceDetailPanel({
             <Badge
               className={
                 currentSource.priority === 'high'
-                  ? 'bg-red-100 text-red-800 border-red-300'
-                  : 'bg-slate-100 text-slate-800 border-slate-300'
+                  ? 'bg-red-900/30 text-red-400 border-red-700'
+                  : 'bg-slate-700 text-slate-400 border-slate-600'
               }
             >
               {currentSource.priority.charAt(0).toUpperCase() + currentSource.priority.slice(1)}{' '}
@@ -525,10 +507,10 @@ export default function BizDevSourceDetailPanel({
         {/* Workflow Info - LIGHTENED BACKGROUND */}
         {/* Only show workflow hint if not archived, not promoted, and has linked leads */}
         {!isArchived && !isPromoted && leadIdsArray && leadIdsArray.length > 0 && (
-          <Alert className="mt-4 bg-blue-50 border-blue-200">
-            <Info className="h-4 w-4 text-blue-700" />
-            <AlertTitle className="text-blue-900 font-semibold">Workflow</AlertTitle>
-            <AlertDescription className="text-blue-800">
+          <Alert className="mt-4 bg-blue-900/20 border-blue-700/50">
+            <Info className="h-4 w-4 text-blue-400" />
+            <AlertTitle className="text-blue-300 font-semibold">Workflow</AlertTitle>
+            <AlertDescription className="text-blue-400">
               Create an opportunity to start pursuing this prospect. Promote to Lead after winning
               business.
             </AlertDescription>
@@ -643,10 +625,10 @@ export default function BizDevSourceDetailPanel({
 
         {/* Promote Confirmation Alert - LIGHTENED BACKGROUND */}
         {showPromoteConfirm && canPromote && (
-          <Alert className="bg-green-50 border-green-200">
-            <AlertCircle className="h-4 w-4 text-green-700" />
-            <AlertTitle className="text-green-900 font-semibold">Promote to Lead?</AlertTitle>
-            <AlertDescription className="text-green-800">
+          <Alert className="bg-green-900/20 border-green-700/50">
+            <AlertCircle className="h-4 w-4 text-green-400" />
+            <AlertTitle className="text-green-300 font-semibold">Promote to Lead?</AlertTitle>
+            <AlertDescription className="text-green-400">
               <p className="mb-3">
                 This will create a Lead from{' '}
                 <strong>
@@ -682,7 +664,7 @@ export default function BizDevSourceDetailPanel({
                   size="sm"
                   variant="outline"
                   onClick={() => setShowPromoteConfirm(false)}
-                  className="border-green-300 text-green-700 hover:bg-green-50"
+                  className="border-green-700 text-green-400 hover:bg-green-900/30"
                 >
                   Cancel
                 </Button>
@@ -693,10 +675,10 @@ export default function BizDevSourceDetailPanel({
 
         {/* Already Promoted Alert - LIGHTENED BACKGROUND */}
         {isPromoted && (
-          <Alert className="bg-blue-50 border-blue-200">
-            <CheckCircle className="h-4 w-4 text-blue-700" />
-            <AlertTitle className="text-blue-900 font-semibold">Already Promoted</AlertTitle>
-            <AlertDescription className="text-blue-800">
+          <Alert className="bg-blue-900/20 border-blue-700/50">
+            <CheckCircle className="h-4 w-4 text-blue-400" />
+            <AlertTitle className="text-blue-300 font-semibold">Already Promoted</AlertTitle>
+            <AlertDescription className="text-blue-400">
               <p className="mt-1">
                 This source has been promoted to Lead:{' '}
                 <strong>{currentSource.metadata?.primary_lead_id}</strong>
@@ -706,7 +688,7 @@ export default function BizDevSourceDetailPanel({
                   <Button
                     size="sm"
                     variant="outline"
-                    className="mt-2 border-blue-300 text-blue-700 hover:bg-blue-50"
+                    className="mt-2 border-blue-700 text-blue-400 hover:bg-blue-900/30"
                   >
                     <ExternalLink className="w-4 h-4 mr-2" />
                     View Lead

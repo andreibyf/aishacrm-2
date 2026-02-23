@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BizDevSource, Account } from '@/api/entities';
+import { BizDevSource, Account, Tenant } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +22,7 @@ import {
   Archive,
   TrendingUp,
   Trash2,
+  X,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -97,6 +98,7 @@ export default function BizDevSourcesPage() {
   const [pageSize, setPageSize] = useState(25);
   const { user } = useUser();
   const [bizdevSchema, setBizdevSchema] = useState(null);
+  const [businessModel, setBusinessModel] = useState('b2b');
 
   const { selectedTenantId } = useTenant();
   const { cachedRequest, clearCache, clearCacheByKey } = useApiManager();
@@ -112,6 +114,23 @@ export default function BizDevSourcesPage() {
         effectiveTenant: selectedTenantId || user?.tenant_id,
       });
     }
+  }, [selectedTenantId, user?.tenant_id]);
+
+  // Load tenant business model once at page level (avoids N+1 fetch per card)
+  useEffect(() => {
+    const loadBusinessModel = async () => {
+      try {
+        const tenantId = selectedTenantId || user?.tenant_id;
+        if (!tenantId) return;
+        const tenantData = await Tenant.get(tenantId);
+        if (tenantData?.business_model) {
+          setBusinessModel(tenantData.business_model);
+        }
+      } catch (err) {
+        console.error('[BizDevSources] Failed to load tenant model:', err);
+      }
+    };
+    loadBusinessModel();
   }, [selectedTenantId, user?.tenant_id]);
 
   useEffect(() => {
@@ -171,7 +190,7 @@ export default function BizDevSourcesPage() {
 
       if (fetchedSources && fetchedSources.length >= 5000) {
         toast.warning(
-          `Loaded 5,000 BizDev Sources. There may be more records not displayed. Use filters to narrow your search.`,
+          `Loaded 5,000 ${bizdevLabel}. There may be more records not displayed. Use filters to narrow your search.`,
           {
             duration: 5000,
           },
@@ -181,7 +200,7 @@ export default function BizDevSourcesPage() {
       if (logError) {
         logError(handleApiError('BizDev Sources Page', error));
       }
-      toast.error('Failed to load BizDev sources');
+      toast.error(`Failed to load ${bizdevLabel.toLowerCase()}`);
     } finally {
       setLoading(false);
       loadingRef.current = false;
@@ -245,7 +264,7 @@ export default function BizDevSourcesPage() {
           return exists ? prev.map((s) => (s.id === result.id ? result : s)) : [result, ...prev];
         });
       }
-      toast.success(`BizDev source ${editingSource ? 'updated' : 'created'} successfully`);
+      toast.success(`${bizdevSourceLabel} ${editingSource ? 'updated' : 'created'} successfully`);
     } catch (error) {
       if (logError) logError(handleApiError('BizDev Source Form (post-submit)', error));
     } finally {
@@ -260,8 +279,8 @@ export default function BizDevSourcesPage() {
     setConfirmAction({
       type: 'archive',
       source,
-      title: 'Archive BizDev Source',
-      description: `Archive "${source.company_name}"? This will mark it as archived but not delete it.`,
+      title: `Archive ${bizdevSourceLabel}`,
+      description: `Archive "${source.company_name || source.contact_person || 'this record'}"? This will mark it as archived but not delete it.`,
     });
   };
 
@@ -272,7 +291,7 @@ export default function BizDevSourcesPage() {
         archived_at: new Date().toISOString(),
       });
       clearCacheByKey('BizDevSource');
-      toast.success('BizDev source archived');
+      toast.success(`${bizdevSourceLabel} archived`);
       handleRefresh();
       if (selectedSource?.id === source.id) {
         setSelectedSource((prev) => ({
@@ -286,7 +305,7 @@ export default function BizDevSourcesPage() {
       if (logError) {
         logError(handleApiError('BizDev Source Archive', error));
       }
-      toast.error('Failed to archive BizDev source');
+      toast.error(`Failed to archive ${bizdevSourceLabel.toLowerCase()}`);
     }
   };
 
@@ -360,7 +379,7 @@ export default function BizDevSourcesPage() {
       }
 
       const leadId = result?.lead?.id;
-      toast.success('BizDev source promoted to lead', {
+      toast.success(`${bizdevSourceLabel} promoted to lead`, {
         description: `Created lead from: ${sourceToPromote.company_name || sourceToPromote.contact_person || 'prospect'}`,
         action: leadId
           ? {
@@ -381,7 +400,7 @@ export default function BizDevSourcesPage() {
       if (logError) {
         logError(handleApiError('BizDev Source Promotion', error));
       }
-      toast.error(`Failed to promote BizDev source to Lead.`);
+      toast.error(`Failed to promote ${bizdevSourceLabel.toLowerCase()} to lead`);
       throw error;
     }
   };
@@ -448,8 +467,8 @@ export default function BizDevSourcesPage() {
     setConfirmAction({
       type: 'delete',
       source,
-      title: 'Delete BizDev Source',
-      description: `Are you sure you want to delete "${source.company_name || source.source || 'this source'}"? This action cannot be undone.`,
+      title: `Delete ${bizdevSourceLabel}`,
+      description: `Are you sure you want to delete "${source.company_name || source.contact_person || source.source || 'this record'}"? This action cannot be undone.`,
     });
   };
 
@@ -457,13 +476,13 @@ export default function BizDevSourcesPage() {
     try {
       await BizDevSource.delete(source.id);
       clearCacheByKey('BizDevSource');
-      toast.success('BizDev source deleted successfully');
+      toast.success(`${bizdevSourceLabel} deleted successfully`);
       handleRefresh();
     } catch (error) {
       if (logError) {
         logError(handleApiError('Delete BizDev Source', error));
       }
-      toast.error('Failed to delete BizDev source');
+      toast.error(`Failed to delete ${bizdevSourceLabel.toLowerCase()}`);
     }
   };
 
@@ -494,7 +513,7 @@ export default function BizDevSourcesPage() {
       source.phone_number?.includes(searchTerm) ||
       source.city?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesStatus = statusFilter === 'all' || source.status === statusFilter;
+    const matchesStatus = statusFilter === 'all' || source.status?.toLowerCase() === statusFilter.toLowerCase();
     const matchesLicenseStatus =
       licenseStatusFilter === 'all' || source.license_status === licenseStatusFilter;
     const matchesBatch = batchFilter === 'all' || source.batch_id === batchFilter;
@@ -574,12 +593,12 @@ export default function BizDevSourcesPage() {
     sortDirection,
   ]);
 
-  const stats = {
+  const stats = useMemo(() => ({
     total: sources.length,
-    active: sources.filter((s) => s.status === 'Active').length,
-    promoted: sources.filter((s) => s.status === 'Promoted' || s.status === 'converted').length,
-    archived: sources.filter((s) => s.status === 'Archived').length,
-  };
+    active: sources.filter((s) => s.status?.toLowerCase() === 'active').length,
+    promoted: sources.filter((s) => ['promoted', 'converted'].includes(s.status?.toLowerCase())).length,
+    archived: sources.filter((s) => s.status?.toLowerCase() === 'archived').length,
+  }), [sources]);
 
   if (loading && sources.length === 0) {
     return (
@@ -600,7 +619,7 @@ export default function BizDevSourcesPage() {
             <div>
               <h1 className="text-3xl font-bold text-slate-100">{bizdevLabel}</h1>
               <p className="text-slate-400">
-                Manage business development {bizdevLabel.toLowerCase()} and prospects
+                Manage and track your {bizdevLabel.toLowerCase()}
                 {sources.length > 0 && (
                   <span className="ml-2 text-slate-500">
                     • Showing {filteredSources.length.toLocaleString()} of{' '}
@@ -741,9 +760,20 @@ export default function BizDevSourcesPage() {
                   className="pl-10 bg-slate-700 border-slate-600 text-slate-100"
                 />
               </div>
+              {searchInput && !searchTerm && (
+                <p className="text-xs text-slate-500 mt-1">
+                  Press Enter to search
+                </p>
+              )}
               {searchTerm && (
                 <p className="text-xs text-slate-400 mt-1">
                   {filteredSources.length} result{filteredSources.length !== 1 ? 's' : ''} found
+                  <button
+                    onClick={() => { setSearchTerm(''); setSearchInput(''); }}
+                    className="ml-2 text-blue-400 hover:text-blue-300"
+                  >
+                    Clear
+                  </button>
                 </p>
               )}
             </div>
@@ -847,9 +877,29 @@ export default function BizDevSourcesPage() {
                 ))}
               </SelectContent>
             </Select>
+            {(searchTerm || statusFilter !== 'all' || licenseStatusFilter !== 'all' || batchFilter !== 'all' || sourceFilter !== 'all') && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSearchTerm('');
+                  setSearchInput('');
+                  setStatusFilter('all');
+                  setLicenseStatusFilter('all');
+                  setBatchFilter('all');
+                  setSourceFilter('all');
+                  setCurrentPage(1);
+                }}
+                className="text-slate-400 hover:text-slate-200 whitespace-nowrap"
+              >
+                <X className="w-3 h-3 mr-1" />
+                Clear Filters
+              </Button>
+            )}
           </div>
         </div>
 
+        {filteredSources.length > 0 && (
         <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-2">
@@ -911,6 +961,7 @@ export default function BizDevSourcesPage() {
             </div>
           </div>
         </div>
+        )}
 
         <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden p-6">
           {loading ? (
@@ -942,6 +993,7 @@ export default function BizDevSourcesPage() {
                   key={source.id}
                   source={source}
                   tenantId={user?.tenant_id || selectedTenantId}
+                  businessModel={businessModel}
                   onClick={handleViewDetails}
                   isSelected={selectedSources.includes(source.id)}
                   onSelect={handleSelectSource}
@@ -986,6 +1038,7 @@ export default function BizDevSourcesPage() {
           <BizDevSourceDetailPanel
             bizDevSource={selectedSource}
             accounts={accounts}
+            businessModel={businessModel}
             onClose={() => {
               setShowDetailPanel(false);
               setSelectedSource(null);
