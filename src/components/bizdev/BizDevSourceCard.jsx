@@ -80,12 +80,12 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
   };
   
   const getStatusColor = (status) => {
-    switch (status) {
-      case "Active":
+    switch (status?.toLowerCase()) {
+      case "active":
         return "bg-green-900/30 text-green-400 border-green-700";
-      case "Promoted":
+      case "promoted":
         return "bg-blue-900/30 text-blue-400 border-blue-700";
-      case "Archived":
+      case "archived":
         return "bg-slate-700 text-slate-400 border-slate-600";
       default:
         return "bg-slate-700 text-slate-300 border-slate-600";
@@ -93,16 +93,16 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
   };
 
   const getLicenseStatusColor = (status) => {
-    switch (status) {
-      case "Active":
+    switch (status?.toLowerCase()) {
+      case "active":
         return "bg-green-900/30 text-green-400 border-green-700";
-      case "Suspended":
-      case "Revoked":
+      case "suspended":
+      case "revoked":
         return "bg-red-900/30 text-red-400 border-red-700";
-      case "Expired":
+      case "expired":
         return "bg-yellow-900/30 text-yellow-400 border-yellow-700";
-      case "Unknown":
-      case "Not Required":
+      case "unknown":
+      case "not required":
         return "bg-slate-700 text-slate-400 border-slate-600";
       default:
         return "bg-slate-700 text-slate-300 border-slate-600";

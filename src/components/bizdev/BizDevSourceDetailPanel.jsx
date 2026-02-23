@@ -188,23 +188,23 @@ export default function BizDevSourceDetailPanel({
 
   const getLicenseStatusColor = (status) => {
     const colors = {
-      Active: 'bg-green-900/30 text-green-400 border-green-700',
-      Suspended: 'bg-yellow-900/30 text-yellow-400 border-yellow-700',
-      Revoked: 'bg-red-900/30 text-red-400 border-red-700',
-      Expired: 'bg-orange-900/30 text-orange-400 border-orange-700',
-      Unknown: 'bg-slate-700 text-slate-400 border-slate-600',
-      'Not Required': 'bg-slate-700 text-slate-400 border-slate-600',
+      active: 'bg-green-900/30 text-green-400 border-green-700',
+      suspended: 'bg-yellow-900/30 text-yellow-400 border-yellow-700',
+      revoked: 'bg-red-900/30 text-red-400 border-red-700',
+      expired: 'bg-orange-900/30 text-orange-400 border-orange-700',
+      unknown: 'bg-slate-700 text-slate-400 border-slate-600',
+      'not required': 'bg-slate-700 text-slate-400 border-slate-600',
     };
-    return colors[status] || 'bg-slate-700 text-slate-400 border-slate-600';
+    return colors[status?.toLowerCase()] || 'bg-slate-700 text-slate-400 border-slate-600';
   };
 
   const getStatusColor = (status) => {
     const colors = {
-      Active: 'bg-green-900/30 text-green-400 border-green-700',
-      Promoted: 'bg-blue-900/30 text-blue-400 border-blue-700',
-      Archived: 'bg-slate-700 text-slate-400 border-slate-600',
+      active: 'bg-green-900/30 text-green-400 border-green-700',
+      promoted: 'bg-blue-900/30 text-blue-400 border-blue-700',
+      archived: 'bg-slate-700 text-slate-400 border-slate-600',
     };
-    return colors[status] || 'bg-slate-700 text-slate-400 border-slate-600';
+    return colors[status?.toLowerCase()] || 'bg-slate-700 text-slate-400 border-slate-600';
   };
 
   const isPromoted = currentSource.status?.toLowerCase() === 'promoted' || currentSource.status?.toLowerCase() === 'converted';
