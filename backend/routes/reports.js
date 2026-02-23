@@ -2349,9 +2349,8 @@ export default function createReportRoutes(_pgPool) {
       let htmlContent = '';
 
       if (report_type === 'overview' || report_type === 'dashboard-stats') {
-        // Fetch dashboard stats data
-        const internalBaseUrl =
-          process.env.INTERNAL_API_BASE_URL || `${req.protocol}://${req.hostname}`;
+        // Fetch dashboard stats data — use env var or hardcoded localhost (never derive from req.hostname to prevent SSRF)
+        const internalBaseUrl = process.env.INTERNAL_API_BASE_URL || 'http://localhost:4001';
         const internalBase = new URL(internalBaseUrl);
         const statsUrl = new URL('/api/reports/dashboard-stats', internalBase);
 
@@ -2453,9 +2452,8 @@ export default function createReportRoutes(_pgPool) {
           </html>
         `;
       } else if (report_type === 'data-quality') {
-        // Fetch data quality report
-        const internalBaseUrl =
-          process.env.INTERNAL_API_BASE_URL || `${req.protocol}://${req.hostname}`;
+        // Fetch data quality report — use env var or hardcoded localhost (never derive from req.hostname to prevent SSRF)
+        const internalBaseUrl = process.env.INTERNAL_API_BASE_URL || 'http://localhost:4001';
         const internalBase = new URL(internalBaseUrl);
         const qualityUrl = new URL('/api/reports/data-quality', internalBase);
         if (tenant_id) qualityUrl.searchParams.append('tenant_id', tenant_id);

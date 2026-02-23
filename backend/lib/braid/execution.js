@@ -69,10 +69,7 @@ export async function executeBraidTool(
   userId = null,
   accessToken = false,
 ) {
-  // DEBUG: Log create_lead calls to debug field scrambling
-  if (toolName === 'create_lead') {
-    console.log('🔍 [DEBUG] create_lead called with args:', JSON.stringify(args, null, 2));
-  }
+  // DEBUG removed: was logging full PII args for create_lead (CodeQL #327)
 
   // SECURITY: Verify the access token before any tool execution
   // This is the "key to the toolshed" - without it, no tools can be accessed
@@ -186,8 +183,8 @@ export async function executeBraidTool(
       // Increment the counter (TTL of 60 seconds for per-minute limiting)
       await cacheManager.set(rateLimitKey, currentCount + 1, 60);
     } catch (rateLimitErr) {
-      // Don't block on rate limit errors, just log
-      console.warn('[Braid Security] Rate limit check failed:', rateLimitErr.message);
+      // Don't block on rate limit errors, just log (redacted per CodeQL #330)
+      console.warn('[Braid Security] Rate limit check failed');
     }
   }
 
@@ -242,7 +239,7 @@ export async function executeBraidTool(
   // Convert object args to positional array based on function signature
   const positionalArgs = objectToPositionalArgs(toolName, normalizedArgs);
 
-  console.log(`[Braid Tool] Executing ${toolName}`, {
+  console.log('[Braid Tool] Executing %s', toolName, {
     braidPath,
     function: config.function,
     tenantUuid,
@@ -304,7 +301,7 @@ export async function executeBraidTool(
       { cache: false, timeout: 30000 }, // Disable in-memory cache, use Redis instead
     );
 
-    console.log(`[Braid Tool] ${toolName} completed`, {
+    console.log('[Braid Tool] %s completed', toolName, {
       resultTag: result?.tag,
       hasError: !!result?.error,
       errorType: result?.error?.type,
@@ -325,10 +322,10 @@ export async function executeBraidTool(
       try {
         const ttl = TOOL_CACHE_TTL[toolName] || TOOL_CACHE_TTL.DEFAULT;
         await cacheManager.set(cacheKey, result, ttl);
-        console.log(`[Braid Tool] Cached ${toolName} result for ${ttl}s`);
+        console.log('[Braid Tool] Cached %s result for %ds', toolName, ttl);
       } catch (cacheErr) {
         // Cache errors should never block tool execution
-        console.warn(`[Braid Tool] Cache store failed for ${toolName}:`, cacheErr.message);
+        console.warn('[Braid Tool] Cache store failed for %s:', toolName, cacheErr.message);
       }
     }
 
@@ -358,13 +355,15 @@ export async function executeBraidTool(
           // Invalidate all braid cache keys for this tenant and entity type
           const _pattern = `braid:${tenantUuid}:*${invalidatedEntity}*`;
           console.log(
-            `[Braid Tool] Invalidating cache for ${invalidatedEntity} (tenant: ${tenantUuid?.substring(0, 8)}...)`,
+            '[Braid Tool] Invalidating cache for %s (tenant: %s...)',
+            invalidatedEntity,
+            tenantUuid?.substring(0, 8),
           );
           await cacheManager.invalidateTenant(tenantUuid, 'braid');
         }
       } catch (cacheErr) {
         // Cache errors should never block tool execution
-        console.warn(`[Braid Tool] Cache invalidation failed for ${toolName}:`, cacheErr.message);
+        console.warn('[Braid Tool] Cache invalidation failed for %s:', toolName, cacheErr.message);
       }
     }
 

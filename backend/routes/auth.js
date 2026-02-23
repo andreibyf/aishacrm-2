@@ -713,16 +713,9 @@ export default function createAuthRoutes(_pgPool) {
       let decoded;
       try {
         decoded = jwt.verify(token, secret);
-        logger.debug('[Auth.refresh] JWT decoded successfully:', {
-          sub: decoded?.sub,
-          table: decoded?.table,
-          exp: decoded?.exp,
-          iat: decoded?.iat,
-        });
+        logger.debug('[Auth.refresh] JWT decoded successfully');
       } catch (jwtErr) {
-        logger.debug('[Auth.refresh] JWT verify failed:', {
-          error: jwtErr?.message || 'Unknown JWT error',
-        });
+        logger.debug('[Auth.refresh] JWT verify failed');
         return res.status(401).json({ status: 'error', message: 'Unauthorized' });
       }
 

@@ -3,7 +3,7 @@
  *
  * Stores per-role agent configuration with formal identity schema.
  * Imports canonical contract from shared/contracts.
- * 
+ *
  * Later: per-tenant DB overrides and UI editor.
  */
 
@@ -63,7 +63,7 @@ export function getDefaultAgentProfile(role, tenant_id = null) {
         temperature: 0.2,
         // BRAID TOOLS ONLY - orchestration and oversight focused
         tool_allowlist: [
-          'fetch_tenant_snapshot',  // Get overview of all CRM data
+          'fetch_tenant_snapshot', // Get overview of all CRM data
 
           // Leads – allow AiSHA to inspect and correct lead records
           'create_lead',
@@ -74,12 +74,12 @@ export function getDefaultAgentProfile(role, tenant_id = null) {
           'list_leads',
 
           // Activities and notes
-          'create_activity',        // Create tasks for team
-          'list_activities',        // Check team calendar/tasks
-          'create_note',            // Document decisions, plans
+          'create_activity', // Create tasks for team
+          'list_activities', // Check team calendar/tasks
+          'create_note', // Document decisions, plans
 
           // Delegation
-          'delegate_task',          // Delegate to specialists
+          'delegate_task', // Delegate to specialists
         ],
         memory_namespace: 'ops',
         metadata: {
@@ -349,7 +349,12 @@ export function getDefaultAgentProfile(role, tenant_id = null) {
           ...base.metadata,
           avatar: '📋',
           color: '#3b82f6',
-          capabilities: ['scheduling', 'milestone_tracking', 'resource_planning', 'status_reporting'],
+          capabilities: [
+            'scheduling',
+            'milestone_tracking',
+            'resource_planning',
+            'status_reporting',
+          ],
         },
       };
 
@@ -432,7 +437,12 @@ export function getDefaultAgentProfile(role, tenant_id = null) {
           ...base.metadata,
           avatar: '📣',
           color: '#ec4899',
-          capabilities: ['campaign_management', 'content_creation', 'audience_segmentation', 'analytics'],
+          capabilities: [
+            'campaign_management',
+            'content_creation',
+            'audience_segmentation',
+            'analytics',
+          ],
         },
       };
 
@@ -500,7 +510,12 @@ export function getDefaultAgentProfile(role, tenant_id = null) {
           ...base.metadata,
           avatar: '🎧',
           color: '#06b6d4',
-          capabilities: ['issue_resolution', 'knowledge_base', 'customer_communication', 'escalation'],
+          capabilities: [
+            'issue_resolution',
+            'knowledge_base',
+            'customer_communication',
+            'escalation',
+          ],
         },
       };
 
@@ -520,13 +535,13 @@ export async function getAgentProfile({ tenant_id, role }) {
   // TODO: Fetch tenant-specific overrides from database
   // For now, return default with tenant-scoped ID
   const profile = getDefaultAgentProfile(role, tenant_id);
-  
+
   // Validate the profile
   const { valid, errors } = validateAgent(profile);
   if (!valid) {
-    console.warn(`[AgentRegistry] Invalid agent profile for ${role}:`, errors);
+    console.warn('[AgentRegistry] Invalid agent profile for %s:', role, errors);
   }
-  
+
   return profile;
 }
 
@@ -536,7 +551,7 @@ export async function getAgentProfile({ tenant_id, role }) {
  * @returns {Promise<Object[]>} Array of agent profiles
  */
 export async function getAllAgentProfiles(tenant_id = null) {
-  return Promise.all(ROLES.map(role => getAgentProfile({ tenant_id, role })));
+  return Promise.all(ROLES.map((role) => getAgentProfile({ tenant_id, role })));
 }
 
 /**
@@ -557,11 +572,11 @@ export function canUseTool(agent, tool_name) {
  */
 export function getEscalationTarget(agent, trigger) {
   const rules = agent.escalation_rules
-    .filter(r => r.trigger === trigger)
+    .filter((r) => r.trigger === trigger)
     .sort((a, b) => (a.priority || 100) - (b.priority || 100));
-  
+
   if (rules.length === 0) return null;
-  
+
   const rule = rules[0];
   return { target_role: rule.target_role, rule };
 }

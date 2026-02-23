@@ -216,7 +216,7 @@ async function createAdmin() {
     console.log('╚═══════════════════════════════════════════════╝');
     console.log('\nYou can now sign in at:');
     console.log(
-      `  URL:      ${SUPABASE_URL.replace('supabase.co', 'supabase.co').replace(/https:\/\/(.+)\.supabase\.co/, 'https://app.aishacrm.com')}`,
+      `  URL:      ${SUPABASE_URL.replace(/https:\/\/(.+)\.supabase\.co/, 'https://app.aishacrm.com')}`,
     );
     console.log(`  Email:    ${ADMIN_EMAIL}`);
     console.log(`  Password: ${'*'.repeat(12)} (see configuration)`);

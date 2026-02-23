@@ -44,6 +44,17 @@ function getAllowedOrigins() {
 const ALLOWED_ORIGINS = getAllowedOrigins();
 
 /**
+ * Check if an origin is in the allowed whitelist.
+ * Exported so callers can guard before calling setCorsHeaders(),
+ * making the validation visible to static analysis (CodeQL).
+ * @param {string|undefined} origin - Request origin header
+ * @returns {boolean} True if origin is allowed
+ */
+export function isAllowedOrigin(origin) {
+  return !!origin && ALLOWED_ORIGINS.includes(origin);
+}
+
+/**
  * Check if origin is allowed and set appropriate CORS headers
  * @param {string|undefined} origin - Request origin header
  * @param {object} res - Express response object

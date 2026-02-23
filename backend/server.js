@@ -31,7 +31,7 @@ import { sanitizeUuidInput } from './lib/uuidValidator.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
 // Import secure CORS helper
-import { setCorsHeaders } from './lib/cors.js';
+import { setCorsHeaders, isAllowedOrigin } from './lib/cors.js';
 
 // Load environment variables
 // Try .env.local first (for local development), then fall back to .env
@@ -457,8 +457,7 @@ app.use('/api/ai/suggestions', defaultLimiter, createSuggestionsRoutes(measuredP
 
 // 404 handler - Ensure CORS headers so browser shows real error, not "CORS error"
 app.use((req, res, next) => {
-  if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
-    // Use secure origin whitelist instead of reflecting arbitrary origins
+  if (!res.getHeader('Access-Control-Allow-Origin') && isAllowedOrigin(req.headers.origin)) {
     setCorsHeaders(req.headers.origin, res, true);
   }
   notFoundHandler(req, res, next);
@@ -468,8 +467,7 @@ app.use((req, res, next) => {
 app.use((err, req, res, next) => {
   // Ensure CORS headers are present even in error responses
   // This prevents "CORS error" from masking the actual backend error (401, 403, 500, etc.)
-  if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
-    // Use secure origin whitelist instead of reflecting arbitrary origins
+  if (!res.getHeader('Access-Control-Allow-Origin') && isAllowedOrigin(req.headers.origin)) {
     setCorsHeaders(req.headers.origin, res, true);
   }
   errorHandler(err, req, res, next);
