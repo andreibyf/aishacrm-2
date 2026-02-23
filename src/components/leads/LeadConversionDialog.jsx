@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Contact, Account, Opportunity, Lead } from "@/api/entities";
+import React, { useState } from 'react';
+import { Contact, Account, Opportunity, Lead } from '@/api/entities';
 import { useUser } from '@/components/shared/useUser.js';
 import { useTenant } from '@/components/shared/tenantContext';
 import {
@@ -8,24 +8,31 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 
-import { Loader2, UserPlus, Building2, Target, ArrowRight } from "lucide-react";
-import { useApiManager } from "../shared/ApiManager";
+import { Loader2, UserPlus, Building2, Target, ArrowRight } from 'lucide-react';
+import { toast } from 'sonner';
+import { useApiManager } from '../shared/ApiManager';
 
 export default function LeadConversionDialog({ lead, accounts, open, onConvert, onClose }) {
   const [isConverting, setIsConverting] = useState(false);
   const [createAccount, setCreateAccount] = useState(false);
-  const [selectedAccountId, setSelectedAccountId] = useState("");
+  const [selectedAccountId, setSelectedAccountId] = useState('');
   const [createOpportunity, setCreateOpportunity] = useState(false);
-  const [accountName, setAccountName] = useState("");
-  const [opportunityName, setOpportunityName] = useState("");
-  const [opportunityAmount, setOpportunityAmount] = useState("");
+  const [accountName, setAccountName] = useState('');
+  const [opportunityName, setOpportunityName] = useState('');
+  const [opportunityAmount, setOpportunityAmount] = useState('');
   const { user: currentUser } = useUser();
   const { selectedTenantId } = useTenant();
 
@@ -38,16 +45,16 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
   React.useEffect(() => {
     if (lead) {
       // Set account name from lead company
-      setAccountName(lead.company || "");
-      
+      setAccountName(lead.company || '');
+
       // Set opportunity name with proper null checking
-      const firstName = lead.first_name || "";
-      const lastName = lead.last_name || "";
+      const firstName = lead.first_name || '';
+      const lastName = lead.last_name || '';
       const fullName = `${firstName} ${lastName}`.trim();
-      setOpportunityName(fullName ? `${fullName} - Opportunity` : "New Opportunity");
-      
+      setOpportunityName(fullName ? `${fullName} - Opportunity` : 'New Opportunity');
+
       // Set opportunity amount from lead estimated value
-      setOpportunityAmount(lead.estimated_value || "");
+      setOpportunityAmount(lead.estimated_value || '');
     }
   }, [lead]);
 
@@ -55,22 +62,22 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
 
   const handleConvert = async () => {
     if (!effectiveTenantId) {
-      alert("Cannot convert lead: No tenant selected. Please select a tenant first.");
+      toast.error('Cannot convert lead: No tenant selected. Please select a tenant first.');
       return;
     }
 
     setIsConverting(true);
     try {
-      let accountId = selectedAccountId;
-      
+      let accountId = selectedAccountId === '__none__' ? '' : selectedAccountId;
+
       // Create or use existing account
       if (createAccount && accountName.trim()) {
-        console.log("Creating new account:", accountName);
+        console.log('Creating new account:', accountName);
 
         const newAccountData = {
           name: accountName,
           tenant_id: effectiveTenantId,
-          type: "prospect",
+          type: 'prospect',
           phone: lead.phone || null,
           address_1: lead.address_1 || null,
           address_2: lead.address_2 || null,
@@ -87,25 +94,27 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
             'Account',
             'create',
             { data: newAccountData },
-            () => Account.create(newAccountData)
+            () => Account.create(newAccountData),
           );
           accountId = newAccount.id;
         } catch (error) {
           // Check for duplicate account error
           if (error.message?.includes('duplicate') || error.message?.includes('already exists')) {
-            throw new Error(`An account named "${accountName}" already exists. Please choose a different name or select the existing account.`);
+            throw new Error(
+              `An account named "${accountName}" already exists. Please choose a different name or select the existing account.`,
+            );
           }
           throw error;
         }
       } else if (!createAccount && selectedAccountId) {
         accountId = selectedAccountId;
-        console.log("Using existing account:", accountId);
+        console.log('Using existing account:', accountId);
       } else if (createAccount && !accountName.trim()) {
-        throw new Error("Account name is required to create a new account.");
+        throw new Error('Account name is required to create a new account.');
       }
 
       // Create contact from lead
-      console.log("Creating contact from lead");
+      console.log('Creating contact from lead');
       const newContact = await cachedRequest(
         'Contact',
         'create',
@@ -118,8 +127,8 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
             phone: lead.phone || null,
             job_title: lead.job_title || null,
             account_id: accountId || null,
-            lead_source: lead.source || "other",
-            status: "prospect",
+            lead_source: lead.source || 'other',
+            status: 'prospect',
             address_1: lead.address_1 || null,
             address_2: lead.address_2 || null,
             city: lead.city || null,
@@ -128,43 +137,44 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
             country: lead.country || null,
             notes: lead.notes || null,
             score: lead.score || 50,
-            score_reason: lead.score_reason || "Converted from lead",
-            ai_action: "follow_up",
+            score_reason: lead.score_reason || 'Converted from lead',
+            ai_action: 'follow_up',
             last_contacted: new Date().toISOString().split('T')[0],
-            next_action: "Initial contact as converted lead",
+            next_action: 'Initial contact as converted lead',
             assigned_to: lead.assigned_to || null,
-          }
+          },
         },
-        () => Contact.create({
-          tenant_id: effectiveTenantId,
-          first_name: lead.first_name,
-          last_name: lead.last_name,
-          email: lead.email,
-          phone: lead.phone || null,
-          job_title: lead.job_title || null,
-          account_id: accountId || null,
-          lead_source: lead.source || "other",
-          status: "prospect",
-          address_1: lead.address_1 || null,
-          address_2: lead.address_2 || null,
-          city: lead.city || null,
-          state: lead.state || null,
-          zip: lead.zip || null,
-          country: lead.country || null,
-          notes: lead.notes || null,
-          score: lead.score || 50,
-          score_reason: lead.score_reason || "Converted from lead",
-          ai_action: "follow_up",
-          last_contacted: new Date().toISOString().split('T')[0],
-          next_action: "Initial contact as converted lead",
-          assigned_to: lead.assigned_to || null,
-        })
+        () =>
+          Contact.create({
+            tenant_id: effectiveTenantId,
+            first_name: lead.first_name,
+            last_name: lead.last_name,
+            email: lead.email,
+            phone: lead.phone || null,
+            job_title: lead.job_title || null,
+            account_id: accountId || null,
+            lead_source: lead.source || 'other',
+            status: 'prospect',
+            address_1: lead.address_1 || null,
+            address_2: lead.address_2 || null,
+            city: lead.city || null,
+            state: lead.state || null,
+            zip: lead.zip || null,
+            country: lead.country || null,
+            notes: lead.notes || null,
+            score: lead.score || 50,
+            score_reason: lead.score_reason || 'Converted from lead',
+            ai_action: 'follow_up',
+            last_contacted: new Date().toISOString().split('T')[0],
+            next_action: 'Initial contact as converted lead',
+            assigned_to: lead.assigned_to || null,
+          }),
       );
 
       // Create opportunity if requested
       let opportunityId = null;
       if (createOpportunity && opportunityName.trim()) {
-        console.log("Creating opportunity");
+        console.log('Creating opportunity');
         const newOpportunity = await cachedRequest(
           'Opportunity',
           'create',
@@ -174,43 +184,60 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
               name: opportunityName,
               account_id: accountId || null,
               contact_id: newContact.id,
-              stage: "prospecting",
+              stage: 'prospecting',
               amount: parseFloat(opportunityAmount) || 0,
               probability: 25,
-              lead_source: lead.source || "other",
+              lead_source: lead.source || 'other',
               assigned_to: lead.assigned_to || null,
-              close_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
-              type: "new_business",
-            }
+              close_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                .toISOString()
+                .split('T')[0], // 30 days from now
+              type: 'new_business',
+            },
           },
-          () => Opportunity.create({
-            tenant_id: effectiveTenantId,
-            name: opportunityName,
-            account_id: accountId || null,
-            contact_id: newContact.id,
-            stage: "prospecting",
-            amount: parseFloat(opportunityAmount) || 0,
-            probability: 25,
-            lead_source: lead.source || "other",
-            assigned_to: lead.assigned_to || null,
-            close_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            type: "new_business",
-          })
+          () =>
+            Opportunity.create({
+              tenant_id: effectiveTenantId,
+              name: opportunityName,
+              account_id: accountId || null,
+              contact_id: newContact.id,
+              stage: 'prospecting',
+              amount: parseFloat(opportunityAmount) || 0,
+              probability: 25,
+              lead_source: lead.source || 'other',
+              assigned_to: lead.assigned_to || null,
+              close_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                .toISOString()
+                .split('T')[0],
+              type: 'new_business',
+            }),
         );
         opportunityId = newOpportunity.id;
       }
 
       // Update lead as converted
-      console.log("Updating lead status to converted");
+      console.log('Updating lead status to converted');
       await cachedRequest(
         'Lead',
         'update',
-        { id: lead.id, data: { status: "converted", converted_contact_id: newContact.id, converted_account_id: accountId } },
-        () => Lead.update(lead.id, { status: "converted", converted_contact_id: newContact.id, converted_account_id: accountId })
+        {
+          id: lead.id,
+          data: {
+            status: 'converted',
+            converted_contact_id: newContact.id,
+            converted_account_id: accountId,
+          },
+        },
+        () =>
+          Lead.update(lead.id, {
+            status: 'converted',
+            converted_contact_id: newContact.id,
+            converted_account_id: accountId,
+          }),
       );
 
-      console.log("Lead conversion completed successfully");
-      
+      console.log('Lead conversion completed successfully');
+
       if (cachedRequest.invalidate) {
         cachedRequest.invalidate('Lead', 'filter');
         cachedRequest.invalidate('Lead', 'get');
@@ -226,12 +253,11 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
         accountId,
         opportunityId,
       });
-      
+
       onClose();
-      
     } catch (error) {
-      console.error("Detailed conversion error:", error);
-      alert(`Failed to convert lead: ${error.message || "Unknown error"}. Please try again.`);
+      console.error('Detailed conversion error:', error);
+      toast.error(`Failed to convert lead: ${error.message || 'Unknown error'}. Please try again.`);
     } finally {
       setIsConverting(false);
     }
@@ -245,7 +271,7 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserPlus className="w-5 h-5 text-green-600" />
-            Convert Lead: {lead.first_name || ""} {lead.last_name || ""}
+            Convert Lead: {lead.first_name || ''} {lead.last_name || ''}
           </DialogTitle>
         </DialogHeader>
 
@@ -258,11 +284,11 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
                 <span>Lead → Contact</span>
               </div>
               <ArrowRight className="w-4 h-4 text-slate-400" />
-              {(createAccount || selectedAccountId) ? ( // Account will be created or selected
+              {createAccount || selectedAccountId ? ( // Account will be created or selected
                 <>
                   <div className="flex items-center gap-2">
                     <Building2 className="w-4 h-4 text-blue-600" />
-                    <span>{createAccount ? "New Account" : "Existing Account"}</span>
+                    <span>{createAccount ? 'New Account' : 'Existing Account'}</span>
                   </div>
                   <ArrowRight className="w-4 h-4 text-slate-400" />
                 </>
@@ -285,9 +311,9 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
                 onCheckedChange={(checked) => {
                   setCreateAccount(checked);
                   // Reset selected account ID if switching to create new
-                  if (checked) setSelectedAccountId("");
+                  if (checked) setSelectedAccountId('');
                   // If switching to use existing, clear account name
-                  else setAccountName("");
+                  else setAccountName('');
                 }}
               />
               <Label htmlFor="createAccount" className="text-sm font-medium">
@@ -314,6 +340,7 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
                     <SelectValue placeholder="Select an account..." />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="__none__">No Account / Don&apos;t associate</SelectItem>
                     {accounts.length > 0 ? (
                       accounts.map((account) => (
                         <SelectItem key={account.id} value={account.id}>
@@ -321,11 +348,10 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
                         </SelectItem>
                       ))
                     ) : (
-                      <SelectItem value={null} disabled>
+                      <SelectItem value="__no_accounts__" disabled>
                         No accounts available
                       </SelectItem>
                     )}
-                    <SelectItem value={null}>No Account / Don&apos;t associate</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -375,8 +401,8 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
           <Button variant="outline" onClick={onClose} disabled={isConverting}>
             Cancel
           </Button>
-          <Button 
-            onClick={handleConvert} 
+          <Button
+            onClick={handleConvert}
             disabled={isConverting || (createAccount && !accountName.trim())}
             className="bg-green-600 hover:bg-green-700"
           >

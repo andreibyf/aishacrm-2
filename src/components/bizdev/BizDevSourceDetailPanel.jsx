@@ -1,9 +1,8 @@
-
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   X,
   Building2,
@@ -27,24 +26,25 @@ import {
   Clock,
   Briefcase,
   User,
-} from "lucide-react";
-import { format } from "date-fns";
-import { toast } from "sonner";
-import { BizDevSource, Tenant } from "@/api/entities";
-import { createPageUrl } from "@/utils";
-import { Link } from "react-router-dom";
-import { Opportunity } from "@/api/entities";
-import { Activity } from "@/api/entities";
-import { Lead } from "@/api/entities";
-import { useTenant } from "@/components/shared/tenantContext";
+} from 'lucide-react';
+import { format } from 'date-fns';
+import { toast } from 'sonner';
+import { BizDevSource, Tenant } from '@/api/entities';
+import { createPageUrl } from '@/utils';
+import { Link } from 'react-router-dom';
+import { Opportunity } from '@/api/entities';
+import { Activity } from '@/api/entities';
+import { Lead } from '@/api/entities';
+import { useTenant } from '@/components/shared/tenantContext';
 
-export default function BizDevSourceDetailPanel({ 
-  bizDevSource, 
-  onClose, 
-  onEdit, 
-  onPromote, 
-  onUpdate, 
-  onRefresh 
+export default function BizDevSourceDetailPanel({
+  bizDevSource,
+  onClose,
+  onEdit,
+  onArchive,
+  onPromote,
+  onUpdate,
+  onRefresh,
 }) {
   const [promoting, setPromoting] = useState(false);
   const [showPromoteConfirm, setShowPromoteConfirm] = useState(false);
@@ -53,7 +53,7 @@ export default function BizDevSourceDetailPanel({
   const [creatingOpportunity, setCreatingOpportunity] = useState(false);
   const [linkedOpportunities, setLinkedOpportunities] = useState([]);
   const [currentSource, setCurrentSource] = useState(bizDevSource);
-  const [businessModel, setBusinessModel] = useState("b2b"); // Default to B2B
+  const [businessModel, setBusinessModel] = useState('b2b'); // Default to B2B
   const { selectedTenantId } = useTenant();
 
   // Determine if we're in B2C mode (person-first display)
@@ -102,7 +102,7 @@ export default function BizDevSourceDetailPanel({
               // Fallback: treat as comma‑separated string
               parsedLeadIds = String(currentSource.lead_ids)
                 .split(',')
-                .map(id => id.trim())
+                .map((id) => id.trim())
                 .filter(Boolean);
             }
           }
@@ -113,7 +113,7 @@ export default function BizDevSourceDetailPanel({
         // Load linked leads using the parsed array
         if (parsedLeadIds.length > 0) {
           const leads = await Lead.list();
-          const filtered = leads.filter(l => parsedLeadIds.includes(l.id));
+          const filtered = leads.filter((l) => parsedLeadIds.includes(l.id));
           setLinkedLeads(filtered);
         } else {
           setLinkedLeads([]);
@@ -121,13 +121,14 @@ export default function BizDevSourceDetailPanel({
 
         // Load linked opportunities (search by description containing source ID)
         const opps = await Opportunity.list();
-        const linkedOpps = opps.filter(opp =>
-          opp.description && opp.description.includes(`[BizDevSource:${currentSource.id}]`)
+        const linkedOpps = opps.filter(
+          (opp) =>
+            opp.description && opp.description.includes(`[BizDevSource:${currentSource.id}]`),
         );
         setLinkedOpportunities(linkedOpps);
       } catch (error) {
-        console.error("Failed to load linked data:", error);
-        toast.error("Failed to load linked data.");
+        console.error('Failed to load linked data:', error);
+        toast.error('Failed to load linked data.');
       }
     };
     loadLinkedData();
@@ -137,7 +138,7 @@ export default function BizDevSourceDetailPanel({
 
   const handlePromote = async () => {
     if (!currentSource?.id) {
-      toast.error("Invalid BizDev Source");
+      toast.error('Invalid BizDev Source');
       return;
     }
 
@@ -145,7 +146,7 @@ export default function BizDevSourceDetailPanel({
       id: currentSource.id,
       company_name: currentSource.company_name,
       status: currentSource.status,
-      has_onPromote: !!onPromote
+      has_onPromote: !!onPromote,
     });
 
     setPromoting(true);
@@ -158,7 +159,7 @@ export default function BizDevSourceDetailPanel({
         console.log('[DetailPanel] Calling parent onPromote...');
         result = await onPromote(currentSource);
         console.log('[DetailPanel] Parent onPromote returned:', result);
-        
+
         // If parent returns null (e.g., user cancelled confirm dialog), bail out
         if (result === null) {
           console.log('[DetailPanel] Parent returned null, cancelling promotion');
@@ -198,36 +199,40 @@ export default function BizDevSourceDetailPanel({
   };
 
   const handleArchive = () => {
-    const updatedSource = {
-      ...currentSource,
-      status: 'Archived',
-      archived_at: new Date().toISOString()
-    };
-    
-    setCurrentSource(updatedSource);
-    if (onUpdate) onUpdate(updatedSource);
-    
-    toast.success("BizDev Source archived");
-    onClose();
+    // Delegate to parent which calls the API to persist the archive
+    if (onArchive) {
+      onArchive(currentSource);
+    } else {
+      // Fallback: update local state only (archive won't persist)
+      const updatedSource = {
+        ...currentSource,
+        status: 'Archived',
+        archived_at: new Date().toISOString(),
+      };
+      setCurrentSource(updatedSource);
+      if (onUpdate) onUpdate(updatedSource);
+      toast.success('BizDev Source archived');
+      onClose();
+    }
   };
 
   const getLicenseStatusColor = (status) => {
     const colors = {
-      'Active': 'bg-green-100 text-green-800 border-green-300',
-      'Suspended': 'bg-yellow-100 text-yellow-800 border-yellow-300',
-      'Revoked': 'bg-red-100 text-red-800 border-red-300',
-      'Expired': 'bg-orange-100 text-orange-800 border-orange-300',
-      'Unknown': 'bg-gray-100 text-gray-800 border-gray-300',
-      'Not Required': 'bg-blue-100 text-blue-800 border-blue-300'
+      Active: 'bg-green-100 text-green-800 border-green-300',
+      Suspended: 'bg-yellow-100 text-yellow-800 border-yellow-300',
+      Revoked: 'bg-red-100 text-red-800 border-red-300',
+      Expired: 'bg-orange-100 text-orange-800 border-orange-300',
+      Unknown: 'bg-gray-100 text-gray-800 border-gray-300',
+      'Not Required': 'bg-blue-100 text-blue-800 border-blue-300',
     };
     return colors[status] || 'bg-gray-100 text-gray-800 border-gray-300';
   };
 
   const getStatusColor = (status) => {
     const colors = {
-      'Active': 'bg-blue-100 text-blue-800 border-blue-300',
-      'Promoted': 'bg-green-100 text-green-800 border-green-300',
-      'Archived': 'bg-gray-100 text-gray-800 border-gray-300'
+      Active: 'bg-blue-100 text-blue-800 border-blue-300',
+      Promoted: 'bg-green-100 text-green-800 border-green-300',
+      Archived: 'bg-gray-100 text-gray-800 border-gray-300',
     };
     return colors[status] || 'bg-gray-100 text-gray-800 border-gray-300';
   };
@@ -236,15 +241,14 @@ export default function BizDevSourceDetailPanel({
   const isArchived = currentSource.status === 'Archived';
   const canPromote = !isPromoted && !isArchived;
 
-
   const handleCreateOpportunity = async () => {
     if (!currentSource?.id) {
-      toast.error("Invalid BizDev Source");
+      toast.error('Invalid BizDev Source');
       return;
     }
-    
+
     console.log('[BizDevSource] Creating opportunity from source:', currentSource.company_name);
-    
+
     setCreatingOpportunity(true);
     try {
       const closeDate = new Date();
@@ -254,16 +258,17 @@ export default function BizDevSourceDetailPanel({
       const oppPayload = {
         name: `${currentSource.company_name} - New Business Opportunity`,
         amount: 0,
-        stage: "prospecting",
+        stage: 'prospecting',
         close_date: closeDateStr,
         tenant_id: currentSource.tenant_id,
-        description: `Opportunity created from BizDev Source: ${currentSource.source || 'Unknown Source'}\n` +
-                     `Batch: ${currentSource.batch_id || 'N/A'}\n` +
-                     `Company: ${currentSource.company_name}\n` +
-                     `Contact: ${currentSource.email || currentSource.phone_number || 'No contact info'}\n` +
-                     `[BizDevSource:${currentSource.id}]`,
-        lead_source: "other",
-        type: "new_business",
+        description:
+          `Opportunity created from BizDev Source: ${currentSource.source || 'Unknown Source'}\n` +
+          `Batch: ${currentSource.batch_id || 'N/A'}\n` +
+          `Company: ${currentSource.company_name}\n` +
+          `Contact: ${currentSource.email || currentSource.phone_number || 'No contact info'}\n` +
+          `[BizDevSource:${currentSource.id}]`,
+        lead_source: 'other',
+        type: 'new_business',
         probability: 10,
         is_test_data: false,
         // Don't set account_id yet - that happens after we win the business
@@ -272,7 +277,8 @@ export default function BizDevSourceDetailPanel({
           origin_bizdev_source_id: currentSource.id,
           origin_bizdev_source_company: currentSource.company_name,
           origin_bizdev_source_batch_id: currentSource.batch_id || null,
-          origin_bizdev_source_created_at: currentSource.created_at || currentSource.created_date || null,
+          origin_bizdev_source_created_at:
+            currentSource.created_at || currentSource.created_date || null,
         },
       };
 
@@ -289,14 +295,15 @@ export default function BizDevSourceDetailPanel({
         const activityDueDateStr = activityDueDate.toISOString().split('T')[0];
 
         await Activity.create({
-          type: "call",
+          type: 'call',
           subject: `Initial contact: ${currentSource.company_name}`,
-          description: `Follow up on opportunity for ${currentSource.company_name}\n` +
-                       `Contact: ${currentSource.email || currentSource.phone_number || 'No contact info'}\n` +
-                       `Source: ${currentSource.source}`,
-          status: "scheduled",
-          priority: "high",
-          related_to: "opportunity",
+          description:
+            `Follow up on opportunity for ${currentSource.company_name}\n` +
+            `Contact: ${currentSource.email || currentSource.phone_number || 'No contact info'}\n` +
+            `Source: ${currentSource.source}`,
+          status: 'scheduled',
+          priority: 'high',
+          related_to: 'opportunity',
           related_id: newOpp.id,
           related_name: newOpp.name,
           due_date: activityDueDateStr,
@@ -304,17 +311,17 @@ export default function BizDevSourceDetailPanel({
           is_test_data: false,
         });
 
-        toast.success("Opportunity and initial activity created!");
+        toast.success('Opportunity and initial activity created!');
       } catch (actError) {
-        console.warn("Failed to create activity, but opportunity was created:", actError);
-        toast.success("Opportunity created! (Activity creation failed)");
+        console.warn('Failed to create activity, but opportunity was created:', actError);
+        toast.success('Opportunity created! (Activity creation failed)');
       }
 
       setTimeout(() => {
         window.location.href = createPageUrl(`Opportunities?id=${newOpp.id}`);
       }, 500);
     } catch (error) {
-      console.error("Failed to create opportunity:", error);
+      console.error('Failed to create opportunity:', error);
       toast.error(`Failed to create opportunity: ${error.message || 'Unknown error'}`);
     } finally {
       setCreatingOpportunity(false);
@@ -325,34 +332,45 @@ export default function BizDevSourceDetailPanel({
   // B2C: Person-first display (contact_person takes priority)
   // B2B: Company-first display (company_name takes priority)
   const displayName = isB2C
-    ? (currentSource.contact_person || currentSource.company_name || currentSource.dba_name || 'Unnamed Contact')
-    : (currentSource.company_name || currentSource.dba_name || currentSource.contact_person || 'Unnamed Company');
+    ? currentSource.contact_person ||
+      currentSource.company_name ||
+      currentSource.dba_name ||
+      'Unnamed Contact'
+    : currentSource.company_name ||
+      currentSource.dba_name ||
+      currentSource.contact_person ||
+      'Unnamed Company';
 
   // Secondary display info (shows the "other" entity type)
   const secondaryName = isB2C
-    ? (currentSource.company_name || currentSource.dba_name) // Show company for B2C
+    ? currentSource.company_name || currentSource.dba_name // Show company for B2C
     : currentSource.contact_person; // Show contact for B2B
 
   const sourceName = currentSource.source || currentSource.source_name;
   const phone = currentSource.phone_number || currentSource.contact_phone;
   const email = currentSource.email || currentSource.contact_email;
-  
+
   // Check if acted upon
-  const hasActivity = currentSource.leads_generated > 0 || 
-                      currentSource.opportunities_created > 0 || 
-                      (currentSource.lead_ids && currentSource.lead_ids.length > 0) ||
-                      linkedOpportunities.length > 0;
+  const hasActivity =
+    currentSource.leads_generated > 0 ||
+    currentSource.opportunities_created > 0 ||
+    (currentSource.lead_ids && currentSource.lead_ids.length > 0) ||
+    linkedOpportunities.length > 0;
 
   return (
     <div className="fixed inset-y-0 right-0 w-full md:w-2/3 lg:w-1/2 bg-slate-800 shadow-2xl z-50 overflow-y-auto border-l border-slate-700">
       <CardHeader className="border-b border-slate-700 sticky top-0 bg-slate-800 z-10">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className={`w-12 h-12 rounded-lg ${hasActivity ? 'bg-green-900/30 border-green-700/50' : isB2C ? 'bg-purple-900/30 border-purple-700/50' : 'bg-blue-900/30 border-blue-700/50'} border flex items-center justify-center relative`}>
+            <div
+              className={`w-12 h-12 rounded-lg ${hasActivity ? 'bg-green-900/30 border-green-700/50' : isB2C ? 'bg-purple-900/30 border-purple-700/50' : 'bg-blue-900/30 border-blue-700/50'} border flex items-center justify-center relative`}
+            >
               {isB2C ? (
                 <User className={`w-6 h-6 ${hasActivity ? 'text-green-400' : 'text-purple-400'}`} />
               ) : (
-                <Building2 className={`w-6 h-6 ${hasActivity ? 'text-green-400' : 'text-blue-400'}`} />
+                <Building2
+                  className={`w-6 h-6 ${hasActivity ? 'text-green-400' : 'text-blue-400'}`}
+                />
               )}
               {hasActivity && (
                 <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-800 flex items-center justify-center">
@@ -379,16 +397,12 @@ export default function BizDevSourceDetailPanel({
                 </p>
               )}
               {/* DBA name if different from display name and secondary name */}
-              {currentSource.dba_name && currentSource.dba_name !== displayName && currentSource.dba_name !== secondaryName && (
-                <p className="text-sm text-slate-400 mt-0.5">
-                  DBA: {currentSource.dba_name}
-                </p>
-              )}
-              {sourceName && (
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Source: {sourceName}
-                </p>
-              )}
+              {currentSource.dba_name &&
+                currentSource.dba_name !== displayName &&
+                currentSource.dba_name !== secondaryName && (
+                  <p className="text-sm text-slate-400 mt-0.5">DBA: {currentSource.dba_name}</p>
+                )}
+              {sourceName && <p className="text-xs text-slate-500 mt-0.5">Source: {sourceName}</p>}
             </div>
           </div>
           <Button
@@ -412,14 +426,21 @@ export default function BizDevSourceDetailPanel({
             </Badge>
           )}
           {currentSource.priority && currentSource.priority !== 'medium' && (
-            <Badge className={currentSource.priority === 'high' 
-              ? 'bg-red-100 text-red-800 border-red-300' 
-              : 'bg-slate-100 text-slate-800 border-slate-300'}>
-              {currentSource.priority.charAt(0).toUpperCase() + currentSource.priority.slice(1)} Priority
+            <Badge
+              className={
+                currentSource.priority === 'high'
+                  ? 'bg-red-100 text-red-800 border-red-300'
+                  : 'bg-slate-100 text-slate-800 border-slate-300'
+              }
+            >
+              {currentSource.priority.charAt(0).toUpperCase() + currentSource.priority.slice(1)}{' '}
+              Priority
             </Badge>
           )}
-          {currentSource.license_status && currentSource.license_status !== "Not Required" && (
-            <Badge className={`${getLicenseStatusColor(currentSource.license_status)} font-semibold`}>
+          {currentSource.license_status && currentSource.license_status !== 'Not Required' && (
+            <Badge
+              className={`${getLicenseStatusColor(currentSource.license_status)} font-semibold`}
+            >
               License: {currentSource.license_status}
             </Badge>
           )}
@@ -476,16 +497,19 @@ export default function BizDevSourceDetailPanel({
               ) : (
                 <>
                   <TrendingUp className="w-4 h-4 mr-2" />
-                    Promote to Lead
+                  Promote to Lead
                 </>
               )}
             </Button>
           )}
-          
+
           {/* View Linked Lead - Show if already promoted */}
           {isPromoted && currentSource.metadata?.primary_lead_id && (
             <Link to={createPageUrl(`Leads?id=${currentSource.metadata.primary_lead_id}`)}>
-              <Button variant="outline" className="border-slate-600 text-slate-300 hover:bg-slate-700">
+              <Button
+                variant="outline"
+                className="border-slate-600 text-slate-300 hover:bg-slate-700"
+              >
                 <ExternalLink className="w-4 h-4 mr-2" />
                 View Linked Lead
               </Button>
@@ -503,7 +527,7 @@ export default function BizDevSourceDetailPanel({
                 <Pencil className="w-4 h-4 mr-2" />
                 Edit
               </Button>
-              
+
               <Button
                 variant="outline"
                 onClick={handleArchive}
@@ -518,12 +542,13 @@ export default function BizDevSourceDetailPanel({
 
         {/* Workflow Info - LIGHTENED BACKGROUND */}
         {/* Only show workflow hint if not archived, not promoted, and has linked leads */}
-        {!isArchived && !isPromoted && leadIdsArray && leadIdsArray.length > 0 && ( 
+        {!isArchived && !isPromoted && leadIdsArray && leadIdsArray.length > 0 && (
           <Alert className="mt-4 bg-blue-50 border-blue-200">
             <Info className="h-4 w-4 text-blue-700" />
             <AlertTitle className="text-blue-900 font-semibold">Workflow</AlertTitle>
             <AlertDescription className="text-blue-800">
-              Create an opportunity to start pursuing this prospect. Promote to Lead after winning business.
+              Create an opportunity to start pursuing this prospect. Promote to Lead after winning
+              business.
             </AlertDescription>
           </Alert>
         )}
@@ -531,7 +556,11 @@ export default function BizDevSourceDetailPanel({
 
       <div className="p-6 space-y-6">
         {/* Quick Contact Info - At the top for easy reference */}
-        {(phone || email || currentSource.contact_person || (currentSource.city || currentSource.state_province)) && (
+        {(phone ||
+          email ||
+          currentSource.contact_person ||
+          currentSource.city ||
+          currentSource.state_province) && (
           <Card className="bg-blue-900/20 border-blue-700/50">
             <CardHeader className="pb-3">
               <CardTitle className="text-slate-200 text-sm flex items-center gap-2">
@@ -566,7 +595,9 @@ export default function BizDevSourceDetailPanel({
                 <div className="flex items-center gap-3 text-sm">
                   <MapPin className="w-4 h-4 text-slate-400 flex-shrink-0" />
                   <span className="text-slate-300">
-                    {currentSource.city}{currentSource.city && currentSource.state_province ? ', ' : ''}{currentSource.state_province}
+                    {currentSource.city}
+                    {currentSource.city && currentSource.state_province ? ', ' : ''}
+                    {currentSource.state_province}
                   </span>
                 </div>
               )}
@@ -575,7 +606,9 @@ export default function BizDevSourceDetailPanel({
         )}
 
         {/* Activity Summary */}
-        {(currentSource.leads_generated > 0 || currentSource.opportunities_created > 0 || currentSource.revenue_generated > 0) && (
+        {(currentSource.leads_generated > 0 ||
+          currentSource.opportunities_created > 0 ||
+          currentSource.revenue_generated > 0) && (
           <Card className="bg-slate-700/50 border-slate-600">
             <CardHeader className="pb-3">
               <CardTitle className="text-slate-200 text-sm flex items-center gap-2">
@@ -587,19 +620,25 @@ export default function BizDevSourceDetailPanel({
               <div className="grid grid-cols-3 gap-4">
                 {currentSource.leads_generated > 0 && (
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-slate-100">{currentSource.leads_generated}</div>
+                    <div className="text-2xl font-bold text-slate-100">
+                      {currentSource.leads_generated}
+                    </div>
                     <div className="text-xs text-slate-400 mt-1">Leads Generated</div>
                   </div>
                 )}
                 {currentSource.opportunities_created > 0 && (
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-slate-100">{currentSource.opportunities_created}</div>
+                    <div className="text-2xl font-bold text-slate-100">
+                      {currentSource.opportunities_created}
+                    </div>
                     <div className="text-xs text-slate-400 mt-1">Opportunities</div>
                   </div>
                 )}
                 {currentSource.revenue_generated > 0 && (
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-green-400">${parseFloat(currentSource.revenue_generated).toLocaleString()}</div>
+                    <div className="text-2xl font-bold text-green-400">
+                      ${parseFloat(currentSource.revenue_generated).toLocaleString()}
+                    </div>
                     <div className="text-xs text-slate-400 mt-1">Revenue</div>
                   </div>
                 )}
@@ -621,14 +660,22 @@ export default function BizDevSourceDetailPanel({
         </div>
 
         {/* Promote Confirmation Alert - LIGHTENED BACKGROUND */}
-        {showPromoteConfirm && canPromote && ( 
+        {showPromoteConfirm && canPromote && (
           <Alert className="bg-green-50 border-green-200">
             <AlertCircle className="h-4 w-4 text-green-700" />
             <AlertTitle className="text-green-900 font-semibold">Promote to Lead?</AlertTitle>
             <AlertDescription className="text-green-800">
               <p className="mb-3">
-                This will create a Lead from <strong>{currentSource.company_name || currentSource.dba_name || currentSource.contact_person || currentSource.source || 'this prospect'}</strong>.
-                All available data will be carried forward to the Lead. Later, you can promote qualified leads to Accounts and Opportunities.
+                This will create a Lead from{' '}
+                <strong>
+                  {currentSource.company_name ||
+                    currentSource.dba_name ||
+                    currentSource.contact_person ||
+                    currentSource.source ||
+                    'this prospect'}
+                </strong>
+                . All available data will be carried forward to the Lead. Later, you can promote
+                qualified leads to Accounts and Opportunities.
               </p>
               <div className="mt-3 flex gap-2">
                 <Button
@@ -669,11 +716,16 @@ export default function BizDevSourceDetailPanel({
             <AlertTitle className="text-blue-900 font-semibold">Already Promoted</AlertTitle>
             <AlertDescription className="text-blue-800">
               <p className="mt-1">
-                This source has been promoted to Lead: <strong>{currentSource.metadata?.primary_lead_id}</strong>
+                This source has been promoted to Lead:{' '}
+                <strong>{currentSource.metadata?.primary_lead_id}</strong>
               </p>
               {currentSource.metadata?.primary_lead_id && (
                 <Link to={createPageUrl(`Leads?id=${currentSource.metadata.primary_lead_id}`)}>
-                  <Button size="sm" variant="outline" className="mt-2 border-blue-300 text-blue-700 hover:bg-blue-50">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-2 border-blue-300 text-blue-700 hover:bg-blue-50"
+                  >
                     <ExternalLink className="w-4 h-4 mr-2" />
                     View Lead
                   </Button>
@@ -694,7 +746,7 @@ export default function BizDevSourceDetailPanel({
             </CardHeader>
             <CardContent className="pt-0">
               <div className="space-y-2">
-                {linkedOpportunities.map(opp => (
+                {linkedOpportunities.map((opp) => (
                   <Link key={opp.id} to={createPageUrl(`Opportunities?id=${opp.id}`)}>
                     <div className="p-3 bg-slate-800 border border-slate-600 rounded-lg hover:border-blue-500 transition-colors cursor-pointer">
                       <div className="flex items-center justify-between">
@@ -725,7 +777,7 @@ export default function BizDevSourceDetailPanel({
             </CardHeader>
             <CardContent className="pt-0">
               <div className="space-y-2">
-                {linkedLeads.map(lead => (
+                {linkedLeads.map((lead) => (
                   <Link key={lead.id} to={createPageUrl(`Leads?id=${lead.id}`)}>
                     <div className="p-3 bg-slate-800 border border-slate-600 rounded-lg hover:border-yellow-500 transition-colors cursor-pointer">
                       <div className="flex items-center justify-between">
@@ -782,7 +834,10 @@ export default function BizDevSourceDetailPanel({
                 <Mail className="w-4 h-4 text-slate-400 mt-0.5" />
                 <div>
                   <p className="text-xs text-slate-400">Email</p>
-                  <a href={`mailto:${currentSource.email}`} className="text-sm text-blue-400 hover:underline">
+                  <a
+                    href={`mailto:${currentSource.email}`}
+                    className="text-sm text-blue-400 hover:underline"
+                  >
                     {currentSource.email}
                   </a>
                 </div>
@@ -794,7 +849,10 @@ export default function BizDevSourceDetailPanel({
                 <Phone className="w-4 h-4 text-slate-400 mt-0.5" />
                 <div>
                   <p className="text-xs text-slate-400">Phone</p>
-                  <a href={`tel:${currentSource.phone_number}`} className="text-sm text-blue-400 hover:underline">
+                  <a
+                    href={`tel:${currentSource.phone_number}`}
+                    className="text-sm text-blue-400 hover:underline"
+                  >
                     {currentSource.phone_number}
                   </a>
                 </div>
@@ -806,12 +864,14 @@ export default function BizDevSourceDetailPanel({
               <div className="flex items-start gap-3">
                 <Building2 className="w-4 h-4 text-slate-400 mt-0.5" />
                 <div>
-                  <p className="text-xs text-slate-400">{isB2C ? 'Company (Optional)' : 'Company Name'}</p>
+                  <p className="text-xs text-slate-400">
+                    {isB2C ? 'Company (Optional)' : 'Company Name'}
+                  </p>
                   <p className="text-sm text-slate-200">{currentSource.company_name}</p>
                 </div>
               </div>
             )}
-            
+
             {currentSource.dba_name && (
               <div className="flex items-start gap-3">
                 <Building2 className="w-4 h-4 text-slate-400 mt-0.5" />
@@ -821,7 +881,7 @@ export default function BizDevSourceDetailPanel({
                 </div>
               </div>
             )}
-            
+
             {/* Industry - only show for B2B or Hybrid */}
             {!isB2C && currentSource.industry && (
               <div className="flex items-start gap-3">
@@ -832,15 +892,19 @@ export default function BizDevSourceDetailPanel({
                 </div>
               </div>
             )}
-            
+
             {/* Website - only show for B2B or Hybrid */}
             {!isB2C && currentSource.website && (
               <div className="flex items-start gap-3">
                 <Globe className="w-4 h-4 text-slate-400 mt-0.5" />
                 <div>
                   <p className="text-xs text-slate-400">Website</p>
-                  <a 
-                    href={currentSource.website.startsWith('http') ? currentSource.website : `https://${currentSource.website}`}
+                  <a
+                    href={
+                      currentSource.website.startsWith('http')
+                        ? currentSource.website
+                        : `https://${currentSource.website}`
+                    }
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-sm text-blue-400 hover:underline"
@@ -850,26 +914,32 @@ export default function BizDevSourceDetailPanel({
                 </div>
               </div>
             )}
-            
+
             {/* Email and Phone for B2B (after company fields) */}
             {!isB2C && currentSource.email && (
               <div className="flex items-start gap-3">
                 <Mail className="w-4 h-4 text-slate-400 mt-0.5" />
                 <div>
                   <p className="text-xs text-slate-400">Email</p>
-                  <a href={`mailto:${currentSource.email}`} className="text-sm text-blue-400 hover:underline">
+                  <a
+                    href={`mailto:${currentSource.email}`}
+                    className="text-sm text-blue-400 hover:underline"
+                  >
                     {currentSource.email}
                   </a>
                 </div>
               </div>
             )}
-            
+
             {!isB2C && currentSource.phone_number && (
               <div className="flex items-start gap-3">
                 <Phone className="w-4 h-4 text-slate-400 mt-0.5" />
                 <div>
                   <p className="text-xs text-slate-400">Phone</p>
-                  <a href={`tel:${currentSource.phone_number}`} className="text-sm text-blue-400 hover:underline">
+                  <a
+                    href={`tel:${currentSource.phone_number}`}
+                    className="text-sm text-blue-400 hover:underline"
+                  >
                     {currentSource.phone_number}
                   </a>
                 </div>
@@ -886,18 +956,35 @@ export default function BizDevSourceDetailPanel({
                 </div>
               </div>
             )}
-            
-            {(currentSource.address_line_1 || currentSource.city || currentSource.state_province) && (
+
+            {(currentSource.address_line_1 ||
+              currentSource.city ||
+              currentSource.state_province) && (
               <div className="flex items-start gap-3">
                 <MapPin className="w-4 h-4 text-slate-400 mt-0.5" />
                 <div>
                   <p className="text-xs text-slate-400">Address</p>
                   <p className="text-sm text-slate-200">
-                    {currentSource.address_line_1 && <>{currentSource.address_line_1}<br /></>}
-                    {currentSource.address_line_2 && <>{currentSource.address_line_2}<br /></>}
+                    {currentSource.address_line_1 && (
+                      <>
+                        {currentSource.address_line_1}
+                        <br />
+                      </>
+                    )}
+                    {currentSource.address_line_2 && (
+                      <>
+                        {currentSource.address_line_2}
+                        <br />
+                      </>
+                    )}
                     {currentSource.city && `${currentSource.city}, `}
                     {currentSource.state_province} {currentSource.postal_code}
-                    {currentSource.country && <><br />{currentSource.country}</>}
+                    {currentSource.country && (
+                      <>
+                        <br />
+                        {currentSource.country}
+                      </>
+                    )}
                   </p>
                 </div>
               </div>
@@ -922,7 +1009,10 @@ export default function BizDevSourceDetailPanel({
         </Card>
 
         {/* Source & Batch Details */}
-        {(sourceName || currentSource.batch_id || currentSource.source_type || currentSource.priority) && (
+        {(sourceName ||
+          currentSource.batch_id ||
+          currentSource.source_type ||
+          currentSource.priority) && (
           <Card className="bg-slate-700/50 border-slate-600">
             <CardHeader>
               <CardTitle className="text-slate-200 text-sm flex items-center gap-2">
@@ -940,7 +1030,7 @@ export default function BizDevSourceDetailPanel({
                   </div>
                 </div>
               )}
-              
+
               {currentSource.source_type && (
                 <div className="flex items-start gap-3">
                   <Tag className="w-4 h-4 text-slate-400 mt-0.5" />
@@ -966,11 +1056,17 @@ export default function BizDevSourceDetailPanel({
                   <TrendingUp className="w-4 h-4 text-slate-400 mt-0.5" />
                   <div>
                     <p className="text-xs text-slate-400">Priority</p>
-                    <p className={`text-sm font-semibold ${
-                      currentSource.priority === 'high' ? 'text-red-400' :
-                      currentSource.priority === 'medium' ? 'text-yellow-400' : 'text-slate-300'
-                    }`}>
-                      {currentSource.priority.charAt(0).toUpperCase() + currentSource.priority.slice(1)}
+                    <p
+                      className={`text-sm font-semibold ${
+                        currentSource.priority === 'high'
+                          ? 'text-red-400'
+                          : currentSource.priority === 'medium'
+                            ? 'text-yellow-400'
+                            : 'text-slate-300'
+                      }`}
+                    >
+                      {currentSource.priority.charAt(0).toUpperCase() +
+                        currentSource.priority.slice(1)}
                     </p>
                   </div>
                 </div>
@@ -992,25 +1088,31 @@ export default function BizDevSourceDetailPanel({
         )}
 
         {/* Tags Section */}
-        {currentSource.tags && Array.isArray(currentSource.tags) && currentSource.tags.length > 0 && (
-          <Card className="bg-slate-700/50 border-slate-600">
-            <CardHeader>
-              <CardTitle className="text-slate-200 text-sm flex items-center gap-2">
-                <Tag className="w-4 h-4 text-blue-400" />
-                Tags
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2">
-                {currentSource.tags.map((tag, idx) => (
-                  <Badge key={idx} variant="outline" className="bg-slate-700 text-slate-300 border-slate-600">
-                    {tag}
-                  </Badge>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        {currentSource.tags &&
+          Array.isArray(currentSource.tags) &&
+          currentSource.tags.length > 0 && (
+            <Card className="bg-slate-700/50 border-slate-600">
+              <CardHeader>
+                <CardTitle className="text-slate-200 text-sm flex items-center gap-2">
+                  <Tag className="w-4 h-4 text-blue-400" />
+                  Tags
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-2">
+                  {currentSource.tags.map((tag, idx) => (
+                    <Badge
+                      key={idx}
+                      variant="outline"
+                      className="bg-slate-700 text-slate-300 border-slate-600"
+                    >
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
         {/* Record Details */}
         <Card className="bg-slate-700/50 border-slate-600">
@@ -1024,13 +1126,17 @@ export default function BizDevSourceDetailPanel({
             <div>
               <p className="text-xs text-slate-400 mb-1">Created</p>
               <p className="text-sm text-slate-300">
-                {currentSource.created_date ? format(new Date(currentSource.created_date), 'MMM d, yyyy h:mm a') : 'N/A'}
+                {currentSource.created_date
+                  ? format(new Date(currentSource.created_date), 'MMM d, yyyy h:mm a')
+                  : 'N/A'}
               </p>
             </div>
             <div>
               <p className="text-xs text-slate-400 mb-1">Updated</p>
               <p className="text-sm text-slate-300">
-                {currentSource.updated_date ? format(new Date(currentSource.updated_date), 'MMM d, yyyy h:mm a') : 'N/A'}
+                {currentSource.updated_date
+                  ? format(new Date(currentSource.updated_date), 'MMM d, yyyy h:mm a')
+                  : 'N/A'}
               </p>
             </div>
             {currentSource.archived_at && (
