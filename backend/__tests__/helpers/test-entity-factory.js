@@ -20,7 +20,7 @@
  *   import { TestFactory } from './helpers/test-entity-factory.js';
  *
  *   const lead = TestFactory.lead({ first_name: "John" });
- *   const contact = TestFactory.contact({ email: "jane@test.com" });
+ *   const employee = TestFactory.employee({ role: "Sales Rep" });
  */
 
 function generateTestId() {
@@ -70,7 +70,7 @@ function getTestMetadata(additional = {}) {
 /**
  * Lead Factory
  */
-export function createTestLead(overrides = {}) {
+function createTestLead(overrides = {}) {
   const now = getNow();
   const testId = generateTestId();
 
@@ -100,7 +100,7 @@ export function createTestLead(overrides = {}) {
 /**
  * Contact Factory
  */
-export function createTestContact(overrides = {}) {
+function createTestContact(overrides = {}) {
   const now = getNow();
   const testId = generateTestId();
 
@@ -127,7 +127,7 @@ export function createTestContact(overrides = {}) {
 /**
  * Account Factory
  */
-export function createTestAccount(overrides = {}) {
+function createTestAccount(overrides = {}) {
   const now = getNow();
   const testId = generateTestId();
 
@@ -153,7 +153,7 @@ export function createTestAccount(overrides = {}) {
 /**
  * Opportunity Factory
  */
-export function createTestOpportunity(overrides = {}) {
+function createTestOpportunity(overrides = {}) {
   const now = getNow();
   const testId = generateTestId();
   const closeDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -182,7 +182,7 @@ export function createTestOpportunity(overrides = {}) {
 /**
  * Activity Factory
  */
-export function createTestActivity(overrides = {}) {
+function createTestActivity(overrides = {}) {
   const now = getNow();
   const testId = generateTestId();
   const dueDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
@@ -208,6 +208,57 @@ export function createTestActivity(overrides = {}) {
 }
 
 /**
+ * Employee Factory
+ */
+function createTestEmployee(overrides = {}) {
+  const now = getNow();
+  const testId = generateTestId();
+
+  const defaults = {
+    first_name: 'Test',
+    last_name: `Employee-${testId}`,
+    email: ensureTestEmail(overrides.email, 'employee-test'),
+    role: 'Test Role',
+    status: 'active',
+    metadata: getTestMetadata(overrides.metadata),
+    tenant_id: getTenantId(overrides),
+  };
+
+  return {
+    ...defaults,
+    ...overrides,
+    is_test_data: true,
+    created_at: overrides.created_at || now,
+    updated_at: overrides.updated_at || now,
+  };
+}
+
+/**
+ * User Factory
+ */
+function createTestUser(overrides = {}) {
+  const now = getNow();
+  const testId = generateTestId();
+
+  const defaults = {
+    email: ensureTestEmail(overrides.email, 'user-test'),
+    first_name: 'Test',
+    last_name: `User-${testId}`,
+    role: 'user',
+    metadata: getTestMetadata(overrides.metadata),
+    tenant_id: getTenantId(overrides),
+  };
+
+  return {
+    ...defaults,
+    ...overrides,
+    is_test_data: true,
+    created_at: overrides.created_at || now,
+    updated_at: overrides.updated_at || now,
+  };
+}
+
+/**
  * Unified Test Factory
  */
 export const TestFactory = {
@@ -216,6 +267,8 @@ export const TestFactory = {
   account: createTestAccount,
   opportunity: createTestOpportunity,
   activity: createTestActivity,
+  employee: createTestEmployee,
+  user: createTestUser,
 
   // Batch creation
   leads: (count, overrides = {}) =>
@@ -227,6 +280,22 @@ export const TestFactory = {
     Array.from({ length: count }, (_, i) =>
       createTestContact({ ...overrides, last_name: `Contact-${i + 1}` }),
     ),
+
+  employees: (count, overrides = {}) =>
+    Array.from({ length: count }, (_, i) =>
+      createTestEmployee({ ...overrides, last_name: `Employee-${i + 1}` }),
+    ),
+};
+
+// Export individual factories
+export {
+  createTestLead,
+  createTestContact,
+  createTestAccount,
+  createTestOpportunity,
+  createTestActivity,
+  createTestEmployee,
+  createTestUser,
 };
 
 export default TestFactory;
