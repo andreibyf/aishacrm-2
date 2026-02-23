@@ -151,11 +151,16 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
           })),
         ];
 
-        // Filter by channel: require phone for calls, email for emails
-        const combinedContacts =
-          formData.campaign_type === 'email'
-            ? combinedContactsAll.filter((c) => c.email)
-            : combinedContactsAll.filter((c) => c.phone);
+        // [2026-02-23 Claude] — initial filter based on default campaign_type;
+        // subsequent type changes are handled by handleCampaignTypeChange
+        const emailTypes = ['email', 'sendfox', 'social_post'];
+        const phoneTypes = ['call', 'sms', 'whatsapp'];
+        const ct = formData.campaign_type;
+        const combinedContacts = emailTypes.includes(ct)
+          ? combinedContactsAll.filter((c) => c.email)
+          : phoneTypes.includes(ct)
+            ? combinedContactsAll.filter((c) => c.phone)
+            : combinedContactsAll;
 
         setAllContacts(combinedContactsAll);
         setAvailableContacts(combinedContacts);
@@ -234,7 +239,9 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
     };
 
     loadData();
-  }, [campaign, selectedTenantId, currentUser, formData.campaign_type]);
+    // [2026-02-23 Claude] — removed formData.campaign_type from deps to prevent
+    // re-triggering loadData on type change (handleCampaignTypeChange handles re-filtering)
+  }, [campaign, selectedTenantId, currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load tenant integrations to enforce tenant-specific profiles
   useEffect(() => {
