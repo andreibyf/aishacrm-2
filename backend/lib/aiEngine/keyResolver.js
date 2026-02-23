@@ -97,7 +97,7 @@ export async function resolveLLMApiKey({
             } else {
               console.log(
                 '[AIEngine][KeyResolver] Using tenant-specific API key from tenant_integrations for provider:',
-                provider,
+                provider, // safe: only provider name logged, not the key
               );
               return trimmedKey;
             }

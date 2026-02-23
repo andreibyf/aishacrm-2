@@ -13,10 +13,10 @@ const isDevelopment = process.env.NODE_ENV === 'development';
 const allowSelfSigned = process.env.ALLOW_SELF_SIGNED_CERTS === 'true';
 
 if (isDevelopment && allowSelfSigned) {
-  // Only disable TLS validation if BOTH conditions are met
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  // Per-connection TLS override is handled in the Client config below.
+  // Global NODE_TLS_REJECT_UNAUTHORIZED is NOT set to avoid process-wide side effects.
   console.warn(
-    '⚠️  WARNING: TLS certificate validation DISABLED (development mode with explicit opt-in)',
+    '⚠️  WARNING: TLS certificate validation DISABLED for this connection (development mode with explicit opt-in)',
   );
   console.warn('⚠️  This configuration is INSECURE and must NEVER be used in production!');
 } else if (!isDevelopment && allowSelfSigned) {
@@ -65,7 +65,8 @@ console.log(`Connecting to Postgres (Supabase) at ${redacted}`);
 
 const client = new Client({
   connectionString,
-  ssl: { rejectUnauthorized: false },
+  ssl:
+    isDevelopment && allowSelfSigned ? { rejectUnauthorized: false } : { rejectUnauthorized: true },
 });
 
 async function run() {

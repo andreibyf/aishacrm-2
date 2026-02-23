@@ -4,7 +4,7 @@ import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildActivityAiContext } from '../lib/aiContextEnricher.js';
 import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
-import { setCorsHeaders } from '../lib/cors.js';
+import { setCorsHeaders, isAllowedOrigin } from '../lib/cors.js';
 
 /**
  * Look up the name and email for a related entity (lead, contact, account, opportunity)
@@ -582,7 +582,7 @@ export default function createActivityV2Routes(_pgPool) {
     } catch (error) {
       logger.error('Error in v2 activities list:', error);
       // Ensure CORS headers are present in error responses (using secure origin whitelist)
-      if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
+      if (!res.getHeader('Access-Control-Allow-Origin') && isAllowedOrigin(req.headers.origin)) {
         setCorsHeaders(req.headers.origin, res, true);
       }
       res.status(500).json({ status: 'error', message: error.message });
@@ -725,7 +725,7 @@ export default function createActivityV2Routes(_pgPool) {
       });
     } catch (error) {
       logger.error('Error in v2 activity create:', error); // Ensure CORS headers are present in error responses (using secure origin whitelist)
-      if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
+      if (!res.getHeader('Access-Control-Allow-Origin') && isAllowedOrigin(req.headers.origin)) {
         setCorsHeaders(req.headers.origin, res, true);
       }
       res.status(500).json({ status: 'error', message: error.message });
@@ -827,7 +827,7 @@ export default function createActivityV2Routes(_pgPool) {
       });
     } catch (error) {
       logger.error('Error in v2 activity search:', error);
-      if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
+      if (!res.getHeader('Access-Control-Allow-Origin') && isAllowedOrigin(req.headers.origin)) {
         setCorsHeaders(req.headers.origin, res, true);
       }
       res.status(500).json({ status: 'error', message: error.message });
@@ -862,7 +862,7 @@ export default function createActivityV2Routes(_pgPool) {
       res.json({ status: 'success', data: { activity, aiContext } });
     } catch (error) {
       logger.error('Error in v2 activity get:', error); // Ensure CORS headers are present in error responses (using secure origin whitelist)
-      if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
+      if (!res.getHeader('Access-Control-Allow-Origin') && isAllowedOrigin(req.headers.origin)) {
         setCorsHeaders(req.headers.origin, res, true);
       }
       res.status(500).json({ status: 'error', message: error.message });
@@ -979,7 +979,7 @@ export default function createActivityV2Routes(_pgPool) {
     } catch (error) {
       logger.error('Error in v2 activity update:', error);
       // Ensure CORS headers are present in error responses (using secure origin whitelist)
-      if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
+      if (!res.getHeader('Access-Control-Allow-Origin') && isAllowedOrigin(req.headers.origin)) {
         setCorsHeaders(req.headers.origin, res, true);
       }
       res.status(500).json({ status: 'error', message: error.message });
@@ -1045,7 +1045,7 @@ export default function createActivityV2Routes(_pgPool) {
     } catch (error) {
       logger.error('Error in v2 activity delete:', error);
       // Ensure CORS headers are present in error responses (using secure origin whitelist)
-      if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
+      if (!res.getHeader('Access-Control-Allow-Origin') && isAllowedOrigin(req.headers.origin)) {
         setCorsHeaders(req.headers.origin, res, true);
       }
       res.status(500).json({ status: 'error', message: error.message });

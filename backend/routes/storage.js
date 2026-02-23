@@ -10,7 +10,7 @@ import { getSupabaseAdmin, getBucketName } from '../lib/supabaseFactory.js';
 import { checkR2Access, buildTenantKey, putObject, getObject } from '../lib/r2.js';
 import logger from '../lib/logger.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
-import { setCorsHeaders } from '../lib/cors.js';
+import { setCorsHeaders, isAllowedOrigin } from '../lib/cors.js';
 
 // Multer memory storage to forward buffer to Supabase
 const upload = multer({ storage: multer.memoryStorage() });
@@ -196,7 +196,7 @@ export default function createStorageRoutes(_pgPool) {
     } catch (error) {
       logger.error('[storage.upload] Error:', error);
       // Ensure CORS headers are present in error responses (using secure origin whitelist)
-      if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
+      if (!res.getHeader('Access-Control-Allow-Origin') && isAllowedOrigin(req.headers.origin)) {
         setCorsHeaders(req.headers.origin, res, true);
       }
       return res.status(500).json({
@@ -511,12 +511,10 @@ export default function createStorageRoutes(_pgPool) {
         null;
 
       if (!tenantId) {
-        return res
-          .status(400)
-          .json({
-            status: 'error',
-            message: 'tenant_id is required (x-tenant-id header preferred)',
-          });
+        return res.status(400).json({
+          status: 'error',
+          message: 'tenant_id is required (x-tenant-id header preferred)',
+        });
       }
 
       const kind = req.query?.kind?.toString() || null;
@@ -594,12 +592,10 @@ export default function createStorageRoutes(_pgPool) {
       const payload = req.body?.payload;
 
       if (!tenantId) {
-        return res
-          .status(400)
-          .json({
-            status: 'error',
-            message: 'tenant_id is required (x-tenant-id header preferred)',
-          });
+        return res.status(400).json({
+          status: 'error',
+          message: 'tenant_id is required (x-tenant-id header preferred)',
+        });
       }
       if (!kind) {
         return res.status(400).json({ status: 'error', message: 'kind is required' });
@@ -666,12 +662,10 @@ export default function createStorageRoutes(_pgPool) {
 
       const id = req.params.id?.toString();
       if (!tenantId) {
-        return res
-          .status(400)
-          .json({
-            status: 'error',
-            message: 'tenant_id is required (x-tenant-id header preferred)',
-          });
+        return res.status(400).json({
+          status: 'error',
+          message: 'tenant_id is required (x-tenant-id header preferred)',
+        });
       }
       if (!id) {
         return res.status(400).json({ status: 'error', message: 'id is required' });

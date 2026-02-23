@@ -56,7 +56,7 @@ import {
 import { buildStatusLabelMap, normalizeToolArgs } from '../lib/statusCardLabelResolver.js';
 import logger from '../lib/logger.js';
 import { buildTenantKey, putObject } from '../lib/r2.js';
-import { setCorsHeaders } from '../lib/cors.js';
+import { setCorsHeaders, isAllowedOrigin } from '../lib/cors.js';
 // Phase 7 RAG helpers
 import {
   queryMemory,
@@ -2747,7 +2747,10 @@ ${toolContextSummary}`,
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
-      res.setHeader('Access-Control-Allow-Origin', '*');
+      // CORS: Use secure origin whitelist instead of wildcard (CodeQL #389)
+      if (isAllowedOrigin(req.headers.origin)) {
+        setCorsHeaders(req.headers.origin, res, true);
+      }
 
       // Send initial connection message
       res.write(`data: ${JSON.stringify({ type: 'connected', conversationId: id })}\n\n`);
@@ -3016,7 +3019,7 @@ ${toolContextSummary}`,
               .single();
 
             if (insertErr) {
-              logger.warn('[AI Chat] Failed to persist user message:', insertErr.message);
+              logger.warn('[AI Chat] Failed to persist user message');
             } else {
               // Store user message ID for response (enables feedback on user messages too)
               req.savedUserMessageId = insertedUserMsg?.id;
@@ -3026,7 +3029,7 @@ ${toolContextSummary}`,
               );
             }
           } catch (insertErr) {
-            logger.warn('[AI Chat] Failed to persist user message:', insertErr.message);
+            logger.warn('[AI Chat] Failed to persist user message (catch)');
           }
         }
       }
@@ -4700,7 +4703,7 @@ ${conversationSummary}`;
       res.setHeader('Connection', 'keep-alive');
 
       // CORS: Use secure origin whitelist for credentials transfer
-      if (req.headers.origin) {
+      if (isAllowedOrigin(req.headers.origin)) {
         setCorsHeaders(req.headers.origin, res, true);
       }
 

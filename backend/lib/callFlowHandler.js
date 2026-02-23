@@ -1,13 +1,13 @@
 /**
  * Call Flow Handler
- * 
+ *
  * Handles both inbound and outbound call flows:
  * - Contact resolution by phone number
  * - Auto-creation of contacts from unknown numbers
  * - Transcript summarization via OpenAI
  * - Automatic note/activity creation
  * - Lead qualification scoring
- * 
+ *
  * PR5: Shadow wiring for C.A.R.E. v1
  * - Escalation detection (read-only)
  * - State transition proposals (read-only)
@@ -44,11 +44,11 @@ async function createCallNotification({
   direction,
   outcome,
   summary,
-  sentiment
+  sentiment,
 }) {
   try {
     const supabase = getSupabaseClient();
-    
+
     // Get the assigned user for this contact/lead
     const table = contact_type === 'lead' ? 'leads' : 'contacts';
     const { data: record } = await supabase
@@ -57,7 +57,7 @@ async function createCallNotification({
       .eq('id', contact_id)
       .eq('tenant_id', tenant_id)
       .single();
-    
+
     if (!record?.assigned_to) return;
 
     // Get user email
@@ -66,13 +66,13 @@ async function createCallNotification({
       .select('email')
       .eq('id', record.assigned_to)
       .single();
-    
+
     if (!user?.email) return;
 
     // Build notification
     const emoji = direction === 'inbound' ? '📞' : '📤';
     const name = contact_name || 'Unknown';
-    
+
     let title, message;
     if (outcome === 'answered' && summary) {
       title = `${emoji} Call with ${name}`;
@@ -91,9 +91,8 @@ async function createCallNotification({
     }
 
     // Determine notification type based on sentiment
-    const type = sentiment === 'positive' ? 'success' 
-               : sentiment === 'negative' ? 'warning' 
-               : 'info';
+    const type =
+      sentiment === 'positive' ? 'success' : sentiment === 'negative' ? 'warning' : 'info';
 
     await supabase.from('notifications').insert({
       tenant_id,
@@ -103,7 +102,7 @@ async function createCallNotification({
       type,
       is_read: false,
       link: `/${contact_type}s?id=${contact_id}`,
-      metadata: { contact_id, contact_type, direction, outcome, sentiment }
+      metadata: { contact_id, contact_type, direction, outcome, sentiment },
     });
 
     console.log(`[CallFlow] Notification created for ${user.email}: ${title}`);
@@ -114,7 +113,7 @@ async function createCallNotification({
 
 /**
  * Process inbound call webhook
- * 
+ *
  * Flow:
  * 1. Lookup contact by phone number
  * 2. If not found, create new lead/contact
@@ -136,7 +135,7 @@ export async function handleInboundCall(pgPool, payload) {
     caller_name, // AI agent extracts from conversation: "Hi, this is John"
     caller_email, // Optional: AI agent extracts if caller provides it
     provider, // 'twilio', 'signalwire', 'callfluent', 'thoughtly'
-    metadata = {}
+    metadata = {},
   } = payload;
 
   if (!tenant_id || !from_number) {
@@ -158,7 +157,7 @@ export async function handleInboundCall(pgPool, payload) {
     const callerInfo = {
       name: caller_name,
       email: caller_email,
-      ...metadata
+      ...metadata,
     };
     const newLead = await createLeadFromCall(pgPool, tenant_id, from_number, callerInfo);
     contactId = newLead.id;
@@ -198,8 +197,8 @@ export async function handleInboundCall(pgPool, payload) {
       provider,
       sentiment,
       transcript_length: transcript?.length || 0,
-      ...metadata
-    }
+      ...metadata,
+    },
   });
 
   // Step 5: Create note with transcript summary
@@ -216,8 +215,8 @@ export async function handleInboundCall(pgPool, payload) {
         action_items: actionItems,
         customer_requests: analysis.customerRequests || [],
         commitments_made: analysis.commitmentsMade || [],
-        call_sid
-      }
+        call_sid,
+      },
     });
   }
 
@@ -229,7 +228,7 @@ export async function handleInboundCall(pgPool, payload) {
       related_id: contactId,
       contact_name: contactName,
       action_items: actionItems,
-      call_activity_id: activity.id
+      call_activity_id: activity.id,
     });
   }
 
@@ -240,7 +239,7 @@ export async function handleInboundCall(pgPool, payload) {
       related_type: contactType,
       related_id: contactId,
       fulfilled_actions: analysis.fulfilledActions,
-      call_activity_id: activity.id
+      call_activity_id: activity.id,
     });
   }
 
@@ -252,8 +251,8 @@ export async function handleInboundCall(pgPool, payload) {
     duration,
     sentiment,
     summary,
-    action_items: actionItems
-  }).catch(err => console.error('[CallFlow] Webhook emission failed:', err.message));
+    action_items: actionItems,
+  }).catch((err) => console.error('[CallFlow] Webhook emission failed:', err.message));
 
   // Step 9: Create in-app notification for assigned user
   await createCallNotification({
@@ -264,7 +263,7 @@ export async function handleInboundCall(pgPool, payload) {
     direction: 'inbound',
     outcome: 'answered',
     summary,
-    sentiment
+    sentiment,
   });
 
   // PR5+PR7: C.A.R.E. Analysis with State Persistence (when enabled)
@@ -273,7 +272,7 @@ export async function handleInboundCall(pgPool, payload) {
     const ctx = {
       tenant_id,
       entity_type: contactType, // 'lead' or 'contact'
-      entity_id: contactId
+      entity_id: contactId,
     };
 
     // PR7: Read current state from DB (fallback to 'unaware' if not found)
@@ -296,7 +295,7 @@ export async function handleInboundCall(pgPool, payload) {
           sentiment,
           channel: 'call',
           action_origin: 'care_autonomous',
-          meta: { direction: 'inbound', duration, contact_type: contactType }
+          meta: { direction: 'inbound', duration, contact_type: contactType },
         });
 
         if (escalationResult.escalate) {
@@ -313,8 +312,8 @@ export async function handleInboundCall(pgPool, payload) {
               reasons: escalationResult.reasons,
               direction: 'inbound',
               sentiment,
-              contact_type: contactType
-            }
+              contact_type: contactType,
+            },
           });
 
           // PR8: Trigger workflow webhook if enabled
@@ -338,12 +337,12 @@ export async function handleInboundCall(pgPool, payload) {
                   direction: 'inbound',
                   sentiment,
                   contact_type: contactType,
-                  duration
-                }
+                  duration,
+                },
               },
               timeout_ms: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_TIMEOUT_MS) || 3000,
-              retries: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_MAX_RETRIES) || 2
-            }).catch(err => {
+              retries: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_MAX_RETRIES) || 2,
+            }).catch((err) => {
               console.warn('[CallFlow] Workflow trigger failed (non-critical):', err.message);
             });
           }
@@ -360,12 +359,12 @@ export async function handleInboundCall(pgPool, payload) {
       sentiment,
       analysis,
       actionItems,
-      duration
+      duration,
     });
 
     const proposal = proposeTransition({
       current_state: currentState, // PR7: real state from DB
-      signals
+      signals,
     });
 
     if (proposal) {
@@ -382,8 +381,8 @@ export async function handleInboundCall(pgPool, payload) {
           from_state: currentState,
           to_state: proposal.next_state,
           direction: 'inbound',
-          signals
-        }
+          signals,
+        },
       });
 
       // PR7: Conditionally apply transition if state write gate is enabled
@@ -395,7 +394,7 @@ export async function handleInboundCall(pgPool, payload) {
             to_state: proposal.next_state,
             reason: proposal.reason,
             action_origin: 'care_autonomous',
-            meta: { direction: 'inbound', signals }
+            meta: { direction: 'inbound', signals },
           });
 
           // Emit state_applied audit
@@ -410,8 +409,8 @@ export async function handleInboundCall(pgPool, payload) {
             meta: {
               from_state: currentState,
               to_state: proposal.next_state,
-              direction: 'inbound'
-            }
+              direction: 'inbound',
+            },
           });
         } catch (applyError) {
           console.warn('[CallFlow] C.A.R.E. state apply error (non-critical):', applyError.message);
@@ -432,8 +431,8 @@ export async function handleInboundCall(pgPool, payload) {
         meta: {
           action_items: actionItems,
           direction: 'inbound',
-          sentiment
-        }
+          sentiment,
+        },
       });
     }
 
@@ -448,8 +447,8 @@ export async function handleInboundCall(pgPool, payload) {
       policy_gate_result: CarePolicyGateResult.ALLOWED,
       meta: {
         direction: 'inbound',
-        action_items_count: actionItems ? actionItems.length : 0
-      }
+        action_items_count: actionItems ? actionItems.length : 0,
+      },
     });
   } catch (careError) {
     // C.A.R.E. errors should not break call flow
@@ -462,13 +461,13 @@ export async function handleInboundCall(pgPool, payload) {
     contact_type: contactType,
     activity_id: activity.id,
     summary,
-    sentiment
+    sentiment,
   };
 }
 
 /**
  * Process outbound call webhook
- * 
+ *
  * Flow:
  * 1. Lookup contact (should already exist for outbound)
  * 2. Log activity with call outcome
@@ -490,7 +489,7 @@ export async function handleOutboundCall(pgPool, payload) {
     contact_id, // Usually provided for outbound
     provider,
     campaign_id, // If part of AI campaign
-    metadata = {}
+    metadata = {},
   } = payload;
 
   if (!tenant_id || !to_number) {
@@ -519,7 +518,10 @@ export async function handleOutboundCall(pgPool, payload) {
   if (!contactId) {
     console.warn(`[CallFlow] Outbound call to ${to_number} but no contact found`);
     // Optionally create lead
-    const newLead = await createLeadFromCall(pgPool, tenant_id, to_number, { ...metadata, source: 'outbound_call' });
+    const newLead = await createLeadFromCall(pgPool, tenant_id, to_number, {
+      ...metadata,
+      source: 'outbound_call',
+    });
     contactId = newLead.id;
     contactType = 'lead';
     contactName = newLead.name;
@@ -539,9 +541,10 @@ export async function handleOutboundCall(pgPool, payload) {
   }
 
   // Step 3: Log activity
-  const activitySubject = outcome === 'answered' 
-    ? `Outbound call with ${contactName || to_number}`
-    : `Outbound call to ${contactName || to_number} - ${outcome}`;
+  const activitySubject =
+    outcome === 'answered'
+      ? `Outbound call with ${contactName || to_number}`
+      : `Outbound call to ${contactName || to_number} - ${outcome}`;
 
   const activity = await logCallActivity(pgPool, {
     tenant_id,
@@ -563,8 +566,8 @@ export async function handleOutboundCall(pgPool, payload) {
       campaign_id,
       sentiment,
       transcript_length: transcript?.length || 0,
-      ...metadata
-    }
+      ...metadata,
+    },
   });
 
   // Step 4: Create note if call was meaningful
@@ -582,8 +585,8 @@ export async function handleOutboundCall(pgPool, payload) {
         customer_requests: analysis.customerRequests || [],
         commitments_made: analysis.commitmentsMade || [],
         outcome,
-        call_sid
-      }
+        call_sid,
+      },
     });
   }
 
@@ -595,7 +598,7 @@ export async function handleOutboundCall(pgPool, payload) {
       related_id: contactId,
       contact_name: contactName,
       action_items: actionItems,
-      call_activity_id: activity.id
+      call_activity_id: activity.id,
     });
   }
 
@@ -606,7 +609,7 @@ export async function handleOutboundCall(pgPool, payload) {
       related_type: contactType,
       related_id: contactId,
       fulfilled_actions: analysis.fulfilledActions,
-      call_activity_id: activity.id
+      call_activity_id: activity.id,
     });
   }
 
@@ -630,8 +633,8 @@ export async function handleOutboundCall(pgPool, payload) {
     sentiment,
     summary,
     action_items: actionItems,
-    campaign_id
-  }).catch(err => console.error('[CallFlow] Webhook emission failed:', err.message));
+    campaign_id,
+  }).catch((err) => console.error('[CallFlow] Webhook emission failed:', err.message));
 
   // Step 8: Create in-app notification for assigned user
   await createCallNotification({
@@ -642,7 +645,7 @@ export async function handleOutboundCall(pgPool, payload) {
     direction: 'outbound',
     outcome,
     summary,
-    sentiment
+    sentiment,
   });
 
   // PR5+PR7: C.A.R.E. Analysis with State Persistence (when enabled)
@@ -653,7 +656,7 @@ export async function handleOutboundCall(pgPool, payload) {
       const ctx = {
         tenant_id,
         entity_type: contactType, // 'lead' or 'contact'
-        entity_id: contactId
+        entity_id: contactId,
       };
 
       // PR7: Read current state from DB (fallback to 'unaware' if not found)
@@ -664,7 +667,10 @@ export async function handleOutboundCall(pgPool, payload) {
           currentState = stateRecord.care_state;
         }
       } catch (stateReadError) {
-        console.warn('[CallFlow] C.A.R.E. state read error (non-critical):', stateReadError.message);
+        console.warn(
+          '[CallFlow] C.A.R.E. state read error (non-critical):',
+          stateReadError.message,
+        );
       }
 
       // 1) Escalation detection
@@ -675,7 +681,7 @@ export async function handleOutboundCall(pgPool, payload) {
           sentiment,
           channel: 'call',
           action_origin: 'care_autonomous',
-          meta: { direction: 'outbound', outcome, duration, contact_type: contactType }
+          meta: { direction: 'outbound', outcome, duration, contact_type: contactType },
         });
 
         if (escalationResult.escalate) {
@@ -693,8 +699,8 @@ export async function handleOutboundCall(pgPool, payload) {
               direction: 'outbound',
               outcome,
               sentiment,
-              contact_type: contactType
-            }
+              contact_type: contactType,
+            },
           });
 
           // PR8: Trigger workflow webhook if enabled
@@ -719,12 +725,12 @@ export async function handleOutboundCall(pgPool, payload) {
                   outcome,
                   sentiment,
                   contact_type: contactType,
-                  duration
-                }
+                  duration,
+                },
               },
               timeout_ms: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_TIMEOUT_MS) || 3000,
-              retries: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_MAX_RETRIES) || 2
-            }).catch(err => {
+              retries: parseInt(process.env.CARE_WORKFLOW_WEBHOOK_MAX_RETRIES) || 2,
+            }).catch((err) => {
               console.warn('[CallFlow] Workflow trigger failed (non-critical):', err.message);
             });
           }
@@ -740,12 +746,12 @@ export async function handleOutboundCall(pgPool, payload) {
         sentiment,
         analysis,
         actionItems,
-        duration
+        duration,
       });
 
       const proposal = proposeTransition({
         current_state: currentState, // PR7: real state from DB
-        signals
+        signals,
       });
 
       if (proposal) {
@@ -763,8 +769,8 @@ export async function handleOutboundCall(pgPool, payload) {
             to_state: proposal.next_state,
             direction: 'outbound',
             outcome,
-            signals
-          }
+            signals,
+          },
         });
 
         // PR7: Conditionally apply transition if state write gate is enabled
@@ -776,7 +782,7 @@ export async function handleOutboundCall(pgPool, payload) {
               to_state: proposal.next_state,
               reason: proposal.reason,
               action_origin: 'care_autonomous',
-              meta: { direction: 'outbound', outcome, signals }
+              meta: { direction: 'outbound', outcome, signals },
             });
 
             // Emit state_applied audit
@@ -792,11 +798,14 @@ export async function handleOutboundCall(pgPool, payload) {
                 from_state: currentState,
                 to_state: proposal.next_state,
                 direction: 'outbound',
-                outcome
-              }
+                outcome,
+              },
             });
           } catch (applyError) {
-            console.warn('[CallFlow] C.A.R.E. state apply error (non-critical):', applyError.message);
+            console.warn(
+              '[CallFlow] C.A.R.E. state apply error (non-critical):',
+              applyError.message,
+            );
           }
         }
       }
@@ -815,8 +824,8 @@ export async function handleOutboundCall(pgPool, payload) {
             action_items: actionItems,
             direction: 'outbound',
             outcome,
-            sentiment
-          }
+            sentiment,
+          },
         });
       }
 
@@ -832,8 +841,8 @@ export async function handleOutboundCall(pgPool, payload) {
         meta: {
           direction: 'outbound',
           outcome,
-          action_items_count: actionItems ? actionItems.length : 0
-        }
+          action_items_count: actionItems ? actionItems.length : 0,
+        },
       });
     }
   } catch (careError) {
@@ -848,7 +857,7 @@ export async function handleOutboundCall(pgPool, payload) {
     activity_id: activity.id,
     outcome,
     summary,
-    sentiment
+    sentiment,
   };
 }
 
@@ -866,7 +875,7 @@ async function findContactByPhone(pgPool, tenant_id, phone) {
       AND (phone = $2 OR mobile = $2 OR REPLACE(REPLACE(REPLACE(phone, '-', ''), ' ', ''), '+', '') = $3)
     LIMIT 1
   `;
-  
+
   const contactResult = await pgPool.query(contactQuery, [tenant_id, phone, normalizedPhone]);
   if (contactResult.rows.length > 0) {
     return contactResult.rows[0];
@@ -880,7 +889,7 @@ async function findContactByPhone(pgPool, tenant_id, phone) {
       AND (phone = $2 OR REPLACE(REPLACE(REPLACE(phone, '-', ''), ' ', ''), '+', '') = $3)
     LIMIT 1
   `;
-  
+
   const leadResult = await pgPool.query(leadQuery, [tenant_id, phone, normalizedPhone]);
   if (leadResult.rows.length > 0) {
     return leadResult.rows[0];
@@ -914,7 +923,7 @@ async function createLeadFromCall(pgPool, tenant_id, phone, callerInfo = {}) {
   // Parse name from AI agent extraction
   let firstName = 'Unknown';
   let lastName = 'Caller';
-  
+
   if (callerInfo.name) {
     // AI agent extracted name from conversation (e.g., "Hi, this is John Smith")
     const nameParts = callerInfo.name.trim().split(/\s+/);
@@ -933,7 +942,7 @@ async function createLeadFromCall(pgPool, tenant_id, phone, callerInfo = {}) {
     created_via: 'call_flow',
     phone_number: phone,
     ai_extracted_name: callerInfo.name || null,
-    ai_extracted_email: callerInfo.email || null
+    ai_extracted_email: callerInfo.email || null,
   };
   delete leadMetadata.name; // Remove from metadata since it's in columns
   delete leadMetadata.email; // Will be in email column if provided
@@ -956,10 +965,12 @@ async function createLeadFromCall(pgPool, tenant_id, phone, callerInfo = {}) {
     email,
     source,
     status,
-    JSON.stringify(leadMetadata)
+    JSON.stringify(leadMetadata),
   ]);
 
-  console.log(`[CallFlow] Created lead ${result.rows[0].id} for ${phone} (${firstName} ${lastName})`);
+  console.log(
+    `[CallFlow] Created lead ${result.rows[0].id} for ${phone} (${firstName} ${lastName})`,
+  );
   return result.rows[0];
 }
 
@@ -976,7 +987,7 @@ async function logCallActivity(pgPool, data) {
     description,
     status,
     direction,
-    metadata
+    metadata,
   } = data;
 
   const insertQuery = `
@@ -992,7 +1003,7 @@ async function logCallActivity(pgPool, data) {
     ...metadata,
     direction,
     call_type: type,
-    logged_via: 'call_flow_handler'
+    logged_via: 'call_flow_handler',
   };
 
   const result = await pgPool.query(insertQuery, [
@@ -1003,7 +1014,7 @@ async function logCallActivity(pgPool, data) {
     subject,
     description,
     status,
-    JSON.stringify(activityMetadata)
+    JSON.stringify(activityMetadata),
   ]);
 
   console.log(`[CallFlow] Created activity ${result.rows[0].id}`);
@@ -1027,7 +1038,8 @@ function buildNoteContent(summary, sentiment, actionItems) {
   if (actionItems && actionItems.length > 0) {
     content += '\n\n**Action Items:**';
     actionItems.forEach((item, index) => {
-      const priorityIcon = item.priority === 'high' ? '🔴' : item.priority === 'medium' ? '🟡' : '🟢';
+      const priorityIcon =
+        item.priority === 'high' ? '🔴' : item.priority === 'medium' ? '🟡' : '🟢';
       const taskText = typeof item === 'string' ? item : item.task;
       content += `\n${index + 1}. ${priorityIcon} ${taskText}`;
     });
@@ -1041,12 +1053,14 @@ function buildNoteContent(summary, sentiment, actionItems) {
  * These appear as tasks in the CRM for follow-up
  */
 async function createActionActivities(pgPool, data) {
-  const { tenant_id, related_type, related_id, contact_name, action_items, call_activity_id } = data;
+  const { tenant_id, related_type, related_id, contact_name, action_items, call_activity_id } =
+    data;
 
   for (const item of action_items) {
     // Only create activity for high/medium priority or specific types
-    const actionItem = typeof item === 'string' ? { task: item, priority: 'medium', type: 'general' } : item;
-    
+    const actionItem =
+      typeof item === 'string' ? { task: item, priority: 'medium', type: 'general' } : item;
+
     if (actionItem.priority === 'low') continue;
 
     const activityType = mapActionTypeToActivityType(actionItem.type);
@@ -1069,7 +1083,7 @@ async function createActionActivities(pgPool, data) {
       action_type: actionItem.type,
       origin_activity_id: call_activity_id,
       auto_created: true,
-      created_from: 'call_transcript_analysis'
+      created_from: 'call_transcript_analysis',
     };
 
     const result = await pgPool.query(insertQuery, [
@@ -1081,7 +1095,7 @@ async function createActionActivities(pgPool, data) {
       description,
       'pending', // status
       dueDate,
-      JSON.stringify(activityMetadata)
+      JSON.stringify(activityMetadata),
     ]);
 
     console.log(`[CallFlow] Created action activity ${result.rows[0].id}: ${subject}`);
@@ -1116,7 +1130,7 @@ async function completeRelatedActivities(pgPool, data) {
       tenant_id,
       related_type,
       related_id,
-      activityType
+      activityType,
     ]);
 
     if (pendingActivities.rows.length === 0) {
@@ -1126,7 +1140,7 @@ async function completeRelatedActivities(pgPool, data) {
 
     // Complete the most recent pending activity of this type
     const activityToComplete = pendingActivities.rows[0];
-    
+
     const updateQuery = `
       UPDATE activities
       SET 
@@ -1142,16 +1156,15 @@ async function completeRelatedActivities(pgPool, data) {
       completed_by: 'call_transcript_analysis',
       completion_activity_id: call_activity_id,
       completion_note: fulfilled.action,
-      auto_completed: true
+      auto_completed: true,
     });
 
-    const result = await pgPool.query(updateQuery, [
-      completionMetadata,
-      activityToComplete.id
-    ]);
+    const result = await pgPool.query(updateQuery, [completionMetadata, activityToComplete.id]);
 
     if (result.rows.length > 0) {
-      console.log(`[CallFlow] ✅ Auto-completed activity ${activityToComplete.id}: ${activityToComplete.subject}`);
+      console.log(
+        `[CallFlow] ✅ Auto-completed activity ${activityToComplete.id}: ${activityToComplete.subject}`,
+      );
     }
   }
 }
@@ -1161,11 +1174,11 @@ async function completeRelatedActivities(pgPool, data) {
  */
 function mapActionTypeToActivityType(actionType) {
   const typeMap = {
-    'email': 'email',
-    'call': 'call',
-    'meeting': 'meeting',
-    'task': 'task',
-    'general': 'task'
+    email: 'email',
+    call: 'call',
+    meeting: 'meeting',
+    task: 'task',
+    general: 'task',
   };
   return typeMap[actionType] || 'task';
 }
@@ -1197,7 +1210,7 @@ async function createNoteFromCall(pgPool, data) {
     related_type,
     related_id,
     content,
-    JSON.stringify({ ...metadata, note_type: 'call_summary' })
+    JSON.stringify({ ...metadata, note_type: 'call_summary' }),
   ]);
 
   console.log(`[CallFlow] Created note ${result.rows[0].id}`);
@@ -1220,7 +1233,10 @@ async function analyzeTranscript(transcript, tenant_id = null) {
         return braidResult;
       }
     } catch (err) {
-      console.warn('[CallFlow] Braid MCP analysis failed, falling back to pattern matching:', err.message);
+      console.warn(
+        '[CallFlow] Braid MCP analysis failed, falling back to pattern matching:',
+        err.message,
+      );
     }
   }
 
@@ -1248,14 +1264,14 @@ async function analyzeTranscript(transcript, tenant_id = null) {
   // Fallback: Use pattern-based extraction
   console.log('[CallFlow] Using pattern-based transcript analysis');
   const analysis = extractBasicPatterns(transcript);
-  
+
   return {
     summary: analysis.summary || `Call summary: ${transcript.substring(0, 100)}...`,
     sentiment: analysis.sentiment || 'neutral',
     actionItems: analysis.actionItems,
     customerRequests: analysis.customerRequests,
     commitmentsMade: analysis.commitmentsMade,
-    fulfilledActions: analysis.fulfilledActions
+    fulfilledActions: analysis.fulfilledActions,
   };
 }
 
@@ -1267,7 +1283,7 @@ async function analyzeTranscriptViaBraid(transcript, tenant_id) {
   // Fallback to single BRAID_MCP_URL or legacy service name.
   const nodeHosts = (process.env.BRAID_MCP_NODE_HOSTS || '')
     .split(',')
-    .map(h => h.trim())
+    .map((h) => h.trim())
     .filter(Boolean);
   const primaryUrl = process.env.BRAID_MCP_URL || 'http://braid-mcp-server:8000';
   const candidateUrls = [];
@@ -1280,7 +1296,7 @@ async function analyzeTranscriptViaBraid(transcript, tenant_id) {
 
   let braidUrl = primaryUrl;
   let lastError = null;
-  
+
   const prompt = `Analyze this call transcript and extract structured information.
 
 Transcript:
@@ -1307,38 +1323,41 @@ Focus on:
     actor: {
       id: 'call-flow-system',
       type: 'system',
-      roles: ['transcript-analyzer']
+      roles: ['transcript-analyzer'],
     },
-    actions: [{
-      id: 'analyze-transcript',
-      system: 'llm',
-      resource: {
-        kind: 'generate-json',
-        id: 'transcript-analysis'
+    actions: [
+      {
+        id: 'analyze-transcript',
+        system: 'llm',
+        resource: {
+          kind: 'generate-json',
+          id: 'transcript-analysis',
+        },
+        verb: 'create',
+        payload: {
+          prompt,
+          model: process.env.TRANSCRIPT_ANALYSIS_MODEL || 'gpt-4o-mini',
+          temperature: 0.2,
+          tenant_id,
+        },
+        metadata: {
+          tenant_id,
+          source: 'call-flow',
+        },
       },
-      verb: 'create',
-      payload: {
-        prompt,
-        model: process.env.TRANSCRIPT_ANALYSIS_MODEL || 'gpt-4o-mini',
-        temperature: 0.2,
-        tenant_id
-      },
-      metadata: {
-        tenant_id,
-        source: 'call-flow'
-      }
-    }]
+    ],
   };
 
   // Try each MCP node until one succeeds
-  let result = null; let response = null;
+  let result = null;
+  let response = null;
   for (const url of candidateUrls) {
     try {
       braidUrl = url; // current attempt
       response = await fetch(`${braidUrl}/mcp/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(envelope)
+        body: JSON.stringify(envelope),
       });
       if (!response.ok) {
         lastError = new Error(`MCP node ${braidUrl} failed: ${response.status}`);
@@ -1355,21 +1374,20 @@ Focus on:
   if (!result) {
     throw lastError || new Error('No MCP nodes responded');
   }
-  
+
   if (result.status !== 'success' || !result.results?.[0]) {
     throw new Error('Braid MCP returned no results');
   }
 
   const actionResult = result.results[0];
-  
+
   if (actionResult.status !== 'success') {
     throw new Error(`Braid action failed: ${actionResult.errorMessage || 'unknown error'}`);
   }
 
   // Parse the AI-generated JSON
-  const analysis = typeof actionResult.data === 'string' 
-    ? JSON.parse(actionResult.data) 
-    : actionResult.data;
+  const analysis =
+    typeof actionResult.data === 'string' ? JSON.parse(actionResult.data) : actionResult.data;
 
   return {
     summary: analysis.summary || `Call analyzed: ${transcript.substring(0, 100)}...`,
@@ -1377,7 +1395,7 @@ Focus on:
     actionItems: analysis.actionItems || [],
     customerRequests: analysis.customerRequests || [],
     commitmentsMade: analysis.commitmentsMade || [],
-    fulfilledActions: analysis.fulfilledActions || []
+    fulfilledActions: analysis.fulfilledActions || [],
   };
 }
 
@@ -1394,21 +1412,31 @@ function extractBasicPatterns(transcript) {
   const lowerTranscript = transcript.toLowerCase();
 
   // Detect sentiment from common phrases
-  if (lowerTranscript.includes('great') || lowerTranscript.includes('excellent') || lowerTranscript.includes('thank you')) {
+  if (
+    lowerTranscript.includes('great') ||
+    lowerTranscript.includes('excellent') ||
+    lowerTranscript.includes('thank you')
+  ) {
     sentiment = 'positive';
-  } else if (lowerTranscript.includes('disappointed') || lowerTranscript.includes('frustrated') || lowerTranscript.includes('issue')) {
+  } else if (
+    lowerTranscript.includes('disappointed') ||
+    lowerTranscript.includes('frustrated') ||
+    lowerTranscript.includes('issue')
+  ) {
     sentiment = 'negative';
   }
 
   // Extract follow-up requests
   if (lowerTranscript.includes('send me') || lowerTranscript.includes('email me')) {
-    const match = transcript.match(/send(?:ing)?\s+(?:me\s+)?([\w\s]+?)(?:\.|,|\?|$)/i);
+    const match = transcript.match(
+      /send(?:ing)?\s+(?:me\s+)?((?:\w+(?:\s+\w+){0,10})?)\s*(?:[.,?]|$)/i,
+    );
     if (match) {
       actionItems.push({
         task: `Send ${match[1].trim()}`,
         priority: 'high',
         dueDate: null,
-        type: 'email'
+        type: 'email',
       });
       customerRequests.push(`Requested: ${match[1].trim()}`);
     }
@@ -1420,26 +1448,34 @@ function extractBasicPatterns(transcript) {
       task: 'Follow up call',
       priority: 'medium',
       dueDate: null,
-      type: 'call'
+      type: 'call',
     });
   }
 
   // Extract meeting/appointment requests
-  if (lowerTranscript.includes('schedule') || lowerTranscript.includes('meeting') || lowerTranscript.includes('appointment')) {
+  if (
+    lowerTranscript.includes('schedule') ||
+    lowerTranscript.includes('meeting') ||
+    lowerTranscript.includes('appointment')
+  ) {
     actionItems.push({
       task: 'Schedule meeting',
       priority: 'high',
       dueDate: null,
-      type: 'meeting'
+      type: 'meeting',
     });
     customerRequests.push('Requested meeting/appointment');
   }
 
   // Extract commitments (what was promised)
-  if (lowerTranscript.includes('i will') || lowerTranscript.includes('we will') || lowerTranscript.includes("i'll")) {
+  if (
+    lowerTranscript.includes('i will') ||
+    lowerTranscript.includes('we will') ||
+    lowerTranscript.includes("i'll")
+  ) {
     const commitmentMatch = transcript.match(/(?:i will|we will|i'll|we'll)\s+([^.!?]+)/gi);
     if (commitmentMatch) {
-      commitmentMatch.forEach(commit => {
+      commitmentMatch.forEach((commit) => {
         commitmentsMade.push(commit.trim());
       });
     }
@@ -1447,22 +1483,30 @@ function extractBasicPatterns(transcript) {
 
   // Detect fulfilled actions (past tense = already done)
   const fulfilledActions = [];
-  
+
   // Sent email/information
-  if (lowerTranscript.includes('i sent') || lowerTranscript.includes('sent you') || lowerTranscript.includes('emailed you')) {
+  if (
+    lowerTranscript.includes('i sent') ||
+    lowerTranscript.includes('sent you') ||
+    lowerTranscript.includes('emailed you')
+  ) {
     fulfilledActions.push({ type: 'email', action: 'sent information' });
   }
-  
+
   // Scheduled meeting
-  if (lowerTranscript.includes('scheduled') || lowerTranscript.includes('booked') || lowerTranscript.includes('set up the meeting')) {
+  if (
+    lowerTranscript.includes('scheduled') ||
+    lowerTranscript.includes('booked') ||
+    lowerTranscript.includes('set up the meeting')
+  ) {
     fulfilledActions.push({ type: 'meeting', action: 'scheduled meeting' });
   }
-  
+
   // Completed follow-up
   if (lowerTranscript.includes('following up') || lowerTranscript.includes('as promised')) {
     fulfilledActions.push({ type: 'call', action: 'follow-up call completed' });
   }
-  
+
   // Sent proposal/quote
   if (lowerTranscript.includes('sent the proposal') || lowerTranscript.includes('sent the quote')) {
     fulfilledActions.push({ type: 'email', action: 'sent proposal' });
@@ -1472,7 +1516,7 @@ function extractBasicPatterns(transcript) {
   if (lowerTranscript.includes('can you') || lowerTranscript.includes('could you')) {
     const questionMatch = transcript.match(/(?:can you|could you)\s+([^.!?]+)/gi);
     if (questionMatch) {
-      questionMatch.forEach(q => {
+      questionMatch.forEach((q) => {
         customerRequests.push(q.trim());
       });
     }
@@ -1484,7 +1528,7 @@ function extractBasicPatterns(transcript) {
       task: 'Follow up with customer',
       priority: 'medium',
       dueDate: null,
-      type: 'general'
+      type: 'general',
     });
   }
 
@@ -1497,7 +1541,7 @@ function extractBasicPatterns(transcript) {
     actionItems,
     customerRequests,
     commitmentsMade,
-    fulfilledActions
+    fulfilledActions,
   };
 }
 
@@ -1520,7 +1564,14 @@ async function updateLeadStatus(pgPool, lead_id, status, notes) {
 /**
  * Update campaign progress (for AI campaigns)
  */
-async function updateCampaignProgress(pgPool, tenant_id, campaign_id, contact_id, outcome, sentiment) {
+async function updateCampaignProgress(
+  pgPool,
+  tenant_id,
+  campaign_id,
+  contact_id,
+  outcome,
+  sentiment,
+) {
   // Update target_contacts array with outcome
   const updateQuery = `
     UPDATE ai_campaigns
@@ -1560,7 +1611,7 @@ export async function prepareOutboundCall(pgPool, params) {
 
   // Step 1: Fetch contact/lead details
   const contact = await getContactDetailsById(pgPool, tenant_id, contact_id);
-  
+
   if (!contact) {
     throw new Error(`Contact ${contact_id} not found`);
   }
@@ -1570,7 +1621,12 @@ export async function prepareOutboundCall(pgPool, params) {
   }
 
   // Step 2: Fetch recent interactions (last 5 activities)
-  const recentInteractions = await getRecentInteractions(pgPool, tenant_id, contact_id, contact.type);
+  const recentInteractions = await getRecentInteractions(
+    pgPool,
+    tenant_id,
+    contact_id,
+    contact.type,
+  );
 
   // Step 3: Fetch campaign context if provided
   let campaignInfo = null;
@@ -1583,12 +1639,12 @@ export async function prepareOutboundCall(pgPool, params) {
     purpose: call_purpose || campaignInfo?.call_script || 'General follow-up call',
     talking_points: buildTalkingPoints(contact, campaignInfo, recentInteractions),
     campaign_info: campaignInfo,
-    recent_interactions: recentInteractions.map(i => ({
+    recent_interactions: recentInteractions.map((i) => ({
       date: i.created_at,
       type: i.type,
       subject: i.subject,
-      outcome: i.metadata?.outcome
-    }))
+      outcome: i.metadata?.outcome,
+    })),
   };
 
   // Step 5: Return complete call preparation
@@ -1601,9 +1657,9 @@ export async function prepareOutboundCall(pgPool, params) {
       company: contact.company,
       title: contact.title,
       type: contact.type,
-      status: contact.status
+      status: contact.status,
     },
-    call_context: callContext
+    call_context: callContext,
   };
 }
 
@@ -1628,7 +1684,7 @@ async function getContactDetailsById(pgPool, tenant_id, contact_id) {
     FROM contacts 
     WHERE tenant_id = $1 AND id = $2
   `;
-  
+
   const contactResult = await pgPool.query(contactQuery, [tenant_id, contact_id]);
   if (contactResult.rows.length > 0) {
     return contactResult.rows[0];
@@ -1652,7 +1708,7 @@ async function getContactDetailsById(pgPool, tenant_id, contact_id) {
     FROM leads 
     WHERE tenant_id = $1 AND id = $2
   `;
-  
+
   const leadResult = await pgPool.query(leadQuery, [tenant_id, contact_id]);
   if (leadResult.rows.length > 0) {
     return leadResult.rows[0];
@@ -1708,7 +1764,7 @@ async function getCampaignContext(pgPool, tenant_id, campaign_id) {
     type: campaign.campaign_type,
     call_script: campaign.metadata?.call_script || campaign.metadata?.message,
     offer: campaign.metadata?.offer,
-    goal: campaign.metadata?.goal
+    goal: campaign.metadata?.goal,
   };
 }
 

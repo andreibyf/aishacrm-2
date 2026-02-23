@@ -3,16 +3,20 @@
  * Server discovery, tool execution, resource management
  */
 
-import express from "express";
-import fetch from "node-fetch";
-import { getSupabaseClient } from "../lib/supabase-db.js";
+import express from 'express';
+import fetch from 'node-fetch';
+import { getSupabaseClient } from '../lib/supabase-db.js';
 // Import auth middleware to require an authenticated user for admin routes.
-import { requireAuthCookie } from "../middleware/authCookie.js";
-import { authenticateRequest } from "../middleware/authenticate.js";
-import { requireSuperAdminRole } from "../middleware/validateTenant.js";
-import { resolveLLMApiKey, generateChatCompletion, selectLLMConfigForTenant } from "../lib/aiEngine/index.js";
-import { logLLMActivity } from "../lib/aiEngine/activityLogger.js";
-import { executeMcpToolViaBraid, getExecutionStrategy } from "../lib/braidMcpBridge.js";
+import { requireAuthCookie } from '../middleware/authCookie.js';
+import { authenticateRequest } from '../middleware/authenticate.js';
+import { requireSuperAdminRole } from '../middleware/validateTenant.js';
+import {
+  resolveLLMApiKey,
+  generateChatCompletion,
+  selectLLMConfigForTenant,
+} from '../lib/aiEngine/index.js';
+import { logLLMActivity } from '../lib/aiEngine/activityLogger.js';
+import { executeMcpToolViaBraid, getExecutionStrategy } from '../lib/braidMcpBridge.js';
 import logger from '../lib/logger.js';
 
 // Admin helper: restrict access to users with emails defined in ADMIN_EMAILS env variable.
@@ -21,16 +25,16 @@ function _requireAdmin(req, res, next) {
   // Check if user is authenticated (requireAuthCookie should set req.user)
   if (!req.user || !req.user.email) {
     return res.status(401).json({
-      status: "error",
-      message: "Unauthorized - authentication required"
+      status: 'error',
+      message: 'Unauthorized - authentication required',
     });
   }
 
   const userEmail = req.user.email;
 
   // Parse allowlist from env; split by comma, trim whitespace, lowercase.
-  const allow = (process.env.ADMIN_EMAILS || "")
-    .split(",")
+  const allow = (process.env.ADMIN_EMAILS || '')
+    .split(',')
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
 
@@ -38,22 +42,22 @@ function _requireAdmin(req, res, next) {
   logger.debug('[MCP Admin] Auth check:', {
     userEmail,
     isInAdminList: allow.includes(userEmail.toLowerCase()),
-    adminEmailsCount: allow.length
+    adminEmailsCount: allow.length,
   });
 
   // If no allowlist configured, deny by default.
   if (allow.length === 0) {
     return res.status(403).json({
-      status: "error",
-      message: "Admin access not configured (ADMIN_EMAILS missing)"
+      status: 'error',
+      message: 'Admin access not configured (ADMIN_EMAILS missing)',
     });
   }
 
   const email = String(userEmail).toLowerCase();
   if (!allow.includes(email)) {
     return res.status(403).json({
-      status: "error",
-      message: "Forbidden - not authorized as admin"
+      status: 'error',
+      message: 'Forbidden - not authorized as admin',
     });
   }
 
@@ -62,19 +66,19 @@ function _requireAdmin(req, res, next) {
 
 // Helper to resolve the MCP base URL. Falls back to localhost for local MCP.
 function getMcpBaseUrl() {
-  return process.env.BRAID_MCP_URL || "http://127.0.0.1:8000";
+  return process.env.BRAID_MCP_URL || 'http://127.0.0.1:8000';
 }
 
 /**
  * callLLMWithFailover
- * 
+ *
  * Attempts to call the LLM with automatic failover between providers.
  * Primary provider is tried first; on failure, falls back to secondary.
- * 
+ *
  * Failover logic:
  * - If primary = "anthropic" -> secondary = "openai"
  * - Otherwise -> secondary = "anthropic"
- * 
+ *
  * @param {Object} opts
  * @param {string} [opts.tenantId] - Tenant identifier for key/model resolution
  * @param {Array} opts.messages - OpenAI-style messages
@@ -88,7 +92,7 @@ function getMcpBaseUrl() {
 async function callLLMWithFailover({
   tenantId,
   messages,
-  capability = "json_strict",
+  capability = 'json_strict',
   temperature = 0.2,
   explicitModel = null,
   explicitProvider = null,
@@ -103,8 +107,9 @@ async function callLLMWithFailover({
   });
 
   // Determine primary and secondary providers
-  const primaryProvider = explicitProvider || baseConfig.provider || process.env.LLM_PROVIDER || "openai";
-  const secondaryProvider = primaryProvider === "anthropic" ? "openai" : "anthropic";
+  const primaryProvider =
+    explicitProvider || baseConfig.provider || process.env.LLM_PROVIDER || 'openai';
+  const secondaryProvider = primaryProvider === 'anthropic' ? 'openai' : 'anthropic';
 
   // Build candidate list: primary first, then secondary
   const candidates = [
@@ -147,8 +152,8 @@ async function callLLMWithFailover({
         capability,
         provider,
         model,
-        nodeId: "mcp:callLLMWithFailover",
-        status: "error",
+        nodeId: 'mcp:callLLMWithFailover',
+        status: 'error',
         error: `No API key for provider ${provider}`,
         attempt,
         totalAttempts,
@@ -167,15 +172,15 @@ async function callLLMWithFailover({
     });
     const durationMs = Date.now() - startTime;
 
-    if (result.status === "success") {
+    if (result.status === 'success') {
       // Log successful LLM activity with attempt info
       logLLMActivity({
         tenantId,
         capability,
         provider,
         model: result.raw?.model || model,
-        nodeId: "mcp:callLLMWithFailover",
-        status: errors.length > 0 ? "failover" : "success",
+        nodeId: 'mcp:callLLMWithFailover',
+        status: errors.length > 0 ? 'failover' : 'success',
         durationMs,
         usage: result.raw?.usage || null,
         attempt,
@@ -200,8 +205,8 @@ async function callLLMWithFailover({
       capability,
       provider,
       model,
-      nodeId: "mcp:callLLMWithFailover",
-      status: "error",
+      nodeId: 'mcp:callLLMWithFailover',
+      status: 'error',
       durationMs,
       error: result.error,
       attempt,
@@ -212,14 +217,14 @@ async function callLLMWithFailover({
   // All candidates failed
   return {
     ok: false,
-    error: errors.map((e) => `${e.provider}: ${e.error}`).join("; "),
+    error: errors.map((e) => `${e.provider}: ${e.error}`).join('; '),
     errors,
   };
 }
 
 export default function createMCPRoutes(_pgPool) {
   const router = express.Router();
-  
+
   // Lazy-load Supabase client to avoid initialization errors when credentials not configured
   const getSupa = () => getSupabaseClient();
 
@@ -303,24 +308,23 @@ export default function createMCPRoutes(_pgPool) {
    */
 
   // GET /api/mcp/servers - List available MCP servers
-  router.get("/servers", async (req, res) => {
+  router.get('/servers', async (req, res) => {
     try {
       const _supa = getSupa();
       const servers = [];
 
       // GitHub MCP server presence is inferred via env token. This is a lightweight proxy/health integration.
-      const githubToken = process.env.GH_TOKEN || process.env.GITHUB_TOKEN ||
-        null;
+      const githubToken = process.env.GH_TOKEN || process.env.GITHUB_TOKEN || null;
       if (githubToken) {
         // Attempt a fast health check against GitHub API
         let healthy = false;
         let identity = null;
         try {
-          const resp = await fetch("https://api.github.com/user", {
+          const resp = await fetch('https://api.github.com/user', {
             headers: {
-              "Authorization": `Bearer ${githubToken}`,
-              "Accept": "application/vnd.github+json",
-              "User-Agent": "aishacrm-mcp-health",
+              Authorization: `Bearer ${githubToken}`,
+              Accept: 'application/vnd.github+json',
+              'User-Agent': 'aishacrm-mcp-health',
             },
           });
           if (resp.ok) {
@@ -333,95 +337,97 @@ export default function createMCPRoutes(_pgPool) {
           void e;
         }
         servers.push({
-          id: "github",
-          name: "GitHub MCP",
-          type: "mcp",
-          transport: "proxy",
+          id: 'github',
+          name: 'GitHub MCP',
+          type: 'mcp',
+          transport: 'proxy',
           configured: true,
           healthy,
           identity,
-          docs: "https://github.com/modelcontextprotocol/servers",
+          docs: 'https://github.com/modelcontextprotocol/servers',
         });
       } else {
         servers.push({
-          id: "github",
-          name: "GitHub MCP",
-          type: "mcp",
-          transport: "proxy",
+          id: 'github',
+          name: 'GitHub MCP',
+          type: 'mcp',
+          transport: 'proxy',
           configured: false,
           healthy: false,
           identity: null,
-          missing: ["GITHUB_TOKEN"],
+          missing: ['GITHUB_TOKEN'],
         });
       }
 
       // Add a lightweight CRM MCP to expose core CRM tools over MCP
       servers.push({
-        id: "crm",
-        name: "CRM MCP",
-        type: "mcp",
-        transport: "proxy",
+        id: 'crm',
+        name: 'CRM MCP',
+        type: 'mcp',
+        transport: 'proxy',
         configured: true,
         healthy: true,
         capabilities: [
-          "crm.search_accounts",
-          "crm.search_contacts",
-          "crm.search_leads",
-          "crm.get_record",
-          "crm.create_activity",
-          "crm.get_tenant_stats",
-          "crm.list_workflows",
-          "crm.execute_workflow",
-          "crm.update_workflow",
-          "crm.toggle_workflow_status",
-          "crm.list_workflow_templates",
-          "crm.get_workflow_template",
-          "crm.instantiate_workflow_template",
+          'crm.search_accounts',
+          'crm.search_contacts',
+          'crm.search_leads',
+          'crm.get_record',
+          'crm.create_activity',
+          'crm.get_tenant_stats',
+          'crm.list_workflows',
+          'crm.execute_workflow',
+          'crm.update_workflow',
+          'crm.toggle_workflow_status',
+          'crm.list_workflow_templates',
+          'crm.get_workflow_template',
+          'crm.instantiate_workflow_template',
         ],
       });
 
       // Add a minimal Web Research MCP (Wikipedia only for now)
       servers.push({
-        id: "web",
-        name: "Web Research MCP",
-        type: "mcp",
-        transport: "proxy",
+        id: 'web',
+        name: 'Web Research MCP',
+        type: 'mcp',
+        transport: 'proxy',
         configured: true,
         healthy: true,
-        capabilities: ["web.search_wikipedia", "web.get_wikipedia_page"],
+        capabilities: ['web.search_wikipedia', 'web.get_wikipedia_page'],
       });
 
       // Add LLM MCP facade
       servers.push({
-        id: "llm",
-        name: "LLM MCP",
-        type: "mcp",
-        transport: "proxy",
+        id: 'llm',
+        name: 'LLM MCP',
+        type: 'mcp',
+        transport: 'proxy',
         configured: true,
         healthy: true,
-        capabilities: ["llm.generate_json"],
+        capabilities: ['llm.generate_json'],
       });
 
-      res.json({ status: "success", data: { servers } });
+      res.json({ status: 'success', data: { servers } });
     } catch (error) {
-      res.status(500).json({ status: "error", message: error.message });
+      res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
   // Admin: consolidated MCP status (health + memory + queue + adapters)
   // Requires authentication (Supabase JWT or cookie) and superadmin role
-  router.get("/admin/status", authenticateRequest, requireSuperAdminRole, async (_req, res) => {
+  router.get('/admin/status', authenticateRequest, requireSuperAdminRole, async (_req, res) => {
     const base = getMcpBaseUrl();
     try {
       // Concurrently fetch health, memory, queue stats, and adapter list from MCP.
       const [health, memory, queue, adapters] = await Promise.all([
         fetch(`${base}/health`).then((r) => r.json()),
         fetch(`${base}/memory/status`).then((r) => r.json()),
-        fetch(`${base}/queue/stats`).then((r) => r.json()).catch(() => ({ status: 'error' })),
+        fetch(`${base}/queue/stats`)
+          .then((r) => r.json())
+          .catch(() => ({ status: 'error' })),
         fetch(`${base}/adapters`).then((r) => r.json()),
       ]);
       return res.json({
-        status: "ok",
+        status: 'ok',
         mcpBaseUrl: base,
         health,
         memory,
@@ -431,8 +437,8 @@ export default function createMCPRoutes(_pgPool) {
       });
     } catch (e) {
       return res.status(502).json({
-        status: "error",
-        message: "Failed to reach MCP locally",
+        status: 'error',
+        message: 'Failed to reach MCP locally',
         detail: e?.message || String(e),
         mcpBaseUrl: base,
       });
@@ -441,7 +447,7 @@ export default function createMCPRoutes(_pgPool) {
 
   // GET /api/mcp/config-status - Get MCP configuration status
   // Returns status of required secrets without exposing actual values
-  router.get("/config-status", async (req, res) => {
+  router.get('/config-status', async (req, res) => {
     try {
       // Required secrets for MCP server
       const requiredSecrets = [
@@ -450,26 +456,24 @@ export default function createMCPRoutes(_pgPool) {
         'SUPABASE_ANON_KEY',
         'OPENAI_API_KEY',
         'DEFAULT_OPENAI_MODEL',
-        'DEFAULT_TENANT_ID'
+        'DEFAULT_TENANT_ID',
       ];
 
       // Optional secrets (warn if missing, but not critical)
-      const optionalSecrets = [
-        'CRM_BACKEND_URL',
-        'GITHUB_TOKEN',
-        'GH_TOKEN'
-      ];
+      const optionalSecrets = ['CRM_BACKEND_URL', 'GITHUB_TOKEN', 'GH_TOKEN'];
 
       // Check if Doppler is enabled (optional - not required for production)
       const dopplerEnabled = !!process.env.DOPPLER_TOKEN;
-      const dopplerInfo = dopplerEnabled ? {
-        enabled: true,
-        project: process.env.DOPPLER_PROJECT || 'unknown',
-        config: process.env.DOPPLER_CONFIG || 'unknown'
-      } : {
-        enabled: false,
-        note: 'Doppler is optional - production can use environment variables directly'
-      };
+      const dopplerInfo = dopplerEnabled
+        ? {
+            enabled: true,
+            project: process.env.DOPPLER_PROJECT || 'unknown',
+            config: process.env.DOPPLER_CONFIG || 'unknown',
+          }
+        : {
+            enabled: false,
+            note: 'Doppler is optional - production can use environment variables directly',
+          };
 
       // Helper function to safely mask secret values
       const maskSecret = (value) => {
@@ -483,14 +487,14 @@ export default function createMCPRoutes(_pgPool) {
 
       // Build status for each secret
       const secrets = {};
-      
+
       for (const secretName of requiredSecrets) {
         const value = process.env[secretName];
         secrets[secretName] = {
           configured: !!value,
           source: value ? (dopplerEnabled ? 'doppler' : 'env') : 'missing',
           masked: maskSecret(value),
-          required: true
+          required: true,
         };
       }
 
@@ -500,14 +504,14 @@ export default function createMCPRoutes(_pgPool) {
           configured: !!value,
           source: value ? (dopplerEnabled ? 'doppler' : 'env') : 'missing',
           masked: maskSecret(value),
-          required: false
+          required: false,
         };
       }
 
       // Calculate summary
       const totalRequired = requiredSecrets.length;
-      const configuredRequired = requiredSecrets.filter(s => !!process.env[s]).length;
-      const missingRequired = requiredSecrets.filter(s => !process.env[s]);
+      const configuredRequired = requiredSecrets.filter((s) => !!process.env[s]).length;
+      const missingRequired = requiredSecrets.filter((s) => !process.env[s]);
 
       res.json({
         status: 'success',
@@ -519,99 +523,96 @@ export default function createMCPRoutes(_pgPool) {
             totalRequired,
             configuredRequired,
             missingRequired,
-            allConfigured: missingRequired.length === 0
+            allConfigured: missingRequired.length === 0,
           },
           notes: {
-            doppler: 'Doppler is optional - environment variables can be managed directly in production',
-            redisPolicy: 'Redis eviction policy "allkeys-lru" is expected for cache workloads'
-          }
-        }
+            doppler:
+              'Doppler is optional - environment variables can be managed directly in production',
+            redisPolicy: 'Redis eviction policy "allkeys-lru" is expected for cache workloads',
+          },
+        },
       });
     } catch (error) {
-      res.status(500).json({ 
-        status: "error", 
-        message: error.message 
+      res.status(500).json({
+        status: 'error',
+        message: error.message,
       });
     }
   });
 
   // POST /api/mcp/execute-tool - Execute MCP tool
-  router.post("/execute-tool", async (req, res) => {
+  router.post('/execute-tool', async (req, res) => {
     const supa = getSupa();
     try {
       const { server_id, tool_name, parameters } = req.body || {};
 
-      if (server_id === "github") {
-        const githubToken = process.env.GH_TOKEN || process.env.GITHUB_TOKEN ||
-          null;
+      if (server_id === 'github') {
+        const githubToken = process.env.GH_TOKEN || process.env.GITHUB_TOKEN || null;
         if (!githubToken) {
           return res.status(400).json({
-            status: "error",
-            message: "GITHUB_TOKEN not configured",
+            status: 'error',
+            message: 'GITHUB_TOKEN not configured',
           });
         }
         // Minimal demo tools to validate wiring without a full MCP gateway
-        if (tool_name === "github.list_repos") {
+        if (tool_name === 'github.list_repos') {
           const per_page = Math.min(Number(parameters?.per_page) || 10, 100);
-          const resp = await fetch(
-            `https://api.github.com/user/repos?per_page=${per_page}`,
-            {
-              headers: {
-                "Authorization": `Bearer ${githubToken}`,
-                "Accept": "application/vnd.github+json",
-                "User-Agent": "aishacrm-mcp-tools",
-              },
-            },
-          );
-          const json = await resp.json();
-          return res.json({ status: "success", data: json });
-        }
-        if (tool_name === "github.get_user") {
-          const resp = await fetch("https://api.github.com/user", {
+          const resp = await fetch(`https://api.github.com/user/repos?per_page=${per_page}`, {
             headers: {
-              "Authorization": `Bearer ${githubToken}`,
-              "Accept": "application/vnd.github+json",
-              "User-Agent": "aishacrm-mcp-tools",
+              Authorization: `Bearer ${githubToken}`,
+              Accept: 'application/vnd.github+json',
+              'User-Agent': 'aishacrm-mcp-tools',
             },
           });
           const json = await resp.json();
-          return res.json({ status: "success", data: json });
+          return res.json({ status: 'success', data: json });
+        }
+        if (tool_name === 'github.get_user') {
+          const resp = await fetch('https://api.github.com/user', {
+            headers: {
+              Authorization: `Bearer ${githubToken}`,
+              Accept: 'application/vnd.github+json',
+              'User-Agent': 'aishacrm-mcp-tools',
+            },
+          });
+          const json = await resp.json();
+          return res.json({ status: 'success', data: json });
         }
         return res.status(400).json({
-          status: "error",
+          status: 'error',
           message: `Unknown tool for server 'github': ${tool_name}`,
         });
       }
 
       // CRM MCP toolset
-      if (server_id === "crm") {
+      if (server_id === 'crm') {
         // ========== BRAID BRIDGE ROUTING ==========
         // Route eligible CRM tools through Braid for unified policy enforcement,
         // caching, and audit logging. Native implementations below are kept for
         // tools not yet migrated to Braid (workflows, templates, etc.)
         const executionStrategy = getExecutionStrategy(tool_name);
-        
+
         if (executionStrategy === 'braid') {
           const { tenant_id } = parameters || {};
           if (!tenant_id) {
             return res.status(400).json({
-              status: "error",
-              message: "tenant_id is required",
+              status: 'error',
+              message: 'tenant_id is required',
             });
           }
-          
+
           // Build tenant record for Braid execution
           const tenantRecord = { id: tenant_id, tenant_id };
           const userId = req.user?.id || req.headers['x-user-id'] || null;
-          
+
           logger.debug('[MCP→Braid] Routing through Braid bridge', {
             tool: tool_name,
             strategy: executionStrategy,
             tenantId: tenant_id?.substring(0, 8),
           });
-          
+
           const result = await executeMcpToolViaBraid(tool_name, parameters, tenantRecord, userId);
-          
+
           if (result.status === 'success') {
             return res.json(result);
           } else {
@@ -619,14 +620,16 @@ export default function createMCPRoutes(_pgPool) {
           }
         }
         // ========== END BRAID BRIDGE ROUTING ==========
-        
+
         // Workflow template read tools don't require tenant_id (system templates are public)
-        if (tool_name === "crm.list_workflow_templates") {
+        if (tool_name === 'crm.list_workflow_templates') {
           const { category, include_inactive = false } = parameters || {};
-          
+
           let query = supa
             .from('workflow_template')
-            .select('id, name, description, category, parameters, use_cases, is_active, is_system, created_at')
+            .select(
+              'id, name, description, category, parameters, use_cases, is_active, is_system, created_at',
+            )
             .order('category', { ascending: true })
             .order('name', { ascending: true });
 
@@ -641,29 +644,31 @@ export default function createMCPRoutes(_pgPool) {
           if (error) throw error;
 
           // Format for AI consumption with parameter summaries
-          const templates = (data || []).map(t => ({
+          const templates = (data || []).map((t) => ({
             ...t,
-            parameter_summary: (t.parameters || []).map(p => 
-              `${p.name} (${p.type}${p.required ? ', required' : ''}): ${p.description}`
-            ).join('; '),
+            parameter_summary: (t.parameters || [])
+              .map(
+                (p) => `${p.name} (${p.type}${p.required ? ', required' : ''}): ${p.description}`,
+              )
+              .join('; '),
           }));
 
           return res.json({
-            status: "success",
+            status: 'success',
             data: templates,
             meta: {
               total: templates.length,
-              categories: [...new Set(templates.map(t => t.category))],
+              categories: [...new Set(templates.map((t) => t.category))],
             },
           });
         }
 
-        if (tool_name === "crm.get_workflow_template") {
+        if (tool_name === 'crm.get_workflow_template') {
           const { template_id } = parameters || {};
           if (!template_id) {
             return res.status(400).json({
-              status: "error",
-              message: "template_id is required",
+              status: 'error',
+              message: 'template_id is required',
             });
           }
 
@@ -676,22 +681,22 @@ export default function createMCPRoutes(_pgPool) {
           if (error) {
             if (error.code === 'PGRST116') {
               return res.status(404).json({
-                status: "error",
-                message: "Template not found",
+                status: 'error',
+                message: 'Template not found',
               });
             }
             throw error;
           }
 
-          return res.json({ status: "success", data });
+          return res.json({ status: 'success', data });
         }
 
         // All other CRM tools require tenant_id
         const { tenant_id } = parameters || {};
         if (!tenant_id) {
           return res.status(400).json({
-            status: "error",
-            message: "tenant_id is required",
+            status: 'error',
+            message: 'tenant_id is required',
           });
         }
 
@@ -699,8 +704,8 @@ export default function createMCPRoutes(_pgPool) {
         const limit = Math.min(Number(parameters?.limit) || 10, 100);
         const offset = Math.max(Number(parameters?.offset) || 0, 0);
 
-        if (tool_name === "crm.search_accounts") {
-          const q = String(parameters?.q || "").trim();
+        if (tool_name === 'crm.search_accounts') {
+          const q = String(parameters?.q || '').trim();
           const { data, error } = await supa
             .from('accounts')
             .select('*')
@@ -714,7 +719,7 @@ export default function createMCPRoutes(_pgPool) {
           let filtered = data || [];
           if (q) {
             const qLower = q.toLowerCase();
-            filtered = filtered.filter(row => {
+            filtered = filtered.filter((row) => {
               const name = (row.name || '').toLowerCase();
               const industry = (row.industry || '').toLowerCase();
               const website = (row.website || '').toLowerCase();
@@ -722,11 +727,11 @@ export default function createMCPRoutes(_pgPool) {
             });
           }
 
-          return res.json({ status: "success", data: filtered });
+          return res.json({ status: 'success', data: filtered });
         }
 
-        if (tool_name === "crm.search_contacts") {
-          const q = String(parameters?.q || "").trim();
+        if (tool_name === 'crm.search_contacts') {
+          const q = String(parameters?.q || '').trim();
           const { data, error } = await supa
             .from('contacts')
             .select('*')
@@ -740,19 +745,21 @@ export default function createMCPRoutes(_pgPool) {
           let filtered = data || [];
           if (q) {
             const qLower = q.toLowerCase();
-            filtered = filtered.filter(row => {
+            filtered = filtered.filter((row) => {
               const first_name = (row.first_name || '').toLowerCase();
               const last_name = (row.last_name || '').toLowerCase();
               const email = (row.email || '').toLowerCase();
-              return first_name.includes(qLower) || last_name.includes(qLower) || email.includes(qLower);
+              return (
+                first_name.includes(qLower) || last_name.includes(qLower) || email.includes(qLower)
+              );
             });
           }
 
-          return res.json({ status: "success", data: filtered });
+          return res.json({ status: 'success', data: filtered });
         }
 
-        if (tool_name === "crm.search_leads") {
-          const q = String(parameters?.q || "").trim();
+        if (tool_name === 'crm.search_leads') {
+          const q = String(parameters?.q || '').trim();
           const { data, error } = await supa
             .from('leads')
             .select('*')
@@ -766,36 +773,41 @@ export default function createMCPRoutes(_pgPool) {
           let filtered = data || [];
           if (q) {
             const qLower = q.toLowerCase();
-            filtered = filtered.filter(row => {
+            filtered = filtered.filter((row) => {
               const first_name = (row.first_name || '').toLowerCase();
               const last_name = (row.last_name || '').toLowerCase();
               const email = (row.email || '').toLowerCase();
               const company = (row.company || '').toLowerCase();
-              return first_name.includes(qLower) || last_name.includes(qLower) || email.includes(qLower) || company.includes(qLower);
+              return (
+                first_name.includes(qLower) ||
+                last_name.includes(qLower) ||
+                email.includes(qLower) ||
+                company.includes(qLower)
+              );
             });
           }
 
-          return res.json({ status: "success", data: filtered });
+          return res.json({ status: 'success', data: filtered });
         }
 
-        if (tool_name === "crm.get_record") {
-          const entity = String(parameters?.entity || "").toLowerCase();
-          const id = String(parameters?.id || "").trim();
+        if (tool_name === 'crm.get_record') {
+          const entity = String(parameters?.entity || '').toLowerCase();
+          const id = String(parameters?.id || '').trim();
           const table = {
-            account: "accounts",
-            accounts: "accounts",
-            contact: "contacts",
-            contacts: "contacts",
-            lead: "leads",
-            leads: "leads",
-            opportunity: "opportunities",
-            opportunities: "opportunities",
-            activity: "activities",
-            activities: "activities",
+            account: 'accounts',
+            accounts: 'accounts',
+            contact: 'contacts',
+            contacts: 'contacts',
+            lead: 'leads',
+            leads: 'leads',
+            opportunity: 'opportunities',
+            opportunities: 'opportunities',
+            activity: 'activities',
+            activities: 'activities',
           }[entity];
           if (!table) {
             return res.status(400).json({
-              status: "error",
+              status: 'error',
               message: `Unsupported entity: ${entity}`,
             });
           }
@@ -808,30 +820,29 @@ export default function createMCPRoutes(_pgPool) {
 
           if (error) throw error;
 
-          return res.json({ status: "success", data: data || null });
+          return res.json({ status: 'success', data: data || null });
         }
 
-        if (tool_name === "crm.create_activity") {
-          const { type, subject, body, related_id, metadata } = parameters ||
-            {};
+        if (tool_name === 'crm.create_activity') {
+          const { type, subject, body, related_id, metadata } = parameters || {};
           if (!type) {
             return res.status(400).json({
-              status: "error",
-              message: "type is required",
+              status: 'error',
+              message: 'type is required',
             });
           }
-          
+
           // Extract user email from authorization header
           const userEmail = req.user?.email || req.headers['x-user-email'] || null;
-          
+
           // Build metadata with assigned_to defaulting to current user
           const activityMetadata = {
             ...metadata,
             assigned_to: metadata?.assigned_to || userEmail,
             status: metadata?.status || 'scheduled',
-            description: body || null
+            description: body || null,
           };
-          
+
           const { data, error } = await supa
             .from('activities')
             .insert({
@@ -841,27 +852,41 @@ export default function createMCPRoutes(_pgPool) {
               body: body || null,
               related_id: related_id || null,
               metadata: activityMetadata,
-              created_at: new Date().toISOString()
+              created_at: new Date().toISOString(),
             })
             .select()
             .single();
 
           if (error) throw error;
 
-          return res.json({ status: "success", data });
+          return res.json({ status: 'success', data });
         }
 
-        if (tool_name === "crm.get_tenant_stats") {
-          const [accounts, contacts, leads, opps, activities] = await Promise
-            .all([
-              supa.from('accounts').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant_id),
-              supa.from('contacts').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant_id),
-              supa.from('leads').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant_id),
-              supa.from('opportunities').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant_id),
-              supa.from('activities').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant_id),
-            ]);
+        if (tool_name === 'crm.get_tenant_stats') {
+          const [accounts, contacts, leads, opps, activities] = await Promise.all([
+            supa
+              .from('accounts')
+              .select('*', { count: 'exact', head: true })
+              .eq('tenant_id', tenant_id),
+            supa
+              .from('contacts')
+              .select('*', { count: 'exact', head: true })
+              .eq('tenant_id', tenant_id),
+            supa
+              .from('leads')
+              .select('*', { count: 'exact', head: true })
+              .eq('tenant_id', tenant_id),
+            supa
+              .from('opportunities')
+              .select('*', { count: 'exact', head: true })
+              .eq('tenant_id', tenant_id),
+            supa
+              .from('activities')
+              .select('*', { count: 'exact', head: true })
+              .eq('tenant_id', tenant_id),
+          ]);
           return res.json({
-            status: "success",
+            status: 'success',
             data: {
               accounts: accounts.count || 0,
               contacts: contacts.count || 0,
@@ -872,14 +897,14 @@ export default function createMCPRoutes(_pgPool) {
           });
         }
 
-        if (tool_name === "crm.list_workflows") {
+        if (tool_name === 'crm.list_workflows') {
           const active_only = parameters?.active_only !== false;
           let query = supa
             .from('workflows')
             .select('id, name, description, trigger, is_active, created_at, updated_at')
             .eq('tenant_id', tenant_id)
             .order('updated_at', { ascending: false });
-          
+
           if (active_only) {
             query = query.eq('is_active', true);
           }
@@ -887,15 +912,15 @@ export default function createMCPRoutes(_pgPool) {
           const { data, error } = await query;
           if (error) throw error;
 
-          return res.json({ status: "success", data: data || [] });
+          return res.json({ status: 'success', data: data || [] });
         }
 
-        if (tool_name === "crm.execute_workflow") {
+        if (tool_name === 'crm.execute_workflow') {
           const { workflow_id, trigger_data } = parameters || {};
           if (!workflow_id) {
             return res.status(400).json({
-              status: "error",
-              message: "workflow_id is required",
+              status: 'error',
+              message: 'workflow_id is required',
             });
           }
 
@@ -910,22 +935,22 @@ export default function createMCPRoutes(_pgPool) {
           if (wErr) throw wErr;
           if (!workflow) {
             return res.status(404).json({
-              status: "error",
-              message: "Workflow not found",
+              status: 'error',
+              message: 'Workflow not found',
             });
           }
 
           if (!workflow.is_active) {
             return res.status(400).json({
-              status: "error",
-              message: "Workflow is not active",
+              status: 'error',
+              message: 'Workflow is not active',
             });
           }
 
           // Execute workflow using the existing executor
           // Import executeWorkflowById dynamically to avoid circular dependencies
           const triggerPayload = trigger_data || {};
-          
+
           // Create execution record
           const { data: execution, error: exErr } = await supa
             .from('workflow_executions')
@@ -954,16 +979,15 @@ export default function createMCPRoutes(_pgPool) {
 
             // Helper function to get next node
             const getNextNode = (currentNodeId, branchType = null) => {
-              const conn = connections.find(c => 
-                c.from === currentNodeId && 
-                (!branchType || c.type === branchType)
+              const conn = connections.find(
+                (c) => c.from === currentNodeId && (!branchType || c.type === branchType),
               );
-              return conn ? nodes.find(n => n.id === conn.to) : null;
+              return conn ? nodes.find((n) => n.id === conn.to) : null;
             };
 
             // Execute nodes sequentially starting after trigger
-            let currentNode = nodes.find(n => n.type !== 'webhook_trigger');
-            
+            let currentNode = nodes.find((n) => n.type !== 'webhook_trigger');
+
             while (currentNode) {
               executionLog.push({
                 node_id: currentNode.id,
@@ -990,12 +1014,15 @@ export default function createMCPRoutes(_pgPool) {
                   const value = currentNode.config?.value || '';
                   const fieldValue = context.variables[field] || context.payload[field];
                   let conditionMet = false;
-                  
-                  if (operator === '==' || operator === 'equals') conditionMet = fieldValue == value;
-                  else if (operator === '!=' || operator === 'not_equals') conditionMet = fieldValue != value;
-                  else if (operator === 'contains') conditionMet = String(fieldValue).includes(value);
+
+                  if (operator === '==' || operator === 'equals')
+                    conditionMet = fieldValue == value;
+                  else if (operator === '!=' || operator === 'not_equals')
+                    conditionMet = fieldValue != value;
+                  else if (operator === 'contains')
+                    conditionMet = String(fieldValue).includes(value);
                   else if (operator === 'exists') conditionMet = fieldValue != null;
-                  
+
                   executionLog[executionLog.length - 1].result = { condition_met: conditionMet };
                   currentNode = getNextNode(currentNode.id, conditionMet ? 'TRUE' : 'FALSE');
                   continue;
@@ -1022,7 +1049,7 @@ export default function createMCPRoutes(_pgPool) {
               .eq('id', execution.id);
 
             return res.json({
-              status: "success",
+              status: 'success',
               data: {
                 execution_id: execution.id,
                 workflow_id,
@@ -1044,7 +1071,7 @@ export default function createMCPRoutes(_pgPool) {
               .eq('id', execution.id);
 
             return res.status(500).json({
-              status: "error",
+              status: 'error',
               message: `Workflow execution failed: ${execError.message}`,
               execution_id: execution.id,
             });
@@ -1052,12 +1079,13 @@ export default function createMCPRoutes(_pgPool) {
         }
 
         // crm.update_workflow - Update workflow configuration
-        if (tool_name === "crm.update_workflow") {
-          const { workflow_id, name, description, nodes, connections, is_active } = parameters || {};
+        if (tool_name === 'crm.update_workflow') {
+          const { workflow_id, name, description, nodes, connections, is_active } =
+            parameters || {};
           if (!workflow_id) {
             return res.status(400).json({
-              status: "error",
-              message: "workflow_id is required",
+              status: 'error',
+              message: 'workflow_id is required',
             });
           }
 
@@ -1072,8 +1100,8 @@ export default function createMCPRoutes(_pgPool) {
           if (checkErr) throw checkErr;
           if (!existing) {
             return res.status(404).json({
-              status: "error",
-              message: "Workflow not found or access denied",
+              status: 'error',
+              message: 'Workflow not found or access denied',
             });
           }
 
@@ -1104,25 +1132,25 @@ export default function createMCPRoutes(_pgPool) {
           if (error) throw error;
 
           return res.json({
-            status: "success",
-            message: "Workflow updated successfully",
+            status: 'success',
+            message: 'Workflow updated successfully',
             data,
           });
         }
 
         // crm.toggle_workflow_status - Activate or deactivate a workflow
-        if (tool_name === "crm.toggle_workflow_status") {
+        if (tool_name === 'crm.toggle_workflow_status') {
           const { workflow_id, is_active } = parameters || {};
           if (!workflow_id) {
             return res.status(400).json({
-              status: "error",
-              message: "workflow_id is required",
+              status: 'error',
+              message: 'workflow_id is required',
             });
           }
           if (typeof is_active !== 'boolean') {
             return res.status(400).json({
-              status: "error",
-              message: "is_active must be a boolean",
+              status: 'error',
+              message: 'is_active must be a boolean',
             });
           }
 
@@ -1137,27 +1165,31 @@ export default function createMCPRoutes(_pgPool) {
           if (error) {
             if (error.code === 'PGRST116') {
               return res.status(404).json({
-                status: "error",
-                message: "Workflow not found or access denied",
+                status: 'error',
+                message: 'Workflow not found or access denied',
               });
             }
             throw error;
           }
 
           return res.json({
-            status: "success",
+            status: 'success',
             message: `Workflow ${is_active ? 'activated' : 'deactivated'}`,
             data,
           });
         }
 
         // crm.instantiate_workflow_template - Create a workflow from a template
-        if (tool_name === "crm.instantiate_workflow_template") {
-          const { template_id, name: workflowName, parameters: paramValues = {} } = parameters || {};
+        if (tool_name === 'crm.instantiate_workflow_template') {
+          const {
+            template_id,
+            name: workflowName,
+            parameters: paramValues = {},
+          } = parameters || {};
           if (!template_id) {
             return res.status(400).json({
-              status: "error",
-              message: "template_id is required",
+              status: 'error',
+              message: 'template_id is required',
             });
           }
 
@@ -1172,8 +1204,8 @@ export default function createMCPRoutes(_pgPool) {
           if (templateError) {
             if (templateError.code === 'PGRST116') {
               return res.status(404).json({
-                status: "error",
-                message: "Template not found or inactive",
+                status: 'error',
+                message: 'Template not found or inactive',
               });
             }
             throw templateError;
@@ -1201,8 +1233,8 @@ export default function createMCPRoutes(_pgPool) {
 
           if (errors.length > 0) {
             return res.status(400).json({
-              status: "error",
-              message: "Parameter validation failed",
+              status: 'error',
+              message: 'Parameter validation failed',
               errors,
             });
           }
@@ -1268,7 +1300,7 @@ export default function createMCPRoutes(_pgPool) {
             .eq('id', workflow.id);
 
           return res.status(201).json({
-            status: "success",
+            status: 'success',
             message: `Workflow "${finalName}" created from template "${template.name}"`,
             data: {
               workflow_id: workflow.id,
@@ -1281,65 +1313,67 @@ export default function createMCPRoutes(_pgPool) {
         }
 
         return res.status(400).json({
-          status: "error",
+          status: 'error',
           message: `Unknown CRM tool: ${tool_name}`,
         });
       }
 
       // Web Research MCP (Wikipedia only, no external keys required)
-      if (server_id === "web") {
-        if (tool_name === "web.search_wikipedia") {
-          const q = String(parameters?.q || "").trim();
+      if (server_id === 'web') {
+        if (tool_name === 'web.search_wikipedia') {
+          const q = String(parameters?.q || '').trim();
           if (!q) {
             return res.status(400).json({
-              status: "error",
-              message: "q is required",
+              status: 'error',
+              message: 'q is required',
             });
           }
           const resp = await fetch(
-            `https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=5&srsearch=${
-              encodeURIComponent(q)
-            }`,
+            `https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=5&srsearch=${encodeURIComponent(
+              q,
+            )}`,
           );
           const json = await resp.json();
           return res.json({
-            status: "success",
+            status: 'success',
             data: json?.query?.search || [],
           });
         }
-        if (tool_name === "web.get_wikipedia_page") {
-          const pageid = String(parameters?.pageid || "").trim();
+        if (tool_name === 'web.get_wikipedia_page') {
+          const pageid = String(parameters?.pageid || '').trim();
           if (!pageid) {
             return res.status(400).json({
-              status: "error",
-              message: "pageid is required",
+              status: 'error',
+              message: 'pageid is required',
             });
           }
           const resp = await fetch(
-            `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro&explaintext&format=json&pageids=${
-              encodeURIComponent(pageid)
-            }`,
+            `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro&explaintext&format=json&pageids=${encodeURIComponent(
+              pageid,
+            )}`,
           );
           const json = await resp.json();
           return res.json({
-            status: "success",
+            status: 'success',
             data: json?.query?.pages?.[pageid] || null,
           });
         }
         return res.status(400).json({
-          status: "error",
+          status: 'error',
           message: `Unknown Web tool: ${tool_name}`,
         });
       }
 
       // LLM MCP facade
-      if (server_id === "llm") {
-        if (tool_name !== "llm.generate_json") {
-          return res.status(400).json({ status: "error", message: `Unknown LLM tool: ${tool_name}` });
+      if (server_id === 'llm') {
+        if (tool_name !== 'llm.generate_json') {
+          return res
+            .status(400)
+            .json({ status: 'error', message: `Unknown LLM tool: ${tool_name}` });
         }
 
         const {
-          prompt = "",
+          prompt = '',
           schema = {},
           context = null,
           model,
@@ -1354,8 +1388,11 @@ export default function createMCPRoutes(_pgPool) {
         const userContentParts = [];
         if (prompt) userContentParts.push(String(prompt));
         if (context) {
-          if (typeof context === "string") userContentParts.push(context);
-          else if (Array.isArray(context)) userContentParts.push(context.map((c) => (typeof c === "string" ? c : JSON.stringify(c))).join("\n\n"));
+          if (typeof context === 'string') userContentParts.push(context);
+          else if (Array.isArray(context))
+            userContentParts.push(
+              context.map((c) => (typeof c === 'string' ? c : JSON.stringify(c))).join('\n\n'),
+            );
           else userContentParts.push(JSON.stringify(context));
         }
         if (schema && Object.keys(schema || {}).length) {
@@ -1363,15 +1400,15 @@ export default function createMCPRoutes(_pgPool) {
         }
 
         const messages = [
-          { role: "system", content: SYSTEM_INSTRUCTIONS },
-          { role: "user", content: userContentParts.join("\n\n") || "Generate JSON." },
+          { role: 'system', content: SYSTEM_INSTRUCTIONS },
+          { role: 'user', content: userContentParts.join('\n\n') || 'Generate JSON.' },
         ];
 
         // Use callLLMWithFailover for automatic provider failover
         const failoverResult = await callLLMWithFailover({
           tenantId: tenantIdParam,
           messages,
-          capability: "json_strict",
+          capability: 'json_strict',
           temperature,
           explicitModel: model,
           explicitProvider: providerParam,
@@ -1380,23 +1417,29 @@ export default function createMCPRoutes(_pgPool) {
 
         if (!failoverResult.ok) {
           const isKeyError = /api key|not configured/i.test(failoverResult.error || '');
-          return res.status(isKeyError ? 501 : 500).json({ status: "error", message: failoverResult.error });
+          return res
+            .status(isKeyError ? 501 : 500)
+            .json({ status: 'error', message: failoverResult.error });
         }
 
         // Parse JSON from result
         let jsonOut = null;
         try {
-          jsonOut = JSON.parse(failoverResult.result.content || "null");
+          jsonOut = JSON.parse(failoverResult.result.content || 'null');
         } catch {
           // try to extract JSON block heuristically
-          const match = (failoverResult.result.content || "").match(/\{[\s\S]*\}\s*$/);
+          const match = (failoverResult.result.content || '').match(/\{[\s\S]*\}\s*$/);
           if (match) {
-            try { jsonOut = JSON.parse(match[0]); } catch { jsonOut = null; }
+            try {
+              jsonOut = JSON.parse(match[0]);
+            } catch {
+              jsonOut = null;
+            }
           }
         }
 
         return res.json({
-          status: "success",
+          status: 'success',
           data: {
             json: jsonOut,
             raw: failoverResult.result.content,
@@ -1409,50 +1452,49 @@ export default function createMCPRoutes(_pgPool) {
 
       // Default stub
       res.json({
-        status: "success",
-        message: "MCP tool execution not yet implemented",
+        status: 'success',
+        message: 'MCP tool execution not yet implemented',
         data: { server_id, tool_name, parameters },
       });
     } catch (error) {
-      res.status(500).json({ status: "error", message: error.message });
+      res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
   // GET /api/mcp/resources - Get MCP resources
-  router.get("/resources", async (req, res) => {
+  router.get('/resources', async (req, res) => {
     try {
-      res.json({ status: "success", data: { resources: [] } });
+      res.json({ status: 'success', data: { resources: [] } });
     } catch (error) {
-      res.status(500).json({ status: "error", message: error.message });
+      res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
   // GET /api/mcp/github/health - explicit health endpoint for GitHub MCP
-  router.get("/github/health", async (req, res) => {
+  router.get('/github/health', async (req, res) => {
     try {
-      const githubToken = process.env.GH_TOKEN || process.env.GITHUB_TOKEN ||
-        null;
+      const githubToken = process.env.GH_TOKEN || process.env.GITHUB_TOKEN || null;
       if (!githubToken) {
         return res.json({
-          status: "success",
+          status: 'success',
           data: {
             configured: false,
             healthy: false,
-            reason: "Missing GITHUB_TOKEN",
+            reason: 'Missing GITHUB_TOKEN',
           },
         });
       }
-      const resp = await fetch("https://api.github.com/user", {
+      const resp = await fetch('https://api.github.com/user', {
         headers: {
-          "Authorization": `Bearer ${githubToken}`,
-          "Accept": "application/vnd.github+json",
-          "User-Agent": "aishacrm-mcp-health",
+          Authorization: `Bearer ${githubToken}`,
+          Accept: 'application/vnd.github+json',
+          'User-Agent': 'aishacrm-mcp-health',
         },
       });
       if (!resp.ok) {
         const text = await resp.text();
         return res.json({
-          status: "success",
+          status: 'success',
           data: {
             configured: true,
             healthy: false,
@@ -1463,7 +1505,7 @@ export default function createMCPRoutes(_pgPool) {
       }
       const json = await resp.json();
       return res.json({
-        status: "success",
+        status: 'success',
         data: {
           configured: true,
           healthy: true,
@@ -1472,29 +1514,31 @@ export default function createMCPRoutes(_pgPool) {
       });
     } catch (err) {
       return res.json({
-        status: "success",
+        status: 'success',
         data: { configured: true, healthy: false, error: String(err) },
       });
     }
   });
 
   // POST /api/mcp/market-insights - Orchestrate web + CRM tools and summarize via LLM into JSON schema
-  router.post("/market-insights", async (req, res) => {
+  router.post('/market-insights', async (req, res) => {
     const supa = getSupa();
     try {
       // User-Agent required by Wikipedia/MediaWiki API policy
       const WIKIPEDIA_USER_AGENT = 'AishaCRM/1.0 (market-insights; contact@aishacrm.com)';
 
       const body = req.body || {};
-      const tenantId = req.headers["x-tenant-id"] || body.tenant_id || body.tenantId || null;
+      const tenantId = req.headers['x-tenant-id'] || body.tenant_id || body.tenantId || null;
       if (!tenantId) {
-        return res.status(400).json({ status: "error", message: "tenant_id required" });
+        return res.status(400).json({ status: 'error', message: 'tenant_id required' });
       }
 
       // Load tenant profile for context
       const { data: tenantRows, error: tErr } = await supa
-        .from("tenant")
-        .select("id, tenant_id, name, industry, business_model, geographic_focus, country, major_city")
+        .from('tenant')
+        .select(
+          'id, tenant_id, name, industry, business_model, geographic_focus, country, major_city',
+        )
         .or(`tenant_id.eq.${tenantId},id.eq.${tenantId}`)
         .limit(1);
       if (tErr) throw tErr;
@@ -1502,37 +1546,69 @@ export default function createMCPRoutes(_pgPool) {
 
       // Human-readable label maps (mirrors frontend AIMarketInsights.jsx)
       const INDUSTRY_LABELS = {
-        accounting_and_finance: "Accounting & Finance", aerospace_and_defense: "Aerospace & Defense",
-        agriculture_and_farming: "Agriculture & Farming", automotive_and_transportation: "Automotive & Transportation",
-        banking_and_financial_services: "Banking & Financial Services", biotechnology_and_pharmaceuticals: "Biotechnology & Pharmaceuticals",
-        chemicals_and_materials: "Chemicals & Materials", construction_and_engineering: "Construction & Engineering",
-        consulting_and_professional_services: "Consulting & Professional Services", consumer_goods_and_retail: "Consumer Goods & Retail",
-        cybersecurity: "Cybersecurity", data_analytics_and_business_intelligence: "Data Analytics & Business Intelligence",
-        education_and_training: "Education & Training", energy_oil_and_gas: "Energy, Oil & Gas",
-        entertainment_and_media: "Entertainment & Media", environmental_services: "Environmental Services",
-        event_management: "Event Management", fashion_and_apparel: "Fashion & Apparel",
-        food_and_beverage: "Food & Beverage", franchising: "Franchising",
-        gaming_and_esports: "Gaming & Esports", government_and_public_sector: "Government & Public Sector",
-        green_energy_and_solar: "Green Energy & Solar", healthcare_and_medical_services: "Healthcare & Medical Services",
-        hospitality_and_tourism: "Hospitality & Tourism", human_resources_and_staffing: "Human Resources & Staffing",
-        information_technology_and_software: "Information Technology & Software", insurance: "Insurance",
-        interior_design_and_architecture: "Interior Design & Architecture", legal_services: "Legal Services",
-        logistics_and_supply_chain: "Logistics & Supply Chain", manufacturing_industrial: "Manufacturing (Industrial)",
-        marketing_advertising_and_pr: "Marketing, Advertising & PR", mining_and_metals: "Mining & Metals",
-        nonprofit_and_ngos: "Nonprofit & NGOs", packaging_and_printing: "Packaging & Printing",
-        pharmaceuticals: "Pharmaceuticals", real_estate_and_property_management: "Real Estate & Property Management",
-        renewable_energy: "Renewable Energy", research_and_development: "Research & Development",
-        retail_and_wholesale: "Retail & Wholesale", robotics_and_automation: "Robotics & Automation",
-        saas_and_cloud_services: "SaaS & Cloud Services", security_services: "Security Services",
-        social_media_and_influencer: "Social Media & Influencer", sports_and_recreation: "Sports & Recreation",
-        telecommunications: "Telecommunications", textiles_and_apparel: "Textiles & Apparel",
-        transportation_and_delivery: "Transportation & Delivery", utilities_water_and_waste: "Utilities (Water & Waste)",
-        veterinary_services: "Veterinary Services", warehousing_and_distribution: "Warehousing & Distribution",
-        wealth_management: "Wealth Management", other: "Other",
+        accounting_and_finance: 'Accounting & Finance',
+        aerospace_and_defense: 'Aerospace & Defense',
+        agriculture_and_farming: 'Agriculture & Farming',
+        automotive_and_transportation: 'Automotive & Transportation',
+        banking_and_financial_services: 'Banking & Financial Services',
+        biotechnology_and_pharmaceuticals: 'Biotechnology & Pharmaceuticals',
+        chemicals_and_materials: 'Chemicals & Materials',
+        construction_and_engineering: 'Construction & Engineering',
+        consulting_and_professional_services: 'Consulting & Professional Services',
+        consumer_goods_and_retail: 'Consumer Goods & Retail',
+        cybersecurity: 'Cybersecurity',
+        data_analytics_and_business_intelligence: 'Data Analytics & Business Intelligence',
+        education_and_training: 'Education & Training',
+        energy_oil_and_gas: 'Energy, Oil & Gas',
+        entertainment_and_media: 'Entertainment & Media',
+        environmental_services: 'Environmental Services',
+        event_management: 'Event Management',
+        fashion_and_apparel: 'Fashion & Apparel',
+        food_and_beverage: 'Food & Beverage',
+        franchising: 'Franchising',
+        gaming_and_esports: 'Gaming & Esports',
+        government_and_public_sector: 'Government & Public Sector',
+        green_energy_and_solar: 'Green Energy & Solar',
+        healthcare_and_medical_services: 'Healthcare & Medical Services',
+        hospitality_and_tourism: 'Hospitality & Tourism',
+        human_resources_and_staffing: 'Human Resources & Staffing',
+        information_technology_and_software: 'Information Technology & Software',
+        insurance: 'Insurance',
+        interior_design_and_architecture: 'Interior Design & Architecture',
+        legal_services: 'Legal Services',
+        logistics_and_supply_chain: 'Logistics & Supply Chain',
+        manufacturing_industrial: 'Manufacturing (Industrial)',
+        marketing_advertising_and_pr: 'Marketing, Advertising & PR',
+        mining_and_metals: 'Mining & Metals',
+        nonprofit_and_ngos: 'Nonprofit & NGOs',
+        packaging_and_printing: 'Packaging & Printing',
+        pharmaceuticals: 'Pharmaceuticals',
+        real_estate_and_property_management: 'Real Estate & Property Management',
+        renewable_energy: 'Renewable Energy',
+        research_and_development: 'Research & Development',
+        retail_and_wholesale: 'Retail & Wholesale',
+        robotics_and_automation: 'Robotics & Automation',
+        saas_and_cloud_services: 'SaaS & Cloud Services',
+        security_services: 'Security Services',
+        social_media_and_influencer: 'Social Media & Influencer',
+        sports_and_recreation: 'Sports & Recreation',
+        telecommunications: 'Telecommunications',
+        textiles_and_apparel: 'Textiles & Apparel',
+        transportation_and_delivery: 'Transportation & Delivery',
+        utilities_water_and_waste: 'Utilities (Water & Waste)',
+        veterinary_services: 'Veterinary Services',
+        warehousing_and_distribution: 'Warehousing & Distribution',
+        wealth_management: 'Wealth Management',
+        other: 'Other',
       };
       const GEOGRAPHIC_LABELS = {
-        north_america: "North America", europe: "Europe", asia: "Asia",
-        south_america: "South America", africa: "Africa", oceania: "Oceania", global: "Global",
+        north_america: 'North America',
+        europe: 'Europe',
+        asia: 'Asia',
+        south_america: 'South America',
+        africa: 'Africa',
+        oceania: 'Oceania',
+        global: 'Global',
       };
       // Fallback: convert snake_case to Title Case if not in label map
       const humanize = (val, labels) => {
@@ -1540,23 +1616,41 @@ export default function createMCPRoutes(_pgPool) {
         if (labels[val]) return labels[val];
         // Check if body already sent a human-readable label
         if (val.includes(' ') || /[A-Z]/.test(val)) return val;
-        return val.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        return val.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
       };
 
-      const rawIndustry = tenant.industry || body.industry || "saas_and_cloud_services";
-      const rawGeo = tenant.geographic_focus || body.geographic_focus || "north_america";
-      const INDUSTRY = humanize(rawIndustry, INDUSTRY_LABELS) || "SaaS & Cloud Services";
-      const BUSINESS_MODEL = (tenant.business_model || body.business_model || "B2B").toUpperCase();
-      const GEO = humanize(rawGeo, GEOGRAPHIC_LABELS) || "North America";
-      const LOCATION = tenant.major_city && tenant.country ? `${tenant.major_city}, ${tenant.country}` : (tenant.country || GEO);
+      const rawIndustry = tenant.industry || body.industry || 'saas_and_cloud_services';
+      const rawGeo = tenant.geographic_focus || body.geographic_focus || 'north_america';
+      const INDUSTRY = humanize(rawIndustry, INDUSTRY_LABELS) || 'SaaS & Cloud Services';
+      const BUSINESS_MODEL = (tenant.business_model || body.business_model || 'B2B').toUpperCase();
+      const GEO = humanize(rawGeo, GEOGRAPHIC_LABELS) || 'North America';
+      const LOCATION =
+        tenant.major_city && tenant.country
+          ? `${tenant.major_city}, ${tenant.country}`
+          : tenant.country || GEO;
 
       // CRM stats (reuse logic from crm.get_tenant_stats)
       const [accounts, contacts, leads, opps, activities] = await Promise.all([
-        supa.from('accounts').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant.tenant_id || tenantId),
-        supa.from('contacts').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant.tenant_id || tenantId),
-        supa.from('leads').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant.tenant_id || tenantId),
-        supa.from('opportunities').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant.tenant_id || tenantId),
-        supa.from('activities').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant.tenant_id || tenantId),
+        supa
+          .from('accounts')
+          .select('*', { count: 'exact', head: true })
+          .eq('tenant_id', tenant.tenant_id || tenantId),
+        supa
+          .from('contacts')
+          .select('*', { count: 'exact', head: true })
+          .eq('tenant_id', tenant.tenant_id || tenantId),
+        supa
+          .from('leads')
+          .select('*', { count: 'exact', head: true })
+          .eq('tenant_id', tenant.tenant_id || tenantId),
+        supa
+          .from('opportunities')
+          .select('*', { count: 'exact', head: true })
+          .eq('tenant_id', tenant.tenant_id || tenantId),
+        supa
+          .from('activities')
+          .select('*', { count: 'exact', head: true })
+          .eq('tenant_id', tenant.tenant_id || tenantId),
       ]);
       const tenantStats = {
         accounts: accounts.count || 0,
@@ -1569,7 +1663,7 @@ export default function createMCPRoutes(_pgPool) {
       // Wikipedia context (reuse logic from web tools)
       const searchQ = `${INDUSTRY} market ${LOCATION}`;
       let searchResults = [];
-      let overview = "";
+      let overview = '';
 
       try {
         const searchResp = await fetch(
@@ -1577,9 +1671,9 @@ export default function createMCPRoutes(_pgPool) {
           {
             headers: {
               'User-Agent': WIKIPEDIA_USER_AGENT,
-              'Accept': 'application/json'
-            }
-          }
+              Accept: 'application/json',
+            },
+          },
         );
         if (searchResp.ok) {
           const searchJson = await searchResp.json();
@@ -1599,101 +1693,139 @@ export default function createMCPRoutes(_pgPool) {
             {
               headers: {
                 'User-Agent': WIKIPEDIA_USER_AGENT,
-                'Accept': 'application/json'
-              }
-            }
+                Accept: 'application/json',
+              },
+            },
           );
           if (pageResp.ok) {
             const pageJson = await pageResp.json();
-            overview = pageJson?.query?.pages?.[pageid]?.extract || "";
+            overview = pageJson?.query?.pages?.[pageid]?.extract || '';
           }
         } catch {
-          overview = "";
+          overview = '';
         }
       }
 
       // Build JSON schema for insights
       const schema = {
-        type: "object",
+        type: 'object',
         properties: {
-          executive_summary: { type: "string", description: "3-4 sentence executive summary with critical insights and recommended immediate actions" },
-          market_overview: { type: "string", description: "Detailed 2-3 paragraph market overview with size, growth trajectory, and dynamics" },
+          executive_summary: {
+            type: 'string',
+            description:
+              '3-4 sentence executive summary with critical insights and recommended immediate actions',
+          },
+          market_overview: {
+            type: 'string',
+            description:
+              'Detailed 2-3 paragraph market overview with size, growth trajectory, and dynamics',
+          },
           swot_analysis: {
-            type: "object",
+            type: 'object',
             properties: {
-              strengths: { type: "array", items: { type: "string" }, minItems: 4 },
-              weaknesses: { type: "array", items: { type: "string" }, minItems: 4 },
-              opportunities: { type: "array", items: { type: "string" }, minItems: 4 },
-              threats: { type: "array", items: { type: "string" }, minItems: 4 },
+              strengths: { type: 'array', items: { type: 'string' }, minItems: 4 },
+              weaknesses: { type: 'array', items: { type: 'string' }, minItems: 4 },
+              opportunities: { type: 'array', items: { type: 'string' }, minItems: 4 },
+              threats: { type: 'array', items: { type: 'string' }, minItems: 4 },
             },
-            required: ["strengths", "weaknesses", "opportunities", "threats"],
+            required: ['strengths', 'weaknesses', 'opportunities', 'threats'],
           },
           competitive_landscape: {
-            type: "object",
+            type: 'object',
             properties: {
-              overview: { type: "string" },
-              major_competitors: { type: "array", items: { type: "string" } },
-              market_dynamics: { type: "string" },
-              competitive_advantages: { type: "string", description: "How this company can differentiate" },
+              overview: { type: 'string' },
+              major_competitors: { type: 'array', items: { type: 'string' } },
+              market_dynamics: { type: 'string' },
+              competitive_advantages: {
+                type: 'string',
+                description: 'How this company can differentiate',
+              },
             },
-            required: ["overview", "major_competitors", "market_dynamics"],
+            required: ['overview', 'major_competitors', 'market_dynamics'],
           },
           industry_trends: {
-            type: "array",
+            type: 'array',
             items: {
-              type: "object",
+              type: 'object',
               properties: {
-                name: { type: "string" },
-                description: { type: "string" },
-                impact: { type: "string", enum: ["high", "medium", "low"] },
-                timeframe: { type: "string" },
+                name: { type: 'string' },
+                description: { type: 'string' },
+                impact: { type: 'string', enum: ['high', 'medium', 'low'] },
+                timeframe: { type: 'string' },
               },
-              required: ["name", "description", "impact"],
+              required: ['name', 'description', 'impact'],
             },
           },
           major_news: {
-            type: "array",
+            type: 'array',
             items: {
-              type: "object",
+              type: 'object',
               properties: {
-                title: { type: "string" },
-                description: { type: "string" },
-                date: { type: "string" },
-                impact: { type: "string", enum: ["positive", "negative", "neutral"] },
+                title: { type: 'string' },
+                description: { type: 'string' },
+                date: { type: 'string' },
+                impact: { type: 'string', enum: ['positive', 'negative', 'neutral'] },
               },
-              required: ["title", "description", "date", "impact"],
+              required: ['title', 'description', 'date', 'impact'],
             },
           },
           recommendations: {
-            type: "array",
+            type: 'array',
             items: {
-              type: "object",
+              type: 'object',
               properties: {
-                title: { type: "string" },
-                description: { type: "string" },
-                priority: { type: "string", enum: ["high", "medium", "low"] },
-                action_items: { type: "array", items: { type: "string" }, description: "2-3 concrete steps to execute this recommendation" },
-                timeline: { type: "string", description: "One of: immediate, short-term (1-3 months), medium-term (3-6 months), long-term (6-12 months)" },
-                expected_impact: { type: "string", description: "Specific expected business outcome with metrics where possible" },
+                title: { type: 'string' },
+                description: { type: 'string' },
+                priority: { type: 'string', enum: ['high', 'medium', 'low'] },
+                action_items: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: '2-3 concrete steps to execute this recommendation',
+                },
+                timeline: {
+                  type: 'string',
+                  description:
+                    'One of: immediate, short-term (1-3 months), medium-term (3-6 months), long-term (6-12 months)',
+                },
+                expected_impact: {
+                  type: 'string',
+                  description: 'Specific expected business outcome with metrics where possible',
+                },
               },
-              required: ["title", "description", "priority", "action_items", "timeline", "expected_impact"],
+              required: [
+                'title',
+                'description',
+                'priority',
+                'action_items',
+                'timeline',
+                'expected_impact',
+              ],
             },
           },
           economic_indicators: {
-            type: "array",
+            type: 'array',
             items: {
-              type: "object",
+              type: 'object',
               properties: {
-                name: { type: "string" },
-                current_value: { type: "number" },
-                trend: { type: "string", enum: ["up", "down", "stable"] },
-                unit: { type: "string" },
+                name: { type: 'string' },
+                current_value: { type: 'number' },
+                trend: { type: 'string', enum: ['up', 'down', 'stable'] },
+                unit: { type: 'string' },
               },
-              required: ["name", "current_value", "trend", "unit"],
+              required: ['name', 'current_value', 'trend', 'unit'],
             },
           },
         },
-        required: ["executive_summary", "market_overview", "swot_analysis", "competitive_landscape", "industry_trends", "major_news", "recommendations", "economic_indicators"],
+        required: [
+          'executive_summary',
+          'market_overview',
+          'swot_analysis',
+          'competitive_landscape',
+          'industry_trends',
+          'major_news',
+          'recommendations',
+          'economic_indicators',
+        ],
       };
 
       // Compose prompt and context for the LLM
@@ -1718,23 +1850,29 @@ Be SPECIFIC to ${INDUSTRY} in ${LOCATION}. Do NOT provide generic advice like "i
         `Business Model: ${BUSINESS_MODEL}`,
         `Location: ${LOCATION}`,
         `CRM Stats: ${JSON.stringify(tenantStats)}`,
-        `Market Overview Seed: ${overview?.slice(0, 1200) || ""}`,
-        `News: ${(searchResults || []).map(r => `${r.title}: ${r.snippet || ''}`).join(" | ").slice(0, 1500)}`,
+        `Market Overview Seed: ${overview?.slice(0, 1200) || ''}`,
+        `News: ${(searchResults || [])
+          .map((r) => `${r.title}: ${r.snippet || ''}`)
+          .join(' | ')
+          .slice(0, 1500)}`,
       ];
 
       // Build messages for LLM call
       const SYSTEM = `You are an expert market intelligence analyst that outputs ONLY valid JSON matching the provided schema. No commentary, no markdown, no explanations — only the JSON object. Be specific, data-driven, and avoid generic business platitudes. Every insight must be tailored to the specific industry, location, and company data provided.`;
       const messages = [
-        { role: "system", content: SYSTEM },
-        { role: "user", content: `${prompt}\n\nSchema:\n${JSON.stringify(schema)}\n\nContext:\n${context.join("\n")}` },
+        { role: 'system', content: SYSTEM },
+        {
+          role: 'user',
+          content: `${prompt}\n\nSchema:\n${JSON.stringify(schema)}\n\nContext:\n${context.join('\n')}`,
+        },
       ];
-      const temperature = typeof body.temperature === "number" ? body.temperature : 0.3;
+      const temperature = typeof body.temperature === 'number' ? body.temperature : 0.3;
 
       // Use callLLMWithFailover for automatic provider failover
       const failoverResult = await callLLMWithFailover({
         tenantId,
         messages,
-        capability: "brain_read_only",
+        capability: 'brain_read_only',
         temperature,
         explicitModel: body.model,
         explicitProvider: body.provider,
@@ -1743,7 +1881,15 @@ Be SPECIFIC to ${INDUSTRY} in ${LOCATION}. Do NOT provide generic advice like "i
 
       // Build fallback baseline helper
       const buildBaseline = () => {
-        const strip = (s) => String(s || '').replace(/<[^>]+>/g, '').trim();
+        const strip = (s) => {
+          let result = String(s || '');
+          let prev;
+          do {
+            prev = result;
+            result = result.replace(/<[^>]+>/g, '');
+          } while (result !== prev);
+          return result.trim();
+        };
         return {
           executive_summary: `The ${INDUSTRY} market in ${LOCATION} presents significant opportunities for ${BUSINESS_MODEL} companies. Current analysis of ${tenantStats.accounts} accounts and ${tenantStats.opportunities} active pipeline opportunities suggests immediate priorities should include pipeline development, conversion optimization, and targeted market expansion within ${INDUSTRY} segments.`,
           market_overview: `The ${INDUSTRY} market in ${LOCATION} continues to evolve with changing economic conditions and technological advancements. Key drivers include infrastructure investment, digital transformation, and workforce development initiatives. ${BUSINESS_MODEL} companies in this sector are navigating supply chain dynamics, regulatory requirements, and competitive pressures while capitalizing on regional growth opportunities. Market maturity varies across sub-segments, with emerging niches offering the strongest growth potential for agile operators.`,
@@ -1775,7 +1921,10 @@ Be SPECIFIC to ${INDUSTRY} in ${LOCATION}. Do NOT provide generic advice like "i
           },
           competitive_landscape: {
             overview: `The ${INDUSTRY} competitive environment in ${LOCATION} features both established players and emerging challengers. Market consolidation trends are creating opportunities for differentiated ${BUSINESS_MODEL} providers that emphasize speed-to-value and specialized expertise.`,
-            major_competitors: (searchResults || []).slice(0, 3).map((r) => r?.title || 'Key competitor').filter(Boolean),
+            major_competitors: (searchResults || [])
+              .slice(0, 3)
+              .map((r) => r?.title || 'Key competitor')
+              .filter(Boolean),
             market_dynamics: `Key dynamics include pricing pressure from digital-first competitors, increasing customer expectations for integrated solutions, and growing importance of data-driven decision making. ${BUSINESS_MODEL} providers that emphasize measurable ROI are gaining market share.`,
             competitive_advantages: `Differentiate through deep ${INDUSTRY} expertise, personalized customer engagement, and agile delivery in the ${LOCATION} market.`,
           },
@@ -1836,30 +1985,38 @@ Be SPECIFIC to ${INDUSTRY} in ${LOCATION}. Do NOT provide generic advice like "i
               timeline: 'immediate',
               expected_impact: `10-20% increase in win rates and improved forecast accuracy through better deal qualification.`,
             },
-            ...(tenantStats.activities < 10 ? [{
-              title: 'Launch Targeted Outreach Sprint',
-              description: `Low recent activity detected (${tenantStats.activities} activities). Execute a focused 2-week outreach campaign targeting high-fit ${INDUSTRY} prospects in ${LOCATION}.`,
-              priority: 'high',
-              action_items: [
-                'Build a list of 50 target accounts matching ICP criteria',
-                'Execute multi-channel outreach (email + LinkedIn + phone) with 5-touch sequences',
-                `Schedule ${Math.max(10, tenantStats.accounts * 2)} outbound activities per week`,
-              ],
-              timeline: 'immediate',
-              expected_impact: `Generate 10-20 new qualified leads and 3-5 discovery meetings within 2 weeks.`,
-            }] : []),
-            ...(tenantStats.opportunities === 0 ? [{
-              title: 'Kickstart Pipeline from Existing Database',
-              description: `No active pipeline found. Leverage existing ${tenantStats.contacts} contacts and ${tenantStats.accounts} accounts to seed new opportunities.`,
-              priority: 'high',
-              action_items: [
-                'Run re-engagement campaign to dormant contacts with new value proposition',
-                'Identify 5 expansion opportunities within existing accounts',
-                'Launch referral program with current customers for warm introductions',
-              ],
-              timeline: 'immediate',
-              expected_impact: `Create 5-10 new pipeline opportunities within 30 days from existing database.`,
-            }] : []),
+            ...(tenantStats.activities < 10
+              ? [
+                  {
+                    title: 'Launch Targeted Outreach Sprint',
+                    description: `Low recent activity detected (${tenantStats.activities} activities). Execute a focused 2-week outreach campaign targeting high-fit ${INDUSTRY} prospects in ${LOCATION}.`,
+                    priority: 'high',
+                    action_items: [
+                      'Build a list of 50 target accounts matching ICP criteria',
+                      'Execute multi-channel outreach (email + LinkedIn + phone) with 5-touch sequences',
+                      `Schedule ${Math.max(10, tenantStats.accounts * 2)} outbound activities per week`,
+                    ],
+                    timeline: 'immediate',
+                    expected_impact: `Generate 10-20 new qualified leads and 3-5 discovery meetings within 2 weeks.`,
+                  },
+                ]
+              : []),
+            ...(tenantStats.opportunities === 0
+              ? [
+                  {
+                    title: 'Kickstart Pipeline from Existing Database',
+                    description: `No active pipeline found. Leverage existing ${tenantStats.contacts} contacts and ${tenantStats.accounts} accounts to seed new opportunities.`,
+                    priority: 'high',
+                    action_items: [
+                      'Run re-engagement campaign to dormant contacts with new value proposition',
+                      'Identify 5 expansion opportunities within existing accounts',
+                      'Launch referral program with current customers for warm introductions',
+                    ],
+                    timeline: 'immediate',
+                    expected_impact: `Create 5-10 new pipeline opportunities within 30 days from existing database.`,
+                  },
+                ]
+              : []),
             {
               title: `${LOCATION} Market Expansion Strategy`,
               description: `Develop focused go-to-market plan for underserved ${INDUSTRY} segments in ${LOCATION}.`,
@@ -1888,21 +2045,34 @@ Be SPECIFIC to ${INDUSTRY} in ${LOCATION}. Do NOT provide generic advice like "i
         const isKeyError = /api key|not configured/i.test(failoverResult.error || '');
         if (isKeyError) {
           // Return baseline without error status
-          return res.json({ status: 'success', data: { insights: buildBaseline(), model: null, provider: null, usage: null, fallback: true } });
+          return res.json({
+            status: 'success',
+            data: {
+              insights: buildBaseline(),
+              model: null,
+              provider: null,
+              usage: null,
+              fallback: true,
+            },
+          });
         }
-        return res.status(500).json({ status: "error", message: failoverResult.error });
+        return res.status(500).json({ status: 'error', message: failoverResult.error });
       }
 
       // Parse LLM response
       let insights = null;
-      try { insights = JSON.parse(failoverResult.result.content || "null"); } catch { insights = null; }
+      try {
+        insights = JSON.parse(failoverResult.result.content || 'null');
+      } catch {
+        insights = null;
+      }
       if (!insights) {
         // Use the full baseline generator instead of minimal object
         insights = buildBaseline();
       }
 
       return res.json({
-        status: "success",
+        status: 'success',
         data: {
           insights,
           model: failoverResult.model,
@@ -1911,7 +2081,7 @@ Be SPECIFIC to ${INDUSTRY} in ${LOCATION}. Do NOT provide generic advice like "i
         },
       });
     } catch (error) {
-      res.status(500).json({ status: "error", message: error.message });
+      res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
@@ -1932,37 +2102,40 @@ Be SPECIFIC to ${INDUSTRY} in ${LOCATION}. Do NOT provide generic advice like "i
       'http://127.0.0.1:8000/health',
     ].filter(Boolean);
 
-    const withTimeout = (p, ms) => Promise.race([
-      p,
-      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))
-    ]);
+    const withTimeout = (p, ms) =>
+      Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
 
     // Track individual errors for better diagnostics
     const errors = [];
-    const attempts = candidates.map(url => (async () => {
-      try {
-      const t0 = performance.now ? performance.now() : Date.now();
-      const resp = await withTimeout(fetch(url, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' }
-      }), 3000);
-      const dt = (performance.now ? performance.now() : Date.now()) - t0;
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      let data;
-      try {
-        data = await resp.json();
-      } catch {
-        throw new Error('invalid_json');
-      }
-      if (!data || (data.status !== 'ok' && data.status !== 'healthy')) {
-        throw new Error('invalid_health_payload');
-      }
-      return { url, latency_ms: Math.round(dt), data };
-      } catch (error) {
-        errors.push({ url, error: error.message });
-        throw error;
-      }
-    })());
+    const attempts = candidates.map((url) =>
+      (async () => {
+        try {
+          const t0 = performance.now ? performance.now() : Date.now();
+          const resp = await withTimeout(
+            fetch(url, {
+              method: 'GET',
+              headers: { Accept: 'application/json' },
+            }),
+            3000,
+          );
+          const dt = (performance.now ? performance.now() : Date.now()) - t0;
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          let data;
+          try {
+            data = await resp.json();
+          } catch {
+            throw new Error('invalid_json');
+          }
+          if (!data || (data.status !== 'ok' && data.status !== 'healthy')) {
+            throw new Error('invalid_health_payload');
+          }
+          return { url, latency_ms: Math.round(dt), data };
+        } catch (error) {
+          errors.push({ url, error: error.message });
+          throw error;
+        }
+      })(),
+    );
 
     try {
       const first = await Promise.any(attempts);
@@ -1973,13 +2146,18 @@ Be SPECIFIC to ${INDUSTRY} in ${LOCATION}. Do NOT provide generic advice like "i
           url: first.url,
           latency_ms: first.latency_ms,
           raw: first.data,
-          attempted: candidates.length
-        }
+          attempted: candidates.length,
+        },
       });
     } catch (err) {
       // Collect all errors for debugging
-      const aggregateErrors = err.errors ? err.errors.map(e => ({ message: e.message, stack: e.stack?.split('\n')[0] })) : [];
-      logger.debug('[MCP Health Proxy] All attempts failed:', JSON.stringify(aggregateErrors, null, 2));
+      const aggregateErrors = err.errors
+        ? err.errors.map((e) => ({ message: e.message, stack: e.stack?.split('\n')[0] }))
+        : [];
+      logger.debug(
+        '[MCP Health Proxy] All attempts failed:',
+        JSON.stringify(aggregateErrors, null, 2),
+      );
       return res.json({
         status: 'success',
         data: {
@@ -1989,9 +2167,9 @@ Be SPECIFIC to ${INDUSTRY} in ${LOCATION}. Do NOT provide generic advice like "i
           diagnostics: {
             candidates: candidates,
             errors: aggregateErrors,
-            hint: 'Set MCP_NODE_HEALTH_URL env var or ensure one of the default endpoints is reachable'
-          }
-        }
+            hint: 'Set MCP_NODE_HEALTH_URL env var or ensure one of the default endpoints is reachable',
+          },
+        },
       });
     }
   });
@@ -2022,9 +2200,9 @@ Be SPECIFIC to ${INDUSTRY} in ${LOCATION}. Do NOT provide generic advice like "i
           {
             headers: {
               'User-Agent': WIKIPEDIA_USER_AGENT,
-              'Accept': 'application/json'
-            }
-          }
+              Accept: 'application/json',
+            },
+          },
         );
         const json = await resp.json();
         return {
@@ -2061,9 +2239,9 @@ Be SPECIFIC to ${INDUSTRY} in ${LOCATION}. Do NOT provide generic advice like "i
           {
             headers: {
               'User-Agent': WIKIPEDIA_USER_AGENT,
-              'Accept': 'application/json'
-            }
-          }
+              Accept: 'application/json',
+            },
+          },
         );
         const json = await resp.json();
         return {
@@ -2089,7 +2267,7 @@ Be SPECIFIC to ${INDUSTRY} in ${LOCATION}. Do NOT provide generic advice like "i
   // POST /api/mcp/run-proxy - Forward MCP action envelope to Braid MCP server from backend (browser-safe)
   router.post('/run-proxy', async (req, res) => {
     const envelope = req.body || {};
-    
+
     // Validate request envelope
     if (!envelope || !envelope.requestId || !envelope.actor || !Array.isArray(envelope.actions)) {
       return res.status(400).json({
@@ -2099,10 +2277,10 @@ Be SPECIFIC to ${INDUSTRY} in ${LOCATION}. Do NOT provide generic advice like "i
           hasRequestId: !!envelope?.requestId,
           hasActor: !!envelope?.actor,
           hasActions: Array.isArray(envelope?.actions),
-        }
+        },
       });
     }
-    
+
     // Reuse candidates from health proxy for base URL discovery
     const healthCandidates = [
       process.env.MCP_NODE_HEALTH_URL,
@@ -2115,32 +2293,42 @@ Be SPECIFIC to ${INDUSTRY} in ${LOCATION}. Do NOT provide generic advice like "i
       'http://localhost:8000/health',
       'http://127.0.0.1:8000/health',
     ].filter(Boolean);
-    const baseCandidates = healthCandidates.map(u => u.replace(/\/health$/,'')).concat(
-      process.env.MCP_NODE_BASE_URL ? [process.env.MCP_NODE_BASE_URL] : []
+    const baseCandidates = healthCandidates
+      .map((u) => u.replace(/\/health$/, ''))
+      .concat(process.env.MCP_NODE_BASE_URL ? [process.env.MCP_NODE_BASE_URL] : []);
+    const withTimeout = (p, ms) =>
+      Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
+
+    const attempts = baseCandidates.map((base) =>
+      (async () => {
+        const url = base.replace(/\/$/, '') + '/mcp/run';
+        const t0 = performance.now ? performance.now() : Date.now();
+        const resp = await withTimeout(
+          fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(envelope),
+          }),
+          5000,
+        );
+        const dt = Math.round((performance.now ? performance.now() : Date.now()) - t0);
+        if (!resp.ok) throw new Error('bad_status_' + resp.status);
+        let json;
+        try {
+          json = await resp.json();
+        } catch {
+          throw new Error('invalid_json');
+        }
+        if (!json || !Array.isArray(json.results)) throw new Error('invalid_mcp_response');
+        return { base, duration_ms: dt, response: json };
+      })(),
     );
-    const withTimeout = (p, ms) => Promise.race([
-      p,
-      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))
-    ]);
-    
-    const attempts = baseCandidates.map(base => (async () => {
-      const url = base.replace(/\/$/, '') + '/mcp/run';
-      const t0 = performance.now ? performance.now() : Date.now();
-      const resp = await withTimeout(fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(envelope)
-      }), 5000);
-      const dt = Math.round((performance.now ? performance.now() : Date.now()) - t0);
-      if (!resp.ok) throw new Error('bad_status_' + resp.status);
-      let json;
-      try { json = await resp.json(); } catch { throw new Error('invalid_json'); }
-      if (!json || !Array.isArray(json.results)) throw new Error('invalid_mcp_response');
-      return { base, duration_ms: dt, response: json };
-    })());
     try {
       const first = await Promise.any(attempts);
-      return res.json({ status: 'success', data: { base: first.base, duration_ms: first.duration_ms, results: first.response.results } });
+      return res.json({
+        status: 'success',
+        data: { base: first.base, duration_ms: first.duration_ms, results: first.response.results },
+      });
     } catch (err) {
       // MCP server unreachable - try inline fallback for supported adapters
       const actions = Array.isArray(envelope.actions) ? envelope.actions : [];
@@ -2149,7 +2337,7 @@ Be SPECIFIC to ${INDUSTRY} in ${LOCATION}. Do NOT provide generic advice like "i
 
       for (const action of actions) {
         const system = (action.resource?.system || '').toLowerCase();
-        
+
         if (system === 'web') {
           const result = await handleWebActionFallback(action);
           if (result) {
@@ -2172,13 +2360,20 @@ Be SPECIFIC to ${INDUSTRY} in ${LOCATION}. Do NOT provide generic advice like "i
             base: 'inline-fallback',
             duration_ms: 0,
             results: fallbackResults,
-            fallback: true
-          }
+            fallback: true,
+          },
         });
       }
 
       // No fallback available - return original error
-      return res.status(502).json({ status: 'error', message: 'MCP run-proxy failed', error: err.message, attempted: baseCandidates });
+      return res
+        .status(502)
+        .json({
+          status: 'error',
+          message: 'MCP run-proxy failed',
+          error: err.message,
+          attempted: baseCandidates,
+        });
     }
   });
 

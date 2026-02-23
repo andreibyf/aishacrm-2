@@ -62,16 +62,7 @@ export async function authenticateRequest(req, _res, next) {
     const providedApiKey =
       req.headers?.apikey || (hasBearer ? authHeader.substring(7).trim() : null);
 
-    // DEBUG: Temporary logging for leads POST
-    if (req.path.includes('/api/leads')) {
-      logger.warn('[AUTH DEBUG] Service Role Check for /api/leads:', {
-        method: req.method,
-        hasServiceKey: !!serviceRoleKey,
-        hasProvidedKey: !!providedApiKey,
-        hasApiKeyHeader: !!req.headers?.apikey,
-        hasBearerToken: hasBearer,
-      });
-    }
+    // DEBUG block removed: raw API key in scope with logger sink (CodeQL #331)
 
     if (serviceRoleKey && providedApiKey === serviceRoleKey) {
       // Service role key match - grant superadmin access

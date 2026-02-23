@@ -23,7 +23,7 @@ import { getSupabaseClient } from '../lib/supabase-db.js';
 import { initMemoryClient, getMemoryClient } from '../lib/memoryClient.js';
 import logger from '../lib/logger.js';
 
-import { setCorsHeaders } from '../lib/cors.js';
+import { setCorsHeaders, isAllowedOrigin } from '../lib/cors.js';
 
 /**
  * Ensure CORS headers are set on error responses so browsers can read the error
@@ -31,8 +31,7 @@ import { setCorsHeaders } from '../lib/cors.js';
  * will show "CORS error" instead of the actual 403/401/etc status
  */
 function ensureCorsHeaders(req, res) {
-  if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
-    // Use secure origin whitelist instead of reflecting arbitrary origins
+  if (!res.getHeader('Access-Control-Allow-Origin') && isAllowedOrigin(req.headers.origin)) {
     setCorsHeaders(req.headers.origin, res, true);
   }
 }
