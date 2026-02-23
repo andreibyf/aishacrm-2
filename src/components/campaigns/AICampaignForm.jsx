@@ -104,6 +104,8 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
   const [selectedContacts, setSelectedContacts] = useState([]);
   const [emailSendingProfiles, setEmailSendingProfiles] = useState([]);
   const [callProviders, setCallProviders] = useState([]);
+  // [2026-02-23 Claude] — SendFox integration state
+  const [sendfoxIntegrations, setSendfoxIntegrations] = useState([]);
   const { user: currentUser } = useUser();
   const [previewPrompt, setPreviewPrompt] = useState('');
   const { selectedTenantId } = useTenant();
@@ -247,8 +249,15 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
           const type = lower(i.integration_type);
           return name.includes('callfluent') || name.includes('thoughtly') || type.includes('call');
         });
+        // [2026-02-23 Claude] — also filter SendFox integrations
+        const sendfoxList = list.filter((i) => {
+          const name = lower(i.integration_name);
+          const type = lower(i.integration_type);
+          return name.includes('sendfox') || type.includes('sendfox');
+        });
         setEmailSendingProfiles(emailProfiles);
         setCallProviders(callList);
+        setSendfoxIntegrations(sendfoxList);
       } catch (e) {
         console.warn('[AICampaignForm] Failed to load tenant integrations', e);
       }
@@ -358,6 +367,8 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
       metadata.whatsapp_body = formData.whatsapp_body || '';
     } else if (ct === 'sendfox') {
       metadata.sendfox_list_id = formData.sendfox_list_id || '';
+      metadata.sendfox_integration_id = formData.sendfox_integration_id || '';
+      metadata.sendfox_api_key = formData.sendfox_api_key || '';
       metadata.ai_email_config = {
         subject: formData.email_subject,
         body_template: formData.email_body_template,
@@ -811,16 +822,71 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
               </>
             )}
 
-            {/* ── SENDFOX CONFIG ── */}
+            {/* [2026-02-23 Claude] — SENDFOX CONFIG with API key + integration selector */}
             {formData.campaign_type === 'sendfox' && (
               <>
                 <Alert className="bg-slate-800 border-slate-700">
                   <Send className="h-4 w-4 text-orange-400" />
                   <AlertDescription className="text-slate-400">
                     SendFox newsletter broadcast. Contacts will be synced to your SendFox list and a
-                    campaign triggered via API.
+                    campaign triggered via the SendFox API. Get your API key at{' '}
+                    <a
+                      href="https://sendfox.com/account/oauth"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-orange-300 underline hover:text-orange-200"
+                    >
+                      sendfox.com/account/oauth
+                    </a>
+                    .
                   </AlertDescription>
                 </Alert>
+                {sendfoxIntegrations.length > 0 && (
+                  <div>
+                    <Label className="text-slate-200">Saved SendFox Integration</Label>
+                    <Select
+                      value={formData.sendfox_integration_id || '__none__'}
+                      onValueChange={(v) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          sendfox_integration_id: v === '__none__' ? '' : v,
+                        }))
+                      }
+                    >
+                      <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                        <SelectValue placeholder="Select integration…" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
+                        <SelectItem value="__none__">Enter API key manually…</SelectItem>
+                        {sendfoxIntegrations.map((p) => (
+                          <SelectItem key={p.id} value={p.id} className="focus:bg-slate-700">
+                            {p.display_name || p.integration_name || p.id}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-sm text-slate-500 mt-1">
+                      Select a saved integration or enter an API key below.
+                    </p>
+                  </div>
+                )}
+                {!formData.sendfox_integration_id && (
+                  <div>
+                    <Label className="text-slate-200">SendFox API Key</Label>
+                    <Input
+                      value={formData.sendfox_api_key || ''}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, sendfox_api_key: e.target.value }))
+                      }
+                      placeholder="eyJ0eXAiOiJKV1QiLCJhbGci…"
+                      type="password"
+                      className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400 font-mono"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">
+                      Personal Access Token from your SendFox account settings.
+                    </p>
+                  </div>
+                )}
                 <div>
                   <Label className="text-slate-200">SendFox List ID</Label>
                   <Input
@@ -831,6 +897,9 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                     placeholder="e.g., 12345 (from your SendFox dashboard)"
                     className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400"
                   />
+                  <p className="text-xs text-slate-500 mt-1">
+                    Find this under Lists in your SendFox dashboard.
+                  </p>
                 </div>
                 <div>
                   <Label className="text-slate-200">Email Subject</Label>

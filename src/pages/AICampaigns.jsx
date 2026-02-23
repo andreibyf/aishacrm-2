@@ -237,13 +237,27 @@ export default function AICampaigns() {
     }
   };
 
+  // [2026-02-23 Claude] — safely parse target_contacts (may be JSON string from DB)
+  const parseContacts = (tc) => {
+    if (Array.isArray(tc)) return tc;
+    if (typeof tc === 'string')
+      try {
+        const p = JSON.parse(tc);
+        return Array.isArray(p) ? p : [];
+      } catch {
+        return [];
+      }
+    return [];
+  };
+
   const getProgressPercentage = (campaign) => {
-    const totalContacts = campaign.target_contacts?.length || 0;
+    const contacts = parseContacts(campaign.target_contacts);
+    const totalContacts = contacts.length;
     if (totalContacts === 0) return 0;
 
-    const completedContacts =
-      campaign.target_contacts?.filter((c) => ['completed', 'failed', 'skipped'].includes(c.status))
-        .length || 0;
+    const completedContacts = contacts.filter((c) =>
+      ['completed', 'failed', 'skipped'].includes(c.status),
+    ).length;
 
     return Math.round((completedContacts / totalContacts) * 100);
   };
@@ -474,7 +488,7 @@ export default function AICampaigns() {
                             <div className="flex items-center gap-2">
                               <Users className="w-4 h-4 text-slate-400" />
                               <span className="text-slate-300">
-                                {campaign.target_contacts?.length || 0}
+                                {parseContacts(campaign.target_contacts).length}
                               </span>
                             </div>
                           </TableCell>
