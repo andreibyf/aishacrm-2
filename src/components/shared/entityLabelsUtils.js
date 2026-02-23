@@ -1,6 +1,6 @@
 /**
  * Entity Labels Utilities and Constants
- * 
+ *
  * Non-React utilities and constants extracted from EntityLabelsContext
  * to fix react-refresh/only-export-components warnings.
  */
@@ -11,7 +11,7 @@ export const DEFAULT_LABELS = {
   accounts: { plural: 'Accounts', singular: 'Account' },
   opportunities: { plural: 'Opportunities', singular: 'Opportunity' },
   activities: { plural: 'Activities', singular: 'Activity' },
-  bizdev_sources: { plural: 'Sources', singular: 'Source' },
+  bizdev_sources: { plural: 'Potential Leads', singular: 'Potential Lead' },
   workers: { plural: 'Workers', singular: 'Worker' },
 };
 
@@ -27,5 +27,5 @@ export const ENTITY_KEY_TO_HREF = {
 
 // Reverse mapping: href to entity key
 export const HREF_TO_ENTITY_KEY = Object.fromEntries(
-  Object.entries(ENTITY_KEY_TO_HREF).map(([key, href]) => [href, key])
+  Object.entries(ENTITY_KEY_TO_HREF).map(([key, href]) => [href, key]),
 );

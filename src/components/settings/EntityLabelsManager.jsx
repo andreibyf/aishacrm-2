@@ -3,9 +3,27 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Save, RotateCcw, Tags, Building2, Users, Target, TrendingUp, CheckSquare, Database } from 'lucide-react';
+import {
+  Loader2,
+  Save,
+  RotateCcw,
+  Tags,
+  Building2,
+  Users,
+  Target,
+  TrendingUp,
+  CheckSquare,
+  Database,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { Tenant, BACKEND_URL } from '@/api/entities';
 import { useTenant } from '@/components/shared/tenantContext';
@@ -18,7 +36,7 @@ const DEFAULT_LABELS = {
   accounts: { plural: 'Accounts', singular: 'Account' },
   opportunities: { plural: 'Opportunities', singular: 'Opportunity' },
   activities: { plural: 'Activities', singular: 'Activity' },
-  bizdev_sources: { plural: 'BizDev Sources', singular: 'BizDev Source' },
+  bizdev_sources: { plural: 'Potential Leads', singular: 'Potential Lead' },
 };
 
 // Icons for each entity type
@@ -76,22 +94,29 @@ export default function EntityLabelsManager({ isTenantAdmin = false }) {
   useEffect(() => {
     async function loadLabels() {
       if (!selectedTenantId) return;
-      
+
       try {
         setLoading(true);
         // Add cache-busting timestamp to prevent 304 responses
         const cacheBuster = Date.now();
-        const response = await fetch(`${BACKEND_URL}/api/entity-labels/${selectedTenantId}?_t=${cacheBuster}`, {
-          credentials: 'include',
-          headers: {
-            'Cache-Control': 'no-cache',
+        const response = await fetch(
+          `${BACKEND_URL}/api/entity-labels/${selectedTenantId}?_t=${cacheBuster}`,
+          {
+            credentials: 'include',
+            headers: {
+              'Cache-Control': 'no-cache',
+            },
           },
-        });
-        
+        );
+
         if (response.ok) {
           const data = await response.json();
           if (data.status === 'success') {
-            console.log('[EntityLabelsManager] Loaded labels for tenant:', selectedTenantId, data.data.labels);
+            console.log(
+              '[EntityLabelsManager] Loaded labels for tenant:',
+              selectedTenantId,
+              data.data.labels,
+            );
             setLabels(data.data.labels);
             setCustomized(data.data.customized || []);
           }
@@ -111,7 +136,7 @@ export default function EntityLabelsManager({ isTenantAdmin = false }) {
   }, [selectedTenantId]);
 
   const handleLabelChange = (entityKey, field, value) => {
-    setLabels(prev => ({
+    setLabels((prev) => ({
       ...prev,
       [entityKey]: {
         ...prev[entityKey],
@@ -129,7 +154,10 @@ export default function EntityLabelsManager({ isTenantAdmin = false }) {
     try {
       setSaving(true);
       console.log('[EntityLabelsManager] Saving labels for tenant:', selectedTenantId);
-      console.log('[EntityLabelsManager] Selected tenant name:', tenants.find(t => t.id === selectedTenantId)?.name);
+      console.log(
+        '[EntityLabelsManager] Selected tenant name:',
+        tenants.find((t) => t.id === selectedTenantId)?.name,
+      );
       console.log('[EntityLabelsManager] Labels being saved:', labels);
       const response = await fetch(`${BACKEND_URL}/api/entity-labels/${selectedTenantId}`, {
         method: 'PUT',
@@ -190,7 +218,7 @@ export default function EntityLabelsManager({ isTenantAdmin = false }) {
     }
   };
 
-  const selectedTenant = tenants.find(t => t.id === selectedTenantId);
+  const selectedTenant = tenants.find((t) => t.id === selectedTenantId);
 
   return (
     <Card>
@@ -200,10 +228,9 @@ export default function EntityLabelsManager({ isTenantAdmin = false }) {
           {isTenantAdmin ? 'Customize Entity Names' : 'Entity Labels'}
         </CardTitle>
         <CardDescription>
-          {isTenantAdmin 
+          {isTenantAdmin
             ? 'Rename CRM entities to match your business terminology. For example, rename "Leads" to "Prospects" or "Accounts" to "Clients".'
-            : 'Customize the display names of core CRM entities for each tenant. Changes appear in navigation, page titles, and form labels.'
-          }
+            : 'Customize the display names of core CRM entities for each tenant. Changes appear in navigation, page titles, and form labels.'}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -252,14 +279,14 @@ export default function EntityLabelsManager({ isTenantAdmin = false }) {
                   const Icon = ENTITY_ICONS[entityKey] || Tags;
                   const isCustomized = customized.includes(entityKey);
                   const currentLabel = labels[entityKey] || defaultLabel;
-                  
+
                   return (
                     <TableRow key={entityKey}>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Icon className="w-4 h-4 text-muted-foreground" />
                           <div>
-                            <div className="font-medium capitalize">{entityKey.replace('_', ' ')}</div>
+                            <div className="font-medium">{currentLabel.plural}</div>
                             <div className="text-xs text-muted-foreground">
                               {ENTITY_DESCRIPTIONS[entityKey]}
                             </div>

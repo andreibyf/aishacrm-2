@@ -14,12 +14,12 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
  */
 async function resolveTenantUUID(tenantIdOrSlug) {
   if (!tenantIdOrSlug) return null;
-  
+
   // If already a UUID, return as-is
   if (UUID_REGEX.test(tenantIdOrSlug)) {
     return tenantIdOrSlug;
   }
-  
+
   // Otherwise, look up by text slug (tenant.tenant_id)
   try {
     const { data, error } = await supabase
@@ -28,12 +28,12 @@ async function resolveTenantUUID(tenantIdOrSlug) {
       .eq('tenant_id', tenantIdOrSlug)
       .limit(1)
       .single();
-    
+
     if (error) {
       logger.error('[entitylabels] Error resolving tenant slug:', error.message);
       return null;
     }
-    
+
     return data?.id || null;
   } catch (err) {
     logger.error('[entitylabels] Error resolving tenant slug:', err.message);
@@ -48,7 +48,7 @@ const DEFAULT_LABELS = {
   accounts: { plural: 'Accounts', singular: 'Account' },
   opportunities: { plural: 'Opportunities', singular: 'Opportunity' },
   activities: { plural: 'Activities', singular: 'Activity' },
-  bizdev_sources: { plural: 'BizDev Sources', singular: 'BizDev Source' },
+  bizdev_sources: { plural: 'Potential Leads', singular: 'Potential Lead' },
 };
 
 export const ENTITY_KEYS = Object.keys(DEFAULT_LABELS);
@@ -80,23 +80,23 @@ export default function createEntityLabelsRoutes() {
       const { tenant_id } = req.params;
 
       if (!tenant_id) {
-        return res.status(400).json({ 
-          status: 'error', 
-          message: 'tenant_id is required' 
+        return res.status(400).json({
+          status: 'error',
+          message: 'tenant_id is required',
         });
       }
 
       // Resolve to UUID (handles both UUID and text slug)
       const tenantUUID = await resolveTenantUUID(tenant_id);
-      
+
       if (!tenantUUID) {
         // Return defaults if tenant not found (graceful degradation)
-        return res.json({ 
-          status: 'success', 
-          data: { 
+        return res.json({
+          status: 'success',
+          data: {
             labels: { ...DEFAULT_LABELS },
-            customized: []
-          } 
+            customized: [],
+          },
         });
       }
 
@@ -105,25 +105,25 @@ export default function createEntityLabelsRoutes() {
         .from('entity_labels')
         .select('entity_key, custom_label, custom_label_singular')
         .eq('tenant_id', tenantUUID);
-      
+
       if (error) throw error;
 
       // Build response: merge defaults with custom labels
       const labels = { ...DEFAULT_LABELS };
-      
-      for (const row of (rows || [])) {
+
+      for (const row of rows || []) {
         labels[row.entity_key] = {
           plural: row.custom_label || DEFAULT_LABELS[row.entity_key]?.plural,
           singular: row.custom_label_singular || DEFAULT_LABELS[row.entity_key]?.singular,
         };
       }
 
-      res.json({ 
-        status: 'success', 
-        data: { 
+      res.json({
+        status: 'success',
+        data: {
           labels,
-          customized: (rows || []).map(r => r.entity_key)
-        } 
+          customized: (rows || []).map((r) => r.entity_key),
+        },
       });
     } catch (error) {
       logger.error('Error fetching entity labels:', error);
@@ -172,32 +172,32 @@ export default function createEntityLabelsRoutes() {
       const { labels } = req.body;
 
       if (!tenant_id) {
-        return res.status(400).json({ 
-          status: 'error', 
-          message: 'tenant_id is required' 
+        return res.status(400).json({
+          status: 'error',
+          message: 'tenant_id is required',
         });
       }
 
       if (!labels || typeof labels !== 'object') {
-        return res.status(400).json({ 
-          status: 'error', 
-          message: 'labels object is required' 
+        return res.status(400).json({
+          status: 'error',
+          message: 'labels object is required',
         });
       }
 
       // Resolve to UUID (handles both UUID and text slug)
       const tenantUUID = await resolveTenantUUID(tenant_id);
-      
+
       if (!tenantUUID) {
-        return res.status(404).json({ 
-          status: 'error', 
-          message: 'Tenant not found' 
+        return res.status(404).json({
+          status: 'error',
+          message: 'Tenant not found',
         });
       }
 
       // Upsert each label
       const upsertPromises = [];
-      
+
       for (const [entityKey, labelData] of Object.entries(labels)) {
         if (!ENTITY_KEYS.includes(entityKey)) {
           continue; // Skip unknown entity keys
@@ -207,30 +207,30 @@ export default function createEntityLabelsRoutes() {
         const singular = labelData.singular?.trim() || DEFAULT_LABELS[entityKey].singular;
 
         // Check if it matches default - if so, delete the custom entry
-        if (plural === DEFAULT_LABELS[entityKey].plural && 
-            singular === DEFAULT_LABELS[entityKey].singular) {
+        if (
+          plural === DEFAULT_LABELS[entityKey].plural &&
+          singular === DEFAULT_LABELS[entityKey].singular
+        ) {
           upsertPromises.push(
             supabase
               .from('entity_labels')
               .delete()
               .eq('tenant_id', tenantUUID)
-              .eq('entity_key', entityKey)
+              .eq('entity_key', entityKey),
           );
         } else {
           // Upsert custom label
           upsertPromises.push(
-            supabase
-              .from('entity_labels')
-              .upsert(
-                {
-                  tenant_id: tenantUUID,
-                  entity_key: entityKey,
-                  custom_label: plural,
-                  custom_label_singular: singular,
-                  updated_at: new Date().toISOString()
-                },
-                { onConflict: 'tenant_id,entity_key' }
-              )
+            supabase.from('entity_labels').upsert(
+              {
+                tenant_id: tenantUUID,
+                entity_key: entityKey,
+                custom_label: plural,
+                custom_label_singular: singular,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: 'tenant_id,entity_key' },
+            ),
           );
         }
       }
@@ -242,24 +242,24 @@ export default function createEntityLabelsRoutes() {
         .from('entity_labels')
         .select('entity_key, custom_label, custom_label_singular')
         .eq('tenant_id', tenantUUID);
-      
+
       if (fetchError) throw fetchError;
 
       const updatedLabels = { ...DEFAULT_LABELS };
-      for (const row of (updatedRows || [])) {
+      for (const row of updatedRows || []) {
         updatedLabels[row.entity_key] = {
           plural: row.custom_label,
           singular: row.custom_label_singular,
         };
       }
 
-      res.json({ 
-        status: 'success', 
+      res.json({
+        status: 'success',
         message: 'Entity labels updated',
-        data: { 
+        data: {
           labels: updatedLabels,
-          customized: (updatedRows || []).map(r => r.entity_key)
-        } 
+          customized: (updatedRows || []).map((r) => r.entity_key),
+        },
       });
     } catch (error) {
       logger.error('Error updating entity labels:', error);
@@ -282,25 +282,22 @@ export default function createEntityLabelsRoutes() {
 
       // Resolve to UUID (handles both UUID and text slug)
       const tenantUUID = await resolveTenantUUID(tenant_id);
-      
+
       if (!tenantUUID) {
-        return res.status(404).json({ 
-          status: 'error', 
-          message: 'Tenant not found' 
+        return res.status(404).json({
+          status: 'error',
+          message: 'Tenant not found',
         });
       }
 
-      const { error } = await supabase
-        .from('entity_labels')
-        .delete()
-        .eq('tenant_id', tenantUUID);
-      
+      const { error } = await supabase.from('entity_labels').delete().eq('tenant_id', tenantUUID);
+
       if (error) throw error;
 
-      res.json({ 
-        status: 'success', 
+      res.json({
+        status: 'success',
         message: 'Entity labels reset to defaults',
-        data: { labels: DEFAULT_LABELS, customized: [] }
+        data: { labels: DEFAULT_LABELS, customized: [] },
       });
     } catch (error) {
       logger.error('Error resetting entity labels:', error);
@@ -310,9 +307,9 @@ export default function createEntityLabelsRoutes() {
 
   // GET /api/entity-labels/defaults - Get default labels (public)
   router.get('/defaults', async (req, res) => {
-    res.json({ 
-      status: 'success', 
-      data: { labels: DEFAULT_LABELS } 
+    res.json({
+      status: 'success',
+      data: { labels: DEFAULT_LABELS },
     });
   });
 
