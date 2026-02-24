@@ -1,6 +1,6 @@
 /**
  * Campaign Worker - Executes scheduled AI campaigns
- * 
+ *
  * Architecture:
  * - Polls for campaigns with status='scheduled' every CAMPAIGN_WORKER_INTERVAL_MS
  * - Uses Postgres advisory locks to prevent duplicate processing across multiple backend instances
@@ -26,24 +26,22 @@ export function startCampaignWorker(pool, intervalMs = 30000) {
 
   pgPool = pool;
   const enabled = process.env.CAMPAIGN_WORKER_ENABLED === 'true';
-  
+
   if (!enabled) {
     logger.info('[CampaignWorker] Disabled (CAMPAIGN_WORKER_ENABLED not true)');
     return;
   }
 
   logger.info({ intervalMs }, '[CampaignWorker] Starting');
-  
+
   // Run immediately on start
-  processPendingCampaigns().catch(err => 
-    logger.error({ err }, '[CampaignWorker] Initial run error')
+  processPendingCampaigns().catch((err) =>
+    logger.error({ err }, '[CampaignWorker] Initial run error'),
   );
 
   // Then run on interval
   workerInterval = setInterval(() => {
-    processPendingCampaigns().catch(err => 
-      logger.error({ err }, '[CampaignWorker] Error')
-    );
+    processPendingCampaigns().catch((err) => logger.error({ err }, '[CampaignWorker] Error'));
   }, intervalMs);
 
   logger.info('[CampaignWorker] Started');
@@ -70,15 +68,15 @@ async function processPendingCampaigns() {
     // Find scheduled campaigns (not yet picked up by any worker)
     const query = `
       SELECT id, tenant_id, name, metadata, target_contacts, campaign_type
-      FROM ai_campaigns
+      FROM ai_campaign
       WHERE status = 'scheduled'
         AND (metadata->'lifecycle'->>'started_at' IS NULL OR metadata->'lifecycle'->>'started_at' = '')
       ORDER BY created_at ASC
       LIMIT 10
     `;
-    
+
     const result = await pgPool.query(query);
-    
+
     if (result.rows.length === 0) {
       // No work to do
       return;
@@ -100,7 +98,7 @@ async function processPendingCampaigns() {
  */
 async function processCampaign(campaign) {
   const { id, tenant_id, name } = campaign;
-  
+
   // Advisory lock ID (hash campaign ID to int)
   const lockId = hashStringToInt(id);
 
@@ -108,10 +106,10 @@ async function processCampaign(campaign) {
   try {
     // Get a dedicated client for this transaction
     client = await pgPool.connect();
-    
+
     // Try to acquire advisory lock (non-blocking)
     const lockResult = await client.query('SELECT pg_try_advisory_lock($1) as locked', [lockId]);
-    
+
     if (!lockResult.rows[0].locked) {
       // Another worker is processing this campaign
       return;
@@ -120,30 +118,34 @@ async function processCampaign(campaign) {
     logger.info({ campaignId: id, name }, '[CampaignWorker] Processing campaign');
 
     // Mark as running and stamp start time
-    await client.query(`
-      UPDATE ai_campaigns
+    await client.query(
+      `
+      UPDATE ai_campaign
       SET status = 'running',
           metadata = jsonb_set(
             jsonb_set(metadata, '{lifecycle,started_at}', to_jsonb(NOW()::text)),
             '{progress}', '{"total": 0, "processed": 0, "success": 0, "failed": 0}'::jsonb
           )
       WHERE id = $1 AND tenant_id = $2
-    `, [id, tenant_id]);
+    `,
+      [id, tenant_id],
+    );
 
     // Emit progress webhook (started)
-    await emitTenantWebhooks(tenant_id, 'aicampaign.progress', {
+    await emitTenantWebhooks(pgPool, tenant_id, 'aicampaign.progress', {
       id,
       status: 'running',
-      progress: { total: 0, processed: 0, success: 0, failed: 0 }
-    }).catch(err => logger.error({ err }, '[CampaignWorker] Webhook emission failed'));
+      progress: { total: 0, processed: 0, success: 0, failed: 0 },
+    }).catch((err) => logger.error({ err }, '[CampaignWorker] Webhook emission failed'));
 
     // Execute the campaign based on type
     const result = await executeCampaign(campaign, client);
 
     // Update final status and metrics
     const finalStatus = result.success ? 'completed' : 'failed';
-    await client.query(`
-      UPDATE ai_campaigns
+    await client.query(
+      `
+      UPDATE ai_campaign
       SET status = $1,
           metadata = jsonb_set(
             jsonb_set(
@@ -153,34 +155,38 @@ async function processCampaign(campaign) {
             '{execution_result}', to_jsonb($3::jsonb)
           )
       WHERE id = $4 AND tenant_id = $5
-    `, [finalStatus, JSON.stringify(result.progress), JSON.stringify(result.details), id, tenant_id]);
+    `,
+      [finalStatus, JSON.stringify(result.progress), JSON.stringify(result.details), id, tenant_id],
+    );
 
     // Emit final webhook
     const event = result.success ? 'aicampaign.completed' : 'aicampaign.failed';
-    await emitTenantWebhooks(tenant_id, event, {
+    await emitTenantWebhooks(pgPool, tenant_id, event, {
       id,
       status: finalStatus,
       progress: result.progress,
-      details: result.details
-    }).catch(err => logger.error({ err }, '[CampaignWorker] Final webhook emission failed'));
+      details: result.details,
+    }).catch((err) => logger.error({ err }, '[CampaignWorker] Final webhook emission failed'));
 
     logger.info({ campaignId: id, finalStatus }, '[CampaignWorker] Campaign finished');
-
   } catch (err) {
     logger.error({ err, campaignId: id }, '[CampaignWorker] Error processing campaign');
-    
+
     // Mark as failed
     if (client) {
       try {
-        await client.query(`
-          UPDATE ai_campaigns
+        await client.query(
+          `
+          UPDATE ai_campaign
           SET status = 'failed',
               metadata = jsonb_set(
                 jsonb_set(metadata, '{lifecycle,failed_at}', to_jsonb(NOW()::text)),
                 '{error}', to_jsonb($1::text)
               )
           WHERE id = $2 AND tenant_id = $3
-        `, [err.message, id, tenant_id]);
+        `,
+          [err.message, id, tenant_id],
+        );
       } catch (updateErr) {
         logger.error({ err: updateErr }, '[CampaignWorker] Failed to update error status');
       }
@@ -203,22 +209,22 @@ async function processCampaign(campaign) {
  */
 async function executeCampaign(campaign, client) {
   const { id: _id, tenant_id: _tenant_id, metadata, target_contacts, campaign_type } = campaign;
-  
+
   const type = metadata?.campaign_type || campaign_type || 'call';
   const contacts = Array.isArray(target_contacts) ? target_contacts : [];
-  
+
   const progress = {
     total: contacts.length,
     processed: 0,
     success: 0,
-    failed: 0
+    failed: 0,
   };
 
   if (contacts.length === 0) {
     return {
       success: true,
       progress,
-      details: { message: 'No contacts to process' }
+      details: { message: 'No contacts to process' },
     };
   }
 
@@ -235,13 +241,13 @@ async function executeCampaign(campaign, client) {
     return {
       success: true,
       progress,
-      details: { message: `Processed ${progress.processed} contacts` }
+      details: { message: `Processed ${progress.processed} contacts` },
     };
   } catch (err) {
     return {
       success: false,
       progress,
-      details: { error: err.message }
+      details: { error: err.message },
     };
   }
 }
@@ -250,8 +256,8 @@ async function executeCampaign(campaign, client) {
  * Execute email campaign
  */
 async function executeEmailCampaign(campaign, contacts, progress, client) {
-  const { tenant_id, metadata } = campaign;
-  
+  const { id, tenant_id, metadata } = campaign;
+
   // Get sending profile (email integration)
   const sendingProfileId = metadata?.ai_email_config?.sending_profile_id;
   if (!sendingProfileId) {
@@ -261,7 +267,7 @@ async function executeEmailCampaign(campaign, contacts, progress, client) {
   // Load integration credentials (tenant-scoped)
   const integrationResult = await client.query(
     'SELECT * FROM tenant_integrations WHERE tenant_id = $1 AND id = $2 AND is_active = true LIMIT 1',
-    [tenant_id, sendingProfileId]
+    [tenant_id, sendingProfileId],
   );
 
   if (integrationResult.rows.length === 0) {
@@ -282,22 +288,28 @@ async function executeEmailCampaign(campaign, contacts, progress, client) {
       const personalizedBody = personalizeTemplate(bodyTemplate, contact);
 
       // Send email based on integration type
-      await sendEmail(integration.integration_type, credentials, contact.email, subject, personalizedBody);
+      await sendEmail(
+        integration.integration_type,
+        credentials,
+        contact.email,
+        subject,
+        personalizedBody,
+      );
 
       progress.success++;
     } catch (err) {
       logger.error({ err, email: contact.email }, '[CampaignWorker] Failed to send email');
       progress.failed++;
     }
-    
+
     progress.processed++;
 
     // Emit progress webhook every 10 contacts
     if (progress.processed % 10 === 0) {
-      await emitTenantWebhooks(tenant_id, 'aicampaign.progress', {
+      await emitTenantWebhooks(pgPool, tenant_id, 'aicampaign.progress', {
         id,
         status: 'running',
-        progress: { ...progress }
+        progress: { ...progress },
       }).catch(() => {});
     }
   }
@@ -308,7 +320,7 @@ async function executeEmailCampaign(campaign, contacts, progress, client) {
  */
 async function executeCallCampaign(campaign, contacts, progress, client) {
   const { id, tenant_id, metadata } = campaign;
-  
+
   // Get call integration
   const callIntegrationId = metadata?.ai_call_integration_id;
   if (!callIntegrationId) {
@@ -318,7 +330,7 @@ async function executeCallCampaign(campaign, contacts, progress, client) {
   // Load integration credentials (tenant-scoped)
   const integrationResult = await client.query(
     'SELECT * FROM tenant_integrations WHERE tenant_id = $1 AND id = $2 AND is_active = true LIMIT 1',
-    [tenant_id, callIntegrationId]
+    [tenant_id, callIntegrationId],
   );
 
   if (integrationResult.rows.length === 0) {
@@ -339,15 +351,15 @@ async function executeCallCampaign(campaign, contacts, progress, client) {
       logger.error({ err, phone: contact.phone }, '[CampaignWorker] Failed to trigger call');
       progress.failed++;
     }
-    
+
     progress.processed++;
 
     // Emit progress webhook every 10 contacts
     if (progress.processed % 10 === 0) {
-      await emitTenantWebhooks(tenant_id, 'aicampaign.progress', {
+      await emitTenantWebhooks(pgPool, tenant_id, 'aicampaign.progress', {
         id,
         status: 'running',
-        progress: { ...progress }
+        progress: { ...progress },
       }).catch(() => {});
     }
   }
@@ -359,16 +371,16 @@ async function executeCallCampaign(campaign, contacts, progress, client) {
 async function sendEmail(integrationType, credentials, toEmail, _subject, _body) {
   // Stub implementation - to be expanded with actual providers
   logger.debug({ integrationType, toEmail }, '[CampaignWorker] Sending email via integration');
-  
+
   switch (integrationType) {
     case 'gmail':
       // TODO: Implement Gmail API send
       throw new Error('Gmail integration not yet implemented');
-      
+
     case 'outlook_email':
       // TODO: Implement Outlook/Microsoft Graph send
       throw new Error('Outlook integration not yet implemented');
-      
+
     case 'webhook_email':
       // TODO: Send to webhook endpoint
       if (!credentials.webhook_url) {
@@ -376,7 +388,7 @@ async function sendEmail(integrationType, credentials, toEmail, _subject, _body)
       }
       // Implement webhook POST
       throw new Error('Webhook email integration not yet implemented');
-      
+
     default:
       throw new Error(`Unsupported email integration: ${integrationType}`);
   }
@@ -387,33 +399,33 @@ async function sendEmail(integrationType, credentials, toEmail, _subject, _body)
  */
 async function triggerAICall(integrationType, credentials, phone, metadata) {
   logger.debug({ integrationType, phone }, '[CampaignWorker] Triggering AI call via integration');
-  
+
   // Step 1: Prepare call context with contact details and talking points
   const { contact_id, campaign_id, tenant_id } = metadata;
-  
+
   let callContext;
   try {
     const { prepareOutboundCall } = await import('./callFlowHandler.js');
     const { pgPool } = await import('../config/db.js');
-    
+
     callContext = await prepareOutboundCall(pgPool, {
       tenant_id,
       contact_id,
-      campaign_id
+      campaign_id,
     });
   } catch (error) {
     logger.error({ err: error }, '[CampaignWorker] Failed to prepare call context');
     throw new Error('Failed to prepare call context');
   }
-  
+
   // Step 2: Trigger call with full context via provider
   switch (integrationType) {
     case 'callfluent':
       return await triggerCallFluentCall(credentials, callContext, campaign_id);
-      
+
     case 'thoughtly':
       return await triggerThoughtlyCall(credentials, callContext, campaign_id);
-      
+
     default:
       throw new Error(`Unsupported call integration: ${integrationType}`);
   }
@@ -424,7 +436,7 @@ async function triggerAICall(integrationType, credentials, phone, metadata) {
  */
 async function triggerCallFluentCall(credentials, callContext, _campaign_id) {
   const { api_key: _api_key, agent_id: _agent_id } = credentials;
-  
+
   // TODO: Integrate with CallFluent API
   // const response = await fetch('https://api.callfluent.com/v1/calls', {
   //   method: 'POST',
@@ -446,9 +458,16 @@ async function triggerCallFluentCall(credentials, callContext, _campaign_id) {
   //     webhook_url: `${process.env.BACKEND_URL}/api/telephony/webhook/callfluent/outbound`
   //   })
   // });
-  
-  logger.debug({ to: callContext.contact.phone, name: callContext.contact.name, purpose: callContext.call_context.purpose }, '[CampaignWorker] CallFluent call triggered (stub)');
-  
+
+  logger.debug(
+    {
+      to: callContext.contact.phone,
+      name: callContext.contact.name,
+      purpose: callContext.call_context.purpose,
+    },
+    '[CampaignWorker] CallFluent call triggered (stub)',
+  );
+
   return { success: true, provider: 'callfluent', status: 'initiated' };
 }
 
@@ -457,7 +476,7 @@ async function triggerCallFluentCall(credentials, callContext, _campaign_id) {
  */
 async function triggerThoughtlyCall(credentials, callContext, _campaign_id) {
   const { api_key: _api_key, agent_id: _agent_id } = credentials;
-  
+
   // TODO: Integrate with Thoughtly API
   // const response = await fetch('https://api.thoughtly.ai/v1/calls', {
   //   method: 'POST',
@@ -482,9 +501,16 @@ async function triggerThoughtlyCall(credentials, callContext, _campaign_id) {
   //     callback_url: `${process.env.BACKEND_URL}/api/telephony/webhook/thoughtly/outbound`
   //   })
   // });
-  
-  logger.debug({ to: callContext.contact.phone, name: callContext.contact.name, purpose: callContext.call_context.purpose }, '[CampaignWorker] Thoughtly call triggered (stub)');
-  
+
+  logger.debug(
+    {
+      to: callContext.contact.phone,
+      name: callContext.contact.name,
+      purpose: callContext.call_context.purpose,
+    },
+    '[CampaignWorker] Thoughtly call triggered (stub)',
+  );
+
   return { success: true, provider: 'thoughtly', status: 'initiated' };
 }
 
@@ -493,7 +519,7 @@ async function triggerThoughtlyCall(credentials, callContext, _campaign_id) {
  */
 function personalizeTemplate(template, contact) {
   let result = template;
-  
+
   // Replace common placeholders
   const replacements = {
     '{{first_name}}': contact.first_name || '',
@@ -502,11 +528,11 @@ function personalizeTemplate(template, contact) {
     '{{phone}}': contact.phone || '',
     '{{company}}': contact.company || '',
   };
-  
+
   for (const [placeholder, value] of Object.entries(replacements)) {
     result = result.replace(new RegExp(placeholder, 'g'), value);
   }
-  
+
   return result;
 }
 
@@ -517,7 +543,7 @@ function hashStringToInt(str) {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
     const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
+    hash = (hash << 5) - hash + char;
     hash = hash & hash; // Convert to 32bit integer
   }
   return Math.abs(hash);

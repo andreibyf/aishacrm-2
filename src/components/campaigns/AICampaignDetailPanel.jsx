@@ -1,11 +1,10 @@
-
 import { useState } from 'react';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Progress } from "@/components/ui/progress";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Progress } from '@/components/ui/progress';
 import {
   Edit,
   Trash2,
@@ -19,49 +18,50 @@ import {
   Calendar,
   Target,
   BarChart3,
-  MessageSquare
-} from "lucide-react";
-import { format } from "date-fns";
+  MessageSquare,
+} from 'lucide-react';
+import { format } from 'date-fns';
+import { parseContacts } from '../../utils/campaignUtils';
 
 const statusColors = {
-  draft: "bg-gray-500 text-gray-100",
-  scheduled: "bg-blue-500 text-blue-100",
-  running: "bg-green-500 text-green-100",
-  paused: "bg-yellow-500 text-yellow-100",
-  completed: "bg-purple-500 text-purple-100",
-  cancelled: "bg-red-500 text-red-100"
+  draft: 'bg-gray-500 text-gray-100',
+  scheduled: 'bg-blue-500 text-blue-100',
+  running: 'bg-green-500 text-green-100',
+  paused: 'bg-yellow-500 text-yellow-100',
+  completed: 'bg-purple-500 text-purple-100',
+  cancelled: 'bg-red-500 text-red-100',
 };
 
-export default function AICampaignDetailPanel({ 
-  campaign, 
-  open, 
-  onOpenChange, 
-  onEdit, 
-  onDelete, 
-  onStatusChange
+export default function AICampaignDetailPanel({
+  campaign,
+  open,
+  onOpenChange,
+  onEdit,
+  onDelete,
+  onStatusChange,
 }) {
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState('overview');
 
   if (!campaign) return null;
 
+  const contacts = parseContacts(campaign.target_contacts);
+
   const getProgressPercentage = () => {
-    const totalContacts = campaign.target_contacts?.length || 0;
-    if (totalContacts === 0) return 0;
-    
-    const completedContacts = campaign.target_contacts?.filter(
-      c => ['completed', 'failed', 'skipped'].includes(c.status)
-    ).length || 0;
-    
-    return Math.round((completedContacts / totalContacts) * 100);
+    if (contacts.length === 0) return 0;
+    const completedContacts = contacts.filter((c) =>
+      ['completed', 'failed', 'skipped'].includes(c.status),
+    ).length;
+    return Math.round((completedContacts / contacts.length) * 100);
   };
 
   const getStatusCounts = () => {
-    if (!campaign.target_contacts) return { pending: 0, completed: 0, failed: 0, scheduled: 0 };
-    
-    return campaign.target_contacts.reduce((counts, contact) => {
-      counts[contact.status] = (counts[contact.status] || 0) + 1;
-      return counts;
-    }, { pending: 0, completed: 0, failed: 0, scheduled: 0 });
+    return contacts.reduce(
+      (counts, contact) => {
+        counts[contact.status] = (counts[contact.status] || 0) + 1;
+        return counts;
+      },
+      { pending: 0, completed: 0, failed: 0, scheduled: 0 },
+    );
   };
 
   const statusCounts = getStatusCounts();
@@ -88,22 +88,42 @@ export default function AICampaignDetailPanel({
               </div>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => onEdit(campaign)} className="bg-slate-800 border-slate-700 hover:bg-slate-700">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onEdit(campaign)}
+                className="bg-slate-800 border-slate-700 hover:bg-slate-700"
+              >
                 <Edit className="w-4 h-4 mr-2" />
                 Edit
               </Button>
               {campaign.status === 'running' ? (
-                <Button variant="outline" size="sm" onClick={() => onStatusChange(campaign, 'paused')} className="bg-slate-800 border-slate-700 hover:bg-slate-700">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onStatusChange(campaign, 'paused')}
+                  className="bg-slate-800 border-slate-700 hover:bg-slate-700"
+                >
                   <Pause className="w-4 h-4 mr-2" />
                   Pause
                 </Button>
               ) : campaign.status === 'paused' ? (
-                <Button variant="outline" size="sm" onClick={() => onStatusChange(campaign, 'running')} className="bg-slate-800 border-slate-700 hover:bg-slate-700">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onStatusChange(campaign, 'running')}
+                  className="bg-slate-800 border-slate-700 hover:bg-slate-700"
+                >
                   <Play className="w-4 h-4 mr-2" />
                   Resume
                 </Button>
               ) : campaign.status === 'draft' || campaign.status === 'scheduled' ? (
-                <Button variant="outline" size="sm" onClick={() => onStatusChange(campaign, 'running')} className="bg-slate-800 border-slate-700 hover:bg-slate-700">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onStatusChange(campaign, 'running')}
+                  className="bg-slate-800 border-slate-700 hover:bg-slate-700"
+                >
                   <Play className="w-4 h-4 mr-2" />
                   Start
                 </Button>
@@ -114,10 +134,30 @@ export default function AICampaignDetailPanel({
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList className="grid w-full grid-cols-4 bg-slate-800 border-slate-700 p-1 h-auto">
-            <TabsTrigger value="overview" className="data-[state=active]:bg-slate-700 data-[state=active]:text-slate-100 text-slate-400">Overview</TabsTrigger>
-            <TabsTrigger value="contacts" className="data-[state=active]:bg-slate-700 data-[state=active]:text-slate-100 text-slate-400">Contacts</TabsTrigger>
-            <TabsTrigger value="performance" className="data-[state=active]:bg-slate-700 data-[state=active]:text-slate-100 text-slate-400">Performance</TabsTrigger>
-            <TabsTrigger value="settings" className="data-[state=active]:bg-slate-700 data-[state=active]:text-slate-100 text-slate-400">Settings</TabsTrigger>
+            <TabsTrigger
+              value="overview"
+              className="data-[state=active]:bg-slate-700 data-[state=active]:text-slate-100 text-slate-400"
+            >
+              Overview
+            </TabsTrigger>
+            <TabsTrigger
+              value="contacts"
+              className="data-[state=active]:bg-slate-700 data-[state=active]:text-slate-100 text-slate-400"
+            >
+              Contacts
+            </TabsTrigger>
+            <TabsTrigger
+              value="performance"
+              className="data-[state=active]:bg-slate-700 data-[state=active]:text-slate-100 text-slate-400"
+            >
+              Performance
+            </TabsTrigger>
+            <TabsTrigger
+              value="settings"
+              className="data-[state=active]:bg-slate-700 data-[state=active]:text-slate-100 text-slate-400"
+            >
+              Settings
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
@@ -144,23 +184,33 @@ export default function AICampaignDetailPanel({
               <CardContent className="space-y-4">
                 <div className="flex items-center gap-4">
                   <Progress value={getProgressPercentage()} className="flex-1 bg-slate-700" />
-                  <span className="text-sm font-medium text-slate-200">{getProgressPercentage()}%</span>
+                  <span className="text-sm font-medium text-slate-200">
+                    {getProgressPercentage()}%
+                  </span>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-slate-100">{statusCounts.pending || 0}</div>
+                    <div className="text-2xl font-bold text-slate-100">
+                      {statusCounts.pending || 0}
+                    </div>
                     <div className="text-xs text-slate-400">Pending</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-400">{statusCounts.scheduled || 0}</div>
+                    <div className="text-2xl font-bold text-blue-400">
+                      {statusCounts.scheduled || 0}
+                    </div>
                     <div className="text-xs text-slate-400">Scheduled</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-green-400">{statusCounts.completed || 0}</div>
+                    <div className="text-2xl font-bold text-green-400">
+                      {statusCounts.completed || 0}
+                    </div>
                     <div className="text-xs text-slate-400">Completed</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-red-400">{statusCounts.failed || 0}</div>
+                    <div className="text-2xl font-bold text-red-400">
+                      {statusCounts.failed || 0}
+                    </div>
                     <div className="text-xs text-slate-400">Failed</div>
                   </div>
                 </div>
@@ -188,25 +238,36 @@ export default function AICampaignDetailPanel({
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2 text-slate-100">
                   <Users className="w-5 h-5" />
-                  Target Contacts ({campaign.target_contacts?.length || 0})
+                  Target Contacts ({contacts.length})
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {!campaign.target_contacts || campaign.target_contacts.length === 0 ? (
+                {contacts.length === 0 ? (
                   <div className="text-center py-8 text-slate-500">
                     <Users className="w-12 h-12 mx-auto mb-4 text-slate-600" />
                     <p>No contacts configured for this campaign</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {campaign.target_contacts.map((contact, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 border border-slate-700 rounded-lg bg-slate-800/50">
+                    {contacts.map((contact, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-3 border border-slate-700 rounded-lg bg-slate-800/50"
+                      >
                         <div className="flex items-center gap-3">
                           <div className="flex items-center gap-2">
-                            {contact.status === 'completed' && <CheckCircle className="w-4 h-4 text-green-400" />}
-                            {contact.status === 'failed' && <XCircle className="w-4 h-4 text-red-400" />}
-                            {contact.status === 'scheduled' && <Clock className="w-4 h-4 text-blue-400" />}
-                            {contact.status === 'pending' && <Clock className="w-4 h-4 text-slate-500" />}
+                            {contact.status === 'completed' && (
+                              <CheckCircle className="w-4 h-4 text-green-400" />
+                            )}
+                            {contact.status === 'failed' && (
+                              <XCircle className="w-4 h-4 text-red-400" />
+                            )}
+                            {contact.status === 'scheduled' && (
+                              <Clock className="w-4 h-4 text-blue-400" />
+                            )}
+                            {contact.status === 'pending' && (
+                              <Clock className="w-4 h-4 text-slate-500" />
+                            )}
                           </div>
                           <div>
                             <div className="font-medium text-slate-200">{contact.contact_name}</div>
@@ -217,12 +278,16 @@ export default function AICampaignDetailPanel({
                           </div>
                         </div>
                         <div className="text-right text-sm">
-                          <Badge variant="outline" className="capitalize border-slate-600 text-slate-300">
+                          <Badge
+                            variant="outline"
+                            className="capitalize border-slate-600 text-slate-300"
+                          >
                             {contact.status}
                           </Badge>
                           {contact.scheduled_date && (
                             <div className="text-xs text-slate-500 mt-1">
-                              {format(new Date(contact.scheduled_date), 'MMM d')} at {contact.scheduled_time}
+                              {format(new Date(contact.scheduled_date), 'MMM d')} at{' '}
+                              {contact.scheduled_time}
                             </div>
                           )}
                           {contact.outcome && (
@@ -302,11 +367,15 @@ export default function AICampaignDetailPanel({
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <div className="text-sm font-medium text-slate-400">Max Duration</div>
-                    <div className="text-lg font-semibold text-slate-200">{campaign.call_settings?.max_duration || 300}s</div>
+                    <div className="text-lg font-semibold text-slate-200">
+                      {campaign.call_settings?.max_duration || 300}s
+                    </div>
                   </div>
                   <div>
                     <div className="text-sm font-medium text-slate-400">Retry Attempts</div>
-                    <div className="text-lg font-semibold text-slate-200">{campaign.call_settings?.retry_attempts || 2}</div>
+                    <div className="text-lg font-semibold text-slate-200">
+                      {campaign.call_settings?.retry_attempts || 2}
+                    </div>
                   </div>
                   <div>
                     <div className="text-sm font-medium text-slate-400">Business Hours Only</div>
@@ -316,7 +385,9 @@ export default function AICampaignDetailPanel({
                   </div>
                   <div>
                     <div className="text-sm font-medium text-slate-400">Delay Between Calls</div>
-                    <div className="text-lg font-semibold text-slate-200">{campaign.call_settings?.delay_between_calls || 60}s</div>
+                    <div className="text-lg font-semibold text-slate-200">
+                      {campaign.call_settings?.delay_between_calls || 60}s
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -334,25 +405,24 @@ export default function AICampaignDetailPanel({
                   <div>
                     <div className="text-sm font-medium text-slate-400">Start Date</div>
                     <div className="text-lg font-semibold text-slate-200">
-                      {campaign.schedule_config?.start_date ? 
-                        format(new Date(campaign.schedule_config.start_date), 'MMM d, yyyy') : 
-                        'Not set'
-                      }
+                      {campaign.schedule_config?.start_date
+                        ? format(new Date(campaign.schedule_config.start_date), 'MMM d, yyyy')
+                        : 'Not set'}
                     </div>
                   </div>
                   <div>
                     <div className="text-sm font-medium text-slate-400">End Date</div>
                     <div className="text-lg font-semibold text-slate-200">
-                      {campaign.schedule_config?.end_date ? 
-                        format(new Date(campaign.schedule_config.end_date), 'MMM d, yyyy') : 
-                        'Not set'
-                      }
+                      {campaign.schedule_config?.end_date
+                        ? format(new Date(campaign.schedule_config.end_date), 'MMM d, yyyy')
+                        : 'Not set'}
                     </div>
                   </div>
                   <div>
                     <div className="text-sm font-medium text-slate-400">Preferred Hours</div>
                     <div className="text-lg font-semibold text-slate-200">
-                      {campaign.schedule_config?.preferred_hours?.start} - {campaign.schedule_config?.preferred_hours?.end}
+                      {campaign.schedule_config?.preferred_hours?.start} -{' '}
+                      {campaign.schedule_config?.preferred_hours?.end}
                     </div>
                   </div>
                   <div>
@@ -371,8 +441,8 @@ export default function AICampaignDetailPanel({
                 <CardTitle className="text-lg text-red-400">Danger Zone</CardTitle>
               </CardHeader>
               <CardContent>
-                <Button 
-                  variant="destructive" 
+                <Button
+                  variant="destructive"
                   onClick={() => onDelete(campaign.id)}
                   className="w-full"
                 >
