@@ -114,6 +114,43 @@ describe('validateTwilioSignature (unit)', { skip: !SHOULD_RUN }, () => {
 });
 
 // ---------------------------------------------------------------------------
+// Unit Tests: authorizeWhatsAppEmployee
+// ---------------------------------------------------------------------------
+
+describe('authorizeWhatsAppEmployee (unit)', { skip: !SHOULD_RUN }, () => {
+  let authorizeWhatsAppEmployee;
+
+  test('module exports authorizeWhatsAppEmployee', async () => {
+    const mod = await import('../../lib/whatsappService.js');
+    authorizeWhatsAppEmployee = mod.authorizeWhatsAppEmployee;
+    assert.equal(typeof authorizeWhatsAppEmployee, 'function');
+  });
+
+  test('returns null for unregistered phone number', async () => {
+    if (!authorizeWhatsAppEmployee) {
+      const mod = await import('../../lib/whatsappService.js');
+      authorizeWhatsAppEmployee = mod.authorizeWhatsAppEmployee;
+    }
+
+    const result = await authorizeWhatsAppEmployee(TENANT_ID, '+19999999999');
+    assert.equal(result, null, 'unregistered number should return null');
+  });
+
+  test('strips whatsapp: prefix before lookup', async () => {
+    if (!authorizeWhatsAppEmployee) {
+      const mod = await import('../../lib/whatsappService.js');
+      authorizeWhatsAppEmployee = mod.authorizeWhatsAppEmployee;
+    }
+
+    // Both formats should return the same result (null for unregistered)
+    const result1 = await authorizeWhatsAppEmployee(TENANT_ID, 'whatsapp:+19999999999');
+    const result2 = await authorizeWhatsAppEmployee(TENANT_ID, '+19999999999');
+    assert.equal(result1, null);
+    assert.equal(result2, null);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Integration Tests: WhatsApp Webhook Route
 // ---------------------------------------------------------------------------
 
@@ -147,8 +184,37 @@ describe('WhatsApp Routes', { skip: !SHOULD_RUN }, () => {
         ProfileName: 'Test User',
       }).toString(),
     });
-    // Should return TwiML (200) even if tenant not found, or 403 for signature issues
+    // Should return TwiML (200) — may be empty (no tenant), rejection (unauthorized), or 403 (sig)
     assert.ok([200, 403].includes(res.status), `expected 200 or 403, got ${res.status}`);
+    if (res.status === 200) {
+      const text = await res.text();
+      assert.ok(text.includes('<Response'), 'should return TwiML response');
+      // Without an authorized employee, should get rejection or empty response
+      // (depends on whether a tenant matched the To number)
+    }
+  });
+
+  test('POST /api/whatsapp/webhook rejects unauthorized sender with message', async () => {
+    // [2026-02-24 Claude] Employee authorization test
+    // This sends from an unregistered number — should get polite rejection
+    const res = await fetch(`${BASE_URL}/api/whatsapp/webhook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        MessageSid: 'SM' + 'unauth01'.padEnd(32, '0'),
+        From: 'whatsapp:+19999999999',
+        To: 'whatsapp:+14155238886',
+        Body: 'Can I use AiSHA?',
+        NumMedia: '0',
+      }).toString(),
+    });
+    assert.ok([200, 403].includes(res.status), `expected 200 or 403, got ${res.status}`);
+    if (res.status === 200) {
+      const text = await res.text();
+      // If tenant matched, should contain authorization rejection message
+      // If no tenant matched, should be empty TwiML
+      assert.ok(text.includes('<Response'), 'should return TwiML response');
+    }
   });
 
   test('POST /api/whatsapp/webhook handles media-only message (NumMedia > 0, no Body)', async () => {

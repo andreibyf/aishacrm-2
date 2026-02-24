@@ -122,6 +122,47 @@ export async function resolveTenantFromWhatsAppNumber(toNumber) {
 }
 
 // ---------------------------------------------------------------------------
+// Employee WhatsApp Authorization
+// ---------------------------------------------------------------------------
+
+/**
+ * Check if a phone number belongs to an authorized employee for WhatsApp.
+ * Returns the employee record if authorized, null otherwise.
+ *
+ * @param {string} tenantId
+ * @param {string} phoneNumber - E.164 format (with or without whatsapp: prefix)
+ * @returns {Promise<{ id: string, name: string, email: string } | null>}
+ * [2026-02-24 Claude]
+ */
+export async function authorizeWhatsAppEmployee(tenantId, phoneNumber) {
+  const cleanPhone = phoneNumber.replace(/^whatsapp:/, '');
+  const supabase = getSupabase();
+
+  const { data, error } = await supabase
+    .from('employees')
+    .select('id, first_name, last_name, email')
+    .eq('tenant_id', tenantId)
+    .eq('whatsapp_number', cleanPhone)
+    .eq('whatsapp_enabled', true)
+    .eq('status', 'active')
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    logger.error(`[WhatsApp] Employee auth lookup error: ${error.message}`);
+    return null;
+  }
+
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    name: [data.first_name, data.last_name].filter(Boolean).join(' ') || 'Employee',
+    email: data.email,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Contact/Lead Phone Lookup
 // ---------------------------------------------------------------------------
 
@@ -434,6 +475,7 @@ export async function processInboundWhatsApp({
   body,
   messageSid,
   chatHandler,
+  employee = null,
 }) {
   const senderPhone = from.replace(/^whatsapp:/, '');
 
@@ -487,6 +529,7 @@ export async function processInboundWhatsApp({
       entityContext: entity ? { name: entity.name, type: entity.type, id: entity.id } : null,
       channel: 'whatsapp',
       senderPhone,
+      employee, // [2026-02-24 Claude] authorized employee context
     });
   } catch (error) {
     logger.error(`[WhatsApp] AiSHA chat error: ${error.message}\n${error.stack}`);

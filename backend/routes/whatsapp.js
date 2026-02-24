@@ -15,6 +15,7 @@ import express from 'express';
 import {
   validateTwilioSignature,
   resolveTenantFromWhatsAppNumber,
+  authorizeWhatsAppEmployee,
   processInboundWhatsApp,
 } from '../lib/whatsappService.js';
 import logger from '../lib/logger.js';
@@ -60,6 +61,7 @@ async function callAiSHA({
   entityContext,
   channel,
   senderPhone,
+  employee = null,
 }) {
   const supabase = getSupabaseClient();
 
@@ -120,14 +122,16 @@ async function callAiSHA({
   }
 
   // Add WhatsApp-specific instructions with explicit tenant context
+  // [2026-02-24 Claude] AiSHA is internal — the user is an employee, not a customer
+  const employeeName = employee?.name || 'an employee';
   const whatsappInstructions = `
 IMPORTANT CONTEXT: This conversation is happening via WhatsApp.
 - You are operating on behalf of the business: "${tenantRecord.name || 'this company'}" (tenant_id: ${tenantId})
 - ALWAYS include tenant_id: "${tenantId}" in ALL tool call arguments. This is required for every tool.
-- The customer is messaging from their phone: ${senderPhone}
+- The person messaging you is an EMPLOYEE of the company: ${employeeName}${employee?.email ? ` (${employee.email})` : ''}
+- They are using WhatsApp to access internal CRM data — treat them as a team member, not a customer
 - Keep responses concise and mobile-friendly (avoid long paragraphs)
 - Use plain text only (no markdown, no HTML, no code blocks)
-- If the customer is a known ${entityContext?.type || 'contact'}: ${entityContext?.name || 'Unknown'}
 - Do NOT include any internal IDs, technical fields, or system metadata in responses
 - Be conversational and helpful, as if texting a valued customer
 - ALWAYS call fetch_tenant_snapshot or the appropriate tool before answering CRM data questions.
@@ -369,7 +373,23 @@ export default function createWhatsAppRoutes(_pgPool) {
         }
       }
 
-      // 3. Handle media-only messages
+      // 3. Authorize employee — only registered employees can use WhatsApp AiSHA
+      // [2026-02-24 Claude] Internal tool: employees must be whitelisted by admin
+      const employee = await authorizeWhatsAppEmployee(tenant.tenant_id, From);
+      if (!employee) {
+        logger.warn(
+          `[WhatsApp] Unauthorized sender: ${From} for tenant ${tenant.tenant_id.substring(0, 8)}...`,
+        );
+        res.type('text/xml');
+        return res.send(
+          '<Response><Message>Sorry, your number is not authorized to use AiSHA via WhatsApp. Please contact your administrator to enable access.</Message></Response>',
+        );
+      }
+      logger.info(
+        `[WhatsApp] Authorized employee: ${employee.name} (${employee.id.substring(0, 8)}...)`,
+      );
+
+      // 4. Handle media-only messages
       if (hasMedia && (!Body || Body.trim() === '')) {
         res.type('text/xml');
         return res.send(
@@ -377,7 +397,7 @@ export default function createWhatsAppRoutes(_pgPool) {
         );
       }
 
-      // 4. Process the message through AiSHA
+      // 5. Process the message through AiSHA
       const result = await processInboundWhatsApp({
         tenantId: tenant.tenant_id,
         twilioCreds: tenant.twilioCreds,
@@ -387,6 +407,7 @@ export default function createWhatsAppRoutes(_pgPool) {
         body: Body.trim(),
         messageSid: MessageSid,
         chatHandler: callAiSHA,
+        employee,
       });
 
       logger.info('[WhatsApp] Message processed successfully', {
