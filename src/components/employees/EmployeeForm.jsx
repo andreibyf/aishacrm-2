@@ -416,9 +416,18 @@ export default function EmployeeForm({
                     disabled={saving}
                     onClick={async () => {
                       try {
-                        const resp = await fetch(`/api/whatsapp/test-employee`, {
+                        const { supabase } = await import('@/lib/supabase');
+                        const {
+                          data: { session },
+                        } = await supabase.auth.getSession();
+                        const hdrs = { 'Content-Type': 'application/json' };
+                        if (session?.access_token) {
+                          hdrs['Authorization'] = `Bearer ${session.access_token}`;
+                        }
+                        const { getBackendUrl } = await import('@/api/backendUrl');
+                        const resp = await fetch(`${getBackendUrl()}/api/whatsapp/test-employee`, {
                           method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
+                          headers: hdrs,
                           body: JSON.stringify({
                             tenant_id: tenantId,
                             employee_id: employee.id,

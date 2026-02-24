@@ -556,11 +556,19 @@ export default function createWhatsAppRoutes(_pgPool) {
           .json({ status: 'error', message: 'WhatsApp integration not configured or inactive' });
       }
 
-      const twilioCreds = integration.api_credentials;
+      // Resolve Twilio creds: whatsapp integration → shared twilio integration → env vars
+      let twilioCreds = integration.api_credentials;
+      if (!twilioCreds?.account_sid) {
+        const { getTwilioCredentials } = await import('../lib/twilioService.js');
+        twilioCreds = await getTwilioCredentials(tenant_id);
+      }
       if (!twilioCreds?.account_sid || !twilioCreds?.auth_token) {
         return res
           .status(400)
-          .json({ status: 'error', message: 'Twilio credentials not configured' });
+          .json({
+            status: 'error',
+            message: 'Twilio credentials not configured. Add them in Settings → Integrations.',
+          });
       }
 
       const fromNumber = integration.config?.whatsapp_number;
