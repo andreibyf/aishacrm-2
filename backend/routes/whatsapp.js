@@ -43,6 +43,11 @@ import { loadAiSettings } from '../lib/aiSettingsLoader.js';
 
 const MAX_TOOL_ITERATIONS = 5;
 
+// Cache tool schemas at module level (they don't change between requests)
+let _cachedBaseTools = null;
+let _baseToolsCacheTime = 0;
+const TOOL_SCHEMA_CACHE_TTL = 600_000; // 10 minutes
+
 /**
  * Call AiSHA with a WhatsApp conversation context.
  * v2 — full tool calling, context dictionary, entity labels, AI settings.
@@ -147,12 +152,18 @@ IMPORTANT CONTEXT: This conversation is happening via WhatsApp.
 
   if (!apiKey) throw new Error('No LLM API key available');
 
-  // Generate tools with custom entity labels
+  // Generate tools with custom entity labels (base schemas are cached)
   let tools = [];
   try {
-    const baseTools = await generateToolSchemas();
+    if (!_cachedBaseTools || Date.now() - _baseToolsCacheTime > TOOL_SCHEMA_CACHE_TTL) {
+      _cachedBaseTools = await generateToolSchemas();
+      _baseToolsCacheTime = Date.now();
+      logger.info(
+        `[WhatsApp] Tool schemas generated and cached (${_cachedBaseTools.length} tools)`,
+      );
+    }
     const entityLabels = await fetchEntityLabels(null, tenantId);
-    tools = updateToolSchemasWithLabels(baseTools, entityLabels);
+    tools = updateToolSchemasWithLabels(_cachedBaseTools, entityLabels);
   } catch (e) {
     logger.warn(`[WhatsApp] Tool schema generation failed (chat-only mode): ${e.message}`);
   }
