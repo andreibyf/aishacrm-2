@@ -1,12 +1,8 @@
 import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
-import { cacheList } from '../lib/cacheMiddleware.js';
+import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
-import {
-  toNullableString,
-  toNumeric,
-  toInteger,
-} from '../lib/typeConversions.js';
+import { toNullableString, toNumeric, toInteger } from '../lib/typeConversions.js';
 
 export default function createOpportunityRoutes(_pgPool) {
   const router = express.Router();
@@ -136,9 +132,7 @@ export default function createOpportunityRoutes(_pgPool) {
 
   const toTagArray = (value) => {
     if (!Array.isArray(value)) return null;
-    return value
-      .map((tag) => (typeof tag === 'string' ? tag.trim() : ''))
-      .filter(Boolean);
+    return value.map((tag) => (typeof tag === 'string' ? tag.trim() : '')).filter(Boolean);
   };
 
   const MIRRORED_METADATA_KEYS = [
@@ -319,7 +313,7 @@ export default function createOpportunityRoutes(_pgPool) {
       if (!tenant_id) {
         return res.status(400).json({
           status: 'error',
-          message: 'tenant_id is required'
+          message: 'tenant_id is required',
         });
       }
 
@@ -345,7 +339,7 @@ export default function createOpportunityRoutes(_pgPool) {
             // treat as literal
           }
         }
-        
+
         // Handle assigned_to filter (supports UUID, null, or email)
         if (typeof parsedFilter === 'object' && parsedFilter.assigned_to !== undefined) {
           q = q.eq('assigned_to', parsedFilter.assigned_to);
@@ -357,10 +351,14 @@ export default function createOpportunityRoutes(_pgPool) {
         }
 
         // Handle $or for unassigned or dynamic search
-        if (typeof parsedFilter === 'object' && parsedFilter.$or && Array.isArray(parsedFilter.$or)) {
+        if (
+          typeof parsedFilter === 'object' &&
+          parsedFilter.$or &&
+          Array.isArray(parsedFilter.$or)
+        ) {
           // Check if this is an "unassigned" filter
-          const isUnassignedFilter = parsedFilter.$or.some(cond => 
-            cond.assigned_to === null || cond.assigned_to === ''
+          const isUnassignedFilter = parsedFilter.$or.some(
+            (cond) => cond.assigned_to === null || cond.assigned_to === '',
           );
 
           if (isUnassignedFilter) {
@@ -368,13 +366,15 @@ export default function createOpportunityRoutes(_pgPool) {
             q = q.or('assigned_to.is.null,assigned_to.eq.');
           } else {
             // Handle other $or conditions (like search)
-            const orConditions = parsedFilter.$or.map(condition => {
-              const [field, opObj] = Object.entries(condition)[0];
-              if (opObj && opObj.$icontains) {
-                return `${field}.ilike.%${opObj.$icontains}%`;
-              }
-              return null;
-            }).filter(Boolean);
+            const orConditions = parsedFilter.$or
+              .map((condition) => {
+                const [field, opObj] = Object.entries(condition)[0];
+                if (opObj && opObj.$icontains) {
+                  return `${field}.ilike.%${opObj.$icontains}%`;
+                }
+                return null;
+              })
+              .filter(Boolean);
 
             if (orConditions.length > 0) {
               q = q.or(orConditions.join(','));
@@ -382,20 +382,19 @@ export default function createOpportunityRoutes(_pgPool) {
           }
         }
       }
-      
-      q = q.order('created_date', { ascending: false })
-        .range(offset, offset + limit - 1);
-      
+
+      q = q.order('created_date', { ascending: false }).range(offset, offset + limit - 1);
+
       const { data, error, count } = await q;
       if (error) throw new Error(error.message);
-      
+
       const opportunities = (data || []).map(expandMetadata);
-      
+
       // Disable caching for dynamic list to avoid stale 304 during rapid updates
       res.set({
         'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0',
+        Pragma: 'no-cache',
+        Expires: '0',
       });
       res.json({
         status: 'success',
@@ -403,14 +402,14 @@ export default function createOpportunityRoutes(_pgPool) {
           opportunities,
           total: count || 0,
           limit,
-          offset
-        }
+          offset,
+        },
       });
     } catch (error) {
       logger.error('Error fetching opportunities:', error);
       res.status(500).json({
         status: 'error',
-        message: error.message
+        message: error.message,
       });
     }
   });
@@ -495,7 +494,7 @@ export default function createOpportunityRoutes(_pgPool) {
       if (error?.code === 'PGRST116') {
         return res.status(404).json({
           status: 'error',
-          message: 'Opportunity not found'
+          message: 'Opportunity not found',
         });
       }
       if (error) throw new Error(error.message);
@@ -503,26 +502,26 @@ export default function createOpportunityRoutes(_pgPool) {
       // Disable caching for single record as well
       res.set({
         'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0',
+        Pragma: 'no-cache',
+        Expires: '0',
       });
       const opportunity = expandMetadata(data);
-      
+
       res.json({
         status: 'success',
-        data: opportunity
+        data: opportunity,
       });
     } catch (error) {
       logger.error('Error fetching opportunity:', error);
       res.status(500).json({
         status: 'error',
-        message: error.message
+        message: error.message,
       });
     }
   });
 
   // POST /api/opportunities - Create new opportunity
-  router.post('/', async (req, res) => {
+  router.post('/', invalidateCache('opportunities'), async (req, res) => {
     try {
       const {
         tenant_id,
@@ -545,27 +544,32 @@ export default function createOpportunityRoutes(_pgPool) {
         assigned_to_name,
         ...otherFields
       } = req.body || {};
-      
+
       if (!tenant_id) {
         return res.status(400).json({
           status: 'error',
-          message: 'tenant_id is required'
+          message: 'tenant_id is required',
         });
       }
 
       const metadataExtras = {};
-      if (description !== undefined && description !== null) metadataExtras.description = description;
-      if (expected_revenue !== undefined && expected_revenue !== null) metadataExtras.expected_revenue = expected_revenue;
+      if (description !== undefined && description !== null)
+        metadataExtras.description = description;
+      if (expected_revenue !== undefined && expected_revenue !== null)
+        metadataExtras.expected_revenue = expected_revenue;
       if (next_step !== undefined && next_step !== null) metadataExtras.next_step = next_step;
       if (lead_id !== undefined && lead_id !== null) metadataExtras.lead_id = lead_id;
-      if (lead_source !== undefined && lead_source !== null) metadataExtras.lead_source = lead_source;
-      if (opportunityType !== undefined && opportunityType !== null) metadataExtras.type = opportunityType;
+      if (lead_source !== undefined && lead_source !== null)
+        metadataExtras.lead_source = lead_source;
+      if (opportunityType !== undefined && opportunityType !== null)
+        metadataExtras.type = opportunityType;
       const combinedMetadata = sanitizeMetadataPayload(metadata, otherFields, metadataExtras);
 
       const nowIso = new Date().toISOString();
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
-      const normalizedStage = typeof stage === 'string' && stage.trim() ? stage.trim().toLowerCase() : 'prospecting';
+      const normalizedStage =
+        typeof stage === 'string' && stage.trim() ? stage.trim().toLowerCase() : 'prospecting';
       const parsedAmount = toNumeric(amount);
       const parsedProbability = clampProbability(probability);
       const opportunityPayload = {
@@ -584,7 +588,8 @@ export default function createOpportunityRoutes(_pgPool) {
       assignStringField(opportunityPayload, 'close_date', close_date);
       assignTagsField(opportunityPayload, tags);
       if (assigned_to !== undefined) opportunityPayload.assigned_to = assigned_to || null;
-      if (assigned_to_name !== undefined) opportunityPayload.assigned_to_name = assigned_to_name || null;
+      if (assigned_to_name !== undefined)
+        opportunityPayload.assigned_to_name = assigned_to_name || null;
 
       const { data, error } = await supabase
         .from('opportunities')
@@ -592,24 +597,24 @@ export default function createOpportunityRoutes(_pgPool) {
         .select('*')
         .single();
       if (error) throw new Error(error.message);
-      
+
       const opportunity = expandMetadata(data);
-      
+
       res.status(201).json({
         status: 'success',
-        data: opportunity
+        data: opportunity,
       });
     } catch (error) {
       logger.error('Error creating opportunity:', error);
       res.status(500).json({
         status: 'error',
-        message: error.message
+        message: error.message,
       });
     }
   });
 
   // PUT /api/opportunities/:id - Update opportunity
-  router.put('/:id', async (req, res) => {
+  router.put('/:id', invalidateCache('opportunities'), async (req, res) => {
     try {
       const { id } = req.params;
       const {
@@ -635,9 +640,11 @@ export default function createOpportunityRoutes(_pgPool) {
       let requestedTenantId = req.body?.tenant_id || req.query?.tenant_id || null;
 
       if (!requestedTenantId) {
-        return res.status(400).json({ status: 'error', message: 'tenant_id is required for update' });
+        return res
+          .status(400)
+          .json({ status: 'error', message: 'tenant_id is required for update' });
       }
-      
+
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
       const { data: before, error: fetchErr } = await supabase
@@ -649,7 +656,7 @@ export default function createOpportunityRoutes(_pgPool) {
       if (fetchErr?.code === 'PGRST116') {
         return res.status(404).json({
           status: 'error',
-          message: 'Opportunity not found'
+          message: 'Opportunity not found',
         });
       }
       if (fetchErr) throw new Error(fetchErr.message);
@@ -661,9 +668,14 @@ export default function createOpportunityRoutes(_pgPool) {
       if (lead_id !== undefined) metadataExtras.lead_id = lead_id;
       if (lead_source !== undefined) metadataExtras.lead_source = lead_source;
       if (opportunityType !== undefined) metadataExtras.type = opportunityType;
-      const updatedMetadata = sanitizeMetadataPayload(before?.metadata, metadata, otherFields, metadataExtras);
+      const updatedMetadata = sanitizeMetadataPayload(
+        before?.metadata,
+        metadata,
+        otherFields,
+        metadataExtras,
+      );
       const normalizedStage = typeof stage === 'string' ? stage.trim().toLowerCase() : null;
-      
+
       const payload = { metadata: updatedMetadata, updated_at: new Date().toISOString() };
       if (name !== undefined) payload.name = name?.trim?.() || null;
       if (account_id !== undefined) payload.account_id = account_id || null;
@@ -693,7 +705,7 @@ export default function createOpportunityRoutes(_pgPool) {
       if (error?.code === 'PGRST116') {
         return res.status(404).json({
           status: 'error',
-          message: 'Opportunity not found for tenant'
+          message: 'Opportunity not found for tenant',
         });
       }
       if (error) throw new Error(error.message);
@@ -702,27 +714,27 @@ export default function createOpportunityRoutes(_pgPool) {
         logger.warn('[Opportunities PUT] ⚠️  Stage mismatch', {
           expected: normalizedStage,
           persisted: data.stage,
-          id: data.id
+          id: data.id,
         });
       }
 
       const updatedOpportunity = expandMetadata(data);
-      
+
       res.json({
         status: 'success',
-        data: updatedOpportunity
+        data: updatedOpportunity,
       });
     } catch (error) {
       logger.error('Error updating opportunity:', error);
       res.status(500).json({
         status: 'error',
-        message: error.message
+        message: error.message,
       });
     }
   });
 
   // DELETE /api/opportunities/:id - Delete opportunity
-  router.delete('/:id', async (req, res) => {
+  router.delete('/:id', invalidateCache('opportunities'), async (req, res) => {
     try {
       const { id } = req.params;
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
@@ -737,19 +749,19 @@ export default function createOpportunityRoutes(_pgPool) {
       if (!data) {
         return res.status(404).json({
           status: 'error',
-          message: 'Opportunity not found'
+          message: 'Opportunity not found',
         });
       }
-      
+
       res.json({
         status: 'success',
-        message: 'Opportunity deleted successfully'
+        message: 'Opportunity deleted successfully',
       });
     } catch (error) {
       logger.error('Error deleting opportunity:', error);
       res.status(500).json({
         status: 'error',
-        message: error.message
+        message: error.message,
       });
     }
   });

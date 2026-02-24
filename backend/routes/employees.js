@@ -4,7 +4,7 @@
  */
 
 import express from 'express';
-import { cacheList } from '../lib/cacheMiddleware.js';
+import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 import { inviteUserByEmail, getAuthUserByEmail } from '../lib/supabaseAuth.js';
 
@@ -303,7 +303,7 @@ export default function createEmployeeRoutes(_pgPool) {
    *               $ref: '#/components/schemas/Error'
    */
   // POST /api/employees - Create employee
-  router.post('/', async (req, res) => {
+  router.post('/', invalidateCache('employees'), async (req, res) => {
     try {
       logger.debug('[EmployeeRoutes] POST body', req.body);
       const {
@@ -573,7 +573,7 @@ export default function createEmployeeRoutes(_pgPool) {
    *               $ref: '#/components/schemas/Error'
    */
   // PUT /api/employees/:id - Update employee
-  router.put('/:id', async (req, res) => {
+  router.put('/:id', invalidateCache('employees'), async (req, res) => {
     try {
       const { id } = req.params;
       const {
@@ -837,7 +837,7 @@ export default function createEmployeeRoutes(_pgPool) {
    *               $ref: '#/components/schemas/Error'
    */
   // DELETE /api/employees/:id - Delete employee
-  router.delete('/:id', async (req, res) => {
+  router.delete('/:id', invalidateCache('employees'), async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query;

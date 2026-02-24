@@ -67,7 +67,7 @@ export default function createNoteRoutes(_pgPool) {
       if (!tenant_id) {
         return res.status(400).json({
           status: 'error',
-          message: 'tenant_id is required'
+          message: 'tenant_id is required',
         });
       }
 
@@ -136,7 +136,8 @@ export default function createNoteRoutes(_pgPool) {
         .eq('tenant_id', tenant_id)
         .eq('id', id)
         .single();
-      if (error?.code === 'PGRST116') return res.status(404).json({ status: 'error', message: 'Not found' });
+      if (error?.code === 'PGRST116')
+        return res.status(404).json({ status: 'error', message: 'Not found' });
       if (error) throw new Error(error.message);
       res.json({ status: 'success', data: { note: data } });
     } catch (error) {
@@ -189,7 +190,7 @@ export default function createNoteRoutes(_pgPool) {
    *               $ref: '#/components/schemas/Error'
    */
   // POST /api/notes - Create note
-  router.post('/', async (req, res) => {
+  router.post('/', invalidateCache('notes'), async (req, res) => {
     try {
       const n = req.body;
       if (!n.tenant_id || !n.content) {
@@ -200,20 +201,22 @@ export default function createNoteRoutes(_pgPool) {
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
         .from('note')
-        .insert([{
-          tenant_id: n.tenant_id,
-          title: n.title || null,
-          content: n.content,
-          type: n.type || n.note_type || 'general',  // Accept note_type as alias (Braid compatibility)
-          related_type: n.related_type || null,
-          related_id: n.related_id || null,
-          created_by: n.created_by || null,
-          metadata: n.metadata || {},
-        }])
+        .insert([
+          {
+            tenant_id: n.tenant_id,
+            title: n.title || null,
+            content: n.content,
+            type: n.type || n.note_type || 'general', // Accept note_type as alias (Braid compatibility)
+            related_type: n.related_type || null,
+            related_id: n.related_id || null,
+            created_by: n.created_by || null,
+            metadata: n.metadata || {},
+          },
+        ])
         .select('*')
         .single();
       if (error) throw new Error(error.message);
-      
+
       // AI MEMORY INGESTION (async, non-blocking)
       if (data) {
         import('../lib/aiMemory/index.js')
@@ -225,14 +228,14 @@ export default function createNoteRoutes(_pgPool) {
               sourceType: 'note',
               entityType: data.related_type,
               entityId: data.related_id,
-              metadata: { noteId: data.id, createdBy: data.created_by }
+              metadata: { noteId: data.id, createdBy: data.created_by },
             });
           })
-          .catch(err => {
+          .catch((err) => {
             logger.error('[NOTE_MEMORY_INGESTION] Failed:', err.message);
           });
       }
-      
+
       res.status(201).json({ status: 'success', message: 'Created', data: { note: data } });
     } catch (error) {
       logger.error('Error creating note:', error);
@@ -297,7 +300,7 @@ export default function createNoteRoutes(_pgPool) {
    *               $ref: '#/components/schemas/Error'
    */
   // PUT /api/notes/:id - Update note (tenant scoped)
-  router.put('/:id', async (req, res) => {
+  router.put('/:id', invalidateCache('notes'), async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query || {};
@@ -312,7 +315,8 @@ export default function createNoteRoutes(_pgPool) {
       Object.entries(u).forEach(([k, v]) => {
         if (allowed.includes(k)) payload[k] = v;
       });
-      if (Object.keys(payload).length === 1) return res.status(400).json({ status: 'error', message: 'No valid fields' });
+      if (Object.keys(payload).length === 1)
+        return res.status(400).json({ status: 'error', message: 'No valid fields' });
 
       const { data, error } = await supabase
         .from('note')
@@ -321,9 +325,10 @@ export default function createNoteRoutes(_pgPool) {
         .eq('id', id)
         .select('*')
         .single();
-      if (error?.code === 'PGRST116') return res.status(404).json({ status: 'error', message: 'Not found' });
+      if (error?.code === 'PGRST116')
+        return res.status(404).json({ status: 'error', message: 'Not found' });
       if (error) throw new Error(error.message);
-      
+
       // AI MEMORY INGESTION (async, non-blocking)
       if (data && data.content) {
         import('../lib/aiMemory/index.js')
@@ -335,14 +340,14 @@ export default function createNoteRoutes(_pgPool) {
               sourceType: 'note',
               entityType: data.related_type,
               entityId: data.related_id,
-              metadata: { noteId: data.id, createdBy: data.created_by }
+              metadata: { noteId: data.id, createdBy: data.created_by },
             });
           })
-          .catch(err => {
+          .catch((err) => {
             logger.error('[NOTE_MEMORY_INGESTION] Failed:', err.message);
           });
       }
-      
+
       res.json({ status: 'success', message: 'Updated', data: { note: data } });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
