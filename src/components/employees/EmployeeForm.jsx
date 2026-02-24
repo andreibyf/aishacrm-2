@@ -105,10 +105,17 @@ export default function EmployeeForm({
       toast.error('Email is required for CRM access requests.');
       return;
     }
-    // [2026-02-24 Claude] WhatsApp access requires a phone number
-    if (formData.whatsapp_enabled && !formData.whatsapp_number?.trim()) {
-      toast.error('WhatsApp phone number is required when WhatsApp access is enabled.');
-      return;
+    // WhatsApp access requires a valid E.164 phone number
+    if (formData.whatsapp_enabled) {
+      const wa = formData.whatsapp_number?.trim();
+      if (!wa) {
+        toast.error('WhatsApp phone number is required when WhatsApp access is enabled.');
+        return;
+      }
+      if (!/^\+[1-9]\d{6,14}$/.test(wa)) {
+        toast.error('WhatsApp number must be in E.164 format (e.g. +19543488819)');
+        return;
+      }
     }
     if (!tenantId && !isEdit) {
       console.log('[EmployeeForm] Validation failed: tenant_id missing');
@@ -391,13 +398,53 @@ export default function EmployeeForm({
                 value={formData.whatsapp_number}
                 onChange={(e) => onChange('whatsapp_number', e.target.value)}
                 className="bg-slate-900 border-slate-700 text-slate-100"
-                placeholder="+1 (555) 123-4567"
+                placeholder="+19543488819"
               />
               <p className="text-xs text-slate-400 mt-1">
-                The phone number linked to this employee&apos;s WhatsApp account. May differ from
-                their office phone.
+                E.164 format required (e.g. +19543488819). This is the number linked to their
+                WhatsApp account.
               </p>
             </div>
+            {isEdit &&
+              formData.whatsapp_number &&
+              /^\+[1-9]\d{6,14}$/.test(formData.whatsapp_number.trim()) && (
+                <div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="bg-green-900/30 border-green-700 text-green-300 hover:bg-green-900/50 hover:text-green-200"
+                    disabled={saving}
+                    onClick={async () => {
+                      try {
+                        const resp = await fetch(`/api/whatsapp/test-employee`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            tenant_id: tenantId,
+                            employee_id: employee.id,
+                            whatsapp_number: formData.whatsapp_number.trim(),
+                          }),
+                        });
+                        const data = await resp.json();
+                        if (data.status === 'success') {
+                          toast.success('Test message sent! Check WhatsApp.');
+                        } else {
+                          toast.error(data.message || 'Failed to send test message');
+                        }
+                      } catch (err) {
+                        toast.error(
+                          'Failed to send test message: ' + (err.message || 'network error'),
+                        );
+                      }
+                    }}
+                  >
+                    📱 Test WhatsApp Connection
+                  </Button>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Sends a test message to verify the number works with your Twilio WhatsApp setup.
+                  </p>
+                </div>
+              )}
           </div>
         )}
       </div>

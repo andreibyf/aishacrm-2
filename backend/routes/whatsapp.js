@@ -389,12 +389,29 @@ export default function createWhatsAppRoutes(_pgPool) {
         `[WhatsApp] Authorized employee: ${employee.name} (${employee.id.substring(0, 8)}...)`,
       );
 
-      // 4. Handle media-only messages
-      if (hasMedia && (!Body || Body.trim() === '')) {
+      // 4. Handle media messages — describe attachments in the message body
+      let messageBody = (Body || '').trim();
+      if (hasMedia) {
+        const mediaCount = parseInt(NumMedia, 10);
+        const mediaDescriptions = [];
+        for (let i = 0; i < mediaCount; i++) {
+          const mediaType = req.body[`MediaContentType${i}`] || 'unknown';
+          const mediaUrl = req.body[`MediaUrl${i}`] || '';
+          const shortType = mediaType.split('/')[0]; // image, video, audio, application
+          mediaDescriptions.push(`[Attached ${shortType}: ${mediaType}]`);
+          logger.info(`[WhatsApp] Media attachment ${i}: type=${mediaType} url=${mediaUrl}`);
+        }
+        const mediaNote = mediaDescriptions.join(' ');
+        if (!messageBody) {
+          messageBody = `${mediaNote} (The employee sent media without text. Acknowledge receipt and ask how you can help.)`;
+        } else {
+          messageBody = `${messageBody}\n\n${mediaNote}`;
+        }
+      }
+
+      if (!messageBody) {
         res.type('text/xml');
-        return res.send(
-          '<Response><Message>Thanks for the image! I can only process text messages right now. How can I help you?</Message></Response>',
-        );
+        return res.send('<Response></Response>');
       }
 
       // 5. Process the message through AiSHA
@@ -404,7 +421,7 @@ export default function createWhatsAppRoutes(_pgPool) {
         config: tenant.config,
         from: From,
         to: To,
-        body: Body.trim(),
+        body: messageBody,
         messageSid: MessageSid,
         chatHandler: callAiSHA,
         employee,
@@ -492,6 +509,94 @@ export default function createWhatsAppRoutes(_pgPool) {
     } catch (error) {
       logger.error(`[WhatsApp] Status check error: ${error.message}`);
       res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  /**
+   * @openapi
+   * /api/whatsapp/test-employee:
+   *   post:
+   *     summary: Send a test WhatsApp message to verify employee connection
+   *     tags: [whatsapp]
+   */
+  router.post('/test-employee', async (req, res) => {
+    try {
+      if (!req.user?.id) {
+        return res.status(401).json({ status: 'error', message: 'Authentication required' });
+      }
+
+      const { tenant_id, employee_id, whatsapp_number } = req.body;
+      if (!tenant_id || !employee_id || !whatsapp_number) {
+        return res.status(400).json({ status: 'error', message: 'Missing required fields' });
+      }
+
+      // Enforce tenant isolation
+      if (req.user.tenant_id !== tenant_id && req.user.role !== 'superadmin') {
+        return res.status(403).json({ status: 'error', message: 'Access denied' });
+      }
+
+      // Validate E.164
+      if (!/^\+[1-9]\d{6,14}$/.test(whatsapp_number)) {
+        return res.status(400).json({ status: 'error', message: 'Invalid phone number format' });
+      }
+
+      // Get tenant's WhatsApp integration config
+      const supabase = getSupabaseClient();
+      const { data: integration, error: intError } = await supabase
+        .from('tenant_integrations')
+        .select('config, api_credentials')
+        .eq('tenant_id', tenant_id)
+        .eq('integration_type', 'whatsapp')
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (intError || !integration) {
+        return res
+          .status(400)
+          .json({ status: 'error', message: 'WhatsApp integration not configured or inactive' });
+      }
+
+      const twilioCreds = integration.api_credentials;
+      if (!twilioCreds?.account_sid || !twilioCreds?.auth_token) {
+        return res
+          .status(400)
+          .json({ status: 'error', message: 'Twilio credentials not configured' });
+      }
+
+      const fromNumber = integration.config?.whatsapp_number;
+      if (!fromNumber) {
+        return res
+          .status(400)
+          .json({ status: 'error', message: 'WhatsApp sender number not configured' });
+      }
+
+      // Send test message
+      const { sendWhatsAppReply } = await import('../lib/whatsappService.js');
+      const result = await sendWhatsAppReply(
+        twilioCreds,
+        `whatsapp:${whatsapp_number}`,
+        fromNumber,
+        `\u2705 AiSHA WhatsApp test successful! Your number is connected and ready to use.`,
+      );
+
+      if (result.success) {
+        logger.info(
+          `[WhatsApp] Test message sent to ${whatsapp_number} for employee ${employee_id}`,
+        );
+        return res.json({
+          status: 'success',
+          message: 'Test message sent',
+          message_sid: result.message_sid,
+        });
+      } else {
+        logger.warn(`[WhatsApp] Test message failed: ${result.error}`);
+        return res
+          .status(500)
+          .json({ status: 'error', message: result.error || 'Failed to send test message' });
+      }
+    } catch (error) {
+      logger.error(`[WhatsApp] Test endpoint error: ${error.message}`);
+      return res.status(500).json({ status: 'error', message: error.message });
     }
   });
 

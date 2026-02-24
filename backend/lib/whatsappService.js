@@ -423,28 +423,63 @@ export async function sendWhatsAppReply(twilioCreds, to, from, body) {
 
 /**
  * Log a WhatsApp interaction as a CRM activity.
+ * Logs for both entity (contact/lead) context and employee usage tracking.
  */
-export async function logWhatsAppActivity(tenantId, entity, senderPhone, userMessage, aiReply) {
-  if (!entity) return; // Can't log without an entity
+export async function logWhatsAppActivity(
+  tenantId,
+  entity,
+  senderPhone,
+  userMessage,
+  aiReply,
+  employee = null,
+) {
+  const supabase = getSupabase();
+  const cleanPhone = senderPhone.replace(/^whatsapp:/, '');
 
-  try {
-    await getSupabase()
-      .from('activities')
-      .insert({
+  // Log against entity if one was matched
+  if (entity) {
+    try {
+      await supabase.from('activities').insert({
         tenant_id: tenantId,
         type: 'whatsapp',
-        subject: 'WhatsApp conversation with AiSHA',
-        description: `Customer: ${userMessage.substring(0, 200)}${userMessage.length > 200 ? '...' : ''}\n\nAiSHA: ${aiReply.substring(0, 200)}${aiReply.length > 200 ? '...' : ''}`,
-        related_to_type: entity.type,
-        related_to_id: entity.id,
+        subject: `WhatsApp: ${entity.name}`,
+        body: `Employee: ${userMessage.substring(0, 200)}${userMessage.length > 200 ? '...' : ''}\n\nAiSHA: ${aiReply.substring(0, 200)}${aiReply.length > 200 ? '...' : ''}`,
+        related_to: entity.type,
+        related_id: entity.id,
+        assigned_to_employee_id: employee?.id || null,
+        status: 'completed',
         metadata: {
           channel: 'whatsapp',
-          phone: senderPhone.replace(/^whatsapp:/, ''),
-          message_preview: userMessage.substring(0, 100),
+          phone: cleanPhone,
+          employee_name: employee?.name || null,
         },
       });
-  } catch (error) {
-    logger.warn('[WhatsApp] Failed to log activity (non-critical):', error?.message);
+    } catch (error) {
+      logger.warn('[WhatsApp] Failed to log entity activity (non-critical):', error?.message);
+    }
+  }
+
+  // Always log employee usage (tracks who used WhatsApp AiSHA and when)
+  if (employee) {
+    try {
+      await supabase.from('activities').insert({
+        tenant_id: tenantId,
+        type: 'whatsapp',
+        subject: `WhatsApp query by ${employee.name}`,
+        body: `Query: ${userMessage.substring(0, 300)}${userMessage.length > 300 ? '...' : ''}`,
+        assigned_to_employee_id: employee.id,
+        status: 'completed',
+        metadata: {
+          channel: 'whatsapp',
+          phone: cleanPhone,
+          employee_id: employee.id,
+          employee_name: employee.name,
+          response_preview: aiReply.substring(0, 200),
+        },
+      });
+    } catch (error) {
+      logger.warn('[WhatsApp] Failed to log employee activity (non-critical):', error?.message);
+    }
   }
 }
 
@@ -551,8 +586,8 @@ export async function processInboundWhatsApp({
     logger.error('[WhatsApp] Failed to send reply:', sendResult.error);
   }
 
-  // 9. Log activity (non-blocking)
-  logWhatsAppActivity(tenantId, entity, from, body, aiReply).catch(() => {});
+  // 9. Log activity (non-blocking) — logs both entity and employee usage
+  logWhatsAppActivity(tenantId, entity, from, body, aiReply, employee).catch(() => {});
 
   return {
     reply: aiReply,
