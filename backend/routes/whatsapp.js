@@ -25,7 +25,7 @@ import logger from '../lib/logger.js';
 
 import { buildSystemPrompt, getOpenAIClient } from '../lib/aiProvider.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
-import { resolveLLMApiKey, pickModel, selectLLMConfigForTenant } from '../lib/aiEngine/index.js';
+import { resolveLLMApiKey, selectLLMConfigForTenant } from '../lib/aiEngine/index.js';
 import { createAnthropicClientWrapper } from '../lib/aiEngine/anthropicAdapter.js';
 import {
   buildTenantContextDictionary,
@@ -130,19 +130,16 @@ IMPORTANT CONTEXT: This conversation is happening via WhatsApp.
   const fullSystemPrompt = baseSystemPrompt + '\n\n' + braidPrompt + '\n\n' + whatsappInstructions;
 
   // Resolve LLM config
+  // [2026-02-24 Claude] Use selectLLMConfigForTenant which handles provider+model together
   let provider, apiKey, modelName;
   try {
-    const llmConfig = await selectLLMConfigForTenant(tenantId);
+    const llmConfig = selectLLMConfigForTenant({
+      capability: 'chat_tools',
+      tenantSlugOrId: tenantId,
+    });
     provider = llmConfig?.provider || process.env.LLM_PROVIDER || 'anthropic';
+    modelName = llmConfig?.model;
     apiKey = await resolveLLMApiKey({ tenantSlugOrId: tenantId, provider });
-    modelName = pickModel(provider, 'chat');
-    if (provider === 'anthropic' && modelName.startsWith('gpt')) {
-      logger.warn(`[WhatsApp] Model/provider mismatch: ${provider}/${modelName}, fixing`);
-      modelName = 'claude-sonnet-4-20250514';
-    } else if (provider !== 'anthropic' && modelName.startsWith('claude')) {
-      logger.warn(`[WhatsApp] Model/provider mismatch: ${provider}/${modelName}, fixing`);
-      modelName = 'gpt-4o-mini';
-    }
   } catch (e) {
     logger.warn(`[WhatsApp] LLM config resolution failed, using env defaults: ${e.message}`);
     provider = process.env.LLM_PROVIDER || 'anthropic';
