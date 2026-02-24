@@ -93,10 +93,12 @@ const IDR_CONFIG = {
   BLOCK_DURATION_MS: 5 * 60 * 1000, // Reduced from 15 to 5 minutes
   ALERT_COOLDOWN_MS: 5 * 60 * 1000, // 5 minutes between alerts
   SQL_INJECTION_PATTERNS: [
-    /(\bUNION\b.*\bSELECT\b)|(\bOR\b.*=.*)/i,
-    /(\bDROP\b.*\bTABLE\b)|(\bEXEC\b.*\()/i,
-    /(\bINSERT\b.*\bINTO\b)|(\bUPDATE\b.*\bSET\b)/i,
-    /(--|;|\/\*|\*\/|xp_)/i,
+    /(\bUNION\b\s+\bSELECT\b)/i, // UNION SELECT
+    /(\bOR\b\s+\d+\s*=\s*\d+)/i, // OR 1=1 style
+    /(\bOR\b\s+['"]\w*['"]\s*=\s*['"])/i, // OR 'a'='a' style
+    /(\bDROP\b\s+\bTABLE\b)|(\bEXEC\b\s*\()/i, // DROP TABLE, EXEC()
+    /(\bINSERT\b\s+\bINTO\b)|(\bUPDATE\b\s+\w+\s+\bSET\b)/i, // INSERT INTO, UPDATE x SET
+    /(--\s|;\s*(?:DROP|DELETE|UPDATE|INSERT|ALTER|TRUNCATE)|\/\*[\s\S]*?\*\/|\bxp_)/i, // SQL comments/chaining (requires SQL keyword after semicolon)
   ],
   SUSPICIOUS_PATTERNS: {
     RAPID_TENANT_SWITCHING: 5, // Different tenants in 5 requests

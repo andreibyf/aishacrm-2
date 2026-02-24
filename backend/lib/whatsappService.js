@@ -68,6 +68,7 @@ export function validateTwilioSignature(authToken, url, params, signature) {
 export async function resolveTenantFromWhatsAppNumber(toNumber) {
   // Strip the "whatsapp:" prefix if present
   const cleanNumber = toNumber.replace(/^whatsapp:/, '');
+  logger.info(`[WhatsApp] Resolving tenant for number: "${cleanNumber}" (raw: "${toNumber}")`);
 
   const { data, error } = await getSupabase()
     .from('tenant_integrations')
@@ -75,20 +76,31 @@ export async function resolveTenantFromWhatsAppNumber(toNumber) {
     .eq('integration_type', 'whatsapp')
     .eq('is_active', true);
 
-  if (error || !data?.length) {
-    logger.debug('[WhatsApp] No active WhatsApp integrations found');
+  if (error) {
+    logger.error(`[WhatsApp] Supabase query error: ${error.message}`);
     return null;
   }
+
+  if (!data?.length) {
+    logger.warn('[WhatsApp] No active WhatsApp integrations found in DB');
+    return null;
+  }
+
+  logger.info(`[WhatsApp] Found ${data.length} active WhatsApp integration(s)`);
 
   // Find the tenant whose whatsapp_number matches the To number
   for (const row of data) {
     const configNumber = (row.config?.whatsapp_number || '').replace(/^whatsapp:/, '');
+    logger.info(`[WhatsApp] Comparing: config="${configNumber}" vs incoming="${cleanNumber}"`);
     if (configNumber === cleanNumber) {
       // Also get Twilio credentials (may be in whatsapp integration or shared twilio integration)
       const twilioCreds = row.api_credentials?.account_sid
         ? row.api_credentials
         : await getTwilioCredentials(row.tenant_id).then((c) => c || null);
 
+      logger.info(
+        `[WhatsApp] Tenant resolved: ${row.tenant_id.substring(0, 8)}... hasCreds=${!!twilioCreds}`,
+      );
       return {
         tenant_id: row.tenant_id,
         config: row.config || {},
@@ -97,7 +109,7 @@ export async function resolveTenantFromWhatsAppNumber(toNumber) {
     }
   }
 
-  logger.warn('[WhatsApp] No tenant found for WhatsApp number:', cleanNumber);
+  logger.warn(`[WhatsApp] No tenant matched for WhatsApp number: ${cleanNumber}`);
   return null;
 }
 
@@ -199,17 +211,18 @@ export async function findOrCreateConversation(tenantId, senderPhone, entity) {
   // Create new conversation
   const title = entity ? `WhatsApp: ${entity.name}` : `WhatsApp: ${cleanPhone}`;
 
+  // Only include columns that exist on all DB versions
+  // title/topic may not exist on dev branch — store in metadata instead
   const { data: newConv, error } = await supabase
     .from('conversations')
     .insert({
       tenant_id: tenantId,
       agent_name: 'aisha',
       status: 'active',
-      title,
-      topic: 'whatsapp',
       metadata: {
         channel: 'whatsapp',
         phone: cleanPhone,
+        title,
         entity_id: entity?.id || null,
         entity_type: entity?.type || null,
       },
@@ -218,8 +231,10 @@ export async function findOrCreateConversation(tenantId, senderPhone, entity) {
     .single();
 
   if (error) {
-    logger.error('[WhatsApp] Failed to create conversation:', error);
-    throw new Error('Failed to create conversation');
+    logger.error(
+      `[WhatsApp] Failed to create conversation: ${error.message} (code: ${error.code}, details: ${error.details})`,
+    );
+    throw new Error(`Failed to create conversation: ${error.message}`);
   }
 
   return newConv.id;
@@ -466,7 +481,7 @@ export async function processInboundWhatsApp({
       senderPhone,
     });
   } catch (error) {
-    logger.error('[WhatsApp] AiSHA chat error:', error);
+    logger.error(`[WhatsApp] AiSHA chat error: ${error.message}\n${error.stack}`);
     aiReply =
       "I'm sorry, I'm having trouble processing your request right now. Please try again in a moment.";
   }
