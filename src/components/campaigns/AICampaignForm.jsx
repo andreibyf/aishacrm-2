@@ -27,7 +27,6 @@ import {
   MessageSquare,
   Linkedin,
   Globe,
-  Send,
   Share2,
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -104,8 +103,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
   const [selectedContacts, setSelectedContacts] = useState([]);
   const [emailSendingProfiles, setEmailSendingProfiles] = useState([]);
   const [callProviders, setCallProviders] = useState([]);
-  // [2026-02-23 Claude] — SendFox integration state
-  const [sendfoxIntegrations, setSendfoxIntegrations] = useState([]);
+
   const { user: currentUser } = useUser();
   const [previewPrompt, setPreviewPrompt] = useState('');
   const { selectedTenantId } = useTenant();
@@ -141,7 +139,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
         ];
 
         // [2026-02-23 Claude] — initial filter; subsequent changes handled by handleCampaignTypeChange
-        const emailTypes = ['email', 'sendfox', 'social_post'];
+        const emailTypes = ['email', 'social_post'];
         const phoneTypes = ['call', 'sms', 'whatsapp'];
         const ct = formData.campaign_type;
         const combinedContacts = emailTypes.includes(ct)
@@ -249,15 +247,8 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
           const type = lower(i.integration_type);
           return name.includes('callfluent') || name.includes('thoughtly') || type.includes('call');
         });
-        // [2026-02-23 Claude] — also filter SendFox integrations
-        const sendfoxList = list.filter((i) => {
-          const name = lower(i.integration_name);
-          const type = lower(i.integration_type);
-          return name.includes('sendfox') || type.includes('sendfox');
-        });
         setEmailSendingProfiles(emailProfiles);
         setCallProviders(callList);
-        setSendfoxIntegrations(sendfoxList);
       } catch (e) {
         console.warn('[AICampaignForm] Failed to load tenant integrations', e);
       }
@@ -285,7 +276,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
   const handleCampaignTypeChange = (value) => {
     setFormData((prev) => ({ ...prev, campaign_type: value }));
     setSelectedContacts([]);
-    const emailTypes = ['email', 'sendfox', 'social_post'];
+    const emailTypes = ['email', 'social_post'];
     const phoneTypes = ['call', 'sms', 'whatsapp'];
     if (emailTypes.includes(value)) {
       setAvailableContacts(allContacts.filter((c) => c.email));
@@ -365,14 +356,6 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
     } else if (ct === 'whatsapp') {
       metadata.whatsapp_template_name = formData.whatsapp_template_name || '';
       metadata.whatsapp_body = formData.whatsapp_body || '';
-    } else if (ct === 'sendfox') {
-      metadata.sendfox_list_id = formData.sendfox_list_id || '';
-      metadata.sendfox_integration_id = formData.sendfox_integration_id || '';
-      metadata.sendfox_api_key = formData.sendfox_api_key || '';
-      metadata.ai_email_config = {
-        subject: formData.email_subject,
-        body_template: formData.email_body_template,
-      };
     } else if (ct === 'api_connector') {
       metadata.api_webhook_url = formData.api_webhook_url || '';
       metadata.api_method = formData.api_method || 'POST';
@@ -464,9 +447,6 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                   </SelectItem>
                   <SelectItem value="whatsapp" className="focus:bg-slate-700">
                     📱 WhatsApp
-                  </SelectItem>
-                  <SelectItem value="sendfox" className="focus:bg-slate-700">
-                    🦊 SendFox Newsletter
                   </SelectItem>
                   <SelectItem value="api_connector" className="focus:bg-slate-700">
                     🔌 API Connector
@@ -576,7 +556,6 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                 sms: 'SMS Configuration',
                 linkedin: 'LinkedIn Configuration',
                 whatsapp: 'WhatsApp Configuration',
-                sendfox: 'SendFox Newsletter Configuration',
                 api_connector: 'API Connector Configuration',
                 social_post: 'Social Post Configuration',
                 sequence: 'Multi-Step Sequence',
@@ -822,113 +801,6 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
               </>
             )}
 
-            {/* [2026-02-23 Claude] — SENDFOX CONFIG with API key + integration selector */}
-            {formData.campaign_type === 'sendfox' && (
-              <>
-                <Alert className="bg-slate-800 border-slate-700">
-                  <Send className="h-4 w-4 text-orange-400" />
-                  <AlertDescription className="text-slate-400">
-                    SendFox newsletter broadcast. Contacts will be synced to your SendFox list and a
-                    campaign triggered via the SendFox API. Get your API key at{' '}
-                    <a
-                      href="https://sendfox.com/account/oauth"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-orange-300 underline hover:text-orange-200"
-                    >
-                      sendfox.com/account/oauth
-                    </a>
-                    .
-                  </AlertDescription>
-                </Alert>
-                {sendfoxIntegrations.length > 0 && (
-                  <div>
-                    <Label className="text-slate-200">Saved SendFox Integration</Label>
-                    <Select
-                      value={formData.sendfox_integration_id || '__none__'}
-                      onValueChange={(v) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          sendfox_integration_id: v === '__none__' ? '' : v,
-                        }))
-                      }
-                    >
-                      <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
-                        <SelectValue placeholder="Select integration…" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                        <SelectItem value="__none__">Enter API key manually…</SelectItem>
-                        {sendfoxIntegrations.map((p) => (
-                          <SelectItem key={p.id} value={p.id} className="focus:bg-slate-700">
-                            {p.display_name || p.integration_name || p.id}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-sm text-slate-500 mt-1">
-                      Select a saved integration or enter an API key below.
-                    </p>
-                  </div>
-                )}
-                {!formData.sendfox_integration_id && (
-                  <div>
-                    <Label className="text-slate-200">SendFox API Key</Label>
-                    <Input
-                      value={formData.sendfox_api_key || ''}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, sendfox_api_key: e.target.value }))
-                      }
-                      placeholder="eyJ0eXAiOiJKV1QiLCJhbGci…"
-                      type="password"
-                      className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400 font-mono"
-                    />
-                    <p className="text-xs text-slate-500 mt-1">
-                      Personal Access Token from your SendFox account settings.
-                    </p>
-                  </div>
-                )}
-                <div>
-                  <Label className="text-slate-200">SendFox List ID</Label>
-                  <Input
-                    value={formData.sendfox_list_id || ''}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, sendfox_list_id: e.target.value }))
-                    }
-                    placeholder="e.g., 12345 (from your SendFox dashboard)"
-                    className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400"
-                  />
-                  <p className="text-xs text-slate-500 mt-1">
-                    Find this under Lists in your SendFox dashboard.
-                  </p>
-                </div>
-                <div>
-                  <Label className="text-slate-200">Email Subject</Label>
-                  <Input
-                    value={formData.email_subject}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, email_subject: e.target.value }))
-                    }
-                    placeholder="Your newsletter subject line"
-                    required
-                    className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400"
-                  />
-                </div>
-                <div>
-                  <Label className="text-slate-200">Email Body (HTML supported)</Label>
-                  <Textarea
-                    value={formData.email_body_template}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, email_body_template: e.target.value }))
-                    }
-                    rows={8}
-                    placeholder={'<h1>Hello {{contact_name}}</h1>\n<p>Check out our latest…</p>'}
-                    required
-                    className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400 font-mono text-sm"
-                  />
-                </div>
-              </>
-            )}
-
             {/* ── API CONNECTOR CONFIG ── */}
             {formData.campaign_type === 'api_connector' && (
               <>
@@ -1124,7 +996,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
             <div className="max-h-60 overflow-y-auto border border-slate-700 rounded-md p-4 space-y-2">
               {availableContacts.length === 0 ? (
                 <p className="text-sm text-slate-500">
-                  {['email', 'sendfox'].includes(formData.campaign_type)
+                  {formData.campaign_type === 'email'
                     ? 'No contacts with email addresses found'
                     : ['call', 'sms', 'whatsapp'].includes(formData.campaign_type)
                       ? 'No contacts with phone numbers found'
@@ -1163,7 +1035,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                         )}
                       </div>
                       <div className="text-sm text-slate-400">
-                        {['email', 'sendfox'].includes(formData.campaign_type)
+                        {formData.campaign_type === 'email'
                           ? contact.email
                           : ['call', 'sms', 'whatsapp'].includes(formData.campaign_type)
                             ? contact.phone

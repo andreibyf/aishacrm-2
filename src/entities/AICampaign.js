@@ -16,14 +16,13 @@ export const AICampaignSchema = {
         'sms',
         'linkedin',
         'whatsapp',
-        'sendfox',
         'api_connector',
         'social_post',
         'sequence',
       ],
       default: 'email',
       description:
-        'Campaign delivery channel: call, email, SMS, LinkedIn, WhatsApp, SendFox, API connector, social post, or multi-step sequence',
+        'Campaign delivery channel: call, email, SMS, LinkedIn, WhatsApp, API connector, social post, or multi-step sequence',
     },
     tenant_id: {
       type: 'string',

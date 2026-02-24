@@ -12,7 +12,6 @@ const VALID_CAMPAIGN_TYPES = [
   'sms',
   'linkedin',
   'whatsapp',
-  'sendfox',
   'api_connector',
   'social_post',
   'sequence',
@@ -297,12 +296,10 @@ export default function createAICampaignRoutes(pgPool) {
             [tenant_id, profileId],
           );
           if (profR.rows.length === 0) {
-            return res
-              .status(403)
-              .json({
-                status: 'error',
-                message: 'Email sending profile not found for tenant or inactive',
-              });
+            return res.status(403).json({
+              status: 'error',
+              message: 'Email sending profile not found for tenant or inactive',
+            });
           }
         }
       } else if (cType === 'call') {
@@ -313,16 +310,14 @@ export default function createAICampaignRoutes(pgPool) {
             [tenant_id, callId],
           );
           if (callR.rows.length === 0) {
-            return res
-              .status(403)
-              .json({
-                status: 'error',
-                message: 'Call provider integration not found for tenant or inactive',
-              });
+            return res.status(403).json({
+              status: 'error',
+              message: 'Call provider integration not found for tenant or inactive',
+            });
           }
         }
       }
-      // Other types (sms, linkedin, whatsapp, sendfox, api_connector, social_post)
+      // Other types (sms, linkedin, whatsapp, api_connector, social_post)
       // will validate their own integrations when delivery adapters are built
 
       const lifecycle = {
