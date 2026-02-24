@@ -21,6 +21,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { parseContacts } from '../../utils/campaignUtils';
 
 const statusColors = {
   draft: 'bg-gray-500 text-gray-100',
@@ -43,18 +44,6 @@ export default function AICampaignDetailPanel({
 
   if (!campaign) return null;
 
-  // [2026-02-23 Claude] — safely parse target_contacts (may be JSON string from DB)
-  const parseContacts = (tc) => {
-    if (Array.isArray(tc)) return tc;
-    if (typeof tc === 'string')
-      try {
-        const p = JSON.parse(tc);
-        return Array.isArray(p) ? p : [];
-      } catch {
-        return [];
-      }
-    return [];
-  };
   const contacts = parseContacts(campaign.target_contacts);
 
   const getProgressPercentage = () => {

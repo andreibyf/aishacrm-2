@@ -45,6 +45,7 @@ import CampaignMonitor from '../components/campaigns/CampaignMonitor';
 import Pagination from '../components/shared/Pagination';
 import { getTenantFilter } from '../components/shared/tenantUtils';
 import { useTenant } from '../components/shared/tenantContext';
+import { parseContacts } from '../utils/campaignUtils';
 
 const statusColors = {
   draft: 'bg-gray-100 text-gray-700',
@@ -235,19 +236,6 @@ export default function AICampaigns() {
     } catch (error) {
       console.error('Error updating campaign status:', error);
     }
-  };
-
-  // [2026-02-23 Claude] — safely parse target_contacts (may be JSON string from DB)
-  const parseContacts = (tc) => {
-    if (Array.isArray(tc)) return tc;
-    if (typeof tc === 'string')
-      try {
-        const p = JSON.parse(tc);
-        return Array.isArray(p) ? p : [];
-      } catch {
-        return [];
-      }
-    return [];
   };
 
   const getProgressPercentage = (campaign) => {
