@@ -20,18 +20,33 @@ import {
 import logger from '../lib/logger.js';
 
 // ---------------------------------------------------------------------------
-// AiSHA Chat Handler (simplified — no tool calling for v1)
+// AiSHA Chat Handler (v2 — full tool calling + context)
 // ---------------------------------------------------------------------------
 
 import { buildSystemPrompt, getOpenAIClient } from '../lib/aiProvider.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { resolveLLMApiKey, pickModel, selectLLMConfigForTenant } from '../lib/aiEngine/index.js';
 import { createAnthropicClientWrapper } from '../lib/aiEngine/anthropicAdapter.js';
+import {
+  buildTenantContextDictionary,
+  generateContextDictionaryPrompt,
+} from '../lib/tenantContextDictionary.js';
+import { fetchEntityLabels, updateToolSchemasWithLabels } from '../lib/entityLabelInjector.js';
+import {
+  generateToolSchemas,
+  executeBraidTool,
+  TOOL_ACCESS_TOKEN,
+  summarizeToolResult,
+  getBraidSystemPrompt,
+} from '../lib/braidIntegration-v2.js';
+import { loadAiSettings } from '../lib/aiSettingsLoader.js';
+
+const MAX_TOOL_ITERATIONS = 5;
 
 /**
  * Call AiSHA with a WhatsApp conversation context.
- * Simplified version — chat only, no tool calling (v1).
- * Tool calling will be added once the basic flow is proven.
+ * v2 — full tool calling, context dictionary, entity labels, AI settings.
+ * [2026-02-24 Claude]
  */
 async function callAiSHA({
   tenantId,
@@ -52,7 +67,15 @@ async function callAiSHA({
 
   if (!tenantRecord) throw new Error('Tenant not found');
 
-  // Build system prompt (skip context dictionary — it needs pgPool which isn't available here)
+  // Load AI settings for this tenant
+  let aiSettings = {};
+  try {
+    aiSettings = (await loadAiSettings('aisha', tenantId)) || {};
+  } catch (e) {
+    logger.warn(`[WhatsApp] loadAiSettings failed: ${e.message}`);
+  }
+
+  // Build system prompt
   let baseSystemPrompt;
   try {
     baseSystemPrompt = buildSystemPrompt(tenantRecord.id, tenantRecord.name);
@@ -61,18 +84,45 @@ async function callAiSHA({
     baseSystemPrompt = `You are AiSHA, an AI assistant for ${tenantRecord.name || 'this company'}. You help customers with inquiries, scheduling, and general support.`;
   }
 
-  // Add WhatsApp-specific instructions
+  // Load tenant context dictionary (uses Supabase internally)
+  try {
+    const tenantDictionary = await buildTenantContextDictionary(null, tenantId);
+    if (tenantDictionary && !tenantDictionary.error) {
+      const contextPrompt = generateContextDictionaryPrompt(tenantDictionary);
+      if (contextPrompt) {
+        baseSystemPrompt += '\n\n' + contextPrompt;
+      }
+    }
+  } catch (e) {
+    logger.warn(`[WhatsApp] Context dictionary failed: ${e.message}`);
+  }
+
+  // Add Braid tool system prompt (tells LLM about available tools and how to use them)
+  let braidPrompt = '';
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York';
+    braidPrompt = getBraidSystemPrompt(tz) || '';
+  } catch (e) {
+    logger.warn(`[WhatsApp] getBraidSystemPrompt failed: ${e.message}`);
+  }
+
+  // Add WhatsApp-specific instructions with explicit tenant context
   const whatsappInstructions = `
 IMPORTANT CONTEXT: This conversation is happening via WhatsApp.
+- You are operating on behalf of the business: "${tenantRecord.name || 'this company'}" (tenant_id: ${tenantId})
+- ALWAYS include tenant_id: "${tenantId}" in ALL tool call arguments. This is required for every tool.
 - The customer is messaging from their phone: ${senderPhone}
 - Keep responses concise and mobile-friendly (avoid long paragraphs)
 - Use plain text only (no markdown, no HTML, no code blocks)
 - If the customer is a known ${entityContext?.type || 'contact'}: ${entityContext?.name || 'Unknown'}
 - Do NOT include any internal IDs, technical fields, or system metadata in responses
 - Be conversational and helpful, as if texting a valued customer
+- ALWAYS call fetch_tenant_snapshot or the appropriate tool before answering CRM data questions.
+- NEVER hallucinate records; only reference data returned by tools.
+- NEVER fabricate or hallucinate tool calls or function results.
 `;
 
-  const fullSystemPrompt = baseSystemPrompt + '\n\n' + whatsappInstructions;
+  const fullSystemPrompt = baseSystemPrompt + '\n\n' + braidPrompt + '\n\n' + whatsappInstructions;
 
   // Resolve LLM config
   let provider, apiKey, modelName;
@@ -81,7 +131,6 @@ IMPORTANT CONTEXT: This conversation is happening via WhatsApp.
     provider = llmConfig?.provider || process.env.LLM_PROVIDER || 'anthropic';
     apiKey = await resolveLLMApiKey({ tenantSlugOrId: tenantId, provider });
     modelName = pickModel(provider, 'chat');
-    // Safety check: ensure model matches provider
     if (provider === 'anthropic' && modelName.startsWith('gpt')) {
       logger.warn(`[WhatsApp] Model/provider mismatch: ${provider}/${modelName}, fixing`);
       modelName = 'claude-sonnet-4-20250514';
@@ -98,28 +147,118 @@ IMPORTANT CONTEXT: This conversation is happening via WhatsApp.
 
   if (!apiKey) throw new Error('No LLM API key available');
 
-  logger.info(`[WhatsApp] Calling LLM: provider=${provider} model=${modelName}`);
+  // Generate tools with custom entity labels
+  let tools = [];
+  try {
+    const baseTools = await generateToolSchemas();
+    const entityLabels = await fetchEntityLabels(null, tenantId);
+    tools = updateToolSchemasWithLabels(baseTools, entityLabels);
+  } catch (e) {
+    logger.warn(`[WhatsApp] Tool schema generation failed (chat-only mode): ${e.message}`);
+  }
 
-  // Build the messages array — no tool calling for now (simpler, more reliable)
+  logger.info(
+    `[WhatsApp] Calling LLM: provider=${provider} model=${modelName} tools=${tools.length}`,
+  );
+
   const llmMessages = [{ role: 'system', content: fullSystemPrompt }, ...messages.slice(-8)];
 
-  let finalReply = '';
-
-  // Both providers use the same OpenAI-compatible interface
-  // (createAnthropicClientWrapper wraps Anthropic SDK in OpenAI-style API)
   const client =
     provider === 'anthropic'
       ? createAnthropicClientWrapper(apiKey)
       : getOpenAIClient(apiKey, provider);
 
-  const completion = await client.chat.completions.create({
-    model: modelName,
-    messages: llmMessages,
-    temperature: 0.4,
-    max_tokens: 1024,
-  });
+  const temperature = aiSettings?.temperature ?? 0.4;
 
-  finalReply = completion.choices?.[0]?.message?.content || '';
+  // Tool-calling loop
+  let finalReply = '';
+  for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
+    const completionOpts = {
+      model: modelName,
+      messages: llmMessages,
+      temperature,
+      max_tokens: 1024,
+    };
+    if (tools.length > 0) {
+      completionOpts.tools = tools;
+      completionOpts.tool_choice = 'auto';
+    }
+
+    const completion = await client.chat.completions.create(completionOpts);
+    const choice = completion.choices?.[0];
+
+    if (!choice) break;
+
+    // If no tool calls, we have a final text response
+    if (choice.finish_reason !== 'tool_calls' && !choice.message?.tool_calls?.length) {
+      finalReply = choice.message?.content || '';
+      break;
+    }
+
+    // Process tool calls
+    const assistantMessage = choice.message;
+    llmMessages.push(assistantMessage);
+
+    for (const toolCall of assistantMessage.tool_calls || []) {
+      const toolName = toolCall.function?.name;
+      let toolArgs;
+      try {
+        toolArgs = JSON.parse(toolCall.function?.arguments || '{}');
+      } catch {
+        toolArgs = {};
+      }
+
+      logger.info(`[WhatsApp] Tool call: ${toolName}`, { args: toolArgs });
+
+      let toolResult;
+      try {
+        toolResult = await executeBraidTool(
+          toolName,
+          { ...toolArgs, tenant_id: tenantId },
+          tenantRecord,
+          senderPhone, // userId equivalent for WhatsApp
+          TOOL_ACCESS_TOKEN, // security token (positional arg 5)
+        );
+      } catch (toolErr) {
+        logger.error(`[WhatsApp] Tool execution error (${toolName}): ${toolErr.message}`);
+        toolResult = { error: toolErr.message };
+      }
+
+      // Unwrap nested API response for better summarization
+      // summarizeToolResult works best with arrays or simple objects
+      let unwrappedResult = toolResult;
+      if (toolResult?.tag === 'Ok' && toolResult?.value && typeof toolResult.value === 'object') {
+        let target = toolResult.value;
+        // Unwrap { status: 'success', data: { ... } } pattern
+        if (target.status === 'success' && target.data && typeof target.data === 'object') {
+          target = target.data;
+        }
+        // Now target might be { leads: [...], total: 5 } or { stats: {...} } etc.
+        // If it contains exactly one array key, extract that array for summarization
+        if (!Array.isArray(target) && typeof target === 'object') {
+          const arrayKeys = Object.keys(target).filter((k) => Array.isArray(target[k]));
+          if (arrayKeys.length === 1) {
+            unwrappedResult = { tag: 'Ok', value: target[arrayKeys[0]] };
+          } else if (target.stats) {
+            // Dashboard bundle — keep as-is for stats summarizer
+            unwrappedResult = { tag: 'Ok', value: target };
+          }
+        }
+      }
+
+      const resultSummary = summarizeToolResult
+        ? summarizeToolResult(unwrappedResult, toolName)
+        : JSON.stringify(toolResult)?.slice(0, 2000);
+
+      logger.info(`[WhatsApp] Tool result summary for ${toolName}: ${resultSummary.slice(0, 300)}`);
+
+      llmMessages.push({
+        role: 'tool',
+        tool_call_id: toolCall.id,
+        content: resultSummary,
+      });
+    }
+  }
 
   if (!finalReply) {
     finalReply = "I've received your message. How can I help you today?";
@@ -127,11 +266,11 @@ IMPORTANT CONTEXT: This conversation is happening via WhatsApp.
 
   // Strip any markdown formatting for WhatsApp plain text
   finalReply = finalReply
-    .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold **text**
-    .replace(/\*(.*?)\*/g, '$1') // Remove italic *text*
-    .replace(/`{1,3}[^`]*`{1,3}/g, (m) => m.replace(/`/g, '')) // Remove code backticks
-    .replace(/#{1,6}\s/g, '') // Remove markdown headers
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Convert links [text](url) → text
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/`{1,3}[^`]*`{1,3}/g, (m) => m.replace(/`/g, ''))
+    .replace(/#{1,6}\s/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .trim();
 
   return finalReply;
