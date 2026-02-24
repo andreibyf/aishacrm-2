@@ -119,7 +119,7 @@ export default function TenantIntegrationSettings() {
         const { testSystemOpenAI } = await import('@/api/functions');
         const response = await testSystemOpenAI({
           api_key: apiKey,
-          model: integration.configuration?.model || 'gpt-4o-mini',
+          model: integration.config?.model || 'gpt-4o-mini',
         });
         success = !!response.data?.success;
         errorMessage = response.data?.details || response.data?.error || null;
@@ -483,7 +483,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
     integration_type: integration?.integration_type || 'twilio',
     integration_name: integration?.integration_name || '',
     is_active: integration?.is_active ?? true,
-    configuration: integration?.configuration || {},
+    config: integration?.config || {},
     api_credentials: integration?.api_credentials || {},
   });
 
@@ -512,7 +512,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
       toast.error('Twilio Account SID and Auth Token are required for WhatsApp.');
       return;
     }
-    if (formData.integration_type === 'whatsapp' && !formData.configuration.whatsapp_number) {
+    if (formData.integration_type === 'whatsapp' && !formData.config.whatsapp_number) {
       toast.error('WhatsApp number is required.');
       return;
     }
@@ -529,7 +529,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
   const handleConfigChange = (key, value) => {
     setFormData((prev) => ({
       ...prev,
-      configuration: { ...prev.configuration, [key]: value },
+      config: { ...prev.config, [key]: value },
     }));
   };
 
@@ -634,7 +634,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
               <Label htmlFor="messaging_service_sid">Messaging Service SID (optional)</Label>
               <Input
                 id="messaging_service_sid"
-                value={formData.configuration.messaging_service_sid || ''}
+                value={formData.config.messaging_service_sid || ''}
                 onChange={(e) => handleConfigChange('messaging_service_sid', e.target.value)}
                 placeholder="MGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                 className="font-mono"
@@ -702,7 +702,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
               </Label>
               <Input
                 id="wa_whatsapp_number"
-                value={formData.configuration.whatsapp_number || ''}
+                value={formData.config.whatsapp_number || ''}
                 onChange={(e) => handleConfigChange('whatsapp_number', e.target.value)}
                 placeholder="+14155238886"
                 required
@@ -822,7 +822,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
             <div className="space-y-2">
               <Label htmlFor="model">Default Model</Label>
               <Select
-                value={formData.configuration.model || 'gpt-4o-mini'}
+                value={formData.config.model || 'gpt-4o-mini'}
                 onValueChange={(value) => handleConfigChange('model', value)}
               >
                 <SelectTrigger>
@@ -908,7 +908,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
               <Label htmlFor="slack_channel">Default Channel</Label>
               <Input
                 id="slack_channel"
-                value={formData.configuration.default_channel || ''}
+                value={formData.config.default_channel || ''}
                 onChange={(e) => handleConfigChange('default_channel', e.target.value)}
                 placeholder="#general or C0123456789"
               />
@@ -998,7 +998,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
               <Label htmlFor="pabbly_webhook_url">Webhook URL (optional)</Label>
               <Input
                 id="pabbly_webhook_url"
-                value={formData.configuration.webhook_url || ''}
+                value={formData.config.webhook_url || ''}
                 onChange={(e) => handleConfigChange('webhook_url', e.target.value)}
                 placeholder="https://connect.pabbly.com/workflow/..."
               />
@@ -1143,7 +1143,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
               <Label htmlFor="other_base_url">Base URL (optional)</Label>
               <Input
                 id="other_base_url"
-                value={formData.configuration.base_url || ''}
+                value={formData.config.base_url || ''}
                 onChange={(e) => handleConfigChange('base_url', e.target.value)}
                 placeholder="https://api.example.com/v1"
               />
