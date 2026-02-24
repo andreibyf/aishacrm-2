@@ -504,6 +504,18 @@ function IntegrationForm({ integration, onSave, onCancel }) {
       toast.error('Twilio Account SID and Auth Token are required.');
       return;
     }
+    // [2026-02-24 Claude] WhatsApp requires own Twilio credentials for tenant isolation
+    if (
+      formData.integration_type === 'whatsapp' &&
+      (!formData.api_credentials.account_sid || !formData.api_credentials.auth_token)
+    ) {
+      toast.error('Twilio Account SID and Auth Token are required for WhatsApp.');
+      return;
+    }
+    if (formData.integration_type === 'whatsapp' && !formData.configuration.whatsapp_number) {
+      toast.error('WhatsApp number is required.');
+      return;
+    }
     onSave(formData);
   };
 
@@ -636,13 +648,13 @@ function IntegrationForm({ integration, onSave, onCancel }) {
       )}
 
       {/* ── WhatsApp (Twilio) ── */}
-      {/* [2026-02-24 Claude] WhatsApp via Twilio Sandbox or dedicated number */}
+      {/* [2026-02-24 Claude] WhatsApp via Twilio — tenant must provide own credentials */}
       {formData.integration_type === 'whatsapp' && (
         <Card className="p-4 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700">
           <CardContent className="space-y-4 pt-4">
             <Alert className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
               <AlertDescription className="text-sm">
-                Uses your Twilio account for WhatsApp messaging. You can use the{' '}
+                Connect your Twilio account to enable WhatsApp messaging with AiSHA. You can use the{' '}
                 <a
                   href="https://console.twilio.com/us1/develop/sms/try-it-out/whatsapp-learn"
                   target="_blank"
@@ -654,6 +666,35 @@ function IntegrationForm({ integration, onSave, onCancel }) {
                 for testing, or a dedicated Twilio WhatsApp number for production.
               </AlertDescription>
             </Alert>
+            <div className="space-y-2">
+              <Label htmlFor="wa_account_sid" className="flex items-center gap-2">
+                <Key className="w-4 h-4 text-muted-foreground" />
+                Twilio Account SID
+              </Label>
+              <Input
+                id="wa_account_sid"
+                value={formData.api_credentials.account_sid || ''}
+                onChange={(e) => handleCredentialChange('account_sid', e.target.value)}
+                placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                className="font-mono"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="wa_auth_token" className="flex items-center gap-2">
+                <Key className="w-4 h-4 text-muted-foreground" />
+                Twilio Auth Token
+              </Label>
+              <Input
+                id="wa_auth_token"
+                type="password"
+                value={formData.api_credentials.auth_token || ''}
+                onChange={(e) => handleCredentialChange('auth_token', e.target.value)}
+                placeholder="Your Twilio auth token"
+                className="font-mono"
+                required
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="wa_whatsapp_number" className="flex items-center gap-2">
                 <Phone className="w-4 h-4 text-muted-foreground" />
@@ -667,48 +708,26 @@ function IntegrationForm({ integration, onSave, onCancel }) {
                 required
               />
               <p className="text-xs text-muted-foreground">
-                The Twilio WhatsApp-enabled number. For sandbox testing use{' '}
+                Your Twilio WhatsApp-enabled number. For sandbox testing use{' '}
                 <code>+14155238886</code>.
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="wa_use_env_creds"
-                checked={formData.configuration.use_env_credentials !== false}
-                onChange={(e) => handleConfigChange('use_env_credentials', e.target.checked)}
-                className="rounded"
-              />
-              <Label htmlFor="wa_use_env_creds" className="text-sm font-normal cursor-pointer">
-                Use system Twilio credentials (recommended if Twilio integration is already
-                configured)
-              </Label>
+            <div className="space-y-2 rounded-md border border-dashed border-slate-300 dark:border-slate-600 p-3 bg-slate-100 dark:bg-slate-800">
+              <Label className="text-sm font-medium">Webhook Setup</Label>
+              <p className="text-xs text-muted-foreground">
+                In your Twilio Console, set the &ldquo;When a message comes in&rdquo; webhook URL
+                to:
+              </p>
+              <code className="block text-xs bg-white dark:bg-slate-900 px-2 py-1.5 rounded border select-all">
+                {window.location.origin
+                  .replace('localhost:5173', 'localhost:3001')
+                  .replace('localhost:4000', 'localhost:3001')}
+                /api/whatsapp/webhook
+              </code>
+              <p className="text-xs text-muted-foreground">
+                For production, use your public domain (e.g. via ngrok for testing).
+              </p>
             </div>
-            {formData.configuration.use_env_credentials === false && (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="wa_account_sid">Twilio Account SID</Label>
-                  <Input
-                    id="wa_account_sid"
-                    value={formData.api_credentials.account_sid || ''}
-                    onChange={(e) => handleCredentialChange('account_sid', e.target.value)}
-                    placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                    className="font-mono"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="wa_auth_token">Twilio Auth Token</Label>
-                  <Input
-                    id="wa_auth_token"
-                    type="password"
-                    value={formData.api_credentials.auth_token || ''}
-                    onChange={(e) => handleCredentialChange('auth_token', e.target.value)}
-                    placeholder="Your Twilio auth token"
-                    className="font-mono"
-                  />
-                </div>
-              </>
-            )}
           </CardContent>
         </Card>
       )}
