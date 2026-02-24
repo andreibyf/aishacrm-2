@@ -50,7 +50,15 @@ export function validateTwilioSignature(authToken, url, params, signature) {
 
   const expected = crypto.createHmac('sha1', authToken).update(data, 'utf-8').digest('base64');
 
-  return expected === signature;
+  // Use timing-safe comparison to prevent timing attacks
+  const expectedBuf = Buffer.from(expected, 'utf8');
+  const signatureBuf = Buffer.from(String(signature), 'utf8');
+
+  if (expectedBuf.length !== signatureBuf.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(expectedBuf, signatureBuf);
 }
 
 // ---------------------------------------------------------------------------
@@ -91,7 +99,7 @@ export async function resolveTenantFromWhatsAppNumber(toNumber) {
   // Find the tenant whose whatsapp_number matches the To number
   for (const row of data) {
     const configNumber = (row.config?.whatsapp_number || '').replace(/^whatsapp:/, '');
-    logger.info(`[WhatsApp] Comparing: config="${configNumber}" vs incoming="${cleanNumber}"`);
+    logger.debug(`[WhatsApp] Comparing: config="${configNumber}" vs incoming="${cleanNumber}"`);
     if (configNumber === cleanNumber) {
       // Also get Twilio credentials (may be in whatsapp integration or shared twilio integration)
       const twilioCreds = row.api_credentials?.account_sid

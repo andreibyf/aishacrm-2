@@ -64,11 +64,19 @@ async function callAiSHA({
   const supabase = getSupabaseClient();
 
   // Resolve tenant record
-  const { data: tenantRecord } = await supabase
+  const { data: tenantRecord, error: tenantError } = await supabase
     .from('tenant')
     .select('*')
     .eq('id', tenantId)
     .single();
+
+  if (tenantError) {
+    logger.error(`[WhatsApp] Failed to load tenant ${tenantId}: ${tenantError.message}`, {
+      tenantId,
+      code: tenantError.code,
+    });
+    throw new Error('Failed to load tenant configuration');
+  }
 
   if (!tenantRecord) throw new Error('Tenant not found');
 
@@ -311,8 +319,9 @@ export default function createWhatsAppRoutes(_pgPool) {
         profileName: ProfileName,
       });
 
-      // Basic validation
-      if (!From || !To || !Body) {
+      // Basic validation — require From, To, and either Body or media
+      const hasMedia = parseInt(NumMedia || '0', 10) > 0;
+      if (!From || !To || (!Body && !hasMedia)) {
         logger.warn('[WhatsApp] Missing required fields in webhook');
         res.type('text/xml');
         return res.send('<Response></Response>');
@@ -326,11 +335,24 @@ export default function createWhatsAppRoutes(_pgPool) {
         return res.send('<Response></Response>');
       }
 
-      // 2. Validate Twilio signature (skip in dev)
+      // 2. Validate Twilio signature
       const twilioSignature = req.headers['x-twilio-signature'];
       const webhookUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+      const isDev =
+        process.env.NODE_ENV === 'development' ||
+        process.env.NODE_ENV === 'test' ||
+        !process.env.NODE_ENV;
 
-      if (tenant.twilioCreds?.auth_token) {
+      if (!tenant.twilioCreds?.auth_token) {
+        // Fail closed in production — cannot validate without auth_token
+        if (!isDev) {
+          logger.error('[WhatsApp] Missing Twilio auth_token — rejecting in production');
+          return res.status(403).json({ error: 'Webhook authentication not configured' });
+        }
+        logger.warn(
+          '[WhatsApp] Missing Twilio auth_token (DEV mode - continuing without validation)',
+        );
+      } else {
         const isValid = validateTwilioSignature(
           tenant.twilioCreds.auth_token,
           webhookUrl,
@@ -339,10 +361,6 @@ export default function createWhatsAppRoutes(_pgPool) {
         );
 
         if (!isValid) {
-          const isDev =
-            process.env.NODE_ENV === 'development' ||
-            process.env.NODE_ENV === 'test' ||
-            !process.env.NODE_ENV;
           if (!isDev) {
             logger.error('[WhatsApp] Invalid Twilio signature - rejecting');
             return res.status(403).json({ error: 'Invalid signature' });
@@ -352,7 +370,7 @@ export default function createWhatsAppRoutes(_pgPool) {
       }
 
       // 3. Handle media-only messages
-      if (parseInt(NumMedia || '0', 10) > 0 && (!Body || Body.trim() === '')) {
+      if (hasMedia && (!Body || Body.trim() === '')) {
         res.type('text/xml');
         return res.send(
           '<Response><Message>Thanks for the image! I can only process text messages right now. How can I help you?</Message></Response>',
@@ -398,9 +416,24 @@ export default function createWhatsAppRoutes(_pgPool) {
    */
   router.get('/status', async (req, res) => {
     try {
-      const { tenant_id } = req.query;
+      // Require authenticated user
+      if (!req.user?.id) {
+        return res.status(401).json({ status: 'error', message: 'Authentication required' });
+      }
+
+      // Use the authenticated user's tenant, not an arbitrary query param
+      const tenant_id = req.user.tenant_id || req.query.tenant_id;
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      // Enforce tenant isolation — non-superadmins can only query their own tenant
+      if (
+        req.query.tenant_id &&
+        req.query.tenant_id !== req.user.tenant_id &&
+        req.user.role !== 'superadmin'
+      ) {
+        return res.status(403).json({ status: 'error', message: 'Access denied' });
       }
 
       const supabase = getSupabaseClient();

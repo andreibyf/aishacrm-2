@@ -272,12 +272,19 @@ export async function buildTenantContextDictionary(_pool, tenantIdOrSlug, option
   if (!UUID_REGEX.test(tenantIdOrSlug)) {
     try {
       const supabase = getSupabaseClient();
-      const { data } = await supabase
+      const { data, error: slugError } = await supabase
         .from('tenant')
         .select('id')
         .eq('tenant_id', tenantIdOrSlug)
         .limit(1)
         .maybeSingle();
+      if (slugError) {
+        console.error(
+          '[TenantContextDictionary] Supabase error resolving tenant slug "%s": %s',
+          tenantIdOrSlug,
+          slugError.message || slugError,
+        );
+      }
       tenantId = data?.id || null;
     } catch (err) {
       console.error('[TenantContextDictionary] Error resolving tenant:', err.message);

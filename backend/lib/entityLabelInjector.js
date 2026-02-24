@@ -42,12 +42,20 @@ async function resolveTenantUUID(_pool, tenantIdOrSlug) {
   // Otherwise, look up by text slug via Supabase
   try {
     const supabase = getSupabaseClient();
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('tenant')
       .select('id')
       .eq('tenant_id', tenantIdOrSlug)
       .limit(1)
       .maybeSingle();
+    if (error) {
+      console.error(
+        '[entityLabelInjector] Supabase error resolving tenant slug "%s": %s',
+        tenantIdOrSlug,
+        error.message || error,
+      );
+      return null;
+    }
     return data?.id || null;
   } catch (err) {
     console.error('[entityLabelInjector] Error resolving tenant slug:', err.message);
