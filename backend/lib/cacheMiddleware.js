@@ -27,7 +27,7 @@ export function cacheList(module, ttl = 180) {
     const operation = 'list';
     const params = {
       query: req.query,
-      path: req.path
+      path: req.path,
     };
 
     try {
@@ -45,11 +45,11 @@ export function cacheList(module, ttl = 180) {
       const originalJson = res.json.bind(res);
 
       // Override json method to cache response
-      res.json = function(data) {
+      res.json = function (data) {
         if (res.statusCode === 200) {
           // Disable browser caching - use server-side Redis cache only
           res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-          cacheManager.set(key, data, ttl).catch(err => {
+          cacheManager.set(key, data, ttl).catch((err) => {
             console.error('[Cache] Failed to cache response:', err);
           });
         }
@@ -87,7 +87,7 @@ export function cacheDetail(module, ttl = 300) {
     const params = {
       id: req.params.id,
       query: req.query,
-      path: req.path
+      path: req.path,
     };
 
     try {
@@ -105,11 +105,11 @@ export function cacheDetail(module, ttl = 300) {
       const originalJson = res.json.bind(res);
 
       // Override json method to cache response
-      res.json = function(data) {
+      res.json = function (data) {
         if (res.statusCode === 200) {
           // Disable browser caching - use server-side Redis cache only
           res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-          cacheManager.set(key, data, ttl).catch(err => {
+          cacheManager.set(key, data, ttl).catch((err) => {
             console.error('[Cache] Failed to cache detail response:', err);
           });
         }
@@ -131,42 +131,37 @@ export function cacheDetail(module, ttl = 300) {
  */
 // CRM modules that affect dashboard stats
 const DASHBOARD_AFFECTING_MODULES = new Set([
-  'leads', 'contacts', 'accounts', 'opportunities', 'activities', 'bizdevsources'
+  'leads',
+  'contacts',
+  'accounts',
+  'opportunities',
+  'activities',
+  'bizdevsources',
 ]);
 
 export function invalidateCache(module) {
   return async (req, res, next) => {
-    // Store original methods
+    // Store original json method (don't override res.send to avoid double-invalidation,
+    // since Express's res.json internally calls res.send)
     const originalJson = res.json.bind(res);
-    const originalSend = res.send.bind(res);
 
-    // Override response methods to invalidate cache on success
-    const invalidate = async (data) => {
+    // Override res.json to invalidate cache on success before sending response
+    res.json = async function (data) {
       if (res.statusCode >= 200 && res.statusCode < 300) {
         const tenantId = req.user?.tenant_id || req.query?.tenant_id || req.body?.tenant_id;
         if (tenantId) {
-          // Invalidate module cache
           await cacheManager.invalidateTenant(tenantId, module);
           console.log(`[Cache] Invalidated: ${module} for tenant ${tenantId}`);
-          
-          // Also invalidate dashboard bundle if this is a CRM entity
+
           if (DASHBOARD_AFFECTING_MODULES.has(module)) {
             await cacheManager.invalidateDashboard(tenantId);
             console.log(`[Cache] Invalidated: dashboard bundle for tenant ${tenantId}`);
           }
         }
       }
-      return data;
-    };
-
-    res.json = async function(data) {
-      await invalidate(data);
+      // Restore original res.send before calling originalJson to prevent
+      // any downstream overrides from triggering additional invalidation
       return originalJson(data);
-    };
-
-    res.send = async function(data) {
-      await invalidate(data);
-      return originalSend(data);
     };
 
     next();
@@ -198,5 +193,5 @@ export default {
   cacheDetail,
   invalidateCache,
   invalidateTenantCache,
-  getCacheStats
+  getCacheStats,
 };

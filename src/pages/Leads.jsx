@@ -796,40 +796,16 @@ export default function LeadsPage() {
 
     try {
       await Lead.delete(id);
+
+      // Optimistic UI: remove immediately so user sees instant feedback
+      setLeads((prev) => prev.filter((l) => l.id !== id));
+      setTotalItems((prev) => Math.max(0, prev - 1));
+      toast.success('Lead deleted successfully');
+
+      // Background refresh to sync with server (cache already invalidated by backend)
       clearCache('Lead');
       clearCacheByKey('Lead');
-
-      // Force reload with fresh data (bypass cache)
-      let currentFilter = getTenantFilter();
-      if (statusFilter !== 'all') {
-        currentFilter = { ...currentFilter, status: statusFilter };
-      }
-      if (selectedTags.length > 0) {
-        currentFilter = { ...currentFilter, tags: { $all: selectedTags } };
-      }
-
-      const freshLeads = await Lead.filter(currentFilter, 'created_date', 10000);
-      let filtered = freshLeads || [];
-
-      // Apply client-side age filter
-      if (ageFilter !== 'all') {
-        const selectedBucket = ageBuckets.find((b) => b.value === ageFilter);
-        if (selectedBucket) {
-          filtered = filtered.filter((lead) => {
-            const age = calculateLeadAge(lead.created_date);
-            return age >= selectedBucket.min && age <= selectedBucket.max;
-          });
-        }
-      }
-
-      setTotalItems(filtered.length);
-      const startIndex = (currentPage - 1) * pageSize;
-      const endIndex = startIndex + pageSize;
-      const paginatedLeads = filtered.slice(startIndex, endIndex);
-      setLeads(paginatedLeads);
-
-      await loadTotalStats();
-      toast.success('Lead deleted successfully');
+      await Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]);
     } catch (error) {
       console.error('Failed to delete lead:', error);
       toast.error('Failed to delete lead');
@@ -919,13 +895,20 @@ export default function LeadsPage() {
         }
 
         completeProgress();
+
+        // Optimistic UI: clear the list immediately since we deleted all matching
+        setLeads([]);
+        setTotalItems(0);
         setSelectedLeads(new Set());
         setSelectAllMode(false);
+
+        if (successCount > 0) toast.success(`${successCount} lead(s) deleted`);
+        if (failCount > 0) toast.error(`${failCount} lead(s) failed to delete`);
+
+        // Background refresh to sync with server
         clearCache('Lead');
         clearCacheByKey('Lead');
         await Promise.all([loadLeads(1, pageSize), loadTotalStats()]);
-        if (successCount > 0) toast.success(`${successCount} lead(s) deleted`);
-        if (failCount > 0) toast.error(`${failCount} lead(s) failed to delete`);
       } catch (error) {
         completeProgress();
         console.error('Failed to delete leads:', error);
@@ -983,40 +966,11 @@ export default function LeadsPage() {
 
         completeProgress();
 
+        // Optimistic UI: remove deleted items immediately
+        const deletedIds = new Set(selectedArray);
+        setLeads((prev) => prev.filter((l) => !deletedIds.has(l.id)));
+        setTotalItems((prev) => Math.max(0, prev - successCount));
         setSelectedLeads(new Set());
-        clearCache('Lead');
-        clearCacheByKey('Lead');
-
-        // Force reload with fresh data (bypass cache)
-        let currentFilter = getTenantFilter();
-        if (statusFilter !== 'all') {
-          currentFilter = { ...currentFilter, status: statusFilter };
-        }
-        if (selectedTags.length > 0) {
-          currentFilter = { ...currentFilter, tags: { $all: selectedTags } };
-        }
-
-        const freshLeads = await Lead.filter(currentFilter, 'created_date', 10000);
-        let filtered = freshLeads || [];
-
-        // Apply client-side age filter
-        if (ageFilter !== 'all') {
-          const selectedBucket = ageBuckets.find((b) => b.value === ageFilter);
-          if (selectedBucket) {
-            filtered = filtered.filter((lead) => {
-              const age = calculateLeadAge(lead.created_date);
-              return age >= selectedBucket.min && age <= selectedBucket.max;
-            });
-          }
-        }
-
-        setTotalItems(filtered.length);
-        const startIndex = (currentPage - 1) * pageSize;
-        const endIndex = startIndex + pageSize;
-        const paginatedLeads = filtered.slice(startIndex, endIndex);
-        setLeads(paginatedLeads);
-
-        await loadTotalStats();
 
         if (failedCount > 0) {
           toast.error(`${successCount} deleted, ${failedCount} failed`);
@@ -1025,13 +979,17 @@ export default function LeadsPage() {
         } else {
           toast.success(`${successCount} lead(s) deleted`);
         }
+
+        // Background refresh to sync with server
+        clearCache('Lead');
+        clearCacheByKey('Lead');
+        await Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]);
       } catch (error) {
         completeProgress();
         console.error('Failed to delete leads:', error);
         toast.error('Failed to delete leads');
         setSelectedLeads(new Set());
         clearCache('Lead');
-        clearCacheByKey('Lead');
         clearCacheByKey('Lead');
         await loadLeads(currentPage, pageSize);
         await loadTotalStats();

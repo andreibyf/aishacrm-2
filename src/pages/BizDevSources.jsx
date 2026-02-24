@@ -475,14 +475,21 @@ export default function BizDevSourcesPage() {
   const executeDelete = async (source) => {
     try {
       await BizDevSource.delete(source.id);
-      clearCacheByKey('BizDevSource');
+
+      // Optimistic UI: remove immediately so user sees instant feedback
+      setSources((prev) => prev.filter((s) => s.id !== source.id));
       toast.success(`${bizdevSourceLabel} deleted successfully`);
+
+      // Background refresh to sync with server
+      clearCacheByKey('BizDevSource');
       handleRefresh();
     } catch (error) {
       if (logError) {
         logError(handleApiError('Delete BizDev Source', error));
       }
       toast.error(`Failed to delete ${bizdevSourceLabel.toLowerCase()}`);
+      // Reload on error to ensure consistency
+      handleRefresh();
     }
   };
 
@@ -513,7 +520,8 @@ export default function BizDevSourcesPage() {
       source.phone_number?.includes(searchTerm) ||
       source.city?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesStatus = statusFilter === 'all' || source.status?.toLowerCase() === statusFilter.toLowerCase();
+    const matchesStatus =
+      statusFilter === 'all' || source.status?.toLowerCase() === statusFilter.toLowerCase();
     const matchesLicenseStatus =
       licenseStatusFilter === 'all' ||
       source.license_status?.toLowerCase() === licenseStatusFilter.toLowerCase();
@@ -594,12 +602,16 @@ export default function BizDevSourcesPage() {
     sortDirection,
   ]);
 
-  const stats = useMemo(() => ({
-    total: sources.length,
-    active: sources.filter((s) => s.status?.toLowerCase() === 'active').length,
-    promoted: sources.filter((s) => ['promoted', 'converted'].includes(s.status?.toLowerCase())).length,
-    archived: sources.filter((s) => s.status?.toLowerCase() === 'archived').length,
-  }), [sources]);
+  const stats = useMemo(
+    () => ({
+      total: sources.length,
+      active: sources.filter((s) => s.status?.toLowerCase() === 'active').length,
+      promoted: sources.filter((s) => ['promoted', 'converted'].includes(s.status?.toLowerCase()))
+        .length,
+      archived: sources.filter((s) => s.status?.toLowerCase() === 'archived').length,
+    }),
+    [sources],
+  );
 
   if (loading && sources.length === 0) {
     return (
@@ -762,15 +774,16 @@ export default function BizDevSourcesPage() {
                 />
               </div>
               {searchInput && !searchTerm && (
-                <p className="text-xs text-slate-500 mt-1">
-                  Press Enter to search
-                </p>
+                <p className="text-xs text-slate-500 mt-1">Press Enter to search</p>
               )}
               {searchTerm && (
                 <p className="text-xs text-slate-400 mt-1">
                   {filteredSources.length} result{filteredSources.length !== 1 ? 's' : ''} found
                   <button
-                    onClick={() => { setSearchTerm(''); setSearchInput(''); }}
+                    onClick={() => {
+                      setSearchTerm('');
+                      setSearchInput('');
+                    }}
                     className="ml-2 text-blue-400 hover:text-blue-300"
                   >
                     Clear
@@ -878,7 +891,11 @@ export default function BizDevSourcesPage() {
                 ))}
               </SelectContent>
             </Select>
-            {(searchTerm || statusFilter !== 'all' || licenseStatusFilter !== 'all' || batchFilter !== 'all' || sourceFilter !== 'all') && (
+            {(searchTerm ||
+              statusFilter !== 'all' ||
+              licenseStatusFilter !== 'all' ||
+              batchFilter !== 'all' ||
+              sourceFilter !== 'all') && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -901,67 +918,67 @@ export default function BizDevSourcesPage() {
         </div>
 
         {filteredSources.length > 0 && (
-        <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              {/* Select All Checkbox */}
-              <div className="flex items-center gap-2 pr-4 border-r border-slate-700">
-                <input
-                  type="checkbox"
-                  checked={isAllSelected}
-                  ref={(el) => {
-                    if (el) {
-                      el.indeterminate = isSomeSelected;
-                    }
-                  }}
-                  onChange={handleSelectAll}
-                  className="w-4 h-4 text-blue-600 bg-slate-700 border-slate-600 rounded focus:ring-blue-500"
-                />
-                <span className="text-sm text-slate-400">
-                  {isAllSelected
-                    ? 'Deselect All'
-                    : isSomeSelected
-                      ? `${selectedSources.length} Selected`
-                      : 'Select All'}
-                </span>
-              </div>
+          <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                {/* Select All Checkbox */}
+                <div className="flex items-center gap-2 pr-4 border-r border-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={isAllSelected}
+                    ref={(el) => {
+                      if (el) {
+                        el.indeterminate = isSomeSelected;
+                      }
+                    }}
+                    onChange={handleSelectAll}
+                    className="w-4 h-4 text-blue-600 bg-slate-700 border-slate-600 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-slate-400">
+                    {isAllSelected
+                      ? 'Deselect All'
+                      : isSomeSelected
+                        ? `${selectedSources.length} Selected`
+                        : 'Select All'}
+                  </span>
+                </div>
 
-              {selectedSources.length > 0 && (
-                <>
-                  <Badge variant="outline" className="border-blue-600 text-blue-400">
-                    {selectedSources.length} selected
-                  </Badge>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleBulkArchive}
-                    className="border-blue-600 text-blue-400 hover:bg-blue-900/30"
-                  >
-                    <Archive className="w-4 h-4 mr-2" />
-                    Archive Selected
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleBulkDelete}
-                    className="border-red-600 text-red-400 hover:bg-red-900/30"
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Delete Selected
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSelectedSources([])}
-                    className="text-slate-400 hover:text-slate-300"
-                  >
-                    Clear Selection
-                  </Button>
-                </>
-              )}
+                {selectedSources.length > 0 && (
+                  <>
+                    <Badge variant="outline" className="border-blue-600 text-blue-400">
+                      {selectedSources.length} selected
+                    </Badge>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleBulkArchive}
+                      className="border-blue-600 text-blue-400 hover:bg-blue-900/30"
+                    >
+                      <Archive className="w-4 h-4 mr-2" />
+                      Archive Selected
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleBulkDelete}
+                      className="border-red-600 text-red-400 hover:bg-red-900/30"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete Selected
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedSources([])}
+                      className="text-slate-400 hover:text-slate-300"
+                    >
+                      Clear Selection
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
-        </div>
         )}
 
         <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden p-6">
