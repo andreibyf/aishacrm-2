@@ -8,8 +8,7 @@
     "start": "node dist/server.js",
     "dev": "ts-node src/server.ts",
     "lint": "echo \"no lint configured\"",
-    "test-audit": "node ./scripts/test-mcp-audit.js",
-    "continue-bridge": "node scripts/continue-mcp-bridge.mjs"
+    "test-audit": "node ./scripts/test-mcp-audit.js"
   },
   "author": "Dre' + ChatGPT",
   "license": "MIT",

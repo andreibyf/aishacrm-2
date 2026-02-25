@@ -142,6 +142,9 @@ backend/test-parameter-descriptions.js
 # Claude Code local config
 .claude/
 
+# Continue.dev local config
+.continue/
+
 # Generated reports
 playwright-report/
 

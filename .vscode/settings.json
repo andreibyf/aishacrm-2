@@ -54,13 +54,6 @@
   },
 
   // ==========================================
-  // Continue.dev - Secondary AI Assistant
-  // ==========================================
-  "continue.enableTabAutocomplete": false,
-  "continue.telemetryEnabled": false,
-  "continue.showInlineTip": false,
-
-  // ==========================================
   // Language-Specific Formatting
   // ==========================================
   "[javascript]": {
@@ -178,9 +171,5 @@
   "npm.packageManager": "npm",
   "explorer.confirmDelete": false,
   "explorer.confirmDragAndDrop": false,
-  "yaml.schemas": {
-    ".continue/**/*.yaml": [
-      ".continue/**/*.yaml"
-    ]
-  }
+  "yaml.schemas": {}
 }

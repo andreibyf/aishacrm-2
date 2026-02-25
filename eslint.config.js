@@ -36,7 +36,6 @@ export default [
       'addons/**',
       // Claude Code worktrees (auto-generated, mirrors main repo)
       '.claude/**',
-      // Continue.dev reranker venv (vendored Python packages)
       '.continue/**',
       // Migration and utility scripts (one-off scripts, not production code)
       'backend/migrations/**',
@@ -123,13 +122,19 @@ export default [
       'react/prop-types': 'off',
       'react-refresh/only-export-components': 'off',
       // Keep unused vars as warnings, ignore underscored args/vars/caught errors
-      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
+      'no-unused-vars': [
+        'warn',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
+      ],
       // Disallow direct Postgres access; use Supabase client instead
       'no-restricted-imports': [
         'error',
         {
           paths: [
-            { name: 'pg', message: 'Use Supabase client (backend/lib/supabase-db.js) instead of pg' },
+            {
+              name: 'pg',
+              message: 'Use Supabase client (backend/lib/supabase-db.js) instead of pg',
+            },
           ],
         },
       ],
@@ -202,7 +207,13 @@ export default [
   // Maintenance scripts override: allow 'pg' in non-runtime backend scripts
   {
     files: ['backend/*.js', 'backend/scripts/**/*.js'],
-    ignores: ['backend/server.js', 'backend/routes/**', 'backend/workers/**', 'backend/lib/**', 'backend/middleware/**'],
+    ignores: [
+      'backend/server.js',
+      'backend/routes/**',
+      'backend/workers/**',
+      'backend/lib/**',
+      'backend/middleware/**',
+    ],
     languageOptions: {
       ecmaVersion: 2020,
       globals: { ...globals.node },
@@ -323,7 +334,10 @@ export default [
       'react/jsx-no-target-blank': 'off',
       'react/prop-types': 'off',
       'no-unused-vars': 'off', // Disable base rule for TS
-      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
       // Type safety rules - prevent any usage (warn for gradual migration)
       '@typescript-eslint/no-explicit-any': 'warn',
     },
@@ -353,7 +367,10 @@ export default [
       'react-refresh/only-export-components': 'off',
       'no-undef': 'off',
       'no-unused-vars': 'off',
-      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
       '@typescript-eslint/no-explicit-any': 'warn',
     },
   },
@@ -378,7 +395,10 @@ export default [
       ...js.configs.recommended.rules,
       'no-undef': 'off',
       'no-unused-vars': 'off',
-      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
       '@typescript-eslint/no-explicit-any': 'warn',
     },
   },
