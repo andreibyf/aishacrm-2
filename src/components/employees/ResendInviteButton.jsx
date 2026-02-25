@@ -85,7 +85,10 @@ export default function ResendInviteButton({
 
       // Frontend fallback email for admins if backend didn't send
       if (ok && isAdminLike && !responseData.invitee_email_sent) {
-        const appUrl = typeof window !== 'undefined' ? window.location.origin : '';
+        const appUrl =
+          typeof window !== 'undefined'
+            ? window.location.origin
+            : import.meta.env.VITE_APP_URL || '';
         const body = `
           <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
             <p>Hello ${fullName || ''},</p>
