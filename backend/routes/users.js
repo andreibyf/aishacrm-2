@@ -178,9 +178,19 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       if (k in nestedMetadata) delete nestedMetadata[k];
     }
 
+    // Compute display_name and full_name from first_name + last_name if not already set.
+    const computedFullName = [rest.first_name, rest.last_name].filter(Boolean).join(' ');
+    if (!promoted.display_name && computedFullName) {
+      promoted.display_name = computedFullName;
+    }
+    if (!promoted.display_name && rest.email) {
+      promoted.display_name = rest.email;
+    }
+
     return {
       ...rest,
       ...promoted,
+      full_name: computedFullName || rest.email || null,
       metadata: nestedMetadata, // slim metadata without promoted duplicates
     };
   };
