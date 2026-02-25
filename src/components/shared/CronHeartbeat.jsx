@@ -9,7 +9,7 @@ export default function CronHeartbeat() {
   const failureCountRef = useRef(0);
   const MAX_FAILURES = 3;
   const { logError } = useErrorLog();
-  
+
   // Use global user context instead of local User.me()
   const { user } = useUser();
 
@@ -32,18 +32,18 @@ export default function CronHeartbeat() {
         isRunningRef.current = true;
         lastRunRef.current = now;
 
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Cron execution timeout')), 30000)
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Cron execution timeout')), 30000),
         );
-        
-        // Call our own backend instead of Base44 SDK
+
+        // Call our own backend
         const cronPromise = fetch(`${BACKEND_URL}/api/cron/run`, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
           },
-          credentials: 'include'
-        }).then(async res => {
+          credentials: 'include',
+        }).then(async (res) => {
           if (!res.ok) {
             const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
             throw new Error(errorData.error || errorData.message || 'Cron execution failed');
@@ -52,18 +52,19 @@ export default function CronHeartbeat() {
         });
 
         await Promise.race([cronPromise, timeoutPromise]);
-        
-        failureCountRef.current = 0;
 
+        failureCountRef.current = 0;
       } catch (error) {
         failureCountRef.current++;
-        
+
         if (failureCountRef.current >= MAX_FAILURES && logError) {
-          logError(createError('Cron System', 'Cron jobs disabled after multiple failures', {
-            severity: 'critical',
-            actionable: 'Check Settings → System Health. Page refresh required to resume.',
-            details: error?.message
-          }));
+          logError(
+            createError('Cron System', 'Cron jobs disabled after multiple failures', {
+              severity: 'critical',
+              actionable: 'Check Settings → System Health. Page refresh required to resume.',
+              details: error?.message,
+            }),
+          );
         } else if (logError) {
           logError(handleApiError('Cron System', error));
         }

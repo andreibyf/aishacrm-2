@@ -1,4 +1,4 @@
-// Mock user for local development (when Base44 auth is disabled)
+// Mock user for local development (when auth is disabled)
 export const createMockUser = () => ({
   id: 'local-dev-user-001',
   email: 'dev@localhost',
@@ -70,29 +70,38 @@ export const createMockTenant = () => ({
 export const isLocalDevMode = () => {
   // Safety hatch: Allow disabling mock mode via localStorage
   try {
-    if (typeof window !== 'undefined' && window.localStorage.getItem('DISABLE_MOCK_USER') === 'true') {
+    if (
+      typeof window !== 'undefined' &&
+      window.localStorage.getItem('DISABLE_MOCK_USER') === 'true'
+    ) {
       return false;
     }
-    if (typeof window !== 'undefined' && window.localStorage.getItem('FORCE_MOCK_USER') === 'true') {
+    if (
+      typeof window !== 'undefined' &&
+      window.localStorage.getItem('FORCE_MOCK_USER') === 'true'
+    ) {
       return true;
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   // Local dev mode means: no real auth/backends are configured
-  // Only check for Supabase (Base44 removed)
+  // Only check for Supabase
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   // Check all possible key names
-  const supabaseAnonKey = 
-    import.meta.env.VITE_SUPABASE_ANON_KEY || 
-    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 
+  const supabaseAnonKey =
+    import.meta.env.VITE_SUPABASE_ANON_KEY ||
+    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
     import.meta.env.VITE_SUPABASE_PUBLIC_KEY;
 
   // Check if credentials are placeholders or example values
-  const isPlaceholder = !supabaseAnonKey || 
-    supabaseAnonKey.includes('your_') || 
+  const isPlaceholder =
+    !supabaseAnonKey ||
+    supabaseAnonKey.includes('your_') ||
     supabaseAnonKey.includes('placeholder');
-    
+
   const hasSupabase = !!(supabaseUrl && supabaseAnonKey && !isPlaceholder);
 
   // If Supabase auth is configured with real credentials, we're NOT in local dev mode

@@ -1,25 +1,15 @@
-
-import { useState, useRef, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Badge } from "@/components/ui/badge";
-import {
-  Send,
-  Bot,
-  User,
-  Loader2,
-  Zap,
-  Database,
-  Brain,
-  Workflow
-} from "lucide-react";
+import { useState, useRef, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Badge } from '@/components/ui/badge';
+import { Send, Bot, User, Loader2, Zap, Database, Brain, Workflow } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import MiddlewareClient from "../middleware/MiddlewareClient";
+import MiddlewareClient from '../middleware/MiddlewareClient';
 
-import { invokeTenantLLM } from "@/api/functions";
-import { invokeSystemOpenAI } from "@/api/functions";
+import { invokeTenantLLM } from '@/api/functions';
+import { invokeSystemOpenAI } from '@/api/functions';
 
 export default function EnhancedAIAssistant({ user }) {
   const [messages, setMessages] = useState([
@@ -31,13 +21,13 @@ export default function EnhancedAIAssistant({ user }) {
 - Access your CRM data directly (when middleware is available)
 - Use multiple AI models (GPT-4, Claude, etc.)
 - Trigger n8n workflows
-- Fall back to Base44 integrations when needed
+- Automatic fallback when services are unavailable
 
 ${user?.role === 'admin' ? 'As an admin, you can configure the middleware connection in Settings.' : ''}
 
 How can I help you today?`,
-      timestamp: new Date()
-    }
+      timestamp: new Date(),
+    },
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -61,22 +51,27 @@ How can I help you today?`,
   };
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   const generateFallbackResponse = (message) => {
     const lowerMessage = message.toLowerCase();
 
-    if (lowerMessage.includes("hello") || lowerMessage.includes("hi")) {
-      return "Hello! How can I assist you with your CRM today?";
+    if (lowerMessage.includes('hello') || lowerMessage.includes('hi')) {
+      return 'Hello! How can I assist you with your CRM today?';
     }
-    if (lowerMessage.includes("crm")) {
-      return "I can help with CRM related queries, but my advanced features for data retrieval require active AI services. Would you like to know about general CRM concepts?";
+    if (lowerMessage.includes('crm')) {
+      return 'I can help with CRM related queries, but my advanced features for data retrieval require active AI services. Would you like to know about general CRM concepts?';
     }
-    if (lowerMessage.includes("contact") || lowerMessage.includes("lead") || lowerMessage.includes("opportunity") || lowerMessage.includes("account")) {
+    if (
+      lowerMessage.includes('contact') ||
+      lowerMessage.includes('lead') ||
+      lowerMessage.includes('opportunity') ||
+      lowerMessage.includes('account')
+    ) {
       return "To provide specific contact, lead, account, or opportunity information, an AI service needs to be properly configured. I'm unable to access your live data in fallback mode.";
     }
-    if (lowerMessage.includes("thank you") || lowerMessage.includes("thanks")) {
+    if (lowerMessage.includes('thank you') || lowerMessage.includes('thanks')) {
       return "You're welcome! Feel free to ask if you have more questions.";
     }
 
@@ -90,10 +85,10 @@ How can I help you today?`,
       id: Date.now(),
       role: 'user',
       content: inputMessage,
-      timestamp: new Date()
+      timestamp: new Date(),
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    setMessages((prev) => [...prev, userMessage]);
     setInputMessage('');
     setIsLoading(true);
 
@@ -106,13 +101,18 @@ How can I help you today?`,
         const tenantResponse = await invokeTenantLLM({
           prompt: userMessage.content,
           // Extract only role and content for conversation context
-          conversation_context: messages.slice(-6).map(msg => ({ role: msg.role, content: msg.content }))
+          conversation_context: messages
+            .slice(-6)
+            .map((msg) => ({ role: msg.role, content: msg.content })),
         });
 
         if (tenantResponse.data?.success && tenantResponse.data?.response) {
           aiResponse = tenantResponse.data.response;
         } else {
-          console.log('Tenant LLM did not return a successful response or data, attempting fallback:', tenantResponse);
+          console.log(
+            'Tenant LLM did not return a successful response or data, attempting fallback:',
+            tenantResponse,
+          );
         }
       } catch (tenantError) {
         console.log('Tenant LLM unavailable, trying system OpenAI fallback:', tenantError.message);
@@ -127,18 +127,23 @@ How can I help you today?`,
               user_context: {
                 email: user?.email,
                 role: user?.role,
-                tenant_id: user?.tenant_id
+                tenant_id: user?.tenant_id,
               },
               // Extract only role and content for conversation context
-              conversation_context: messages.slice(-4).map(msg => ({ role: msg.role, content: msg.content }))
-            }
+              conversation_context: messages
+                .slice(-4)
+                .map((msg) => ({ role: msg.role, content: msg.content })),
+            },
           });
 
           if (systemResponse.data?.success && systemResponse.data?.response) {
             aiResponse = systemResponse.data.response;
             usedSystemFallback = true;
           } else {
-            console.log('System OpenAI did not return a successful response or data, attempting rule-based fallback:', systemResponse);
+            console.log(
+              'System OpenAI did not return a successful response or data, attempting rule-based fallback:',
+              systemResponse,
+            );
           }
         } catch (systemError) {
           console.log('System OpenAI also unavailable:', systemError.message);
@@ -153,24 +158,24 @@ How can I help you today?`,
 
       const assistantMessage = {
         id: Date.now() + 1,
-        role: "assistant",
+        role: 'assistant',
         content: aiResponse,
         timestamp: new Date(),
-        metadata: usedSystemFallback ? { source: 'system_openai' } : null
+        metadata: usedSystemFallback ? { source: 'system_openai' } : null,
       };
 
-      setMessages(prev => [...prev, assistantMessage]);
-
+      setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
-      console.error("Chat error:", error);
+      console.error('Chat error:', error);
       const errorMessage = {
         id: Date.now() + 1,
-        role: "assistant",
-        content: "I apologize, but I'm having trouble processing your request right now. Please try again later or contact support if the issue persists.",
+        role: 'assistant',
+        content:
+          "I apologize, but I'm having trouble processing your request right now. Please try again later or contact support if the issue persists.",
         timestamp: new Date(),
-        isError: true
+        isError: true,
       };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
     }
@@ -196,7 +201,7 @@ How can I help you today?`,
         return (
           <Badge variant="secondary" className="flex items-center gap-1">
             <div className="w-2 h-2 rounded-full bg-orange-500" />
-            Base44
+            Fallback
           </Badge>
         );
       default:
@@ -246,13 +251,15 @@ How can I help you today?`,
                   </div>
                 )}
 
-                <div className={`max-w-[80%] rounded-lg p-3 ${
-                  message.role === 'user'
-                    ? 'bg-blue-600 text-white'
-                    : message.isError
-                    ? 'bg-red-50 text-red-900 border border-red-200'
-                    : 'bg-slate-100 text-slate-900'
-                }`}>
+                <div
+                  className={`max-w-[80%] rounded-lg p-3 ${
+                    message.role === 'user'
+                      ? 'bg-blue-600 text-white'
+                      : message.isError
+                        ? 'bg-red-50 text-red-900 border border-red-200'
+                        : 'bg-slate-100 text-slate-900'
+                  }`}
+                >
                   {message.role === 'user' ? (
                     <p className="whitespace-pre-wrap">{message.content}</p>
                   ) : (
@@ -266,7 +273,12 @@ How can I help you today?`,
                     {message.role === 'assistant' && (
                       <div className="flex items-center gap-1">
                         {message.metadata?.source === 'system_openai' && (
-                           <Badge variant="outline" className="text-xs px-1 py-0.5 bg-gray-100 text-gray-600">System AI</Badge>
+                          <Badge
+                            variant="outline"
+                            className="text-xs px-1 py-0.5 bg-gray-100 text-gray-600"
+                          >
+                            System AI
+                          </Badge>
                         )}
                         <Database className="w-3 h-3" />
                         <Workflow className="w-3 h-3" />
@@ -293,7 +305,7 @@ How can I help you today?`,
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder={isLoading ? "AI is thinking..." : "Ask me anything..."}
+              placeholder={isLoading ? 'AI is thinking...' : 'Ask me anything...'}
               disabled={isLoading || connectionStatus === 'checking'}
               className="flex-1"
             />

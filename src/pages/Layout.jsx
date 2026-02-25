@@ -748,7 +748,7 @@ function Layout({ children, currentPageName }) {
   React.useEffect(() => {
     const origins = [
       'https://m.stripe.com',
-      // Note: Removed Base44 and external Supabase URLs - using local assets now
+      // Using local assets only
     ];
     const ensureLink = (rel, href, crossOrigin) => {
       const id = `hint-${rel}-${btoa(href).replace(/=/g, '')}`;

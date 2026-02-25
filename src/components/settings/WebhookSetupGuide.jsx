@@ -1,5 +1,10 @@
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { KeyRound, FileJson, Beaker, CheckCircle } from "lucide-react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
+import { KeyRound, FileJson, Beaker, CheckCircle } from 'lucide-react';
 
 export default function WebhookSetupGuide() {
   return (
@@ -14,15 +19,28 @@ export default function WebhookSetupGuide() {
         <AccordionContent className="text-slate-400 prose prose-sm prose-invert max-w-none">
           <p>Your webhooks must be authenticated using an API key sent as a request header.</p>
           <ul className="list-disc pl-5 space-y-1">
-            <li>Go to <code className="bg-slate-900 rounded px-1.5 py-0.5 font-mono text-cyan-400">Settings → System → API Key Manager</code>.</li>
+            <li>
+              Go to{' '}
+              <code className="bg-slate-900 rounded px-1.5 py-0.5 font-mono text-cyan-400">
+                Settings → System → API Key Manager
+              </code>
+              .
+            </li>
             <li>Create a new key and copy its value.</li>
             <li>In your external service (like n8n or Zapier), add a request header:</li>
-            <li className="ml-4"><strong className="text-slate-300">Header Name:</strong> <code className="bg-slate-900 rounded px-1.5 py-0.5 font-mono text-cyan-400">api_key</code></li>
-            <li className="ml-4"><strong className="text-slate-300">Header Value:</strong> Your generated API key.</li>
+            <li className="ml-4">
+              <strong className="text-slate-300">Header Name:</strong>{' '}
+              <code className="bg-slate-900 rounded px-1.5 py-0.5 font-mono text-cyan-400">
+                api_key
+              </code>
+            </li>
+            <li className="ml-4">
+              <strong className="text-slate-300">Header Value:</strong> Your generated API key.
+            </li>
           </ul>
         </AccordionContent>
       </AccordionItem>
-      
+
       <AccordionItem value="item-2" className="border-slate-700">
         <AccordionTrigger className="text-slate-200 hover:no-underline">
           <div className="flex items-center gap-3">
@@ -31,8 +49,19 @@ export default function WebhookSetupGuide() {
           </div>
         </AccordionTrigger>
         <AccordionContent className="text-slate-400 prose prose-sm prose-invert max-w-none">
-          <p>Your request must be a <code className="bg-slate-900 rounded px-1.5 py-0.5 font-mono text-cyan-400">POST</code> request with a JSON body. The specific fields required depend on the webhook you are calling.</p>
-          <p>For example, to create a lead using the <code className="bg-slate-900 rounded px-1.5 py-0.5 font-mono text-cyan-400">n8nCreateLead</code> webhook, your payload should look like this:</p>
+          <p>
+            Your request must be a{' '}
+            <code className="bg-slate-900 rounded px-1.5 py-0.5 font-mono text-cyan-400">POST</code>{' '}
+            request with a JSON body. The specific fields required depend on the webhook you are
+            calling.
+          </p>
+          <p>
+            For example, to create a lead using the{' '}
+            <code className="bg-slate-900 rounded px-1.5 py-0.5 font-mono text-cyan-400">
+              n8nCreateLead
+            </code>{' '}
+            webhook, your payload should look like this:
+          </p>
           <pre className="bg-slate-900 text-slate-300 p-3 rounded-md text-xs mt-1 font-mono overflow-x-auto">{`{
   "first_name": "John",
   "last_name": "Doe",
@@ -50,7 +79,11 @@ export default function WebhookSetupGuide() {
           </div>
         </AccordionTrigger>
         <AccordionContent className="text-slate-400 prose prose-sm prose-invert max-w-none">
-          <p>Use a tool like Postman or Insomnia to test your webhook before integrating it with your service. This helps you quickly diagnose any issues with authentication or the request body.</p>
+          <p>
+            Use a tool like Postman or Insomnia to test your webhook before integrating it with your
+            service. This helps you quickly diagnose any issues with authentication or the request
+            body.
+          </p>
         </AccordionContent>
       </AccordionItem>
 
@@ -62,8 +95,16 @@ export default function WebhookSetupGuide() {
           </div>
         </AccordionTrigger>
         <AccordionContent className="text-slate-400 prose prose-sm prose-invert max-w-none">
-          <p>Make sure you are using the full, correct webhook URL provided in the sections above, including the full domain.</p>
-          <p>Example URL structure: <code className="bg-slate-900 rounded px-1.5 py-0.5 font-mono text-cyan-400 break-all">https://[your-app-domain].base44.app/api/apps/[app-id]/functions/[function-name]</code></p>
+          <p>
+            Make sure you are using the full, correct webhook URL provided in the sections above,
+            including the full domain.
+          </p>
+          <p>
+            Example URL structure:{' '}
+            <code className="bg-slate-900 rounded px-1.5 py-0.5 font-mono text-cyan-400 break-all">
+              https://[your-domain]/api/whatsapp/webhook
+            </code>
+          </p>
         </AccordionContent>
       </AccordionItem>
     </Accordion>

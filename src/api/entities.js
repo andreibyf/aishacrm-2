@@ -1589,7 +1589,7 @@ export const WorkflowExecution = createEntity('WorkflowExecution');
 // ============================================
 // SUPABASE AUTHENTICATION
 // ============================================
-// Using Supabase Auth instead of Base44 for independent authentication
+// Using Supabase Auth for authentication
 
 const baseUserEntity = createEntity('User');
 

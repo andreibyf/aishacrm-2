@@ -1,19 +1,24 @@
-
-import { useState, useEffect, useCallback } from "react";
-import { User } from "@/api/entities";
-import { Tenant } from "@/api/entities";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Save, AlertCircle, Users2, Eye, PencilLine } from "lucide-react";
+import { useState, useEffect, useCallback } from 'react';
+import { User } from '@/api/entities';
+import { Tenant } from '@/api/entities';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Loader2, Save, AlertCircle, Users2, Eye, PencilLine } from 'lucide-react';
 // import { useTenant } from "../shared/tenantContext"; // Reserved for future use
-import NavigationPermissions from "./NavigationPermissions";
-import TagInput from "../shared/TagInput";
-import { toast } from "sonner";
+import NavigationPermissions from './NavigationPermissions';
+import TagInput from '../shared/TagInput';
+import { toast } from 'sonner';
 
 export default function UserPermissions({ userEmail, onClose }) {
   const [user, setUser] = useState(null);
@@ -23,17 +28,17 @@ export default function UserPermissions({ userEmail, onClose }) {
   // useTenant hook not currently needed but kept for potential future use
   // const { selectedTenantId } = useTenant();
 
-  const [displayName, setDisplayName] = useState("");
-  const [selectedTenant, setSelectedTenant] = useState("");
+  const [displayName, setDisplayName] = useState('');
+  const [selectedTenant, setSelectedTenant] = useState('');
   const [tenants, setTenants] = useState([]);
-  const [role, setRole] = useState("user");
-  const [employeeRole, setEmployeeRole] = useState("");
-  const [accessLevel, setAccessLevel] = useState("read_write");
+  const [role, setRole] = useState('user');
+  const [employeeRole, setEmployeeRole] = useState('');
+  const [accessLevel, setAccessLevel] = useState('read_write');
   const [crmAccess, setCrmAccess] = useState(true);
   const [canUseSoftphone, setCanUseSoftphone] = useState(false);
-  const [dashboardScope, setDashboardScope] = useState("own");
+  const [dashboardScope, setDashboardScope] = useState('own');
   const [tags, setTags] = useState([]);
-  const [assignedManager, setAssignedManager] = useState("");
+  const [assignedManager, setAssignedManager] = useState('');
   const [managers, setManagers] = useState([]);
 
   const [navigationPermissions, setNavigationPermissions] = useState({
@@ -57,44 +62,44 @@ export default function UserPermissions({ userEmail, onClose }) {
     DocumentManagement: false,
     PaymentPortal: false,
     ConstructionProjects: false,
-    Utilities: false
+    Utilities: false,
   });
 
   const loadUserData = useCallback(async () => {
     try {
       setLoading(true);
       const users = await User.list();
-      const foundUser = users.find(u => u.email === userEmail);
-      
+      const foundUser = users.find((u) => u.email === userEmail);
+
       if (!foundUser) {
-        setError("User not found");
+        setError('User not found');
         return;
       }
 
-      console.log("Loaded user:", foundUser);
+      console.log('Loaded user:', foundUser);
       console.log("User's stored navigation_permissions:", foundUser.navigation_permissions);
 
       setUser(foundUser);
-      setDisplayName(foundUser.display_name || foundUser.full_name || "");
-      setSelectedTenant(foundUser.tenant_id || "");
-      setRole(foundUser.role || "user");
-      setEmployeeRole(foundUser.employee_role || "");
-      setAccessLevel(foundUser.access_level || "read_write");
+      setDisplayName(foundUser.display_name || foundUser.full_name || '');
+      setSelectedTenant(foundUser.tenant_id || '');
+      setRole(foundUser.role || 'user');
+      setEmployeeRole(foundUser.employee_role || '');
+      setAccessLevel(foundUser.access_level || 'read_write');
       setCrmAccess(foundUser.crm_access !== false);
       setCanUseSoftphone(foundUser.permissions?.can_use_softphone || false);
-      setDashboardScope(foundUser.permissions?.dashboard_scope || "own");
+      setDashboardScope(foundUser.permissions?.dashboard_scope || 'own');
       setTags(foundUser.tags || []);
-      setAssignedManager(foundUser.assigned_manager || "");
-      
+      setAssignedManager(foundUser.assigned_manager || '');
+
       if (foundUser.navigation_permissions) {
-        console.log("Setting navigation permissions from user:", foundUser.navigation_permissions);
-        setNavigationPermissions(prev => ({
+        console.log('Setting navigation permissions from user:', foundUser.navigation_permissions);
+        setNavigationPermissions((prev) => ({
           ...prev,
-          ...foundUser.navigation_permissions
+          ...foundUser.navigation_permissions,
         }));
       }
     } catch (err) {
-      console.error("Failed to load user:", err);
+      console.error('Failed to load user:', err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -106,21 +111,19 @@ export default function UserPermissions({ userEmail, onClose }) {
       const fetchedTenants = await Tenant.list();
       setTenants(fetchedTenants || []);
     } catch (err) {
-      console.warn("Could not load tenants:", err);
+      console.warn('Could not load tenants:', err);
     }
   }, []);
 
   const loadManagers = useCallback(async () => {
     try {
       const users = await User.list();
-      const managerUsers = users.filter(u => 
-        u.employee_role === 'manager' || 
-        u.role === 'admin' || 
-        u.role === 'superadmin'
+      const managerUsers = users.filter(
+        (u) => u.employee_role === 'manager' || u.role === 'admin' || u.role === 'superadmin',
       );
       setManagers(managerUsers);
     } catch (err) {
-      console.warn("Could not load managers:", err);
+      console.warn('Could not load managers:', err);
     }
   }, []);
 
@@ -137,7 +140,7 @@ export default function UserPermissions({ userEmail, onClose }) {
     setError(null);
 
     try {
-      console.log("Saving navigation_permissions:", navigationPermissions);
+      console.log('Saving navigation_permissions:', navigationPermissions);
 
       const updates = {
         display_name: displayName,
@@ -151,29 +154,29 @@ export default function UserPermissions({ userEmail, onClose }) {
         permissions: {
           ...(user.permissions || {}),
           can_use_softphone: canUseSoftphone,
-          dashboard_scope: dashboardScope
+          dashboard_scope: dashboardScope,
         },
-        navigation_permissions: navigationPermissions
+        navigation_permissions: navigationPermissions,
       };
 
-      console.log("Full update payload:", JSON.stringify(updates, null, 2));
+      console.log('Full update payload:', JSON.stringify(updates, null, 2));
 
       await User.update(user.id, updates);
-      
+
       // Reload the user to verify the save
       const updatedUsers = await User.list();
-      const updatedUser = updatedUsers.find(u => u.email === userEmail);
-      console.log("After save, user navigation_permissions:", updatedUser?.navigation_permissions);
+      const updatedUser = updatedUsers.find((u) => u.email === userEmail);
+      console.log('After save, user navigation_permissions:', updatedUser?.navigation_permissions);
 
-      toast.success("User permissions updated successfully");
-      
+      toast.success('User permissions updated successfully');
+
       if (onClose) {
         onClose();
       }
     } catch (err) {
-      console.error("Failed to save user permissions:", err);
+      console.error('Failed to save user permissions:', err);
       setError(err.message);
-      toast.error("Failed to update permissions: " + err.message);
+      toast.error('Failed to update permissions: ' + err.message);
     } finally {
       setSaving(false);
     }
@@ -249,7 +252,7 @@ export default function UserPermissions({ userEmail, onClose }) {
           {/* Role & Employee Role Row */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label className="text-slate-200">Base44 Role</Label>
+              <Label className="text-slate-200">Platform Role</Label>
               <Select value={role} onValueChange={setRole}>
                 <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-200">
                   <SelectValue />
@@ -265,12 +268,15 @@ export default function UserPermissions({ userEmail, onClose }) {
 
             <div>
               <Label className="text-slate-200">Employee Role</Label>
-              <Select value={employeeRole || 'none'} onValueChange={(val) => setEmployeeRole(val === 'none' ? '' : val)}>
+              <Select
+                value={employeeRole || 'none'}
+                onValueChange={(val) => setEmployeeRole(val === 'none' ? '' : val)}
+              >
                 <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-200">
                   <SelectValue placeholder="Select employee role" />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-900 border-slate-700 text-slate-200">
-                  <SelectItem value="none">None (Use Base44 Role)</SelectItem>
+                  <SelectItem value="none">None (Use Platform Role)</SelectItem>
                   <SelectItem value="manager">
                     <div className="flex flex-col">
                       <span className="font-semibold">Manager</span>
@@ -305,19 +311,13 @@ export default function UserPermissions({ userEmail, onClose }) {
           {/* Softphone */}
           <div className="flex items-center justify-between p-3 bg-slate-900 rounded-lg border border-slate-700">
             <Label className="text-slate-200">Can use Softphone</Label>
-            <Switch
-              checked={canUseSoftphone}
-              onCheckedChange={setCanUseSoftphone}
-            />
+            <Switch checked={canUseSoftphone} onCheckedChange={setCanUseSoftphone} />
           </div>
 
           {/* CRM Access */}
           <div className="flex items-center justify-between p-3 bg-slate-900 rounded-lg border border-slate-700">
             <Label className="text-slate-200">CRM Access</Label>
-            <Switch
-              checked={crmAccess}
-              onCheckedChange={setCrmAccess}
-            />
+            <Switch checked={crmAccess} onCheckedChange={setCrmAccess} />
           </div>
 
           {/* Access Level & Dashboard Scope Row */}
@@ -385,14 +385,17 @@ export default function UserPermissions({ userEmail, onClose }) {
         <CardHeader>
           <CardTitle className="text-slate-100">Navigation Permissions</CardTitle>
           <CardDescription className="text-slate-400">
-            {navigationPermissions ? Object.keys(navigationPermissions).filter(k => navigationPermissions[k]).length : 0} enabled
+            {navigationPermissions
+              ? Object.keys(navigationPermissions).filter((k) => navigationPermissions[k]).length
+              : 0}{' '}
+            enabled
           </CardDescription>
         </CardHeader>
         <CardContent>
           <NavigationPermissions
             value={navigationPermissions}
             onChange={(newPerms) => {
-              console.log("NavigationPermissions onChange called with:", newPerms);
+              console.log('NavigationPermissions onChange called with:', newPerms);
               setNavigationPermissions(newPerms);
             }}
           />

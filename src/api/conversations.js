@@ -1,6 +1,6 @@
 /**
  * Conversations API Client
- * Replaces Base44 agents API with local backend endpoints
+ * Conversations API backed by local backend endpoints
  */
 
 import { BACKEND_URL } from '@/api/entities';
@@ -8,11 +8,7 @@ import { BACKEND_URL } from '@/api/entities';
 // Helper to read tenant ID consistently (new key first, legacy fallback)
 function resolveTenantId() {
   try {
-    return (
-      localStorage.getItem('selected_tenant_id') ||
-      localStorage.getItem('tenant_id') ||
-      ''
-    );
+    return localStorage.getItem('selected_tenant_id') || localStorage.getItem('tenant_id') || '';
   } catch {
     return '';
   }
@@ -27,7 +23,7 @@ async function getAuthHeaders() {
   // Supabase auth is optional - if user isn't logged in via Supabase,
   // we rely on cookie-based JWT auth (aisha_access cookie) which is sent automatically
   // via credentials: 'include' in fetch options
-  
+
   // Return empty object - cookies are sent automatically with credentials: 'include'
   return {};
 }
@@ -42,8 +38,10 @@ async function getAuthHeaders() {
 export async function createConversation({ agent_name = 'crm_assistant', metadata = {} } = {}) {
   const tenantId = resolveTenantId();
   const authHeaders = await getAuthHeaders();
-  console.log(`[Conversations API] Creating conversation for tenant ${tenantId}`, { hasAuth: !!authHeaders.Authorization });
-  
+  console.log(`[Conversations API] Creating conversation for tenant ${tenantId}`, {
+    hasAuth: !!authHeaders.Authorization,
+  });
+
   const response = await fetch(`${BACKEND_URL}/api/ai/conversations`, {
     method: 'POST',
     headers: {
@@ -59,9 +57,13 @@ export async function createConversation({ agent_name = 'crm_assistant', metadat
     // 401 on initial load is expected for admin users before auth cookie is fully established
     // (see KNOWN_ISSUES.md — "Precursor 401 on /api/ai/conversations")
     if (response.status === 401) {
-      console.debug(`[Conversations API] Auth not ready yet (401) — will retry when session is established`);
+      console.debug(
+        `[Conversations API] Auth not ready yet (401) — will retry when session is established`,
+      );
     } else {
-      console.error(`[Conversations API] Failed to create conversation: ${response.status} ${response.statusText}`);
+      console.error(
+        `[Conversations API] Failed to create conversation: ${response.status} ${response.statusText}`,
+      );
     }
     const err = new Error(`Failed to create conversation: ${response.statusText}`);
     err.status = response.status;
@@ -82,7 +84,7 @@ export async function getConversation(conversationId) {
   const tenantId = resolveTenantId();
   const authHeaders = await getAuthHeaders();
   console.log(`[Conversations API] Getting conversation ${conversationId} for tenant ${tenantId}`);
-  
+
   const response = await fetch(`${BACKEND_URL}/api/ai/conversations/${conversationId}`, {
     headers: {
       'x-tenant-id': tenantId,
@@ -95,7 +97,9 @@ export async function getConversation(conversationId) {
     if (response.status === 401) {
       console.debug(`[Conversations API] Auth not ready yet (401) for getConversation`);
     } else {
-      console.error(`[Conversations API] Failed to get conversation: ${response.status} ${response.statusText}`);
+      console.error(
+        `[Conversations API] Failed to get conversation: ${response.status} ${response.statusText}`,
+      );
     }
     const err = new Error(`Failed to get conversation: ${response.statusText}`);
     err.status = response.status;
@@ -103,7 +107,9 @@ export async function getConversation(conversationId) {
   }
 
   const result = await response.json();
-  console.log(`[Conversations API] Got conversation with ${result.data?.messages?.length || 0} messages`);
+  console.log(
+    `[Conversations API] Got conversation with ${result.data?.messages?.length || 0} messages`,
+  );
   return result.data;
 }
 
@@ -135,7 +141,9 @@ export async function listConversations({ agent_name, limit } = {}) {
     if (response.status === 401) {
       console.debug(`[Conversations API] Auth not ready yet (401) for listConversations`);
     } else {
-      console.error(`[Conversations API] Failed to list conversations: ${response.status} ${response.statusText}`);
+      console.error(
+        `[Conversations API] Failed to list conversations: ${response.status} ${response.statusText}`,
+      );
     }
     const err = new Error(`Failed to list conversations: ${response.statusText}`);
     err.status = response.status;
@@ -158,7 +166,7 @@ export async function updateConversation(conversationId, { title, topic }) {
   const tenantId = resolveTenantId();
   const authHeaders = await getAuthHeaders();
   console.log(`[Conversations API] Updating conversation ${conversationId}:`, { title, topic });
-  
+
   const response = await fetch(`${BACKEND_URL}/api/ai/conversations/${conversationId}`, {
     method: 'PATCH',
     headers: {
@@ -171,7 +179,9 @@ export async function updateConversation(conversationId, { title, topic }) {
   });
 
   if (!response.ok) {
-    console.error(`[Conversations API] Failed to update conversation: ${response.status} ${response.statusText}`);
+    console.error(
+      `[Conversations API] Failed to update conversation: ${response.status} ${response.statusText}`,
+    );
     throw new Error(`Failed to update conversation: ${response.statusText}`);
   }
 
@@ -189,7 +199,7 @@ export async function deleteConversation(conversationId) {
   const tenantId = resolveTenantId();
   const authHeaders = await getAuthHeaders();
   console.log(`[Conversations API] Deleting conversation ${conversationId} for tenant ${tenantId}`);
-  
+
   const response = await fetch(`${BACKEND_URL}/api/ai/conversations/${conversationId}`, {
     method: 'DELETE',
     headers: {
@@ -200,7 +210,9 @@ export async function deleteConversation(conversationId) {
   });
 
   if (!response.ok) {
-    console.error(`[Conversations API] Failed to delete conversation: ${response.status} ${response.statusText}`);
+    console.error(
+      `[Conversations API] Failed to delete conversation: ${response.status} ${response.statusText}`,
+    );
     throw new Error(`Failed to delete conversation: ${response.statusText}`);
   }
 
@@ -224,20 +236,20 @@ export async function addMessage(conversation, { role, content, file_urls = [] }
   }
   const tenantId = resolveTenantId();
   const authHeaders = await getAuthHeaders();
-  
+
   const headers = {
     'Content-Type': 'application/json',
     'x-tenant-id': tenantId,
     ...authHeaders,
   };
-  
+
   // Pass user name to backend for AI context
   if (user) {
     if (user.first_name) headers['x-user-first-name'] = user.first_name;
     if (user.last_name) headers['x-user-last-name'] = user.last_name;
     if (user.email) headers['x-user-email'] = user.email;
   }
-  
+
   const response = await fetch(`${BACKEND_URL}/api/ai/conversations/${conversation.id}/messages`, {
     method: 'POST',
     headers,
@@ -282,13 +294,13 @@ export function getWhatsAppConnectURL(agent_name) {
 export function subscribeToConversation(conversationId, callback) {
   const tenantId = resolveTenantId();
   const eventSource = new EventSource(
-    `${BACKEND_URL}/api/ai/conversations/${conversationId}/stream?tenant_id=${tenantId}`
+    `${BACKEND_URL}/api/ai/conversations/${conversationId}/stream?tenant_id=${tenantId}`,
   );
 
   eventSource.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data);
-      
+
       if (data.type === 'connected') {
         console.log('Connected to conversation stream:', data.conversationId);
         return;
@@ -327,7 +339,7 @@ export async function submitFeedback(conversationId, messageId, rating) {
   const tenantId = resolveTenantId();
   const authHeaders = await getAuthHeaders();
   console.log(`[Conversations API] Submitting feedback for message ${messageId}: ${rating}`);
-  
+
   const response = await fetch(
     `${BACKEND_URL}/api/ai/conversations/${conversationId}/messages/${messageId}/feedback`,
     {
@@ -339,11 +351,13 @@ export async function submitFeedback(conversationId, messageId, rating) {
       },
       credentials: 'include',
       body: JSON.stringify({ rating }),
-    }
+    },
   );
 
   if (!response.ok) {
-    console.error(`[Conversations API] Failed to submit feedback: ${response.status} ${response.statusText}`);
+    console.error(
+      `[Conversations API] Failed to submit feedback: ${response.status} ${response.statusText}`,
+    );
     throw new Error(`Failed to submit feedback: ${response.statusText}`);
   }
 
