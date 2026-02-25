@@ -2079,6 +2079,177 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           </div>
         );
 
+      // Contact: Find
+      case 'find_contact':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-200">Search Field</Label>
+              <Select
+                value={node.config?.search_field || 'email'}
+                onValueChange={(value) => {
+                  updateNodeConfig(node.id, { ...node.config, search_field: value });
+                }}
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectItem value="email">Email</SelectItem>
+                  <SelectItem value="phone">Phone</SelectItem>
+                  <SelectItem value="name">Name</SelectItem>
+                  <SelectItem value="unique_id">Unique ID</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-slate-200">Search Value</Label>
+              {getAvailableFields().length > 0 ? (
+                <Select
+                  value={node.config?.search_value || ''}
+                  onValueChange={(value) => {
+                    updateNodeConfig(node.id, { ...node.config, search_value: `{{${value}}}` });
+                  }}
+                >
+                  <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                    <SelectValue placeholder="Select webhook field" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-slate-700">
+                    {getAvailableFields().map((field) => (
+                      <SelectItem key={field} value={field}>
+                        {'{{'}
+                        {field}
+                        {'}}'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  value={node.config?.search_value || '{{email}}'}
+                  onChange={(e) => {
+                    updateNodeConfig(node.id, { ...node.config, search_value: e.target.value });
+                  }}
+                  placeholder="{{email}}"
+                  className="bg-slate-800 border-slate-700 text-slate-200"
+                />
+              )}
+              <p className="text-xs text-slate-500 mt-1">
+                Use {'{{field_name}}'} to reference webhook data
+              </p>
+            </div>
+          </div>
+        );
+
+      // Contact: Update
+      case 'update_contact':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-200">Field Mappings</Label>
+              <p className="text-sm text-slate-400 mb-3">Map webhook fields to contact fields</p>
+
+              <div className="max-h-96 overflow-y-auto pr-2 space-y-2">
+                {(node.config?.field_mappings || []).map((mapping, index) => (
+                  <div key={index} className="flex gap-2 items-center">
+                    <Select
+                      value={mapping.contact_field}
+                      onValueChange={(value) => {
+                        const newMappings = [...(node.config?.field_mappings || [])];
+                        newMappings[index] = { ...mapping, contact_field: value };
+                        updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
+                      }}
+                    >
+                      <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                        <SelectValue placeholder="Contact Field" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-slate-800 border-slate-700">
+                        <SelectItem value="first_name">First Name</SelectItem>
+                        <SelectItem value="last_name">Last Name</SelectItem>
+                        <SelectItem value="email">Email</SelectItem>
+                        <SelectItem value="phone">Phone</SelectItem>
+                        <SelectItem value="company">Company</SelectItem>
+                        <SelectItem value="job_title">Job Title</SelectItem>
+                        <SelectItem value="status">Status</SelectItem>
+                        <SelectItem value="notes">Notes</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    {getAvailableFields().length > 0 ? (
+                      <Select
+                        value={mapping.webhook_field}
+                        onValueChange={(value) => {
+                          const newMappings = [...(node.config?.field_mappings || [])];
+                          newMappings[index] = { ...mapping, webhook_field: value };
+                          updateNodeConfig(node.id, {
+                            ...node.config,
+                            field_mappings: newMappings,
+                          });
+                        }}
+                      >
+                        <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                          <SelectValue placeholder="Webhook Field" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-slate-800 border-slate-700">
+                          {getAvailableFields().map((field) => (
+                            <SelectItem key={field} value={field}>
+                              {field}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        value={mapping.webhook_field}
+                        onChange={(e) => {
+                          const newMappings = [...(node.config?.field_mappings || [])];
+                          newMappings[index] = { ...mapping, webhook_field: e.target.value };
+                          updateNodeConfig(node.id, {
+                            ...node.config,
+                            field_mappings: newMappings,
+                          });
+                        }}
+                        placeholder="webhook_field"
+                        className="bg-slate-800 border-slate-700 text-slate-200"
+                      />
+                    )}
+
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        const newMappings = (node.config?.field_mappings || []).filter(
+                          (_, i) => i !== index,
+                        );
+                        updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
+                      }}
+                      className="text-red-400 hover:text-red-300 hover:bg-red-900/20 flex-shrink-0"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const newMappings = [
+                    ...(node.config?.field_mappings || []),
+                    { contact_field: '', webhook_field: '' },
+                  ];
+                  updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
+                }}
+                className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700 mt-2 w-full"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Mapping
+              </Button>
+            </div>
+          </div>
+        );
+
       // Account: Find
       case 'find_account':
         return (
