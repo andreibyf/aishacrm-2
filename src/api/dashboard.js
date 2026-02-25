@@ -1,8 +1,8 @@
 /**
  * Dashboard API - Direct backend routes
  * Optimized for speed: calls /api/reports/dashboard-bundle directly instead of Firebase Cloud Functions
- * 
- * This eliminates Firebase cold-start delays and Base44 network latency.
+ *
+ * This eliminates cold-start delays and external network latency.
  */
 
 import { BACKEND_URL } from './entities';
@@ -21,25 +21,25 @@ const RESULT_CACHE_TTL = 5000; // 5 seconds - prevents duplicate calls during in
  * Uses in-memory caching on backend for instant response
  * Includes in-flight request deduplication to prevent duplicate concurrent calls.
  * Also caches results for 5s to prevent rapid successive calls (e.g., Layout warming + Dashboard load).
- * 
+ *
  * @param {Object} options - { tenant_id, include_test_data }
  * @returns {Promise<Object>} Dashboard data bundle
  */
 export async function getDashboardBundleFast(options = {}) {
   const { tenant_id, include_test_data = true, widgets = [] } = options;
-  
+
   // Create cache key for deduplication (include widgets to separate cache per widget set)
   const cacheKey = JSON.stringify({ tenant_id, include_test_data, widgets: widgets.sort() });
-  
+
   // Check short-term result cache first (prevents Layout + Dashboard double-fetch)
   const cached = recentResults.get(cacheKey);
-  if (cached && (Date.now() - cached.timestamp) < RESULT_CACHE_TTL) {
+  if (cached && Date.now() - cached.timestamp < RESULT_CACHE_TTL) {
     if (import.meta.env.DEV) {
       console.log('[Dashboard] Returning cached result for:', cacheKey);
     }
     return cached.data;
   }
-  
+
   // If there's already an in-flight request for these params, return that promise
   if (pendingRequests.has(cacheKey)) {
     if (import.meta.env.DEV) {
@@ -47,22 +47,24 @@ export async function getDashboardBundleFast(options = {}) {
     }
     return pendingRequests.get(cacheKey);
   }
-  
+
   // Create the fetch promise
-  const fetchPromise = _fetchDashboardBundle(tenant_id, include_test_data, widgets).then(result => {
-    // Cache the successful result
-    recentResults.set(cacheKey, { data: result, timestamp: Date.now() });
-    return result;
-  });
-  
+  const fetchPromise = _fetchDashboardBundle(tenant_id, include_test_data, widgets).then(
+    (result) => {
+      // Cache the successful result
+      recentResults.set(cacheKey, { data: result, timestamp: Date.now() });
+      return result;
+    },
+  );
+
   // Store it for deduplication
   pendingRequests.set(cacheKey, fetchPromise);
-  
+
   // Clean up after resolution (success or failure)
   fetchPromise.finally(() => {
     pendingRequests.delete(cacheKey);
   });
-  
+
   return fetchPromise;
 }
 
@@ -70,7 +72,6 @@ export async function getDashboardBundleFast(options = {}) {
  * Internal fetch implementation
  */
 async function _fetchDashboardBundle(tenant_id, include_test_data, widgets = []) {
-
   try {
     // Call backend /api/reports/dashboard-bundle directly (in-memory cached on server)
     const queryParams = new URLSearchParams();
@@ -89,8 +90,8 @@ async function _fetchDashboardBundle(tenant_id, include_test_data, widgets = [])
     const response = await fetch(url, {
       credentials: 'include',
       headers: {
-        'Accept': 'application/json'
-      }
+        Accept: 'application/json',
+      },
     });
 
     if (!response.ok) {
@@ -112,14 +113,14 @@ async function _fetchDashboardBundle(tenant_id, include_test_data, widgets = [])
         pipelineValue: 0,
         wonOpportunities: 0,
         newLeadsLast30Days: 0,
-        activitiesLast30Days: 0
+        activitiesLast30Days: 0,
       },
       lists: data?.lists || {
         recentLeads: [],
         recentOpportunities: [],
         recentActivities: [],
-        recentContacts: []
-      }
+        recentContacts: [],
+      },
     };
   } catch (error) {
     console.error('[getDashboardBundleFast] Error:', error);
@@ -133,14 +134,14 @@ async function _fetchDashboardBundle(tenant_id, include_test_data, widgets = [])
         pipelineValue: 0,
         wonOpportunities: 0,
         newLeadsLast30Days: 0,
-        activitiesLast30Days: 0
+        activitiesLast30Days: 0,
       },
       lists: {
         recentLeads: [],
         recentOpportunities: [],
         recentActivities: [],
-        recentContacts: []
-      }
+        recentContacts: [],
+      },
     };
   }
 }

@@ -1,17 +1,8 @@
-
 // Deployment and Setup Documentation
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  Cloud, 
-  Database, 
-  Shield, 
-  Zap,
-  Code,
-  Users,
-  Globe
-} from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Cloud, Database, Shield, Zap, Code, Users, Globe } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function DeploymentGuide() {
   return (
@@ -36,7 +27,8 @@ export default function DeploymentGuide() {
             <Alert>
               <Cloud className="h-4 w-4" />
               <AlertDescription>
-                Ai-SHA CRM is built on the base44 platform which handles all infrastructure, hosting, and deployment automatically.
+                Ai-SHA CRM is a self-hosted platform running on Supabase + Express backend with
+                Docker-based deployment.
               </AlertDescription>
             </Alert>
 
@@ -49,10 +41,18 @@ export default function DeploymentGuide() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
-                  <p><strong>Database:</strong> Managed PostgreSQL with automatic backups</p>
-                  <p><strong>File Storage:</strong> Integrated file upload and management</p>
-                  <p><strong>Scalability:</strong> Auto-scaling based on usage</p>
-                  <p><strong>Security:</strong> Enterprise-grade encryption and security</p>
+                  <p>
+                    <strong>Database:</strong> Managed PostgreSQL with automatic backups
+                  </p>
+                  <p>
+                    <strong>File Storage:</strong> Integrated file upload and management
+                  </p>
+                  <p>
+                    <strong>Scalability:</strong> Auto-scaling based on usage
+                  </p>
+                  <p>
+                    <strong>Security:</strong> Enterprise-grade encryption and security
+                  </p>
                 </CardContent>
               </Card>
 
@@ -64,10 +64,18 @@ export default function DeploymentGuide() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
-                  <p><strong>Authentication:</strong> Google OAuth 2.0 (no setup required)</p>
-                  <p><strong>User Roles:</strong> Admin and User roles with permissions</p>
-                  <p><strong>Data Security:</strong> End-to-end encryption</p>
-                  <p><strong>Access Control:</strong> Role-based access to CRM features</p>
+                  <p>
+                    <strong>Authentication:</strong> Google OAuth 2.0 (no setup required)
+                  </p>
+                  <p>
+                    <strong>User Roles:</strong> Admin and User roles with permissions
+                  </p>
+                  <p>
+                    <strong>Data Security:</strong> End-to-end encryption
+                  </p>
+                  <p>
+                    <strong>Access Control:</strong> Role-based access to CRM features
+                  </p>
                 </CardContent>
               </Card>
 
@@ -79,10 +87,18 @@ export default function DeploymentGuide() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
-                  <p><strong>Hosting:</strong> Global CDN with 99.9% uptime</p>
-                  <p><strong>SSL:</strong> Automatic SSL certificate management</p>
-                  <p><strong>Custom Domain:</strong> Available in platform settings</p>
-                  <p><strong>Performance:</strong> Optimized for speed and reliability</p>
+                  <p>
+                    <strong>Hosting:</strong> Global CDN with 99.9% uptime
+                  </p>
+                  <p>
+                    <strong>SSL:</strong> Automatic SSL certificate management
+                  </p>
+                  <p>
+                    <strong>Custom Domain:</strong> Available in platform settings
+                  </p>
+                  <p>
+                    <strong>Performance:</strong> Optimized for speed and reliability
+                  </p>
                 </CardContent>
               </Card>
             </div>
@@ -92,7 +108,8 @@ export default function DeploymentGuide() {
             <Alert className="border-blue-200 bg-blue-50">
               <Zap className="h-4 w-4" />
               <AlertDescription>
-                <strong>Middleware Architecture:</strong> Deploy an external middleware layer to connect Base44 CRM with your self-hosted backend and enable advanced AI features.
+                <strong>Middleware Architecture:</strong> Deploy an external middleware layer to
+                extend your CRM backend and enable advanced AI features.
               </AlertDescription>
             </Alert>
 
@@ -103,8 +120,8 @@ export default function DeploymentGuide() {
                 </CardHeader>
                 <CardContent>
                   <pre className="bg-slate-100 p-4 rounded text-sm overflow-x-auto">
-{`┌─────────────────┐    ┌───────────────────┐    ┌──────────────────┐
-│   Base44 CRM    │    │   Middleware      │    │  Self-Hosted     │
+                    {`┌─────────────────┐    ┌───────────────────┐    ┌──────────────────┐
+│   Ai-SHA CRM   │    │   Middleware      │    │  Supabase        │
 │   Frontend      │◄──►│   Gateway         │◄──►│  Backend DB      │
 │                 │    │                   │    │                  │
 └─────────────────┘    └───────────────────┘    └──────────────────┘
@@ -130,9 +147,11 @@ export default function DeploymentGuide() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    <p className="text-sm text-slate-600">Save this as <code>docker-compose.yml</code> in your middleware directory:</p>
+                    <p className="text-sm text-slate-600">
+                      Save this as <code>docker-compose.yml</code> in your middleware directory:
+                    </p>
                     <pre className="bg-slate-900 text-slate-100 p-4 rounded text-sm overflow-x-auto max-h-96">
-{`version: '3.8'
+                      {`version: '3.8'
 
 services:
   # Main API Gateway
@@ -145,7 +164,7 @@ services:
       - DATABASE_URL=postgresql://\${POSTGRES_USER}:\${POSTGRES_PASSWORD}@postgres:5432/\${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379
       - N8N_WEBHOOK_URL=http://n8n:5678
-      - BASE44_API_URL=https://your-base44-app.base44.dev
+      - CRM_API_URL=https://your-crm-api.example.com
     depends_on:
       - postgres
       - redis
@@ -237,18 +256,20 @@ networks:
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    <p className="text-sm text-slate-600">Create a <code>.env</code> file with these variables:</p>
+                    <p className="text-sm text-slate-600">
+                      Create a <code>.env</code> file with these variables:
+                    </p>
                     <pre className="bg-slate-900 text-slate-100 p-4 rounded text-sm">
-{`# Database Configuration
+                      {`# Database Configuration
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
 POSTGRES_DB=crm_database
 POSTGRES_USER=crm_user
 POSTGRES_PASSWORD=secure_password_here
 
-# Base44 Integration
-BASE44_API_URL=https://your-base44-app.base44.dev
-BASE44_API_KEY=your_base44_api_key
+# CRM Integration
+CRM_API_URL=https://your-crm-api.example.com
+CRM_API_KEY=your_crm_api_key
 
 # n8n Configuration
 N8N_USER=admin
@@ -277,9 +298,11 @@ MIDDLEWARE_TOKEN_SECRET=your-jwt-secret-here`}
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    <p className="text-sm text-slate-600">Create <code>gateway/src/index.js</code> with this Express.js server:</p>
+                    <p className="text-sm text-slate-600">
+                      Create <code>gateway/src/index.js</code> with this Express.js server:
+                    </p>
                     <pre className="bg-slate-900 text-slate-100 p-4 rounded text-sm overflow-x-auto max-h-96">
-{`const express = require('express');
+                      {`const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -418,9 +441,11 @@ app.listen(port, '0.0.0.0', () => {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    <p className="text-sm text-slate-600">Create <code>mcp-server/src/server.js</code> for AI model integration:</p>
+                    <p className="text-sm text-slate-600">
+                      Create <code>mcp-server/src/server.js</code> for AI model integration:
+                    </p>
                     <pre className="bg-slate-900 text-slate-100 p-4 rounded text-sm overflow-x-auto max-h-96">
-{`const express = require('express');
+                      {`const express = require('express');
 const { OpenAI } = require('openai');
 const Anthropic = require('@anthropic-ai/sdk');
 
@@ -513,16 +538,16 @@ app.listen(port, '0.0.0.0', () => {
                     <div className="bg-slate-100 p-4 rounded">
                       <h4 className="font-semibold mb-2">1. Create project structure:</h4>
                       <pre className="text-sm">
-{`mkdir ai-sha-middleware
+                        {`mkdir ai-sha-middleware
 cd ai-sha-middleware
 mkdir -p gateway/src mcp-server/src`}
                       </pre>
                     </div>
-                    
+
                     <div className="bg-slate-100 p-4 rounded">
                       <h4 className="font-semibold mb-2">2. Deploy the stack:</h4>
                       <pre className="text-sm">
-{`# Copy all code files to respective directories
+                        {`# Copy all code files to respective directories
 # Configure your .env file with actual values
 docker-compose up -d
 
@@ -533,14 +558,14 @@ docker-compose ps
 docker-compose logs -f gateway`}
                       </pre>
                     </div>
-                    
+
                     <div className="bg-slate-100 p-4 rounded">
-                      <h4 className="font-semibold mb-2">3. Configure Base44 CRM:</h4>
+                      <h4 className="font-semibold mb-2">3. Configure CRM connection:</h4>
                       <pre className="text-sm">
-{`# Add to your Base44 app environment:
+                        {`# Add to your app environment:
 MIDDLEWARE_URL=http://your-server-ip:8080/api/v1
 
-# Test connection from Base44:
+# Test connection:
 const client = new MiddlewareClient();
 client.getContacts().then(console.log);`}
                       </pre>
@@ -560,19 +585,27 @@ client.getContacts().then(console.log);`}
                 <CardContent className="space-y-3 text-sm">
                   <div>
                     <strong>Company Name:</strong>
-                    <p className="text-slate-600">Change from &quot;Ai-SHA CRM&quot; to your company name in Settings → Branding</p>
+                    <p className="text-slate-600">
+                      Change from &quot;Ai-SHA CRM&quot; to your company name in Settings → Branding
+                    </p>
                   </div>
                   <div>
                     <strong>Logo Upload:</strong>
-                    <p className="text-slate-600">Upload your company logo to replace default branding</p>
+                    <p className="text-slate-600">
+                      Upload your company logo to replace default branding
+                    </p>
                   </div>
                   <div>
                     <strong>Color Scheme:</strong>
-                    <p className="text-slate-600">Customize primary and accent colors to match your brand</p>
+                    <p className="text-slate-600">
+                      Customize primary and accent colors to match your brand
+                    </p>
                   </div>
                   <div>
                     <strong>Layout Customization:</strong>
-                    <p className="text-slate-600">Modify the Layout.js component for custom navigation and styling</p>
+                    <p className="text-slate-600">
+                      Modify the Layout.js component for custom navigation and styling
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -584,15 +617,21 @@ client.getContacts().then(console.log);`}
                 <CardContent className="space-y-3 text-sm">
                   <div>
                     <strong>Entity Customization:</strong>
-                    <p className="text-slate-600">Modify entity schemas to add custom fields and validation</p>
+                    <p className="text-slate-600">
+                      Modify entity schemas to add custom fields and validation
+                    </p>
                   </div>
                   <div>
                     <strong>UI Components:</strong>
-                    <p className="text-slate-600">Customize forms, tables, and dashboards in the components/ directory</p>
+                    <p className="text-slate-600">
+                      Customize forms, tables, and dashboards in the components/ directory
+                    </p>
                   </div>
                   <div>
                     <strong>Workflow Customization:</strong>
-                    <p className="text-slate-600">Modify page logic and business rules in the pages/ directory</p>
+                    <p className="text-slate-600">
+                      Modify page logic and business rules in the pages/ directory
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -603,7 +642,8 @@ client.getContacts().then(console.log);`}
             <Alert>
               <Zap className="h-4 w-4" />
               <AlertDescription>
-                Advanced integrations require enabling backend functions through Dashboard → Settings → Enable Backend Functions
+                Advanced integrations require enabling backend functions through Dashboard →
+                Settings → Enable Backend Functions
               </AlertDescription>
             </Alert>
 
@@ -615,19 +655,27 @@ client.getContacts().then(console.log);`}
                 <CardContent className="space-y-3 text-sm">
                   <div>
                     <strong>Email Integration:</strong>
-                    <p className="text-slate-600">Gmail API integration for email tracking and automation</p>
+                    <p className="text-slate-600">
+                      Gmail API integration for email tracking and automation
+                    </p>
                   </div>
                   <div>
                     <strong>Calendar Sync:</strong>
-                    <p className="text-slate-600">Google Calendar integration for meeting management</p>
+                    <p className="text-slate-600">
+                      Google Calendar integration for meeting management
+                    </p>
                   </div>
                   <div>
                     <strong>Webhook Support:</strong>
-                    <p className="text-slate-600">Zapier, Pabbly Connect, and custom webhook endpoints</p>
+                    <p className="text-slate-600">
+                      Zapier, Pabbly Connect, and custom webhook endpoints
+                    </p>
                   </div>
                   <div>
                     <strong>AI Services:</strong>
-                    <p className="text-slate-600">Custom AI microservice integration for automated data entry</p>
+                    <p className="text-slate-600">
+                      Custom AI microservice integration for automated data entry
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -663,15 +711,21 @@ client.getContacts().then(console.log);`}
                   </div>
                   <div>
                     <strong>Role Assignment:</strong>
-                    <p className="text-slate-600">Assign admin or user roles based on responsibilities</p>
+                    <p className="text-slate-600">
+                      Assign admin or user roles based on responsibilities
+                    </p>
                   </div>
                   <div>
                     <strong>Permission Management:</strong>
-                    <p className="text-slate-600">Control access to different CRM modules and features</p>
+                    <p className="text-slate-600">
+                      Control access to different CRM modules and features
+                    </p>
                   </div>
                   <div>
                     <strong>Team Collaboration:</strong>
-                    <p className="text-slate-600">Share contacts, opportunities, and activities across teams</p>
+                    <p className="text-slate-600">
+                      Share contacts, opportunities, and activities across teams
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -686,7 +740,9 @@ client.getContacts().then(console.log);`}
                 <CardContent className="space-y-3 text-sm">
                   <div>
                     <strong>Adding New Entities:</strong>
-                    <p className="text-slate-600">Create new JSON schema files in entities/ directory</p>
+                    <p className="text-slate-600">
+                      Create new JSON schema files in entities/ directory
+                    </p>
                   </div>
                   <div>
                     <strong>Custom Pages:</strong>
@@ -694,11 +750,15 @@ client.getContacts().then(console.log);`}
                   </div>
                   <div>
                     <strong>Reusable Components:</strong>
-                    <p className="text-slate-600">Build modular UI components in components/ directory</p>
+                    <p className="text-slate-600">
+                      Build modular UI components in components/ directory
+                    </p>
                   </div>
                   <div>
                     <strong>API Extensions:</strong>
-                    <p className="text-slate-600">Extend functionality with backend functions and custom endpoints</p>
+                    <p className="text-slate-600">
+                      Extend functionality with backend functions and custom endpoints
+                    </p>
                   </div>
                 </CardContent>
               </Card>

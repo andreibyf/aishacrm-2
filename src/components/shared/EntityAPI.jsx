@@ -6,186 +6,186 @@ import {
   // CardDescription, // Reserved for future use
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
+} from '@/components/ui/card';
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import { Database, Shield, Zap } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { Database, Shield, Zap } from 'lucide-react';
 
 export default function EntityAPI() {
   const entities = [
     {
-      name: "Contact",
-      description: "Individual contacts and their details",
-      required: ["first_name", "last_name", "email"],
+      name: 'Contact',
+      description: 'Individual contacts and their details',
+      required: ['first_name', 'last_name', 'email'],
       endpoints: [
         {
-          method: "GET",
-          path: "Contact.list()",
-          description: "List all contacts",
+          method: 'GET',
+          path: 'Contact.list()',
+          description: 'List all contacts',
         },
         {
-          method: "POST",
-          path: "Contact.create(data)",
-          description: "Create new contact",
+          method: 'POST',
+          path: 'Contact.create(data)',
+          description: 'Create new contact',
         },
         {
-          method: "PUT",
-          path: "Contact.update(id, data)",
-          description: "Update contact",
+          method: 'PUT',
+          path: 'Contact.update(id, data)',
+          description: 'Update contact',
         },
         {
-          method: "DELETE",
-          path: "Contact.delete(id)",
-          description: "Delete contact",
+          method: 'DELETE',
+          path: 'Contact.delete(id)',
+          description: 'Delete contact',
         },
       ],
     },
     {
-      name: "Account",
-      description: "Companies and organizations",
-      required: ["name"],
+      name: 'Account',
+      description: 'Companies and organizations',
+      required: ['name'],
       endpoints: [
         {
-          method: "GET",
-          path: "Account.list()",
-          description: "List all accounts",
+          method: 'GET',
+          path: 'Account.list()',
+          description: 'List all accounts',
         },
         {
-          method: "POST",
-          path: "Account.create(data)",
-          description: "Create new account",
+          method: 'POST',
+          path: 'Account.create(data)',
+          description: 'Create new account',
         },
         {
-          method: "PUT",
-          path: "Account.update(id, data)",
-          description: "Update account",
+          method: 'PUT',
+          path: 'Account.update(id, data)',
+          description: 'Update account',
         },
         {
-          method: "DELETE",
-          path: "Account.delete(id)",
-          description: "Delete account",
+          method: 'DELETE',
+          path: 'Account.delete(id)',
+          description: 'Delete account',
         },
       ],
     },
     {
-      name: "Lead",
-      description: "Potential customers and prospects",
-      required: ["first_name", "last_name", "email"],
+      name: 'Lead',
+      description: 'Potential customers and prospects',
+      required: ['first_name', 'last_name', 'email'],
       endpoints: [
-        { method: "GET", path: "Lead.list()", description: "List all leads" },
+        { method: 'GET', path: 'Lead.list()', description: 'List all leads' },
         {
-          method: "POST",
-          path: "Lead.create(data)",
-          description: "Create new lead",
+          method: 'POST',
+          path: 'Lead.create(data)',
+          description: 'Create new lead',
         },
         {
-          method: "PUT",
-          path: "Lead.update(id, data)",
-          description: "Update lead",
+          method: 'PUT',
+          path: 'Lead.update(id, data)',
+          description: 'Update lead',
         },
         {
-          method: "DELETE",
-          path: "Lead.delete(id)",
-          description: "Delete lead",
+          method: 'DELETE',
+          path: 'Lead.delete(id)',
+          description: 'Delete lead',
         },
       ],
     },
     {
-      name: "Opportunity",
-      description: "Sales opportunities and pipeline",
-      required: ["name", "amount", "close_date"],
+      name: 'Opportunity',
+      description: 'Sales opportunities and pipeline',
+      required: ['name', 'amount', 'close_date'],
       endpoints: [
         {
-          method: "GET",
-          path: "Opportunity.list()",
-          description: "List all opportunities",
+          method: 'GET',
+          path: 'Opportunity.list()',
+          description: 'List all opportunities',
         },
         {
-          method: "POST",
-          path: "Opportunity.create(data)",
-          description: "Create new opportunity",
+          method: 'POST',
+          path: 'Opportunity.create(data)',
+          description: 'Create new opportunity',
         },
         {
-          method: "PUT",
-          path: "Opportunity.update(id, data)",
-          description: "Update opportunity",
+          method: 'PUT',
+          path: 'Opportunity.update(id, data)',
+          description: 'Update opportunity',
         },
         {
-          method: "DELETE",
-          path: "Opportunity.delete(id)",
-          description: "Delete opportunity",
+          method: 'DELETE',
+          path: 'Opportunity.delete(id)',
+          description: 'Delete opportunity',
         },
       ],
     },
     {
-      name: "Activity",
-      description: "Tasks, meetings, calls, and activities",
-      required: ["type", "subject", "due_date"],
+      name: 'Activity',
+      description: 'Tasks, meetings, calls, and activities',
+      required: ['type', 'subject', 'due_date'],
       endpoints: [
         {
-          method: "GET",
-          path: "Activity.list()",
-          description: "List all activities",
+          method: 'GET',
+          path: 'Activity.list()',
+          description: 'List all activities',
         },
         {
-          method: "POST",
-          path: "Activity.create(data)",
-          description: "Create new activity",
+          method: 'POST',
+          path: 'Activity.create(data)',
+          description: 'Create new activity',
         },
         {
-          method: "PUT",
-          path: "Activity.update(id, data)",
-          description: "Update activity",
+          method: 'PUT',
+          path: 'Activity.update(id, data)',
+          description: 'Update activity',
         },
         {
-          method: "DELETE",
-          path: "Activity.delete(id)",
-          description: "Delete activity",
+          method: 'DELETE',
+          path: 'Activity.delete(id)',
+          description: 'Delete activity',
         },
       ],
     },
     {
-      name: "TenantIntegration",
-      description: "Tenant-specific integrations with external services",
-      required: ["tenant_id", "integration_type", "integration_name"],
+      name: 'TenantIntegration',
+      description: 'Tenant-specific integrations with external services',
+      required: ['tenant_id', 'integration_type', 'integration_name'],
       endpoints: [
         {
-          method: "GET",
-          path: "TenantIntegration.list()",
-          description: "List tenant integrations",
+          method: 'GET',
+          path: 'TenantIntegration.list()',
+          description: 'List tenant integrations',
         },
         {
-          method: "POST",
-          path: "TenantIntegration.create(data)",
-          description: "Create new integration",
+          method: 'POST',
+          path: 'TenantIntegration.create(data)',
+          description: 'Create new integration',
         },
         {
-          method: "PUT",
-          path: "TenantIntegration.update(id, data)",
-          description: "Update integration",
+          method: 'PUT',
+          path: 'TenantIntegration.update(id, data)',
+          description: 'Update integration',
         },
         {
-          method: "DELETE",
-          path: "TenantIntegration.delete(id)",
-          description: "Delete integration",
+          method: 'DELETE',
+          path: 'TenantIntegration.delete(id)',
+          description: 'Delete integration',
         },
       ],
     },
     {
-      name: "TestReport",
-      description: "Stores the results of comprehensive system integrity tests",
-      required: ["test_date", "status", "report_data", "triggered_by"],
+      name: 'TestReport',
+      description: 'Stores the results of comprehensive system integrity tests',
+      required: ['test_date', 'status', 'report_data', 'triggered_by'],
       endpoints: [
         {
-          method: "GET",
-          path: "TestReport.list()",
-          description: "List all test reports",
+          method: 'GET',
+          path: 'TestReport.list()',
+          description: 'List all test reports',
         },
         {
-          method: "POST",
-          path: "TestReport.create(data)",
-          description: "Create a new test report (system use)",
+          method: 'POST',
+          path: 'TestReport.create(data)',
+          description: 'Create a new test report (system use)',
         },
       ],
     },
@@ -193,16 +193,16 @@ export default function EntityAPI() {
 
   const getMethodColor = (method) => {
     switch (method) {
-      case "GET":
-        return "bg-green-100 text-green-800";
-      case "POST":
-        return "bg-blue-100 text-blue-800";
-      case "PUT":
-        return "bg-yellow-100 text-yellow-800";
-      case "DELETE":
-        return "bg-red-100 text-red-800";
+      case 'GET':
+        return 'bg-green-100 text-green-800';
+      case 'POST':
+        return 'bg-blue-100 text-blue-800';
+      case 'PUT':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'DELETE':
+        return 'bg-red-100 text-red-800';
       default:
-        return "bg-gray-100 text-gray-800";
+        return 'bg-gray-100 text-gray-800';
     }
   };
 
@@ -217,9 +217,8 @@ export default function EntityAPI() {
         </CardHeader>
         <CardContent>
           <p className="text-slate-600 mb-4">
-            Ai-SHA CRM uses the base44 platform&apos;s built-in entity SDK for all
-            data operations. Each entity provides a consistent API for CRUD
-            operations with built-in tenant isolation.
+            Ai-SHA CRM provides a RESTful API for all data operations. Each entity provides a
+            consistent API for CRUD operations with built-in tenant isolation.
           </p>
 
           <Tabs defaultValue="overview" className="space-y-4">
@@ -235,9 +234,7 @@ export default function EntityAPI() {
                 <Card key={entity.name} className="border">
                   <CardHeader>
                     <CardTitle className="text-lg">{entity.name}</CardTitle>
-                    <p className="text-sm text-slate-600">
-                      {entity.description}
-                    </p>
+                    <p className="text-sm text-slate-600">{entity.description}</p>
                   </CardHeader>
                   <CardContent>
                     <h4 className="font-semibold text-sm mb-2">Endpoints:</h4>
@@ -262,16 +259,10 @@ export default function EntityAPI() {
                       ))}
                     </div>
                     <div className="mt-4">
-                      <h4 className="font-semibold text-sm mb-2">
-                        Required Fields for Creation:
-                      </h4>
+                      <h4 className="font-semibold text-sm mb-2">Required Fields for Creation:</h4>
                       <div className="flex flex-wrap gap-2">
                         {entity.required.map((field) => (
-                          <Badge
-                            key={field}
-                            variant="outline"
-                            className="font-mono"
-                          >
+                          <Badge key={field} variant="outline" className="font-mono">
                             {field}
                           </Badge>
                         ))}
@@ -292,13 +283,10 @@ export default function EntityAPI() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
-                    <h4 className="font-semibold mb-2">
-                      Authentication Method
-                    </h4>
+                    <h4 className="font-semibold mb-2">Authentication Method</h4>
                     <p className="text-slate-600">
-                      Ai-SHA CRM uses Google OAuth 2.0 for authentication,
-                      managed by the base44 platform. No custom JWT
-                      implementation needed.
+                      Ai-SHA CRM uses Google OAuth 2.0 for authentication, managed by Supabase Auth.
+                      No custom JWT implementation needed.
                     </p>
                   </div>
 
@@ -308,38 +296,32 @@ export default function EntityAPI() {
                       <div className="flex items-center gap-2">
                         <Badge variant="outline">admin</Badge>
                         <span className="text-sm">
-                          Full access to all CRM features and settings across
-                          all tenants
+                          Full access to all CRM features and settings across all tenants
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge variant="outline">power-user</Badge>
                         <span className="text-sm">
-                          Manages all data within an assigned tenant, including
-                          integrations
+                          Manages all data within an assigned tenant, including integrations
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge variant="outline">user</Badge>
                         <span className="text-sm">
-                          Standard access; can only manage their own assigned
-                          records within their tenant
+                          Standard access; can only manage their own assigned records within their
+                          tenant
                         </span>
                       </div>
                     </div>
                   </div>
 
                   <div>
-                    <h4 className="font-semibold mb-2">
-                      Multi-Tenant Data Isolation
-                    </h4>
+                    <h4 className="font-semibold mb-2">Multi-Tenant Data Isolation</h4>
                     <p className="text-slate-600">
-                      All data is strictly segregated by{" "}
-                      <code className="bg-slate-100 p-1 rounded">
-                        tenant_id
-                      </code>. Users can only access data belonging to their
-                      assigned tenant. The Admin role is the only exception,
-                      having cross-tenant visibility for management purposes.
+                      All data is strictly segregated by{' '}
+                      <code className="bg-slate-100 p-1 rounded">tenant_id</code>. Users can only
+                      access data belonging to their assigned tenant. The Admin role is the only
+                      exception, having cross-tenant visibility for management purposes.
                     </p>
                   </div>
                 </CardContent>
@@ -356,21 +338,17 @@ export default function EntityAPI() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <p className="text-slate-600">
-                    Each tenant maintains their own private integrations with
-                    external services, ensuring complete data isolation and
-                    security.
+                    Each tenant maintains their own private integrations with external services,
+                    ensuring complete data isolation and security.
                   </p>
 
                   <div>
-                    <h4 className="font-semibold mb-2">
-                      Supported Integrations
-                    </h4>
+                    <h4 className="font-semibold mb-2">Supported Integrations</h4>
                     <div className="grid gap-3 md:grid-cols-2">
                       <div className="p-3 border rounded-lg">
                         <h5 className="font-medium">Google Services</h5>
                         <p className="text-sm text-slate-600">
-                          Drive, Calendar, and Gmail integration with OAuth
-                          authentication
+                          Drive, Calendar, and Gmail integration with OAuth authentication
                         </p>
                       </div>
                       <div className="p-3 border rounded-lg">
@@ -385,9 +363,8 @@ export default function EntityAPI() {
                   <div>
                     <h4 className="font-semibold mb-2">Security</h4>
                     <p className="text-sm text-slate-600">
-                      API credentials are encrypted at rest and isolated per
-                      tenant. Only Power Users within each tenant can manage
-                      their organization&apos;s integrations.
+                      API credentials are encrypted at rest and isolated per tenant. Only Power
+                      Users within each tenant can manage their organization&apos;s integrations.
                     </p>
                   </div>
                 </CardContent>
@@ -404,19 +381,17 @@ export default function EntityAPI() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <p className="text-slate-600">
-                    Webhooks can be configured in{" "}
-                    <Badge variant="outline">Settings → Webhooks</Badge>{" "}
-                    to send real-time data to external services like Zapier or
-                    n8n when events occur in the CRM (e.g., a new contact is
-                    created).
+                    Webhooks can be configured in{' '}
+                    <Badge variant="outline">Settings → Webhooks</Badge> to send real-time data to
+                    external services like Zapier or n8n when events occur in the CRM (e.g., a new
+                    contact is created).
                   </p>
 
                   <div>
                     <h4 className="font-semibold mb-2">Supported Events</h4>
                     <p className="text-sm text-slate-600">
-                      You can create webhooks for create, update, and delete
-                      events for Contacts, Accounts, Leads, Opportunities, and
-                      Activities.
+                      You can create webhooks for create, update, and delete events for Contacts,
+                      Accounts, Leads, Opportunities, and Activities.
                     </p>
                   </div>
                 </CardContent>

@@ -38,7 +38,7 @@ export default function createDatabaseRoutes(_pgPool) {
     }
   });
 
-  // POST /api/database/sync - Sync data from Base44 to PostgreSQL
+  // POST /api/database/sync - Sync data to PostgreSQL
   router.post('/sync', async (req, res) => {
     try {
       const { tenant_id, entities } = req.body;
@@ -76,7 +76,7 @@ export default function createDatabaseRoutes(_pgPool) {
       res.json({
         status: 'success',
         message: 'Volume check requires database admin access',
-        data: []
+        data: [],
       });
     } catch (error) {
       res.status(500).json({
@@ -90,7 +90,7 @@ export default function createDatabaseRoutes(_pgPool) {
   router.post('/archive-aged-data', async (req, res) => {
     try {
       const { tenant_id, days } = req.body;
-      
+
       res.json({
         status: 'success',
         message: `Archive function for data older than ${days} days`,
@@ -108,7 +108,7 @@ export default function createDatabaseRoutes(_pgPool) {
   router.post('/cleanup-orphaned-data', async (req, res) => {
     try {
       const { tenant_id } = req.body;
-      
+
       res.json({
         status: 'success',
         message: 'Orphaned data cleanup initiated',
@@ -136,28 +136,48 @@ export default function createDatabaseRoutes(_pgPool) {
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
-      
+
       // Delete from all entity tables (in correct order to respect foreign keys)
       const results = {};
 
       // Activities first (has foreign keys to other tables)
-      const { data: activitiesData } = await supabase.from('activities').delete().neq('id', '00000000-0000-0000-0000-000000000000').select('id');
+      const { data: activitiesData } = await supabase
+        .from('activities')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000')
+        .select('id');
       results.activities = activitiesData?.length || 0;
 
       // Opportunities
-      const { data: oppsData } = await supabase.from('opportunities').delete().neq('id', '00000000-0000-0000-0000-000000000000').select('id');
+      const { data: oppsData } = await supabase
+        .from('opportunities')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000')
+        .select('id');
       results.opportunities = oppsData?.length || 0;
 
       // Accounts
-      const { data: accountsData } = await supabase.from('accounts').delete().neq('id', '00000000-0000-0000-0000-000000000000').select('id');
+      const { data: accountsData } = await supabase
+        .from('accounts')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000')
+        .select('id');
       results.accounts = accountsData?.length || 0;
 
       // Leads
-      const { data: leadsData } = await supabase.from('leads').delete().neq('id', '00000000-0000-0000-0000-000000000000').select('id');
+      const { data: leadsData } = await supabase
+        .from('leads')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000')
+        .select('id');
       results.leads = leadsData?.length || 0;
 
       // Contacts
-      const { data: contactsData } = await supabase.from('contacts').delete().neq('id', '00000000-0000-0000-0000-000000000000').select('id');
+      const { data: contactsData } = await supabase
+        .from('contacts')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000')
+        .select('id');
       results.contacts = contactsData?.length || 0;
 
       const totalDeleted = Object.values(results).reduce((sum, count) => sum + count, 0);

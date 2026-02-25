@@ -18,7 +18,7 @@ const options = {
 ## Key Features
 
 - **Multi-tenant Architecture**: UUID-based tenant isolation and management
-- **Database**: PostgreSQL (Supabase) with automatic Base44 failover
+- **Database**: PostgreSQL (Supabase)
 - **Workflow Automation**: Visual workflow builder with AI-powered nodes and CRM entity operations
 - **AI Agent Operations**: MCP (Model Context Protocol) server support with provider abstraction (OpenAI/Anthropic/Gemini)
 - **Background Processing**: Bull queue for async workflow execution with retry logic
@@ -40,39 +40,39 @@ Build automated workflows with:
 For detailed guides and examples, visit the API documentation at \`/api-docs\``,
       contact: {
         name: 'API Support',
-        email: 'support@aishacrm.com'
+        email: 'support@aishacrm.com',
       },
       license: {
         name: 'MIT',
-        url: 'https://opensource.org/licenses/MIT'
-      }
+        url: 'https://opensource.org/licenses/MIT',
+      },
     },
     servers: [
       {
         url: 'http://localhost:4001',
-        description: 'Development server (Docker)'
+        description: 'Development server (Docker)',
       },
       {
         url: 'http://localhost:3001',
-        description: 'Development server (Local)'
+        description: 'Development server (Local)',
       },
       {
         url: 'https://api.aishacrm.com',
-        description: 'Production server'
-      }
+        description: 'Production server',
+      },
     ],
     components: {
       securitySchemes: {
         bearerAuth: {
           type: 'http',
           scheme: 'bearer',
-          bearerFormat: 'JWT'
+          bearerFormat: 'JWT',
         },
         apiKey: {
           type: 'apiKey',
           in: 'header',
-          name: 'x-api-key'
-        }
+          name: 'x-api-key',
+        },
       },
       schemas: {
         Error: {
@@ -80,37 +80,40 @@ For detailed guides and examples, visit the API documentation at \`/api-docs\``,
           properties: {
             status: {
               type: 'string',
-              example: 'error'
+              example: 'error',
             },
             message: {
               type: 'string',
-              example: 'Error description'
-            }
-          }
+              example: 'Error description',
+            },
+          },
         },
         Success: {
           type: 'object',
           properties: {
             status: {
               type: 'string',
-              example: 'success'
+              example: 'success',
             },
             data: {
-              type: 'object'
-            }
-          }
-        }
-      }
+              type: 'object',
+            },
+          },
+        },
+      },
     },
     security: [
       {
-        bearerAuth: []
-      }
+        bearerAuth: [],
+      },
     ],
     tags: [
       { name: 'accounts', description: 'Manage customer accounts and organizations' },
       { name: 'activities', description: 'Track and log customer interactions' },
-      { name: 'bizdev', description: 'Business development tools and pipelines (legacy endpoints)' },
+      {
+        name: 'bizdev',
+        description: 'Business development tools and pipelines (legacy endpoints)',
+      },
       { name: 'bizdevsources', description: 'External data sources for lead generation' },
       { name: 'clients', description: 'Client relationship and account management' },
       { name: 'contacts', description: 'Individual contact management and profiles' },
@@ -130,20 +133,55 @@ For detailed guides and examples, visit the API documentation at \`/api-docs\``,
       { name: 'telephony', description: 'Phone system integration and call management' },
       { name: 'tenants', description: 'Multi-tenant management and provisioning' },
       { name: 'users', description: 'User authentication, profiles, and sessions' },
-      { name: 'workflows', description: 'Visual workflow automation with AI-powered nodes - Build automated CRM workflows with webhook triggers, CRM entity operations (find/update Accounts, create/update Opportunities, create Activities), AI-driven steps (classify stages, generate emails, enrich accounts, route activities), conditional branching, and background execution via Bull queue. Supports drag-and-drop canvas builder with SVG connections and absolute positioning.' },
-      { name: 'opportunities-v2', description: 'v2 Opportunity management with flattened metadata (internal pilot)' },
-      { name: 'activities-v2', description: 'v2 Activity tracking with flattened metadata (internal pilot)' },
-      { name: 'contacts-v2', description: 'v2 Contact management with flattened metadata (internal pilot)' },
-      { name: 'accounts-v2', description: 'v2 Account management with flattened metadata (internal pilot)' },
-      { name: 'leads-v2', description: 'v2 Lead management with flattened metadata (internal pilot)' },
-      { name: 'reports-v2', description: 'v2 Reports with AI-powered analytics, health scores, and predictions (internal pilot)' },
-      { name: 'workflows-v2', description: 'v2 Workflows with AI-powered health analysis, structure validation, and optimization (internal pilot)' },
-      { name: 'workflow-templates', description: 'Pre-built workflow templates with parameterized instantiation for AI-assisted automation creation' },
-      { name: 'developer-ai', description: 'Superadmin-only AI-powered code development assistant. Features: file read/write, code search, command execution with safety guardrails. Powered by Claude 3.5 Sonnet. Requires superadmin role.' }
-    ]
+      {
+        name: 'workflows',
+        description:
+          'Visual workflow automation with AI-powered nodes - Build automated CRM workflows with webhook triggers, CRM entity operations (find/update Accounts, create/update Opportunities, create Activities), AI-driven steps (classify stages, generate emails, enrich accounts, route activities), conditional branching, and background execution via Bull queue. Supports drag-and-drop canvas builder with SVG connections and absolute positioning.',
+      },
+      {
+        name: 'opportunities-v2',
+        description: 'v2 Opportunity management with flattened metadata (internal pilot)',
+      },
+      {
+        name: 'activities-v2',
+        description: 'v2 Activity tracking with flattened metadata (internal pilot)',
+      },
+      {
+        name: 'contacts-v2',
+        description: 'v2 Contact management with flattened metadata (internal pilot)',
+      },
+      {
+        name: 'accounts-v2',
+        description: 'v2 Account management with flattened metadata (internal pilot)',
+      },
+      {
+        name: 'leads-v2',
+        description: 'v2 Lead management with flattened metadata (internal pilot)',
+      },
+      {
+        name: 'reports-v2',
+        description:
+          'v2 Reports with AI-powered analytics, health scores, and predictions (internal pilot)',
+      },
+      {
+        name: 'workflows-v2',
+        description:
+          'v2 Workflows with AI-powered health analysis, structure validation, and optimization (internal pilot)',
+      },
+      {
+        name: 'workflow-templates',
+        description:
+          'Pre-built workflow templates with parameterized instantiation for AI-assisted automation creation',
+      },
+      {
+        name: 'developer-ai',
+        description:
+          'Superadmin-only AI-powered code development assistant. Features: file read/write, code search, command execution with safety guardrails. Powered by Claude 3.5 Sonnet. Requires superadmin role.',
+      },
+    ],
   },
   // Paths to files containing OpenAPI definitions
-  apis: ['./routes/*.js', './server.js']
+  apis: ['./routes/*.js', './server.js'],
 };
 
 export const swaggerSpec = swaggerJsdoc(options);

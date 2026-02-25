@@ -9,13 +9,19 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase';
  */
 async function getAuthorizationHeader() {
   if (!isSupabaseConfigured()) return null;
-  
+
   try {
-    const { data: { session }, error } = await supabase.auth.getSession();
-    
+    const {
+      data: { session },
+      error,
+    } = await supabase.auth.getSession();
+
     // Handle auth session missing error gracefully (user not logged in)
     if (error) {
-      if (error.name === 'AuthSessionMissingError' || error.message?.includes('Auth session missing')) {
+      if (
+        error.name === 'AuthSessionMissingError' ||
+        error.message?.includes('Auth session missing')
+      ) {
         // This is expected when user isn't logged in, don't log as warning
         if (import.meta.env.DEV) {
           console.log('[Auth] No session available (user not logged in)');
@@ -28,7 +34,7 @@ async function getAuthorizationHeader() {
       }
       return null;
     }
-    
+
     if (session?.access_token) {
       return `Bearer ${session.access_token}`;
     }
@@ -56,7 +62,12 @@ const callMCPServerDirect = async (payload) => {
   } else {
     try {
       // Try to infer tenant_id from payload.params or payload.context
-      const tenantId = payload?.params?.tenant_id || payload?.params?.tenantId || payload?.context?.tenant_id || import.meta.env.VITE_SYSTEM_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+      const tenantId =
+        payload?.params?.tenant_id ||
+        payload?.params?.tenantId ||
+        payload?.context?.tenant_id ||
+        import.meta.env.VITE_SYSTEM_TENANT_ID ||
+        'a11dfb63-4b18-4eb8-872e-747af2e37c46';
       const storageKey = `local_user_api_key_${tenantId}`;
       const stored = localStorage.getItem(storageKey);
       if (stored) headers['x-api-key'] = stored;
@@ -69,11 +80,13 @@ const callMCPServerDirect = async (payload) => {
   const response = await fetch(MCP_SERVER_URL, {
     method: 'POST',
     headers,
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
   });
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`MCP server request failed: ${response.status} ${response.statusText} - ${text}`);
+    throw new Error(
+      `MCP server request failed: ${response.status} ${response.statusText} - ${text}`,
+    );
   }
   return response.json();
 };
@@ -103,7 +116,9 @@ const createFunctionProxy = (functionName) => {
         }
 
         if (import.meta.env.DEV) {
-          logDev(`[processChatCommand] tenantId=${tenantId || 'none'} (source: ${tenantSource || 'none'})`);
+          logDev(
+            `[processChatCommand] tenantId=${tenantId || 'none'} (source: ${tenantSource || 'none'})`,
+          );
         }
 
         // Optimize: only send last assistant and last user message to reduce token usage
@@ -112,12 +127,12 @@ const createFunctionProxy = (functionName) => {
         if (!Array.isArray(allMessages)) {
           allMessages = [allMessages];
         }
-        
+
         // If no messages array but single "message" or "text" field is provided, convert it
         if (allMessages.length === 0 && (opts.message || opts.text)) {
           allMessages = [{ role: 'user', content: String(opts.message || opts.text).trim() }];
         }
-        
+
         console.log('[DEBUG processChatCommand] opts.message:', opts.message);
         console.log('[DEBUG processChatCommand] opts.text:', opts.text);
         console.log('[DEBUG processChatCommand] opts.messages:', opts.messages);
@@ -125,11 +140,11 @@ const createFunctionProxy = (functionName) => {
         console.log('[DEBUG processChatCommand] allMessages:', allMessages);
 
         const all = allMessages;
-        const lastUser = [...all].reverse().find(m => m?.role === 'user');
-        const lastAssistant = [...all].reverse().find(m => m?.role === 'assistant');
+        const lastUser = [...all].reverse().find((m) => m?.role === 'user');
+        const lastAssistant = [...all].reverse().find((m) => m?.role === 'assistant');
 
         const messages = [lastAssistant, lastUser].filter(Boolean);
-        
+
         console.log('[DEBUG processChatCommand] messages to send:', messages);
 
         // Safety: Ensure we always have at least one message
@@ -137,7 +152,7 @@ const createFunctionProxy = (functionName) => {
           // Fallback to the very last message if optimization resulted in empty array
           messages.push(all[all.length - 1]);
         }
-        
+
         const body = {
           messages,
           model: opts.model,
@@ -145,14 +160,16 @@ const createFunctionProxy = (functionName) => {
           api_key: opts.api_key,
           conversation_id: opts.conversation_id || opts.conversationId, // Support both naming conventions
           sessionEntities: opts.sessionEntities || opts.entityContext, // Session context for follow-up questions
-          timezone: opts.timezone || 'America/New_York' // User's timezone for activity scheduling
+          timezone: opts.timezone || 'America/New_York', // User's timezone for activity scheduling
         };
 
         const headers = { 'Content-Type': 'application/json' };
         if (tenantId) {
           headers['x-tenant-id'] = tenantId;
         } else if (import.meta.env.DEV) {
-          console.warn('[processChatCommand] Missing tenantId (superadmin global view or not selected). Header omitted.');
+          console.warn(
+            '[processChatCommand] Missing tenantId (superadmin global view or not selected). Header omitted.',
+          );
         }
 
         // Add Supabase access token for cross-domain authentication
@@ -165,7 +182,7 @@ const createFunctionProxy = (functionName) => {
           method: 'POST',
           headers,
           credentials: 'include',
-          body: JSON.stringify(body)
+          body: JSON.stringify(body),
         });
         const json = await resp.json().catch(() => ({}));
         return { status: resp.status, data: json };
@@ -186,7 +203,7 @@ const createFunctionProxy = (functionName) => {
 
         const messages = Array.isArray(opts.messages)
           ? opts.messages
-          : [{ role: 'user', content: String(opts.message || '').trim() }].filter(m => m.content);
+          : [{ role: 'user', content: String(opts.message || '').trim() }].filter((m) => m.content);
 
         const body = { messages };
 
@@ -217,7 +234,7 @@ const createFunctionProxy = (functionName) => {
         const headers = {
           'Content-Type': 'application/json',
           'x-user-role': userRole,
-          'x-user-email': userEmail
+          'x-user-email': userEmail,
         };
 
         // Add Supabase access token for cross-domain authentication
@@ -230,7 +247,7 @@ const createFunctionProxy = (functionName) => {
           method: 'POST',
           headers,
           credentials: 'include',
-          body: JSON.stringify(body)
+          body: JSON.stringify(body),
         });
         const json = await resp.json().catch(() => ({}));
         return { status: resp.status, data: json };
@@ -240,47 +257,48 @@ const createFunctionProxy = (functionName) => {
     }
 
     if (isLocalDevMode()) {
-            // ========================================
-            // Dashboard Stats & Bundle (Local Dev -> call backend directly)
-            // ========================================
-            if (functionName === 'getDashboardStats') {
-              try {
-                const BACKEND_URL = getBackendUrl();
-                const opts = args[0] || {};
-                const params = new URLSearchParams();
-                if (opts.tenant_id) params.append('tenant_id', opts.tenant_id);
-                const resp = await fetch(`${BACKEND_URL}/api/reports/dashboard-stats?${params}`, {
-                  method: 'GET',
-                  headers: { 'Content-Type': 'application/json' },
-                  credentials: 'include',
-                });
-                const json = await resp.json().catch(() => ({}));
-                return { data: json.data || json };
-              } catch (err) {
-                console.warn('[Local Dev Mode] getDashboardStats failed:', err?.message || err);
-                return { data: { status: 'error', message: err?.message || String(err) } };
-              }
-            }
+      // ========================================
+      // Dashboard Stats & Bundle (Local Dev -> call backend directly)
+      // ========================================
+      if (functionName === 'getDashboardStats') {
+        try {
+          const BACKEND_URL = getBackendUrl();
+          const opts = args[0] || {};
+          const params = new URLSearchParams();
+          if (opts.tenant_id) params.append('tenant_id', opts.tenant_id);
+          const resp = await fetch(`${BACKEND_URL}/api/reports/dashboard-stats?${params}`, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+          });
+          const json = await resp.json().catch(() => ({}));
+          return { data: json.data || json };
+        } catch (err) {
+          console.warn('[Local Dev Mode] getDashboardStats failed:', err?.message || err);
+          return { data: { status: 'error', message: err?.message || String(err) } };
+        }
+      }
 
-            if (functionName === 'getDashboardBundle') {
-              try {
-                const BACKEND_URL = getBackendUrl();
-                const opts = args[0] || {};
-                const params = new URLSearchParams();
-                if (opts.tenant_id) params.append('tenant_id', opts.tenant_id);
-                if (typeof opts.include_test_data !== 'undefined') params.append('include_test_data', String(!!opts.include_test_data));
-                const resp = await fetch(`${BACKEND_URL}/api/reports/dashboard-bundle?${params}`, {
-                  method: 'GET',
-                  headers: { 'Content-Type': 'application/json' },
-                  credentials: 'include',
-                });
-                const json = await resp.json().catch(() => ({}));
-                return { data: json.data || json };
-              } catch (err) {
-                console.warn('[Local Dev Mode] getDashboardBundle failed:', err?.message || err);
-                return { data: { status: 'error', message: err?.message || String(err) } };
-              }
-            }
+      if (functionName === 'getDashboardBundle') {
+        try {
+          const BACKEND_URL = getBackendUrl();
+          const opts = args[0] || {};
+          const params = new URLSearchParams();
+          if (opts.tenant_id) params.append('tenant_id', opts.tenant_id);
+          if (typeof opts.include_test_data !== 'undefined')
+            params.append('include_test_data', String(!!opts.include_test_data));
+          const resp = await fetch(`${BACKEND_URL}/api/reports/dashboard-bundle?${params}`, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+          });
+          const json = await resp.json().catch(() => ({}));
+          return { data: json.data || json };
+        } catch (err) {
+          console.warn('[Local Dev Mode] getDashboardBundle failed:', err?.message || err);
+          return { data: { status: 'error', message: err?.message || String(err) } };
+        }
+      }
       // ========================================
       // Workflows (Local Backend)
       // ========================================
@@ -301,7 +319,9 @@ const createFunctionProxy = (functionName) => {
           }
           return { data: json };
         } catch (err) {
-          console.warn(`[Local Dev Mode] executeWorkflow backend call failed: ${err?.message || err}`);
+          console.warn(
+            `[Local Dev Mode] executeWorkflow backend call failed: ${err?.message || err}`,
+          );
           return { data: { status: 'error', error: err?.message || String(err) } };
         }
       }
@@ -309,7 +329,7 @@ const createFunctionProxy = (functionName) => {
       // ========================================
       // CRUD Operations
       // ========================================
-      
+
       // Local fallback for saving employees (used by EmployeeForm)
       if (functionName === 'saveEmployee') {
         try {
@@ -335,7 +355,10 @@ const createFunctionProxy = (functionName) => {
           const newEmployee = {
             id: `local-emp-${Date.now()}`,
             ...employeeData,
-            tenant_id: tenantId || import.meta.env.VITE_SYSTEM_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
+            tenant_id:
+              tenantId ||
+              import.meta.env.VITE_SYSTEM_TENANT_ID ||
+              'a11dfb63-4b18-4eb8-872e-747af2e37c46',
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           };
@@ -351,17 +374,17 @@ const createFunctionProxy = (functionName) => {
       // ========================================
       // Health Checks & Status Functions
       // ========================================
-      
+
       if (functionName === 'checkBackendStatus') {
         logDev('[Local Dev Mode] checkBackendStatus: returning mock healthy status');
-        return { 
-          data: { 
-            success: true, 
-            status: 'healthy', 
+        return {
+          data: {
+            success: true,
+            status: 'healthy',
             message: 'Backend running in local-dev mode',
             timestamp: new Date().toISOString(),
-            version: '1.0.0-local'
-          } 
+            version: '1.0.0-local',
+          },
         };
       }
 
@@ -376,8 +399,8 @@ const createFunctionProxy = (functionName) => {
               CLOUDFLARE_R2_BUCKET_NAME: 'SET',
             },
             message: 'R2 configuration check (local-dev mock)',
-            configured: true
-          }
+            configured: true,
+          },
         };
       }
 
@@ -387,8 +410,8 @@ const createFunctionProxy = (functionName) => {
           data: {
             success: true,
             message: 'Stripe connection test (local-dev mock)',
-            connected: true
-          }
+            connected: true,
+          },
         };
       }
 
@@ -399,15 +422,15 @@ const createFunctionProxy = (functionName) => {
             success: true,
             message: 'OpenAI API test (local-dev mock)',
             response: 'Hello from mock OpenAI!',
-            model: 'gpt-4'
-          }
+            model: 'gpt-4',
+          },
         };
       }
 
       // ========================================
       // Test & Diagnostic Functions
       // ========================================
-      
+
       if (functionName === 'runComponentTests') {
         const { testNames } = args[0] || {};
         logDev('[Local Dev Mode] runComponentTests: returning mock test results for', testNames);
@@ -415,13 +438,13 @@ const createFunctionProxy = (functionName) => {
           data: {
             status: 'success',
             summary: `All tests passed (local-dev mock)`,
-            reports: (testNames || ['default']).map(name => ({
+            reports: (testNames || ['default']).map((name) => ({
               test: name,
               status: 'success',
               message: 'Test passed in local-dev mode',
-              timestamp: new Date().toISOString()
-            }))
-          }
+              timestamp: new Date().toISOString(),
+            })),
+          },
         };
       }
 
@@ -441,10 +464,14 @@ const createFunctionProxy = (functionName) => {
           data: {
             suites: [
               { id: 'auth', name: 'Authentication Tests', description: 'Test user auth flows' },
-              { id: 'crud', name: 'CRUD Operations', description: 'Test create/read/update/delete' },
+              {
+                id: 'crud',
+                name: 'CRUD Operations',
+                description: 'Test create/read/update/delete',
+              },
               { id: 'integration', name: 'Integration Tests', description: 'Test external APIs' },
-            ]
-          }
+            ],
+          },
         };
       }
 
@@ -458,10 +485,10 @@ const createFunctionProxy = (functionName) => {
               id: userId || 'local-user-001',
               email: 'dev@localhost',
               status: 'active',
-              permissions: ['all']
+              permissions: ['all'],
             },
-            message: 'User record check (local-dev mock)'
-          }
+            message: 'User record check (local-dev mock)',
+          },
         };
       }
 
@@ -475,10 +502,10 @@ const createFunctionProxy = (functionName) => {
               id: leadId || 'local-lead-001',
               visible: true,
               assignedTo: 'local-user-001',
-              issues: []
+              issues: [],
             },
-            message: 'Lead visibility check (local-dev mock)'
-          }
+            message: 'Lead visibility check (local-dev mock)',
+          },
         };
       }
 
@@ -489,40 +516,40 @@ const createFunctionProxy = (functionName) => {
           data: {
             success: true,
             message: `Lead ${leadId} visibility fixed (local-dev mock)`,
-            fixed: true
-          }
+            fixed: true,
+          },
         };
       }
 
       // ========================================
       // Performance & Monitoring
       // ========================================
-      
+
       if (functionName === 'listPerformanceLogs') {
         try {
           const BACKEND_URL = getBackendUrl();
           const params = new URLSearchParams();
-          
+
           if (args[0]?.tenant_id) params.append('tenant_id', args[0].tenant_id);
           if (args[0]?.limit) params.append('limit', args[0].limit);
           if (args[0]?.hours) params.append('hours', args[0].hours);
-          
+
           const response = await fetch(`${BACKEND_URL}/api/metrics/performance?${params}`);
-          
+
           if (response.ok) {
             const result = await response.json();
             return {
               data: {
                 logs: result.data.logs || [],
                 count: result.data.count || 0,
-                metrics: result.data.metrics
-              }
+                metrics: result.data.metrics,
+              },
             };
           }
         } catch (error) {
           console.error('[Backend API] Error fetching performance logs:', error);
         }
-        
+
         // Fallback to empty data if backend is down
         return {
           data: {
@@ -532,24 +559,24 @@ const createFunctionProxy = (functionName) => {
               totalCalls: 0,
               avgResponseTime: 0,
               errorRate: 0,
-              uptime: 0
-            }
-          }
+              uptime: 0,
+            },
+          },
         };
       }
 
       // ========================================
       // Data Management Functions
       // ========================================
-      
+
       if (functionName === 'cleanupTestRecords') {
         logDev('[Local Dev Mode] cleanupTestRecords: returning mock cleanup result');
         return {
           data: {
             success: true,
             message: 'Test records cleanup (local-dev mock)',
-            deleted: 0
-          }
+            deleted: 0,
+          },
         };
       }
 
@@ -560,8 +587,8 @@ const createFunctionProxy = (functionName) => {
             success: true,
             message: 'Orphaned data cleanup (local-dev mock)',
             deleted: 0,
-            summary: {}
-          }
+            summary: {},
+          },
         };
       }
 
@@ -571,8 +598,8 @@ const createFunctionProxy = (functionName) => {
           data: {
             success: true,
             orphaned: [],
-            message: 'No orphaned records found (local-dev mock)'
-          }
+            message: 'No orphaned records found (local-dev mock)',
+          },
         };
       }
 
@@ -582,8 +609,8 @@ const createFunctionProxy = (functionName) => {
           data: {
             success: true,
             message: 'Denormalized fields synced (local-dev mock)',
-            synced: 0
-          }
+            synced: 0,
+          },
         };
       }
 
@@ -596,10 +623,10 @@ const createFunctionProxy = (functionName) => {
               contacts: 0,
               leads: 0,
               accounts: 0,
-              activities: 0
+              activities: 0,
             },
-            total: 0
-          }
+            total: 0,
+          },
         };
       }
 
@@ -609,58 +636,66 @@ const createFunctionProxy = (functionName) => {
           data: {
             success: true,
             message: 'Aged data archived (local-dev mock)',
-            archived: 0
-          }
+            archived: 0,
+          },
         };
       }
 
       // ========================================
       // User & Tenant Management
       // ========================================
-      
+
       // inviteUser: Route to backend (this function should be called directly via backend API)
       if (functionName === 'inviteUser') {
-        console.warn('[Functions] inviteUser should be called directly via backend API at /api/users/invite');
+        console.warn(
+          '[Functions] inviteUser should be called directly via backend API at /api/users/invite',
+        );
         return {
           data: {
             success: false,
-            message: 'inviteUser should be called directly via backend API'
-          }
+            message: 'inviteUser should be called directly via backend API',
+          },
         };
       }
-      
+
       if (functionName === 'cleanupUserData') {
         logDev('[Local Dev Mode] cleanupUserData: returning mock cleanup result');
         return {
           data: {
             success: true,
             message: 'User data cleaned up (local-dev mock)',
-            cleaned: 0
-          }
+            cleaned: 0,
+          },
         };
       }
 
       if (functionName === 'updateEmployeeSecure') {
         const { employeeId, updates } = args[0] || {};
-        logDev('[Local Dev Mode] updateEmployeeSecure: returning mock update result for', employeeId);
+        logDev(
+          '[Local Dev Mode] updateEmployeeSecure: returning mock update result for',
+          employeeId,
+        );
         return {
           data: {
             success: true,
             message: 'Employee updated (local-dev mock)',
-            employee: { id: employeeId, ...updates }
-          }
+            employee: { id: employeeId, ...updates },
+          },
         };
       }
 
       if (functionName === 'updateEmployeeUserAccess') {
         const { employeeId, access } = args[0] || {};
-        logDev('[Local Dev Mode] updateEmployeeUserAccess: returning mock access update for', employeeId);
+        logDev(
+          '[Local Dev Mode] updateEmployeeUserAccess: returning mock access update for',
+          employeeId,
+        );
         return {
           data: {
             success: true,
             message: 'Employee access updated (local-dev mock)',
-            access
-          }
+            access,
+          },
         };
       }
 
@@ -671,23 +706,23 @@ const createFunctionProxy = (functionName) => {
           data: {
             success: true,
             message: `Tenant ${tenantId} deleted (local-dev mock)`,
-            deleted: true
-          }
+            deleted: true,
+          },
         };
       }
 
       // ========================================
       // Integration & Documentation
       // ========================================
-      
+
       if (functionName === 'seedDocumentation') {
         logDev('[Local Dev Mode] seedDocumentation: returning mock seed result');
         return {
           data: {
             success: true,
             message: 'Documentation seeded (local-dev mock)',
-            seeded: 0
-          }
+            seeded: 0,
+          },
         };
       }
 
@@ -697,34 +732,49 @@ const createFunctionProxy = (functionName) => {
           data: {
             success: true,
             status: 'running',
-            message: 'MCP server status (local-dev mock)'
-          }
+            message: 'MCP server status (local-dev mock)',
+          },
         };
       }
 
       if (functionName === 'getOrCreateUserApiKey') {
         try {
-          const mockTenant = args[0]?.tenantId || import.meta.env.VITE_SYSTEM_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+          const mockTenant =
+            args[0]?.tenantId ||
+            import.meta.env.VITE_SYSTEM_TENANT_ID ||
+            'a11dfb63-4b18-4eb8-872e-747af2e37c46';
           const storageKey = `local_user_api_key_${mockTenant}`;
-          const persistAllowed = (import.meta.env.VITE_ALLOW_PERSIST_API_KEYS === 'true');
+          const persistAllowed = import.meta.env.VITE_ALLOW_PERSIST_API_KEYS === 'true';
 
           // Prefer sessionStorage (ephemeral). Migrate any legacy localStorage secret.
           let existing = null;
           try {
             existing = sessionStorage.getItem(storageKey);
-          } catch { /* ignore */ }
+          } catch {
+            /* ignore */
+          }
           if (!existing) {
             try {
               const legacy = localStorage.getItem(storageKey);
               if (legacy) {
                 // If persistence is not allowed, migrate to session storage and remove persistent copy
-                try { sessionStorage.setItem(storageKey, legacy); } catch { /* ignore */ }
+                try {
+                  sessionStorage.setItem(storageKey, legacy);
+                } catch {
+                  /* ignore */
+                }
                 if (!persistAllowed) {
-                  try { localStorage.removeItem(storageKey); } catch { /* ignore */ }
+                  try {
+                    localStorage.removeItem(storageKey);
+                  } catch {
+                    /* ignore */
+                  }
                 }
                 existing = legacy;
               }
-            } catch { /* ignore */ }
+            } catch {
+              /* ignore */
+            }
           }
           if (existing) {
             return { data: { success: true, apiKey: existing } };
@@ -738,21 +788,35 @@ const createFunctionProxy = (functionName) => {
               if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
                 const bytes = new Uint8Array(16);
                 crypto.getRandomValues(bytes);
-                return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+                return Array.from(bytes)
+                  .map((b) => b.toString(16).padStart(2, '0'))
+                  .join('');
               }
-            } catch { /* fall through */ }
+            } catch {
+              /* fall through */
+            }
             // Fallback (non-cryptographic) - very unlikely path in modern browsers
             return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
           };
           const generated = `aisha_${makeSecureId()}`;
           // Store in session (ephemeral). Optionally persist if explicitly allowed.
-          try { sessionStorage.setItem(storageKey, generated); } catch { /* ignore */ }
+          try {
+            sessionStorage.setItem(storageKey, generated);
+          } catch {
+            /* ignore */
+          }
           if (persistAllowed) {
-            try { localStorage.setItem(storageKey, generated); } catch { /* ignore */ }
+            try {
+              localStorage.setItem(storageKey, generated);
+            } catch {
+              /* ignore */
+            }
           }
           return { data: { success: true, apiKey: generated } };
         } catch (err) {
-          console.warn(`[Local Dev Mode] getOrCreateUserApiKey fallback failed: ${err?.message || err}`);
+          console.warn(
+            `[Local Dev Mode] getOrCreateUserApiKey fallback failed: ${err?.message || err}`,
+          );
           return { data: { success: false, error: err?.message || String(err) } };
         }
       }
@@ -760,15 +824,15 @@ const createFunctionProxy = (functionName) => {
       // ========================================
       // Billing
       // ========================================
-      
+
       if (functionName === 'createCheckoutSession') {
         logDev('[Local Dev Mode] createCheckoutSession: returning mock checkout URL');
         return {
           data: {
             success: true,
             url: 'https://checkout.local-dev.mock',
-            sessionId: `local-session-${Date.now()}`
-          }
+            sessionId: `local-session-${Date.now()}`,
+          },
         };
       }
 
@@ -778,30 +842,30 @@ const createFunctionProxy = (functionName) => {
           data: {
             success: true,
             url: 'https://billing.local-dev.mock',
-            sessionId: `local-portal-${Date.now()}`
-          }
+            sessionId: `local-portal-${Date.now()}`,
+          },
         };
       }
 
       // ========================================
       // Cron Jobs
       // ========================================
-      
+
       if (functionName === 'createInitialCronJobs') {
         logDev('[Local Dev Mode] createInitialCronJobs: returning mock cron init result');
         return {
           data: {
             success: true,
             message: 'Cron jobs initialized (local-dev mock)',
-            jobs: []
-          }
+            jobs: [],
+          },
         };
       }
 
       // ========================================
       // CSV Import & Validation
       // ========================================
-      
+
       if (functionName === 'validateAndImport') {
         try {
           const BACKEND_URL = getBackendUrl();
@@ -818,14 +882,20 @@ const createFunctionProxy = (functionName) => {
           }
           return { data: json.data || json };
         } catch (err) {
-          console.warn(`[Local Dev Mode] validateAndImport backend call failed: ${err?.message || err}`);
+          console.warn(
+            `[Local Dev Mode] validateAndImport backend call failed: ${err?.message || err}`,
+          );
           return { data: { status: 'error', error: err?.message || String(err) } };
         }
       }
 
       // Default behavior for other functions in local dev mode: warn + no-op
-      console.warn(`[Local Dev Mode] Function '${functionName}' called but not available in local dev mode.`);
-      return Promise.resolve({ data: { success: false, message: 'Function not available in local dev mode' } });
+      console.warn(
+        `[Local Dev Mode] Function '${functionName}' called but not available in local dev mode.`,
+      );
+      return Promise.resolve({
+        data: { success: false, message: 'Function not available in local dev mode' },
+      });
     }
 
     // Non-local mode: Use backend routes for all functions
@@ -833,7 +903,9 @@ const createFunctionProxy = (functionName) => {
       const payload = args[0] || {};
       const { api_key, model = 'gpt-4o-mini' } = payload;
       if (!api_key) {
-        return { data: { success: false, error: 'OpenAI API key is required for connectivity test.' } };
+        return {
+          data: { success: false, error: 'OpenAI API key is required for connectivity test.' },
+        };
       }
 
       const BACKEND_URL = getBackendUrl();
@@ -841,18 +913,27 @@ const createFunctionProxy = (functionName) => {
       const tenantHeader = payload.tenantId || payload.tenant_id;
       if (tenantHeader) headers['x-tenant-id'] = tenantHeader;
 
-      const messages = Array.isArray(payload.messages) && payload.messages.length
-        ? payload.messages
-        : [
-            { role: 'system', content: 'You are performing a diagnostic connectivity check for the Aisha CRM platform.' },
-            { role: 'user', content: 'Please reply with a short confirmation that the OpenAI connectivity test succeeded.' }
-          ];
+      const messages =
+        Array.isArray(payload.messages) && payload.messages.length
+          ? payload.messages
+          : [
+              {
+                role: 'system',
+                content:
+                  'You are performing a diagnostic connectivity check for the Aisha CRM platform.',
+              },
+              {
+                role: 'user',
+                content:
+                  'Please reply with a short confirmation that the OpenAI connectivity test succeeded.',
+              },
+            ];
 
       const body = {
         messages,
         model,
         temperature: typeof payload.temperature === 'number' ? payload.temperature : 0.2,
-        api_key
+        api_key,
       };
 
       try {
@@ -860,7 +941,7 @@ const createFunctionProxy = (functionName) => {
           method: 'POST',
           headers,
           credentials: 'include',
-          body: JSON.stringify(body)
+          body: JSON.stringify(body),
         });
 
         const json = await response.json().catch(() => ({}));
@@ -872,11 +953,13 @@ const createFunctionProxy = (functionName) => {
         return {
           data: {
             success: true,
-            message: json?.data?.response ? 'OpenAI connection verified.' : 'OpenAI connection verified with empty response.',
+            message: json?.data?.response
+              ? 'OpenAI connection verified.'
+              : 'OpenAI connection verified with empty response.',
             response: json?.data?.response || '',
             usage: json?.data?.usage || null,
-            model: json?.data?.model || model
-          }
+            model: json?.data?.model || model,
+          },
         };
       } catch (err) {
         console.error('[testSystemOpenAI] Backend call failed:', err);
@@ -911,7 +994,8 @@ const createFunctionProxy = (functionName) => {
         const opts = args[0] || {};
         const params = new URLSearchParams();
         if (opts.tenant_id) params.append('tenant_id', opts.tenant_id);
-        if (typeof opts.include_test_data !== 'undefined') params.append('include_test_data', String(!!opts.include_test_data));
+        if (typeof opts.include_test_data !== 'undefined')
+          params.append('include_test_data', String(!!opts.include_test_data));
         const resp = await fetch(`${BACKEND_URL}/api/reports/dashboard-bundle?${params}`, {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
@@ -933,15 +1017,30 @@ const createFunctionProxy = (functionName) => {
         const response = await fetch(`${BACKEND_URL}/api/system/cleanup-orphans`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          credentials: 'include'
+          credentials: 'include',
         });
         const json = await response.json();
         if (!response.ok) {
-          return { data: { success: false, message: json.message || 'Cleanup failed', error: json.message } };
+          return {
+            data: {
+              success: false,
+              message: json.message || 'Cleanup failed',
+              error: json.message,
+            },
+          };
         }
-        return { data: { success: true, message: json.message, summary: json.data?.summary || {}, total_deleted: json.data?.total_deleted || 0 } };
+        return {
+          data: {
+            success: true,
+            message: json.message,
+            summary: json.data?.summary || {},
+            total_deleted: json.data?.total_deleted || 0,
+          },
+        };
       } catch (err) {
-        return { data: { success: false, message: err?.message || 'Cleanup failed', error: err?.message } };
+        return {
+          data: { success: false, message: err?.message || 'Cleanup failed', error: err?.message },
+        };
       }
     }
     // checkDuplicateBeforeCreate: call backend validation route
@@ -949,12 +1048,15 @@ const createFunctionProxy = (functionName) => {
       try {
         const BACKEND_URL = getBackendUrl();
         const payload = args[0] || {};
-        const response = await fetch(`${BACKEND_URL}/api/validation/check-duplicate-before-create`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(payload),
-        });
+        const response = await fetch(
+          `${BACKEND_URL}/api/validation/check-duplicate-before-create`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(payload),
+          },
+        );
         const json = await response.json();
         if (!response.ok) {
           return { data: { status: 'error', error: json?.message || response.statusText } };
@@ -966,13 +1068,18 @@ const createFunctionProxy = (functionName) => {
       }
     }
 
-    // Non-local: call backend validate-and-import directly when Base44 doesn't expose it
+    // Non-local: call backend validate-and-import directly
     if (functionName === 'validateAndImport') {
       logDev('[validateAndImport] Non-local mode handler called');
       try {
         const BACKEND_URL = getBackendUrl();
         const payload = args[0] || {};
-        logDev('[validateAndImport] Calling', `${BACKEND_URL}/api/validation/validate-and-import`, 'with payload:', payload);
+        logDev(
+          '[validateAndImport] Calling',
+          `${BACKEND_URL}/api/validation/validate-and-import`,
+          'with payload:',
+          payload,
+        );
         const response = await fetch(`${BACKEND_URL}/api/validation/validate-and-import`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1041,7 +1148,7 @@ const createFunctionProxy = (functionName) => {
       try {
         const BACKEND_URL = getBackendUrl();
         const payload = args[0] || {};
-        
+
         // Auto-detect user_email from Supabase session if not explicitly provided
         // This prevents NOT NULL constraint violations when callers omit user_email
         let userEmail = payload.user_email;
@@ -1052,7 +1159,9 @@ const createFunctionProxy = (functionName) => {
             const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
             if (supabaseUrl && supabaseAnonKey) {
               const supabase = createClient(supabaseUrl, supabaseAnonKey);
-              const { data: { user } } = await supabase.auth.getUser();
+              const {
+                data: { user },
+              } = await supabase.auth.getUser();
               userEmail = user?.email || 'system@aishacrm.com';
             } else {
               userEmail = 'system@aishacrm.com';
@@ -1061,7 +1170,7 @@ const createFunctionProxy = (functionName) => {
             userEmail = 'system@aishacrm.com'; // Fallback for auth errors
           }
         }
-        
+
         // Map frontend fields (action_type, new_values, old_values) to backend schema (action, changes)
         const backendPayload = {
           tenant_id: payload.tenant_id,
@@ -1096,48 +1205,58 @@ const createFunctionProxy = (functionName) => {
 
     // Fallback: warn if function not found
     console.warn(`[Production Mode] Function '${functionName}' not available. Use backend routes.`);
-    return Promise.reject(new Error(`Function '${functionName}' not available. Use backend routes.`));
+    return Promise.reject(
+      new Error(`Function '${functionName}' not available. Use backend routes.`),
+    );
   };
 };
 
-// Functions we always override with our proxy implementation even if Base44 exposes them.
-// Rationale: We need custom logic (e.g., direct backend call + logging + response shape normalization)
-// that the Base44 stub either doesn't provide or returns in a different shape.
+// Functions we always override with our proxy implementation.
+// Rationale: We need custom logic (e.g., direct backend call + logging + response shape normalization).
 const OVERRIDE_FUNCTIONS = new Set(['validateAndImport']);
 
 // Create a Proxy handler that wraps all function access
-const functionsProxy = new Proxy({}, {
-  get: (target, prop) => {
-    // If a direct MCP server URL is configured, allow direct JSON-RPC calls
-    // for MCP-related function names (mcpServer*, mcpHandler, mcpTool*), even in local-dev.
-    if (MCP_SERVER_URL && (String(prop).startsWith('mcpServer') || String(prop).startsWith('mcpHandler') || String(prop).startsWith('mcpTool') || String(prop).startsWith('mcpToolFinder'))) {
-      return async (...args) => {
-        try {
-          const payload = args[0] || {};
-          const result = await callMCPServerDirect(payload);
-          // Return in the codebase's expected shape: { data: <json-rpc-response> }
-          return { data: result };
-        } catch (err) {
-          console.error(`[MCP Direct] Error calling MCP server for ${String(prop)}:`, err);
-          throw err;
-        }
-      };
-    }
+const functionsProxy = new Proxy(
+  {},
+  {
+    get: (target, prop) => {
+      // If a direct MCP server URL is configured, allow direct JSON-RPC calls
+      // for MCP-related function names (mcpServer*, mcpHandler, mcpTool*), even in local-dev.
+      if (
+        MCP_SERVER_URL &&
+        (String(prop).startsWith('mcpServer') ||
+          String(prop).startsWith('mcpHandler') ||
+          String(prop).startsWith('mcpTool') ||
+          String(prop).startsWith('mcpToolFinder'))
+      ) {
+        return async (...args) => {
+          try {
+            const payload = args[0] || {};
+            const result = await callMCPServerDirect(payload);
+            // Return in the codebase's expected shape: { data: <json-rpc-response> }
+            return { data: result };
+          } catch (err) {
+            console.error(`[MCP Direct] Error calling MCP server for ${String(prop)}:`, err);
+            throw err;
+          }
+        };
+      }
 
-    // Local dev mode: use function proxy (mock/no-op implementations)
-    if (isLocalDevMode()) {
+      // Local dev mode: use function proxy (mock/no-op implementations)
+      if (isLocalDevMode()) {
+        return createFunctionProxy(prop);
+      }
+
+      // Always override certain functions with custom implementation
+      if (OVERRIDE_FUNCTIONS.has(String(prop))) {
+        return createFunctionProxy(prop);
+      }
+
+      // Production mode: all functions use backend routes
       return createFunctionProxy(prop);
-    }
-
-    // Always override certain functions with custom implementation
-    if (OVERRIDE_FUNCTIONS.has(String(prop))) {
-      return createFunctionProxy(prop);
-    }
-
-    // Production mode: all functions use backend routes
-    return createFunctionProxy(prop);
-  }
-});
+    },
+  },
+);
 
 // Export all functions through the proxy
 export const syncDatabase = functionsProxy.syncDatabase;
@@ -1476,4 +1595,3 @@ export const approveClientRequirement = functionsProxy.approveClientRequirement;
 export const elevenLabsCRMAccess = functionsProxy.elevenLabsCRMAccess;
 
 export const executeWorkflow = functionsProxy.executeWorkflow;
-

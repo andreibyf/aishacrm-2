@@ -483,7 +483,7 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel, moduleSet
                 </SelectContent>
               </Select>
               <p className="text-xs text-slate-500 mt-1">
-                Note: Base44 role is always &quot;user&quot; for Employees/Managers. This controls
+                Note: Platform role is always &quot;user&quot; for Employees/Managers. This controls
                 CRM data visibility.
               </p>
             </div>
@@ -853,7 +853,7 @@ export default function EnhancedUserManagement() {
         ...cleanedData.permissions,
       };
 
-      // Set intended_role based on actual Base44 role
+      // Set intended_role based on actual platform role
       if (userBeingEdited.role === 'admin' || userBeingEdited.role === 'superadmin') {
         permissionsToSave.intended_role = userBeingEdited.role;
       } else {
