@@ -1423,6 +1423,7 @@ export default function EnhancedUserManagement() {
                               <Button
                                 variant="outline"
                                 size="sm"
+                                type="button"
                                 onClick={() => handleResendInvite(user)}
                                 className="bg-blue-700 border-blue-600 text-blue-100 hover:bg-blue-600"
                               >
@@ -1433,6 +1434,7 @@ export default function EnhancedUserManagement() {
                             <Button
                               variant="outline"
                               size="sm"
+                              type="button"
                               onClick={() => setEditingUser(user)}
                               disabled={!managerCanEdit}
                               className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600 disabled:opacity-60"
@@ -1443,6 +1445,7 @@ export default function EnhancedUserManagement() {
                             <Button
                               variant="outline"
                               size="sm"
+                              type="button"
                               onClick={() => handleDeleteUser(user)}
                               disabled={!isDeletable}
                               className="bg-red-700 border-red-600 text-red-100 hover:bg-red-600 disabled:opacity-60"

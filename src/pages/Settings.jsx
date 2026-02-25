@@ -116,10 +116,16 @@ const CareSettings = lazy(() => import('../components/settings/CareSettings'));
 const McpAdmin = lazy(() => import('./McpAdmin'));
 
 export default function SettingsPage() {
+  const getInitialTabFromUrl = useCallback(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    return tab && tab !== 'menu' ? tab : null;
+  }, []);
+
   // Renamed from Settings to SettingsPage as per outline
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState(null); // null = show menu, string = show specific setting
+  const [activeTab, setActiveTab] = useState(() => getInitialTabFromUrl()); // null = show menu, string = show specific setting
   // Use global tenant context instead of local state — prevents cascading loadUser re-renders
   const { selectedTenantId } = useTenant();
   const [searchTerm, setSearchTerm] = useState('');
@@ -136,18 +142,35 @@ export default function SettingsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [getInitialTabFromUrl]);
 
   useEffect(() => {
     loadUser();
   }, [loadUser]);
 
   useEffect(() => {
+    const handlePopState = () => {
+      setActiveTab(getInitialTabFromUrl());
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const setActiveTabWithUrl = useCallback((nextTab) => {
+    const normalizedTab = nextTab && nextTab !== 'menu' ? nextTab : null;
+    setActiveTab(normalizedTab);
+
     const params = new URLSearchParams(window.location.search);
-    const tab = params.get('tab');
-    if (tab && tab !== 'menu') {
-      setActiveTab(tab);
+    if (normalizedTab) {
+      params.set('tab', normalizedTab);
+    } else {
+      params.delete('tab');
     }
+
+    const query = params.toString();
+    const nextUrl = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash || ''}`;
+    window.history.replaceState({}, '', nextUrl);
   }, []);
 
   // Compute role flags (safe even if currentUser is null)
@@ -949,7 +972,7 @@ export default function SettingsPage() {
                     </Button>
                     <p className="text-xs text-muted-foreground mt-2">
                       This will create the master cron job runner that processes all scheduled
-                      tasks.
+                      onClick={() => setActiveTabWithUrl(null)}
                     </p>
                   </CardContent>
                 </Card>
@@ -1387,7 +1410,7 @@ export default function SettingsPage() {
                   <Card
                     key={item.id}
                     className={`cursor-pointer transition-all duration-200 hover:scale-[1.02] hover:shadow-lg border-2 ${getColorClasses(CATEGORIES[item.category]?.color)}`}
-                    onClick={() => setActiveTab(item.id)}
+                    onClick={() => setActiveTabWithUrl(item.id)}
                   >
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between">
