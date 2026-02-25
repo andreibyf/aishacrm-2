@@ -1181,6 +1181,17 @@ export default function ContactsPage() {
             <Upload className="w-4 h-4 mr-2" />
             Import
           </Button>
+          {(selectedContacts.size > 0 || selectAllMode) && (
+            <BulkActionsMenu
+              selectedCount={selectAllMode ? totalItems : selectedContacts.size}
+              onBulkDelete={handleBulkDelete}
+              onBulkStatusChange={handleBulkStatusChange}
+              onBulkAssign={handleBulkAssign}
+              employees={employees}
+              selectAllMode={selectAllMode}
+              totalCount={totalItems}
+            />
+          )}
           <Button
             onClick={() => {
               setEditingContact(null);
@@ -1358,32 +1369,6 @@ export default function ContactsPage() {
           </SelectContent>
         </Select>
       </div>
-
-      {/* Bulk Actions */}
-      {(selectedContacts.size > 0 || selectAllMode) && (
-        <div className="bg-blue-900/30 border border-blue-700/50 rounded-lg p-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Checkbox
-              checked={selectedContacts.size === contacts.length && !selectAllMode}
-              onCheckedChange={toggleSelectAll}
-              className="border-slate-600 data-[state=checked]:bg-blue-600"
-            />
-
-            <span className="text-slate-200 font-medium">
-              {selectAllMode ? totalItems : selectedContacts.size} contact
-              {(selectAllMode ? totalItems : selectedContacts.size) !== 1 ? 's' : ''} selected
-            </span>
-          </div>
-          <BulkActionsMenu
-            selectedCount={selectAllMode ? totalItems : selectedContacts.size}
-            onBulkDelete={handleBulkDelete}
-            onBulkStatusChange={handleBulkStatusChange}
-            onBulkAssign={handleBulkAssign}
-            selectAllMode={selectAllMode}
-            totalCount={totalItems}
-          />
-        </div>
-      )}
 
       {/* Select All Banner */}
       {selectedContacts.size === contacts.length &&
