@@ -112,7 +112,7 @@ export default function EmployeeForm({
         toast.error('WhatsApp phone number is required when WhatsApp access is enabled.');
         return;
       }
-      if (!/^\+[1-9]\d{6,14}$/.test(wa)) {
+      if (!/^\+[1-9]\d{7,14}$/.test(wa)) {
         toast.error('WhatsApp number must be in E.164 format (e.g. +19543488819)');
         return;
       }
@@ -407,7 +407,7 @@ export default function EmployeeForm({
             </div>
             {isEdit &&
               formData.whatsapp_number &&
-              /^\+[1-9]\d{6,14}$/.test(formData.whatsapp_number.trim()) && (
+              /^\+[1-9]\d{7,14}$/.test(formData.whatsapp_number.trim()) && (
                 <div>
                   <Button
                     type="button"

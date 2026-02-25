@@ -720,10 +720,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
                 to:
               </p>
               <code className="block text-xs bg-white dark:bg-slate-900 px-2 py-1.5 rounded border select-all">
-                {window.location.origin
-                  .replace('localhost:5173', 'localhost:3001')
-                  .replace('localhost:4000', 'localhost:3001')}
-                /api/whatsapp/webhook
+                {getBackendUrl()}/api/whatsapp/webhook
               </code>
               <p className="text-xs text-muted-foreground">
                 For production, use your public domain (e.g. via ngrok for testing).

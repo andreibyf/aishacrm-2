@@ -134,7 +134,7 @@ IMPORTANT CONTEXT: This conversation is happening via WhatsApp.
 - Keep responses concise and mobile-friendly (avoid long paragraphs)
 - Use plain text only (no markdown, no HTML, no code blocks)
 - Do NOT include any internal IDs, technical fields, or system metadata in responses
-- Be conversational and helpful, as if texting a valued customer
+- Be conversational and helpful, as if texting a colleague
 - ALWAYS call fetch_tenant_snapshot or the appropriate tool before answering CRM data questions.
 - NEVER hallucinate records; only reference data returned by tools.
 - NEVER fabricate or hallucinate tool calls or function results.
@@ -537,7 +537,7 @@ export default function createWhatsAppRoutes(_pgPool) {
       }
 
       // Validate E.164
-      if (!/^\+[1-9]\d{6,14}$/.test(whatsapp_number)) {
+      if (!/^\+[1-9]\d{7,14}$/.test(whatsapp_number)) {
         return res.status(400).json({ status: 'error', message: 'Invalid phone number format' });
       }
 
