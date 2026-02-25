@@ -67,10 +67,48 @@ const nodeColors = {
   pep_query: 'bg-emerald-600',
 };
 
+// Reusable connection point component with larger hit area and hover visibility
+function ConnectionPoint({ position, onStartConnect, connectMode, direction }) {
+  const positionClasses = {
+    top: 'top-0 left-1/2 -translate-x-1/2 -translate-y-1/2',
+    bottom: 'bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2',
+    left: 'top-1/2 left-0 -translate-x-1/2 -translate-y-1/2',
+    right: 'top-1/2 right-0 translate-x-1/2 -translate-y-1/2',
+  };
+
+  return (
+    <div
+      className={`absolute ${positionClasses[position]} z-20 group/cp`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onStartConnect(position);
+      }}
+      title={`Connect from ${position}`}
+    >
+      {/* Larger invisible hit area for easier clicking */}
+      <div className="w-6 h-6 rounded-full flex items-center justify-center cursor-pointer">
+        {/* Visible dot */}
+        <div
+          className={`
+          w-3 h-3 rounded-full border-2 border-white transition-all duration-200
+          ${
+            connectMode
+              ? 'bg-yellow-400 scale-125 animate-pulse shadow-lg shadow-yellow-400/50'
+              : 'bg-blue-400 opacity-40 group-hover:opacity-100 group-hover/cp:scale-150 group-hover/cp:opacity-100 group-hover/cp:shadow-lg group-hover/cp:shadow-blue-400/50'
+          }
+        `}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function WorkflowNode({
   node,
   isSelected,
   isConnecting,
+  isDragging,
+  connectMode,
   onClick,
   _onUpdate,
   onDelete,
@@ -199,11 +237,14 @@ export default function WorkflowNode({
     }
   };
 
+  // Drag feedback classes
+  const dragClasses = isDragging ? 'shadow-2xl shadow-purple-500/30 scale-[1.02] opacity-90' : '';
+
   // Special diamond rendering for condition node
   if (node.type === 'condition') {
     return (
       <div
-        className="relative bg-transparent p-4 rounded-lg border-0 shadow-none cursor-pointer select-none transition-all duration-200 w-80"
+        className={`relative bg-transparent p-4 rounded-lg border-0 shadow-none cursor-pointer select-none transition-all duration-200 w-80 group ${dragClasses}`}
         style={{ minHeight: '160px' }}
         onClick={onClick}
       >
@@ -247,38 +288,22 @@ export default function WorkflowNode({
           </div>
         </div>
 
-        {/* Connection points on sides like regular nodes */}
-        <div
-          className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-blue-400 border border-white cursor-pointer hover:scale-150 transition-transform z-20"
-          onClick={(e) => {
-            e.stopPropagation();
-            onStartConnect('top');
-          }}
-          title="Connect from top"
+        {/* Connection points */}
+        <ConnectionPoint position="top" onStartConnect={onStartConnect} connectMode={connectMode} />
+        <ConnectionPoint
+          position="bottom"
+          onStartConnect={onStartConnect}
+          connectMode={connectMode}
         />
-        <div
-          className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-2 h-2 rounded-full bg-blue-400 border border-white cursor-pointer hover:scale-150 transition-transform z-20"
-          onClick={(e) => {
-            e.stopPropagation();
-            onStartConnect('bottom');
-          }}
-          title="Connect from bottom"
+        <ConnectionPoint
+          position="left"
+          onStartConnect={onStartConnect}
+          connectMode={connectMode}
         />
-        <div
-          className="absolute top-1/2 left-0 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-blue-400 border border-white cursor-pointer hover:scale-150 transition-transform z-20"
-          onClick={(e) => {
-            e.stopPropagation();
-            onStartConnect('left');
-          }}
-          title="Connect from left"
-        />
-        <div
-          className="absolute top-1/2 right-0 translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-blue-400 border border-white cursor-pointer hover:scale-150 transition-transform z-20"
-          onClick={(e) => {
-            e.stopPropagation();
-            onStartConnect('right');
-          }}
-          title="Connect from right"
+        <ConnectionPoint
+          position="right"
+          onStartConnect={onStartConnect}
+          connectMode={connectMode}
         />
 
         {/* Overlay controls */}
@@ -308,14 +333,14 @@ export default function WorkflowNode({
 
         {/* Visual hint for connection order */}
         <div className="text-center text-[10px] text-slate-500 mt-1">
-          First connection = TRUE • Second = FALSE
+          First connection = TRUE &bull; Second = FALSE
         </div>
       </div>
     );
   }
 
   return (
-    <div className="relative">
+    <div className={`relative group transition-all duration-200 ${dragClasses}`}>
       <Card
         className={`w-80 cursor-pointer transition-all ${
           isSelected ? 'ring-2 ring-purple-500 shadow-xl' : 'hover:shadow-lg'
@@ -356,39 +381,15 @@ export default function WorkflowNode({
         </CardContent>
       </Card>
 
-      {/* Connection points on rectangle sides */}
-      <div
-        className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-blue-400 border border-white cursor-pointer hover:scale-150 transition-transform z-20"
-        onClick={(e) => {
-          e.stopPropagation();
-          onStartConnect('top');
-        }}
-        title="Connect from top"
+      {/* Connection points with larger hit areas */}
+      <ConnectionPoint position="top" onStartConnect={onStartConnect} connectMode={connectMode} />
+      <ConnectionPoint
+        position="bottom"
+        onStartConnect={onStartConnect}
+        connectMode={connectMode}
       />
-      <div
-        className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-2 h-2 rounded-full bg-blue-400 border border-white cursor-pointer hover:scale-150 transition-transform z-20"
-        onClick={(e) => {
-          e.stopPropagation();
-          onStartConnect('bottom');
-        }}
-        title="Connect from bottom"
-      />
-      <div
-        className="absolute top-1/2 left-0 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-blue-400 border border-white cursor-pointer hover:scale-150 transition-transform z-20"
-        onClick={(e) => {
-          e.stopPropagation();
-          onStartConnect('left');
-        }}
-        title="Connect from left"
-      />
-      <div
-        className="absolute top-1/2 right-0 translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-blue-400 border border-white cursor-pointer hover:scale-150 transition-transform z-20"
-        onClick={(e) => {
-          e.stopPropagation();
-          onStartConnect('right');
-        }}
-        title="Connect from right"
-      />
+      <ConnectionPoint position="left" onStartConnect={onStartConnect} connectMode={connectMode} />
+      <ConnectionPoint position="right" onStartConnect={onStartConnect} connectMode={connectMode} />
     </div>
   );
 }
