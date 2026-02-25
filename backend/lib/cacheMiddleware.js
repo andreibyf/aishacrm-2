@@ -148,7 +148,9 @@ export function invalidateCache(module) {
     // Override res.json to invalidate cache on success before sending response
     res.json = async function (data) {
       if (res.statusCode >= 200 && res.statusCode < 300) {
-        const tenantId = req.user?.tenant_id || req.query?.tenant_id || req.body?.tenant_id;
+        // Prefer canonical UUID from tenant middleware, fall back to query/body
+        const tenantId =
+          req.tenant?.id || req.user?.tenant_id || req.query?.tenant_id || req.body?.tenant_id;
         if (tenantId) {
           await cacheManager.invalidateTenant(tenantId, module);
           console.log(`[Cache] Invalidated: ${module} for tenant ${tenantId}`);
@@ -159,8 +161,6 @@ export function invalidateCache(module) {
           }
         }
       }
-      // Restore original res.send before calling originalJson to prevent
-      // any downstream overrides from triggering additional invalidation
       return originalJson(data);
     };
 

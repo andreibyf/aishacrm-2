@@ -896,11 +896,14 @@ export default function LeadsPage() {
 
         completeProgress();
 
-        // Optimistic UI: clear the list immediately since we deleted all matching
-        setLeads([]);
-        setTotalItems(0);
         setSelectedLeads(new Set());
         setSelectAllMode(false);
+
+        // Optimistic UI: only clear the list if all deletes succeeded
+        if (failCount === 0) {
+          setLeads([]);
+          setTotalItems(0);
+        }
 
         if (successCount > 0) toast.success(`${successCount} lead(s) deleted`);
         if (failCount > 0) toast.error(`${failCount} lead(s) failed to delete`);
@@ -966,11 +969,14 @@ export default function LeadsPage() {
 
         completeProgress();
 
-        // Optimistic UI: remove deleted items immediately
-        const deletedIds = new Set(selectedArray);
-        setLeads((prev) => prev.filter((l) => !deletedIds.has(l.id)));
-        setTotalItems((prev) => Math.max(0, prev - successCount));
         setSelectedLeads(new Set());
+
+        // Optimistic UI: only remove items if all chunks succeeded
+        if (failedCount === 0) {
+          const deletedIds = new Set(selectedArray);
+          setLeads((prev) => prev.filter((l) => !deletedIds.has(l.id)));
+          setTotalItems((prev) => Math.max(0, prev - successCount));
+        }
 
         if (failedCount > 0) {
           toast.error(`${successCount} deleted, ${failedCount} failed`);
