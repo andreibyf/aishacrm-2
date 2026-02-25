@@ -56,7 +56,8 @@ import { format } from 'date-fns';
 import { updateEmployeeSecure } from '@/api/functions';
 import { canDeleteUser } from '@/utils/permissions';
 import { useUser } from '@/components/shared/useUser.js';
-import { useTenant } from '@/components/shared/tenantContext';
+// useTenant hook removed — caused re-render cascade on edit click (PR #295 bug fix)
+// Tenant changes now handled via 'tenant-changed' window event listener instead
 import { getBackendUrl } from '@/api/backendUrl';
 
 // Backend API URL
@@ -769,22 +770,26 @@ export default function EnhancedUserManagement() {
   const [searchParams] = useSearchParams();
   const urlTenantId = searchParams.get('tenant');
 
-  // Primary tenant source: context hook (reacts to TenantSwitcher changes)
-  const { selectedTenantId: contextTenantId } = useTenant();
-  // Resolved tenant: context takes priority, URL param as fallback for deep links
-  const activeTenantId = contextTenantId || urlTenantId;
+  // Track effective tenant — initialized from URL, updated via tenant-changed events.
+  // Uses local state + event listener instead of useTenant() to avoid re-render
+  // cascade that caused tenant switching when clicking Edit (PR #295 bug fix)
+  const [effectiveTenantId, setEffectiveTenantId] = useState(urlTenantId);
 
   useEffect(() => {
     if (!currentUser) return;
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser, activeTenantId]);
+  }, [currentUser, effectiveTenantId]);
 
   // Listen for tenant-changed events (fired by TenantSwitcher via tenantContext)
+  // This is the ONLY mechanism that reacts to TenantSwitcher changes — we intentionally
+  // avoid useTenant() hook to prevent re-render cascade that caused the edit-click bug
   useEffect(() => {
     const handleTenantChanged = (e) => {
-      console.log('[EnhancedUserManagement] tenant-changed event:', e.detail?.tenantId);
-      // Reset search/filters when tenant changes
+      const newTenantId = e.detail?.tenantId;
+      console.log('[EnhancedUserManagement] tenant-changed event:', newTenantId);
+      // Update effective tenant and reset search/filters
+      setEffectiveTenantId(newTenantId || null);
       setSearchTerm('');
       setRoleFilter('all');
       setSelectedUsers(new Set());
@@ -804,8 +809,8 @@ export default function EnhancedUserManagement() {
       let userFilter = {};
       if (currentUser.role === 'superadmin') {
         // Superadmins: if URL has tenant, filter by it; otherwise show ALL users
-        if (activeTenantId) {
-          userFilter.tenant_id = activeTenantId;
+        if (effectiveTenantId) {
+          userFilter.tenant_id = effectiveTenantId;
         }
       } else {
         // Regular admins only see their own tenant
@@ -816,8 +821,8 @@ export default function EnhancedUserManagement() {
         User.listProfiles(userFilter, { cacheBust: !!options.cacheBust }),
         currentUser.role === 'superadmin' ? Tenant.list() : Promise.resolve([]),
         // Load module settings for the current/selected tenant
-        activeTenantId || currentUser.tenant_id
-          ? ModuleSettings.filter({ tenant_id: activeTenantId || currentUser.tenant_id })
+        effectiveTenantId || currentUser.tenant_id
+          ? ModuleSettings.filter({ tenant_id: effectiveTenantId || currentUser.tenant_id })
           : Promise.resolve([]),
       ]);
 
@@ -902,11 +907,8 @@ export default function EnhancedUserManagement() {
       toast.success('User updated successfully!');
       setEditingUser(null);
 
-      await loadData();
-
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
+      // Re-fetch user list to reflect changes (no full page reload needed)
+      await loadData({ cacheBust: true });
     } catch (error) {
       console.error('Error updating user:', error);
       toast.error(`Failed to update user: ${error.message || 'An unknown error occurred.'}`);

@@ -44,6 +44,7 @@ import {
   Zap, // for CareSettings
 } from 'lucide-react';
 import { User as UserEntity } from '@/api/entities';
+import { useTenant } from '@/components/shared/tenantContext';
 
 // Lazy loading wrapper for settings sub-components
 const SettingsLoader = ({ children }) => (
@@ -119,7 +120,8 @@ export default function SettingsPage() {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(null); // null = show menu, string = show specific setting
-  const [selectedTenantId, setSelectedTenantId] = useState(null);
+  // Use global tenant context instead of local state — prevents cascading loadUser re-renders
+  const { selectedTenantId } = useTenant();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(null);
 
@@ -127,9 +129,6 @@ export default function SettingsPage() {
     try {
       const user = await UserEntity.me();
       setCurrentUser(user);
-      if (!selectedTenantId && user?.tenant_id) {
-        setSelectedTenantId(user.tenant_id);
-      }
     } catch (error) {
       if (import.meta.env.DEV) {
         console.error('Error loading user:', error);
@@ -137,7 +136,7 @@ export default function SettingsPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedTenantId]);
+  }, []);
 
   useEffect(() => {
     loadUser();
