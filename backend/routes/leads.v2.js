@@ -656,10 +656,8 @@ export default function createLeadsV2Routes() {
 
       if (!data) throw new Error('Lead created but could not be fetched');
 
-      // Invalidate cache in background
-      invalidateTenantCache(tenant_id, 'leads').catch((err) =>
-        logger.warn('[Leads v2 POST] Cache invalidation failed:', err.message),
-      );
+      // Invalidate cache before responding so the next GET returns fresh data
+      await invalidateTenantCache(tenant_id, 'leads');
 
       const created = expandMetadata(data);
       const aiContext = await buildLeadAiContext(created, { tenantId: tenant_id });
@@ -832,10 +830,8 @@ export default function createLeadsV2Routes() {
         throw new Error(error.message);
       }
 
-      // Invalidate cache in background
-      invalidateTenantCache(tenant_id, 'leads').catch((err) =>
-        logger.warn('[Leads v2 PUT] Cache invalidation failed:', err.message),
-      );
+      // Invalidate cache before responding so the next GET returns fresh data
+      await invalidateTenantCache(tenant_id, 'leads');
 
       res.json({
         status: 'success',
@@ -920,10 +916,8 @@ export default function createLeadsV2Routes() {
 
       if (error) throw new Error(error.message);
 
-      // Invalidate cache once for the whole batch
-      invalidateTenantCache(tenant_id, 'leads').catch((err) =>
-        logger.warn('[Leads v2 BULK-DELETE] Cache invalidation failed:', err.message),
-      );
+      // Invalidate cache before responding so the next GET returns fresh data
+      await invalidateTenantCache(tenant_id, 'leads');
 
       res.json({
         status: 'success',

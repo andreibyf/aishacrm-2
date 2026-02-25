@@ -595,16 +595,19 @@ export default function ContactsPage() {
     });
     try {
       await Contact.delete(id);
-      clearCacheByKey('Contact');
 
-      // Reload data properly
-      await Promise.all([loadContacts(), loadTotalStats()]);
-
+      // Optimistic UI: remove immediately so user sees instant feedback
+      setContacts((prev) => prev.filter((c) => c.id !== id));
+      setTotalItems((prev) => Math.max(0, prev - 1));
       toast.success('Contact deleted successfully');
       logger.info('Contact deleted successfully', 'ContactsPage', {
         contactId: id,
         userId: user?.id || user?.email,
       });
+
+      // Background refresh to sync with server
+      clearCacheByKey('Contact');
+      await Promise.all([loadContacts(), loadTotalStats()]);
     } catch (error) {
       console.error('Error deleting contact:', error);
       toast.error('Failed to delete contact');

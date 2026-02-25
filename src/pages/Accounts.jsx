@@ -667,12 +667,15 @@ export default function AccountsPage() {
 
     try {
       await Account.delete(id);
-      clearCacheByKey('Account');
 
-      // Reload data properly
-      await Promise.all([loadAccounts(), loadTotalStats()]);
-
+      // Optimistic UI: remove immediately so user sees instant feedback
+      setAccounts((prev) => prev.filter((a) => a.id !== id));
+      setTotalItems((prev) => Math.max(0, prev - 1));
       toast.success('Account deleted successfully');
+
+      // Background refresh to sync with server
+      clearCacheByKey('Account');
+      await Promise.all([loadAccounts(), loadTotalStats()]);
     } catch (error) {
       console.error('Failed to delete account:', error);
       const errorMsg =
