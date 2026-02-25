@@ -774,7 +774,7 @@ export default function EnhancedUserManagement() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, urlTenantId]);
 
-  const loadData = async () => {
+  const loadData = async (options = {}) => {
     if (!currentUser) return;
     setLoading(true);
     try {
@@ -793,7 +793,7 @@ export default function EnhancedUserManagement() {
       }
 
       const [usersData, tenantsData, moduleData] = await Promise.all([
-        User.listProfiles(userFilter),
+        User.listProfiles(userFilter, { cacheBust: !!options.cacheBust }),
         currentUser.role === 'superadmin' ? Tenant.list() : Promise.resolve([]),
         // Load module settings for the current/selected tenant
         urlTenantId || currentUser.tenant_id
@@ -894,7 +894,9 @@ export default function EnhancedUserManagement() {
   };
 
   const handleInviteSuccess = () => {
-    loadData();
+    // Small delay to allow backend cache invalidation to complete,
+    // then re-fetch with cache-busting to ensure fresh data
+    setTimeout(() => loadData({ cacheBust: true }), 500);
   };
 
   const handleDeleteUser = (user) => {
