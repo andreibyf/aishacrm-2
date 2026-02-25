@@ -1,6 +1,6 @@
 /**
  * Documents v2 API Routes
- * 
+ *
  * AI-enhanced document management with:
  * - Automatic document classification
  * - AI-powered summaries
@@ -11,7 +11,7 @@
 import express from 'express';
 import { validateTenantAccess, requireAdminOrManagerRole } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
-import { cacheList, cacheDetail } from '../lib/cacheMiddleware.js';
+import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 
 export default function createDocumentV2Routes(_pgPool) {
@@ -24,7 +24,7 @@ export default function createDocumentV2Routes(_pgPool) {
    */
   async function buildDocumentAiContext(document, _options = {}) {
     const startTime = Date.now();
-    
+
     if (!document) {
       return {
         confidence: 0,
@@ -39,7 +39,16 @@ export default function createDocumentV2Routes(_pgPool) {
 
     try {
       const supabase = getSupabaseClient();
-      const { tenant_id: _tenant_id, id: _id, name, file_type, file_size, related_type, related_id, created_at } = document;
+      const {
+        tenant_id: _tenant_id,
+        id: _id,
+        name,
+        file_type,
+        file_size,
+        related_type,
+        related_id,
+        created_at,
+      } = document;
 
       // Classify document type
       const classification = classifyDocument(name, file_type);
@@ -47,19 +56,29 @@ export default function createDocumentV2Routes(_pgPool) {
       // Fetch related entity if any
       let relatedEntity = null;
       if (related_type && related_id) {
-        const tableName = related_type === 'opportunity' ? 'opportunities' :
-                          related_type === 'account' ? 'accounts' :
-                          related_type === 'contact' ? 'contacts' :
-                          related_type === 'lead' ? 'leads' : null;
+        const tableName =
+          related_type === 'opportunity'
+            ? 'opportunities'
+            : related_type === 'account'
+              ? 'accounts'
+              : related_type === 'contact'
+                ? 'contacts'
+                : related_type === 'lead'
+                  ? 'leads'
+                  : null;
         if (tableName) {
-          const { data } = await supabase.from(tableName).select('id, name, first_name, last_name').eq('id', related_id).single();
+          const { data } = await supabase
+            .from(tableName)
+            .select('id, name, first_name, last_name')
+            .eq('id', related_id)
+            .single();
           relatedEntity = data;
         }
       }
 
       // Generate suggestions
       const suggestions = [];
-      
+
       if (!related_id) {
         suggestions.push({
           action: 'link_to_entity',
@@ -90,7 +109,7 @@ export default function createDocumentV2Routes(_pgPool) {
       // Generate insights
       const insights = [];
       insights.push(`Document type: ${classification.category}`);
-      
+
       if (file_size) {
         const sizeMB = (file_size / (1024 * 1024)).toFixed(2);
         insights.push(`File size: ${sizeMB} MB`);
@@ -103,7 +122,8 @@ export default function createDocumentV2Routes(_pgPool) {
       // Build related items
       const relatedItems = [];
       if (relatedEntity) {
-        const entityName = relatedEntity.name || 
+        const entityName =
+          relatedEntity.name ||
           `${relatedEntity.first_name || ''} ${relatedEntity.last_name || ''}`.trim();
         relatedItems.push({ type: related_type, id: related_id, name: entityName });
       }
@@ -144,40 +164,61 @@ export default function createDocumentV2Routes(_pgPool) {
     const keywords = [];
 
     let category = 'general';
-    
+
     // Contract detection
-    if (nameLower.includes('contract') || nameLower.includes('agreement') || 
-        nameLower.includes('msa') || nameLower.includes('sow')) {
+    if (
+      nameLower.includes('contract') ||
+      nameLower.includes('agreement') ||
+      nameLower.includes('msa') ||
+      nameLower.includes('sow')
+    ) {
       category = 'contract';
       keywords.push('legal', 'binding');
     }
     // Proposal detection
-    else if (nameLower.includes('proposal') || nameLower.includes('quote') || 
-             nameLower.includes('estimate') || nameLower.includes('rfp')) {
+    else if (
+      nameLower.includes('proposal') ||
+      nameLower.includes('quote') ||
+      nameLower.includes('estimate') ||
+      nameLower.includes('rfp')
+    ) {
       category = 'proposal';
       keywords.push('sales', 'pricing');
     }
     // Invoice detection
-    else if (nameLower.includes('invoice') || nameLower.includes('receipt') || 
-             nameLower.includes('payment')) {
+    else if (
+      nameLower.includes('invoice') ||
+      nameLower.includes('receipt') ||
+      nameLower.includes('payment')
+    ) {
       category = 'invoice';
       keywords.push('financial', 'billing');
     }
     // Report detection
-    else if (nameLower.includes('report') || nameLower.includes('analysis') || 
-             nameLower.includes('summary')) {
+    else if (
+      nameLower.includes('report') ||
+      nameLower.includes('analysis') ||
+      nameLower.includes('summary')
+    ) {
       category = 'report';
       keywords.push('analytics', 'data');
     }
     // Presentation detection
-    else if (fileType?.includes('presentation') || nameLower.includes('deck') ||
-             nameLower.includes('.pptx') || nameLower.includes('.ppt')) {
+    else if (
+      fileType?.includes('presentation') ||
+      nameLower.includes('deck') ||
+      nameLower.includes('.pptx') ||
+      nameLower.includes('.ppt')
+    ) {
       category = 'presentation';
       keywords.push('slides', 'meeting');
     }
     // Spreadsheet detection
-    else if (fileType?.includes('spreadsheet') || nameLower.includes('.xlsx') || 
-             nameLower.includes('.csv')) {
+    else if (
+      fileType?.includes('spreadsheet') ||
+      nameLower.includes('.xlsx') ||
+      nameLower.includes('.csv')
+    ) {
       category = 'spreadsheet';
       keywords.push('data', 'numbers');
     }
@@ -199,11 +240,16 @@ export default function createDocumentV2Routes(_pgPool) {
    */
   function detectSensitivity(name, classification) {
     const nameLower = (name || '').toLowerCase();
-    
+
     // High sensitivity indicators
-    if (nameLower.includes('confidential') || nameLower.includes('private') ||
-        nameLower.includes('nda') || nameLower.includes('salary') ||
-        nameLower.includes('ssn') || nameLower.includes('password')) {
+    if (
+      nameLower.includes('confidential') ||
+      nameLower.includes('private') ||
+      nameLower.includes('nda') ||
+      nameLower.includes('salary') ||
+      nameLower.includes('ssn') ||
+      nameLower.includes('password')
+    ) {
       return 'high';
     }
 
@@ -293,10 +339,7 @@ export default function createDocumentV2Routes(_pgPool) {
       const limit = parseInt(req.query.limit || '50', 10);
       const offset = parseInt(req.query.offset || '0', 10);
 
-      let q = supabase
-        .from('documents')
-        .select('*', { count: 'exact' })
-        .eq('tenant_id', tenant_id);
+      let q = supabase.from('documents').select('*', { count: 'exact' }).eq('tenant_id', tenant_id);
 
       if (related_type) {
         q = q.eq('related_type', related_type);
@@ -305,8 +348,7 @@ export default function createDocumentV2Routes(_pgPool) {
         q = q.eq('related_id', related_id);
       }
 
-      q = q.order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1);
+      q = q.order('created_at', { ascending: false }).range(offset, offset + limit - 1);
 
       const { data, error, count } = await q;
       if (error) throw new Error(error.message);
@@ -316,7 +358,7 @@ export default function createDocumentV2Routes(_pgPool) {
         (data || []).map(async (doc) => {
           const aiContext = await buildDocumentAiContext(doc, { lite: true });
           return { ...doc, aiContext };
-        })
+        }),
       );
 
       res.json({
@@ -386,9 +428,10 @@ export default function createDocumentV2Routes(_pgPool) {
    *     summary: Create document with AI classification
    *     tags: [documents-v2]
    */
-  router.post('/', async (req, res) => {
+  router.post('/', invalidateCache('documents'), async (req, res) => {
     try {
-      const { tenant_id, name, file_url, file_type, file_size, related_type, related_id, ...rest } = req.body;
+      const { tenant_id, name, file_url, file_type, file_size, related_type, related_id, ...rest } =
+        req.body;
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -449,7 +492,7 @@ export default function createDocumentV2Routes(_pgPool) {
    *     summary: Update document
    *     tags: [documents-v2]
    */
-  router.put('/:id', async (req, res) => {
+  router.put('/:id', invalidateCache('documents'), async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id, ...payload } = req.body;
@@ -520,86 +563,91 @@ export default function createDocumentV2Routes(_pgPool) {
    *           type: string
    *         description: Reason for deletion (required for audit trail)
    */
-  router.delete('/:id', requireAdminOrManagerRole, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { tenant_id, reason } = req.query;
-      const { user } = req;
-
-      if (!tenant_id) {
-        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
-      }
-
-      if (!reason || reason.trim() === '') {
-        return res.status(400).json({ 
-          status: 'error', 
-          message: 'Deletion reason is required for audit trail' 
-        });
-      }
-
-      const supabase = getSupabaseClient();
-
-      // First, get the document details before deletion for audit log
-      const { data: documentToDelete, error: fetchError } = await supabase
-        .from('documents')
-        .select('*')
-        .eq('id', id)
-        .eq('tenant_id', tenant_id)
-        .maybeSingle();
-
-      if (fetchError && fetchError.code !== 'PGRST116') {
-        throw new Error(fetchError.message);
-      }
-
-      if (!documentToDelete) {
-        return res.status(404).json({ status: 'error', message: 'Document not found' });
-      }
-
-      // Delete the document
-      const { error: deleteError } = await supabase
-        .from('documents')
-        .delete()
-        .eq('id', id)
-        .eq('tenant_id', tenant_id);
-
-      if (deleteError) throw new Error(deleteError.message);
-
-      // Log the deletion to system_logs for audit trail
+  router.delete(
+    '/:id',
+    requireAdminOrManagerRole,
+    invalidateCache('documents'),
+    async (req, res) => {
       try {
-        await supabase.from('system_logs').insert({
-          tenant_id,
-          level: 'INFO',
-          source: 'documents.v2',
-          message: `Document deleted: ${documentToDelete.name || documentToDelete.id}`,
-          metadata: {
-            action: 'document_delete',
-            document_id: id,
-            document_name: documentToDelete.name,
-            document_type: documentToDelete.type,
-            deleted_by_user_id: user.id,
-            deleted_by_email: user.email,
-            deleted_by_role: user.role,
-            deletion_reason: reason.trim(),
-            ip_address: req.ip || req.connection?.remoteAddress,
-            user_agent: req.get('user-agent'),
-            timestamp: new Date().toISOString()
-          }
-        });
-      } catch (logError) {
-        // Log error but don't fail the deletion
-        logger.error('Failed to write audit log for document deletion:', logError);
-      }
+        const { id } = req.params;
+        const { tenant_id, reason } = req.query;
+        const { user } = req;
 
-      res.json({
-        status: 'success',
-        message: 'Document deleted successfully',
-        audit_logged: true
-      });
-    } catch (error) {
-      logger.error('Error in v2 document delete:', error);
-      res.status(500).json({ status: 'error', message: error.message });
-    }
-  });
+        if (!tenant_id) {
+          return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+        }
+
+        if (!reason || reason.trim() === '') {
+          return res.status(400).json({
+            status: 'error',
+            message: 'Deletion reason is required for audit trail',
+          });
+        }
+
+        const supabase = getSupabaseClient();
+
+        // First, get the document details before deletion for audit log
+        const { data: documentToDelete, error: fetchError } = await supabase
+          .from('documents')
+          .select('*')
+          .eq('id', id)
+          .eq('tenant_id', tenant_id)
+          .maybeSingle();
+
+        if (fetchError && fetchError.code !== 'PGRST116') {
+          throw new Error(fetchError.message);
+        }
+
+        if (!documentToDelete) {
+          return res.status(404).json({ status: 'error', message: 'Document not found' });
+        }
+
+        // Delete the document
+        const { error: deleteError } = await supabase
+          .from('documents')
+          .delete()
+          .eq('id', id)
+          .eq('tenant_id', tenant_id);
+
+        if (deleteError) throw new Error(deleteError.message);
+
+        // Log the deletion to system_logs for audit trail
+        try {
+          await supabase.from('system_logs').insert({
+            tenant_id,
+            level: 'INFO',
+            source: 'documents.v2',
+            message: `Document deleted: ${documentToDelete.name || documentToDelete.id}`,
+            metadata: {
+              action: 'document_delete',
+              document_id: id,
+              document_name: documentToDelete.name,
+              document_type: documentToDelete.type,
+              deleted_by_user_id: user.id,
+              deleted_by_email: user.email,
+              deleted_by_role: user.role,
+              deletion_reason: reason.trim(),
+              ip_address: req.ip || req.connection?.remoteAddress,
+              user_agent: req.get('user-agent'),
+              timestamp: new Date().toISOString(),
+            },
+          });
+        } catch (logError) {
+          // Log error but don't fail the deletion
+          logger.error('Failed to write audit log for document deletion:', logError);
+        }
+
+        res.json({
+          status: 'success',
+          message: 'Document deleted successfully',
+          audit_logged: true,
+        });
+      } catch (error) {
+        logger.error('Error in v2 document delete:', error);
+        res.status(500).json({ status: 'error', message: error.message });
+      }
+    },
+  );
 
   /**
    * @openapi
@@ -640,7 +688,11 @@ export default function createDocumentV2Routes(_pgPool) {
       const supabase = getSupabaseClient();
 
       // Query system_logs for document deletion events
-      const { data: deletionLogs, error, count } = await supabase
+      const {
+        data: deletionLogs,
+        error,
+        count,
+      } = await supabase
         .from('system_logs')
         .select('*', { count: 'exact' })
         .eq('tenant_id', tenant_id)
@@ -654,7 +706,7 @@ export default function createDocumentV2Routes(_pgPool) {
       }
 
       // Transform logs into a cleaner format for the frontend
-      const deletions = (deletionLogs || []).map(log => ({
+      const deletions = (deletionLogs || []).map((log) => ({
         id: log.id,
         document_id: log.metadata?.document_id,
         document_name: log.metadata?.document_name,
@@ -677,7 +729,7 @@ export default function createDocumentV2Routes(_pgPool) {
           total: count || 0,
           limit: parseInt(limit),
           offset: parseInt(offset),
-          hasMore: (parseInt(offset) + deletions.length) < (count || 0),
+          hasMore: parseInt(offset) + deletions.length < (count || 0),
         },
       });
     } catch (error) {
@@ -717,7 +769,9 @@ export default function createDocumentV2Routes(_pgPool) {
       // Placeholder for actual document analysis
       // In production, this would call an AI service (OpenAI, etc.)
       const analysis = {
-        summary: document ? `Document "${document.name}" analysis pending full AI integration` : 'Content analysis pending',
+        summary: document
+          ? `Document "${document.name}" analysis pending full AI integration`
+          : 'Content analysis pending',
         keyPoints: [],
         entities: [],
         sentiment: null,

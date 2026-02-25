@@ -1,11 +1,11 @@
 import express from 'express';
-import { cacheList } from '../lib/cacheMiddleware.js';
+import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 
 export default function createNotificationRoutes(_pgPool) {
   const router = express.Router();
 
-// Helper function to expand metadata fields to top-level properties
+  // Helper function to expand metadata fields to top-level properties
   const expandMetadata = (record) => {
     if (!record) return record;
     const { metadata = {}, ...rest } = record;
@@ -73,7 +73,7 @@ export default function createNotificationRoutes(_pgPool) {
       if (!tenant_id) {
         return res.status(400).json({
           status: 'error',
-          message: 'tenant_id is required'
+          message: 'tenant_id is required',
         });
       }
 
@@ -81,13 +81,12 @@ export default function createNotificationRoutes(_pgPool) {
       const supabase = getSupabaseClient();
       let q = supabase
         .from('notifications')
-        .select('*', { count: 'exact' })  // Get accurate total count
-        .eq('tenant_id', tenant_id);  // Always enforce tenant scoping
+        .select('*', { count: 'exact' }) // Get accurate total count
+        .eq('tenant_id', tenant_id); // Always enforce tenant scoping
 
       if (user_email) q = q.eq('user_email', user_email);
 
-      q = q.order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1);
+      q = q.order('created_at', { ascending: false }).range(offset, offset + limit - 1);
 
       const { data, error, count } = await q;
       if (error) throw new Error(error.message);
@@ -98,16 +97,16 @@ export default function createNotificationRoutes(_pgPool) {
         status: 'success',
         data: {
           notifications,
-          total: count || 0,  // Use accurate count from database
+          total: count || 0, // Use accurate count from database
           limit,
-          offset
-        }
+          offset,
+        },
       });
     } catch (error) {
       logger.error('Error fetching notifications:', error);
       res.status(500).json({
         status: 'error',
-        message: error.message
+        message: error.message,
       });
     }
   });
@@ -152,13 +151,14 @@ export default function createNotificationRoutes(_pgPool) {
    *               $ref: '#/components/schemas/Success'
    */
   // POST /api/notifications - Create notification
-  router.post('/', async (req, res) => {
+  router.post('/', invalidateCache('notifications'), async (req, res) => {
     try {
-      const { tenant_id, user_email, title, message, type, is_read, metadata, ...otherFields } = req.body;
+      const { tenant_id, user_email, title, message, type, is_read, metadata, ...otherFields } =
+        req.body;
 
       const combinedMetadata = {
         ...(metadata || {}),
-        ...otherFields
+        ...otherFields,
       };
 
       const nowIso = new Date().toISOString();
@@ -177,7 +177,7 @@ export default function createNotificationRoutes(_pgPool) {
             metadata: combinedMetadata,
             created_date: nowIso,
             created_at: nowIso,
-          }
+          },
         ])
         .select('*')
         .single();
@@ -187,13 +187,13 @@ export default function createNotificationRoutes(_pgPool) {
 
       res.status(201).json({
         status: 'success',
-        data: notification
+        data: notification,
       });
     } catch (error) {
       logger.error('Error creating notification:', error);
       res.status(500).json({
         status: 'error',
-        message: error.message
+        message: error.message,
       });
     }
   });
@@ -237,7 +237,7 @@ export default function createNotificationRoutes(_pgPool) {
    *               $ref: '#/components/schemas/Error'
    */
   // PUT /api/notifications/:id - Update notification (mark as read)
-  router.put('/:id', async (req, res) => {
+  router.put('/:id', invalidateCache('notifications'), async (req, res) => {
     try {
       const { id } = req.params;
       const { is_read, metadata, ...otherFields } = req.body;
@@ -281,13 +281,13 @@ export default function createNotificationRoutes(_pgPool) {
 
       res.json({
         status: 'success',
-        data: updatedNotification
+        data: updatedNotification,
       });
     } catch (error) {
       logger.error('Error updating notification:', error);
       res.status(500).json({
         status: 'error',
-        message: error.message
+        message: error.message,
       });
     }
   });

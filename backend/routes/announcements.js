@@ -5,7 +5,7 @@
 
 import express from 'express';
 import { validateTenantScopedId } from '../lib/validation.js';
-import { cacheList } from '../lib/cacheMiddleware.js';
+import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 
 export default function createAnnouncementRoutes(_pgPool) {
@@ -21,17 +21,22 @@ export default function createAnnouncementRoutes(_pgPool) {
       if (!tenant_id) {
         return res.status(400).json({
           status: 'error',
-          message: 'tenant_id is required'
+          message: 'tenant_id is required',
         });
       }
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
-      let query = supabase.from('announcement').select('*', { count: 'exact' }).eq('tenant_id', tenant_id);
+      let query = supabase
+        .from('announcement')
+        .select('*', { count: 'exact' })
+        .eq('tenant_id', tenant_id);
       if (is_active !== undefined) query = query.eq('is_active', is_active === 'true');
 
-      query = query.order('created_at', { ascending: false }).range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
+      query = query
+        .order('created_at', { ascending: false })
+        .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
 
       const { data, error, count } = await query;
       if (error) throw new Error(error.message);
@@ -49,11 +54,11 @@ export default function createAnnouncementRoutes(_pgPool) {
   router.get('/active', async (req, res) => {
     try {
       const { tenant_id } = req.query;
-      
+
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
-      
+
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
       // Don't filter by is_active as that column may not exist
@@ -74,7 +79,7 @@ export default function createAnnouncementRoutes(_pgPool) {
       const { id } = req.params;
       const tenant_id = req.tenant?.id || req.query.tenant_id;
       if (!validateTenantScopedId(id, tenant_id, res)) return;
-      
+
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
@@ -83,7 +88,8 @@ export default function createAnnouncementRoutes(_pgPool) {
         .or(`tenant_id.eq.${tenant_id},tenant_id.is.null`)
         .eq('id', id)
         .single();
-      if (error?.code === 'PGRST116') return res.status(404).json({ status: 'error', message: 'Not found' });
+      if (error?.code === 'PGRST116')
+        return res.status(404).json({ status: 'error', message: 'Not found' });
       if (error) throw new Error(error.message);
       res.json({ status: 'success', data: { announcement: data } });
     } catch (error) {
@@ -92,26 +98,29 @@ export default function createAnnouncementRoutes(_pgPool) {
   });
 
   // POST /api/announcements - Create announcement
-  router.post('/', async (req, res) => {
+  router.post('/', invalidateCache('announcements'), async (req, res) => {
     try {
       const a = req.body;
-      if (!a.title || !a.content) return res.status(400).json({ status: 'error', message: 'title and content required' });
+      if (!a.title || !a.content)
+        return res.status(400).json({ status: 'error', message: 'title and content required' });
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
         .from('announcement')
-        .insert([{
-          tenant_id: a.tenant_id || null,
-          title: a.title,
-          content: a.content,
-          type: a.type || 'info',
-          is_active: a.is_active !== false,
-          start_date: a.start_date || null,
-          end_date: a.end_date || null,
-          target_roles: a.target_roles || [],
-          metadata: a.metadata || {}
-        }])
+        .insert([
+          {
+            tenant_id: a.tenant_id || null,
+            title: a.title,
+            content: a.content,
+            type: a.type || 'info',
+            is_active: a.is_active !== false,
+            start_date: a.start_date || null,
+            end_date: a.end_date || null,
+            target_roles: a.target_roles || [],
+            metadata: a.metadata || {},
+          },
+        ])
         .select('*')
         .single();
       if (error) throw new Error(error.message);
@@ -123,7 +132,7 @@ export default function createAnnouncementRoutes(_pgPool) {
   });
 
   // PUT /api/announcements/:id - Update announcement (tenant scoped)
-  router.put('/:id', async (req, res) => {
+  router.put('/:id', invalidateCache('announcements'), async (req, res) => {
     try {
       const { id } = req.params;
       const tenant_id = req.tenant?.id || req.query.tenant_id;
@@ -131,14 +140,24 @@ export default function createAnnouncementRoutes(_pgPool) {
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
 
-      const allowed = ['title', 'content', 'type', 'is_active', 'start_date', 'end_date', 'target_roles', 'metadata'];
+      const allowed = [
+        'title',
+        'content',
+        'type',
+        'is_active',
+        'start_date',
+        'end_date',
+        'target_roles',
+        'metadata',
+      ];
       const payload = {};
       Object.entries(u).forEach(([k, v]) => {
         if (allowed.includes(k)) {
           payload[k] = v;
         }
       });
-      if (Object.keys(payload).length === 0) return res.status(400).json({ status: 'error', message: 'No valid fields' });
+      if (Object.keys(payload).length === 0)
+        return res.status(400).json({ status: 'error', message: 'No valid fields' });
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
@@ -158,7 +177,7 @@ export default function createAnnouncementRoutes(_pgPool) {
   });
 
   // DELETE /api/announcements/:id - Delete announcement (tenant scoped)
-  router.delete('/:id', async (req, res) => {
+  router.delete('/:id', invalidateCache('announcements'), async (req, res) => {
     try {
       const { id } = req.params;
       const tenant_id = req.tenant?.id || req.query.tenant_id;

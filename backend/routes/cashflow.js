@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
 import { validateTenantScopedId } from '../lib/validation.js';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
-import { cacheList } from '../lib/cacheMiddleware.js';
+import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 import { validateCompiledProgram, executePepProgram } from '../../pep/runtime/pepRuntime.js';
 
@@ -152,7 +152,7 @@ export default function createCashFlowRoutes(_pgPool) {
   });
 
   // POST /api/cashflow - Create record
-  router.post('/', async (req, res) => {
+  router.post('/', invalidateCache('cashflow'), async (req, res) => {
     try {
       const c = req.body;
       // Accept transaction_type (Braid/PEP convention) or type (legacy)
@@ -210,7 +210,7 @@ export default function createCashFlowRoutes(_pgPool) {
   });
 
   // PUT /api/cashflow/:id - Update record (tenant scoped)
-  router.put('/:id', async (req, res) => {
+  router.put('/:id', invalidateCache('cashflow'), async (req, res) => {
     try {
       const { id } = req.params;
       let { tenant_id } = req.query || {};
@@ -255,7 +255,7 @@ export default function createCashFlowRoutes(_pgPool) {
   });
 
   // DELETE /api/cashflow/:id - Delete record (tenant scoped)
-  router.delete('/:id', async (req, res) => {
+  router.delete('/:id', invalidateCache('cashflow'), async (req, res) => {
     try {
       const { id } = req.params;
       let { tenant_id } = req.query || {};
