@@ -780,6 +780,20 @@ export default function EnhancedUserManagement() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, activeTenantId]);
 
+  // Listen for tenant-changed events (fired by TenantSwitcher via tenantContext)
+  useEffect(() => {
+    const handleTenantChanged = (e) => {
+      console.log('[EnhancedUserManagement] tenant-changed event:', e.detail?.tenantId);
+      // Reset search/filters when tenant changes
+      setSearchTerm('');
+      setRoleFilter('all');
+      setSelectedUsers(new Set());
+    };
+
+    window.addEventListener('tenant-changed', handleTenantChanged);
+    return () => window.removeEventListener('tenant-changed', handleTenantChanged);
+  }, []);
+
   const loadData = async (options = {}) => {
     if (!currentUser) return;
     setLoading(true);
