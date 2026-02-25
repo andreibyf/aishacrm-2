@@ -2171,7 +2171,7 @@ export const User = {
    * List user profiles with linked employee data
    * @param {object} filters - Optional filters (tenant_id, role, etc.)
    */
-  listProfiles: async (filters = {}) => {
+  listProfiles: async (filters = {}, { cacheBust = false } = {}) => {
     try {
       const params = new URLSearchParams();
       Object.entries(filters).forEach(([key, value]) => {
@@ -2179,6 +2179,9 @@ export const User = {
           params.append(key, value);
         }
       });
+      if (cacheBust) {
+        params.append('_t', Date.now());
+      }
 
       const url = `${BACKEND_URL}/api/users${params.toString() ? `?${params.toString()}` : ''}`;
       const response = await fetch(url, {

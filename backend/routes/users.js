@@ -6,6 +6,7 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
+import expandUserMetadata from '../lib/expandUserMetadata.js';
 import {
   confirmUserEmail,
   deleteAuthUser,
@@ -145,49 +146,12 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
   // Helper: selectively expand metadata to reduce duplication.
   // Previously we spread ALL metadata keys to top-level which caused large duplication
-  // (e.g. navigation_permissions, permissions repeated). We now only expose a curated
-  // whitelist of frequently accessed convenience fields while retaining the full
-  // original metadata object. Components needing other custom metadata must read
-  // from user.metadata.<key> instead of top-level.
-  const expandUserMetadata = (user) => {
-    if (!user) return user;
-    const { metadata = {}, ...rest } = user;
-
-    // Whitelist of metadata keys promoted to top-level for convenience.
-    const promoteKeys = [
-      'display_name',
-      'live_status',
-      'last_seen',
-      'is_active',
-      'account_status',
-      'employee_role',
-      'tags',
-      'permissions',
-      'navigation_permissions',
-      'password_change_required',
-      'password_expires_at',
-    ];
-    const promoted = {};
-    for (const k of promoteKeys) {
-      if (k in metadata) promoted[k] = metadata[k];
-    }
-
-    // Remove promoted keys from nested metadata to avoid duplication.
-    const nestedMetadata = { ...metadata };
-    for (const k of promoteKeys) {
-      if (k in nestedMetadata) delete nestedMetadata[k];
-    }
-
-    return {
-      ...rest,
-      ...promoted,
-      metadata: nestedMetadata, // slim metadata without promoted duplicates
-    };
-  };
+  // expandUserMetadata is imported from ../lib/expandUserMetadata.js
+  // It promotes whitelisted metadata keys to top-level and computes display_name/full_name.
 
   // GET /api/users - List users (combines global users + tenant employees)
   // Supports lookup by email without tenant filter
-  router.get('/', cacheList('users', 180), async (req, res) => {
+  router.get('/', cacheList('users', 30), async (req, res) => {
     try {
       // Normalize email param case-insensitively and support alternate casing
       const rawEmailKey = Object.keys(req.query).find((k) => k.toLowerCase() === 'email');
@@ -1206,6 +1170,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
       // Build metadata
       const metadata = {
+        display_name: full_name || first_name || null,
         crm_access: crm_access !== false,
         requested_access: requested_access || 'read_write',
         can_use_softphone: can_use_softphone || false,

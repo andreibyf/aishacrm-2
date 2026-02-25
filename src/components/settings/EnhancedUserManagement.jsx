@@ -56,6 +56,7 @@ import { format } from 'date-fns';
 import { updateEmployeeSecure } from '@/api/functions';
 import { canDeleteUser } from '@/utils/permissions';
 import { useUser } from '@/components/shared/useUser.js';
+import { useTenant } from '@/components/shared/tenantContext';
 import { getBackendUrl } from '@/api/backendUrl';
 
 // Backend API URL
@@ -768,13 +769,32 @@ export default function EnhancedUserManagement() {
   const [searchParams] = useSearchParams();
   const urlTenantId = searchParams.get('tenant');
 
+  // Primary tenant source: context hook (reacts to TenantSwitcher changes)
+  const { selectedTenantId: contextTenantId } = useTenant();
+  // Resolved tenant: context takes priority, URL param as fallback for deep links
+  const activeTenantId = contextTenantId || urlTenantId;
+
   useEffect(() => {
     if (!currentUser) return;
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser, urlTenantId]);
+  }, [currentUser, activeTenantId]);
 
-  const loadData = async () => {
+  // Listen for tenant-changed events (fired by TenantSwitcher via tenantContext)
+  useEffect(() => {
+    const handleTenantChanged = (e) => {
+      console.log('[EnhancedUserManagement] tenant-changed event:', e.detail?.tenantId);
+      // Reset search/filters when tenant changes
+      setSearchTerm('');
+      setRoleFilter('all');
+      setSelectedUsers(new Set());
+    };
+
+    window.addEventListener('tenant-changed', handleTenantChanged);
+    return () => window.removeEventListener('tenant-changed', handleTenantChanged);
+  }, []);
+
+  const loadData = async (options = {}) => {
     if (!currentUser) return;
     setLoading(true);
     try {
@@ -784,8 +804,8 @@ export default function EnhancedUserManagement() {
       let userFilter = {};
       if (currentUser.role === 'superadmin') {
         // Superadmins: if URL has tenant, filter by it; otherwise show ALL users
-        if (urlTenantId) {
-          userFilter.tenant_id = urlTenantId;
+        if (activeTenantId) {
+          userFilter.tenant_id = activeTenantId;
         }
       } else {
         // Regular admins only see their own tenant
@@ -793,11 +813,11 @@ export default function EnhancedUserManagement() {
       }
 
       const [usersData, tenantsData, moduleData] = await Promise.all([
-        User.listProfiles(userFilter),
+        User.listProfiles(userFilter, { cacheBust: !!options.cacheBust }),
         currentUser.role === 'superadmin' ? Tenant.list() : Promise.resolve([]),
         // Load module settings for the current/selected tenant
-        urlTenantId || currentUser.tenant_id
-          ? ModuleSettings.filter({ tenant_id: urlTenantId || currentUser.tenant_id })
+        activeTenantId || currentUser.tenant_id
+          ? ModuleSettings.filter({ tenant_id: activeTenantId || currentUser.tenant_id })
           : Promise.resolve([]),
       ]);
 
@@ -894,7 +914,9 @@ export default function EnhancedUserManagement() {
   };
 
   const handleInviteSuccess = () => {
-    loadData();
+    // Small delay to allow backend cache invalidation to complete,
+    // then re-fetch with cache-busting to ensure fresh data
+    setTimeout(() => loadData({ cacheBust: true }), 500);
   };
 
   const handleDeleteUser = (user) => {
