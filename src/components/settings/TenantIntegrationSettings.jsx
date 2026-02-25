@@ -7,6 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { TenantIntegration } from '@/api/entities';
+import { getBackendUrl } from '@/api/backendUrl';
 import {
   Loader2,
   Save,
@@ -126,7 +127,7 @@ export default function TenantIntegrationSettings() {
       } else if (integration.integration_type === 'twilio') {
         // Twilio test — call the status endpoint
         const tenantFilter = getTenantFilter(currentUser, selectedTenantId);
-        const BACKEND_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4001';
+        const BACKEND_URL = getBackendUrl();
         const res = await fetch(
           `${BACKEND_URL}/api/integrations/twilio/status?tenant_id=${tenantFilter.tenant_id}`,
         );

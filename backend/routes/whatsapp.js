@@ -19,6 +19,7 @@ import {
   processInboundWhatsApp,
 } from '../lib/whatsappService.js';
 import logger from '../lib/logger.js';
+import { authenticateRequest } from '../middleware/authenticate.js';
 
 // ---------------------------------------------------------------------------
 // AiSHA Chat Handler (v2 — full tool calling + context)
@@ -452,7 +453,7 @@ export default function createWhatsAppRoutes(_pgPool) {
    *     summary: Check WhatsApp integration status for a tenant
    *     tags: [whatsapp]
    */
-  router.get('/status', async (req, res) => {
+  router.get('/status', authenticateRequest, async (req, res) => {
     try {
       // Require authenticated user
       if (!req.user?.id) {
@@ -519,7 +520,7 @@ export default function createWhatsAppRoutes(_pgPool) {
    *     summary: Send a test WhatsApp message to verify employee connection
    *     tags: [whatsapp]
    */
-  router.post('/test-employee', async (req, res) => {
+  router.post('/test-employee', authenticateRequest, async (req, res) => {
     try {
       if (!req.user?.id) {
         return res.status(401).json({ status: 'error', message: 'Authentication required' });
@@ -563,12 +564,10 @@ export default function createWhatsAppRoutes(_pgPool) {
         twilioCreds = await getTwilioCredentials(tenant_id);
       }
       if (!twilioCreds?.account_sid || !twilioCreds?.auth_token) {
-        return res
-          .status(400)
-          .json({
-            status: 'error',
-            message: 'Twilio credentials not configured. Add them in Settings → Integrations.',
-          });
+        return res.status(400).json({
+          status: 'error',
+          message: 'Twilio credentials not configured. Add them in Settings → Integrations.',
+        });
       }
 
       const fromNumber = integration.config?.whatsapp_number;
