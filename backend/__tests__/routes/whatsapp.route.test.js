@@ -117,6 +117,9 @@ describe('validateTwilioSignature (unit)', { skip: !SHOULD_RUN }, () => {
 // Unit Tests: authorizeWhatsAppEmployee
 // ---------------------------------------------------------------------------
 
+// DB-dependent tests require Supabase credentials
+const HAS_SUPABASE = !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+
 describe('authorizeWhatsAppEmployee (unit)', { skip: !SHOULD_RUN }, () => {
   let authorizeWhatsAppEmployee;
 
@@ -126,28 +129,36 @@ describe('authorizeWhatsAppEmployee (unit)', { skip: !SHOULD_RUN }, () => {
     assert.equal(typeof authorizeWhatsAppEmployee, 'function');
   });
 
-  test('returns null for unregistered phone number', async () => {
-    if (!authorizeWhatsAppEmployee) {
-      const mod = await import('../../lib/whatsappService.js');
-      authorizeWhatsAppEmployee = mod.authorizeWhatsAppEmployee;
-    }
+  test(
+    'returns null for unregistered phone number',
+    { skip: !HAS_SUPABASE && 'SUPABASE_URL not set' },
+    async () => {
+      if (!authorizeWhatsAppEmployee) {
+        const mod = await import('../../lib/whatsappService.js');
+        authorizeWhatsAppEmployee = mod.authorizeWhatsAppEmployee;
+      }
 
-    const result = await authorizeWhatsAppEmployee(TENANT_ID, '+19999999999');
-    assert.equal(result, null, 'unregistered number should return null');
-  });
+      const result = await authorizeWhatsAppEmployee(TENANT_ID, '+19999999999');
+      assert.equal(result, null, 'unregistered number should return null');
+    },
+  );
 
-  test('strips whatsapp: prefix before lookup', async () => {
-    if (!authorizeWhatsAppEmployee) {
-      const mod = await import('../../lib/whatsappService.js');
-      authorizeWhatsAppEmployee = mod.authorizeWhatsAppEmployee;
-    }
+  test(
+    'strips whatsapp: prefix before lookup',
+    { skip: !HAS_SUPABASE && 'SUPABASE_URL not set' },
+    async () => {
+      if (!authorizeWhatsAppEmployee) {
+        const mod = await import('../../lib/whatsappService.js');
+        authorizeWhatsAppEmployee = mod.authorizeWhatsAppEmployee;
+      }
 
-    // Both formats should return the same result (null for unregistered)
-    const result1 = await authorizeWhatsAppEmployee(TENANT_ID, 'whatsapp:+19999999999');
-    const result2 = await authorizeWhatsAppEmployee(TENANT_ID, '+19999999999');
-    assert.equal(result1, null);
-    assert.equal(result2, null);
-  });
+      // Both formats should return the same result (null for unregistered)
+      const result1 = await authorizeWhatsAppEmployee(TENANT_ID, 'whatsapp:+19999999999');
+      const result2 = await authorizeWhatsAppEmployee(TENANT_ID, '+19999999999');
+      assert.equal(result1, null);
+      assert.equal(result2, null);
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------
