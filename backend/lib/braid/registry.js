@@ -45,7 +45,7 @@ export const TOOL_CACHE_TTL = {
   get_pipeline_report: 300,
   get_activity_report: 300,
   get_lead_conversion_report: 300,
-  get_revenue_forecasts: 300,
+  // get_revenue_forecasts: 300, // revenues.braid not yet implemented
   get_employee_assignments: 180,
   get_current_page: 10, // 10 seconds - navigation context
   list_documents: 120,
@@ -389,11 +389,8 @@ export const TOOL_REGISTRY = {
     function: 'getLeadConversionReport',
     policy: 'READ_ONLY',
   },
-  get_revenue_forecasts: {
-    file: 'revenues.braid',
-    function: 'getRevenueForecasts',
-    policy: 'READ_ONLY',
-  },
+  // get_revenue_forecasts: { file: 'revenues.braid', function: 'getRevenueForecasts', policy: 'READ_ONLY' },
+  // TODO: revenues.braid not yet implemented — re-enable when created [2026-02-24 Claude]
   clear_report_cache: { file: 'reports.braid', function: 'clearReportCache', policy: 'READ_ONLY' },
 
   // Snapshot
@@ -648,8 +645,7 @@ export const TOOL_DESCRIPTIONS = {
     'Generate an activity report for a date range. Optionally filter by employee.',
   get_lead_conversion_report:
     'Get lead conversion metrics showing funnel stages and conversion rates.',
-  get_revenue_forecasts:
-    'Get revenue forecasts based on pipeline opportunities. Specify months_ahead.',
+  // get_revenue_forecasts: 'Get revenue forecasts based on pipeline opportunities. Specify months_ahead.', // Not yet implemented
   clear_report_cache: 'Clear cached report data to force regeneration. Requires admin privileges.',
 
   // AI-Powered Next Actions (RAG-enabled)

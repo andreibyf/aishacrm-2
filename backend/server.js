@@ -163,6 +163,7 @@ app.get('/api/status', (req, res) => {
 import createDatabaseRoutes from './routes/database.js';
 import createIntegrationRoutes from './routes/integrations.js';
 import createTelephonyRoutes from './routes/telephony.js';
+import createWhatsAppRoutes from './routes/whatsapp.js';
 import createAiRoutes from './routes/ai.js';
 import { createAgentOfficeRoutes } from './routes/agentOffice.js';
 import createMcpRoutes from './routes/mcp.js';
@@ -255,6 +256,7 @@ const measuredPgPool = pgPool;
 app.use('/api/database', defaultLimiter, createDatabaseRoutes(measuredPgPool));
 app.use('/api/integrations', defaultLimiter, createIntegrationRoutes(measuredPgPool));
 app.use('/api/telephony', defaultLimiter, createTelephonyRoutes(measuredPgPool));
+app.use('/api/whatsapp', defaultLimiter, createWhatsAppRoutes(measuredPgPool)); // WhatsApp webhook (no auth - Twilio signature validation)
 app.use('/api/ai', defaultLimiter, authenticateRequest, createAiRoutes(measuredPgPool));
 app.use(
   '/api/agent-office',

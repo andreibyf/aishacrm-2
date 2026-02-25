@@ -1,25 +1,38 @@
-import { useState } from 'react'
+import { useState } from 'react';
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 // Removed: Switch component is replaced by native checkbox
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent } from '@/components/ui/card';
 // Removed Alert and AlertDescription as messages are now handled by toast
 // import { Alert, AlertDescription } from "@/components/ui/alert";
 
-import { useTenant } from "../shared/tenantContext";
+import { useTenant } from '../shared/tenantContext';
 
-import { Employee } from "@/api/entities";
-import { toast } from "sonner";
+import { Employee } from '@/api/entities';
+import { toast } from 'sonner';
 // Removed: ResendInviteButton is removed from this form's outline
 // import ResendInviteButton from "./ResendInviteButton"; // This import is no longer needed
 
 // Standardized props: { initialData, onSubmit, onCancel, tenantId } while retaining backward compat for existing parent usage.
-export default function EmployeeForm({ employee: legacyEmployee, initialData, onSubmit, onSave, onCancel, tenantId }) {
+export default function EmployeeForm({
+  employee: legacyEmployee,
+  initialData,
+  onSubmit,
+  onSave,
+  onCancel,
+  tenantId,
+}) {
   console.log('[EmployeeForm] Rendering with props:', { legacyEmployee, initialData, tenantId });
-  
+
   // Prefer initialData if provided; fall back to legacy 'employee' prop.
   const employee = initialData || legacyEmployee || null;
   const isEdit = !!(employee && employee.id);
@@ -52,7 +65,11 @@ export default function EmployeeForm({ employee: legacyEmployee, initialData, on
 
     // Retained CRM-related fields from original as UI exists and functionality should be preserved
     has_crm_access: employee?.has_crm_access || false,
-    crm_user_employee_role: employee?.crm_user_employee_role || "employee",
+    crm_user_employee_role: employee?.crm_user_employee_role || 'employee',
+
+    // [2026-02-24 Claude] WhatsApp AiSHA access
+    whatsapp_number: employee?.whatsapp_number || '',
+    whatsapp_enabled: employee?.whatsapp_enabled || false,
   }));
 
   const [saving, setSaving] = useState(false);
@@ -67,7 +84,7 @@ export default function EmployeeForm({ employee: legacyEmployee, initialData, on
   const handleSubmit = async (e) => {
     e.preventDefault();
     console.log('[EmployeeForm] handleSubmit called', { tenantId, isEdit, formData });
-    
+
     // Removed setMessage(null) as message state is removed
 
     // Validation - only required fields
@@ -85,12 +102,24 @@ export default function EmployeeForm({ employee: legacyEmployee, initialData, on
     // Validation for CRM access - email is required only if enabling CRM access
     if (formData.has_crm_access && !formData.email?.trim()) {
       console.log('[EmployeeForm] Validation failed: CRM access requires email');
-      toast.error("Email is required for CRM access requests.");
+      toast.error('Email is required for CRM access requests.');
       return;
+    }
+    // WhatsApp access requires a valid E.164 phone number
+    if (formData.whatsapp_enabled) {
+      const wa = formData.whatsapp_number?.trim();
+      if (!wa) {
+        toast.error('WhatsApp phone number is required when WhatsApp access is enabled.');
+        return;
+      }
+      if (!/^\+[1-9]\d{7,14}$/.test(wa)) {
+        toast.error('WhatsApp number must be in E.164 format (e.g. +19543488819)');
+        return;
+      }
     }
     if (!tenantId && !isEdit) {
       console.log('[EmployeeForm] Validation failed: tenant_id missing');
-      toast.error("Cannot save employee. Tenant information is missing.");
+      toast.error('Cannot save employee. Tenant information is missing.');
       return;
     }
 
@@ -125,6 +154,9 @@ export default function EmployeeForm({ employee: legacyEmployee, initialData, on
         is_active: formData.is_active,
         has_crm_access: formData.has_crm_access,
         crm_user_employee_role: formData.has_crm_access ? formData.crm_user_employee_role : null,
+        // [2026-02-24 Claude] WhatsApp AiSHA access fields
+        whatsapp_number: formData.whatsapp_enabled ? formData.whatsapp_number || null : null,
+        whatsapp_enabled: formData.whatsapp_enabled,
         tenant_id: tenantId || null,
       };
 
@@ -142,13 +174,21 @@ export default function EmployeeForm({ employee: legacyEmployee, initialData, on
         console.log('[EmployeeForm] API call successful:', result);
         const isEdit = !!employee?.id;
         if (formData.has_crm_access && formData.email) {
-          toast.success(isEdit ? 'Employee updated – CRM invitation sent' : 'Employee created – CRM invitation sent');
+          toast.success(
+            isEdit
+              ? 'Employee updated – CRM invitation sent'
+              : 'Employee created – CRM invitation sent',
+          );
         } else {
           toast.success(isEdit ? 'Employee updated successfully' : 'Employee created successfully');
         }
       } catch (err) {
         console.error('[EmployeeForm] API call failed:', err);
-        const msg = err?.response?.data?.error || err?.response?.data?.message || err?.message || 'Failed to save employee';
+        const msg =
+          err?.response?.data?.error ||
+          err?.response?.data?.message ||
+          err?.message ||
+          'Failed to save employee';
         toast.error(msg);
         throw err;
       }
@@ -189,7 +229,7 @@ export default function EmployeeForm({ employee: legacyEmployee, initialData, on
             <Input
               required
               value={formData.first_name}
-              onChange={(e) => onChange("first_name", e.target.value)}
+              onChange={(e) => onChange('first_name', e.target.value)}
               className="bg-slate-900 border-slate-700 text-slate-100"
               placeholder="First name"
             />
@@ -201,7 +241,7 @@ export default function EmployeeForm({ employee: legacyEmployee, initialData, on
             <Input
               required
               value={formData.last_name}
-              onChange={(e) => onChange("last_name", e.target.value)}
+              onChange={(e) => onChange('last_name', e.target.value)}
               className="bg-slate-900 border-slate-700 text-slate-100"
               placeholder="Last name"
             />
@@ -214,28 +254,26 @@ export default function EmployeeForm({ employee: legacyEmployee, initialData, on
               type="email"
               required={formData.has_crm_access}
               value={formData.email}
-              onChange={(e) => onChange("email", e.target.value)}
+              onChange={(e) => onChange('email', e.target.value)}
               className="bg-slate-900 border-slate-700 text-slate-100"
               placeholder="work@example.com"
             />
             {formData.has_crm_access && (
-              <p className="text-xs text-amber-400 mt-1">
-                Email is required for CRM access
-              </p>
+              <p className="text-xs text-amber-400 mt-1">Email is required for CRM access</p>
             )}
           </div>
           <div>
             <Label className="text-slate-200">Phone</Label>
             <Input
               value={formData.phone}
-              onChange={(e) => onChange("phone", e.target.value)}
+              onChange={(e) => onChange('phone', e.target.value)}
               className="bg-slate-900 border-slate-700 text-slate-100"
               placeholder="(555) 123-4567"
             />
           </div>
           <div>
             <Label className="text-slate-200">Department</Label>
-            <Select value={formData.department} onValueChange={(v) => onChange("department", v)}>
+            <Select value={formData.department} onValueChange={(v) => onChange('department', v)}>
               <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-100">
                 <SelectValue placeholder="Select department" />
               </SelectTrigger>
@@ -258,7 +296,7 @@ export default function EmployeeForm({ employee: legacyEmployee, initialData, on
             <Label className="text-slate-200">Job title</Label>
             <Input
               value={formData.job_title}
-              onChange={(e) => onChange("job_title", e.target.value)}
+              onChange={(e) => onChange('job_title', e.target.value)}
               className="bg-slate-900 border-slate-700 text-slate-100"
               placeholder="Role / Title"
             />
@@ -272,17 +310,17 @@ export default function EmployeeForm({ employee: legacyEmployee, initialData, on
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-lg font-medium text-slate-100">CRM Access</h3>
-            <p className="text-sm text-slate-400">
-              Grant this employee access to the CRM system
-            </p>
+            <p className="text-sm text-slate-400">Grant this employee access to the CRM system</p>
           </div>
           <div className="flex items-center gap-2">
-            <label htmlFor="has-crm-access" className="text-sm text-slate-300">Enable CRM access</label>
+            <label htmlFor="has-crm-access" className="text-sm text-slate-300">
+              Enable CRM access
+            </label>
             <input
               id="has-crm-access"
               type="checkbox"
               checked={formData.has_crm_access}
-              onChange={(e) => onChange("has_crm_access", e.target.checked)}
+              onChange={(e) => onChange('has_crm_access', e.target.checked)}
               className="rounded border-slate-600 bg-slate-700"
             />
           </div>
@@ -293,27 +331,32 @@ export default function EmployeeForm({ employee: legacyEmployee, initialData, on
             <div>
               <Label className="text-slate-300">CRM Role</Label>
               <Select
-                value={formData.crm_user_employee_role || "employee"}
-                onValueChange={(value) => onChange("crm_user_employee_role", value)}
+                value={formData.crm_user_employee_role || 'employee'}
+                onValueChange={(value) => onChange('crm_user_employee_role', value)}
               >
                 <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-200">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-700">
-                  <SelectItem value="employee" className="text-slate-200">Employee (Own records only)</SelectItem>
-                  <SelectItem value="manager" className="text-slate-200">Manager (All tenant records)</SelectItem>
+                  <SelectItem value="employee" className="text-slate-200">
+                    Employee (Own records only)
+                  </SelectItem>
+                  <SelectItem value="manager" className="text-slate-200">
+                    Manager (All tenant records)
+                  </SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-slate-400 mt-1">
-                {formData.crm_user_employee_role === 'manager' ?
-                  '✓ Can view all records in their tenant' :
-                  '✓ Can only view records assigned to them'}
+                {formData.crm_user_employee_role === 'manager'
+                  ? '✓ Can view all records in their tenant'
+                  : '✓ Can only view records assigned to them'}
               </p>
             </div>
 
             {employee && employee.crm_invite_status && (
               <div className="text-sm text-slate-400">
-                <span className="font-medium">Status:</span> {employee.crm_invite_status.replace(/_/g, " ")}
+                <span className="font-medium">Status:</span>{' '}
+                {employee.crm_invite_status.replace(/_/g, ' ')}
                 {employee.crm_invite_last_sent && (
                   <span className="ml-2">
                     (Last sent: {new Date(employee.crm_invite_last_sent).toLocaleDateString()})
@@ -325,16 +368,112 @@ export default function EmployeeForm({ employee: legacyEmployee, initialData, on
         )}
       </div>
 
+      {/* WhatsApp AiSHA Access Section */}
+      {/* [2026-02-24 Claude] Employee WhatsApp authorization */}
+      <div className="border-t border-slate-700 pt-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-medium text-slate-100">WhatsApp Access</h3>
+            <p className="text-sm text-slate-400">Allow this employee to use AiSHA via WhatsApp</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <label htmlFor="whatsapp-enabled" className="text-sm text-slate-300">
+              Enable WhatsApp
+            </label>
+            <input
+              id="whatsapp-enabled"
+              type="checkbox"
+              checked={formData.whatsapp_enabled}
+              onChange={(e) => onChange('whatsapp_enabled', e.target.checked)}
+              className="rounded border-slate-600 bg-slate-700"
+            />
+          </div>
+        </div>
+
+        {formData.whatsapp_enabled && (
+          <div className="space-y-4 pl-4 border-l-2 border-slate-700">
+            <div>
+              <Label className="text-slate-300">WhatsApp Phone Number</Label>
+              <Input
+                value={formData.whatsapp_number}
+                onChange={(e) => onChange('whatsapp_number', e.target.value)}
+                className="bg-slate-900 border-slate-700 text-slate-100"
+                placeholder="+19543488819"
+              />
+              <p className="text-xs text-slate-400 mt-1">
+                E.164 format required (e.g. +19543488819). This is the number linked to their
+                WhatsApp account.
+              </p>
+            </div>
+            {isEdit &&
+              formData.whatsapp_number &&
+              /^\+[1-9]\d{7,14}$/.test(formData.whatsapp_number.trim()) && (
+                <div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="bg-green-900/30 border-green-700 text-green-300 hover:bg-green-900/50 hover:text-green-200"
+                    disabled={saving}
+                    onClick={async () => {
+                      try {
+                        const { supabase } = await import('@/lib/supabase');
+                        const {
+                          data: { session },
+                        } = await supabase.auth.getSession();
+                        const hdrs = { 'Content-Type': 'application/json' };
+                        if (session?.access_token) {
+                          hdrs['Authorization'] = `Bearer ${session.access_token}`;
+                        }
+                        const { getBackendUrl } = await import('@/api/backendUrl');
+                        const resp = await fetch(`${getBackendUrl()}/api/whatsapp/test-employee`, {
+                          method: 'POST',
+                          headers: hdrs,
+                          body: JSON.stringify({
+                            tenant_id: tenantId,
+                            employee_id: employee.id,
+                            whatsapp_number: formData.whatsapp_number.trim(),
+                          }),
+                        });
+                        const data = await resp.json();
+                        if (data.status === 'success') {
+                          toast.success('Test message sent! Check WhatsApp.');
+                        } else {
+                          toast.error(data.message || 'Failed to send test message');
+                        }
+                      } catch (err) {
+                        toast.error(
+                          'Failed to send test message: ' + (err.message || 'network error'),
+                        );
+                      }
+                    }}
+                  >
+                    📱 Test WhatsApp Connection
+                  </Button>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Sends a test message to verify the number works with your Twilio WhatsApp setup.
+                  </p>
+                </div>
+              )}
+          </div>
+        )}
+      </div>
+
       <div className="flex items-center justify-between pt-4 border-t border-slate-700">
         <p className="text-xs text-slate-400">
           <span className="text-red-400">*</span> Required fields
         </p>
         <div className="flex gap-3">
-          <Button type="button" variant="outline" onClick={onCancel} disabled={saving} className="bg-slate-700 border-slate-600 text-slate-200">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+            disabled={saving}
+            className="bg-slate-700 border-slate-600 text-slate-200"
+          >
             Cancel
           </Button>
           <Button type="submit" disabled={saving} className="bg-blue-600 hover:bg-blue-700">
-            {saving ? "Saving..." : isEdit ? "Update Employee" : "Create Employee"}
+            {saving ? 'Saving...' : isEdit ? 'Update Employee' : 'Create Employee'}
           </Button>
         </div>
       </div>

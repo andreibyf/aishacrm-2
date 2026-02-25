@@ -127,6 +127,18 @@ export function initMiddleware(app, pgPool) {
         return next();
       }
 
+      // Skip CSRF for external webhook endpoints (authenticated by their own mechanisms)
+      // These routes use provider-specific signature validation (e.g., Twilio X-Twilio-Signature)
+      // Note: only inbound provider webhooks belong here — NOT internal CRUD routes like /api/webhooks
+      const webhookPaths = [
+        '/api/whatsapp/webhook',
+        '/api/telephony/inbound-webhook',
+        '/api/telephony/outbound-webhook',
+      ];
+      if (webhookPaths.some((p) => req.originalUrl.startsWith(p))) {
+        return next();
+      }
+
       // Skip CSRF for requests with Bearer token (JWT auth inherently CSRF-safe)
       const authHeader = req.headers.authorization;
       if (authHeader && authHeader.startsWith('Bearer ')) {
