@@ -172,9 +172,9 @@ export default function createWebhookRoutes(_pgPool) {
         .single();
 
       if (error?.code === 'PGRST116') {
-        if (error) throw new Error(error.message);
         return res.status(404).json({ status: 'error', message: 'Webhook not found' });
       }
+      if (error) throw new Error(error.message);
 
       res.json({ status: 'success', data: { webhook: data } });
     } catch (error) {

@@ -116,8 +116,8 @@ export default function createModuleSettingsRoutes(_pool) {
     try {
       const { id } = req.params;
 
-      // Enforce tenant isolation
-      const tenant_id = req.tenant?.id;
+      // Enforce tenant isolation (req.tenant may not be set without validateTenantAccess)
+      const tenant_id = req.tenant?.id || req.query.tenant_id;
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
@@ -196,9 +196,6 @@ export default function createModuleSettingsRoutes(_pool) {
         .single();
 
       if (error) throw error;
-
-      // Invalidate cache for this tenant's module settings
-      await invalidateCache(tenant_id, 'modulesettings');
 
       res.status(201).json({ status: 'success', data });
     } catch (error) {
@@ -326,9 +323,6 @@ export default function createModuleSettingsRoutes(_pool) {
         });
         return res.status(404).json({ status: 'error', message: 'Module setting not found' });
       }
-
-      // Invalidate cache for this tenant's module settings
-      await invalidateCache(tenant_id, 'modulesettings');
 
       res.json({ status: 'success', data });
     } catch (error) {
