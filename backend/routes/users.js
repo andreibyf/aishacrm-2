@@ -1216,6 +1216,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
       // Build metadata
       const metadata = {
+        display_name: full_name || first_name || null,
         crm_access: crm_access !== false,
         requested_access: requested_access || 'read_write',
         can_use_softphone: can_use_softphone || false,
