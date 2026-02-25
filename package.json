@@ -121,7 +121,7 @@
     "@types/react-dom": "^18.2.22",
     "@typescript-eslint/eslint-plugin": "^8.47.0",
     "@typescript-eslint/parser": "^8.47.0",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@vitejs/plugin-react": "^5.1.4",
     "@vitest/ui": "4.0.8",
     "autoprefixer": "^10.4.20",
     "dotenv": "^17.2.3",
