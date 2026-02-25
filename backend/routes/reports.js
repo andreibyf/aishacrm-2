@@ -828,7 +828,7 @@ export default function createReportRoutes(_pgPool) {
                   'id,first_name,last_name,company,email,phone,created_date,created_at,status,source,is_test_data',
                 )
                 .order('created_at', { ascending: false })
-                .limit(100);
+                .limit(50);
               if (tenant_id) q = q.eq('tenant_id', tenant_id);
               if (!includeTestData) {
                 try {

@@ -13,7 +13,7 @@ import {
   sortableKeyboardCoordinates,
   rectSortingStrategy,
 } from '@dnd-kit/sortable';
-import { User, Lead, Contact, Opportunity, Activity } from '@/api/entities';
+import { User } from '@/api/entities';
 
 import { useTenant } from '../components/shared/tenantContext';
 import { useApiManager } from '../components/shared/ApiManager';
@@ -459,129 +459,16 @@ export default function DashboardPage() {
           }
         }
 
-        // If bundle missing advanced stats (e.g., pipeline sums), fall back to detailed lists AFTER first paint
-        const [leadsRaw, contactsRaw, opportunitiesRaw, activitiesRaw] = bundle?.stats
-          ? [[], [], [], []] // skip heavy fetch for initial stats
-          : await Promise.all([
-              cachedRequest('Lead', 'filter', { filter: tenantFilter }, () =>
-                Lead.filter(tenantFilter),
-              ),
-              cachedRequest('Contact', 'filter', { filter: tenantFilter }, () =>
-                Contact.filter(tenantFilter),
-              ),
-              cachedRequest('Opportunity', 'filter', { filter: tenantFilter }, () =>
-                Opportunity.filter(tenantFilter),
-              ),
-              cachedRequest('Activity', 'filter', { filter: tenantFilter }, () =>
-                Activity.filter(tenantFilter),
-              ),
-            ]);
-
-        // Defensive normalization: some race conditions or transient errors can return
-        // non-array values (object, promise remnants). Coerce to arrays to avoid
-        // runtime errors like 'P.filter is not a function'. Log once if normalization applied.
-        const toArray = (val, label) => {
-          if (Array.isArray(val)) return val;
-          if (val == null) return [];
-          // Handle enriched response objects like { activities: [...], counts: {...}, total: N }
-          const entityKey = label.toLowerCase();
-          if (val && typeof val === 'object' && Array.isArray(val[entityKey])) {
-            return val[entityKey];
-          }
-          console.warn(`[Dashboard] Normalizing non-array ${label} value`, val);
-          return [];
-        };
-        const leads = toArray(leadsRaw, 'leads');
-        const contacts = toArray(contactsRaw, 'contacts');
-        const opportunities = toArray(opportunitiesRaw, 'opportunities');
-        const activities = toArray(activitiesRaw, 'activities');
-
-        // Calculate pipeline value (active opportunities only - exclude won and lost)
-        const activeOpps =
-          opportunities?.filter(
-            (o) =>
-              o.stage !== 'won' &&
-              o.stage !== 'closed_won' &&
-              o.stage !== 'lost' &&
-              o.stage !== 'closed_lost',
-          ) || [];
-
-        // Count won opportunities
-        const wonOpps =
-          opportunities?.filter((o) => o.stage === 'won' || o.stage === 'closed_won') || [];
-
-        const pipelineValue = activeOpps.reduce((sum, opp) => {
-          const amount = parseFloat(opp.amount) || 0;
-          return sum + amount;
-        }, 0);
-
-        const wonValue = wonOpps.reduce((sum, opp) => {
-          const amount = parseFloat(opp.amount) || 0;
-          return sum + amount;
-        }, 0);
-
-        // Get new leads from last 30 days
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        const newLeads =
-          leads?.filter((l) => {
-            const createdDate = new Date(l.created_date);
-            return createdDate >= thirtyDaysAgo;
-          }) || [];
-
-        // Get ALL activities created in last 30 days (not just completed)
-        const recentActivities =
-          activities?.filter((a) => {
-            const createdDate = new Date(a.created_date);
-            return createdDate >= thirtyDaysAgo;
-          }) || [];
-
-        // Prefer bundle stats if available (they come from server calculation)
-        // Fall back to local calculation only if bundle stats are missing
-        let finalPipelineValue = 0;
-        let finalWonValue = 0;
-
-        if (bundle?.stats) {
-          // Bundle has server-calculated values, use those
-          finalPipelineValue = Number(bundle.stats.pipelineValue || 0);
-          finalWonValue = Number(bundle.stats.wonValue || 0);
-          if (import.meta.env.DEV) {
-            console.log('[Dashboard] Using bundle stats:', {
-              finalPipelineValue,
-              finalWonValue,
-              bundleStats: bundle.stats,
-            });
-          }
-        } else {
-          // No bundle or stats, calculate from loaded opportunities
-          finalPipelineValue = pipelineValue > 0 ? pipelineValue : 0;
-          finalWonValue = wonValue > 0 ? wonValue : 0;
-          if (import.meta.env.DEV) {
-            console.log('[Dashboard] Using calculated stats:', {
-              finalPipelineValue,
-              finalWonValue,
-              pipelineValue,
-              wonValue,
-            });
-          }
-        }
-
+        // Build stats from bundle (server-calculated values are authoritative)
+        const bundleStats = bundle?.stats || {};
         const calculatedStats = {
-          totalContacts: bundle?.stats
-            ? Number(bundle.stats.totalContacts || 0)
-            : contacts?.length || 0,
-          newLeads: bundle?.stats ? Number(bundle.stats.newLeadsLast30Days || 0) : newLeads.length,
-          activeOpportunities: bundle?.stats
-            ? Number(bundle.stats.openOpportunities || 0)
-            : activeOpps.length,
-          wonOpportunities: bundle?.stats
-            ? Number(bundle.stats.wonOpportunities || 0)
-            : wonOpps.length,
-          pipelineValue: finalPipelineValue,
-          wonValue: finalWonValue,
-          activitiesLogged: bundle?.stats
-            ? Number(bundle.stats.activitiesLast30Days || 0)
-            : recentActivities.length,
+          totalContacts: Number(bundleStats.totalContacts || 0),
+          newLeads: Number(bundleStats.newLeadsLast30Days || 0),
+          activeOpportunities: Number(bundleStats.openOpportunities || 0),
+          wonOpportunities: Number(bundleStats.wonOpportunities || 0),
+          pipelineValue: Number(bundleStats.pipelineValue || 0),
+          wonValue: Number(bundleStats.wonValue || 0),
+          activitiesLogged: Number(bundleStats.activitiesLast30Days || 0),
           trends: {
             contacts: null,
             newLeads: null,
@@ -596,10 +483,7 @@ export default function DashboardPage() {
         setStats(calculatedStats);
         logger.info('Dashboard data loaded successfully', 'Dashboard', {
           userId: user.email,
-          contactsCount: contacts?.length || 0,
-          leadsCount: leads?.length || 0,
-          opportunitiesCount: opportunities?.length || 0,
-          activitiesCount: activities?.length || 0,
+          stats: calculatedStats,
         });
 
         // Dismiss loading toast and show success
@@ -634,14 +518,7 @@ export default function DashboardPage() {
     };
 
     loadStats();
-  }, [
-    user,
-    authCookiesReady,
-    getTenantFilter,
-    cachedRequest,
-    logger,
-    loadingToast,
-  ]);
+  }, [user, authCookiesReady, getTenantFilter, cachedRequest, logger, loadingToast]);
 
   // Refresh handler - forces fresh data fetch
   const handleRefresh = useCallback(async () => {
