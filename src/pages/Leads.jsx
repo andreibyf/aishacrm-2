@@ -5,6 +5,8 @@ import { Account } from '@/api/entities';
 import { useUser } from '@/components/shared/useUser.js';
 import { Employee } from '@/api/entities';
 import { useApiManager } from '../components/shared/ApiManager';
+import { clearDashboardResultsCache } from '@/api/dashboard';
+import { clearAllDashboardCaches } from '@/api/dashboardCache';
 import LeadCard from '../components/leads/LeadCard';
 const LeadForm = lazy(() => import('../components/leads/LeadForm'));
 const LeadDetailPanel = lazy(() => import('../components/leads/LeadDetailPanel'));
@@ -802,9 +804,11 @@ export default function LeadsPage() {
       setTotalItems((prev) => Math.max(0, prev - 1));
       toast.success('Lead deleted successfully');
 
-      // Background refresh to sync with server (cache already invalidated by backend)
+      // Clear all caches so dashboard and lead lists show fresh data
       clearCache('Lead');
       clearCacheByKey('Lead');
+      clearDashboardResultsCache();
+      clearAllDashboardCaches();
       await Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]);
     } catch (error) {
       console.error('Failed to delete lead:', error);
@@ -908,9 +912,11 @@ export default function LeadsPage() {
         if (successCount > 0) toast.success(`${successCount} lead(s) deleted`);
         if (failCount > 0) toast.error(`${failCount} lead(s) failed to delete`);
 
-        // Background refresh to sync with server
+        // Clear all caches so dashboard and lead lists show fresh data
         clearCache('Lead');
         clearCacheByKey('Lead');
+        clearDashboardResultsCache();
+        clearAllDashboardCaches();
         await Promise.all([loadLeads(1, pageSize), loadTotalStats()]);
       } catch (error) {
         completeProgress();
@@ -986,9 +992,11 @@ export default function LeadsPage() {
           toast.success(`${successCount} lead(s) deleted`);
         }
 
-        // Background refresh to sync with server
+        // Clear all caches so dashboard and lead lists show fresh data
         clearCache('Lead');
         clearCacheByKey('Lead');
+        clearDashboardResultsCache();
+        clearAllDashboardCaches();
         await Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]);
       } catch (error) {
         completeProgress();

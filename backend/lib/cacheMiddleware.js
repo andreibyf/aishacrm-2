@@ -170,7 +170,9 @@ export function invalidateCache(module) {
 
 /**
  * Manual cache invalidation helper
- * Use in route handlers for fine-grained control
+ * Use in route handlers for fine-grained control.
+ * For CRM entity mutations, prefer invalidateTenantAndDashboardCache()
+ * which also busts the dashboard bundle cache.
  */
 export async function invalidateTenantCache(tenantId, module) {
   try {
@@ -178,6 +180,23 @@ export async function invalidateTenantCache(tenantId, module) {
     console.log(`[Cache] Manual invalidation: ${module} for tenant ${tenantId}`);
   } catch (error) {
     console.error('[Cache] Manual invalidation failed:', error);
+  }
+}
+
+/**
+ * Invalidate both entity cache AND dashboard bundle cache.
+ * Use this for any CRM entity mutation (create/update/delete) that
+ * is NOT already wrapped by the invalidateCache() middleware.
+ */
+export async function invalidateTenantAndDashboardCache(tenantId, module) {
+  await invalidateTenantCache(tenantId, module);
+  if (DASHBOARD_AFFECTING_MODULES.has(module)) {
+    try {
+      await cacheManager.invalidateDashboard(tenantId);
+      console.log(`[Cache] Manual dashboard invalidation for tenant ${tenantId}`);
+    } catch (error) {
+      console.error('[Cache] Manual dashboard invalidation failed:', error);
+    }
   }
 }
 
@@ -193,5 +212,6 @@ export default {
   cacheDetail,
   invalidateCache,
   invalidateTenantCache,
+  invalidateTenantAndDashboardCache,
   getCacheStats,
 };

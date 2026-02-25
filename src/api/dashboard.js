@@ -69,6 +69,15 @@ export async function getDashboardBundleFast(options = {}) {
 }
 
 /**
+ * Clear the short-term in-memory result cache.
+ * Call this after CRM entity mutations (create/update/delete) so the
+ * next getDashboardBundleFast() call fetches fresh data from the server.
+ */
+export function clearDashboardResultsCache() {
+  recentResults.clear();
+}
+
+/**
  * Internal fetch implementation
  */
 async function _fetchDashboardBundle(tenant_id, include_test_data, widgets = []) {

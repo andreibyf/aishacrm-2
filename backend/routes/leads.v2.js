@@ -12,7 +12,7 @@ import {
   cacheList,
   cacheDetail,
   invalidateCache,
-  invalidateTenantCache,
+  invalidateTenantAndDashboardCache,
 } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 
@@ -657,7 +657,7 @@ export default function createLeadsV2Routes() {
       if (!data) throw new Error('Lead created but could not be fetched');
 
       // Invalidate cache before responding so the next GET returns fresh data
-      await invalidateTenantCache(tenant_id, 'leads');
+      await invalidateTenantAndDashboardCache(tenant_id, 'leads');
 
       const created = expandMetadata(data);
       const aiContext = await buildLeadAiContext(created, { tenantId: tenant_id });
@@ -831,7 +831,7 @@ export default function createLeadsV2Routes() {
       }
 
       // Invalidate cache before responding so the next GET returns fresh data
-      await invalidateTenantCache(tenant_id, 'leads');
+      await invalidateTenantAndDashboardCache(tenant_id, 'leads');
 
       res.json({
         status: 'success',
@@ -917,7 +917,7 @@ export default function createLeadsV2Routes() {
       if (error) throw new Error(error.message);
 
       // Invalidate cache before responding so the next GET returns fresh data
-      await invalidateTenantCache(tenant_id, 'leads');
+      await invalidateTenantAndDashboardCache(tenant_id, 'leads');
 
       res.json({
         status: 'success',
