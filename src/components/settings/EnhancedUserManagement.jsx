@@ -781,7 +781,80 @@ export default function EnhancedUserManagement() {
   }, [editingUser]);
 
   useEffect(() => {
+    if (!editingUser) return;
+
+    const marker = '[UM-EDIT-MARKER]';
+    const navType =
+      typeof performance !== 'undefined' && typeof performance.getEntriesByType === 'function'
+        ? performance.getEntriesByType('navigation')?.[0]?.type
+        : 'unknown';
+
+    console.log(`${marker} Edit modal OPEN`, {
+      userId: editingUser.id,
+      email: editingUser.email,
+      tenantId: editingUser.tenant_id,
+      navType,
+      url: window.location.href,
+      at: new Date().toISOString(),
+    });
+
+    const onBeforeUnload = () => {
+      console.warn(`${marker} beforeunload fired while edit modal open`, {
+        userId: editingUser.id,
+        url: window.location.href,
+        at: new Date().toISOString(),
+      });
+    };
+
+    const onPageHide = () => {
+      console.warn(`${marker} pagehide fired while edit modal open`, {
+        userId: editingUser.id,
+        url: window.location.href,
+        at: new Date().toISOString(),
+      });
+    };
+
+    const onVisibilityChange = () => {
+      console.log(`${marker} visibilitychange while edit modal open`, {
+        userId: editingUser.id,
+        visibilityState: document.visibilityState,
+        at: new Date().toISOString(),
+      });
+    };
+
+    const onPopState = () => {
+      console.warn(`${marker} popstate/navigation while edit modal open`, {
+        userId: editingUser.id,
+        url: window.location.href,
+        at: new Date().toISOString(),
+      });
+    };
+
+    window.addEventListener('beforeunload', onBeforeUnload);
+    window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('popstate', onPopState);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      window.removeEventListener('pagehide', onPageHide);
+      window.removeEventListener('popstate', onPopState);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+
+      console.log(`${marker} Edit modal CLOSE`, {
+        userId: editingUser.id,
+        url: window.location.href,
+        at: new Date().toISOString(),
+      });
+    };
+  }, [editingUser]);
+
+  useEffect(() => {
     if (!currentUser) return;
+    if (editingUserRef.current) {
+      console.log('[EnhancedUserManagement] Skipping loadData while edit modal is open');
+      return;
+    }
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, effectiveTenantId]);
@@ -1445,7 +1518,16 @@ export default function EnhancedUserManagement() {
                               variant="outline"
                               size="sm"
                               type="button"
-                              onClick={() => setEditingUser(user)}
+                              onClick={() => {
+                                console.log('[UM-EDIT-MARKER] Edit button clicked', {
+                                  userId: user.id,
+                                  email: user.email,
+                                  tenantId: user.tenant_id,
+                                  at: new Date().toISOString(),
+                                });
+                                editingUserRef.current = user;
+                                setEditingUser(user);
+                              }}
                               disabled={!managerCanEdit}
                               className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600 disabled:opacity-60"
                             >
@@ -1482,7 +1564,14 @@ export default function EnhancedUserManagement() {
           currentUser={currentUser}
           moduleSettings={moduleSettings}
           onSave={handleSaveUser}
-          onCancel={() => setEditingUser(null)}
+          onCancel={() => {
+            console.log('[UM-EDIT-MARKER] Edit modal cancel triggered', {
+              userId: editingUser?.id,
+              at: new Date().toISOString(),
+            });
+            editingUserRef.current = null;
+            setEditingUser(null);
+          }}
         />
       )}
 

@@ -46,7 +46,9 @@ export default function PasswordResetHandler({ children }) {
           });
           if (error) {
             console.error('[PasswordResetHandler] setSession error:', error);
-            setError('Invalid or expired reset link. Please request a new one.');
+            setError(
+              'This password reset link is no longer valid. Please request a new reset email.',
+            );
             setBootstrapDone(true);
             return;
           }
@@ -64,7 +66,9 @@ export default function PasswordResetHandler({ children }) {
           const { error } = await supabase.auth.exchangeCodeForSession(authCode);
           if (error) {
             console.error('[PasswordResetHandler] exchange (query) error:', error);
-            setError('Invalid or expired reset link. Please request a new one.');
+            setError(
+              'This password reset link is no longer valid. Please request a new reset email.',
+            );
             setBootstrapDone(true);
             return;
           }
@@ -83,11 +87,13 @@ export default function PasswordResetHandler({ children }) {
         // No recovery tokens found in URL — link may be malformed or already consumed
         console.warn('[PasswordResetHandler] No recovery tokens or code found in URL.');
         setError(
-          'No recovery information found. The link may have expired or already been used. Please request a new password reset.',
+          'We couldn’t verify this password reset link. It may have expired or already been used. Please request a new reset email.',
         );
       } catch (e) {
         console.error('[PasswordResetHandler] bootstrap error:', e);
-        setError('Unexpected error handling reset link.');
+        setError(
+          'Something went wrong while opening this reset link. Please request a new reset email.',
+        );
       } finally {
         setBootstrapDone(true);
       }
@@ -219,7 +225,7 @@ export default function PasswordResetHandler({ children }) {
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle className="text-2xl">Password Reset</CardTitle>
-            <CardDescription>Unable to process your reset link</CardDescription>
+            <CardDescription>This reset link is no longer valid</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col items-center gap-4 py-4">
@@ -228,10 +234,10 @@ export default function PasswordResetHandler({ children }) {
               <Button
                 className="mt-2 w-full"
                 onClick={() => {
-                  window.location.href = '/login';
+                  window.location.href = '/forgot-password';
                 }}
               >
-                Back to Login
+                Request New Reset Email
               </Button>
             </div>
           </CardContent>
