@@ -218,6 +218,7 @@ jobs:
             org.opencontainers.image.licenses=MIT
 
       - name: Build and push ${{ matrix.service }}
+        timeout-minutes: 20
         uses: docker/build-push-action@v5
         with:
           context: ${{ matrix.context }}
@@ -446,14 +447,29 @@ jobs:
           command_timeout: 20m
           timeout: 25m
           script: |
-            set -e  # Exit on any error
+            set -euo pipefail
+
+            phase() {
+              echo "[$(date -u +'%Y-%m-%d %H:%M:%S UTC')] $1"
+            }
+
+            run_timed() {
+              local duration="$1"
+              shift
+              if command -v timeout >/dev/null 2>&1; then
+                timeout "$duration" "$@"
+              else
+                "$@"
+              fi
+            }
+
             cd /opt/aishacrm
-            echo "Deploying version: $VERSION_TAG"
+            phase "Deploying version: $VERSION_TAG"
 
             # === DOPPLER RUNTIME INJECTION ===
             # Secrets are injected at container startup via Doppler CLI in entrypoints.
             # No secrets are written to disk. DOPPLER_TOKEN is the only credential on the VPS.
-            echo "Configuring Doppler token for runtime secret injection..."
+            phase "Configuring Doppler token for runtime secret injection"
             if [ -n "$DOPPLER_TOKEN" ]; then
               # Write DOPPLER_TOKEN to a minimal .env used by docker compose
               # This is the ONLY secret stored on disk — containers fetch everything else at runtime
@@ -462,19 +478,19 @@ jobs:
                 echo "DOPPLER_TOKEN=$DOPPLER_TOKEN" >> .env
               grep -q "^DOPPLER_PROJECT=" .env 2>/dev/null || echo "DOPPLER_PROJECT=aishacrm" >> .env
               grep -q "^DOPPLER_CONFIG=" .env 2>/dev/null || echo "DOPPLER_CONFIG=prd_prd" >> .env
-              echo "✓ Doppler token configured for runtime injection"
+              phase "✓ Doppler token configured for runtime injection"
 
               # Clean up legacy .env.from-doppler if it exists (secrets no longer stored on disk)
               if [ -f .env.from-doppler ]; then
                 rm -f .env.from-doppler
-                echo "✓ Removed legacy .env.from-doppler (secrets now injected at runtime)"
+                phase "✓ Removed legacy .env.from-doppler (secrets now injected at runtime)"
               fi
             else
-              echo "WARNING: DOPPLER_TOKEN not set, containers will start without Doppler"
+              phase "WARNING: DOPPLER_TOKEN not set, containers will start without Doppler"
             fi
 
             # === FULL CLEANUP: Remove orphaned containers and broken references ===
-            echo "Cleaning up orphaned containers and broken Docker state..."
+            phase "Cleaning up orphaned containers and broken Docker state"
             docker compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
             docker container prune -f 2>/dev/null || true
             # Remove any containers with broken dependencies
@@ -485,12 +501,14 @@ jobs:
             docker network inspect aishanet >/dev/null 2>&1 || docker network create aishanet
 
             # Pull specific version tags
-            docker pull ghcr.io/andreibyf/aishacrm-2-frontend:$VERSION_TAG
-            docker pull ghcr.io/andreibyf/aishacrm-2-backend:$VERSION_TAG
-            docker pull ghcr.io/andreibyf/aishacrm-2-mcp:$VERSION_TAG
-            docker pull ghcr.io/andreibyf/aishacrm-2-office-viz:$VERSION_TAG
-            docker pull ghcr.io/andreibyf/aishacrm-2-telemetry-sidecar:$VERSION_TAG
+            phase "Pulling GHCR images for $VERSION_TAG"
+            run_timed 7m docker pull ghcr.io/andreibyf/aishacrm-2-frontend:$VERSION_TAG
+            run_timed 7m docker pull ghcr.io/andreibyf/aishacrm-2-backend:$VERSION_TAG
+            run_timed 7m docker pull ghcr.io/andreibyf/aishacrm-2-mcp:$VERSION_TAG
+            run_timed 7m docker pull ghcr.io/andreibyf/aishacrm-2-office-viz:$VERSION_TAG
+            run_timed 7m docker pull ghcr.io/andreibyf/aishacrm-2-telemetry-sidecar:$VERSION_TAG
             # Tag as latest locally
+            phase "Tagging pulled images as latest"
             docker tag ghcr.io/andreibyf/aishacrm-2-frontend:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-frontend:latest
             docker tag ghcr.io/andreibyf/aishacrm-2-backend:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-backend:latest
             docker tag ghcr.io/andreibyf/aishacrm-2-mcp:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-mcp:latest
@@ -516,10 +534,11 @@ jobs:
             # Restart main services with version info (force recreate to detect :latest image changes)
             # NOTE: n8n is optional - use --profile workflows to include it
             # Frontend and backend run directly on ports 4000 and 4001 (no proxy)
-            docker compose -f docker-compose.prod.yml up -d --force-recreate frontend backend redpanda telemetry-sidecar office-viz
+            phase "Recreating main production services"
+            run_timed 10m docker compose -f docker-compose.prod.yml up -d --force-recreate frontend backend redpanda telemetry-sidecar office-viz
 
             # Deploy MCP server (separate compose file with 3 containers)
-            echo "Deploying MCP server cluster (1 server + 2 nodes)..."
+            phase "Deploying MCP server cluster (1 server + 2 nodes)"
 
             # Ensure MCP directory exists
             mkdir -p /opt/aishacrm/braid-mcp-node-server
@@ -529,10 +548,10 @@ jobs:
             if [ ! -f .env ]; then
               if [ -f .env.example ]; then
                 cp .env.example .env
-                echo "Created .env from .env.example"
+                phase "Created .env from .env.example"
               else
                 echo "NODE_ENV=production" > .env
-                echo "Created minimal .env"
+                phase "Created minimal .env"
               fi
             fi
 
@@ -589,7 +608,7 @@ jobs:
             # Optional: Direct Supabase access
             grep -q "^USE_DIRECT_SUPABASE_ACCESS=" .env || echo "USE_DIRECT_SUPABASE_ACCESS=false" >> .env
 
-            echo "MCP .env configuration updated"
+            phase "MCP .env configuration updated"
 
             # Verify docker-compose.prod.yml exists (should have been copied by SCP)
             if [ ! -f docker-compose.prod.yml ]; then
@@ -610,27 +629,27 @@ jobs:
               echo "  4. Directory permissions issue"
               exit 1
             fi
-            echo "✓ docker-compose.prod.yml verified"
+            phase "✓ docker-compose.prod.yml verified"
 
             # Clean up any orphaned/conflicting MCP containers before starting
-            echo "Cleaning up orphaned MCP containers..."
+            phase "Cleaning up orphaned MCP containers"
             docker compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
             docker rm -f braid-mcp-1 braid-mcp-2 braid-mcp-node-server 2>/dev/null || true
 
             # Start MCP services using production compose (uses GHCR images)
-            echo "Starting MCP containers..."
-            docker compose -f docker-compose.prod.yml up -d --force-recreate
+            phase "Starting MCP containers"
+            run_timed 10m docker compose -f docker-compose.prod.yml up -d --force-recreate
 
             # Verify MCP deployment
-            echo "Verifying MCP deployment..."
+            phase "Verifying MCP deployment"
             sleep 5
             docker ps --filter "name=braid-mcp" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
             cd /opt/aishacrm
-            echo "Deployment completed: $VERSION_TAG"
+            phase "Deployment completed: $VERSION_TAG"
 
             # Final verification - all containers
-            echo "=== All AishaCRM containers ==="
+            phase "=== All AishaCRM containers ==="
             docker ps --filter "name=aishacrm" --format "table {{.Names}}\t{{.Status}}"
             docker ps --filter "name=braid-mcp" --format "table {{.Names}}\t{{.Status}}"
 
