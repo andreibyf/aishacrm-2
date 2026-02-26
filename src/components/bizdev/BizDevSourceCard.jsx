@@ -36,10 +36,38 @@ export default function BizDevSourceCard({
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesText, setNotesText] = useState(source.notes || '');
   const [savingNotes, setSavingNotes] = useState(false);
+  const [assignedName, setAssignedName] = useState(source.assigned_to_name || null);
   const isPromoted =
     source.status?.toLowerCase() === 'promoted' || source.status?.toLowerCase() === 'converted';
   // New state to hold parsed lead IDs for UI checks
   const [leadIdsArray, setLeadIdsArray] = useState([]);
+
+  // Resolve assigned_to UUID to employee name if not already provided
+  useEffect(() => {
+    if (source.assigned_to_name) {
+      setAssignedName(source.assigned_to_name);
+      return;
+    }
+    if (!source.assigned_to) {
+      setAssignedName(null);
+      return;
+    }
+    let cancelled = false;
+    Employee.get(source.assigned_to)
+      .then((emp) => {
+        if (!cancelled && emp) {
+          const name =
+            [emp.first_name, emp.last_name].filter(Boolean).join(' ') || emp.email || 'Assigned';
+          setAssignedName(name);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAssignedName('Assigned');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [source.assigned_to, source.assigned_to_name]);
 
   // Parse lead_ids which may be stored as JSON string or array
   useEffect(() => {
@@ -315,7 +343,7 @@ export default function BizDevSourceCard({
           </div>
 
           {/* Right side - Notes area */}
-          <div className="flex-1 bg-slate-700/30 border border-slate-600 rounded-lg p-3 min-h-[120px] max-h-[180px] flex flex-col">
+          <div className="flex-1 bg-slate-700/30 border border-slate-600 rounded-lg p-3 min-h-[160px] max-h-[280px] flex flex-col">
             {editingNotes ? (
               <div className="space-y-2 flex-1 flex flex-col">
                 <Textarea
@@ -521,19 +549,23 @@ export default function BizDevSourceCard({
             <Badge variant="outline" className={statusColorClass}>
               {source.status || 'Active'}
             </Badge>
-            {source.assigned_to_name && (
-              <span className="flex items-center gap-1 text-xs text-slate-400">
-                <User className="w-3 h-3" />
-                {source.assigned_to_name}
-              </span>
-            )}
+            <span className="text-slate-600 mx-1">·</span>
+            <span
+              className={`flex items-center gap-1 text-xs ${assignedName ? 'text-slate-300' : 'text-slate-500 italic'}`}
+            >
+              <User className="w-3 h-3 text-slate-400" />
+              {assignedName || 'Unassigned'}
+            </span>
             {source.batch_id && (
-              <span className="text-xs text-slate-500">Batch: {source.batch_id}</span>
+              <>
+                <span className="text-slate-600 mx-1">·</span>
+                <span className="text-xs text-slate-500">Batch: {source.batch_id}</span>
+              </>
             )}
           </div>
           {sourceName && (
-            <span className="text-xs text-slate-500 truncate max-w-[150px]" title={sourceName}>
-              Source: {sourceName}
+            <span className="text-xs text-slate-500 truncate max-w-[150px] ml-2" title={sourceName}>
+              <span className="text-slate-600 mr-2">·</span>Source: {sourceName}
             </span>
           )}
         </div>
