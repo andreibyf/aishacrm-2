@@ -1,58 +1,70 @@
-import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
+import { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { X } from "lucide-react";
-import { Lead, BizDevSource, Tenant } from "@/api/entities";
-import { useEntityForm } from "@/hooks/useEntityForm";
-import { useTenant } from "@/components/shared/tenantContext";
-import { toast } from "sonner";
+} from '@/components/ui/select';
+import { X } from 'lucide-react';
+import { Lead, BizDevSource, Tenant } from '@/api/entities';
+import { useEntityForm } from '@/hooks/useEntityForm';
+import { useTenant } from '@/components/shared/tenantContext';
+import { useUser } from '@/components/shared/useUser.js';
+import LazyEmployeeSelector from '@/components/shared/LazyEmployeeSelector';
+import { toast } from 'sonner';
 
 /**
  * BizDevSourceForm - Adaptive B2B/B2C Form
- * 
+ *
  * Renders conditional fields based on tenant's business_model setting.
  * - B2B: Company-centric (company_name required, contact optional)
  * - B2C: Person-centric (contact_person required, company optional)
  * - Hybrid: All fields available
  */
-export default function BizDevSourceForm({ source: legacySource, initialData, onSubmit, onCancel, sourceFieldLabel = 'Source' }) {
+export default function BizDevSourceForm({
+  source: legacySource,
+  initialData,
+  onSubmit,
+  onCancel,
+  sourceFieldLabel = 'Source',
+}) {
   const source = initialData || legacySource || null;
   const { ensureTenantId, isSubmitting, normalizeError } = useEntityForm();
   const { selectedTenantId } = useTenant();
-  
+  const { user } = useUser();
+  const isManager =
+    user?.role === 'manager' || user?.role === 'admin' || user?.role === 'superadmin';
+
   // Tenant-level business model setting
-  const [businessModel, setBusinessModel] = useState("b2b"); // 'b2b' | 'b2c' | 'hybrid'
+  const [businessModel, setBusinessModel] = useState('b2b'); // 'b2b' | 'b2c' | 'hybrid'
   const [tenantLoading, setTenantLoading] = useState(true);
   const [formData, setFormData] = useState({
-    source_name: "",
-    batch_id: "",
-    company_name: "",
-    dba_name: "",
-    industry: "",
-    website: "",
-    email: "",
-    phone_number: "",
-    address_line_1: "",
-    address_line_2: "",
-    city: "",
-    state_province: "",
-    postal_code: "",
-    country: "United States",
-    notes: "",
+    source_name: '',
+    batch_id: '',
+    company_name: '',
+    dba_name: '',
+    industry: '',
+    website: '',
+    email: '',
+    phone_number: '',
+    address_line_1: '',
+    address_line_2: '',
+    city: '',
+    state_province: '',
+    postal_code: '',
+    country: 'United States',
+    notes: '',
     lead_ids: [], // Added lead_ids to form data
-    industry_license: "",
-    license_status: "Not Required",
-    license_expiry_date: "",
-    status: "Active",
+    industry_license: '',
+    license_status: 'Not Required',
+    license_expiry_date: '',
+    status: 'Active',
+    assigned_to: '',
   });
 
   const [leads, setLeads] = useState([]);
@@ -62,14 +74,14 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
     let cancelled = false;
     const loadTenantModel = async () => {
       try {
-        const tenantId = selectedTenantId || await ensureTenantId();
+        const tenantId = selectedTenantId || (await ensureTenantId());
         if (!tenantId) {
           setTenantLoading(false);
           return;
         }
         const tenantData = await Tenant.get(tenantId);
         if (!cancelled && tenantData) {
-          setBusinessModel(tenantData.business_model || "b2b");
+          setBusinessModel(tenantData.business_model || 'b2b');
         }
         if (!cancelled) setTenantLoading(false);
       } catch (err) {
@@ -78,7 +90,9 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
       }
     };
     loadTenantModel();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [selectedTenantId, ensureTenantId]);
 
   // Load leads using resolved tenant_id (standardized tenant resolution)
@@ -99,36 +113,44 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
       }
     };
     loadLeads();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [ensureTenantId]);
 
   useEffect(() => {
     if (source) {
       setFormData({
-        source_name: source.source_name || source.source || "",
-        batch_id: source.batch_id || "",
-        company_name: source.company_name || "",
-        dba_name: source.dba_name || "",
-        industry: source.industry || "",
-        website: source.website || "",
-        contact_person: source.contact_person || "",
-        email: source.email || "",
-        phone_number: source.phone_number || "",
-        address_line_1: source.address_line_1 || "",
-        address_line_2: source.address_line_2 || "",
-        city: source.city || "",
-        state_province: source.state_province || "",
-        postal_code: source.postal_code || "",
-        country: source.country || "United States",
-        notes: source.notes || "",
+        source_name: source.source_name || source.source || '',
+        batch_id: source.batch_id || '',
+        company_name: source.company_name || '',
+        dba_name: source.dba_name || '',
+        industry: source.industry || '',
+        website: source.website || '',
+        contact_person: source.contact_person || '',
+        email: source.email || '',
+        phone_number: source.phone_number || '',
+        address_line_1: source.address_line_1 || '',
+        address_line_2: source.address_line_2 || '',
+        city: source.city || '',
+        state_province: source.state_province || '',
+        postal_code: source.postal_code || '',
+        country: source.country || 'United States',
+        notes: source.notes || '',
         lead_ids: source.lead_ids || [], // Initialize lead_ids from source
-        industry_license: source.industry_license || "",
-        license_status: source.license_status || "Not Required",
-        license_expiry_date: source.license_expiry_date || "",
-        status: source.status || "Active",
+        industry_license: source.industry_license || '',
+        license_status: source.license_status || 'Not Required',
+        license_expiry_date: source.license_expiry_date || '',
+        status: source.status || 'Active',
+        assigned_to: source.assigned_to || '',
       });
+    } else {
+      // New source: default assigned_to to current user's employee ID if available
+      if (user?.employee_id) {
+        setFormData((prev) => ({ ...prev, assigned_to: user.employee_id }));
+      }
     }
-  }, [source]);
+  }, [source, user]);
 
   // Determine required fields based on business model
   const getRequiredFields = () => {
@@ -151,7 +173,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
       toast.error('Form error: submit handler missing');
       return;
     }
-    
+
     // Validate required fields based on business model
     const requiredFields = getRequiredFields();
     for (const field of requiredFields) {
@@ -171,17 +193,22 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
 
       // Clean payload: convert empty strings to null for consistency
       const payload = { ...formData, tenant_id: tenantId };
-      Object.keys(payload).forEach(k => {
-        if (payload[k] === '' && typeof payload[k] === 'string') payload[k] = null;
+      // Handle assigned_to: 'unassigned' or empty -> null
+      if (payload.assigned_to === 'unassigned' || payload.assigned_to === '') {
+        payload.assigned_to = null;
+      }
+      Object.keys(payload).forEach((k) => {
+        if (k !== 'assigned_to' && payload[k] === '' && typeof payload[k] === 'string')
+          payload[k] = null;
       });
 
       let result;
       if (source?.id) {
         result = await BizDevSource.update(source.id, payload);
-        toast.success('BizDev source updated');
+        toast.success(`${sourceFieldLabel} updated`);
       } else {
         result = await BizDevSource.create(payload);
-        toast.success('BizDev source created');
+        toast.success(`${sourceFieldLabel} created`);
       }
       await onSubmit(result);
     } catch (err) {
@@ -196,11 +223,11 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
 
   // Function to toggle lead selection
   const handleLeadToggle = (leadId) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       lead_ids: prev.lead_ids.includes(leadId)
-        ? prev.lead_ids.filter(id => id !== leadId)
-        : [...prev.lead_ids, leadId]
+        ? prev.lead_ids.filter((id) => id !== leadId)
+        : [...prev.lead_ids, leadId],
     }));
   };
 
@@ -213,7 +240,12 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
           </h2>
           {!tenantLoading && (
             <p className="text-sm text-slate-400 mt-1">
-              Client Type: {businessModel?.toUpperCase()} • {businessModel === 'b2b' ? 'Company-focused' : businessModel === 'b2c' ? 'Person-focused' : 'Both Company and Person'}
+              Client Type: {businessModel?.toUpperCase()} •{' '}
+              {businessModel === 'b2b'
+                ? 'Company-focused'
+                : businessModel === 'b2c'
+                  ? 'Person-focused'
+                  : 'Both Company and Person'}
             </p>
           )}
         </div>
@@ -240,7 +272,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
               <Input
                 id="source_name"
                 value={formData.source_name}
-                onChange={(e) => handleChange("source_name", e.target.value)}
+                onChange={(e) => handleChange('source_name', e.target.value)}
                 placeholder="e.g., Construction Directory Q4 2025"
                 required
                 className="bg-slate-700 border-slate-600 text-slate-100"
@@ -253,7 +285,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
               <Input
                 id="batch_id"
                 value={formData.batch_id}
-                onChange={(e) => handleChange("batch_id", e.target.value)}
+                onChange={(e) => handleChange('batch_id', e.target.value)}
                 placeholder="Batch identifier"
                 className="bg-slate-700 border-slate-600 text-slate-100"
               />
@@ -273,7 +305,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
                 <Input
                   id="contact_person"
                   value={formData.contact_person}
-                  onChange={(e) => handleChange("contact_person", e.target.value)}
+                  onChange={(e) => handleChange('contact_person', e.target.value)}
                   placeholder="John Doe"
                   required
                   className="bg-slate-700 border-slate-600 text-slate-100"
@@ -287,7 +319,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
                   id="email"
                   type="email"
                   value={formData.email}
-                  onChange={(e) => handleChange("email", e.target.value)}
+                  onChange={(e) => handleChange('email', e.target.value)}
                   placeholder="john@example.com"
                   required
                   className="bg-slate-700 border-slate-600 text-slate-100"
@@ -300,7 +332,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
                 <Input
                   id="phone_number"
                   value={formData.phone_number}
-                  onChange={(e) => handleChange("phone_number", e.target.value)}
+                  onChange={(e) => handleChange('phone_number', e.target.value)}
                   placeholder="(555) 123-4567"
                   className="bg-slate-700 border-slate-600 text-slate-100"
                 />
@@ -321,7 +353,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
                 <Input
                   id="company_name"
                   value={formData.company_name}
-                  onChange={(e) => handleChange("company_name", e.target.value)}
+                  onChange={(e) => handleChange('company_name', e.target.value)}
                   placeholder="Company legal name"
                   required
                   className="bg-slate-700 border-slate-600 text-slate-100"
@@ -334,7 +366,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
                 <Input
                   id="dba_name"
                   value={formData.dba_name}
-                  onChange={(e) => handleChange("dba_name", e.target.value)}
+                  onChange={(e) => handleChange('dba_name', e.target.value)}
                   placeholder="Doing Business As"
                   className="bg-slate-700 border-slate-600 text-slate-100"
                 />
@@ -346,7 +378,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
                 <Input
                   id="industry"
                   value={formData.industry}
-                  onChange={(e) => handleChange("industry", e.target.value)}
+                  onChange={(e) => handleChange('industry', e.target.value)}
                   placeholder="e.g., Construction"
                   className="bg-slate-700 border-slate-600 text-slate-100"
                 />
@@ -359,7 +391,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
                   id="website"
                   type="url"
                   value={formData.website}
-                  onChange={(e) => handleChange("website", e.target.value)}
+                  onChange={(e) => handleChange('website', e.target.value)}
                   placeholder="https://example.com"
                   className="bg-slate-700 border-slate-600 text-slate-100"
                 />
@@ -377,25 +409,27 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="contact_person" className="text-slate-300">
-                  Contact Person {businessModel === 'b2b' && <span className="text-slate-500">(Optional)</span>}
+                  Contact Person{' '}
+                  {businessModel === 'b2b' && <span className="text-slate-500">(Optional)</span>}
                 </Label>
                 <Input
                   id="contact_person"
                   value={formData.contact_person}
-                  onChange={(e) => handleChange("contact_person", e.target.value)}
+                  onChange={(e) => handleChange('contact_person', e.target.value)}
                   placeholder="Contact name"
                   className="bg-slate-700 border-slate-600 text-slate-100"
                 />
               </div>
               <div>
                 <Label htmlFor="email" className="text-slate-300">
-                  Email {businessModel === 'b2b' && <span className="text-slate-500">(Optional)</span>}
+                  Email{' '}
+                  {businessModel === 'b2b' && <span className="text-slate-500">(Optional)</span>}
                 </Label>
                 <Input
                   id="email"
                   type="email"
                   value={formData.email}
-                  onChange={(e) => handleChange("email", e.target.value)}
+                  onChange={(e) => handleChange('email', e.target.value)}
                   placeholder="contact@company.com"
                   className="bg-slate-700 border-slate-600 text-slate-100"
                 />
@@ -407,7 +441,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
                 <Input
                   id="phone_number"
                   value={formData.phone_number}
-                  onChange={(e) => handleChange("phone_number", e.target.value)}
+                  onChange={(e) => handleChange('phone_number', e.target.value)}
                   placeholder="(555) 123-4567"
                   className="bg-slate-700 border-slate-600 text-slate-100"
                 />
@@ -427,7 +461,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
               <Input
                 id="address_line_1"
                 value={formData.address_line_1}
-                onChange={(e) => handleChange("address_line_1", e.target.value)}
+                onChange={(e) => handleChange('address_line_1', e.target.value)}
                 placeholder="Street address"
                 className="bg-slate-700 border-slate-600 text-slate-100"
               />
@@ -439,7 +473,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
               <Input
                 id="address_line_2"
                 value={formData.address_line_2}
-                onChange={(e) => handleChange("address_line_2", e.target.value)}
+                onChange={(e) => handleChange('address_line_2', e.target.value)}
                 placeholder="Suite, unit, etc."
                 className="bg-slate-700 border-slate-600 text-slate-100"
               />
@@ -452,7 +486,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
                 <Input
                   id="city"
                   value={formData.city}
-                  onChange={(e) => handleChange("city", e.target.value)}
+                  onChange={(e) => handleChange('city', e.target.value)}
                   placeholder="City"
                   className="bg-slate-700 border-slate-600 text-slate-100"
                 />
@@ -464,7 +498,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
                 <Input
                   id="state_province"
                   value={formData.state_province}
-                  onChange={(e) => handleChange("state_province", e.target.value)}
+                  onChange={(e) => handleChange('state_province', e.target.value)}
                   placeholder="State"
                   className="bg-slate-700 border-slate-600 text-slate-100"
                 />
@@ -476,7 +510,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
                 <Input
                   id="postal_code"
                   value={formData.postal_code}
-                  onChange={(e) => handleChange("postal_code", e.target.value)}
+                  onChange={(e) => handleChange('postal_code', e.target.value)}
                   placeholder="ZIP"
                   className="bg-slate-700 border-slate-600 text-slate-100"
                 />
@@ -489,7 +523,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
               <Input
                 id="country"
                 value={formData.country}
-                onChange={(e) => handleChange("country", e.target.value)}
+                onChange={(e) => handleChange('country', e.target.value)}
                 placeholder="Country"
                 className="bg-slate-700 border-slate-600 text-slate-100"
               />
@@ -508,7 +542,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
               <Input
                 id="industry_license"
                 value={formData.industry_license}
-                onChange={(e) => handleChange("industry_license", e.target.value)}
+                onChange={(e) => handleChange('industry_license', e.target.value)}
                 placeholder="License number"
                 className="bg-slate-700 border-slate-600 text-slate-100"
               />
@@ -517,7 +551,10 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
               <Label htmlFor="license_status" className="text-slate-300">
                 License Status
               </Label>
-              <Select value={formData.license_status} onValueChange={(value) => handleChange("license_status", value)}>
+              <Select
+                value={formData.license_status}
+                onValueChange={(value) => handleChange('license_status', value)}
+              >
                 <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-100">
                   <SelectValue />
                 </SelectTrigger>
@@ -539,7 +576,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
                 id="license_expiry_date"
                 type="date"
                 value={formData.license_expiry_date}
-                onChange={(e) => handleChange("license_expiry_date", e.target.value)}
+                onChange={(e) => handleChange('license_expiry_date', e.target.value)}
                 className="bg-slate-700 border-slate-600 text-slate-100"
               />
             </div>
@@ -550,8 +587,10 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
         {leads.length > 0 && ( // Only show this section if there are leads to link
           <div className="space-y-4">
             <h3 className="text-lg font-semibold text-slate-200">Linked Leads</h3>
-            <div className="space-y-2 max-h-40 overflow-y-auto pr-2"> {/* Added max-h and overflow for scroll */}
-              {leads.map(lead => (
+            <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+              {' '}
+              {/* Added max-h and overflow for scroll */}
+              {leads.map((lead) => (
                 <div key={lead.id} className="flex items-center gap-2 p-2 bg-slate-700 rounded">
                   <input
                     type="checkbox"
@@ -560,8 +599,11 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
                     onChange={() => handleLeadToggle(lead.id)}
                     className="rounded border-slate-600 focus:ring-blue-500 text-blue-600 bg-slate-800"
                   />
-                  <Label htmlFor={`lead-${lead.id}`} className="text-slate-200 text-sm cursor-pointer">
-                    {lead.first_name} {lead.last_name} {lead.company ? `- ${lead.company}` : ""}
+                  <Label
+                    htmlFor={`lead-${lead.id}`}
+                    className="text-slate-200 text-sm cursor-pointer"
+                  >
+                    {lead.first_name} {lead.last_name} {lead.company ? `- ${lead.company}` : ''}
                   </Label>
                 </div>
               ))}
@@ -569,23 +611,49 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
           </div>
         )}
 
-        {/* Additional Information */}
+        {/* Assignment & Status */}
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-slate-200">Additional Information</h3>
-          <div>
-            <Label htmlFor="status" className="text-slate-300">
-              Status
-            </Label>
-            <Select value={formData.status} onValueChange={(value) => handleChange("status", value)}>
-              <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-100">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Active">Active</SelectItem>
-                <SelectItem value="Promoted">Promoted</SelectItem>
-                <SelectItem value="Archived">Archived</SelectItem>
-              </SelectContent>
-            </Select>
+          <h3 className="text-lg font-semibold text-slate-200">Assignment & Status</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="assigned_to" className="text-slate-300">
+                Assigned To{' '}
+                {!isManager && <span className="text-xs text-slate-500">(Auto-assigned)</span>}
+              </Label>
+              {!isManager ? (
+                <Input
+                  value={`${user?.full_name || user?.email || 'You'} (Auto-assigned)`}
+                  disabled
+                  className="bg-slate-600 border-slate-500 text-slate-300 cursor-not-allowed"
+                />
+              ) : (
+                <LazyEmployeeSelector
+                  value={formData.assigned_to || 'unassigned'}
+                  onValueChange={(value) => handleChange('assigned_to', value)}
+                  placeholder="Select assignee"
+                  includeUnassigned={true}
+                  className="bg-slate-700 border-slate-600 text-slate-100"
+                />
+              )}
+            </div>
+            <div>
+              <Label htmlFor="status" className="text-slate-300">
+                Status
+              </Label>
+              <Select
+                value={formData.status}
+                onValueChange={(value) => handleChange('status', value)}
+              >
+                <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-100">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Active">Active</SelectItem>
+                  <SelectItem value="Promoted">Promoted</SelectItem>
+                  <SelectItem value="Archived">Archived</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <div>
             <Label htmlFor="notes" className="text-slate-300">
@@ -594,7 +662,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
             <Textarea
               id="notes"
               value={formData.notes}
-              onChange={(e) => handleChange("notes", e.target.value)}
+              onChange={(e) => handleChange('notes', e.target.value)}
               placeholder="Additional notes..."
               rows={4}
               className="bg-slate-700 border-slate-600 text-slate-100"
@@ -604,11 +672,22 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
       </div>
 
       <div className="flex justify-end gap-3 pt-4 border-t border-slate-700">
-        <Button type="button" variant="outline" onClick={onCancel} className="border-slate-600 text-slate-300 hover:bg-slate-700">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onCancel}
+          className="border-slate-600 text-slate-300 hover:bg-slate-700"
+        >
           Cancel
         </Button>
         <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
-          {isSubmitting ? (source?.id ? 'Saving...' : 'Creating...') : (source?.id ? "Update Source" : "Create Source")}
+          {isSubmitting
+            ? source?.id
+              ? 'Saving...'
+              : 'Creating...'
+            : source?.id
+              ? 'Update Source'
+              : 'Create Source'}
         </Button>
       </div>
     </form>

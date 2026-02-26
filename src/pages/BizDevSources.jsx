@@ -459,7 +459,9 @@ export default function BizDevSourcesPage() {
     }, 500);
 
     if (result && result.successful > 0) {
-      toast.success(`Deleted ${result.successful} BizDev Source(s)`);
+      toast.success(
+        `Deleted ${result.successful} ${result.successful === 1 ? bizdevSourceLabel : bizdevLabel}`,
+      );
     }
   };
 
@@ -663,7 +665,7 @@ export default function BizDevSourcesPage() {
             <CsvExportButton
               data={filteredSources}
               filename="bizdev-sources"
-              entityName="BizDevSource"
+              entityName={bizdevSourceLabel}
             />
             <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
               <Plus className="w-4 h-4 mr-2" />
@@ -1057,6 +1059,7 @@ export default function BizDevSourcesPage() {
             bizDevSource={selectedSource}
             accounts={accounts}
             businessModel={businessModel}
+            entityLabel={bizdevSourceLabel}
             onClose={() => {
               setShowDetailPanel(false);
               setSelectedSource(null);
@@ -1097,6 +1100,8 @@ export default function BizDevSourcesPage() {
             sources={sources.filter((s) => selectedSources.includes(s.id))}
             onClose={() => setShowBulkDelete(false)}
             onComplete={handleDeleteComplete}
+            entityLabel={bizdevSourceLabel}
+            entityLabelPlural={bizdevLabel}
           />
         )}
 

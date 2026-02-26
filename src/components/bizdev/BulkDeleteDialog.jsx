@@ -1,24 +1,29 @@
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import {
-  Trash2,
-  X,
-  AlertTriangle,
-  Loader2,
-} from "lucide-react";
-import { toast } from "sonner";
-import { BizDevSource } from "@/api/entities";
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Trash2, X, AlertTriangle, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { BizDevSource } from '@/api/entities';
 
-export default function BulkDeleteDialog({ sources, onClose, onComplete }) {
+export default function BulkDeleteDialog({
+  sources,
+  onClose,
+  onComplete,
+  entityLabel = 'Potential Lead',
+  entityLabelPlural = 'Potential Leads',
+}) {
   const [deleting, setDeleting] = useState(false);
 
   if (!sources || sources.length === 0) return null;
 
   const handleDelete = async () => {
-    if (!confirm(`Are you sure you want to permanently delete ${sources.length} BizDev Source(s)? This action cannot be undone.`)) {
+    if (
+      !confirm(
+        `Are you sure you want to permanently delete ${sources.length} ${sources.length === 1 ? entityLabel : entityLabelPlural}? This action cannot be undone.`,
+      )
+    ) {
       return;
     }
 
@@ -28,7 +33,7 @@ export default function BulkDeleteDialog({ sources, onClose, onComplete }) {
       const results = {
         successful: 0,
         failed: 0,
-        errors: []
+        errors: [],
       };
 
       // Delete in batches to avoid rate limiting
@@ -49,17 +54,20 @@ export default function BulkDeleteDialog({ sources, onClose, onComplete }) {
                 return { success: true };
               } catch (err) {
                 lastErr = err;
-                const is429 = err.message?.includes('429') || err.message?.includes('Too many') || err.message?.includes('rate');
+                const is429 =
+                  err.message?.includes('429') ||
+                  err.message?.includes('Too many') ||
+                  err.message?.includes('rate');
                 if (is429 && attempt < MAX_RETRIES - 1) {
                   // Exponential backoff: 1s, 2s, 4s
-                  await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)));
+                  await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
                   continue;
                 }
                 throw err;
               }
             }
             throw lastErr;
-          })
+          }),
         );
 
         batchResults.forEach((result, idx) => {
@@ -71,25 +79,27 @@ export default function BulkDeleteDialog({ sources, onClose, onComplete }) {
             results.errors.push({
               id: source.id,
               name: source.company_name || source.source,
-              error: result.reason?.message || 'Delete failed'
+              error: result.reason?.message || 'Delete failed',
             });
           }
         });
 
         // Pause between batches (skip after last batch)
         if (i + BATCH_SIZE < sources.length) {
-          await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
+          await new Promise((r) => setTimeout(r, BATCH_DELAY_MS));
         }
       }
 
       if (results.failed === 0) {
-        toast.success(`Successfully deleted ${results.successful} BizDev Source(s)`);
+        toast.success(
+          `Successfully deleted ${results.successful} ${results.successful === 1 ? entityLabel : entityLabelPlural}`,
+        );
       } else if (results.successful > 0) {
         toast.warning(`Deleted ${results.successful} of ${sources.length} sources`, {
-          description: `${results.failed} record(s) failed to delete`
+          description: `${results.failed} record(s) failed to delete`,
         });
       } else {
-        toast.error('Failed to delete BizDev Sources');
+        toast.error(`Failed to delete ${entityLabelPlural}`);
       }
 
       if (onComplete) {
@@ -99,7 +109,7 @@ export default function BulkDeleteDialog({ sources, onClose, onComplete }) {
       onClose();
     } catch (error) {
       console.error('Delete error:', error);
-      toast.error('Failed to delete BizDev Sources. Please try again.');
+      toast.error(`Failed to delete ${entityLabelPlural}. Please try again.`);
     } finally {
       setDeleting(false);
     }
@@ -123,9 +133,10 @@ export default function BulkDeleteDialog({ sources, onClose, onComplete }) {
             <div className="flex items-center gap-3">
               <Trash2 className="w-6 h-6 text-red-400" />
               <div>
-                <CardTitle className="text-slate-100">Delete BizDev Sources</CardTitle>
+                <CardTitle className="text-slate-100">Delete {entityLabelPlural}</CardTitle>
                 <p className="text-sm text-slate-400 mt-1">
-                  Permanently delete {sources.length} BizDev Source{sources.length > 1 ? 's' : ''}
+                  Permanently delete {sources.length}{' '}
+                  {sources.length > 1 ? entityLabelPlural : entityLabel}
                 </p>
               </div>
             </div>
@@ -148,8 +159,9 @@ export default function BulkDeleteDialog({ sources, onClose, onComplete }) {
             <AlertDescription className="text-red-300">
               <p className="font-semibold mb-1">Permanent Deletion</p>
               <p className="text-sm">
-                This action cannot be undone. All selected records will be permanently deleted from the database.
-                Consider using &quot;Archive&quot; instead if you want to preserve the data.
+                This action cannot be undone. All selected records will be permanently deleted from
+                the database. Consider using &quot;Archive&quot; instead if you want to preserve the
+                data.
               </p>
             </AlertDescription>
           </Alert>
@@ -159,14 +171,15 @@ export default function BulkDeleteDialog({ sources, onClose, onComplete }) {
             <h3 className="text-sm font-semibold text-slate-300 mb-3">Records to Delete</h3>
             <div className="space-y-2">
               {Object.entries(batches).map(([batchId, batchSources]) => (
-                <div key={batchId} className="flex items-center justify-between p-3 bg-slate-700 rounded-lg">
+                <div
+                  key={batchId}
+                  className="flex items-center justify-between p-3 bg-slate-700 rounded-lg"
+                >
                   <div>
                     <Badge variant="outline" className="border-slate-600 text-slate-300 mb-1">
                       {batchId}
                     </Badge>
-                    <p className="text-xs text-slate-400">
-                      {batchSources[0].source}
-                    </p>
+                    <p className="text-xs text-slate-400">{batchSources[0].source}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-semibold text-slate-200">

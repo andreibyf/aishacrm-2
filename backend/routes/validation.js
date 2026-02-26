@@ -11,7 +11,152 @@ import { invalidateTenantCache } from '../lib/cacheMiddleware.js';
 // Helper to normalize strings for duplicate detection
 function normalizeString(str) {
   if (!str) return '';
-  return String(str).toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+  return String(str)
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]/g, '');
+}
+
+// Helper: check if a string looks like a UUID
+function isUuidFormat(str) {
+  if (!str || typeof str !== 'string') return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
+}
+
+/**
+ * Build a lookup structure for employees in a tenant.
+ * Returns an object with multiple indexes for fast matching:
+ *   byEmail, byFullName, byFirstLast, byLastFirst, byFirstName, byLastName
+ */
+async function buildEmployeeLookup(supabase, tenantId) {
+  const lookup = {
+    byEmail: {}, // email -> { id, first_name, last_name, email }
+    byFullName: {}, // "john smith" -> employee
+    byLastFirst: {}, // "smith john" -> employee  (handles "Smith, John" CSV format)
+    byFirstName: {}, // "john" -> [employees]  (for single-name matching, may be ambiguous)
+    byLastName: {}, // "smith" -> [employees]
+    all: [],
+  };
+
+  try {
+    const { data, error } = await supabase
+      .from('employees')
+      .select('id, first_name, last_name, email, user_email')
+      .eq('tenant_id', tenantId);
+
+    if (error || !data) return lookup;
+
+    lookup.all = data;
+
+    for (const emp of data) {
+      const email = (emp.email || emp.user_email || '').toLowerCase().trim();
+      const first = (emp.first_name || '').toLowerCase().trim();
+      const last = (emp.last_name || '').toLowerCase().trim();
+      const full = `${first} ${last}`.trim();
+
+      if (email) lookup.byEmail[email] = emp;
+      if (full) lookup.byFullName[full] = emp;
+      if (first && last) lookup.byLastFirst[`${last} ${first}`] = emp;
+
+      // Single-name indexes (arrays since multiple employees could share a first/last name)
+      if (first) {
+        if (!lookup.byFirstName[first]) lookup.byFirstName[first] = [];
+        lookup.byFirstName[first].push(emp);
+      }
+      if (last) {
+        if (!lookup.byLastName[last]) lookup.byLastName[last] = [];
+        lookup.byLastName[last].push(emp);
+      }
+    }
+  } catch (err) {
+    logger.warn('[buildEmployeeLookup] Failed to load employees:', err?.message);
+  }
+
+  return lookup;
+}
+
+/**
+ * Resolve a human-readable assigned_to value (name or email) to an employee UUID.
+ * Match priority:
+ *   1. Exact email match
+ *   2. Exact full name match ("John Smith")
+ *   3. "Last, First" or "Last First" reversed match
+ *   4. Single name match (only if unambiguous — exactly 1 employee with that first or last name)
+ *   5. Initials match (e.g. "JS" for "John Smith") — only if unambiguous
+ * Returns { uuid, rawValue, reason }
+ */
+function resolveEmployeeAssignment(rawValue, lookup) {
+  if (!rawValue || typeof rawValue !== 'string') {
+    return { uuid: null, rawValue, reason: 'empty value' };
+  }
+
+  const trimmed = rawValue.trim();
+  const lower = trimmed.toLowerCase();
+
+  // 1. Exact email match
+  if (lower.includes('@') && lookup.byEmail[lower]) {
+    return { uuid: lookup.byEmail[lower].id, rawValue: trimmed, reason: 'email match' };
+  }
+
+  // 2. Exact full name match ("John Smith")
+  if (lookup.byFullName[lower]) {
+    return { uuid: lookup.byFullName[lower].id, rawValue: trimmed, reason: 'full name match' };
+  }
+
+  // 3. "Last, First" format (e.g. "Smith, John" or "Smith John")
+  const commaSwap = lower.replace(/,\s*/, ' ').trim();
+  if (commaSwap !== lower && lookup.byFullName[commaSwap]) {
+    return { uuid: lookup.byFullName[commaSwap].id, rawValue: trimmed, reason: 'last-first match' };
+  }
+  // Also try reversed without comma: "Smith John" -> check byLastFirst
+  if (lookup.byLastFirst[lower]) {
+    return { uuid: lookup.byLastFirst[lower].id, rawValue: trimmed, reason: 'reversed name match' };
+  }
+  // Try the comma-cleaned version in byLastFirst too
+  if (commaSwap !== lower && lookup.byLastFirst[commaSwap]) {
+    return {
+      uuid: lookup.byLastFirst[commaSwap].id,
+      rawValue: trimmed,
+      reason: 'reversed name match',
+    };
+  }
+
+  // 4. Single name match (unambiguous only)
+  const parts = lower.split(/\s+/);
+  if (parts.length === 1) {
+    const name = parts[0];
+    // Check first name
+    const firstMatches = lookup.byFirstName[name] || [];
+    if (firstMatches.length === 1) {
+      return { uuid: firstMatches[0].id, rawValue: trimmed, reason: 'unique first name match' };
+    }
+    // Check last name
+    const lastMatches = lookup.byLastName[name] || [];
+    if (lastMatches.length === 1) {
+      return { uuid: lastMatches[0].id, rawValue: trimmed, reason: 'unique last name match' };
+    }
+    if (firstMatches.length > 1 || lastMatches.length > 1) {
+      return {
+        uuid: null,
+        rawValue: trimmed,
+        reason: `ambiguous: multiple employees match "${trimmed}"`,
+      };
+    }
+  }
+
+  // 5. Initials match (e.g. "JS" → John Smith) — only if exactly 1 match
+  if (/^[a-z]{2,4}$/i.test(trimmed) && trimmed.length <= 4) {
+    const initials = trimmed.toLowerCase();
+    const matches = lookup.all.filter((emp) => {
+      const empInitials = ((emp.first_name || '')[0] + (emp.last_name || '')[0]).toLowerCase();
+      return empInitials === initials;
+    });
+    if (matches.length === 1) {
+      return { uuid: matches[0].id, rawValue: trimmed, reason: 'initials match' };
+    }
+  }
+
+  return { uuid: null, rawValue: trimmed, reason: `no matching employee found for "${trimmed}"` };
 }
 
 // Helper: dynamic duplicate finder for a given entity and fields (Postgres only)
@@ -37,9 +182,7 @@ async function findDuplicatesInDbSupabase(supabase, entityTable, tenantId, field
   }
 
   // Build GROUP BY key: coalesce each field to empty string to avoid null grouping issues
-  const _keyExpr = safeFields
-    .map((f) => `COALESCE(${f}::text, '')`)
-    .join(` || '|' || `);
+  const _keyExpr = safeFields.map((f) => `COALESCE(${f}::text, '')`).join(` || '|' || `);
 
   // Fetch a capped set of rows and aggregate in-memory to avoid server-side GROUP BY
   // Safety cap to control payload size
@@ -75,11 +218,11 @@ export default function createValidationRoutes(_pgPool) {
   router.get('/check-duplicate', async (req, res) => {
     try {
       const { tenant_id, type, name, email, phone } = req.query;
-      
+
       if (!tenant_id || !type) {
         return res.status(400).json({
           status: 'error',
-          message: 'tenant_id and type are required'
+          message: 'tenant_id and type are required',
         });
       }
 
@@ -90,14 +233,14 @@ export default function createValidationRoutes(_pgPool) {
         account: 'accounts',
         lead: 'leads',
         contact: 'contacts',
-        opportunity: 'opportunities'
+        opportunity: 'opportunities',
       };
 
       const table = tableMap[type];
       if (!table) {
         return res.status(400).json({
           status: 'error',
-          message: `Invalid type: ${type}. Valid types: account, lead, contact, opportunity`
+          message: `Invalid type: ${type}. Valid types: account, lead, contact, opportunity`,
         });
       }
 
@@ -116,8 +259,8 @@ export default function createValidationRoutes(_pgPool) {
         data: {
           has_duplicates: data && data.length > 0,
           count: data?.length || 0,
-          duplicates: data || []
-        }
+          duplicates: data || [],
+        },
       });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
@@ -130,7 +273,9 @@ export default function createValidationRoutes(_pgPool) {
       const { tenant_id, entity_type, fields = [] } = req.body || {};
 
       if (!entity_type || !tenant_id) {
-        return res.status(400).json({ status: 'error', message: 'entity_type and tenant_id are required' });
+        return res
+          .status(400)
+          .json({ status: 'error', message: 'entity_type and tenant_id are required' });
       }
 
       // Map entity type to table name (simple pluralization; adjust as needed)
@@ -207,14 +352,18 @@ export default function createValidationRoutes(_pgPool) {
         if (!contact.first_name) contactsIssues.missing_first_name++;
         if (!contact.last_name) contactsIssues.missing_last_name++;
         if (contact.email && !isValidEmail(contact.email)) contactsIssues.invalid_email++;
-        if (!contact.email && !contact.phone && !contact.mobile) contactsIssues.missing_contact_info++;
+        if (!contact.email && !contact.phone && !contact.mobile)
+          contactsIssues.missing_contact_info++;
         if (hasInvalidNameChars(contact.first_name) || hasInvalidNameChars(contact.last_name)) {
           contactsIssues.invalid_name_characters++;
         }
       });
 
       const contactsTotal = contactsData.length || 1; // Avoid division by zero
-      const contactsIssuesCount = Object.values(contactsIssues).reduce((sum, count) => sum + count, 0);
+      const contactsIssuesCount = Object.values(contactsIssues).reduce(
+        (sum, count) => sum + count,
+        0,
+      );
       const contactsIssuesPercentage = (contactsIssuesCount / contactsTotal) * 100;
 
       // Analyze Accounts
@@ -232,7 +381,10 @@ export default function createValidationRoutes(_pgPool) {
       });
 
       const accountsTotal = accountsData.length || 1;
-      const accountsIssuesCount = Object.values(accountsIssues).reduce((sum, count) => sum + count, 0);
+      const accountsIssuesCount = Object.values(accountsIssues).reduce(
+        (sum, count) => sum + count,
+        0,
+      );
       const accountsIssuesPercentage = (accountsIssuesCount / accountsTotal) * 100;
 
       // Analyze Leads
@@ -415,7 +567,10 @@ export default function createValidationRoutes(_pgPool) {
 
           (allAccounts || []).forEach((account) => {
             const accountNameNorm = normalizeString(account.name);
-            if (accountNameNorm === nameNorm && !potentialDuplicates.find((d) => d.id === account.id)) {
+            if (
+              accountNameNorm === nameNorm &&
+              !potentialDuplicates.find((d) => d.id === account.id)
+            ) {
               potentialDuplicates.push({
                 ...account,
                 reason: 'Same company name',
@@ -445,7 +600,14 @@ export default function createValidationRoutes(_pgPool) {
   // OPTIMIZED: Uses bulk insert instead of row-by-row to minimize DB round-trips.
   router.post('/validate-and-import', async (req, res) => {
     try {
-      const { records, entityType, mapping: _mapping, fileName, accountLinkColumn, tenant_id } = req.body;
+      const {
+        records,
+        entityType,
+        mapping: _mapping,
+        fileName,
+        accountLinkColumn,
+        tenant_id,
+      } = req.body;
 
       if (!records || !Array.isArray(records) || records.length === 0) {
         return res.status(400).json({
@@ -524,8 +686,14 @@ export default function createValidationRoutes(_pgPool) {
           }
         });
 
-        logger.debug(`📚 Built account lookup with ${Object.keys(accountLookupMap).length} entries`);
+        logger.debug(
+          `📚 Built account lookup with ${Object.keys(accountLookupMap).length} entries`,
+        );
       }
+
+      // Lazy-loaded employee lookup for resolving assigned_to from names/emails to UUIDs.
+      // Built once on first encounter of a non-UUID assigned_to value.
+      let employeeLookup = null;
 
       // ── Phase 1: Validate all records and prepare for bulk insert ──
       const validRecords = [];
@@ -559,6 +727,60 @@ export default function createValidationRoutes(_pgPool) {
             if (!record.source) {
               record.source = fileName || 'CSV Import';
             }
+            // Resolve assigned_to from name/email to employee UUID
+            if (record.assigned_to && !isUuidFormat(record.assigned_to)) {
+              if (!employeeLookup) {
+                employeeLookup = await buildEmployeeLookup(supabase, tenant_id);
+              }
+              const resolved = resolveEmployeeAssignment(record.assigned_to, employeeLookup);
+              if (resolved.uuid) {
+                record.assigned_to = resolved.uuid;
+              } else {
+                // Preserve the raw name in metadata so it's not lost
+                record.metadata = {
+                  ...(record.metadata || {}),
+                  imported_assigned_to_raw: record.assigned_to,
+                  assigned_to_unresolved: true,
+                };
+                record.assigned_to = null;
+                results.assignmentWarnings = results.assignmentWarnings || [];
+                results.assignmentWarnings.push({
+                  rowNumber,
+                  rawValue: resolved.rawValue,
+                  reason: resolved.reason,
+                });
+              }
+            }
+          }
+
+          // Resolve assigned_to from name/email to UUID for any entity type
+          // (Leads, Contacts, Accounts, Opportunities all support assigned_to)
+          if (
+            entityType !== 'BizDevSource' &&
+            record.assigned_to &&
+            !isUuidFormat(record.assigned_to)
+          ) {
+            if (!employeeLookup) {
+              employeeLookup = await buildEmployeeLookup(supabase, tenant_id);
+            }
+            const resolved = resolveEmployeeAssignment(record.assigned_to, employeeLookup);
+            if (resolved.uuid) {
+              record.assigned_to = resolved.uuid;
+            } else {
+              // Store raw value in metadata, leave assigned_to null
+              record.metadata = {
+                ...(record.metadata || {}),
+                imported_assigned_to_raw: record.assigned_to,
+                assigned_to_unresolved: true,
+              };
+              record.assigned_to = null;
+              results.assignmentWarnings = results.assignmentWarnings || [];
+              results.assignmentWarnings.push({
+                rowNumber,
+                rawValue: resolved.rawValue,
+                reason: resolved.reason,
+              });
+            }
           }
 
           // Handle account linking for Contacts
@@ -572,7 +794,10 @@ export default function createValidationRoutes(_pgPool) {
             if (matchedAccount) {
               if (matchedAccount.name && matchedAccount.name.toLowerCase() === companyKey) {
                 matchMethod = 'Company Name';
-              } else if (matchedAccount.legacy_id && matchedAccount.legacy_id.toLowerCase() === companyKey) {
+              } else if (
+                matchedAccount.legacy_id &&
+                matchedAccount.legacy_id.toLowerCase() === companyKey
+              ) {
                 matchMethod = 'Legacy ID';
               } else if (matchedAccount.id && matchedAccount.id.toLowerCase() === companyKey) {
                 matchMethod = 'Account ID';
@@ -625,16 +850,22 @@ export default function createValidationRoutes(_pgPool) {
           if (probeRows && probeRows.length > 0) {
             tableColumns = new Set(Object.keys(probeRows[0]));
           }
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
 
         // Fallback for empty tables: query column names via Supabase RPC
         if (!tableColumns) {
           try {
-            const { data: colRows } = await supabase.rpc('get_columns_for_table', { t_name: table });
+            const { data: colRows } = await supabase.rpc('get_columns_for_table', {
+              t_name: table,
+            });
             if (Array.isArray(colRows) && colRows.length > 0) {
-              tableColumns = new Set(colRows.map(r => r.column_name));
+              tableColumns = new Set(colRows.map((r) => r.column_name));
             }
-          } catch { /* RPC may not exist — will attempt insert without filtering */ }
+          } catch {
+            /* RPC may not exist — will attempt insert without filtering */
+          }
         }
 
         // Strip unknown columns from every record
@@ -652,7 +883,9 @@ export default function createValidationRoutes(_pgPool) {
           return cleaned;
         });
         if (strippedKeys.size > 0) {
-          logger.warn(`⏭️ Stripped unknown columns from ${table} import: ${[...strippedKeys].join(', ')}`);
+          logger.warn(
+            `⏭️ Stripped unknown columns from ${table} import: ${[...strippedKeys].join(', ')}`,
+          );
         }
 
         const { error: bulkErr, count: insertedCount } = await supabase
@@ -667,9 +900,7 @@ export default function createValidationRoutes(_pgPool) {
 
           for (const { record, rowNumber } of validRecords) {
             try {
-              const { error: rowErr } = await supabase
-                .from(table)
-                .insert([record]);
+              const { error: rowErr } = await supabase.from(table).insert([record]);
               if (rowErr) throw new Error(rowErr.message);
               results.successCount++;
             } catch (rowError) {
@@ -686,7 +917,9 @@ export default function createValidationRoutes(_pgPool) {
         }
       }
 
-      logger.debug(`✅ Import complete: ${results.successCount} success, ${results.failCount} failed`);
+      logger.debug(
+        `✅ Import complete: ${results.successCount} success, ${results.failCount} failed`,
+      );
 
       // Invalidate cache so the UI shows new data immediately
       if (results.successCount > 0 && tenant_id && table) {

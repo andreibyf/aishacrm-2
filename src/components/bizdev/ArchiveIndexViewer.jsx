@@ -1,16 +1,16 @@
-import { useState, useEffect, useCallback } from "react";
-import { ArchiveIndex } from "@/api/entities";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { useState, useEffect, useCallback } from 'react';
+import { ArchiveIndex } from '@/api/entities';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -18,18 +18,11 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from "@/components/ui/dialog";
-import {
-  Archive,
-  Search,
-  RotateCcw,
-  Loader2,
-  X,
-  AlertTriangle,
-} from "lucide-react";
-import { toast } from "sonner";
-import { format } from "date-fns";
-import { retrieveArchiveFromR2 } from "@/api/functions";
+} from '@/components/ui/dialog';
+import { Archive, Search, RotateCcw, Loader2, X, AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
+import { format } from 'date-fns';
+import { retrieveArchiveFromR2 } from '@/api/functions';
 
 export default function ArchiveIndexViewer({ tenantId, onClose, onRetrieved }) {
   const [archives, setArchives] = useState([]);
@@ -38,10 +31,10 @@ export default function ArchiveIndexViewer({ tenantId, onClose, onRetrieved }) {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [selectedArchive, setSelectedArchive] = useState(null);
   const [reactivateMode, setReactivateMode] = useState('all');
-  
-  const [searchTerm, setSearchTerm] = useState("");
-  const [batchFilter, setBatchFilter] = useState("all");
-  const [formatFilter, setFormatFilter] = useState("all");
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [batchFilter, setBatchFilter] = useState('all');
+  const [formatFilter, setFormatFilter] = useState('all');
 
   const loadArchives = useCallback(async () => {
     if (!tenantId) return;
@@ -50,14 +43,14 @@ export default function ArchiveIndexViewer({ tenantId, onClose, onRetrieved }) {
     try {
       const filter = {
         tenant_id: tenantId,
-        entity_type: "BizDevSource"
+        entity_type: 'BizDevSource',
       };
-      
+
       const fetchedArchives = await ArchiveIndex.filter(filter, '-archived_at', 100);
       setArchives(fetchedArchives || []);
     } catch (error) {
-      console.error("Failed to load archives:", error);
-      toast.error("Failed to load archive index");
+      console.error('Failed to load archives:', error);
+      toast.error('Failed to load archive index');
     } finally {
       setLoading(false);
     }
@@ -81,20 +74,18 @@ export default function ArchiveIndexViewer({ tenantId, onClose, onRetrieved }) {
     try {
       const response = await retrieveArchiveFromR2({
         archive_index_id: selectedArchive.id,
-        reactivate_mode: reactivateMode
+        reactivate_mode: reactivateMode,
       });
 
       if (response.status === 200) {
         const result = response.data;
-        toast.success(
-          `Retrieved ${result.rehydrated_count} records from archive`,
-          {
-            description: result.skipped_count > 0 
+        toast.success(`Retrieved ${result.rehydrated_count} records from archive`, {
+          description:
+            result.skipped_count > 0
               ? `${result.skipped_count} records were skipped (already exist)`
-              : undefined
-          }
-        );
-        
+              : undefined,
+        });
+
         // Callback to refresh the main page
         if (onRetrieved) {
           onRetrieved();
@@ -103,9 +94,9 @@ export default function ArchiveIndexViewer({ tenantId, onClose, onRetrieved }) {
         throw new Error(response.data?.error || 'Retrieval failed');
       }
     } catch (error) {
-      console.error("Archive retrieval failed:", error);
-      toast.error("Failed to retrieve archive", {
-        description: error.message || 'An error occurred'
+      console.error('Archive retrieval failed:', error);
+      toast.error('Failed to retrieve archive', {
+        description: error.message || 'An error occurred',
       });
     } finally {
       setRetrieving(false);
@@ -114,21 +105,22 @@ export default function ArchiveIndexViewer({ tenantId, onClose, onRetrieved }) {
   };
 
   const filteredArchives = archives.filter((archive) => {
-    const matchesSearch = !searchTerm ||
+    const matchesSearch =
+      !searchTerm ||
       archive.batch_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       archive.source_description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       archive.archive_path?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesBatch = batchFilter === "all" || archive.batch_id === batchFilter;
-    const matchesFormat = formatFilter === "all" || archive.file_format === formatFilter;
+    const matchesBatch = batchFilter === 'all' || archive.batch_id === batchFilter;
+    const matchesFormat = formatFilter === 'all' || archive.file_format === formatFilter;
 
     return matchesSearch && matchesBatch && matchesFormat;
   });
 
-  const uniqueBatches = [...new Set(archives.map(a => a.batch_id).filter(Boolean))];
+  const uniqueBatches = [...new Set(archives.map((a) => a.batch_id).filter(Boolean))];
 
   const formatFileSize = (bytes) => {
-    if (!bytes) return "N/A";
+    if (!bytes) return 'N/A';
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
@@ -184,8 +176,10 @@ export default function ArchiveIndexViewer({ tenantId, onClose, onRetrieved }) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Batches</SelectItem>
-                  {uniqueBatches.map(batch => (
-                    <SelectItem key={batch} value={batch}>{batch}</SelectItem>
+                  {uniqueBatches.map((batch) => (
+                    <SelectItem key={batch} value={batch}>
+                      {batch}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -204,40 +198,47 @@ export default function ArchiveIndexViewer({ tenantId, onClose, onRetrieved }) {
             {filteredArchives.length === 0 ? (
               <div className="text-center py-12">
                 <Archive className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-slate-300 mb-2">
-                  No archives found
-                </h3>
+                <h3 className="text-lg font-semibold text-slate-300 mb-2">No archives found</h3>
                 <p className="text-slate-400">
                   {archives.length === 0
-                    ? "No BizDev sources have been archived yet."
-                    : "Try adjusting your filters or search term."}
+                    ? 'No records have been archived yet.'
+                    : 'Try adjusting your filters or search term.'}
                 </p>
               </div>
             ) : (
               <div className="space-y-3">
                 {filteredArchives.map((archive) => (
-                  <Card key={archive.id} className="bg-slate-700 border-slate-600 hover:border-blue-500 transition-colors">
+                  <Card
+                    key={archive.id}
+                    className="bg-slate-700 border-slate-600 hover:border-blue-500 transition-colors"
+                  >
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-2">
                             <h3 className="font-semibold text-slate-100">
-                              {archive.source_description || "BizDev Archive"}
+                              {archive.source_description || 'Archive'}
                             </h3>
                             <Badge variant="outline" className="text-xs">
                               {archive.file_format?.toUpperCase()}
                             </Badge>
                             {archive.is_accessible ? (
-                              <Badge variant="outline" className="text-xs text-green-400 border-green-600">
+                              <Badge
+                                variant="outline"
+                                className="text-xs text-green-400 border-green-600"
+                              >
                                 Accessible
                               </Badge>
                             ) : (
-                              <Badge variant="outline" className="text-xs text-red-400 border-red-600">
+                              <Badge
+                                variant="outline"
+                                className="text-xs text-red-400 border-red-600"
+                              >
                                 Unavailable
                               </Badge>
                             )}
                           </div>
-                          
+
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                             <div>
                               <p className="text-slate-400">Batch ID</p>
@@ -247,9 +248,7 @@ export default function ArchiveIndexViewer({ tenantId, onClose, onRetrieved }) {
                             </div>
                             <div>
                               <p className="text-slate-400">Records</p>
-                              <p className="text-slate-200 font-medium">
-                                {archive.record_count}
-                              </p>
+                              <p className="text-slate-200 font-medium">{archive.record_count}</p>
                             </div>
                             <div>
                               <p className="text-slate-400">File Size</p>
@@ -301,7 +300,9 @@ export default function ArchiveIndexViewer({ tenantId, onClose, onRetrieved }) {
 
           <div className="border-t border-slate-700 p-4 flex-shrink-0">
             <div className="flex items-center justify-between text-sm text-slate-400">
-              <span>Showing {filteredArchives.length} of {archives.length} archives</span>
+              <span>
+                Showing {filteredArchives.length} of {archives.length} archives
+              </span>
               <Button
                 variant="outline"
                 onClick={loadArchives}
@@ -324,18 +325,16 @@ export default function ArchiveIndexViewer({ tenantId, onClose, onRetrieved }) {
               Confirm Archive Retrieval
             </DialogTitle>
             <DialogDescription className="text-slate-300">
-              You are about to retrieve{" "}
+              You are about to retrieve{' '}
               <span className="font-semibold text-slate-100">
                 {selectedArchive?.record_count} records
-              </span>{" "}
+              </span>{' '}
               from archive:
               <div className="mt-2 p-3 bg-slate-700 rounded-lg">
                 <p className="text-sm font-medium text-slate-200">
                   {selectedArchive?.source_description}
                 </p>
-                <p className="text-xs text-slate-400 mt-1">
-                  Batch: {selectedArchive?.batch_id}
-                </p>
+                <p className="text-xs text-slate-400 mt-1">Batch: {selectedArchive?.batch_id}</p>
               </div>
             </DialogDescription>
           </DialogHeader>
@@ -350,16 +349,12 @@ export default function ArchiveIndexViewer({ tenantId, onClose, onRetrieved }) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">
-                    Reactivate existing + Create new
-                  </SelectItem>
-                  <SelectItem value="new_only">
-                    Only create new records (skip existing)
-                  </SelectItem>
+                  <SelectItem value="all">Reactivate existing + Create new</SelectItem>
+                  <SelectItem value="new_only">Only create new records (skip existing)</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-slate-400 mt-2">
-                {reactivateMode === 'all' 
+                {reactivateMode === 'all'
                   ? "This will reactivate archived records and create any that don't exist."
                   : "This will only create records that don't already exist in the database."}
               </p>
@@ -374,10 +369,7 @@ export default function ArchiveIndexViewer({ tenantId, onClose, onRetrieved }) {
             >
               Cancel
             </Button>
-            <Button
-              onClick={handleConfirmRetrieve}
-              className="bg-green-600 hover:bg-green-700"
-            >
+            <Button onClick={handleConfirmRetrieve} className="bg-green-600 hover:bg-green-700">
               <RotateCcw className="w-4 h-4 mr-2" />
               Retrieve Archive
             </Button>

@@ -15,7 +15,7 @@ import {
   createPersonFromBizDev,
   findOrCreateB2BAccountFromBizDev,
   buildLeadProvenanceMetadata,
-  determineLeadType
+  determineLeadType,
 } from '../utils/promotionHelpers.js';
 
 export default function createBizDevSourceRoutes(pgPool) {
@@ -68,7 +68,7 @@ export default function createBizDevSourceRoutes(pgPool) {
       if (!tenant_id) {
         return res.status(400).json({
           status: 'error',
-          message: 'tenant_id is required'
+          message: 'tenant_id is required',
         });
       }
 
@@ -77,9 +77,20 @@ export default function createBizDevSourceRoutes(pgPool) {
 
       // Parse sort param: "-field" = descending, "field" = ascending (default: -created_at)
       const allowedSortColumns = new Set([
-        'created_at', 'updated_at', 'company_name', 'status', 'source',
-        'source_type', 'priority', 'city', 'state_province', 'batch_id',
-        'contact_person', 'email', 'industry'
+        'created_at',
+        'updated_at',
+        'company_name',
+        'status',
+        'source',
+        'source_type',
+        'priority',
+        'city',
+        'state_province',
+        'batch_id',
+        'contact_person',
+        'email',
+        'industry',
+        'assigned_to',
       ]);
       let sortColumn = 'created_at';
       let sortAscending = false;
@@ -129,21 +140,41 @@ export default function createBizDevSourceRoutes(pgPool) {
 
       const data = allData;
 
+      // Enrich with assigned_to employee names (batch lookup)
+      const assignedToIds = [...new Set((data || []).map((r) => r.assigned_to).filter(Boolean))];
+      let employeeNameMap = {};
+      if (assignedToIds.length > 0) {
+        try {
+          const { data: empData } = await supabase
+            .from('employees')
+            .select('id, first_name, last_name')
+            .in('id', assignedToIds);
+          if (empData) {
+            empData.forEach((emp) => {
+              employeeNameMap[emp.id] = `${emp.first_name || ''} ${emp.last_name || ''}`.trim();
+            });
+          }
+        } catch (empErr) {
+          logger.warn('[BizDevSources] Employee name lookup failed (non-fatal):', empErr?.message);
+        }
+      }
+
       // Map 'source' column to 'source_name' for frontend compatibility
-      const mappedData = (data || []).map(row => ({
+      const mappedData = (data || []).map((row) => ({
         ...row,
-        source_name: row.source || row.source_name
+        source_name: row.source || row.source_name,
+        assigned_to_name: row.assigned_to ? employeeNameMap[row.assigned_to] || null : null,
       }));
 
       res.json({
         status: 'success',
-        data: { bizdevsources: mappedData }
+        data: { bizdevsources: mappedData },
       });
     } catch (error) {
       logger.error('Error fetching bizdev sources:', error);
       res.status(500).json({
         status: 'error',
-        message: error.message
+        message: error.message,
       });
     }
   });
@@ -184,7 +215,7 @@ export default function createBizDevSourceRoutes(pgPool) {
       if (!validateTenantScopedId(id, tenant_id, res)) return;
 
       // Accept UUID or slug; normalize to slug for legacy columns
-      
+
       const { data, error } = await supabase
         .from('bizdev_sources')
         .select('*')
@@ -197,7 +228,7 @@ export default function createBizDevSourceRoutes(pgPool) {
       if (!data) {
         return res.status(404).json({
           status: 'error',
-          message: 'BizDev source not found'
+          message: 'BizDev source not found',
         });
       }
 
@@ -206,16 +237,33 @@ export default function createBizDevSourceRoutes(pgPool) {
         return res.status(404).json({ status: 'error', message: 'BizDev source not found' });
       }
 
+      // Resolve assigned_to employee name
+      let assigned_to_name = null;
+      if (data.assigned_to) {
+        try {
+          const { data: empData } = await supabase
+            .from('employees')
+            .select('first_name, last_name')
+            .eq('id', data.assigned_to)
+            .maybeSingle();
+          if (empData) {
+            assigned_to_name = `${empData.first_name || ''} ${empData.last_name || ''}`.trim();
+          }
+        } catch (_e) {
+          /* non-fatal */
+        }
+      }
+
       // Map 'source' column to 'source_name' for frontend compatibility
       res.json({
         status: 'success',
-        data: { ...data, source_name: data.source || data.source_name }
+        data: { ...data, source_name: data.source || data.source_name, assigned_to_name },
       });
     } catch (error) {
       logger.error('Error fetching bizdev source:', error);
       res.status(500).json({
         status: 'error',
-        message: error.message
+        message: error.message,
       });
     }
   });
@@ -283,8 +331,8 @@ export default function createBizDevSourceRoutes(pgPool) {
     try {
       const {
         tenant_id: incomingTenantId,
-        source_name,  // Frontend may send this
-        source,       // Production DB uses this column name
+        source_name, // Frontend may send this
+        source, // Production DB uses this column name
         source_type,
         source_url,
         contact_person,
@@ -316,7 +364,8 @@ export default function createBizDevSourceRoutes(pgPool) {
         lead_ids,
         industry_license,
         license_status,
-        license_expiry_date
+        license_expiry_date,
+        assigned_to,
       } = req.body;
 
       // Accept either 'source' or 'source_name' from frontend
@@ -325,7 +374,7 @@ export default function createBizDevSourceRoutes(pgPool) {
       if (!incomingTenantId || !sourceValue) {
         return res.status(400).json({
           status: 'error',
-          message: 'tenant_id and source (or source_name) are required'
+          message: 'tenant_id and source (or source_name) are required',
         });
       }
 
@@ -365,10 +414,11 @@ export default function createBizDevSourceRoutes(pgPool) {
           state_province,
           postal_code,
           country,
-          lead_ids: Array.isArray(lead_ids) ? lead_ids : (lead_ids ? JSON.parse(lead_ids) : []),
+          lead_ids: Array.isArray(lead_ids) ? lead_ids : lead_ids ? JSON.parse(lead_ids) : [],
           industry_license,
           license_status,
-          license_expiry_date
+          license_expiry_date,
+          assigned_to: assigned_to || null,
         })
         .select()
         .single();
@@ -378,13 +428,13 @@ export default function createBizDevSourceRoutes(pgPool) {
       // Return with source_name for frontend compatibility
       res.status(201).json({
         status: 'success',
-        data: { ...data, source_name: data.source }
+        data: { ...data, source_name: data.source },
       });
     } catch (error) {
       logger.error('Error creating bizdev source:', error);
       res.status(500).json({
         status: 'error',
-        message: error.message
+        message: error.message,
       });
     }
   });
@@ -461,8 +511,8 @@ export default function createBizDevSourceRoutes(pgPool) {
       const { id } = req.params;
       let { tenant_id } = req.query || {};
       const {
-        source_name,  // Frontend may send this
-        source,       // Production DB uses this column name
+        source_name, // Frontend may send this
+        source, // Production DB uses this column name
         source_type,
         source_url,
         contact_person,
@@ -493,7 +543,8 @@ export default function createBizDevSourceRoutes(pgPool) {
         batch_id,
         industry_license,
         license_status,
-        license_expiry_date
+        license_expiry_date,
+        assigned_to,
       } = req.body;
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
@@ -512,7 +563,8 @@ export default function createBizDevSourceRoutes(pgPool) {
       if (status !== undefined) updateObj.status = status;
       if (priority !== undefined) updateObj.priority = priority;
       if (leads_generated !== undefined) updateObj.leads_generated = leads_generated;
-      if (opportunities_created !== undefined) updateObj.opportunities_created = opportunities_created;
+      if (opportunities_created !== undefined)
+        updateObj.opportunities_created = opportunities_created;
       if (revenue_generated !== undefined) updateObj.revenue_generated = revenue_generated;
       if (notes !== undefined) updateObj.notes = notes;
       if (tags !== undefined) updateObj.tags = tags;
@@ -534,6 +586,7 @@ export default function createBizDevSourceRoutes(pgPool) {
       if (industry_license !== undefined) updateObj.industry_license = industry_license;
       if (license_status !== undefined) updateObj.license_status = license_status;
       if (license_expiry_date !== undefined) updateObj.license_expiry_date = license_expiry_date;
+      if (assigned_to !== undefined) updateObj.assigned_to = assigned_to || null;
       updateObj.updated_at = new Date().toISOString();
 
       const { data, error } = await supabase
@@ -549,20 +602,20 @@ export default function createBizDevSourceRoutes(pgPool) {
       if (!data) {
         return res.status(404).json({
           status: 'error',
-          message: 'BizDev source not found'
+          message: 'BizDev source not found',
         });
       }
 
       // Map 'source' column to 'source_name' for frontend compatibility
       res.json({
         status: 'success',
-        data: { ...data, source_name: data.source || data.source_name }
+        data: { ...data, source_name: data.source || data.source_name },
       });
     } catch (error) {
       logger.error('Error updating bizdev source:', error);
       res.status(500).json({
         status: 'error',
-        message: error.message
+        message: error.message,
       });
     }
   });
@@ -614,7 +667,7 @@ export default function createBizDevSourceRoutes(pgPool) {
       if (!data || data.length === 0) {
         return res.status(404).json({
           status: 'error',
-          message: 'BizDev source not found'
+          message: 'BizDev source not found',
         });
       }
 
@@ -623,13 +676,13 @@ export default function createBizDevSourceRoutes(pgPool) {
       res.json({
         status: 'success',
         message: 'BizDev source deleted',
-        data: { ...deletedData, source_name: deletedData.source || deletedData.source_name }
+        data: { ...deletedData, source_name: deletedData.source || deletedData.source_name },
       });
     } catch (error) {
       logger.error('Error deleting bizdev source:', error);
       res.status(500).json({
         status: 'error',
-        message: error.message
+        message: error.message,
       });
     }
   });
@@ -677,205 +730,283 @@ export default function createBizDevSourceRoutes(pgPool) {
   // - Create/link Account (B2B company or B2C placeholder)
   // - Create/link person_profile (B2C requirement or contact person for B2B)
   // - Store BizDev provenance via: leads.promoted_from_bizdev_source_id + leads.metadata
-  router.post('/:id/promote', invalidateCache('bizdevsources'), invalidateCache('leads'), invalidateCache('accounts'), async (req, res) => {
-    const supportsTx = typeof pgPool.connect === 'function';
-    let client = null;
-    try {
-      const { id } = req.params;
-      const { tenant_id: incomingTenantId, performed_by, delete_source = false, client_type = 'B2B' } = req.body;
-      const tenant_id = incomingTenantId;
-
-      logger.debug('[Promote BizDev → Lead v3.0.0] Request:', { id, tenant_id, client_type });
-
-      if (!tenant_id) {
-        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
-      }
-
-      if (supportsTx) {
-        client = await pgPool.connect();
-      } else {
-        client = { query: (...args) => pgPool.query(...args), release: () => {} };
-      }
-
-      if (supportsTx) await client.query('BEGIN');
-
-      // ========== STEP 1: Fetch BizDev Source ==========
-      const selectSql = supportsTx
-        ? 'SELECT * FROM bizdev_sources WHERE id = $1 AND tenant_id = $2 FOR UPDATE'
-        : 'SELECT * FROM bizdev_sources WHERE id = $1 AND tenant_id = $2';
-      const sourceResult = await client.query(selectSql, [id, tenant_id]);
-
-      if (sourceResult.rows.length === 0) {
-        if (supportsTx) await client.query('ROLLBACK').catch(() => {});
-        return res.status(404).json({ status: 'error', message: 'BizDev source not found' });
-      }
-
-      const bizdevSource = sourceResult.rows[0];
-      logger.debug('[Promote] BizDev Source fetched:', {
-        company_name: bizdevSource.company_name,
-        contact_person: bizdevSource.contact_person
-      });
-
-      // ========== STEP 2: Determine lead_type and create Account ==========
-      // Fetch tenant's business_model to determine lead type (B2C/B2B)
-      let tenantBusinessModel = client_type;
+  router.post(
+    '/:id/promote',
+    invalidateCache('bizdevsources'),
+    invalidateCache('leads'),
+    invalidateCache('accounts'),
+    async (req, res) => {
+      const supportsTx = typeof pgPool.connect === 'function';
+      let client = null;
       try {
-        const tenantResult = await client.query(
-          'SELECT business_model FROM tenant WHERE id = $1',
-          [tenant_id]
-        );
-        if (tenantResult.rows.length > 0 && tenantResult.rows[0].business_model) {
-          tenantBusinessModel = tenantResult.rows[0].business_model;
-          logger.debug('[Promote] Tenant business_model:', tenantBusinessModel);
+        const { id } = req.params;
+        const {
+          tenant_id: incomingTenantId,
+          performed_by,
+          delete_source = false,
+          client_type = 'B2B',
+        } = req.body;
+        const tenant_id = incomingTenantId;
+
+        logger.debug('[Promote BizDev → Lead v3.0.0] Request:', { id, tenant_id, client_type });
+
+        if (!tenant_id) {
+          return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
         }
-      } catch (_e) {
-        logger.warn('[Promote] Failed to fetch tenant business_model, using default:', tenantBusinessModel);
-      }
 
-      const hasCompanyData = !!(bizdevSource.company_name || bizdevSource.dba_name);
-      const leadType = determineLeadType(tenantBusinessModel, hasCompanyData);
-      
-      let accountId;
-      let personId = null;
+        if (supportsTx) {
+          client = await pgPool.connect();
+        } else {
+          client = { query: (...args) => pgPool.query(...args), release: () => {} };
+        }
 
-      if (leadType === 'b2c') {
-        // B2C: Create person_profile, link to placeholder B2C account
-        logger.debug('[Promote] Creating B2C Lead flow');
-        
-        // Get or create placeholder B2C account
-        const b2cAccountResult = await getOrCreatePlaceholderB2CAccount(client, tenant_id);
-        accountId = b2cAccountResult.id;
-        logger.debug('[Promote] Using placeholder B2C account:', accountId);
+        if (supportsTx) await client.query('BEGIN');
 
-        // Create person_profile from contact data
-        const personResult = await createPersonFromBizDev(client, tenant_id, bizdevSource);
-        personId = personResult.id;
-        logger.debug('[Promote] Created person_profile:', personId);
-      } else {
-        // B2B: Create or find B2B company account
-        logger.debug('[Promote] Creating B2B Lead flow');
-        
-        const accountResult = await findOrCreateB2BAccountFromBizDev(client, tenant_id, bizdevSource);
-        accountId = accountResult.id;
-        logger.debug('[Promote] Using/created B2B account:', accountId);
-      }
+        // ========== STEP 1: Fetch BizDev Source ==========
+        const selectSql = supportsTx
+          ? 'SELECT * FROM bizdev_sources WHERE id = $1 AND tenant_id = $2 FOR UPDATE'
+          : 'SELECT * FROM bizdev_sources WHERE id = $1 AND tenant_id = $2';
+        const sourceResult = await client.query(selectSql, [id, tenant_id]);
 
-      // ========== STEP 3: Build Lead metadata with provenance ==========
-      const leadMetadata = buildLeadProvenanceMetadata(bizdevSource);
+        if (sourceResult.rows.length === 0) {
+          if (supportsTx) await client.query('ROLLBACK').catch(() => {});
+          return res.status(404).json({ status: 'error', message: 'BizDev source not found' });
+        }
 
-      // ========== STEP 4: Create Lead in normalized schema ==========
-      // v3.0.0 Lead schema: (tenant_id, account_id, person_id [B2C only], lead_type, + contact fields, metadata)
-      // Contact fields populated from BizDev Source for downstream conversion flow
-      
-      // Extract contact name - try contact_person, then split email username
-      let firstName = null, lastName = null;
-      if (bizdevSource.contact_person) {
-        const [first, ...rest] = bizdevSource.contact_person.split(' ');
-        firstName = first;
-        lastName = rest.join(' ') || null;
-      } else if (bizdevSource.contact_email) {
-        firstName = bizdevSource.contact_email.split('@')[0]; // Fallback: email prefix
-      }
+        const bizdevSource = sourceResult.rows[0];
+        logger.debug('[Promote] BizDev Source fetched:', {
+          company_name: bizdevSource.company_name,
+          contact_person: bizdevSource.contact_person,
+        });
 
-      const leadInsertSql = leadType === 'b2c'
-        ? `INSERT INTO leads (tenant_id, account_id, person_id, lead_type, first_name, last_name, email, phone, source, address_1, address_2, city, state, zip, country, created_date, metadata)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        // ========== STEP 2: Determine lead_type and create Account ==========
+        // Fetch tenant's business_model to determine lead type (B2C/B2B)
+        let tenantBusinessModel = client_type;
+        try {
+          const tenantResult = await client.query(
+            'SELECT business_model FROM tenant WHERE id = $1',
+            [tenant_id],
+          );
+          if (tenantResult.rows.length > 0 && tenantResult.rows[0].business_model) {
+            tenantBusinessModel = tenantResult.rows[0].business_model;
+            logger.debug('[Promote] Tenant business_model:', tenantBusinessModel);
+          }
+        } catch (_e) {
+          logger.warn(
+            '[Promote] Failed to fetch tenant business_model, using default:',
+            tenantBusinessModel,
+          );
+        }
+
+        const hasCompanyData = !!(bizdevSource.company_name || bizdevSource.dba_name);
+        const leadType = determineLeadType(tenantBusinessModel, hasCompanyData);
+
+        let accountId;
+        let personId = null;
+
+        if (leadType === 'b2c') {
+          // B2C: Create person_profile, link to placeholder B2C account
+          logger.debug('[Promote] Creating B2C Lead flow');
+
+          // Get or create placeholder B2C account
+          const b2cAccountResult = await getOrCreatePlaceholderB2CAccount(client, tenant_id);
+          accountId = b2cAccountResult.id;
+          logger.debug('[Promote] Using placeholder B2C account:', accountId);
+
+          // Create person_profile from contact data
+          const personResult = await createPersonFromBizDev(client, tenant_id, bizdevSource);
+          personId = personResult.id;
+          logger.debug('[Promote] Created person_profile:', personId);
+        } else {
+          // B2B: Create or find B2B company account
+          logger.debug('[Promote] Creating B2B Lead flow');
+
+          const accountResult = await findOrCreateB2BAccountFromBizDev(
+            client,
+            tenant_id,
+            bizdevSource,
+          );
+          accountId = accountResult.id;
+          logger.debug('[Promote] Using/created B2B account:', accountId);
+        }
+
+        // ========== STEP 3: Build Lead metadata with provenance ==========
+        const leadMetadata = buildLeadProvenanceMetadata(bizdevSource);
+
+        // ========== STEP 4: Create Lead in normalized schema ==========
+        // v3.0.0 Lead schema: (tenant_id, account_id, person_id [B2C only], lead_type, + contact fields, metadata)
+        // Contact fields populated from BizDev Source for downstream conversion flow
+
+        // Extract contact name - try contact_person, then split email username
+        let firstName = null,
+          lastName = null;
+        if (bizdevSource.contact_person) {
+          const [first, ...rest] = bizdevSource.contact_person.split(' ');
+          firstName = first;
+          lastName = rest.join(' ') || null;
+        } else if (bizdevSource.contact_email) {
+          firstName = bizdevSource.contact_email.split('@')[0]; // Fallback: email prefix
+        }
+
+        const leadInsertSql =
+          leadType === 'b2c'
+            ? `INSERT INTO leads (tenant_id, account_id, person_id, lead_type, first_name, last_name, email, phone, source, address_1, address_2, city, state, zip, country, created_date, metadata, assigned_to)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
            RETURNING *`
-        : `INSERT INTO leads (tenant_id, account_id, lead_type, first_name, last_name, email, phone, company, source, address_1, address_2, city, state, zip, country, created_date, metadata)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+            : `INSERT INTO leads (tenant_id, account_id, lead_type, first_name, last_name, email, phone, company, source, address_1, address_2, city, state, zip, country, created_date, metadata, assigned_to)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
            RETURNING *`;
 
-      const leadParams = leadType === 'b2c'
-        ? [tenant_id, accountId, personId, leadType, firstName, lastName, bizdevSource.contact_email, bizdevSource.contact_phone, bizdevSource.source || bizdevSource.source_type, bizdevSource.address_line_1, bizdevSource.address_line_2, bizdevSource.city, bizdevSource.state_province, bizdevSource.postal_code, bizdevSource.country, bizdevSource.created_date || new Date().toISOString(), JSON.stringify(leadMetadata)]
-        : [tenant_id, accountId, leadType, firstName, lastName, bizdevSource.contact_email, bizdevSource.contact_phone, bizdevSource.company_name, bizdevSource.source || bizdevSource.source_type, bizdevSource.address_line_1, bizdevSource.address_line_2, bizdevSource.city, bizdevSource.state_province, bizdevSource.postal_code, bizdevSource.country, bizdevSource.created_date || new Date().toISOString(), JSON.stringify(leadMetadata)];
+        // Carry assigned_to from BizDev Source to Lead on promotion
+        const assignedTo = bizdevSource.assigned_to || null;
 
-      const leadResult = await client.query(leadInsertSql, leadParams);
-      const newLead = leadResult.rows[0];
-      logger.debug('[Promote] Lead created:', { lead_id: newLead.id, lead_type: leadType });
+        const leadParams =
+          leadType === 'b2c'
+            ? [
+                tenant_id,
+                accountId,
+                personId,
+                leadType,
+                firstName,
+                lastName,
+                bizdevSource.contact_email,
+                bizdevSource.contact_phone,
+                bizdevSource.source || bizdevSource.source_type,
+                bizdevSource.address_line_1,
+                bizdevSource.address_line_2,
+                bizdevSource.city,
+                bizdevSource.state_province,
+                bizdevSource.postal_code,
+                bizdevSource.country,
+                bizdevSource.created_date || new Date().toISOString(),
+                JSON.stringify(leadMetadata),
+                assignedTo,
+              ]
+            : [
+                tenant_id,
+                accountId,
+                leadType,
+                firstName,
+                lastName,
+                bizdevSource.contact_email,
+                bizdevSource.contact_phone,
+                bizdevSource.company_name,
+                bizdevSource.source || bizdevSource.source_type,
+                bizdevSource.address_line_1,
+                bizdevSource.address_line_2,
+                bizdevSource.city,
+                bizdevSource.state_province,
+                bizdevSource.postal_code,
+                bizdevSource.country,
+                bizdevSource.created_date || new Date().toISOString(),
+                JSON.stringify(leadMetadata),
+                assignedTo,
+              ];
 
-      // ========== STEP 5: Update BizDev Source status and link (provenance stored in lead metadata) ==========
-      const updateBizDevSql = `UPDATE bizdev_sources SET
+        const leadResult = await client.query(leadInsertSql, leadParams);
+        const newLead = leadResult.rows[0];
+        logger.debug('[Promote] Lead created:', { lead_id: newLead.id, lead_type: leadType });
+
+        // ========== STEP 5: Update BizDev Source status and link (provenance stored in lead metadata) ==========
+        const updateBizDevSql = `UPDATE bizdev_sources SET
             status = $1,
             metadata = $2,
             updated_at = NOW()
            WHERE id = $3 AND tenant_id = $4`;
 
-      const updatedBizdevMetadata = {
-        ...bizdevSource.metadata,
-        promoted_to_lead_id: newLead.id,
-        promoted_at: new Date().toISOString(),
-        promoted_account_id: accountId,
-        promoted_person_id: personId,
-        promoted_lead_type: leadType
-      };
+        const updatedBizdevMetadata = {
+          ...bizdevSource.metadata,
+          promoted_to_lead_id: newLead.id,
+          promoted_at: new Date().toISOString(),
+          promoted_account_id: accountId,
+          promoted_person_id: personId,
+          promoted_lead_type: leadType,
+        };
 
-      await client.query(updateBizDevSql, ['Promoted', JSON.stringify(updatedBizdevMetadata), id, tenant_id]);
-      logger.debug('[Promote] BizDev Source marked as Promoted');
+        await client.query(updateBizDevSql, [
+          'Promoted',
+          JSON.stringify(updatedBizdevMetadata),
+          id,
+          tenant_id,
+        ]);
+        logger.debug('[Promote] BizDev Source marked as Promoted');
 
-      // ========== STEP 6: Relink activities ==========
-      try {
-        await client.query(
-          `UPDATE activities SET related_to = $1, related_id = $2, updated_at = NOW()
-           WHERE tenant_id = $3 AND related_to = 'bizdev_source' AND related_id = $4`,
-          ['lead', newLead.id, tenant_id, id]
-        );
-      } catch (e) {
-        logger.warn('[Promote] Activity relink failed (non-fatal):', e?.message);
-      }
-
-      // ========== STEP 7: Optionally delete BizDev Source ==========
-      if (delete_source) {
+        // ========== STEP 6: Relink activities ==========
         try {
-          await logEntityTransition(client, {
-            tenant_id,
-            from_table: 'bizdev_sources',
-            from_id: id,
-            to_table: 'leads',
-            to_id: newLead.id,
-            action: 'promote',
-            performed_by,
-            snapshot: bizdevSource
-          });
+          await client.query(
+            `UPDATE activities SET related_to = $1, related_id = $2, updated_at = NOW()
+           WHERE tenant_id = $3 AND related_to = 'bizdev_source' AND related_id = $4`,
+            ['lead', newLead.id, tenant_id, id],
+          );
         } catch (e) {
-          logger.warn('[Promote] Transition log failed (non-fatal):', e?.message);
+          logger.warn('[Promote] Activity relink failed (non-fatal):', e?.message);
         }
-        await client.query('DELETE FROM bizdev_sources WHERE id = $1 AND tenant_id = $2', [id, tenant_id]);
-        logger.debug('[Promote] BizDev Source deleted');
-      }
 
-      if (supportsTx) await client.query('COMMIT');
-
-      // Fetch the account object to return to frontend
-      const accountSelect = supportsTx
-        ? 'SELECT * FROM accounts WHERE id = $1 AND tenant_id = $2'
-        : 'SELECT * FROM accounts WHERE id = $1 AND tenant_id = $2';
-      const accountResult = await client.query(accountSelect, [accountId, tenant_id]);
-      const account = accountResult.rows[0] || null;
-
-      return res.json({
-        status: 'success',
-        message: `BizDev Source promoted to ${leadType.toUpperCase()} Lead`,
-        data: {
-          lead: newLead,
-          account: account,
-          bizdev_source_id: id,
-          account_id: accountId,
-          person_id: personId,
-          lead_type: leadType
+        // ========== STEP 7: Optionally delete BizDev Source ==========
+        if (delete_source) {
+          try {
+            await logEntityTransition(client, {
+              tenant_id,
+              from_table: 'bizdev_sources',
+              from_id: id,
+              to_table: 'leads',
+              to_id: newLead.id,
+              action: 'promote',
+              performed_by,
+              snapshot: bizdevSource,
+            });
+          } catch (e) {
+            logger.warn('[Promote] Transition log failed (non-fatal):', e?.message);
+          }
+          await client.query('DELETE FROM bizdev_sources WHERE id = $1 AND tenant_id = $2', [
+            id,
+            tenant_id,
+          ]);
+          logger.debug('[Promote] BizDev Source deleted');
         }
-      });
-    } catch (error) {
-      if (supportsTx && client) {
-        try { await client.query('ROLLBACK'); } catch { /* noop */ }
+
+        if (supportsTx) await client.query('COMMIT');
+
+        // Fetch the account object to return to frontend
+        const accountSelect = supportsTx
+          ? 'SELECT * FROM accounts WHERE id = $1 AND tenant_id = $2'
+          : 'SELECT * FROM accounts WHERE id = $1 AND tenant_id = $2';
+        const accountResult = await client.query(accountSelect, [accountId, tenant_id]);
+        const account = accountResult.rows[0] || null;
+
+        return res.json({
+          status: 'success',
+          message: `BizDev Source promoted to ${leadType.toUpperCase()} Lead`,
+          data: {
+            lead: newLead,
+            account: account,
+            bizdev_source_id: id,
+            account_id: accountId,
+            person_id: personId,
+            lead_type: leadType,
+          },
+        });
+      } catch (error) {
+        if (supportsTx && client) {
+          try {
+            await client.query('ROLLBACK');
+          } catch {
+            /* noop */
+          }
+        }
+        logger.error('[Promote] Error:', error);
+        return res.status(500).json({ status: 'error', message: error.message });
+      } finally {
+        if (supportsTx && client && typeof client.release === 'function') {
+          try {
+            client.release();
+          } catch {
+            /* noop */
+          }
+        }
       }
-      logger.error('[Promote] Error:', error);
-      return res.status(500).json({ status: 'error', message: error.message });
-    } finally {
-      if (supportsTx && client && typeof client.release === 'function') {
-        try { client.release(); } catch { /* noop */ }
-      }
-    }
-  });
+    },
+  );
 
   /**
    * @openapi
@@ -925,20 +1056,24 @@ export default function createBizDevSourceRoutes(pgPool) {
         tenant_id: incomingTenantId,
         format = 'csv',
         compress = true,
-        remove_after_archive = false
+        remove_after_archive = false,
       } = req.body;
 
       if (!incomingTenantId) {
         return res.status(400).json({
           status: 'error',
-          message: 'tenant_id is required'
+          message: 'tenant_id is required',
         });
       }
 
-      if (!bizdev_source_ids || !Array.isArray(bizdev_source_ids) || bizdev_source_ids.length === 0) {
+      if (
+        !bizdev_source_ids ||
+        !Array.isArray(bizdev_source_ids) ||
+        bizdev_source_ids.length === 0
+      ) {
         return res.status(400).json({
           status: 'error',
-          message: 'bizdev_source_ids array is required'
+          message: 'bizdev_source_ids array is required',
         });
       }
 
@@ -953,21 +1088,21 @@ export default function createBizDevSourceRoutes(pgPool) {
              updated_at = NOW()
          WHERE tenant_id = $1 AND id IN (${placeholders})
          RETURNING *`,
-        [tenant_id, ...bizdev_source_ids]
+        [tenant_id, ...bizdev_source_ids],
       );
 
       const archivedSources = updateResult.rows;
 
       // If remove_after_archive is true, clear large text fields
       if (remove_after_archive && archivedSources.length > 0) {
-        const ids = archivedSources.map(s => s.id);
+        const ids = archivedSources.map((s) => s.id);
         const idPlaceholders = ids.map((_, i) => `$${i + 2}`).join(',');
         await pgPool.query(
           `UPDATE bizdev_sources 
            SET notes = NULL,
                metadata = COALESCE(metadata, '{}'::jsonb) || '{"minimized": true}'::jsonb
            WHERE tenant_id = $1 AND id IN (${idPlaceholders})`,
-          [tenant_id, ...ids]
+          [tenant_id, ...ids],
         );
       }
 
@@ -979,19 +1114,19 @@ export default function createBizDevSourceRoutes(pgPool) {
         format,
         compress,
         timestamp: new Date().toISOString(),
-        storage_path: `archives/bizdev-sources/${new Date().toISOString().split('T')[0]}`
+        storage_path: `archives/bizdev-sources/${new Date().toISOString().split('T')[0]}`,
       };
 
       res.json({
         status: 'success',
         message: `Successfully archived ${archivedSources.length} BizDev source(s)`,
-        data: archiveData
+        data: archiveData,
       });
     } catch (error) {
       logger.error('Error archiving bizdev sources:', error);
       res.status(500).json({
         status: 'error',
-        message: error.message
+        message: error.message,
       });
     }
   });

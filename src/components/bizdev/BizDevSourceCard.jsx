@@ -1,8 +1,8 @@
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Building2,
   Mail,
@@ -17,17 +17,27 @@ import {
   Save,
   X,
   User,
-} from "lucide-react";
-import { useState, useEffect } from "react";
-import { toast } from "sonner";
-import { BizDevSource } from "@/api/entities";
+} from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
+import { BizDevSource, Employee } from '@/api/entities';
 
-
-export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, isSelected, onSelect, onUpdate, tenantId, businessModel = 'b2b' }) {
+export default function BizDevSourceCard({
+  source,
+  onEdit,
+  onDelete,
+  onClick,
+  isSelected,
+  onSelect,
+  onUpdate,
+  tenantId,
+  businessModel = 'b2b',
+}) {
   const [editingNotes, setEditingNotes] = useState(false);
-  const [notesText, setNotesText] = useState(source.notes || "");
+  const [notesText, setNotesText] = useState(source.notes || '');
   const [savingNotes, setSavingNotes] = useState(false);
-  const isPromoted = source.status?.toLowerCase() === 'promoted' || source.status?.toLowerCase() === 'converted';
+  const isPromoted =
+    source.status?.toLowerCase() === 'promoted' || source.status?.toLowerCase() === 'converted';
   // New state to hold parsed lead IDs for UI checks
   const [leadIdsArray, setLeadIdsArray] = useState([]);
 
@@ -43,7 +53,7 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
         } catch {
           parsed = String(source.lead_ids)
             .split(',')
-            .map(id => id.trim())
+            .map((id) => id.trim())
             .filter(Boolean);
         }
       }
@@ -52,7 +62,7 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
   }, [source.lead_ids]);
   // Determine if we're in B2C mode (person-first display)
   const isB2C = businessModel === 'b2c';
-  
+
   const handleSaveNotes = async () => {
     try {
       setSavingNotes(true);
@@ -60,9 +70,9 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
       if (!updateTenantId) {
         throw new Error('tenant_id is required');
       }
-      await BizDevSource.update(source.id, { 
+      await BizDevSource.update(source.id, {
         notes: notesText,
-        tenant_id: updateTenantId
+        tenant_id: updateTenantId,
       });
       toast.success('Notes saved');
       setEditingNotes(false);
@@ -77,34 +87,34 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
       setSavingNotes(false);
     }
   };
-  
+
   const getStatusColor = (status) => {
     switch (status?.toLowerCase()) {
-      case "active":
-        return "bg-green-900/30 text-green-400 border-green-700";
-      case "promoted":
-        return "bg-blue-900/30 text-blue-400 border-blue-700";
-      case "archived":
-        return "bg-slate-700 text-slate-400 border-slate-600";
+      case 'active':
+        return 'bg-green-900/30 text-green-400 border-green-700';
+      case 'promoted':
+        return 'bg-blue-900/30 text-blue-400 border-blue-700';
+      case 'archived':
+        return 'bg-slate-700 text-slate-400 border-slate-600';
       default:
-        return "bg-slate-700 text-slate-300 border-slate-600";
+        return 'bg-slate-700 text-slate-300 border-slate-600';
     }
   };
 
   const getLicenseStatusColor = (status) => {
     switch (status?.toLowerCase()) {
-      case "active":
-        return "bg-green-900/30 text-green-400 border-green-700";
-      case "suspended":
-      case "revoked":
-        return "bg-red-900/30 text-red-400 border-red-700";
-      case "expired":
-        return "bg-yellow-900/30 text-yellow-400 border-yellow-700";
-      case "unknown":
-      case "not required":
-        return "bg-slate-700 text-slate-400 border-slate-600";
+      case 'active':
+        return 'bg-green-900/30 text-green-400 border-green-700';
+      case 'suspended':
+      case 'revoked':
+        return 'bg-red-900/30 text-red-400 border-red-700';
+      case 'expired':
+        return 'bg-yellow-900/30 text-yellow-400 border-yellow-700';
+      case 'unknown':
+      case 'not required':
+        return 'bg-slate-700 text-slate-400 border-slate-600';
       default:
-        return "bg-slate-700 text-slate-300 border-slate-600";
+        return 'bg-slate-700 text-slate-300 border-slate-600';
     }
   };
 
@@ -113,14 +123,14 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
   const handleCardClick = (e) => {
     // Don't open detail panel if clicking checkbox, button, or link
     if (
-      e.target.type === 'checkbox' || 
-      e.target.closest('button') || 
+      e.target.type === 'checkbox' ||
+      e.target.closest('button') ||
       e.target.closest('a') ||
       e.target.closest('input[type="checkbox"]')
     ) {
       return;
     }
-    
+
     // Call the onClick handler to open detail panel
     if (onClick) {
       onClick(source);
@@ -128,24 +138,25 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
   };
 
   // Check if this source has been "acted upon" (has opportunities, leads, or activities linked)
-  const hasActivity = source.leads_generated > 0 || 
-                      source.opportunities_created > 0 || 
+  const hasActivity =
+    source.leads_generated > 0 ||
+    source.opportunities_created > 0 ||
     (leadIdsArray && leadIdsArray.length > 0);
 
   // Get display name - adapts based on business model
   // B2C: Person-first display (contact_person takes priority)
   // B2B: Company-first display (company_name takes priority)
   const displayName = isB2C
-    ? (source.contact_person || source.company_name || source.dba_name || 'Unnamed Contact')
-    : (source.company_name || source.dba_name || source.contact_person || 'Unnamed Company');
+    ? source.contact_person || source.company_name || source.dba_name || 'Unnamed Contact'
+    : source.company_name || source.dba_name || source.contact_person || 'Unnamed Company';
 
   // Secondary display info (shows the "other" entity type)
   const secondaryName = isB2C
-    ? (source.company_name || source.dba_name) // Show company for B2C
+    ? source.company_name || source.dba_name // Show company for B2C
     : source.contact_person; // Show contact for B2B
 
   const sourceName = source.source || source.source_name;
-  
+
   // Get contact info
   const phone = source.phone_number || source.contact_phone;
   const email = source.email || source.contact_email;
@@ -155,12 +166,8 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
   return (
     <Card
       className={`hover:shadow-lg transition-all duration-200 cursor-pointer ${
-        isPromoted 
-          ? 'bg-slate-900/50 border-slate-600 opacity-70' 
-          : 'bg-slate-800 border-slate-700'
-      } ${
-        isSelected ? 'ring-2 ring-blue-500' : ''
-      }`}
+        isPromoted ? 'bg-slate-900/50 border-slate-600 opacity-70' : 'bg-slate-800 border-slate-700'
+      } ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
       onClick={handleCardClick}
     >
       <CardHeader className="pb-3">
@@ -182,21 +189,34 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
           {/* Left side - Entity info (adapts to B2B/B2C) */}
           <div className="flex-1 space-y-1">
             <div className="flex items-start gap-3">
-              <div className={`w-10 h-10 rounded-lg ${hasActivity ? 'bg-green-900/30 border-green-700/50' : isB2C ? 'bg-purple-900/30 border-purple-700/50' : 'bg-blue-900/30 border-blue-700/50'} border flex items-center justify-center flex-shrink-0 relative`}>
+              <div
+                className={`w-10 h-10 rounded-lg ${hasActivity ? 'bg-green-900/30 border-green-700/50' : isB2C ? 'bg-purple-900/30 border-purple-700/50' : 'bg-blue-900/30 border-blue-700/50'} border flex items-center justify-center flex-shrink-0 relative`}
+              >
                 {isB2C ? (
-                  <User className={`w-5 h-5 ${hasActivity ? 'text-green-400' : 'text-purple-400'}`} />
+                  <User
+                    className={`w-5 h-5 ${hasActivity ? 'text-green-400' : 'text-purple-400'}`}
+                  />
                 ) : (
-                  <Building2 className={`w-5 h-5 ${hasActivity ? 'text-green-400' : 'text-blue-400'}`} />
+                  <Building2
+                    className={`w-5 h-5 ${hasActivity ? 'text-green-400' : 'text-blue-400'}`}
+                  />
                 )}
                 {hasActivity && (
-                  <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border border-slate-800" title="Has activity" />
+                  <div
+                    className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border border-slate-800"
+                    title="Has activity"
+                  />
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className={`text-lg font-semibold ${isPromoted ? 'text-slate-400 line-through' : 'text-slate-100'}`}>
+                <h3
+                  className={`text-lg font-semibold ${isPromoted ? 'text-slate-400 line-through' : 'text-slate-100'}`}
+                >
                   {displayName}
                   {isPromoted && source.account_name && (
-                    <span className="ml-2 text-sm font-normal text-blue-400">→ {source.account_name}</span>
+                    <span className="ml-2 text-sm font-normal text-blue-400">
+                      → {source.account_name}
+                    </span>
                   )}
                 </h3>
                 {/* Secondary name - show company for B2C or contact for B2B */}
@@ -216,16 +236,18 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
                   </p>
                 )}
                 {/* DBA name if different from display name */}
-                {source.dba_name && source.dba_name !== displayName && source.dba_name !== secondaryName && (
-                  <p className="text-sm text-slate-400">DBA: {source.dba_name}</p>
-                )}
+                {source.dba_name &&
+                  source.dba_name !== displayName &&
+                  source.dba_name !== secondaryName && (
+                    <p className="text-sm text-slate-400">DBA: {source.dba_name}</p>
+                  )}
               </div>
             </div>
-            
+
             {/* Key Contact Info Row - Phone, Email, Address */}
             <div className="flex flex-wrap items-center gap-3 ml-12 text-sm">
               {phone && (
-                <a 
+                <a
                   href={`tel:${phone}`}
                   onClick={(e) => e.stopPropagation()}
                   className="flex items-center gap-1 text-slate-300 hover:text-blue-400 transition-colors"
@@ -235,7 +257,7 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
                 </a>
               )}
               {email && (
-                <a 
+                <a
                   href={`mailto:${email}`}
                   onClick={(e) => e.stopPropagation()}
                   className="flex items-center gap-1 text-slate-300 hover:text-blue-400 transition-colors truncate max-w-[200px]"
@@ -256,27 +278,36 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
             <div className="flex items-center gap-2 flex-wrap ml-12">
               {/* Activity indicators */}
               {leadIdsArray && leadIdsArray.length > 0 && (
-                <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300 font-semibold">
+                <Badge
+                  variant="outline"
+                  className="bg-green-100 text-green-800 border-green-300 font-semibold"
+                >
                   <CheckCircle2 className="w-3 h-3 mr-1" />
                   Contacted
                 </Badge>
               )}
               {source.priority && source.priority !== 'medium' && (
-                <Badge variant="outline" className={
-                  source.priority === 'high' 
-                    ? 'bg-red-900/30 text-red-400 border-red-700' 
-                    : 'bg-slate-700 text-slate-400 border-slate-600'
-                }>
+                <Badge
+                  variant="outline"
+                  className={
+                    source.priority === 'high'
+                      ? 'bg-red-900/30 text-red-400 border-red-700'
+                      : 'bg-slate-700 text-slate-400 border-slate-600'
+                  }
+                >
                   {source.priority.charAt(0).toUpperCase() + source.priority.slice(1)} Priority
                 </Badge>
               )}
-              {source.license_status && source.license_status !== "Not Required" && (
+              {source.license_status && source.license_status !== 'Not Required' && (
                 <Badge variant="outline" className={getLicenseStatusColor(source.license_status)}>
                   {source.license_status}
                 </Badge>
               )}
               {source.industry && (
-                <Badge variant="outline" className="bg-slate-700/50 text-slate-400 border-slate-600 text-xs">
+                <Badge
+                  variant="outline"
+                  className="bg-slate-700/50 text-slate-400 border-slate-600 text-xs"
+                >
                   {source.industry}
                 </Badge>
               )}
@@ -313,7 +344,7 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
                     onClick={(e) => {
                       e.stopPropagation();
                       setEditingNotes(false);
-                      setNotesText(source.notes || "");
+                      setNotesText(source.notes || '');
                     }}
                     className="border-slate-600 text-slate-400 hover:bg-slate-700 h-7 text-xs"
                   >
@@ -331,8 +362,12 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
                     }}
                     className="w-full h-full text-left flex flex-col hover:bg-slate-700/50 p-1 rounded transition-colors overflow-hidden"
                   >
-                    <div className="text-xs text-slate-400 mb-1 font-semibold flex-shrink-0">Notes</div>
-                    <div className="text-sm text-slate-300 flex-1 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-slate-800">{source.notes}</div>
+                    <div className="text-xs text-slate-400 mb-1 font-semibold flex-shrink-0">
+                      Notes
+                    </div>
+                    <div className="text-sm text-slate-300 flex-1 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-slate-800">
+                      {source.notes}
+                    </div>
                   </button>
                 ) : (
                   <button
@@ -429,14 +464,16 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
               className="hover:text-blue-400 transition-colors truncate flex items-center gap-1"
               onClick={(e) => e.stopPropagation()}
             >
-              {(source.website || source.source_url).replace(/^https?:\/\/(www\.)?/, "")}
+              {(source.website || source.source_url).replace(/^https?:\/\/(www\.)?/, '')}
               <ExternalLink className="w-3 h-3" />
             </a>
           </div>
         )}
 
         {/* Performance Metrics Section */}
-        {(source.leads_generated > 0 || source.opportunities_created > 0 || source.revenue_generated > 0) && (
+        {(source.leads_generated > 0 ||
+          source.opportunities_created > 0 ||
+          source.revenue_generated > 0) && (
           <div className="grid grid-cols-3 gap-3 pt-3 border-t border-slate-700">
             {source.leads_generated > 0 && (
               <div className="text-center">
@@ -446,7 +483,9 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
             )}
             {source.opportunities_created > 0 && (
               <div className="text-center">
-                <div className="text-lg font-semibold text-slate-200">{source.opportunities_created}</div>
+                <div className="text-lg font-semibold text-slate-200">
+                  {source.opportunities_created}
+                </div>
                 <div className="text-xs text-slate-400">Opportunities</div>
               </div>
             )}
@@ -470,7 +509,9 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
               </span>
             ))}
             {source.tags.length > 5 && (
-              <span className="px-2 py-1 text-xs text-slate-400">+{source.tags.length - 5} more</span>
+              <span className="px-2 py-1 text-xs text-slate-400">
+                +{source.tags.length - 5} more
+              </span>
             )}
           </div>
         )}
@@ -480,6 +521,12 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
             <Badge variant="outline" className={statusColorClass}>
               {source.status || 'Active'}
             </Badge>
+            {source.assigned_to_name && (
+              <span className="flex items-center gap-1 text-xs text-slate-400">
+                <User className="w-3 h-3" />
+                {source.assigned_to_name}
+              </span>
+            )}
             {source.batch_id && (
               <span className="text-xs text-slate-500">Batch: {source.batch_id}</span>
             )}

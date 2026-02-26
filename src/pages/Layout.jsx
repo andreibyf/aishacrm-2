@@ -120,7 +120,7 @@ const navItems = [
   { href: 'Calendar', icon: Calendar, label: 'Calendar' },
   { href: 'ConstructionProjects', icon: Kanban, label: 'Project Management' }, // Project management module
   { href: 'Workers', icon: Users, label: 'Workers' }, // Contractors/temp labor management
-  { href: 'BizDevSources', icon: Database, label: 'BizDev Sources' }, // Business development sources
+  { href: 'BizDevSources', icon: Database, label: 'Potential Leads' }, // Business development sources
   { href: 'CashFlow', icon: DollarSign, label: 'Cash Flow' },
   { href: 'DocumentProcessing', icon: FileText, label: 'Document Processing' },
   {

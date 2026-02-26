@@ -36,7 +36,6 @@ import { Opportunity } from '@/api/entities';
 import { Activity } from '@/api/entities';
 import { Lead } from '@/api/entities';
 
-
 export default function BizDevSourceDetailPanel({
   bizDevSource,
   onClose,
@@ -46,6 +45,7 @@ export default function BizDevSourceDetailPanel({
   onUpdate,
   onRefresh,
   businessModel = 'b2b',
+  entityLabel = 'Potential Lead',
 }) {
   const [promoting, setPromoting] = useState(false);
   const [showPromoteConfirm, setShowPromoteConfirm] = useState(false);
@@ -54,7 +54,6 @@ export default function BizDevSourceDetailPanel({
   const [creatingOpportunity, setCreatingOpportunity] = useState(false);
   const [linkedOpportunities, setLinkedOpportunities] = useState([]);
   const [currentSource, setCurrentSource] = useState(bizDevSource);
-
 
   // Determine if we're in B2C mode (person-first display)
   const isB2C = businessModel === 'b2c';
@@ -119,7 +118,7 @@ export default function BizDevSourceDetailPanel({
 
   const handlePromote = async () => {
     if (!currentSource?.id) {
-      toast.error('Invalid BizDev Source');
+      toast.error(`Invalid ${entityLabel}`);
       return;
     }
 
@@ -161,7 +160,7 @@ export default function BizDevSourceDetailPanel({
       // Success toast handled by parent to avoid duplicates.
     } catch (error) {
       console.error('Promote error:', error);
-      const message = error?.message || 'Failed to promote BizDev Source';
+      const message = error?.message || `Failed to promote ${entityLabel}`;
       toast.error(message);
     } finally {
       setPromoting(false);
@@ -181,7 +180,7 @@ export default function BizDevSourceDetailPanel({
       };
       setCurrentSource(updatedSource);
       if (onUpdate) onUpdate(updatedSource);
-      toast.success('BizDev Source archived');
+      toast.success(`${entityLabel} archived`);
       onClose();
     }
   };
@@ -207,13 +206,15 @@ export default function BizDevSourceDetailPanel({
     return colors[status?.toLowerCase()] || 'bg-slate-700 text-slate-400 border-slate-600';
   };
 
-  const isPromoted = currentSource.status?.toLowerCase() === 'promoted' || currentSource.status?.toLowerCase() === 'converted';
+  const isPromoted =
+    currentSource.status?.toLowerCase() === 'promoted' ||
+    currentSource.status?.toLowerCase() === 'converted';
   const isArchived = currentSource.status?.toLowerCase() === 'archived';
   const canPromote = !isPromoted && !isArchived;
 
   const handleCreateOpportunity = async () => {
     if (!currentSource?.id) {
-      toast.error('Invalid BizDev Source');
+      toast.error(`Invalid ${entityLabel}`);
       return;
     }
 
@@ -230,7 +231,7 @@ export default function BizDevSourceDetailPanel({
         close_date: closeDateStr,
         tenant_id: currentSource.tenant_id,
         description:
-          `Opportunity created from BizDev Source: ${currentSource.source || 'Unknown Source'}\n` +
+          `Opportunity created from ${entityLabel}: ${currentSource.source || 'Unknown Source'}\n` +
           `Batch: ${currentSource.batch_id || 'N/A'}\n` +
           `Company: ${currentSource.company_name}\n` +
           `Contact: ${currentSource.email || currentSource.phone_number || 'No contact info'}\n` +
@@ -1087,6 +1088,16 @@ export default function BizDevSourceDetailPanel({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
+            <div>
+              <p className="text-xs text-slate-400 mb-1">Assigned To</p>
+              <p
+                className={`text-sm flex items-center gap-1.5 ${currentSource.assigned_to_name || currentSource.assigned_to ? 'text-slate-200' : 'text-slate-500 italic'}`}
+              >
+                <User className="w-3.5 h-3.5 text-slate-400" />
+                {currentSource.assigned_to_name ||
+                  (currentSource.assigned_to ? 'Assigned' : 'Unassigned')}
+              </p>
+            </div>
             <div>
               <p className="text-xs text-slate-400 mb-1">Created</p>
               <p className="text-sm text-slate-300">

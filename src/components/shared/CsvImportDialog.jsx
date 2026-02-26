@@ -1,19 +1,48 @@
-
-import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Upload, File, CheckCircle, AlertCircle, AlertTriangle, XCircle, CheckCircle2, Link2 } from "lucide-react";
-import { Employee } from "@/api/entities";
-import { validateAndImport } from "@/api/functions";
-import { toast } from "@/components/ui/use-toast";
-import { Progress } from "@/components/ui/progress"; // NEW: Import Progress component
+import { useState, useEffect } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Loader2,
+  Upload,
+  File,
+  CheckCircle,
+  AlertCircle,
+  AlertTriangle,
+  XCircle,
+  CheckCircle2,
+  Link2,
+} from 'lucide-react';
+import { Employee } from '@/api/entities';
+import { validateAndImport } from '@/api/functions';
+import { toast } from '@/components/ui/use-toast';
+import { Progress } from '@/components/ui/progress'; // NEW: Import Progress component
 import { useUser } from '@/components/shared/useUser.js';
 
 const formatPhoneNumber = (phoneNumber) => {
@@ -44,12 +73,17 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
   const [accountLinkColumn, setAccountLinkColumn] = useState(null);
   const [previewData, setPreviewData] = useState([]);
   const [showDetailedResults, setShowDetailedResults] = useState(false); // New state for the detailed results dialog
-  
+
   // NEW: State for batch processing
   const [isBatching, setIsBatching] = useState(false); // Controls the global progress overlay
 
   // NEW: State for batch processing progress details
-  const [importProgress, setImportProgress] = useState({ itemsImported: 0, totalItems: 0, currentBatchNum: 0, totalBatchCount: 0 });
+  const [importProgress, setImportProgress] = useState({
+    itemsImported: 0,
+    totalItems: 0,
+    currentBatchNum: 0,
+    totalBatchCount: 0,
+  });
 
   useEffect(() => {
     const loadData = async () => {
@@ -58,11 +92,11 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
         const empList = await Employee.filter({ tenant_id: currentUser.tenant_id });
         setEmployees(empList);
       } catch (error) {
-        console.error("Failed to load data:", error);
+        console.error('Failed to load data:', error);
         toast({
-          title: "Error loading employees",
-          description: error.message || "Could not load employee list for assignment.",
-          variant: "destructive",
+          title: 'Error loading employees',
+          description: error.message || 'Could not load employee list for assignment.',
+          variant: 'destructive',
         });
       }
     };
@@ -75,17 +109,28 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
   useEffect(() => {
     if (schema?.properties) {
       const excludedFields = [
-        'id', 'unique_id', 'tenant_id', 'created_date', 'updated_date', 'created_by',
-        'last_synced', 'assigned_to_name', 'account_name', 'account_industry',
-        'contact_name', 'contact_email', 'converted_contact_name', 'converted_account_name'
+        'id',
+        'unique_id',
+        'tenant_id',
+        'created_date',
+        'updated_date',
+        'created_by',
+        'last_synced',
+        'assigned_to_name',
+        'account_name',
+        'account_industry',
+        'contact_name',
+        'contact_email',
+        'converted_contact_name',
+        'converted_account_name',
       ];
 
       const fields = Object.keys(schema.properties)
-        .filter(key => !excludedFields.includes(key))
-        .map(key => ({
+        .filter((key) => !excludedFields.includes(key))
+        .map((key) => ({
           value: key,
-          label: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-          required: schema.required?.includes(key) || false
+          label: key.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase()),
+          required: schema.required?.includes(key) || false,
         }))
         .sort((a, b) => {
           if (a.required && !b.required) return -1;
@@ -115,17 +160,17 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
   };
 
   const parseCSV = (text) => {
-    const lines = text.split(/\r?\n/).filter(line => line.trim());
+    const lines = text.split(/\r?\n/).filter((line) => line.trim());
     const delimiter = text.includes('\t') ? '\t' : ',';
-    
-    return lines.map(line => {
+
+    return lines.map((line) => {
       const values = [];
       let current = '';
       let inQuotes = false;
-      
+
       for (let i = 0; i < line.length; i++) {
         const char = line[i];
-        
+
         if (char === '"') {
           if (inQuotes && line[i + 1] === '"') {
             current += '"';
@@ -161,41 +206,46 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
       reader.onload = (event) => {
         const text = event.target.result;
         const rows = parseCSV(text);
-        
-        if (!rows || rows.length <= 1) { // Check for header + at least one data row
+
+        if (!rows || rows.length <= 1) {
+          // Check for header + at least one data row
           toast({
-            title: "CSV Empty",
-            description: "The selected CSV file appears to be empty or only contains headers.",
-            variant: "destructive",
+            title: 'CSV Empty',
+            description: 'The selected CSV file appears to be empty or only contains headers.',
+            variant: 'destructive',
           });
           setFile(null); // Clear the file
           return;
         }
-        
-        const headerRow = rows[0].map(h => (h || "").trim());
-        const dataRows = rows.slice(1); 
-        
+
+        const headerRow = rows[0].map((h) => (h || '').trim());
+        const dataRows = rows.slice(1);
+
         setHeaders(headerRow);
         setPreviewData(dataRows); // Keep all data rows for preview if needed, or slice if only a few are needed.
-                                  // The actual preview UI only shows first few rows anyway.
-        
+        // The actual preview UI only shows first few rows anyway.
+
         // Auto-detect account link column for Contacts
         if (schema?.name === 'Contact') {
-          const linkColumn = headerRow.find(h => {
+          const linkColumn = headerRow.find((h) => {
             const lower = h.toLowerCase();
             return (
-              lower === 'company' || lower === 'company name' ||
-              lower === 'account' || lower === 'account name' ||
+              lower === 'company' ||
+              lower === 'company name' ||
+              lower === 'account' ||
+              lower === 'account name' ||
               (lower.includes('company') && (lower.includes('id') || lower.includes('legacy'))) ||
               (lower.includes('account') && (lower.includes('id') || lower.includes('legacy'))) ||
-              lower === 'company id' || lower === 'account id' ||
-              lower === 'company_id' || lower === 'account_id'
+              lower === 'company id' ||
+              lower === 'account id' ||
+              lower === 'company_id' ||
+              lower === 'account_id'
             );
           });
-          
+
           setAccountLinkColumn(linkColumn || null);
         }
-        
+
         autoMapHeaders(headerRow);
         setStep('map');
       };
@@ -206,22 +256,33 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
   const autoMapHeaders = (csvHeaders) => {
     const newMapping = {};
     const mappingPatterns = {
-      'first_name': ['first name', 'firstname', 'fname', 'given name'],
-      'last_name': ['last name', 'lastname', 'lname', 'surname'],
-      'email': ['email', 'email address', 'e-mail'],
-      'phone': ['phone', 'phone number', 'telephone', 'mobile'],
-      'job_title': ['job title', 'title', 'position'],
-      'address_1': ['address', 'street address', 'address line 1'],
-      'city': ['city', 'town'],
-      'state': ['state', 'province'],
-      'zip': ['zip', 'postal code', 'zipcode'],
-      'country': ['country'],
-      'status': ['status'],
-      'source': ['source', 'lead source'],
-      'industry': ['industry', 'sector']
+      first_name: ['first name', 'firstname', 'fname', 'given name'],
+      last_name: ['last name', 'lastname', 'lname', 'surname'],
+      email: ['email', 'email address', 'e-mail'],
+      phone: ['phone', 'phone number', 'telephone', 'mobile'],
+      job_title: ['job title', 'title', 'position'],
+      address_1: ['address', 'street address', 'address line 1'],
+      city: ['city', 'town'],
+      state: ['state', 'province'],
+      zip: ['zip', 'postal code', 'zipcode'],
+      country: ['country'],
+      status: ['status'],
+      source: ['source', 'lead source'],
+      industry: ['industry', 'sector'],
+      assigned_to: [
+        'assigned to',
+        'assigned',
+        'assignee',
+        'salesperson',
+        'sales person',
+        'sales rep',
+        'rep',
+        'owner',
+        'agent',
+      ],
     };
 
-    csvHeaders.forEach(header => {
+    csvHeaders.forEach((header) => {
       // Skip account link column - don't map it to a field
       if (schema?.name === 'Contact' && header === accountLinkColumn) {
         newMapping[header] = null;
@@ -232,8 +293,12 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
       let matchedField = null;
 
       for (const [crmField, patterns] of Object.entries(mappingPatterns)) {
-        if (patterns.some(pattern => normalizedHeader === pattern || normalizedHeader.includes(pattern))) {
-          if (crmFields.some(f => f.value === crmField)) {
+        if (
+          patterns.some(
+            (pattern) => normalizedHeader === pattern || normalizedHeader.includes(pattern),
+          )
+        ) {
+          if (crmFields.some((f) => f.value === crmField)) {
             matchedField = crmField;
             break;
           }
@@ -248,7 +313,7 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
 
   const handleMappingChange = (header, crmField) => {
     const actualValue = crmField === '__skip__' ? null : crmField;
-    setMapping(prev => ({ ...prev, [header]: actualValue }));
+    setMapping((prev) => ({ ...prev, [header]: actualValue }));
   };
 
   const handleImport = async () => {
@@ -260,7 +325,7 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
 
     try {
       const reader = new FileReader();
-      
+
       const text = await new Promise((resolve, reject) => {
         reader.onload = (e) => resolve(e.target.result);
         reader.onerror = reject;
@@ -274,21 +339,21 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
       // Build records from mapping
       const records = dataRows.map((cols) => {
         const record = {};
-        
+
         headerRow.forEach((header, index) => {
           const crmField = mapping[header];
           if (!crmField) return; // If mapping is null (skip) or undefined, do not add to record
-          
+
           let value = cols[index] || '';
-          
+
           if ((crmField === 'phone' || crmField === 'mobile') && value) {
             value = formatPhoneNumber(value);
           }
-          
+
           if (crmField === 'email' && value) {
             value = value.toLowerCase().trim();
           }
-          
+
           if (value) {
             record[crmField] = value;
           }
@@ -317,22 +382,34 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
       });
 
       // Filter out records that are completely empty after processing (except system fields like is_test_data, assigned_to or _company_name which might be the only things set)
-      const validRecords = records.filter(r => Object.keys(r).some(key => !key.startsWith('_') && key !== 'is_test_data' && key !== 'assigned_to') || r.assigned_to || r._company_name);
+      const validRecords = records.filter(
+        (r) =>
+          Object.keys(r).some(
+            (key) => !key.startsWith('_') && key !== 'is_test_data' && key !== 'assigned_to',
+          ) ||
+          r.assigned_to ||
+          r._company_name,
+      );
 
       if (validRecords.length === 0) {
         toast({
-          title: "No Valid Records",
-          description: "No records found with mapped data to import. Please check your mapping.",
-          variant: "destructive",
+          title: 'No Valid Records',
+          description: 'No records found with mapped data to import. Please check your mapping.',
+          variant: 'destructive',
           duration: 6000,
         });
         setStep('map'); // Go back to map step if no valid records
         setImporting(false);
         setIsBatching(false); // NEW: Reset batching flag
-        setImportProgress({ itemsImported: 0, totalItems: 0, currentBatchNum: 0, totalBatchCount: 0 }); // Reset progress
+        setImportProgress({
+          itemsImported: 0,
+          totalItems: 0,
+          currentBatchNum: 0,
+          totalBatchCount: 0,
+        }); // Reset progress
         return;
       }
-      
+
       // PERFORMANCE OPTIMIZATION: Increased batch size and removed client-side delays.
       // ApiOptimizer handles rate limiting automatically.
       const BATCH_SIZE = 100;
@@ -341,14 +418,27 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
       for (let i = 0; i < validRecords.length; i += BATCH_SIZE) {
         batches.push(validRecords.slice(i, i + BATCH_SIZE));
       }
-      setImportProgress({ itemsImported: 0, totalItems: validRecords.length, currentBatchNum: 0, totalBatchCount: batches.length });
+      setImportProgress({
+        itemsImported: 0,
+        totalItems: validRecords.length,
+        currentBatchNum: 0,
+        totalBatchCount: batches.length,
+      });
 
-      const allResults = { successCount: 0, failCount: 0, errors: [], accountsLinked: 0, accountsNotFound: 0, matchingDetails: [] };
-      
+      const allResults = {
+        successCount: 0,
+        failCount: 0,
+        errors: [],
+        accountsLinked: 0,
+        accountsNotFound: 0,
+        matchingDetails: [],
+        assignmentWarnings: [],
+      };
+
       for (let i = 0; i < batches.length; i++) {
-        setImportProgress(prev => ({ ...prev, currentBatchNum: i + 1 }));
+        setImportProgress((prev) => ({ ...prev, currentBatchNum: i + 1 }));
         const batch = batches[i];
-        
+
         try {
           let response;
           try {
@@ -358,12 +448,15 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
               mapping: mapping, // This mapping is for the whole CSV, not just the batch headers
               fileName: file.name,
               accountLinkColumn: accountLinkColumn,
-              tenant_id: currentUser?.tenant_id
+              tenant_id: currentUser?.tenant_id,
             });
           } catch (lowLevelErr) {
             // Immediate transport error (network/fetch reject) - push and continue
             allResults.failCount += batch.length;
-            allResults.errors.push({ row_number: `Batch ${i + 1}`, error: lowLevelErr?.message || 'Transport error calling import endpoint.' });
+            allResults.errors.push({
+              row_number: `Batch ${i + 1}`,
+              error: lowLevelErr?.message || 'Transport error calling import endpoint.',
+            });
             continue;
           }
 
@@ -373,53 +466,79 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
           // If backend returned an error wrapper, surface details
           if (payload && payload.status === 'error' && (payload.error || payload.message)) {
             allResults.failCount += batch.length;
-            allResults.errors.push({ row_number: `Batch ${i + 1}`, error: payload.error || payload.message || 'Backend reported error status.' });
+            allResults.errors.push({
+              row_number: `Batch ${i + 1}`,
+              error: payload.error || payload.message || 'Backend reported error status.',
+            });
             continue;
           }
 
-          if (payload && (payload.successCount !== undefined || payload.failCount !== undefined || Array.isArray(payload.errors))) {
+          if (
+            payload &&
+            (payload.successCount !== undefined ||
+              payload.failCount !== undefined ||
+              Array.isArray(payload.errors))
+          ) {
             allResults.successCount += payload.successCount || 0;
             allResults.failCount += payload.failCount || 0;
             allResults.errors.push(...(payload.errors || []));
             allResults.accountsLinked += payload.accountsLinked || 0;
             allResults.accountsNotFound += payload.accountsNotFound || 0;
             allResults.matchingDetails.push(...(payload.matchingDetails || []));
-            
+            allResults.assignmentWarnings.push(...(payload.assignmentWarnings || []));
+
             // Update progress
-            setImportProgress(prev => ({ ...prev, itemsImported: allResults.successCount }));
-      } else {
-        // Capture unexpected shape; include a diagnostic snapshot of keys
-        const keys = payload ? Object.keys(payload).join(',') : 'null';
-        allResults.failCount += batch.length;
-        allResults.errors.push({ row_number: `Batch ${i + 1} (unexpected shape)`, error: `Import response missing expected fields. Keys: ${keys}` });
-      }
-          
+            setImportProgress((prev) => ({ ...prev, itemsImported: allResults.successCount }));
+          } else {
+            // Capture unexpected shape; include a diagnostic snapshot of keys
+            const keys = payload ? Object.keys(payload).join(',') : 'null';
+            allResults.failCount += batch.length;
+            allResults.errors.push({
+              row_number: `Batch ${i + 1} (unexpected shape)`,
+              error: `Import response missing expected fields. Keys: ${keys}`,
+            });
+          }
+
           // Removed client-side delay: `ApiOptimizer` is assumed to handle rate limiting internally.
         } catch (batchError) {
           const errorMessage = batchError.message?.toLowerCase() || '';
           const errorString = String(batchError).toLowerCase();
           const status = batchError?.response?.status || batchError?.status;
-          
+
           // Handle rate limits
-          if (status === 429 || errorMessage.includes('429') || errorMessage.includes('rate limit')) {
+          if (
+            status === 429 ||
+            errorMessage.includes('429') ||
+            errorMessage.includes('rate limit')
+          ) {
             console.error(`Import rate limited at batch ${i + 1}`);
-            allResults.errors.push({ 
-              row_number: `Batch ${i + 1}`, 
-              error: `Rate limit exceeded. ${allResults.successCount} records imported successfully before rate limit. Please wait a few minutes and re-import the remaining records.` 
+            allResults.errors.push({
+              row_number: `Batch ${i + 1}`,
+              error: `Rate limit exceeded. ${allResults.successCount} records imported successfully before rate limit. Please wait a few minutes and re-import the remaining records.`,
             });
             break; // Stop processing further batches on rate limit
-          } 
+          }
           // Handle network errors
-          else if (errorMessage.includes('network error') || errorString.includes('network error') || (batchError instanceof TypeError && batchError.message === 'Failed to fetch')) {
+          else if (
+            errorMessage.includes('network error') ||
+            errorString.includes('network error') ||
+            (batchError instanceof TypeError && batchError.message === 'Failed to fetch')
+          ) {
             console.warn(`Network error during import batch ${i + 1}`);
             allResults.failCount += batch.length;
-            allResults.errors.push({ row_number: `Batch ${i + 1}`, error: "Network error - please check connection and try again" });
+            allResults.errors.push({
+              row_number: `Batch ${i + 1}`,
+              error: 'Network error - please check connection and try again',
+            });
           }
           // Other errors
           else {
             console.error(`Import batch ${i + 1} failed:`, batchError?.message || 'Unknown error');
             allResults.failCount += batch.length;
-            allResults.errors.push({ row_number: `Batch ${i + 1}`, error: batchError.message || "Batch failed with an unknown error." });
+            allResults.errors.push({
+              row_number: `Batch ${i + 1}`,
+              error: batchError.message || 'Batch failed with an unknown error.',
+            });
           }
         }
       }
@@ -428,51 +547,57 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
 
       if (allResults.failCount === 0) {
         toast({
-          title: "Import Successful",
+          title: 'Import Successful',
           description: `${allResults.successCount} ${schema.name.toLowerCase()}(s) imported successfully${allResults.accountsLinked ? `. ${allResults.accountsLinked} linked to accounts.` : ''}`,
           duration: 5000,
         });
         if (onSuccess) onSuccess();
         handleDialogClose(false);
-      } else { // Partial success or full failure
+      } else {
+        // Partial success or full failure
         toast({
-          title: "Import Completed with Issues",
+          title: 'Import Completed with Issues',
           description: `${allResults.successCount} records imported, but ${allResults.failCount} failed. See detailed results.`,
-          variant: "warning",
+          variant: 'warning',
           duration: 8000,
         });
         setShowDetailedResults(true);
         setStep('done');
       }
-
     } catch (error) {
-      console.error("Import failed:", error?.message || 'Unknown error');
+      console.error('Import failed:', error?.message || 'Unknown error');
       toast({
-        title: "Import Error",
-        description: error.message || "An unexpected error occurred during import.",
-        variant: "destructive",
+        title: 'Import Error',
+        description: error.message || 'An unexpected error occurred during import.',
+        variant: 'destructive',
         duration: 8000,
       });
-      setImportResults({ // Ensure importResults is populated even on general error
+      setImportResults({
+        // Ensure importResults is populated even on general error
         successCount: 0,
         failCount: 0, // Cannot determine exact number of failures from a general error, assume 0 successful
-        errors: [{ row_number: "N/A", error: error.message || "An unexpected error occurred" }],
+        errors: [{ row_number: 'N/A', error: error.message || 'An unexpected error occurred' }],
         accountsLinked: 0,
         accountsNotFound: 0,
-        matchingDetails: []
+        matchingDetails: [],
       });
       setShowDetailedResults(true);
       setStep('done');
     } finally {
       setImporting(false);
       setIsBatching(false); // NEW: Reset batching flag
-      setImportProgress({ itemsImported: 0, totalItems: 0, currentBatchNum: 0, totalBatchCount: 0 }); // Reset progress
+      setImportProgress({
+        itemsImported: 0,
+        totalItems: 0,
+        currentBatchNum: 0,
+        totalBatchCount: 0,
+      }); // Reset progress
     }
   };
 
   const requiredFieldsMapped = crmFields
-    .filter(f => f.required)
-    .every(f => Object.values(mapping).includes(f.value));
+    .filter((f) => f.required)
+    .every((f) => Object.values(mapping).includes(f.value));
 
   return (
     <>
@@ -569,11 +694,7 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
                         Leave Unassigned
                       </SelectItem>
                       {employees.map((emp) => (
-                        <SelectItem
-                          key={emp.id}
-                          value={emp.email || emp.user_email}
-                          className="hover:bg-slate-700"
-                        >
+                        <SelectItem key={emp.id} value={emp.id} className="hover:bg-slate-700">
                           {emp.first_name} {emp.last_name}
                         </SelectItem>
                       ))}
@@ -866,6 +987,34 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
                     </CardContent>
                   </Card>
                 )}
+
+              {/* Assignment Warnings */}
+              {importResults.assignmentWarnings && importResults.assignmentWarnings.length > 0 && (
+                <Card className="bg-amber-900/20 border-amber-700">
+                  <CardHeader>
+                    <CardTitle className="text-amber-300 text-lg">
+                      Unresolved Assignments ({importResults.assignmentWarnings.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 max-h-48 overflow-y-auto">
+                    <p className="text-xs text-amber-400 mb-2">
+                      These salesperson names could not be matched to employees. Records were
+                      imported without assignment. The original name is preserved in metadata.
+                    </p>
+                    {importResults.assignmentWarnings.map((warn, idx) => (
+                      <div
+                        key={idx}
+                        className="p-2 bg-amber-900/20 rounded border border-amber-700/50 flex justify-between items-center"
+                      >
+                        <span className="text-sm text-amber-200">
+                          Row {warn.rowNumber}: &quot;{warn.rawValue}&quot;
+                        </span>
+                        <span className="text-xs text-amber-400">{warn.reason}</span>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Error Details */}
               {importResults.errors && importResults.errors.length > 0 && (
