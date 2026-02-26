@@ -2,16 +2,23 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import { workflowTemplates, templateCategories, difficultyLevels } from '@/data/workflowTemplates';
-import { Sparkles, Zap, Users, TrendingUp, MessageSquare, Search, X } from 'lucide-react';
+import { Sparkles, Zap, Users, TrendingUp, MessageSquare, Search, X, Shield } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
 const categoryIcons = {
   'Lead Management': Users,
   'Lead Nurture': TrendingUp,
-  'Sales': Zap,
-  'Multi-Channel': MessageSquare
+  Sales: Zap,
+  'Multi-Channel': MessageSquare,
+  CARE: Shield,
 };
 
 export default function WorkflowTemplatesBrowser({ onSelectTemplate, onClose }) {
@@ -19,13 +26,14 @@ export default function WorkflowTemplatesBrowser({ onSelectTemplate, onClose }) 
   const [searchQuery, setSearchQuery] = useState('');
   const [previewTemplate, setPreviewTemplate] = useState(null);
 
-  const filteredTemplates = workflowTemplates.filter(template => {
+  const filteredTemplates = workflowTemplates.filter((template) => {
     const matchesCategory = selectedCategory === 'all' || template.category === selectedCategory;
-    const matchesSearch = !searchQuery || 
+    const matchesSearch =
+      !searchQuery ||
       template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       template.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      template.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
-    
+      template.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+
     return matchesCategory && matchesSearch;
   });
 
@@ -48,9 +56,7 @@ export default function WorkflowTemplatesBrowser({ onSelectTemplate, onClose }) 
               <Sparkles className="w-6 h-6 text-purple-400" />
               Workflow Templates
             </h2>
-            <p className="text-sm text-slate-400 mt-1">
-              Start with proven automation patterns
-            </p>
+            <p className="text-sm text-slate-400 mt-1">Start with proven automation patterns</p>
           </div>
           {onClose && (
             <Button
@@ -79,13 +85,17 @@ export default function WorkflowTemplatesBrowser({ onSelectTemplate, onClose }) 
 
       {/* Category Tabs */}
       <div className="flex gap-2 px-6 py-4 border-b border-slate-700 overflow-x-auto">
-        {templateCategories.map(category => (
+        {templateCategories.map((category) => (
           <Button
             key={category.id}
             variant={selectedCategory === category.id ? 'default' : 'ghost'}
             size="sm"
             onClick={() => setSelectedCategory(category.id)}
-            className={selectedCategory === category.id ? 'bg-purple-600 hover:bg-purple-700' : 'text-slate-400 hover:text-slate-200'}
+            className={
+              selectedCategory === category.id
+                ? 'bg-purple-600 hover:bg-purple-700'
+                : 'text-slate-400 hover:text-slate-200'
+            }
           >
             <span className="mr-2">{category.icon}</span>
             {category.name}
@@ -101,10 +111,10 @@ export default function WorkflowTemplatesBrowser({ onSelectTemplate, onClose }) 
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredTemplates.map(template => {
+            {filteredTemplates.map((template) => {
               const difficultyInfo = difficultyLevels[template.difficulty];
               const CategoryIcon = categoryIcons[template.category] || Zap;
-              
+
               return (
                 <Card
                   key={template.id}
@@ -127,9 +137,7 @@ export default function WorkflowTemplatesBrowser({ onSelectTemplate, onClose }) 
                         {difficultyInfo.label}
                       </Badge>
                     </div>
-                    <CardTitle className="text-slate-100 text-lg">
-                      {template.name}
-                    </CardTitle>
+                    <CardTitle className="text-slate-100 text-lg">{template.name}</CardTitle>
                     <CardDescription className="text-slate-400">
                       {template.description}
                     </CardDescription>
@@ -140,7 +148,7 @@ export default function WorkflowTemplatesBrowser({ onSelectTemplate, onClose }) 
                       <span className="text-xs text-slate-500">{template.category}</span>
                     </div>
                     <div className="flex flex-wrap gap-1">
-                      {template.tags.map(tag => (
+                      {template.tags.map((tag) => (
                         <Badge
                           key={tag}
                           variant="secondary"
@@ -222,12 +230,8 @@ export default function WorkflowTemplatesBrowser({ onSelectTemplate, onClose }) 
               <div>
                 <h4 className="text-sm font-semibold text-slate-200 mb-2">Tags:</h4>
                 <div className="flex flex-wrap gap-2">
-                  {previewTemplate.tags.map(tag => (
-                    <Badge
-                      key={tag}
-                      variant="secondary"
-                      className="bg-slate-700 text-slate-300"
-                    >
+                  {previewTemplate.tags.map((tag) => (
+                    <Badge key={tag} variant="secondary" className="bg-slate-700 text-slate-300">
                       {tag}
                     </Badge>
                   ))}

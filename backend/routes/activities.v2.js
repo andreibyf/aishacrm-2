@@ -503,7 +503,16 @@ export default function createActivityV2Routes(_pgPool) {
         }
       }
 
-      const { data, error, count } = await q;
+      let { data, error, count, status: queryStatus } = await q;
+
+      // PostgREST may return HTTP 416 when offset exceeds available rows.
+      // For list endpoints this should behave as an empty page, not a server error.
+      if (error && queryStatus === 416) {
+        data = [];
+        error = null;
+        count = count || 0;
+      }
+
       if (error) throw new Error(error.message);
 
       const activities = (data || []).map((activity) => {
@@ -580,7 +589,7 @@ export default function createActivityV2Routes(_pgPool) {
         },
       });
     } catch (error) {
-      logger.error('Error in v2 activities list:', error);
+      logger.error({ err: error }, 'Error in v2 activities list');
       // Ensure CORS headers are present in error responses (using secure origin whitelist)
       if (!res.getHeader('Access-Control-Allow-Origin') && isAllowedOrigin(req.headers.origin)) {
         setCorsHeaders(req.headers.origin, res, true);
