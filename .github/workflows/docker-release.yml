@@ -502,11 +502,11 @@ jobs:
 
             # Pull specific version tags
             phase "Pulling GHCR images for $VERSION_TAG"
-            run_timed 7m docker pull ghcr.io/andreibyf/aishacrm-2-frontend:$VERSION_TAG
-            run_timed 7m docker pull ghcr.io/andreibyf/aishacrm-2-backend:$VERSION_TAG
-            run_timed 7m docker pull ghcr.io/andreibyf/aishacrm-2-mcp:$VERSION_TAG
-            run_timed 7m docker pull ghcr.io/andreibyf/aishacrm-2-office-viz:$VERSION_TAG
-            run_timed 7m docker pull ghcr.io/andreibyf/aishacrm-2-telemetry-sidecar:$VERSION_TAG
+            run_timed 15m docker pull ghcr.io/andreibyf/aishacrm-2-frontend:$VERSION_TAG
+            run_timed 15m docker pull ghcr.io/andreibyf/aishacrm-2-backend:$VERSION_TAG
+            run_timed 15m docker pull ghcr.io/andreibyf/aishacrm-2-mcp:$VERSION_TAG
+            run_timed 15m docker pull ghcr.io/andreibyf/aishacrm-2-office-viz:$VERSION_TAG
+            run_timed 15m docker pull ghcr.io/andreibyf/aishacrm-2-telemetry-sidecar:$VERSION_TAG
             # Tag as latest locally
             phase "Tagging pulled images as latest"
             docker tag ghcr.io/andreibyf/aishacrm-2-frontend:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-frontend:latest
