@@ -410,6 +410,7 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel, moduleSet
             <Input
               id="new_password"
               type="password"
+              autoComplete="new-password"
               value={formData.new_password || ''}
               onChange={(e) => setFormData((prev) => ({ ...prev, new_password: e.target.value }))}
               placeholder="Leave blank to keep current password"
