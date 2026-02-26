@@ -4,140 +4,136 @@
  */
 
 export const TenantIntegrationSchema = {
-  "name": "TenantIntegration",
-  "type": "object",
-  "properties": {
-    "tenant_id": {
-      "type": "string",
-      "description": "The ID of the tenant this integration belongs to"
+  name: 'TenantIntegration',
+  type: 'object',
+  properties: {
+    tenant_id: {
+      type: 'string',
+      description: 'The ID of the tenant this integration belongs to',
     },
-    "integration_type": {
-      "type": "string",
-      "enum": [
-        "google_drive",
-        "google_calendar",
-        "gmail",
-        "gmail_smtp",
-        "outlook_email",
-        "onedrive",
-        "outlook_calendar",
-        "zapier",
-        "stripe",
-        "openai_llm",
-        "anthropic_llm",
-        "azure_openai_llm",
-        "webhook_email",
-        "other"
+    integration_type: {
+      type: 'string',
+      enum: [
+        'google_drive',
+        'google_calendar',
+        'gmail',
+        'gmail_smtp',
+        'outlook_email',
+        'onedrive',
+        'outlook_calendar',
+        'zapier',
+        'stripe',
+        'openai_llm',
+        'anthropic_llm',
+        'azure_openai_llm',
+        'webhook_email',
+        'twilio',
+        'whatsapp',
+        'whatsapp_business',
+        'slack',
+        'pabbly',
+        'other',
       ],
-      "description": "Type of integration"
+      description: 'Type of integration',
     },
-    "integration_name": {
-      "type": "string",
-      "description": "Display name for this integration"
+    integration_name: {
+      type: 'string',
+      description: 'Display name for this integration',
     },
-    "api_credentials": {
-      "type": "object",
-      "additionalProperties": true,
-      "description": "Encrypted API keys and credentials (encrypted at rest)"
+    api_credentials: {
+      type: 'object',
+      additionalProperties: true,
+      description: 'Encrypted API keys and credentials (encrypted at rest)',
     },
-    "configuration": {
-      "type": "object",
-      "additionalProperties": true,
-      "description": "Integration-specific configuration settings"
+    configuration: {
+      type: 'object',
+      additionalProperties: true,
+      description: 'Integration-specific configuration settings',
     },
-    "is_active": {
-      "type": "boolean",
-      "default": true,
-      "description": "Whether this integration is currently active"
+    is_active: {
+      type: 'boolean',
+      default: true,
+      description: 'Whether this integration is currently active',
     },
-    "last_sync": {
-      "type": "string",
-      "format": "date-time",
-      "description": "Last successful sync timestamp"
+    sync_status: {
+      type: 'string',
+      enum: ['connected', 'error', 'pending', 'disconnected'],
+      default: 'pending',
+      description: 'Current sync status',
     },
-    "sync_status": {
-      "type": "string",
-      "enum": [
-        "connected",
-        "error",
-        "pending",
-        "disconnected"
-      ],
-      "default": "pending",
-      "description": "Current sync status"
+    error_message: {
+      type: 'string',
+      description: 'Last error message if sync failed',
     },
-    "error_message": {
-      "type": "string",
-      "description": "Last error message if sync failed"
-    }
+    last_sync: {
+      type: 'string',
+      format: 'date-time',
+      description: 'Last successful sync/test timestamp',
+    },
   },
-  "required": [
-    "tenant_id",
-    "integration_type",
-    "integration_name"
-  ],
-  "rls": {
-    "read": {
-      "$or": [
+  required: ['tenant_id', 'integration_type', 'integration_name'],
+  rls: {
+    read: {
+      $or: [
         {
-          "user_condition": {
-            "role": "superadmin"
-          }
+          user_condition: {
+            role: 'superadmin',
+          },
         },
         {
-          "$and": [
+          $and: [
             {
-              "tenant_id": "{{user.tenant_id}}"
+              tenant_id: '{{user.tenant_id}}',
             },
             {
-              "$or": [
+              $or: [
                 {
-                  "user_condition": {
-                    "role": "admin"
-                  }
+                  user_condition: {
+                    role: 'admin',
+                  },
                 },
                 {
-                  "user_condition": {
-                    "role": "power-user"
-                  }
-                }
-              ]
-            }
-          ]
-        }
-      ]
+                  user_condition: {
+                    role: 'power-user',
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
     },
-    "write": {
-      "$or": [
+    write: {
+      $or: [
         {
-          "user_condition": {
-            "role": "superadmin"
-          }
+          user_condition: {
+            role: 'superadmin',
+          },
         },
         {
-          "$and": [
+          $and: [
             {
-              "tenant_id": "{{user.tenant_id}}"
+              tenant_id: '{{user.tenant_id}}',
             },
             {
-              "$or": [
+              $or: [
                 {
-                  "user_condition": {
-                    "role": "admin"
-                  }
+                  user_condition: {
+                    role: 'admin',
+                  },
                 },
                 {
-                  "user_condition": {
-                    "role": "power-user"
-                  }
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    }
-  }
+                  user_condition: {
+                    role: 'power-user',
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  },
 };
 
 export default TenantIntegrationSchema;
