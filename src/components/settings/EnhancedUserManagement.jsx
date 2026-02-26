@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -764,6 +764,7 @@ export default function EnhancedUserManagement() {
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
+  const editingUserRef = useRef(null);
 
   // Use global user context instead of local User.me()
   const { user: currentUser } = useUser();
@@ -776,6 +777,10 @@ export default function EnhancedUserManagement() {
   const [effectiveTenantId, setEffectiveTenantId] = useState(urlTenantId);
 
   useEffect(() => {
+    editingUserRef.current = editingUser;
+  }, [editingUser]);
+
+  useEffect(() => {
     if (!currentUser) return;
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -786,6 +791,11 @@ export default function EnhancedUserManagement() {
   // avoid useTenant() hook to prevent re-render cascade that caused the edit-click bug
   useEffect(() => {
     const handleTenantChanged = (e) => {
+      if (editingUserRef.current) {
+        console.log('[EnhancedUserManagement] Ignoring tenant-changed while edit modal is open');
+        return;
+      }
+
       const newTenantId = e.detail?.tenantId;
       console.log('[EnhancedUserManagement] tenant-changed event:', newTenantId);
       // Update effective tenant and reset search/filters
@@ -1105,7 +1115,7 @@ export default function EnhancedUserManagement() {
     setSelectedUsers(new Set());
   }, [searchTerm, roleFilter]);
 
-  if (loading) {
+  if (loading && users.length === 0 && !editingUser) {
     return (
       <div className="p-8 text-center">
         <Loader2 className="w-8 h-8 animate-spin mx-auto" />
