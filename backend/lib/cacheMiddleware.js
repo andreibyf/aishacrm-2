@@ -23,11 +23,15 @@ export function cacheList(module, ttl = 180) {
       return next();
     }
 
-    // Generate cache key from query params
+    // Generate cache key from query params + user ID
+    // User ID is included because visibility scoping means different users
+    // see different data for the same query params.
     const operation = 'list';
+    const userId = req.user?.id || 'anon';
     const params = {
       query: req.query,
       path: req.path,
+      userId,
     };
 
     try {
@@ -82,12 +86,14 @@ export function cacheDetail(module, ttl = 300) {
       return next();
     }
 
-    // Generate cache key from resource ID and query params
+    // Generate cache key from resource ID, query params + user ID
     const operation = 'detail';
+    const userId = req.user?.id || 'anon';
     const params = {
       id: req.params.id,
       query: req.query,
       path: req.path,
+      userId,
     };
 
     try {

@@ -16,6 +16,7 @@ import { useEntityForm } from '@/hooks/useEntityForm';
 import { useTenant } from '@/components/shared/tenantContext';
 import { useUser } from '@/components/shared/useUser.js';
 import LazyEmployeeSelector from '@/components/shared/LazyEmployeeSelector';
+import AssignmentField from '@/components/shared/AssignmentField';
 import { toast } from 'sonner';
 
 /**
@@ -615,27 +616,15 @@ export default function BizDevSourceForm({
         <div className="space-y-4">
           <h3 className="text-lg font-semibold text-slate-200">Assignment & Status</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="assigned_to" className="text-slate-300">
-                Assigned To{' '}
-                {!isManager && <span className="text-xs text-slate-500">(Auto-assigned)</span>}
-              </Label>
-              {!isManager ? (
-                <Input
-                  value={`${user?.full_name || user?.email || 'You'} (Auto-assigned)`}
-                  disabled
-                  className="bg-slate-600 border-slate-500 text-slate-300 cursor-not-allowed"
-                />
-              ) : (
-                <LazyEmployeeSelector
-                  value={formData.assigned_to || 'unassigned'}
-                  onValueChange={(value) => handleChange('assigned_to', value)}
-                  placeholder="Select assignee"
-                  includeUnassigned={true}
-                  className="bg-slate-700 border-slate-600 text-slate-100"
-                />
-              )}
-            </div>
+            <AssignmentField
+              value={formData.assigned_to}
+              onChange={(value) => handleChange('assigned_to', value)}
+              user={user}
+              isManager={isManager}
+              entityId={source?.id}
+              entityType="bizdev_source"
+              tenantId={selectedTenantId || user?.tenant_id}
+            />
             <div>
               <Label htmlFor="status" className="text-slate-300">
                 Status

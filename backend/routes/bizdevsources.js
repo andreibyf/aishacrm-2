@@ -8,6 +8,7 @@ import { validateTenantScopedId } from '../lib/validation.js';
 import { logEntityTransition } from '../lib/transitions.js';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
+import { getVisibilityScope } from '../lib/teamVisibility.js';
 import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 import {
@@ -59,7 +60,7 @@ export default function createBizDevSourceRoutes(pgPool) {
    *               $ref: '#/components/schemas/Success'
    */
   // Get all bizdev sources (with optional filtering)
-  router.get('/', cacheList('bizdevsources', 180), async (req, res) => {
+  router.get('/', cacheList('bizdevsources', 30), async (req, res) => {
     try {
       const { status, source_type, priority, limit, sort } = req.query;
 
@@ -103,6 +104,19 @@ export default function createBizDevSourceRoutes(pgPool) {
         }
       }
 
+      // ===== Team-based visibility filtering (shared utility) =====
+      let visibilityScope = null;
+      if (req.user) {
+        try {
+          visibilityScope = await getVisibilityScope(req.user, supabase);
+        } catch (teamErr) {
+          logger.warn(
+            '[BizDevSources] Team visibility check failed (non-fatal, showing all):',
+            teamErr?.message,
+          );
+        }
+      }
+
       // Build base query with filters (reusable for paginated fetches)
       function buildQuery(from, to) {
         let q = supabase
@@ -120,6 +134,11 @@ export default function createBizDevSourceRoutes(pgPool) {
         }
         if (priority && priority !== 'undefined') {
           q = q.eq('priority', priority);
+        }
+        // Apply team visibility filter
+        if (visibilityScope && !visibilityScope.bypass && visibilityScope.employeeIds.length > 0) {
+          const idList = visibilityScope.employeeIds.join(',');
+          q = q.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
         }
         return q;
       }
@@ -206,6 +225,57 @@ export default function createBizDevSourceRoutes(pgPool) {
    *             schema:
    *               $ref: '#/components/schemas/Success'
    */
+  // GET /api/bizdevsources/:id/assignment-history
+  router.get('/:id/assignment-history', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const tenant_id = req.query.tenant_id || req.tenant?.id;
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      const { data, error } = await supabase
+        .from('assignment_history')
+        .select('id, assigned_from, assigned_to, assigned_by, action, note, created_at')
+        .eq('entity_type', 'bizdev_source')
+        .eq('entity_id', id)
+        .eq('tenant_id', tenant_id)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      const empIds = new Set();
+      (data || []).forEach((h) => {
+        if (h.assigned_from) empIds.add(h.assigned_from);
+        if (h.assigned_to) empIds.add(h.assigned_to);
+        if (h.assigned_by) empIds.add(h.assigned_by);
+      });
+
+      let empMap = {};
+      if (empIds.size > 0) {
+        const { data: emps } = await supabase
+          .from('employees')
+          .select('id, first_name, last_name')
+          .in('id', [...empIds]);
+        (emps || []).forEach((e) => {
+          empMap[e.id] = `${e.first_name || ''} ${e.last_name || ''}`.trim();
+        });
+      }
+
+      const history = (data || []).map((h) => ({
+        ...h,
+        assigned_from_name: empMap[h.assigned_from] || null,
+        assigned_to_name: empMap[h.assigned_to] || null,
+        assigned_by_name: empMap[h.assigned_by] || null,
+      }));
+
+      res.json({ status: 'success', data: history });
+    } catch (err) {
+      logger.error('[BizDevSources GET /:id/assignment-history] Error:', err.message);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
   // Get single bizdev source by ID (tenant scoped)
   router.get('/:id', async (req, res) => {
     try {
@@ -589,6 +659,18 @@ export default function createBizDevSourceRoutes(pgPool) {
       if (assigned_to !== undefined) updateObj.assigned_to = assigned_to || null;
       updateObj.updated_at = new Date().toISOString();
 
+      // Track assignment changes: fetch current assigned_to before update
+      let previousAssignedTo = undefined;
+      if (assigned_to !== undefined) {
+        const { data: current } = await supabase
+          .from('bizdev_sources')
+          .select('assigned_to')
+          .eq('id', id)
+          .eq('tenant_id', tenant_id)
+          .single();
+        previousAssignedTo = current?.assigned_to || null;
+      }
+
       const { data, error } = await supabase
         .from('bizdev_sources')
         .update(updateObj)
@@ -604,6 +686,30 @@ export default function createBizDevSourceRoutes(pgPool) {
           status: 'error',
           message: 'BizDev source not found',
         });
+      }
+
+      // Record assignment change in history (non-blocking)
+      const newAssignedTo = data.assigned_to || null;
+      if (previousAssignedTo !== undefined && previousAssignedTo !== newAssignedTo) {
+        const action = !newAssignedTo ? 'unassign' : !previousAssignedTo ? 'assign' : 'reassign';
+        supabase
+          .from('assignment_history')
+          .insert({
+            tenant_id,
+            entity_type: 'bizdev_source',
+            entity_id: id,
+            assigned_from: previousAssignedTo,
+            assigned_to: newAssignedTo,
+            assigned_by: req.user?.id || null,
+            action,
+          })
+          .then(({ error: histErr }) => {
+            if (histErr)
+              logger.warn(
+                '[BizDevSources PUT] Failed to record assignment history:',
+                histErr.message,
+              );
+          });
       }
 
       // Map 'source' column to 'source_name' for frontend compatibility
