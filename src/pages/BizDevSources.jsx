@@ -51,6 +51,7 @@ import BulkDeleteDialog from '../components/bizdev/BulkDeleteDialog';
 import StatusHelper from '../components/shared/StatusHelper';
 import { useUser } from '../components/shared/useUser.js';
 import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
+import { useEmployeeScope } from '../components/shared/EmployeeScopeContext';
 
 export default function BizDevSourcesPage() {
   const navigate = useNavigate();
@@ -101,6 +102,7 @@ export default function BizDevSourcesPage() {
   const [businessModel, setBusinessModel] = useState('b2b');
 
   const { selectedTenantId } = useTenant();
+  const { selectedEmployeeId } = useEmployeeScope();
   const { cachedRequest, clearCache, clearCacheByKey } = useApiManager();
   const { logError } = useErrorLog();
   const loadingRef = useRef(false);
@@ -530,7 +532,21 @@ export default function BizDevSourcesPage() {
     const matchesBatch = batchFilter === 'all' || source.batch_id === batchFilter;
     const matchesSource = sourceFilter === 'all' || source.source === sourceFilter;
 
-    return matchesSearch && matchesStatus && matchesLicenseStatus && matchesBatch && matchesSource;
+    // Employee scope filter (global header dropdown)
+    const matchesEmployee =
+      !selectedEmployeeId ||
+      (selectedEmployeeId === 'unassigned'
+        ? !source.assigned_to
+        : source.assigned_to === selectedEmployeeId);
+
+    return (
+      matchesSearch &&
+      matchesStatus &&
+      matchesLicenseStatus &&
+      matchesBatch &&
+      matchesSource &&
+      matchesEmployee
+    );
   });
 
   const uniqueBatches = [...new Set(sources.map((s) => s.batch_id).filter(Boolean))];
@@ -602,6 +618,7 @@ export default function BizDevSourcesPage() {
     sourceFilter,
     sortField,
     sortDirection,
+    selectedEmployeeId,
   ]);
 
   const stats = useMemo(
