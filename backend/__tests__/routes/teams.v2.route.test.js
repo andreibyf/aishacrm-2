@@ -48,8 +48,7 @@ async function createTestApp(port, userOverride = {}) {
     req.user = { ...defaultUser, ...userOverride };
     req.tenant = { id: TEST_TENANT_ID };
     // Set query tenant_id as fallback for getTenantId helper
-    if (!req.query.tenant_id && req.method === 'GET') {
-      req.query = req.query || {};
+    if (req.method === 'GET' && !req.query?.tenant_id) {
       req.query.tenant_id = TEST_TENANT_ID;
     }
     next();
@@ -601,7 +600,7 @@ describe('Teams v2 — member management', () => {
   });
 
   it('GET /:id/members returns 404 for nonexistent team', async () => {
-    if (!supabaseReady) return;
+    if (!supabaseReady || !teamId) return;
 
     const res = await req(
       PORT,
