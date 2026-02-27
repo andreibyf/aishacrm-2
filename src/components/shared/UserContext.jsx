@@ -34,7 +34,7 @@ export function UserProvider({ children }) {
               email: normalized.email,
               role: normalized.role,
               tenant_id: normalized.tenant_id,
-            }
+            },
           };
           console.log('[UserContext] normalizeUser snapshot:', snapshot);
         } catch {
@@ -44,11 +44,17 @@ export function UserProvider({ children }) {
       if (!normalized && isLocalDevMode()) {
         const mock = createMockUser();
         if (import.meta.env.DEV) {
-          console.log('[UserContext] No authenticated user; using mock user for local dev/test:', mock.email);
+          console.log(
+            '[UserContext] No authenticated user; using mock user for local dev/test:',
+            mock.email,
+          );
         }
-        setUser(normalizeUser(mock));
+        const mockNorm = normalizeUser(mock);
+        setUser(mockNorm);
+        window.__USER_ROLE = mockNorm?.role || null;
       } else {
         setUser(normalized);
+        window.__USER_ROLE = normalized?.role || null;
       }
     } catch (err) {
       const message = err?.message || err;
@@ -65,9 +71,11 @@ export function UserProvider({ children }) {
           setUser(normalizeUser(mock));
         } else {
           setUser(null);
+          window.__USER_ROLE = null;
         }
       } catch {
         setUser(null);
+        window.__USER_ROLE = null;
       }
     } finally {
       setLoading(false);
@@ -79,7 +87,9 @@ export function UserProvider({ children }) {
   }, [loadUser]);
 
   return (
-    <UserContextInternal.Provider value={{ user, loading, reloadUser: loadUser, refetch: loadUser }}>
+    <UserContextInternal.Provider
+      value={{ user, loading, reloadUser: loadUser, refetch: loadUser }}
+    >
       {children}
     </UserContextInternal.Provider>
   );

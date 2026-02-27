@@ -1,4 +1,3 @@
-/* eslint-env node */
 /* global process */
 import { defineConfig, devices } from '@playwright/experimental-ct-react';
 import { fileURLToPath } from 'url';

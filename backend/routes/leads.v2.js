@@ -8,6 +8,7 @@ import express from 'express';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { sanitizeUuidInput } from '../lib/uuidValidator.js';
 import { buildLeadAiContext } from '../lib/aiContextEnricher.js';
+import { getVisibilityScope } from '../lib/teamVisibility.js';
 import {
   cacheList,
   cacheDetail,
@@ -31,6 +32,32 @@ export default function createLeadsV2Routes() {
       metadata,
     };
   };
+
+  /**
+   * Returns the visibility scope for the current user.
+   * Used by the frontend to scope employee selectors (e.g., "Assign To" dropdown)
+   * to only show team members the user can assign leads to.
+   */
+  router.get('/team-scope', async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ status: 'error', message: 'Authentication required' });
+      }
+      const supabase = getSupabaseClient();
+      const scope = await getVisibilityScope(req.user, supabase);
+      res.json({
+        status: 'success',
+        data: {
+          bypass: scope.bypass,
+          employeeIds: scope.employeeIds,
+          mode: scope.mode,
+        },
+      });
+    } catch (err) {
+      logger.error('[Leads v2 GET /team-scope] Error:', err.message);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
 
   /**
    * @openapi
@@ -61,7 +88,19 @@ export default function createLeadsV2Routes() {
 
       const supabase = getSupabaseClient();
 
-      // Build filter for test data
+      // ── Team visibility scoping ──
+      let visibilityScope = null;
+      if (req.user) {
+        visibilityScope = await getVisibilityScope(req.user, supabase);
+      }
+
+      // Build SQL fragments for visibility + test data filtering
+      let visibilityFilter = '';
+      if (visibilityScope && !visibilityScope.bypass && visibilityScope.employeeIds.length > 0) {
+        const ids = visibilityScope.employeeIds.map((id) => `'${id}'`).join(',');
+        visibilityFilter = `AND (assigned_to IN (${ids}) OR assigned_to IS NULL)`;
+      }
+
       let testDataFilter = '';
       if (is_test_data === 'false') {
         testDataFilter = 'AND (is_test_data IS NULL OR is_test_data = false)';
@@ -74,11 +113,20 @@ export default function createLeadsV2Routes() {
             COALESCE(status, 'unknown') as status,
             COUNT(*)::int as count
           FROM leads 
-          WHERE tenant_id = $1 ${testDataFilter}
+          WHERE tenant_id = $1 ${testDataFilter} ${visibilityFilter}
           GROUP BY status
         `,
         params: [tenant_id],
       });
+
+      // Helper: apply visibility filter to a Supabase query builder
+      const applyVisibility = (query) => {
+        if (visibilityScope && !visibilityScope.bypass && visibilityScope.employeeIds.length > 0) {
+          const idList = visibilityScope.employeeIds.join(',');
+          return query.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+        }
+        return query;
+      };
 
       // If RPC not available, fall back to simple count queries
       if (error && error.message?.includes('function')) {
@@ -90,6 +138,8 @@ export default function createLeadsV2Routes() {
             .select('id', { count: 'exact', head: true })
             .eq('tenant_id', tenant_id)
             .eq('status', status);
+
+          query = applyVisibility(query);
 
           if (is_test_data === 'false') {
             query = query.or('is_test_data.is.false,is_test_data.is.null');
@@ -104,6 +154,8 @@ export default function createLeadsV2Routes() {
           .from('leads')
           .select('id', { count: 'exact', head: true })
           .eq('tenant_id', tenant_id);
+
+        totalQuery = applyVisibility(totalQuery);
 
         if (is_test_data === 'false') {
           totalQuery = totalQuery.or('is_test_data.is.false,is_test_data.is.null');
@@ -170,7 +222,7 @@ export default function createLeadsV2Routes() {
    *       200:
    *         description: Leads list with flattened metadata
    */
-  router.get('/', cacheList('leads', 180), async (req, res) => {
+  router.get('/', cacheList('leads', 30), async (req, res) => {
     try {
       const {
         tenant_id,
@@ -236,12 +288,26 @@ export default function createLeadsV2Routes() {
 
       const supabase = getSupabaseClient();
 
+      // ── Team visibility scoping ──
+      // Pre-compute visibility scope once (async), then apply synchronously in buildBaseQuery.
+      // This avoids making buildBaseQuery async (which breaks Supabase's thenable chain).
+      let visibilityScope = null;
+      if (req.user) {
+        visibilityScope = await getVisibilityScope(req.user, supabase);
+      }
+
       // Helper function to build the base query with all filters
       const buildBaseQuery = (selectClause) => {
         let query = supabase
           .from('leads')
           .select(selectClause, { count: 'exact' })
           .eq('tenant_id', tenant_id);
+
+        // Apply team visibility filter (pre-computed above)
+        if (visibilityScope && !visibilityScope.bypass && visibilityScope.employeeIds.length > 0) {
+          const idList = visibilityScope.employeeIds.join(',');
+          query = query.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+        }
 
         // Text search across name and email fields
         if (searchQuery && searchQuery.trim()) {
@@ -674,6 +740,64 @@ export default function createLeadsV2Routes() {
   });
 
   /**
+   * Get assignment history for a specific lead.
+   * Returns a chronological trail of who assigned/reassigned/unassigned the lead.
+   */
+  router.get('/:id/assignment-history', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const tenant_id = req.query.tenant_id || req.tenant?.id;
+
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('assignment_history')
+        .select('id, assigned_from, assigned_to, assigned_by, action, note, created_at')
+        .eq('entity_type', 'lead')
+        .eq('entity_id', id)
+        .eq('tenant_id', tenant_id)
+        .order('created_at', { ascending: true });
+
+      if (error) throw new Error(error.message);
+
+      // Collect unique employee IDs to resolve names
+      const empIds = new Set();
+      (data || []).forEach((h) => {
+        if (h.assigned_from) empIds.add(h.assigned_from);
+        if (h.assigned_to) empIds.add(h.assigned_to);
+        if (h.assigned_by) empIds.add(h.assigned_by);
+      });
+
+      let empMap = {};
+      if (empIds.size > 0) {
+        const { data: emps } = await supabase
+          .from('employees')
+          .select('id, first_name, last_name')
+          .in('id', [...empIds]);
+        (emps || []).forEach((e) => {
+          empMap[e.id] = `${e.first_name || ''} ${e.last_name || ''}`.trim();
+        });
+      }
+
+      // Enrich history with names
+      const history = (data || []).map((h) => ({
+        ...h,
+        assigned_from_name: empMap[h.assigned_from] || null,
+        assigned_to_name: empMap[h.assigned_to] || null,
+        assigned_by_name: empMap[h.assigned_by] || null,
+      }));
+
+      res.json({ status: 'success', data: history });
+    } catch (err) {
+      logger.error('[Leads v2 GET /:id/assignment-history] Error:', err.message);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
+  /**
    * @openapi
    * /api/v2/leads/{id}:
    *   get:
@@ -694,7 +818,7 @@ export default function createLeadsV2Routes() {
    *       404:
    *         description: Lead not found
    */
-  router.get('/:id', cacheDetail('leads', 300), async (req, res) => {
+  router.get('/:id', cacheDetail('leads', 60), async (req, res) => {
     try {
       const { id } = req.params;
       const tenant_id = req.query.tenant_id || req.tenant?.id;
@@ -811,8 +935,38 @@ export default function createLeadsV2Routes() {
         }
       });
 
+      // Ensure tags is a proper array (not a JSON string) for Postgres
+      if (payload.tags !== undefined) {
+        if (typeof payload.tags === 'string') {
+          try {
+            payload.tags = JSON.parse(payload.tags);
+          } catch {
+            payload.tags = payload.tags
+              .split(',')
+              .map((t) => t.trim())
+              .filter(Boolean);
+          }
+        }
+        if (!Array.isArray(payload.tags)) {
+          payload.tags = [];
+        }
+      }
+
       // ── Use SECURITY DEFINER for UPDATE (bypasses 8s PostgREST timeout) ──
       const supabase = getSupabaseClient();
+
+      // Track assignment changes: fetch current assigned_to before update
+      let previousAssignedTo = undefined;
+      if (payload.assigned_to !== undefined) {
+        const { data: current } = await supabase
+          .from('leads')
+          .select('assigned_to')
+          .eq('id', id)
+          .eq('tenant_id', tenant_id)
+          .single();
+        previousAssignedTo = current?.assigned_to || null;
+      }
+
       const updateStart = Date.now();
       const { data: result, error } = await supabase.rpc('leads_update_definer', {
         p_lead_id: id,
@@ -828,6 +982,28 @@ export default function createLeadsV2Routes() {
           return res.status(404).json({ status: 'error', message: 'Lead not found' });
         }
         throw new Error(error.message);
+      }
+
+      // Record assignment change in history (non-blocking)
+      const newAssignedTo = payload.assigned_to || null;
+      if (previousAssignedTo !== undefined && previousAssignedTo !== newAssignedTo) {
+        const action = !newAssignedTo ? 'unassign' : !previousAssignedTo ? 'assign' : 'reassign';
+        supabase
+          .from('assignment_history')
+          .insert({
+            tenant_id,
+            entity_type: 'lead',
+            entity_id: id,
+            assigned_from: previousAssignedTo,
+            assigned_to: newAssignedTo,
+            assigned_by: req.user?.id || null,
+            action,
+          })
+          .then(({ error: histErr }) => {
+            if (histErr)
+              logger.warn('[Leads v2 PUT] Failed to record assignment history:', histErr.message);
+            else logger.info(`[Leads v2 PUT] Assignment history: ${action} lead ${id}`);
+          });
       }
 
       // Invalidate cache before responding so the next GET returns fresh data

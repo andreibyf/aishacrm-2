@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* eslint-env node */
 /* eslint-disable no-undef */
 /*
   CI-Friendly Test script for MCP audit logging.
@@ -57,7 +56,7 @@ function getSupabaseClient() {
   if (!supa && HAS_SUPABASE) {
     const { createClient } = require('@supabase/supabase-js');
     supa = createClient(SUPABASE_URL, SUPABASE_KEY, {
-      auth: { autoRefreshToken: false, persistSession: false }
+      auth: { autoRefreshToken: false, persistSession: false },
     });
   }
   return supa;
@@ -73,17 +72,24 @@ function makeEnvelope(requestId, tenantId) {
         verb: 'create',
         actor: { id: 'test:user:1', type: 'user' },
         resource: { system: 'crm', kind: 'contacts' },
-        payload: { tenant_id: tenantId, first_name: 'MCP', last_name: 'Tester', email: 'mcp-test@example.com' },
+        payload: {
+          tenant_id: tenantId,
+          first_name: 'MCP',
+          last_name: 'Tester',
+          email: 'mcp-test@example.com',
+        },
         options: { dryRun: false },
-        metadata: { requestId, tenant_id: tenantId }
-      }
+        metadata: { requestId, tenant_id: tenantId },
+      },
     ],
     createdAt: new Date().toISOString(),
-    client: 'mcp-test-script'
+    client: 'mcp-test-script',
   };
 }
 
-async function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+async function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 // ============================================
 // HEALTH CHECK ONLY MODE
@@ -106,7 +112,7 @@ async function runHealthCheckOnly() {
     console.error(`✗ Health check failed: ${err.message}`);
     process.exit(1);
   }
-  
+
   // Test 2: MCP endpoint accepts requests (may fail internally without proper env, that's OK)
   console.log(`\n[2/2] Testing MCP endpoint accepts requests: ${MCP_RUN}`);
   try {
@@ -115,7 +121,7 @@ async function runHealthCheckOnly() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(testEnvelope),
-      timeout: 15000
+      timeout: 15000,
     });
 
     // Any response (even 4xx/5xx) means the server is accepting requests
@@ -125,7 +131,9 @@ async function runHealthCheckOnly() {
     try {
       const body = await mcpResp.json();
       if (body.error) {
-        console.log(`  Note: Server returned error (expected in CI without full setup): ${body.error}`);
+        console.log(
+          `  Note: Server returned error (expected in CI without full setup): ${body.error}`,
+        );
       }
     } catch {
       // Body parsing failed, that's fine
@@ -138,10 +146,12 @@ async function runHealthCheckOnly() {
     // Timeout or other errors may be acceptable
     console.warn(`⚠ MCP endpoint test had issues: ${err.message}`);
   }
-  
+
   console.log('\n=== Health Check Passed ===');
   console.log('MCP server is running and accepting requests.');
-  console.log('For full audit log testing, provide SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY secrets.');
+  console.log(
+    'For full audit log testing, provide SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY secrets.',
+  );
   process.exit(0);
 }
 
@@ -153,7 +163,7 @@ async function runFullTest() {
 
   const perfStart = Date.now();
   console.log('[PERF] Test started');
-  
+
   const supa = getSupabaseClient();
   const requestId = `test-${Date.now()}`;
 
@@ -187,7 +197,11 @@ async function runFullTest() {
     try {
       let { data } = await supa.from(table).select('id,tenant_id').eq('id', candidate).limit(1);
       if (data && data.length > 0) return data[0].id;
-      ({ data } = await supa.from(table).select('id,tenant_id').eq('tenant_id', candidate).limit(1));
+      ({ data } = await supa
+        .from(table)
+        .select('id,tenant_id')
+        .eq('tenant_id', candidate)
+        .limit(1));
       if (data && data.length > 0) return data[0].id;
     } catch (e) {
       console.warn('Could not resolve tenant id:', e?.message ?? e);
@@ -222,7 +236,9 @@ async function runFullTest() {
   }
 
   if (!tenantId) {
-    console.error('No tenant id available. Set TENANT_ID env var or ensure a tenant exists in Supabase.');
+    console.error(
+      'No tenant id available. Set TENANT_ID env var or ensure a tenant exists in Supabase.',
+    );
     console.log('Falling back to health check mode...');
     return runHealthCheckOnly();
   }
@@ -314,7 +330,9 @@ async function runFullTest() {
   console.log('Querying Supabase audit_log for request_id=', requestId);
   const { data, error } = await supa
     .from('audit_log')
-    .select('id, tenant_id, user_email, action, entity_type, entity_id, changes, ip_address, user_agent, created_at, request_id')
+    .select(
+      'id, tenant_id, user_email, action, entity_type, entity_id, changes, ip_address, user_agent, created_at, request_id',
+    )
     .eq('request_id', requestId)
     .order('created_at', { ascending: false })
     .limit(5);
@@ -322,7 +340,9 @@ async function runFullTest() {
   if (error) {
     console.error('Error querying audit_log:', error.message);
     if (error.message?.includes('column audit_log.request_id does not exist')) {
-      console.error('Missing `request_id` column. Apply `backend/migrations/053_add_audit_log_request_id.sql`');
+      console.error(
+        'Missing `request_id` column. Apply `backend/migrations/053_add_audit_log_request_id.sql`',
+      );
       process.exit(4);
     }
     process.exit(2);
@@ -335,16 +355,22 @@ async function runFullTest() {
 
   console.log('\n=== Found audit_log entries ===');
   for (const row of data) {
-    console.log(JSON.stringify({
-      id: row.id,
-      tenant_id: row.tenant_id,
-      action: row.action,
-      entity_type: row.entity_type,
-      entity_id: row.entity_id,
-      created_at: row.created_at,
-    }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          id: row.id,
+          tenant_id: row.tenant_id,
+          action: row.action,
+          entity_type: row.entity_type,
+          entity_id: row.entity_id,
+          created_at: row.created_at,
+        },
+        null,
+        2,
+      ),
+    );
   }
-  
+
   console.log(`\n[PERF] Total test time: ${Date.now() - perfStart}ms`);
   console.log('=== MCP Audit Test Passed ===');
   process.exit(0);

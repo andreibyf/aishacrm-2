@@ -1,26 +1,22 @@
-/* eslint-env node */
-import process from "node:process";
-import { createClient } from "@supabase/supabase-js";
-import dotenv from "dotenv";
+import process from 'node:process';
+import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
 
-dotenv.config({ path: "./backend/.env" });
+dotenv.config({ path: './backend/.env' });
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-);
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 async function checkLeads() {
-  console.log("Checking leads in database...\n");
+  console.log('Checking leads in database...\n');
 
   const { data: leads, error } = await supabase
-    .from("leads")
-    .select("*")
-    .eq("tenant_id", "6cb4c008-4847-426a-9a2e-918ad70e7b69")
+    .from('leads')
+    .select('*')
+    .eq('tenant_id', '6cb4c008-4847-426a-9a2e-918ad70e7b69')
     .limit(5);
 
   if (error) {
-    console.error("Error fetching leads:", error);
+    console.error('Error fetching leads:', error);
     return;
   }
 
@@ -37,23 +33,19 @@ async function checkLeads() {
     const today = new Date();
     const ageInDays = Math.floor((today - createdDate) / (1000 * 60 * 60 * 24));
     console.log(`  Calculated Age: ${ageInDays} days`);
-    console.log(
-      `  Should show in Dashboard: ${!["converted", "lost"].includes(
-        lead.status,
-      )}`,
-    );
-    console.log("");
+    console.log(`  Should show in Dashboard: ${!['converted', 'lost'].includes(lead.status)}`);
+    console.log('');
   });
 
   // Test the filter that Dashboard uses
   const { data: activeLeads, error: filterError } = await supabase
-    .from("leads")
-    .select("*")
-    .eq("tenant_id", "6cb4c008-4847-426a-9a2e-918ad70e7b69")
-    .not("status", "in", '("converted","lost")');
+    .from('leads')
+    .select('*')
+    .eq('tenant_id', '6cb4c008-4847-426a-9a2e-918ad70e7b69')
+    .not('status', 'in', '("converted","lost")');
 
   if (filterError) {
-    console.error("Error with filter:", filterError);
+    console.error('Error with filter:', filterError);
   } else {
     console.log(`\nDashboard filter found ${activeLeads.length} active leads`);
   }
