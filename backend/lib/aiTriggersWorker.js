@@ -1,24 +1,25 @@
 /**
  * AI Triggers Worker - Phase 3 Autonomous Operations
- * 
+ *
  * Architecture:
  * - Polls for trigger conditions on a configurable interval
  * - Detects: lead stagnation, deal decay, account risks, behavioral metrics
  * - Generates suggestions via AI Brain (propose_actions mode)
  * - Stores suggestions in ai_suggestions table for human review
  * - Runs only when AI_TRIGGERS_WORKER_ENABLED=true
- * 
+ *
  * SUPABASE QUERY POLICY:
  * - Use Supabase JS client with simple .from().select().eq().lt() chains
  * - Do NOT use complex raw SQL (subqueries, EXTRACT, COALESCE, NOT EXISTS)
  * - For candidate+exclusion queries: two simple queries + JS filtering
- * 
+ *
  * Following the same pattern as campaignWorker.js
  */
 
 import { emitTenantWebhooks } from './webhookEmitter.js';
 import { runTask as runAiBrainTask } from './aiBrain.js';
 import { getSupabaseClient } from './supabase-db.js';
+import { sanitizeUuidInput } from './uuidValidator.js';
 import logger from './logger.js';
 
 // PR6: C.A.R.E. shadow wiring (read-only analysis, no behavior change)
@@ -44,6 +45,15 @@ const DEFAULT_INTERVAL_MS = 60000; // 1 minute
 const LEAD_STAGNANT_DAYS = parseInt(process.env.CARE_LEAD_STAGNANT_DAYS) || 7;
 const DEAL_DECAY_DAYS = parseInt(process.env.CARE_DEAL_DECAY_DAYS) || 14;
 const SUGGESTION_EXPIRY_DAYS = 7;
+const NIL_UUID = '00000000-0000-0000-0000-000000000000';
+
+function safeSystemUserId() {
+  const sanitized = sanitizeUuidInput(process.env.SYSTEM_USER_ID, {
+    systemAliases: ['system', 'unknown', 'anonymous'],
+  });
+  if (!sanitized || sanitized === NIL_UUID) return null;
+  return sanitized;
+}
 
 /**
  * Trigger type definitions
@@ -64,7 +74,7 @@ export const TRIGGER_TYPES = {
  */
 export function startAiTriggersWorker(_pool, intervalMs = DEFAULT_INTERVAL_MS) {
   const enabled = process.env.AI_TRIGGERS_WORKER_ENABLED === 'true';
-  
+
   if (!enabled) {
     logger.info('[AiTriggersWorker] Disabled (AI_TRIGGERS_WORKER_ENABLED not true)');
     return;
@@ -79,17 +89,15 @@ export function startAiTriggersWorker(_pool, intervalMs = DEFAULT_INTERVAL_MS) {
 
   console.info('[AiTriggersWorker] Starting');
   logger.info({ intervalMs }, '[AiTriggersWorker] Starting');
-  
+
   // Run immediately on start
-  processAllTriggers().catch(err => 
-    logger.error({ err }, '[AiTriggersWorker] Initial run error')
+  processAllTriggers().catch((err) =>
+    logger.error({ err }, '[AiTriggersWorker] Initial run error'),
   );
 
   // Then run on interval
   workerInterval = setInterval(() => {
-    processAllTriggers().catch(err => 
-      logger.error({ err }, '[AiTriggersWorker] Error')
-    );
+    processAllTriggers().catch((err) => logger.error({ err }, '[AiTriggersWorker] Error'));
   }, intervalMs);
 
   logger.info('[AiTriggersWorker] Started');
@@ -128,13 +136,16 @@ async function processAllTriggers() {
     }
 
     let totalTriggers = 0;
-    
-    for (const tenant of (tenants || [])) {
+
+    for (const tenant of tenants || []) {
       try {
         const tenantTriggers = await processTriggersForTenant(tenant);
         totalTriggers += tenantTriggers;
       } catch (tenantErr) {
-        logger.error({ err: tenantErr, tenantSlug: tenant.tenant_id }, '[AiTriggersWorker] Error processing tenant');
+        logger.error(
+          { err: tenantErr, tenantSlug: tenant.tenant_id },
+          '[AiTriggersWorker] Error processing tenant',
+        );
       }
     }
 
@@ -143,7 +154,6 @@ async function processAllTriggers() {
 
     const duration = Date.now() - startTime;
     logger.debug({ totalTriggers, durationMs: duration }, '[AiTriggersWorker] Processed triggers');
-
   } catch (err) {
     logger.error({ err }, '[AiTriggersWorker] processAllTriggers error');
   }
@@ -152,7 +162,7 @@ async function processAllTriggers() {
 /**
  * Trigger CARE workflow using per-tenant configuration
  * Falls back to environment variable config if no tenant-specific config exists
- * 
+ *
  * @param {string} tenantId - Tenant UUID
  * @param {object} payload - Workflow trigger payload
  */
@@ -160,37 +170,42 @@ async function triggerCareWorkflowForTenant(tenantId, payload) {
   try {
     // Get tenant-specific config (with env fallback)
     const config = await getCareConfigForTenant(tenantId);
-    
+
     // Check if CARE is enabled for this tenant
     if (!config?.is_enabled) {
       logger.debug({ tenant_id: tenantId }, '[AiTriggers] CARE not enabled for tenant');
       return;
     }
-    
+
     // Check if webhook URL is configured
     if (!config?.webhook_url) {
-      logger.debug({ 
-        tenant_id: tenantId, 
-        config_source: config?._source 
-      }, '[AiTriggers] No webhook URL configured for tenant');
+      logger.debug(
+        {
+          tenant_id: tenantId,
+          config_source: config?._source,
+        },
+        '[AiTriggers] No webhook URL configured for tenant',
+      );
       return;
     }
-    
-    logger.info({
-      tenant_id: tenantId,
-      webhook_url: config.webhook_url,
-      config_source: config._source,
-      shadow_mode: config.shadow_mode
-    }, '[AiTriggers] Triggering CARE workflow for tenant');
-    
+
+    logger.info(
+      {
+        tenant_id: tenantId,
+        webhook_url: config.webhook_url,
+        config_source: config._source,
+        shadow_mode: config.shadow_mode,
+      },
+      '[AiTriggers] Triggering CARE workflow for tenant',
+    );
+
     await triggerCareWorkflow({
       url: config.webhook_url,
       secret: config.webhook_secret,
       payload,
       timeout_ms: config.webhook_timeout_ms,
-      retries: config.webhook_max_retries
+      retries: config.webhook_max_retries,
     });
-    
   } catch (err) {
     logger.warn({ err, tenant_id: tenantId }, '[AiTriggers] CARE workflow trigger failed');
   }
@@ -209,9 +224,12 @@ async function processTriggersForTenant(tenant) {
     try {
       stagnantLeads = await detectStagnantLeads(tenantUuid);
     } catch (detectErr) {
-      logger.warn({ err: detectErr, tenantSlug }, '[AiTriggersWorker] detectStagnantLeads failed, skipping');
+      logger.warn(
+        { err: detectErr, tenantSlug },
+        '[AiTriggersWorker] detectStagnantLeads failed, skipping',
+      );
     }
-    
+
     for (const lead of stagnantLeads) {
       await createSuggestionIfNew(tenantUuid, {
         triggerId: TRIGGER_TYPES.LEAD_STAGNANT,
@@ -232,7 +250,7 @@ async function processTriggersForTenant(tenant) {
         const ctx = {
           tenant_id: tenantUuid,
           entity_type: 'lead',
-          entity_id: lead.id
+          entity_id: lead.id,
         };
 
         // PR7: Read current state from DB (fallback to 'unaware')
@@ -267,18 +285,21 @@ async function processTriggersForTenant(tenant) {
         });
 
         const escalation = detectEscalation({ text: escalationText });
-        
+
         // Debug logging for escalation detection
-        logger.info({
-          trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
-          lead_id: lead.id,
-          escalation_text: escalationText,
-          is_escalation: escalation.is_escalation,
-          escalation_reason: escalation.reason,
-          escalation_severity: escalation.severity,
-          tenant_id: tenantUuid
-        }, '[AiTriggers] Escalation detection result');
-        
+        logger.info(
+          {
+            trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
+            lead_id: lead.id,
+            escalation_text: escalationText,
+            is_escalation: escalation.is_escalation,
+            escalation_reason: escalation.reason,
+            escalation_severity: escalation.severity,
+            tenant_id: tenantUuid,
+          },
+          '[AiTriggers] Escalation detection result',
+        );
+
         if (escalation.is_escalation) {
           logger.info({ lead_id: lead.id }, '[AiTriggers] ESCALATION DETECTED');
           emitCareAudit({
@@ -291,8 +312,8 @@ async function processTriggersForTenant(tenant) {
             policy_gate_result: CarePolicyGateResult.ALLOWED,
             meta: {
               severity: escalation.severity,
-              trigger_type: TRIGGER_TYPES.LEAD_STAGNANT
-            }
+              trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
+            },
           });
         }
 
@@ -307,7 +328,7 @@ async function processTriggersForTenant(tenant) {
         // If autonomy enabled and proposal exists, use proposed state (will be written to DB)
         // Otherwise use current state from DB
         let effectiveState = currentState;
-        
+
         if (proposal && proposal.to_state) {
           // Always emit state_proposed
           emitCareAudit({
@@ -321,8 +342,8 @@ async function processTriggersForTenant(tenant) {
             meta: {
               current_state: currentState,
               proposed_state: proposal.to_state,
-              trigger_type: TRIGGER_TYPES.LEAD_STAGNANT
-            }
+              trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
+            },
           });
 
           // PR7: Conditionally apply transition if autonomy is enabled (not shadow mode)
@@ -332,9 +353,9 @@ async function processTriggersForTenant(tenant) {
               await upsertCareState(ctx, {
                 care_state: proposal.to_state,
                 last_signal_at: new Date().toISOString(),
-                escalation_status: escalation.is_escalation ? escalation.severity : null
+                escalation_status: escalation.is_escalation ? escalation.severity : null,
               });
-              
+
               // Append to history for audit trail
               await appendCareHistory(ctx, {
                 from_state: currentState,
@@ -342,11 +363,11 @@ async function processTriggersForTenant(tenant) {
                 event_type: 'state_transition',
                 reason: proposal.reason,
                 actor_type: 'system',
-                meta: { 
-                  trigger_type: TRIGGER_TYPES.LEAD_STAGNANT, 
+                meta: {
+                  trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
                   signals,
-                  action_origin: 'care_autonomous'
-                }
+                  action_origin: 'care_autonomous',
+                },
               });
 
               // Update effective state to reflect the write
@@ -363,8 +384,8 @@ async function processTriggersForTenant(tenant) {
                 meta: {
                   from_state: currentState,
                   to_state: proposal.to_state,
-                  trigger_type: TRIGGER_TYPES.LEAD_STAGNANT
-                }
+                  trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
+                },
               });
             } catch (applyError) {
               logger.warn({ err: applyError }, '[AiTriggers] C.A.R.E. state apply error');
@@ -403,8 +424,9 @@ async function processTriggersForTenant(tenant) {
             status: lead.status,
             days_stagnant: lead.days_stagnant,
             severity: escalation.is_escalation ? escalation.severity : null,
-            state_transition: currentState !== effectiveState ? `${currentState} → ${effectiveState}` : null
-          }
+            state_transition:
+              currentState !== effectiveState ? `${currentState} → ${effectiveState}` : null,
+          },
         });
 
         if (!proposal) {
@@ -416,12 +438,16 @@ async function processTriggersForTenant(tenant) {
             action_origin: 'care_autonomous',
             reason: 'no_transition_proposed',
             policy_gate_result: CarePolicyGateResult.ALLOWED,
-            meta: { trigger_type: TRIGGER_TYPES.LEAD_STAGNANT }
+            meta: { trigger_type: TRIGGER_TYPES.LEAD_STAGNANT },
           });
         }
 
         // Emit action candidate for meaningful follow-ups (logs only)
-        if (proposal && proposal.to_state && ['awareness', 'engagement'].includes(proposal.to_state)) {
+        if (
+          proposal &&
+          proposal.to_state &&
+          ['awareness', 'engagement'].includes(proposal.to_state)
+        ) {
           emitCareAudit({
             tenant_id: tenantUuid,
             entity_type: 'lead',
@@ -434,8 +460,8 @@ async function processTriggersForTenant(tenant) {
               action_type: 'follow_up',
               proposed_state: proposal.to_state,
               trigger_type: TRIGGER_TYPES.LEAD_STAGNANT,
-              silence_days: signals.silence_days
-            }
+              silence_days: signals.silence_days,
+            },
           });
         }
 
@@ -448,7 +474,7 @@ async function processTriggersForTenant(tenant) {
           action_origin: 'care_autonomous',
           reason: 'Autonomous actions disabled (PR7: state persistence only)',
           policy_gate_result: CarePolicyGateResult.ALLOWED,
-          meta: { trigger_type: TRIGGER_TYPES.LEAD_STAGNANT }
+          meta: { trigger_type: TRIGGER_TYPES.LEAD_STAGNANT },
         });
       } catch (err) {
         console.warn('[C.A.R.E. PR7] Trigger analysis error (non-breaking):', err.message);
@@ -460,9 +486,12 @@ async function processTriggersForTenant(tenant) {
     try {
       decayingDeals = await detectDealDecay(tenantUuid);
     } catch (detectErr) {
-      logger.warn({ err: detectErr, tenantSlug }, '[AiTriggersWorker] detectDealDecay failed, skipping');
+      logger.warn(
+        { err: detectErr, tenantSlug },
+        '[AiTriggersWorker] detectDealDecay failed, skipping',
+      );
     }
-    
+
     for (const deal of decayingDeals) {
       await createSuggestionIfNew(tenantUuid, {
         triggerId: TRIGGER_TYPES.DEAL_DECAY,
@@ -484,7 +513,7 @@ async function processTriggersForTenant(tenant) {
         const ctx = {
           tenant_id: tenantUuid,
           entity_type: 'opportunity',
-          entity_id: deal.id
+          entity_id: deal.id,
         };
 
         // PR7: Read current state from DB (fallback to 'unaware')
@@ -522,7 +551,7 @@ async function processTriggersForTenant(tenant) {
         });
 
         const escalation = detectEscalation({ text: escalationText });
-        
+
         // PR7: Calculate proposal BEFORE triggering workflow
         const proposal = proposeTransition({
           current_state: currentState,
@@ -532,7 +561,7 @@ async function processTriggersForTenant(tenant) {
 
         // Determine effective state for workflow payload
         let effectiveState = currentState;
-        
+
         if (proposal && proposal.to_state) {
           // Always emit state_proposed
           emitCareAudit({
@@ -546,8 +575,8 @@ async function processTriggersForTenant(tenant) {
             meta: {
               current_state: currentState,
               proposed_state: proposal.to_state,
-              trigger_type: TRIGGER_TYPES.DEAL_DECAY
-            }
+              trigger_type: TRIGGER_TYPES.DEAL_DECAY,
+            },
           });
 
           // PR7: Conditionally apply transition if autonomy is enabled (not shadow mode)
@@ -557,9 +586,9 @@ async function processTriggersForTenant(tenant) {
               await upsertCareState(ctx, {
                 care_state: proposal.to_state,
                 last_signal_at: new Date().toISOString(),
-                escalation_status: escalation.is_escalation ? escalation.severity : null
+                escalation_status: escalation.is_escalation ? escalation.severity : null,
               });
-              
+
               // Append to history for audit trail
               await appendCareHistory(ctx, {
                 from_state: currentState,
@@ -567,12 +596,12 @@ async function processTriggersForTenant(tenant) {
                 event_type: 'state_transition',
                 reason: proposal.reason,
                 actor_type: 'system',
-                meta: { 
-                  trigger_type: TRIGGER_TYPES.DEAL_DECAY, 
-                  amount: deal.amount, 
+                meta: {
+                  trigger_type: TRIGGER_TYPES.DEAL_DECAY,
+                  amount: deal.amount,
                   signals,
-                  action_origin: 'care_autonomous'
-                }
+                  action_origin: 'care_autonomous',
+                },
               });
 
               // Update effective state to reflect the write
@@ -589,8 +618,8 @@ async function processTriggersForTenant(tenant) {
                 meta: {
                   from_state: currentState,
                   to_state: proposal.to_state,
-                  trigger_type: TRIGGER_TYPES.DEAL_DECAY
-                }
+                  trigger_type: TRIGGER_TYPES.DEAL_DECAY,
+                },
               });
             } catch (applyError) {
               logger.warn({ err: applyError }, '[AiTriggers] C.A.R.E. state apply error');
@@ -610,8 +639,8 @@ async function processTriggersForTenant(tenant) {
             meta: {
               severity: escalation.severity,
               amount: deal.amount,
-              trigger_type: TRIGGER_TYPES.DEAL_DECAY
-            }
+              trigger_type: TRIGGER_TYPES.DEAL_DECAY,
+            },
           });
 
           // PR8: Trigger workflow webhook with updated state
@@ -619,7 +648,7 @@ async function processTriggersForTenant(tenant) {
           // Normalize opportunity (signal) to parent account or lead (entity)
           const entityId = deal.account_id || deal.lead_id;
           const entityType = deal.account_id ? 'account' : 'lead';
-          
+
           await triggerCareWorkflowForTenant(tenantUuid, {
             event_id: `trigger-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             type: escalation.is_escalation ? 'care.escalation_detected' : 'care.trigger_detected',
@@ -646,8 +675,9 @@ async function processTriggersForTenant(tenant) {
               days_inactive: deal.days_inactive,
               close_date: deal.close_date || null,
               severity: escalation.severity,
-              state_transition: currentState !== effectiveState ? `${currentState} → ${effectiveState}` : null
-            }
+              state_transition:
+                currentState !== effectiveState ? `${currentState} → ${effectiveState}` : null,
+            },
           });
         }
 
@@ -660,7 +690,7 @@ async function processTriggersForTenant(tenant) {
             action_origin: 'care_autonomous',
             reason: 'no_transition_proposed',
             policy_gate_result: CarePolicyGateResult.ALLOWED,
-            meta: { trigger_type: TRIGGER_TYPES.DEAL_DECAY }
+            meta: { trigger_type: TRIGGER_TYPES.DEAL_DECAY },
           });
         }
 
@@ -678,8 +708,8 @@ async function processTriggersForTenant(tenant) {
               proposed_state: proposal.to_state,
               trigger_type: TRIGGER_TYPES.DEAL_DECAY,
               amount: deal.amount,
-              silence_days: signals.silence_days
-            }
+              silence_days: signals.silence_days,
+            },
           });
         }
 
@@ -692,7 +722,7 @@ async function processTriggersForTenant(tenant) {
           action_origin: 'care_autonomous',
           reason: 'Autonomous actions disabled (PR7: state persistence only)',
           policy_gate_result: CarePolicyGateResult.ALLOWED,
-          meta: { trigger_type: TRIGGER_TYPES.DEAL_DECAY }
+          meta: { trigger_type: TRIGGER_TYPES.DEAL_DECAY },
         });
       } catch (err) {
         console.warn('[C.A.R.E. PR7] Trigger analysis error (non-breaking):', err.message);
@@ -704,9 +734,12 @@ async function processTriggersForTenant(tenant) {
     try {
       overdueActivities = await detectOverdueActivities(tenantUuid);
     } catch (detectErr) {
-      logger.warn({ err: detectErr, tenantSlug }, '[AiTriggersWorker] detectOverdueActivities failed, skipping');
+      logger.warn(
+        { err: detectErr, tenantSlug },
+        '[AiTriggersWorker] detectOverdueActivities failed, skipping',
+      );
     }
-    
+
     for (const activity of overdueActivities) {
       await createSuggestionIfNew(tenantUuid, {
         triggerId: TRIGGER_TYPES.ACTIVITY_OVERDUE,
@@ -725,21 +758,24 @@ async function processTriggersForTenant(tenant) {
       // PR6+PR7: C.A.R.E. analysis with state persistence (when enabled)
       try {
         // CRITICAL: Normalize to relationship entity for CARE state
-        // Activities are signals, not relationship entities. CARE state should be 
+        // Activities are signals, not relationship entities. CARE state should be
         // keyed on the related contact/account/lead, with activity as source metadata.
         const validRelationshipTypes = ['lead', 'contact', 'account'];
-        const normalizedEntityType = validRelationshipTypes.includes(activity.related_to) 
-          ? activity.related_to 
+        const normalizedEntityType = validRelationshipTypes.includes(activity.related_to)
+          ? activity.related_to
           : null;
         const normalizedEntityId = activity.related_id || null;
-        
+
         // If we can't normalize to a relationship entity, log and skip CARE processing
         if (!normalizedEntityType || !normalizedEntityId) {
-          logger.debug({
-            activity_id: activity.id,
-            related_to: activity.related_to,
-            related_id: activity.related_id
-          }, '[AiTriggers] Cannot normalize activity to relationship entity - skipping CARE');
+          logger.debug(
+            {
+              activity_id: activity.id,
+              related_to: activity.related_to,
+              related_id: activity.related_id,
+            },
+            '[AiTriggers] Cannot normalize activity to relationship entity - skipping CARE',
+          );
           continue;
         }
 
@@ -747,7 +783,7 @@ async function processTriggersForTenant(tenant) {
         const ctx = {
           tenant_id: tenantUuid,
           entity_type: normalizedEntityType,
-          entity_id: normalizedEntityId
+          entity_id: normalizedEntityId,
         };
 
         // PR7: Read current state from DB (fallback to 'unaware')
@@ -782,7 +818,7 @@ async function processTriggersForTenant(tenant) {
         });
 
         const escalation = detectEscalation({ text: escalationText });
-        
+
         // PR7: Calculate proposal BEFORE triggering workflow
         const proposal = proposeTransition({
           current_state: currentState,
@@ -792,7 +828,7 @@ async function processTriggersForTenant(tenant) {
 
         // Determine effective state for workflow payload
         let effectiveState = currentState;
-        
+
         if (proposal && proposal.to_state) {
           // Always emit state_proposed - use normalized entity
           emitCareAudit({
@@ -808,8 +844,8 @@ async function processTriggersForTenant(tenant) {
               proposed_state: proposal.to_state,
               trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
               signal_entity_type: 'activity',
-              signal_entity_id: activity.id
-            }
+              signal_entity_id: activity.id,
+            },
           });
 
           // PR7: Conditionally apply transition if autonomy is enabled (not shadow mode)
@@ -819,9 +855,9 @@ async function processTriggersForTenant(tenant) {
               await upsertCareState(ctx, {
                 care_state: proposal.to_state,
                 last_signal_at: new Date().toISOString(),
-                escalation_status: escalation.is_escalation ? escalation.severity : null
+                escalation_status: escalation.is_escalation ? escalation.severity : null,
               });
-              
+
               // Append to history for audit trail
               await appendCareHistory(ctx, {
                 from_state: currentState,
@@ -829,14 +865,14 @@ async function processTriggersForTenant(tenant) {
                 event_type: 'state_transition',
                 reason: proposal.reason,
                 actor_type: 'system',
-                meta: { 
-                  trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE, 
-                  days_overdue: activity.days_overdue, 
+                meta: {
+                  trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
+                  days_overdue: activity.days_overdue,
                   signals,
                   signal_entity_type: 'activity',
                   signal_entity_id: activity.id,
-                  action_origin: 'care_autonomous'
-                }
+                  action_origin: 'care_autonomous',
+                },
               });
 
               // Update effective state to reflect the write
@@ -855,8 +891,8 @@ async function processTriggersForTenant(tenant) {
                   to_state: proposal.to_state,
                   trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
                   signal_entity_type: 'activity',
-                  signal_entity_id: activity.id
-                }
+                  signal_entity_id: activity.id,
+                },
               });
             } catch (applyError) {
               logger.warn({ err: applyError }, '[AiTriggers] C.A.R.E. state apply error');
@@ -878,8 +914,8 @@ async function processTriggersForTenant(tenant) {
               days_overdue: activity.days_overdue,
               trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
               signal_entity_type: 'activity',
-              signal_entity_id: activity.id
-            }
+              signal_entity_id: activity.id,
+            },
           });
         }
 
@@ -897,7 +933,9 @@ async function processTriggersForTenant(tenant) {
           trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
           action_origin: 'care_autonomous',
           policy_gate_result: 'allowed',
-          reason: escalation.is_escalation ? escalation.reason : `Activity is overdue by ${activity.days_overdue} days`,
+          reason: escalation.is_escalation
+            ? escalation.reason
+            : `Activity is overdue by ${activity.days_overdue} days`,
           care_state: effectiveState,
           previous_state: currentState !== effectiveState ? currentState : null,
           escalation_detected: escalation.is_escalation,
@@ -911,8 +949,9 @@ async function processTriggersForTenant(tenant) {
             days_overdue: activity.days_overdue,
             assigned_to: activity.assigned_to || null,
             severity: escalation.is_escalation ? escalation.severity : null,
-            state_transition: currentState !== effectiveState ? `${currentState} → ${effectiveState}` : null
-          }
+            state_transition:
+              currentState !== effectiveState ? `${currentState} → ${effectiveState}` : null,
+          },
         });
 
         if (!proposal) {
@@ -924,11 +963,11 @@ async function processTriggersForTenant(tenant) {
             action_origin: 'care_autonomous',
             reason: 'no_transition_proposed',
             policy_gate_result: CarePolicyGateResult.ALLOWED,
-            meta: { 
+            meta: {
               trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
               signal_entity_type: 'activity',
-              signal_entity_id: activity.id
-            }
+              signal_entity_id: activity.id,
+            },
           });
         }
 
@@ -947,8 +986,8 @@ async function processTriggersForTenant(tenant) {
               trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
               days_overdue: activity.days_overdue,
               signal_entity_type: 'activity',
-              signal_entity_id: activity.id
-            }
+              signal_entity_id: activity.id,
+            },
           });
         }
 
@@ -961,11 +1000,11 @@ async function processTriggersForTenant(tenant) {
           action_origin: 'care_autonomous',
           reason: 'Autonomous actions disabled (PR7: state persistence only)',
           policy_gate_result: CarePolicyGateResult.ALLOWED,
-          meta: { 
+          meta: {
             trigger_type: TRIGGER_TYPES.ACTIVITY_OVERDUE,
             signal_entity_type: 'activity',
-            signal_entity_id: activity.id
-          }
+            signal_entity_id: activity.id,
+          },
         });
       } catch (err) {
         console.warn('[C.A.R.E. PR7] Trigger analysis error (non-breaking):', err.message);
@@ -977,9 +1016,12 @@ async function processTriggersForTenant(tenant) {
     try {
       hotOpportunities = await detectHotOpportunities(tenantUuid);
     } catch (detectErr) {
-      logger.warn({ err: detectErr, tenantSlug }, '[AiTriggersWorker] detectHotOpportunities failed, skipping');
+      logger.warn(
+        { err: detectErr, tenantSlug },
+        '[AiTriggersWorker] detectHotOpportunities failed, skipping',
+      );
     }
-    
+
     for (const opp of hotOpportunities) {
       await createSuggestionIfNew(tenantUuid, {
         triggerId: TRIGGER_TYPES.OPPORTUNITY_HOT,
@@ -1002,7 +1044,7 @@ async function processTriggersForTenant(tenant) {
         const ctx = {
           tenant_id: tenantUuid,
           entity_type: 'opportunity',
-          entity_id: opp.id
+          entity_id: opp.id,
         };
 
         // PR7: Read current state from DB (fallback to 'unaware')
@@ -1039,7 +1081,7 @@ async function processTriggersForTenant(tenant) {
         });
 
         const escalation = detectEscalation({ text: escalationText });
-        
+
         // PR7: Calculate proposal BEFORE triggering workflow
         const proposal = proposeTransition({
           current_state: currentState,
@@ -1063,8 +1105,8 @@ async function processTriggersForTenant(tenant) {
             meta: {
               current_state: currentState,
               proposed_state: proposal.to_state,
-              trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT
-            }
+              trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
+            },
           });
 
           // PR7: Conditionally apply transition if autonomy is enabled (not shadow mode)
@@ -1074,9 +1116,9 @@ async function processTriggersForTenant(tenant) {
               await upsertCareState(ctx, {
                 care_state: proposal.to_state,
                 last_signal_at: new Date().toISOString(),
-                escalation_status: escalation.is_escalation ? escalation.severity : null
+                escalation_status: escalation.is_escalation ? escalation.severity : null,
               });
-              
+
               // Append to history for audit trail
               await appendCareHistory(ctx, {
                 from_state: currentState,
@@ -1084,12 +1126,12 @@ async function processTriggersForTenant(tenant) {
                 event_type: 'state_transition',
                 reason: proposal.reason,
                 actor_type: 'system',
-                meta: { 
-                  trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT, 
-                  amount: opp.amount, 
+                meta: {
+                  trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
+                  amount: opp.amount,
                   signals,
-                  action_origin: 'care_autonomous'
-                }
+                  action_origin: 'care_autonomous',
+                },
               });
 
               // Update effective state to reflect the write
@@ -1106,8 +1148,8 @@ async function processTriggersForTenant(tenant) {
                 meta: {
                   from_state: currentState,
                   to_state: proposal.to_state,
-                  trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT
-                }
+                  trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
+                },
               });
             } catch (applyError) {
               logger.warn({ err: applyError }, '[AiTriggers] C.A.R.E. state apply error');
@@ -1127,8 +1169,8 @@ async function processTriggersForTenant(tenant) {
             meta: {
               severity: escalation.severity,
               probability: opp.probability,
-              trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT
-            }
+              trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
+            },
           });
 
           // PR8: Trigger workflow webhook with updated state
@@ -1136,7 +1178,7 @@ async function processTriggersForTenant(tenant) {
           // Normalize opportunity (signal) to parent account or lead (entity)
           const entityId = opp.account_id || opp.lead_id;
           const entityType = opp.account_id ? 'account' : 'lead';
-          
+
           await triggerCareWorkflowForTenant(tenantUuid, {
             event_id: `trigger-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             type: 'care.escalation_detected',
@@ -1149,7 +1191,9 @@ async function processTriggersForTenant(tenant) {
             trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
             action_origin: 'care_autonomous',
             policy_gate_result: 'allowed',
-            reason: escalation.reason || `High-value opportunity closing soon (${opp.days_to_close} days)`,
+            reason:
+              escalation.reason ||
+              `High-value opportunity closing soon (${opp.days_to_close} days)`,
             care_state: effectiveState,
             previous_state: currentState !== effectiveState ? currentState : null,
             escalation_detected: true,
@@ -1164,8 +1208,9 @@ async function processTriggersForTenant(tenant) {
               days_to_close: opp.days_to_close,
               close_date: opp.close_date || null,
               severity: escalation.severity,
-              state_transition: currentState !== effectiveState ? `${currentState} → ${effectiveState}` : null
-            }
+              state_transition:
+                currentState !== effectiveState ? `${currentState} → ${effectiveState}` : null,
+            },
           });
         }
 
@@ -1183,8 +1228,8 @@ async function processTriggersForTenant(tenant) {
               proposed_state: proposal.to_state,
               trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT,
               amount: opp.amount,
-              days_to_close: opp.days_to_close
-            }
+              days_to_close: opp.days_to_close,
+            },
           });
         }
 
@@ -1197,7 +1242,7 @@ async function processTriggersForTenant(tenant) {
           action_origin: 'care_autonomous',
           reason: 'Autonomous actions disabled (PR7: state persistence only)',
           policy_gate_result: CarePolicyGateResult.ALLOWED,
-          meta: { trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT }
+          meta: { trigger_type: TRIGGER_TYPES.OPPORTUNITY_HOT },
         });
       } catch (err) {
         console.warn('[C.A.R.E. PR7] Trigger analysis error (non-breaking):', err.message);
@@ -1207,7 +1252,6 @@ async function processTriggersForTenant(tenant) {
     if (triggerCount > 0) {
       logger.debug({ tenantSlug, triggerCount }, '[AiTriggersWorker] Triggers detected for tenant');
     }
-
   } catch (err) {
     logger.error({ err, tenantSlug }, '[AiTriggersWorker] Error processing tenant');
   }
@@ -1222,7 +1266,7 @@ async function processTriggersForTenant(tenant) {
 async function detectStagnantLeads(tenantUuid) {
   const stagnantDate = new Date();
   stagnantDate.setDate(stagnantDate.getDate() - LEAD_STAGNANT_DAYS);
-  
+
   try {
     // Step 1: Get candidate leads (simple query)
     // Exclude test data records
@@ -1242,7 +1286,7 @@ async function detectStagnantLeads(tenantUuid) {
     }
 
     // Step 2: Get existing pending suggestions for these leads
-    const leadIds = (leads || []).map(l => l.id);
+    const leadIds = (leads || []).map((l) => l.id);
     if (leadIds.length === 0) return [];
 
     const { data: existingSuggestions } = await supabase
@@ -1253,15 +1297,18 @@ async function detectStagnantLeads(tenantUuid) {
       .eq('status', 'pending')
       .in('record_id', leadIds);
 
-    const existingIds = new Set((existingSuggestions || []).map(s => s.record_id));
+    const existingIds = new Set((existingSuggestions || []).map((s) => s.record_id));
 
     // Step 3: Filter in JavaScript and calculate days_stagnant
     return (leads || [])
-      .filter(lead => !existingIds.has(lead.id))
-      .map(lead => ({
+      .filter((lead) => !existingIds.has(lead.id))
+      .map((lead) => ({
         ...lead,
-        days_stagnant: Math.floor((Date.now() - new Date(lead.updated_at || lead.created_at).getTime()) / (1000 * 60 * 60 * 24)),
-        last_activity_at: null
+        days_stagnant: Math.floor(
+          (Date.now() - new Date(lead.updated_at || lead.created_at).getTime()) /
+            (1000 * 60 * 60 * 24),
+        ),
+        last_activity_at: null,
       }));
   } catch (err) {
     logger.error({ err }, '[AiTriggersWorker] detectStagnantLeads error');
@@ -1276,14 +1323,16 @@ async function detectStagnantLeads(tenantUuid) {
 async function detectDealDecay(tenantUuid) {
   const decayDate = new Date();
   decayDate.setDate(decayDate.getDate() - DEAL_DECAY_DAYS);
-  
+
   try {
     // Step 1: Get candidate opportunities (simple query)
     // Exclude test data records
     // Include account_id and lead_id for entity normalization
     const { data: opportunities, error } = await supabase
       .from('opportunities')
-      .select('id, name, stage, amount, close_date, updated_at, created_at, is_test_data, account_id, lead_id')
+      .select(
+        'id, name, stage, amount, close_date, updated_at, created_at, is_test_data, account_id, lead_id',
+      )
       .eq('tenant_id', tenantUuid)
       .not('stage', 'in', '(closed_won,closed_lost)')
       .lt('updated_at', decayDate.toISOString())
@@ -1297,7 +1346,7 @@ async function detectDealDecay(tenantUuid) {
     }
 
     // Step 2: Get existing pending suggestions
-    const oppIds = (opportunities || []).map(o => o.id);
+    const oppIds = (opportunities || []).map((o) => o.id);
     if (oppIds.length === 0) return [];
 
     const { data: existingSuggestions } = await supabase
@@ -1308,14 +1357,17 @@ async function detectDealDecay(tenantUuid) {
       .eq('status', 'pending')
       .in('record_id', oppIds);
 
-    const existingIds = new Set((existingSuggestions || []).map(s => s.record_id));
+    const existingIds = new Set((existingSuggestions || []).map((s) => s.record_id));
 
     // Step 3: Filter in JavaScript and calculate days_inactive
     return (opportunities || [])
-      .filter(opp => !existingIds.has(opp.id))
-      .map(deal => ({
+      .filter((opp) => !existingIds.has(opp.id))
+      .map((deal) => ({
         ...deal,
-        days_inactive: Math.floor((Date.now() - new Date(deal.updated_at || deal.created_at).getTime()) / (1000 * 60 * 60 * 24))
+        days_inactive: Math.floor(
+          (Date.now() - new Date(deal.updated_at || deal.created_at).getTime()) /
+            (1000 * 60 * 60 * 24),
+        ),
       }));
   } catch (err) {
     logger.error({ err }, '[AiTriggersWorker] detectDealDecay error');
@@ -1330,7 +1382,7 @@ async function detectDealDecay(tenantUuid) {
  */
 async function detectOverdueActivities(tenantUuid) {
   const today = new Date().toISOString().split('T')[0];
-  
+
   try {
     // Step 1: Get activities with overdue due_date (direct column, not metadata)
     // Filter incomplete activities in JS since status column may not exist
@@ -1351,7 +1403,7 @@ async function detectOverdueActivities(tenantUuid) {
 
     // Step 2: Filter out completed activities in JavaScript
     // Check both metadata.status and direct status if it exists
-    const overdueCandidates = (activities || []).filter(act => {
+    const overdueCandidates = (activities || []).filter((act) => {
       const status = act.status || act.metadata?.status;
       if (status === 'completed' || status === 'cancelled' || status === 'done') return false;
       return true;
@@ -1360,7 +1412,7 @@ async function detectOverdueActivities(tenantUuid) {
     if (overdueCandidates.length === 0) return [];
 
     // Step 3: Get existing pending suggestions
-    const actIds = overdueCandidates.map(a => a.id);
+    const actIds = overdueCandidates.map((a) => a.id);
     const { data: existingSuggestions } = await supabase
       .from('ai_suggestions')
       .select('record_id')
@@ -1369,17 +1421,19 @@ async function detectOverdueActivities(tenantUuid) {
       .eq('status', 'pending')
       .in('record_id', actIds);
 
-    const existingIds = new Set((existingSuggestions || []).map(s => s.record_id));
+    const existingIds = new Set((existingSuggestions || []).map((s) => s.record_id));
 
     // Step 4: Filter and calculate days_overdue
     // Include related_id for normalizing to relationship entity
     return overdueCandidates
-      .filter(act => !existingIds.has(act.id))
-      .map(activity => ({
+      .filter((act) => !existingIds.has(act.id))
+      .map((activity) => ({
         ...activity,
-        days_overdue: Math.floor((Date.now() - new Date(activity.due_date).getTime()) / (1000 * 60 * 60 * 24)),
+        days_overdue: Math.floor(
+          (Date.now() - new Date(activity.due_date).getTime()) / (1000 * 60 * 60 * 24),
+        ),
         related_to: activity.related_to || activity.metadata?.related_to || null,
-        related_id: activity.related_id || activity.metadata?.related_id || null
+        related_id: activity.related_id || activity.metadata?.related_id || null,
       }))
       .slice(0, 50);
   } catch (err) {
@@ -1397,7 +1451,7 @@ async function detectHotOpportunities(tenantUuid) {
   futureDate.setDate(futureDate.getDate() + 14);
   const today = new Date().toISOString().split('T')[0];
   const futureDateStr = futureDate.toISOString().split('T')[0];
-  
+
   try {
     // Step 1: Get candidate opportunities (simple query)
     // Exclude test data records
@@ -1420,7 +1474,7 @@ async function detectHotOpportunities(tenantUuid) {
     }
 
     // Step 2: Get existing pending suggestions
-    const oppIds = (opportunities || []).map(o => o.id);
+    const oppIds = (opportunities || []).map((o) => o.id);
     if (oppIds.length === 0) return [];
 
     const { data: existingSuggestions } = await supabase
@@ -1431,14 +1485,16 @@ async function detectHotOpportunities(tenantUuid) {
       .eq('status', 'pending')
       .in('record_id', oppIds);
 
-    const existingIds = new Set((existingSuggestions || []).map(s => s.record_id));
+    const existingIds = new Set((existingSuggestions || []).map((s) => s.record_id));
 
     // Step 3: Filter in JavaScript and calculate days_to_close
     return (opportunities || [])
-      .filter(opp => !existingIds.has(opp.id))
-      .map(opp => ({
+      .filter((opp) => !existingIds.has(opp.id))
+      .map((opp) => ({
         ...opp,
-        days_to_close: Math.floor((new Date(opp.close_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+        days_to_close: Math.floor(
+          (new Date(opp.close_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+        ),
       }));
   } catch (err) {
     logger.error({ err }, '[AiTriggersWorker] detectHotOpportunities error');
@@ -1471,7 +1527,7 @@ export async function createSuggestionIfNew(tenantUuid, triggerData, _deps = {})
     const cooldownDays = 7;
     const cooldownDate = new Date();
     cooldownDate.setDate(cooldownDate.getDate() - cooldownDays);
-    
+
     const { data: existing, error: checkError } = await _supabase
       .from('ai_suggestions')
       .select('id, status, updated_at')
@@ -1480,24 +1536,30 @@ export async function createSuggestionIfNew(tenantUuid, triggerData, _deps = {})
       .eq('record_id', recordId)
       .or(`status.eq.pending,and(status.eq.rejected,updated_at.gte.${cooldownDate.toISOString()})`)
       .limit(1);
-    
+
     if (checkError) {
       _log.error({ err: checkError }, '[AiTriggersWorker] Error checking existing suggestion');
     }
-    
+
     if (existing && existing.length > 0) {
       const existingStatus = existing[0].status;
       outcomeType = OUTCOME_TYPES.duplicate_suppressed;
-      _log.debug({ triggerId, recordId, existingStatus, outcomeType }, '[AiTriggersWorker] Skipping - existing suggestion');
+      _log.debug(
+        { triggerId, recordId, existingStatus, outcomeType },
+        '[AiTriggersWorker] Skipping - existing suggestion',
+      );
       return null;
     }
 
     // Generate AI suggestion using propose_actions mode
     const suggestion = await _generate(tenantUuid, triggerId, recordType, recordId, context);
-    
+
     if (!suggestion) {
       outcomeType = OUTCOME_TYPES.generation_failed;
-      _log.debug({ triggerId, recordId, outcomeType }, '[AiTriggersWorker] No suggestion generated');
+      _log.debug(
+        { triggerId, recordId, outcomeType },
+        '[AiTriggersWorker] No suggestion generated',
+      );
       return null;
     }
 
@@ -1506,7 +1568,10 @@ export async function createSuggestionIfNew(tenantUuid, triggerData, _deps = {})
     const confidence = suggestion.confidence ?? 0;
     if (confidence < MIN_CONFIDENCE) {
       outcomeType = OUTCOME_TYPES.low_confidence;
-      _log.debug({ triggerId, recordId, confidence, MIN_CONFIDENCE, outcomeType }, '[AiTriggersWorker] Suggestion below confidence threshold');
+      _log.debug(
+        { triggerId, recordId, confidence, MIN_CONFIDENCE, outcomeType },
+        '[AiTriggersWorker] Suggestion below confidence threshold',
+      );
       return null;
     }
 
@@ -1529,7 +1594,7 @@ export async function createSuggestionIfNew(tenantUuid, triggerData, _deps = {})
         priority,
         expires_at: expiresAt.toISOString(),
         status: 'pending',
-        outcome_type: OUTCOME_TYPES.suggestion_created
+        outcome_type: OUTCOME_TYPES.suggestion_created,
       })
       .select('id')
       .single();
@@ -1538,19 +1603,28 @@ export async function createSuggestionIfNew(tenantUuid, triggerData, _deps = {})
       // Check if it's a duplicate (constraint violation)
       if (error.code === '23505') {
         outcomeType = OUTCOME_TYPES.constraint_violation;
-        _log.debug({ triggerId, recordId, outcomeType }, '[AiTriggersWorker] Suggestion already exists');
+        _log.debug(
+          { triggerId, recordId, outcomeType },
+          '[AiTriggersWorker] Suggestion already exists',
+        );
         return null;
       }
       outcomeType = OUTCOME_TYPES.error;
-      _log.error({ err: error, triggerId, recordId, outcomeType }, '[AiTriggersWorker] Error inserting suggestion');
+      _log.error(
+        { err: error, triggerId, recordId, outcomeType },
+        '[AiTriggersWorker] Error inserting suggestion',
+      );
       return null;
     }
 
     if (data) {
       suggestionId = data.id;
       outcomeType = OUTCOME_TYPES.suggestion_created;
-      _log.info({ suggestionId: data.id, triggerId, recordId, outcomeType }, '[AiTriggersWorker] Created suggestion');
-      
+      _log.info(
+        { suggestionId: data.id, triggerId, recordId, outcomeType },
+        '[AiTriggersWorker] Created suggestion',
+      );
+
       // Emit webhook for new suggestion
       await _webhooks(tenantUuid, 'ai.suggestion.generated', {
         suggestion_id: data.id,
@@ -1558,7 +1632,7 @@ export async function createSuggestionIfNew(tenantUuid, triggerData, _deps = {})
         record_type: recordType,
         record_id: recordId,
         priority,
-      }).catch(err => _log.error({ err }, '[AiTriggersWorker] Webhook emission failed'));
+      }).catch((err) => _log.error({ err }, '[AiTriggersWorker] Webhook emission failed'));
 
       outcomeType = OUTCOME_TYPES.suggestion_created;
       return data.id;
@@ -1568,7 +1642,10 @@ export async function createSuggestionIfNew(tenantUuid, triggerData, _deps = {})
     return null;
   } catch (err) {
     outcomeType = OUTCOME_TYPES.error;
-    _log.error({ err, triggerId, recordId, outcomeType }, '[AiTriggersWorker] Error creating suggestion');
+    _log.error(
+      { err, triggerId, recordId, outcomeType },
+      '[AiTriggersWorker] Error creating suggestion',
+    );
     return null;
   } finally {
     // Emit ACTION_OUTCOME audit for every trigger evaluation (fire-and-forget)
@@ -1590,7 +1667,10 @@ export async function createSuggestionIfNew(tenantUuid, triggerData, _deps = {})
         },
       });
     } catch (auditErr) {
-      _log.error({ err: auditErr, triggerId, recordId, outcomeType }, '[AiTriggersWorker] ACTION_OUTCOME audit emission failed');
+      _log.error(
+        { err: auditErr, triggerId, recordId, outcomeType },
+        '[AiTriggersWorker] ACTION_OUTCOME audit emission failed',
+      );
     }
   }
 }
@@ -1602,15 +1682,24 @@ export async function createSuggestionIfNew(tenantUuid, triggerData, _deps = {})
 async function generateAiSuggestion(tenantUuid, triggerId, recordType, recordId, context) {
   // Check if AI-powered suggestions are enabled
   const useAiBrain = process.env.AI_SUGGESTIONS_USE_BRAIN === 'true';
-  
+
   if (useAiBrain) {
     try {
-      const brainSuggestion = await generateAiBrainSuggestion(tenantUuid, triggerId, recordType, recordId, context);
+      const brainSuggestion = await generateAiBrainSuggestion(
+        tenantUuid,
+        triggerId,
+        recordType,
+        recordId,
+        context,
+      );
       if (brainSuggestion) {
         return brainSuggestion;
       }
     } catch (brainError) {
-      logger.warn({ err: brainError }, '[AiTriggersWorker] AI Brain suggestion failed, falling back to templates');
+      logger.warn(
+        { err: brainError },
+        '[AiTriggersWorker] AI Brain suggestion failed, falling back to templates',
+      );
     }
   }
 
@@ -1623,8 +1712,14 @@ async function generateAiSuggestion(tenantUuid, triggerId, recordType, recordId,
  */
 async function generateAiBrainSuggestion(tenantUuid, triggerId, recordType, recordId, context) {
   // System user ID for autonomous operations
-  const SYSTEM_USER_ID = process.env.SYSTEM_USER_ID || '00000000-0000-0000-0000-000000000000';
-  
+  const systemUserId = safeSystemUserId();
+  if (!systemUserId) {
+    logger.warn(
+      '[AiTriggersWorker] SYSTEM_USER_ID is invalid or unset; skipping AI Brain suggestion',
+    );
+    return null;
+  }
+
   const taskContext = {
     trigger_type: triggerId,
     record_type: recordType,
@@ -1638,7 +1733,7 @@ async function generateAiBrainSuggestion(tenantUuid, triggerId, recordType, reco
   try {
     const result = await runAiBrainTask({
       tenantId: tenantUuid,
-      userId: SYSTEM_USER_ID,
+      userId: systemUserId,
       taskType,
       mode: 'propose_actions',
       context: taskContext,
@@ -1647,7 +1742,7 @@ async function generateAiBrainSuggestion(tenantUuid, triggerId, recordType, reco
     // Extract proposed action from AI Brain result
     if (result?.proposed_actions?.length > 0) {
       const proposed = result.proposed_actions[0];
-      
+
       return {
         action: {
           tool_name: `${proposed.type}_${proposed.entity}`,
@@ -1680,7 +1775,7 @@ function mapTriggerToTaskType(triggerId) {
     [TRIGGER_TYPES.OPPORTUNITY_HOT]: 'opportunity_closing_suggestion',
     [TRIGGER_TYPES.FOLLOWUP_NEEDED]: 'followup_action_suggestion',
   };
-  
+
   return taskTypeMap[triggerId] || 'general_crm_suggestion';
 }
 
@@ -1700,10 +1795,10 @@ function generateTemplateSuggestion(triggerId, _recordType, recordId, context) {
           related_id: recordId,
         },
       },
-      confidence: 0.80,
+      confidence: 0.8,
       reasoning: `Lead "${context.lead_name}" has been stagnant for ${context.days_stagnant} days. A follow-up task is recommended to re-engage.`,
     },
-    
+
     [TRIGGER_TYPES.DEAL_DECAY]: {
       action: {
         tool_name: 'create_activity',
@@ -1718,7 +1813,7 @@ function generateTemplateSuggestion(triggerId, _recordType, recordId, context) {
       confidence: 0.85,
       reasoning: `Opportunity "${context.deal_name}" (${context.stage}) has been inactive for ${context.days_inactive} days. A check-in call is recommended.`,
     },
-    
+
     [TRIGGER_TYPES.ACTIVITY_OVERDUE]: {
       action: {
         tool_name: 'update_activity',
@@ -1733,10 +1828,10 @@ function generateTemplateSuggestion(triggerId, _recordType, recordId, context) {
           },
         },
       },
-      confidence: 0.70,
+      confidence: 0.7,
       reasoning: `Activity "${context.subject}" is ${context.days_overdue} days overdue. Consider rescheduling or completing.`,
     },
-    
+
     [TRIGGER_TYPES.OPPORTUNITY_HOT]: {
       action: {
         tool_name: 'create_activity',
@@ -1748,7 +1843,7 @@ function generateTemplateSuggestion(triggerId, _recordType, recordId, context) {
           related_id: recordId,
         },
       },
-      confidence: 0.90,
+      confidence: 0.9,
       reasoning: `Opportunity "${context.deal_name}" is hot (${context.probability}% probability) and closing in ${context.days_to_close} days. Schedule a meeting to close.`,
     },
   };
@@ -1763,7 +1858,7 @@ function generateTemplateSuggestion(triggerId, _recordType, recordId, context) {
 async function expireOldSuggestions() {
   try {
     const now = new Date().toISOString();
-    
+
     const { data, error } = await supabase
       .from('ai_suggestions')
       .update({ status: 'expired', updated_at: now })
@@ -1791,7 +1886,7 @@ function _hashStringToInt(str) {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
     const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
+    hash = (hash << 5) - hash + char;
     hash = hash & hash;
   }
   return Math.abs(hash);
@@ -1816,7 +1911,7 @@ export async function triggerForTenant(_pool, tenantUuid) {
   // Temporarily set supabase if not already set
   const prevSupabase = supabase;
   supabase = supa;
-  
+
   try {
     const triggers = await processTriggersForTenant(tenantData);
     return { triggers_detected: triggers };
@@ -1848,24 +1943,38 @@ export async function getPendingSuggestions(_pool, tenantUuid, limit = 50) {
   }
 
   // Enrich with record names in JavaScript
-  const enriched = await Promise.all((suggestions || []).map(async (s) => {
-    let recordName = null;
-    try {
-      if (s.record_type === 'lead') {
-        const { data } = await supa.from('leads').select('first_name, last_name').eq('id', s.record_id).single();
-        recordName = data ? `${data.first_name || ''} ${data.last_name || ''}`.trim() : null;
-      } else if (s.record_type === 'opportunity') {
-        const { data } = await supa.from('opportunities').select('name').eq('id', s.record_id).single();
-        recordName = data?.name || null;
-      } else if (s.record_type === 'activity') {
-        const { data } = await supa.from('activities').select('subject').eq('id', s.record_id).single();
-        recordName = data?.subject || null;
+  const enriched = await Promise.all(
+    (suggestions || []).map(async (s) => {
+      let recordName = null;
+      try {
+        if (s.record_type === 'lead') {
+          const { data } = await supa
+            .from('leads')
+            .select('first_name, last_name')
+            .eq('id', s.record_id)
+            .single();
+          recordName = data ? `${data.first_name || ''} ${data.last_name || ''}`.trim() : null;
+        } else if (s.record_type === 'opportunity') {
+          const { data } = await supa
+            .from('opportunities')
+            .select('name')
+            .eq('id', s.record_id)
+            .single();
+          recordName = data?.name || null;
+        } else if (s.record_type === 'activity') {
+          const { data } = await supa
+            .from('activities')
+            .select('subject')
+            .eq('id', s.record_id)
+            .single();
+          recordName = data?.subject || null;
+        }
+      } catch {
+        // Ignore enrichment errors
       }
-    } catch {
-      // Ignore enrichment errors
-    }
-    return { ...s, record_name: recordName };
-  }));
+      return { ...s, record_name: recordName };
+    }),
+  );
 
   return enriched;
 }

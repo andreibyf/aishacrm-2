@@ -284,7 +284,9 @@ export default function createMCPRoutes(_pgPool) {
    *   get:
    *     summary: Get MCP admin status (superadmin only)
    *     tags: [integrations]
-   *     security:\n   *       - bearerAuth: []\n   *     description: Get detailed MCP server status and health - requires superadmin role
+   *     security:
+   *       - bearerAuth: []
+   *     description: Get detailed MCP server status and health - requires superadmin role
    *     responses:
    *       200:
    *         description: Admin status details
@@ -302,7 +304,8 @@ export default function createMCPRoutes(_pgPool) {
    *           schema:
    *             type: object
    *             properties:
-   *               accountId: { type: string }\n   *               company: { type: string }
+   *               accountId: { type: string }
+   *               company: { type: string }
    *     responses:
    *       200:
    *         description: Market insights data

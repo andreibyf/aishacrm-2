@@ -1,10 +1,19 @@
-import { getMemoryClient } from "../lib/memoryClient.js";
-import { getSupabaseClient, initSupabaseDB } from "../lib/supabase-db.js";
-import { resolveCanonicalTenant } from "../lib/tenantCanonicalResolver.js";
+import { getMemoryClient } from '../lib/memoryClient.js';
+import { getSupabaseClient, initSupabaseDB } from '../lib/supabase-db.js';
+import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
+import { sanitizeUuidInput } from '../lib/uuidValidator.js';
+
+const NIL_UUID = '00000000-0000-0000-0000-000000000000';
+
+function safeTenantUuid(raw) {
+  const sanitized = sanitizeUuidInput(raw, { systemAliases: ['system', 'unknown', 'anonymous'] });
+  if (!sanitized || sanitized === NIL_UUID) return null;
+  return sanitized;
+}
 
 function parseSessionKey(key) {
   // agent:session:{tenantId}:{userId}:{sessionId}
-  const parts = key.split(":");
+  const parts = key.split(':');
   if (parts.length < 5) return null;
   return { tenantId: parts[2], userId: parts[3], sessionId: parts.slice(4).join(':') };
 }
@@ -23,12 +32,14 @@ function shouldArchiveSession(sessionObj, events) {
     if (sessionObj.archive === true) return true;
     if (sessionObj.status && String(sessionObj.status).toLowerCase() === 'completed') return true;
     if (Array.isArray(events)) {
-      return events.some(e => {
+      return events.some((e) => {
         const t = (e?.type || '').toLowerCase();
         return t === 'final' || t === 'summary' || t === 'decision' || t === 'end';
       });
     }
-  } catch { /* ignore parse/shape errors and default to not archiving */ }
+  } catch {
+    /* ignore parse/shape errors and default to not archiving */
+  }
   return false;
 }
 
@@ -37,13 +48,21 @@ export async function archiveSessionByIds(tenantId, userId, sessionId) {
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set for archive');
   }
-  try { initSupabaseDB(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY); } catch { /* already initialized or failed; will throw later if unusable */ }
+  try {
+    initSupabaseDB(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  } catch {
+    /* already initialized or failed; will throw later if unusable */
+  }
   const supa = getSupabaseClient();
 
   const redis = getMemoryClient();
   // Canonical tenant resolution (supports slug 'system')
   const canonical = await resolveCanonicalTenant(tenantId);
-  const tenantUUID = canonical.uuid || process.env.SYSTEM_TENANT_ID || '00000000-0000-0000-0000-000000000000';
+  const tenantUUID =
+    safeTenantUuid(canonical?.uuid) || safeTenantUuid(process.env.SYSTEM_TENANT_ID);
+  if (!tenantUUID) {
+    return { archived: false, reason: 'TENANT_UNRESOLVED' };
+  }
   const sKey = sessionKey(tenantId, userId, sessionId);
   const eKey = eventsKey(tenantId, userId, sessionId);
 
@@ -53,7 +72,15 @@ export async function archiveSessionByIds(tenantId, userId, sessionId) {
     return { archived: false, reason: 'SESSION_NOT_FOUND' };
   }
   const eventStrings = await redis.lRange(eKey, 0, -1);
-  const events = eventStrings.map(s => { try { return JSON.parse(s); } catch { return null; } }).filter(Boolean);
+  const events = eventStrings
+    .map((s) => {
+      try {
+        return JSON.parse(s);
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
 
   // Upsert session archive
   const sessionRow = {
@@ -79,7 +106,7 @@ export async function archiveSessionByIds(tenantId, userId, sessionId) {
 
   // Insert events in batches of 200
   if (events.length > 0) {
-    const rows = events.map(ev => ({
+    const rows = events.map((ev) => ({
       tenant_id: tenantUUID,
       user_id: userId,
       session_id: sessionId,
@@ -117,7 +144,15 @@ export async function scanAndArchive({ limit = 200 } = {}) {
     const raw = await redis.get(key);
     const session = raw ? JSON.parse(raw) : null;
     const eventsRaw = await redis.lRange(eventsKey(ids.tenantId, ids.userId, ids.sessionId), 0, -1);
-    const events = eventsRaw.map(s => { try { return JSON.parse(s); } catch { return null; } }).filter(Boolean);
+    const events = eventsRaw
+      .map((s) => {
+        try {
+          return JSON.parse(s);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
 
     if (shouldArchiveSession(session, events)) {
       const res = await archiveSessionByIds(ids.tenantId, ids.userId, ids.sessionId);

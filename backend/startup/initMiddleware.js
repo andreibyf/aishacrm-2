@@ -256,7 +256,8 @@ export function initMiddleware(app, pgPool) {
 
   // Explicit OPTIONS handler for all API routes (preflight requests)
   // This ensures preflight requests are handled before any other middleware
-  app.options('/api/*', (req, res) => {
+  // Express 5 requires named wildcard parameters (bare '*' is no longer valid)
+  app.options('/api/{*path}', (req, res) => {
     res.status(204).end();
   });
 

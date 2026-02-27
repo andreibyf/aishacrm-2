@@ -26,7 +26,7 @@ ENV APP_BUILD_VERSION=$APP_BUILD_VERSION
 COPY package*.json ./
 
 # Install ALL dependencies (including dev deps needed for Vite build)
-RUN NODE_OPTIONS=--max-old-space-size=512 npm ci --include=dev
+RUN NODE_OPTIONS=--max-old-space-size=512 npm ci --include=dev --legacy-peer-deps
 
 # Copy source code
 COPY . .

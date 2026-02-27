@@ -37,7 +37,9 @@ function copyAuthHeaders(req) {
 async function forwardGet(req, res, upstreamPath) {
   const target = buildUpstreamUrl(upstreamPath);
   if (!target) {
-    return res.status(503).json({ status: 'error', message: 'SUPABASE_URL not configured for functions proxy' });
+    return res
+      .status(503)
+      .json({ status: 'error', message: 'SUPABASE_URL not configured for functions proxy' });
   }
   try {
     logger.debug('[EdgeFunctionsProxy] Forwarding GET to', target);
@@ -76,7 +78,9 @@ async function forwardGet(req, res, upstreamPath) {
 async function forwardPost(req, res, upstreamPath) {
   const target = buildUpstreamUrl(upstreamPath);
   if (!target) {
-    return res.status(503).json({ status: 'error', message: 'SUPABASE_URL not configured for functions proxy' });
+    return res
+      .status(503)
+      .json({ status: 'error', message: 'SUPABASE_URL not configured for functions proxy' });
   }
   try {
     logger.debug('[EdgeFunctionsProxy] Forwarding POST to', target);
@@ -117,9 +121,13 @@ export default function createEdgeFunctionRoutes() {
   const router = express.Router();
 
   // Preflight handler for proxy endpoints
-  router.options('*', (_req, res) => {
+  // Express 5 requires named wildcard parameters (bare '*' is no longer valid)
+  router.options('/{*path}', (_req, res) => {
     res.header('Access-Control-Allow-Methods', 'GET,OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Authorization, Content-Type, x-tenant-id, x-tenant-slug');
+    res.header(
+      'Access-Control-Allow-Headers',
+      'Authorization, Content-Type, x-tenant-id, x-tenant-slug',
+    );
     return res.sendStatus(204);
   });
 
