@@ -1,4 +1,3 @@
-/* eslint-env node */
 import process from "node:process";
 import pg from "pg";
 
