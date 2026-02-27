@@ -177,7 +177,13 @@ export default function LeadsPage() {
   // Derived state for manager role
   const isManager = useMemo(() => {
     if (!user) return false;
-    return user.role === 'admin' || user.role === 'superadmin' || user.employee_role === 'manager';
+    return (
+      user.role === 'admin' ||
+      user.role === 'superadmin' ||
+      user.role === 'manager' ||
+      user.employee_role === 'manager' ||
+      user.employee_role === 'director'
+    );
   }, [user]);
 
   // Derived state for Superadmin role for controlling test data visibility
@@ -764,6 +770,9 @@ export default function LeadsPage() {
       // Also refresh accounts in case a new account was created during lead save
       clearCache('Lead');
       clearCacheByKey('Lead');
+
+      // Brief delay to ensure backend cache invalidation has propagated
+      await new Promise((r) => setTimeout(r, 150));
 
       // Reload leads, stats, and accounts
       await Promise.all([

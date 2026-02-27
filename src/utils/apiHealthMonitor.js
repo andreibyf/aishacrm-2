@@ -150,6 +150,20 @@ class ApiHealthMonitor {
   }
 
   /**
+   * Return a user-friendly message for non-admin users.
+   * Keeps technical details out of the UI.
+   */
+  _friendlyMessage(errorInfo) {
+    const type = String(errorInfo.type);
+    if (type.startsWith('5')) return 'Something went wrong. Please try again shortly.';
+    if (type === '401') return 'Your session may have expired. Please refresh the page.';
+    if (type === '403') return "You don't have permission for this action.";
+    if (type === '404') return 'The requested data could not be found.';
+    if (type === '400') return 'There was a problem with your request.';
+    return 'An unexpected error occurred.';
+  }
+
+  /**
    * Internal method to track errors
    */
   _trackError(errorMap, endpoint, context, errorInfo) {
@@ -186,8 +200,14 @@ class ApiHealthMonitor {
 
         if (shouldShowToast) {
           const toastFn = errorInfo.severity === 'critical' ? toast.error : toast.warning;
-          toastFn(String(errorInfo.title) + ': ' + String(endpoint), {
-            description: errorInfo.description,
+          // Show user-friendly messages — never expose raw URLs/endpoints to end users.
+          // Full details are already logged to console above for debugging.
+          const isSuperAdmin = typeof window !== 'undefined' && window.__USER_ROLE === 'superadmin';
+          const friendlyTitle = isSuperAdmin
+            ? String(errorInfo.title) + ': ' + String(endpoint)
+            : this._friendlyMessage(errorInfo);
+          toastFn(friendlyTitle, {
+            description: isSuperAdmin ? errorInfo.description : undefined,
             duration: 5000,
           });
         }
@@ -241,14 +261,18 @@ class ApiHealthMonitor {
         typeof sessionStorage !== 'undefined' &&
         sessionStorage.getItem('test_runner_active') === 'true';
       if (!isTestRunning) {
-        toast.warning(`Missing endpoint detected: ${endpoint}`, {
-          description: suggestion.fixDescription,
-          action: {
-            label: 'Copy Fix',
-            onClick: () => this.copyFixToClipboard(suggestion),
-          },
-          duration: 10000,
-        });
+        const isSuperAdmin = typeof window !== 'undefined' && window.__USER_ROLE === 'superadmin';
+        if (isSuperAdmin) {
+          toast.warning(`Missing endpoint detected: ${endpoint}`, {
+            description: suggestion.fixDescription,
+            action: {
+              label: 'Copy Fix',
+              onClick: () => this.copyFixToClipboard(suggestion),
+            },
+            duration: 10000,
+          });
+        }
+        // Non-admins: no toast for missing endpoints (already logged to console)
       }
     } else {
       console.warn('[API Health Monitor] No auto-fix available for %s', endpoint, suggestion);
