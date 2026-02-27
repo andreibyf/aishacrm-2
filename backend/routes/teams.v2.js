@@ -72,9 +72,49 @@ export default function createTeamsV2Routes(_pgPool) {
   // VISIBILITY MODE (admin only)
   // ═══════════════════════════════════════════════════════════════════════════════
 
+  // ─── Default labels (used when tenant hasn't customized) ──────────────────
+  const DEFAULT_ROLE_LABELS = { member: 'Member', manager: 'Manager', director: 'Director' };
+  const DEFAULT_TIER_LABELS = { top: 'Division', mid: 'Department', leaf: 'Team' };
+
+  /**
+   * GET /api/v2/teams/settings — Get full team settings for tenant (any user).
+   * Returns visibility_mode, role_labels, tier_labels.
+   * Non-admin safe — used by frontend to render labels everywhere.
+   */
+  router.get('/settings', async (req, res) => {
+    try {
+      const tenant_id = getTenantId(req);
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('modulesettings')
+        .select('settings')
+        .eq('tenant_id', tenant_id)
+        .eq('module_name', 'teams')
+        .maybeSingle();
+
+      if (error) throw new Error(error.message);
+
+      res.json({
+        status: 'success',
+        data: {
+          visibility_mode: data?.settings?.visibility_mode || 'hierarchical',
+          role_labels: { ...DEFAULT_ROLE_LABELS, ...(data?.settings?.role_labels || {}) },
+          tier_labels: { ...DEFAULT_TIER_LABELS, ...(data?.settings?.tier_labels || {}) },
+        },
+      });
+    } catch (err) {
+      logger.error('[Teams v2 GET /settings] Error:', err.message);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
   /**
    * GET /api/v2/teams/visibility-mode — Get current visibility mode for tenant.
-   * Returns 'hierarchical' (default) or 'shared'.
+   * Returns 'hierarchical' (default) or 'shared', plus role_labels and tier_labels.
    */
   router.get('/visibility-mode', requireAdminRole, async (req, res) => {
     try {
@@ -93,12 +133,19 @@ export default function createTeamsV2Routes(_pgPool) {
 
       if (error) throw new Error(error.message);
 
-      const mode = data?.settings?.visibility_mode || 'hierarchical';
+      const settings = data?.settings || {};
+      const mode = settings.visibility_mode || 'hierarchical';
       const is_enabled = data?.is_enabled ?? false;
 
       res.json({
         status: 'success',
-        data: { visibility_mode: mode, is_enabled, settings_id: data?.id || null },
+        data: {
+          visibility_mode: mode,
+          is_enabled,
+          settings_id: data?.id || null,
+          role_labels: { ...DEFAULT_ROLE_LABELS, ...(settings.role_labels || {}) },
+          tier_labels: { ...DEFAULT_TIER_LABELS, ...(settings.tier_labels || {}) },
+        },
       });
     } catch (err) {
       logger.error('[Teams v2 GET /visibility-mode] Error:', err.message);
@@ -107,8 +154,12 @@ export default function createTeamsV2Routes(_pgPool) {
   });
 
   /**
-   * PUT /api/v2/teams/visibility-mode — Set visibility mode for tenant.
-   * Body: { visibility_mode: 'shared' | 'hierarchical' }
+   * PUT /api/v2/teams/visibility-mode — Set visibility mode and/or custom labels.
+   * Body: {
+   *   visibility_mode: 'shared' | 'hierarchical',
+   *   role_labels?: { member?: string, manager?: string, director?: string },
+   *   tier_labels?: { top?: string, mid?: string, leaf?: string }
+   * }
    * Creates the modulesettings row if it doesn't exist (upsert).
    */
   router.put('/visibility-mode', requireAdminRole, async (req, res) => {
@@ -118,12 +169,38 @@ export default function createTeamsV2Routes(_pgPool) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
 
-      const { visibility_mode } = req.body;
-      if (!['shared', 'hierarchical'].includes(visibility_mode)) {
+      const { visibility_mode, role_labels, tier_labels } = req.body;
+
+      // visibility_mode is optional if only updating labels
+      if (visibility_mode && !['shared', 'hierarchical'].includes(visibility_mode)) {
         return res.status(400).json({
           status: 'error',
           message: 'visibility_mode must be "shared" or "hierarchical"',
         });
+      }
+
+      // Validate label keys if provided
+      const validRoleKeys = ['member', 'manager', 'director'];
+      const validTierKeys = ['top', 'mid', 'leaf'];
+      if (role_labels && typeof role_labels === 'object') {
+        for (const key of Object.keys(role_labels)) {
+          if (!validRoleKeys.includes(key)) {
+            return res.status(400).json({
+              status: 'error',
+              message: `Invalid role_labels key: '${key}'. Valid keys: ${validRoleKeys.join(', ')}`,
+            });
+          }
+        }
+      }
+      if (tier_labels && typeof tier_labels === 'object') {
+        for (const key of Object.keys(tier_labels)) {
+          if (!validTierKeys.includes(key)) {
+            return res.status(400).json({
+              status: 'error',
+              message: `Invalid tier_labels key: '${key}'. Valid keys: ${validTierKeys.join(', ')}`,
+            });
+          }
+        }
       }
 
       const supabase = getSupabaseClient();
@@ -136,10 +213,17 @@ export default function createTeamsV2Routes(_pgPool) {
         .eq('module_name', 'teams')
         .maybeSingle();
 
+      // Build merged settings
+      const prevSettings = existing?.settings || {};
+      const mergedSettings = { ...prevSettings };
+      if (visibility_mode) mergedSettings.visibility_mode = visibility_mode;
+      if (role_labels)
+        mergedSettings.role_labels = { ...(prevSettings.role_labels || {}), ...role_labels };
+      if (tier_labels)
+        mergedSettings.tier_labels = { ...(prevSettings.tier_labels || {}), ...tier_labels };
+
       let result;
       if (existing) {
-        // Update existing
-        const mergedSettings = { ...(existing.settings || {}), visibility_mode };
         const { data, error } = await supabase
           .from('modulesettings')
           .update({
@@ -153,13 +237,12 @@ export default function createTeamsV2Routes(_pgPool) {
         if (error) throw new Error(error.message);
         result = data;
       } else {
-        // Insert new
         const { data, error } = await supabase
           .from('modulesettings')
           .insert({
             tenant_id,
             module_name: 'teams',
-            settings: { visibility_mode },
+            settings: mergedSettings,
             is_enabled: true,
           })
           .select()
@@ -168,15 +251,27 @@ export default function createTeamsV2Routes(_pgPool) {
         result = data;
       }
 
-      // Invalidate caches so all users pick up the new mode
-      clearSettingsCache(tenant_id);
-      clearVisibilityCache(); // Clear all user scope caches for this tenant
+      // Invalidate caches (visibility_mode may have changed)
+      if (visibility_mode) {
+        clearSettingsCache(tenant_id);
+        clearVisibilityCache();
+      }
 
-      logger.info(`[Teams v2] Visibility mode set to '${visibility_mode}' for tenant ${tenant_id}`);
+      const finalSettings = result.settings || {};
+      logger.info(`[Teams v2] Settings updated for tenant ${tenant_id}:`, {
+        visibility_mode: finalSettings.visibility_mode,
+        role_labels: finalSettings.role_labels,
+        tier_labels: finalSettings.tier_labels,
+      });
 
       res.json({
         status: 'success',
-        data: { visibility_mode, settings_id: result.id },
+        data: {
+          visibility_mode: finalSettings.visibility_mode || 'hierarchical',
+          settings_id: result.id,
+          role_labels: { ...DEFAULT_ROLE_LABELS, ...(finalSettings.role_labels || {}) },
+          tier_labels: { ...DEFAULT_TIER_LABELS, ...(finalSettings.tier_labels || {}) },
+        },
       });
     } catch (err) {
       logger.error('[Teams v2 PUT /visibility-mode] Error:', err.message);
