@@ -21,7 +21,7 @@ import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import TagInput from '../shared/TagInput';
 import LazyAccountSelector from '../shared/LazyAccountSelector';
-import LazyEmployeeSelector from '../shared/LazyEmployeeSelector';
+import AssignmentField from '../shared/AssignmentField';
 import CreateAccountDialog from '../accounts/CreateAccountDialog';
 import { useApiManager } from '../shared/ApiManager';
 import { useStatusCardPreferences } from '@/hooks/useStatusCardPreferences';
@@ -79,7 +79,7 @@ export default function LeadForm({
   onSubmit,
   onCancel,
   user,
-  employees = [],
+  employees = [], // Legacy prop — kept for backward compat, no longer used directly
   isManager,
 }) {
   // Unified contract: support both new and legacy prop names
@@ -115,7 +115,6 @@ export default function LeadForm({
   const [loading, setLoading] = useState(true);
   const { selectedTenantId } = useTenant();
   const [allTags, setAllTags] = useState([]);
-  const [teamEmployeeIds, setTeamEmployeeIds] = useState(null); // null = no filtering (admin), array = scoped
   const [showCreateAccountDialog, setShowCreateAccountDialog] = useState(false);
   const [newAccountName, setNewAccountName] = useState(''); // Track typed account name for create dialog
   const [createdAccount, setCreatedAccount] = useState(null); // Store newly created account for immediate display
@@ -126,20 +125,6 @@ export default function LeadForm({
     first_name: '',
     last_name: '',
   });
-
-  // Determine assignable employees based on role
-  // TODO: Use this for role-based employee assignment restrictions
-  const _assignableEmployees = useMemo(() => {
-    if (!employees || !user) return [];
-
-    // Managers can assign to any active employee
-    if (isManager) {
-      return employees.filter((e) => e.is_active !== false && e.status !== 'inactive');
-    }
-
-    // Employees can only assign to themselves
-    return employees.filter((e) => e.id === user.employee_id || e.email === user.email);
-  }, [employees, user, isManager]);
 
   const isSuperadmin = user?.role === 'superadmin';
   const { isCardVisible, getCardLabel } = useStatusCardPreferences();
@@ -232,30 +217,6 @@ export default function LeadForm({
       loadInitialData();
     }
   }, [lead, user, isManager]);
-
-  // Fetch team visibility scope to filter employee selector
-  useEffect(() => {
-    if (!user || !isManager) return; // Non-managers don't see the dropdown
-    const fetchTeamScope = async () => {
-      try {
-        const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4001';
-        const response = await fetch(`${BACKEND_URL}/api/v2/leads/team-scope`, {
-          credentials: 'include',
-        });
-        if (response.ok) {
-          const json = await response.json();
-          if (json.data?.bypass) {
-            setTeamEmployeeIds(null); // Admin/superadmin — no filtering
-          } else if (json.data?.employeeIds) {
-            setTeamEmployeeIds(json.data.employeeIds);
-          }
-        }
-      } catch (err) {
-        console.warn('LeadForm: Could not fetch team scope, showing all employees:', err);
-      }
-    };
-    fetchTeamScope();
-  }, [user, isManager]);
 
   // Load all existing tags when component mounts or tenant/user changes
   useEffect(() => {
@@ -780,56 +741,15 @@ export default function LeadForm({
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="assigned_to" className="text-slate-200">
-              Assigned To
-            </Label>
-            {isManager ? (
-              // Managers/admins can select any assignee
-              <LazyEmployeeSelector
-                value={formData.assigned_to || 'unassigned'}
-                onValueChange={(value) => handleChange('assigned_to', value)}
-                placeholder="Select assignee"
-                includeUnassigned={true}
-                allowedIds={teamEmployeeIds}
-                className="mt-1 bg-slate-700 border-slate-600 text-slate-200"
-              />
-            ) : !formData.assigned_to || formData.assigned_to === 'unassigned' ? (
-              // Non-managers viewing unassigned lead: show claim button
-              <div className="flex gap-2 mt-1">
-                <Input
-                  value="Unassigned"
-                  disabled
-                  className="bg-slate-700 border-slate-600 text-slate-400 cursor-not-allowed"
-                />
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleChange('assigned_to', user?.employee_id || user?.id || user?.email)
-                  }
-                  className="px-3 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-md whitespace-nowrap transition-colors"
-                >
-                  Assign to me
-                </button>
-              </div>
-            ) : (
-              // Non-managers with an assigned lead: show name + option to unassign
-              <div className="flex gap-2 mt-1">
-                <Input
-                  value={user?.full_name || user?.email || 'You'}
-                  disabled
-                  className="bg-slate-600 border-slate-500 text-slate-300 cursor-not-allowed"
-                />
-                <button
-                  type="button"
-                  onClick={() => handleChange('assigned_to', '')}
-                  className="px-3 py-2 text-sm font-medium bg-slate-600 hover:bg-slate-500 text-slate-300 rounded-md whitespace-nowrap transition-colors border border-slate-500"
-                >
-                  Unassign
-                </button>
-              </div>
-            )}
-          </div>
+          <AssignmentField
+            value={formData.assigned_to}
+            onChange={(v) => handleChange('assigned_to', v)}
+            user={user}
+            isManager={isManager}
+            entityId={lead?.id}
+            entityType="lead"
+            tenantId={selectedTenantId || user?.tenant_id}
+          />
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
