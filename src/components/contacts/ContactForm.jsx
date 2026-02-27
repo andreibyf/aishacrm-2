@@ -1,106 +1,113 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { X, Save, AlertCircle, AlertTriangle, Loader2 } from "lucide-react";
-import PhoneInput from "../shared/PhoneInput";
-import AddressFields from "../shared/AddressFields";
-import { Contact, Lead } from "@/api/entities";
-import { useUser } from "@/components/shared/useUser.js";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { useTenant } from "../shared/tenantContext";
-import { generateUniqueId } from "@/api/functions";
-import { useToast } from "@/components/ui/use-toast";
-import { createAuditLog } from "@/api/functions";
-import TagInput from "../shared/TagInput";
-import LazyAccountSelector from "../shared/LazyAccountSelector";
-import CreateAccountDialog from "../accounts/CreateAccountDialog";
-import { logDev } from "@/utils/devLogger";
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { X, Save, AlertCircle, AlertTriangle, Loader2 } from 'lucide-react';
+import PhoneInput from '../shared/PhoneInput';
+import AddressFields from '../shared/AddressFields';
+import { Contact, Lead } from '@/api/entities';
+import { useUser } from '@/components/shared/useUser.js';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useTenant } from '../shared/tenantContext';
+import { generateUniqueId } from '@/api/functions';
+import { useToast } from '@/components/ui/use-toast';
+import { createAuditLog } from '@/api/functions';
+import TagInput from '../shared/TagInput';
+import LazyAccountSelector from '../shared/LazyAccountSelector';
+import CreateAccountDialog from '../accounts/CreateAccountDialog';
+import { logDev } from '@/utils/devLogger';
 
 // New imports for duplicate detection
-import { checkDuplicateBeforeCreate } from "@/api/functions";
-import { useApiManager } from "../shared/ApiManager";
-import LazyEmployeeSelector from "../shared/LazyEmployeeSelector";
-import { DenormalizationHelper } from "../shared/DenormalizationHelper";
-import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
+import { checkDuplicateBeforeCreate } from '@/api/functions';
+import { useApiManager } from '../shared/ApiManager';
+import LazyEmployeeSelector from '../shared/LazyEmployeeSelector';
+import AssignmentField from '../shared/AssignmentField';
+import { DenormalizationHelper } from '../shared/DenormalizationHelper';
+import { useStatusCardPreferences } from '@/hooks/useStatusCardPreferences';
 
 // New imports for error logging
-import { useErrorLog, handleApiError } from '../shared/ErrorLogger'
+import { useErrorLog, handleApiError } from '../shared/ErrorLogger';
 
 const leadSourceOptions = [
-  { value: "website", label: "Website" },
-  { value: "referral", label: "Referral" },
-  { value: "cold_call", label: "Cold Call" },
-  { value: "email", label: "Email Campaign" },
-  { value: "social_media", label: "Social Media" },
-  { value: "trade_show", label: "Trade Show" },
-  { value: "advertising", label: "Advertising" },
-  { value: "other", label: "Other" }
+  { value: 'website', label: 'Website' },
+  { value: 'referral', label: 'Referral' },
+  { value: 'cold_call', label: 'Cold Call' },
+  { value: 'email', label: 'Email Campaign' },
+  { value: 'social_media', label: 'Social Media' },
+  { value: 'trade_show', label: 'Trade Show' },
+  { value: 'advertising', label: 'Advertising' },
+  { value: 'other', label: 'Other' },
 ];
 
 const statusOptions = [
-  { value: "prospect", label: "Prospect" },
-  { value: "customer", label: "Customer" },
-  { value: "active", label: "Active" },
-  { value: "inactive", label: "Inactive" },
+  { value: 'prospect', label: 'Prospect' },
+  { value: 'customer', label: 'Customer' },
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
 ];
 
-export default function ContactForm({ 
-  contact: contactProp,      // Legacy prop
-  initialData,               // New unified prop
-  onSuccess: onSuccessProp,  // Legacy callback
-  onSubmit,                  // New unified callback
-  onCancel, 
-  user: userProp 
+export default function ContactForm({
+  contact: contactProp, // Legacy prop
+  initialData, // New unified prop
+  onSuccess: onSuccessProp, // Legacy callback
+  onSubmit, // New unified callback
+  onCancel,
+  user: userProp,
 }) {
   // Unified contract: Support both old and new prop names
   const contact = initialData || contactProp;
   const onSuccess = onSubmit || onSuccessProp;
-  
+
   logDev('[ContactForm] === COMPONENT MOUNT ===');
   logDev('[ContactForm] contact:', contact?.id, contact?.first_name, contact?.last_name);
   logDev('[ContactForm] userProp:', userProp?.email, userProp?.role);
-  
+
   // Use global user unless an explicit override is provided via props
   const { user: contextUser, loading: contextUserLoading } = useUser();
   const user = userProp || contextUser;
   const userLoading = userProp ? false : contextUserLoading;
-  
+
   const { toast } = useToast();
 
   // User is now provided by global context (no local User.me() calls)
 
   const [formData, setFormData] = useState({
-    first_name: contact?.first_name || "",
-    last_name: contact?.last_name || "",
-    email: contact?.email || "",
-    phone: contact?.phone || "",
-    mobile: contact?.mobile || "",
-    job_title: contact?.job_title || "",
-    department: contact?.department || "",
-    account_id: contact?.account_id || "",
-    assigned_to: contact?.assigned_to || "",
-    lead_source: contact?.lead_source || "website",
-    status: contact?.status || "prospect",
-    address_1: contact?.address_1 || "",
-    address_2: contact?.address_2 || "",
-    city: contact?.city || "",
-    state: contact?.state || "",
-    zip: contact?.zip || "",
-    country: contact?.country || "",
+    first_name: contact?.first_name || '',
+    last_name: contact?.last_name || '',
+    email: contact?.email || '',
+    phone: contact?.phone || '',
+    mobile: contact?.mobile || '',
+    job_title: contact?.job_title || '',
+    department: contact?.department || '',
+    account_id: contact?.account_id || '',
+    assigned_to: contact?.assigned_to || '',
+    lead_source: contact?.lead_source || 'website',
+    status: contact?.status || 'prospect',
+    address_1: contact?.address_1 || '',
+    address_2: contact?.address_2 || '',
+    city: contact?.city || '',
+    state: contact?.state || '',
+    zip: contact?.zip || '',
+    country: contact?.country || '',
     is_test_data: contact?.is_test_data || false,
     tags: contact?.tags || [],
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
-  const [submitProgress, setSubmitProgress] = useState("");
+  const [submitProgress, setSubmitProgress] = useState('');
   const { selectedTenantId } = useTenant();
   const [allTags, setAllTags] = useState([]);
   const [showCreateAccount, setShowCreateAccount] = useState(false);
-  const [newAccountName, setNewAccountName] = useState("");
+  const [newAccountName, setNewAccountName] = useState('');
   const [createdAccount, setCreatedAccount] = useState(null); // Store newly created account for immediate display
 
   const [duplicateWarning, setDuplicateWarning] = useState(null);
@@ -109,7 +116,7 @@ export default function ContactForm({
   // Field-level validation errors for a11y
   const [fieldErrors, setFieldErrors] = useState({
     first_name: '',
-    last_name: ''
+    last_name: '',
   });
 
   const { cachedRequest, clearCache } = useApiManager();
@@ -122,19 +129,19 @@ export default function ContactForm({
   // Keep hidden statuses if the current record has them
   const filteredStatusOptions = useMemo(() => {
     const statusCardMap = {
-      'prospect': 'contact_prospect',
-      'customer': 'contact_customer',
-      'active': 'contact_active',
-      'inactive': 'contact_inactive',
+      prospect: 'contact_prospect',
+      customer: 'contact_customer',
+      active: 'contact_active',
+      inactive: 'contact_inactive',
     };
-    
+
     return statusOptions
-      .filter(option => 
-        isCardVisible(statusCardMap[option.value]) || formData.status === option.value
+      .filter(
+        (option) => isCardVisible(statusCardMap[option.value]) || formData.status === option.value,
       )
-      .map(option => ({
+      .map((option) => ({
         ...option,
-        label: getCardLabel(statusCardMap[option.value]) || option.label
+        label: getCardLabel(statusCardMap[option.value]) || option.label,
       }));
   }, [isCardVisible, getCardLabel, formData.status]);
 
@@ -143,87 +150,89 @@ export default function ContactForm({
 
   const dupCheckAvailableRef = useRef(true);
 
-  const checkForDuplicates = useCallback(async (data) => {
-    logDev('[ContactForm] checkForDuplicates called');
-    if (!dupCheckAvailableRef.current) {
-      logDev('[ContactForm] Duplicate check disabled for this session (unavailable).');
-      return;
-    }
-    
-    // Skip duplicate check for test data
-    if (data.is_test_data) {
-      logDev('[ContactForm] Test data flagged, skipping duplicate check');
-      setDuplicateWarning(null);
-      setCheckingDuplicates(false);
-      return;
-    }
-    
-    if (contact) {
-      logDev('[ContactForm] Editing existing contact, skipping duplicate check');
-      return;
-    }
+  const checkForDuplicates = useCallback(
+    async (data) => {
+      logDev('[ContactForm] checkForDuplicates called');
+      if (!dupCheckAvailableRef.current) {
+        logDev('[ContactForm] Duplicate check disabled for this session (unavailable).');
+        return;
+      }
 
-    if (!data.email && !data.phone) {
-      logDev('[ContactForm] No email or phone, skipping duplicate check');
-      setDuplicateWarning(null);
-      return;
-    }
-
-    if (!user) { // Ensure user is loaded before checking duplicates
-      logDev('[ContactForm] User not available yet, cannot perform duplicate check.');
-      return;
-    }
-
-    logDev('[ContactForm] Starting duplicate check...');
-    setCheckingDuplicates(true);
-    try {
-      const tenantId = user.role === 'superadmin' && selectedTenantId ? selectedTenantId : user.tenant_id;
-      if (!tenantId) {
-        logDev('[ContactForm] No tenant ID, skipping duplicate check');
+      // Skip duplicate check for test data
+      if (data.is_test_data) {
+        logDev('[ContactForm] Test data flagged, skipping duplicate check');
+        setDuplicateWarning(null);
         setCheckingDuplicates(false);
         return;
       }
 
-      const checkData = {
-        entity_type: 'Contact',
-        data: {
-          email: data.email || null,
-          phone: data.phone || null
-        },
-        tenant_id: tenantId
-      };
+      if (contact) {
+        logDev('[ContactForm] Editing existing contact, skipping duplicate check');
+        return;
+      }
 
-      logDev('[ContactForm] Calling checkDuplicateBeforeCreate...', checkData);
-      const response = await cachedRequest(
-        'Contact',
-        'checkDuplicate',
-        checkData,
-        () => checkDuplicateBeforeCreate(checkData)
-      );
-
-      logDev('[ContactForm] Duplicate check response:', response);
-      if (response.data?.has_duplicates) {
-        logDev('[ContactForm] Duplicates found:', response.data.duplicates.length);
-        setDuplicateWarning(response.data.duplicates);
-      } else {
-        logDev('[ContactForm] No duplicates found');
+      if (!data.email && !data.phone) {
+        logDev('[ContactForm] No email or phone, skipping duplicate check');
         setDuplicateWarning(null);
+        return;
       }
-    } catch (error) {
-      console.error('[ContactForm] Duplicate check failed:', error);
-      if (logError) {
-        logError(handleApiError('Contact Form - Duplicate Check', error));
+
+      if (!user) {
+        // Ensure user is loaded before checking duplicates
+        logDev('[ContactForm] User not available yet, cannot perform duplicate check.');
+        return;
       }
-      // If function isn't available in production, disable further checks to avoid noisy re-renders
-      if (String(error?.message || '').includes('not available')) {
-        dupCheckAvailableRef.current = false;
+
+      logDev('[ContactForm] Starting duplicate check...');
+      setCheckingDuplicates(true);
+      try {
+        const tenantId =
+          user.role === 'superadmin' && selectedTenantId ? selectedTenantId : user.tenant_id;
+        if (!tenantId) {
+          logDev('[ContactForm] No tenant ID, skipping duplicate check');
+          setCheckingDuplicates(false);
+          return;
+        }
+
+        const checkData = {
+          entity_type: 'Contact',
+          data: {
+            email: data.email || null,
+            phone: data.phone || null,
+          },
+          tenant_id: tenantId,
+        };
+
+        logDev('[ContactForm] Calling checkDuplicateBeforeCreate...', checkData);
+        const response = await cachedRequest('Contact', 'checkDuplicate', checkData, () =>
+          checkDuplicateBeforeCreate(checkData),
+        );
+
+        logDev('[ContactForm] Duplicate check response:', response);
+        if (response.data?.has_duplicates) {
+          logDev('[ContactForm] Duplicates found:', response.data.duplicates.length);
+          setDuplicateWarning(response.data.duplicates);
+        } else {
+          logDev('[ContactForm] No duplicates found');
+          setDuplicateWarning(null);
+        }
+      } catch (error) {
+        console.error('[ContactForm] Duplicate check failed:', error);
+        if (logError) {
+          logError(handleApiError('Contact Form - Duplicate Check', error));
+        }
+        // If function isn't available in production, disable further checks to avoid noisy re-renders
+        if (String(error?.message || '').includes('not available')) {
+          dupCheckAvailableRef.current = false;
+        }
+        setDuplicateWarning(null);
+      } finally {
+        logDev('[ContactForm] Duplicate check complete');
+        setCheckingDuplicates(false);
       }
-      setDuplicateWarning(null);
-    } finally {
-      logDev('[ContactForm] Duplicate check complete');
-      setCheckingDuplicates(false);
-    }
-  }, [contact, user, selectedTenantId, cachedRequest, logError]);
+    },
+    [contact, user, selectedTenantId, cachedRequest, logError],
+  );
 
   // Initialize form state once per open session (avoid resets on unrelated re-renders)
   const initializedRef = useRef(false);
@@ -234,24 +243,24 @@ export default function ContactForm({
       if (contact) {
         logDev('[ContactForm] Loading existing contact data into form');
         setFormData({
-          first_name: contact.first_name || "",
-          last_name: contact.last_name || "",
-          email: contact.email || "",
-          phone: contact.phone || "",
-          mobile: contact.mobile || "",
-          job_title: contact.job_title || "",
-          department: contact.department || "",
-          account_id: contact.account_id || "",
-          lead_source: contact.lead_source || "website",
-          status: contact.status || "prospect",
-          address_1: contact.address_1 || "",
-          address_2: contact.address_2 || "",
-          city: contact.city || "",
-          state: contact.state || "",
-          zip: contact.zip || "",
-          country: contact.country || "United States",
+          first_name: contact.first_name || '',
+          last_name: contact.last_name || '',
+          email: contact.email || '',
+          phone: contact.phone || '',
+          mobile: contact.mobile || '',
+          job_title: contact.job_title || '',
+          department: contact.department || '',
+          account_id: contact.account_id || '',
+          lead_source: contact.lead_source || 'website',
+          status: contact.status || 'prospect',
+          address_1: contact.address_1 || '',
+          address_2: contact.address_2 || '',
+          city: contact.city || '',
+          state: contact.state || '',
+          zip: contact.zip || '',
+          country: contact.country || 'United States',
           tags: contact.tags || [],
-          assigned_to: contact.assigned_to || "",
+          assigned_to: contact.assigned_to || '',
           is_test_data: contact.is_test_data || false,
         });
         logDev('[ContactForm] Form data loaded for existing contact');
@@ -268,36 +277,38 @@ export default function ContactForm({
         logDev('[ContactForm] URL accountId:', accountId);
 
         const newContactInitialState = {
-          first_name: "",
-          last_name: "",
-          email: "",
-          phone: "",
-          mobile: "",
-          job_title: "",
-          department: "",
-          account_id: accountId || "",
-          assigned_to: "",
-          lead_source: "website",
-          status: "prospect",
-          address_1: "",
-          address_2: "",
-          city: "",
-          state: "",
-          zip: "",
-          country: "United States",
+          first_name: '',
+          last_name: '',
+          email: '',
+          phone: '',
+          mobile: '',
+          job_title: '',
+          department: '',
+          account_id: accountId || '',
+          assigned_to: '',
+          lead_source: 'website',
+          status: 'prospect',
+          address_1: '',
+          address_2: '',
+          city: '',
+          state: '',
+          zip: '',
+          country: 'United States',
           is_test_data: false,
           tags: [],
         };
         // IMPORTANT: Do NOT overwrite user-entered names if the user started typing before context user finished loading.
         // Preserve existing first_name / last_name if they are already populated in formData.
-        setFormData(prev => ({
+        setFormData((prev) => ({
           ...newContactInitialState,
           first_name: prev.first_name || newContactInitialState.first_name,
           last_name: prev.last_name || newContactInitialState.last_name,
         }));
         initializedRef.current = true;
-        logDev('[ContactForm] New contact form initialized (preserving existing name fields if present)');
-        
+        logDev(
+          '[ContactForm] New contact form initialized (preserving existing name fields if present)',
+        );
+
         // Only check for duplicates if we have email or phone and user is available
         if (user && (newContactInitialState.email || newContactInitialState.phone)) {
           logDev('[ContactForm] Checking for duplicates on new contact');
@@ -312,10 +323,10 @@ export default function ContactForm({
     } else {
       logDev('[ContactForm] Waiting for user to load form data...');
     }
-  // Important: do NOT depend on checkForDuplicates or selectedTenantId here to prevent resets
-  // We intentionally omit checkForDuplicates from deps to avoid re-initializing the form
-  // after user starts typing. Safe because we only call it once on initial load when needed.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Important: do NOT depend on checkForDuplicates or selectedTenantId here to prevent resets
+    // We intentionally omit checkForDuplicates from deps to avoid re-initializing the form
+    // after user starts typing. Safe because we only call it once on initial load when needed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contact, user]);
 
   // Separate effect for loading tags
@@ -326,17 +337,24 @@ export default function ContactForm({
       try {
         logDev('[ContactForm] Fetching contacts and leads for tags with tenant:', selectedTenantId);
         const [contactsData, leadsData] = await Promise.all([
-          cachedRequest('Contact', 'list', { limit: 100, tenant_id: selectedTenantId }, () => Contact.list({ tenant_id: selectedTenantId }, null, 100)),
-          cachedRequest('Lead', 'list', { limit: 100, tenant_id: selectedTenantId }, () => Lead?.list({ tenant_id: selectedTenantId }, null, 100) || []),
+          cachedRequest('Contact', 'list', { limit: 100, tenant_id: selectedTenantId }, () =>
+            Contact.list({ tenant_id: selectedTenantId }, null, 100),
+          ),
+          cachedRequest(
+            'Lead',
+            'list',
+            { limit: 100, tenant_id: selectedTenantId },
+            () => Lead?.list({ tenant_id: selectedTenantId }, null, 100) || [],
+          ),
         ]);
 
         logDev('[ContactForm] Contacts fetched:', contactsData?.length);
         logDev('[ContactForm] Leads fetched:', leadsData?.length);
 
         const tagCounts = {};
-        [...contactsData, ...leadsData].forEach(item => {
+        [...contactsData, ...leadsData].forEach((item) => {
           if (item.tags && Array.isArray(item.tags)) {
-            item.tags.forEach(tag => {
+            item.tags.forEach((tag) => {
               if (tag && typeof tag === 'string') {
                 tagCounts[tag.toLowerCase()] = (tagCounts[tag.toLowerCase()] || 0) + 1;
               }
@@ -351,7 +369,7 @@ export default function ContactForm({
         logDev('[ContactForm] Tags loaded:', tagList.length);
         setAllTags(tagList);
       } catch (error) {
-        console.error("[ContactForm] Failed to load existing tags:", error);
+        console.error('[ContactForm] Failed to load existing tags:', error);
         if (logError) {
           logError(handleApiError('Contact Form - Load Tags', error));
         }
@@ -359,7 +377,8 @@ export default function ContactForm({
       }
     };
 
-    if (user) { // Ensure user is loaded before loading tags
+    if (user) {
+      // Ensure user is loaded before loading tags
       logDev('[ContactForm] User available, loading tags');
       loadExistingTags();
     } else {
@@ -369,13 +388,13 @@ export default function ContactForm({
 
   const handleChange = (field, value) => {
     logDev('[ContactForm] Field changed:', field, value);
-    
+
     // Clear field error when user starts typing
     if (field === 'first_name' || field === 'last_name') {
-      setFieldErrors(prev => ({ ...prev, [field]: '' }));
+      setFieldErrors((prev) => ({ ...prev, [field]: '' }));
     }
-    
-    setFormData(prev => {
+
+    setFormData((prev) => {
       const updated = { ...prev, [field]: value };
 
       // FUTURE: Potential enhancement - if email is entered and first/last names are blank,
@@ -395,11 +414,11 @@ export default function ContactForm({
   const handleCreateAccountSuccess = (newAccount) => {
     logDev('[ContactForm] New account created:', newAccount.id);
     setCreatedAccount(newAccount); // Store for immediate display in selector
-    setFormData(prev => ({ ...prev, account_id: newAccount.id }));
+    setFormData((prev) => ({ ...prev, account_id: newAccount.id }));
     setShowCreateAccount(false);
     toast({
-      title: "Success",
-      description: "Account created successfully",
+      title: 'Success',
+      description: 'Account created successfully',
     });
   };
 
@@ -407,12 +426,12 @@ export default function ContactForm({
     e.preventDefault();
     logDev('[ContactForm] === FORM SUBMIT ===');
     setSubmitError(null);
-    setSubmitProgress("");
-    
+    setSubmitProgress('');
+
     // Clear and validate field errors
     const errors = {
       first_name: '',
-      last_name: ''
+      last_name: '',
     };
 
     // Require at least first name OR last name (not both mandatory) for UX,
@@ -421,14 +440,16 @@ export default function ContactForm({
     if (!formData.first_name?.trim() && !formData.last_name?.trim()) {
       errors.first_name = 'First name or last name is required';
       errors.last_name = 'First name or last name is required';
-      logDev('[ContactForm] ERROR: Missing required fields (need at least first_name OR last_name)');
+      logDev(
+        '[ContactForm] ERROR: Missing required fields (need at least first_name OR last_name)',
+      );
       setFieldErrors(errors);
       toast({
-        title: "Missing Information",
-        description: "At least first name or last name is required.",
-        variant: "destructive",
+        title: 'Missing Information',
+        description: 'At least first name or last name is required.',
+        variant: 'destructive',
       });
-      setSubmitError("At least first name or last name is required.");
+      setSubmitError('At least first name or last name is required.');
       return;
     }
 
@@ -437,7 +458,8 @@ export default function ContactForm({
       logDev('[ContactForm] ERROR: Superadmin write without selected tenant');
       toast({
         title: 'Select a tenant',
-        description: 'As superadmin, please pick a tenant (top-right selector) before creating a contact.',
+        description:
+          'As superadmin, please pick a tenant (top-right selector) before creating a contact.',
         variant: 'destructive',
       });
       setSubmitError('Tenant is required for superadmin writes.');
@@ -448,7 +470,7 @@ export default function ContactForm({
     if (!contact && duplicateWarning && duplicateWarning.length > 0 && !formData.is_test_data) {
       logDev('[ContactForm] Duplicate warning present, prompting user...');
       const proceed = window.confirm(
-        `Warning: ${duplicateWarning.length} potential duplicate(s) found. Do you want to proceed anyway?`
+        `Warning: ${duplicateWarning.length} potential duplicate(s) found. Do you want to proceed anyway?`,
       );
       if (!proceed) {
         logDev('[ContactForm] User cancelled submission due to duplicates');
@@ -459,102 +481,141 @@ export default function ContactForm({
 
     logDev('[ContactForm] Starting submission...');
     setIsSubmitting(true);
-    setSubmitProgress("Preparing contact data...");
+    setSubmitProgress('Preparing contact data...');
 
     try {
       let submissionData = { ...formData };
 
-      Object.keys(submissionData).forEach(key => {
+      Object.keys(submissionData).forEach((key) => {
         if (submissionData[key] === '' && key !== 'is_test_data' && key !== 'tags') {
           submissionData[key] = null;
         } else if (key === 'tags' && submissionData[key] && submissionData[key].length === 0) {
           submissionData[key] = null;
         }
       });
-      
+
       logDev('[ContactForm] Enriching contact data...');
-      setSubmitProgress("Enriching contact data...");
+      setSubmitProgress('Enriching contact data...');
       // Use tenant_id from user context, selectedTenantId, or null (backend will handle)
       const tenantId = user?.tenant_id || selectedTenantId || null;
-      const enrichedData = await DenormalizationHelper.enrichContact(
-        submissionData,
-        tenantId
-      );
+      const enrichedData = await DenormalizationHelper.enrichContact(submissionData, tenantId);
       logDev('[ContactForm] Data enriched successfully');
-      
+
       let result;
       if (contact) {
         logDev('[ContactForm] Updating existing contact with ID:', contact.id);
-        setSubmitProgress("Updating contact...");
+        setSubmitProgress('Updating contact...');
         result = await Contact.update(contact.id, enrichedData);
         logDev('[ContactForm] Contact updated successfully, result:', result?.id);
 
         try {
           logDev('[ContactForm] Creating audit log for update...');
-          setSubmitProgress("Creating audit log...");
+          setSubmitProgress('Creating audit log...');
           const auditLogData = {
             action_type: 'update',
             entity_type: 'Contact',
             entity_id: contact.id,
             description: `Contact updated: ${formData.first_name} ${formData.last_name}`,
             old_values: {
-              first_name: contact.first_name, last_name: contact.last_name, email: contact.email,
-              phone: contact.phone, mobile: contact.mobile, job_title: contact.job_title,
-              department: contact.department, account_id: contact.account_id, assigned_to: contact.assigned_to,
-              lead_source: contact.lead_source, status: contact.status, is_test_data: contact.is_test_data,
-              address_1: contact.address_1, address_2: contact.address_2, city: contact.city, state: contact.state, zip: contact.zip, country: contact.country,
+              first_name: contact.first_name,
+              last_name: contact.last_name,
+              email: contact.email,
+              phone: contact.phone,
+              mobile: contact.mobile,
+              job_title: contact.job_title,
+              department: contact.department,
+              account_id: contact.account_id,
+              assigned_to: contact.assigned_to,
+              lead_source: contact.lead_source,
+              status: contact.status,
+              is_test_data: contact.is_test_data,
+              address_1: contact.address_1,
+              address_2: contact.address_2,
+              city: contact.city,
+              state: contact.state,
+              zip: contact.zip,
+              country: contact.country,
               tags: contact.tags,
             },
             new_values: {
-              first_name: enrichedData.first_name, last_name: enrichedData.last_name, email: enrichedData.email,
-              phone: enrichedData.phone, mobile: enrichedData.mobile, job_title: enrichedData.job_title,
-              department: enrichedData.department, account_id: enrichedData.account_id, assigned_to: enrichedData.assigned_to,
-              lead_source: enrichedData.lead_source, status: enrichedData.status, is_test_data: enrichedData.is_test_data,
-              address_1: enrichedData.address_1, address_2: enrichedData.address_2, city: enrichedData.city, state: enrichedData.state, zip: enrichedData.zip, country: enrichedData.country,
+              first_name: enrichedData.first_name,
+              last_name: enrichedData.last_name,
+              email: enrichedData.email,
+              phone: enrichedData.phone,
+              mobile: enrichedData.mobile,
+              job_title: enrichedData.job_title,
+              department: enrichedData.department,
+              account_id: enrichedData.account_id,
+              assigned_to: enrichedData.assigned_to,
+              lead_source: enrichedData.lead_source,
+              status: enrichedData.status,
+              is_test_data: enrichedData.is_test_data,
+              address_1: enrichedData.address_1,
+              address_2: enrichedData.address_2,
+              city: enrichedData.city,
+              state: enrichedData.state,
+              zip: enrichedData.zip,
+              country: enrichedData.country,
               tags: enrichedData.tags,
-            }
+            },
           };
-          await cachedRequest('Utility', 'createAuditLog', auditLogData, () => createAuditLog(auditLogData));
+          await cachedRequest('Utility', 'createAuditLog', auditLogData, () =>
+            createAuditLog(auditLogData),
+          );
           logDev('[ContactForm] Audit log created for update');
         } catch (auditError) {
-          console.warn('[ContactForm] Audit log creation failed (non-critical) during update:', auditError.message);
+          console.warn(
+            '[ContactForm] Audit log creation failed (non-critical) during update:',
+            auditError.message,
+          );
           if (logError) {
             logError(handleApiError('Contact Form - Update Audit Log', auditError));
           }
         }
       } else {
         // For new contacts, use tenant from context if available, otherwise backend will handle
-        const tenantIdForNewContact = user?.role === 'superadmin' && selectedTenantId ? selectedTenantId : (user?.tenant_id || null);
-        logDev('[ContactForm] Creating new contact with target tenant:', tenantIdForNewContact || 'auto-assign');
+        const tenantIdForNewContact =
+          user?.role === 'superadmin' && selectedTenantId
+            ? selectedTenantId
+            : user?.tenant_id || null;
+        logDev(
+          '[ContactForm] Creating new contact with target tenant:',
+          tenantIdForNewContact || 'auto-assign',
+        );
 
         if (!enrichedData.unique_id) {
           try {
             logDev('[ContactForm] Generating unique ID for new contact...');
-            setSubmitProgress("Generating unique ID...");
+            setSubmitProgress('Generating unique ID...');
             // Only pass tenant_id if we have one; backend can handle null
             const idResponse = await cachedRequest(
               'Utility',
               'generateUniqueId',
               { entity_type: 'Contact', tenant_id: tenantIdForNewContact },
-              () => generateUniqueId({ entity_type: 'Contact', tenant_id: tenantIdForNewContact })
+              () => generateUniqueId({ entity_type: 'Contact', tenant_id: tenantIdForNewContact }),
             );
             if (idResponse.data?.unique_id) {
               enrichedData.unique_id = idResponse.data.unique_id;
               logDev('[ContactForm] Unique ID generated:', enrichedData.unique_id);
             }
           } catch (error) {
-            console.warn('[ContactForm] Failed to generate unique ID (non-critical) for new contact:', error.message);
+            console.warn(
+              '[ContactForm] Failed to generate unique ID (non-critical) for new contact:',
+              error.message,
+            );
             if (logError) {
-              logError(handleApiError('Contact Form - Generate Unique ID', error, {
-                severity: 'warning',
-                description: 'Failed to generate unique ID for new contact.'
-              }));
+              logError(
+                handleApiError('Contact Form - Generate Unique ID', error, {
+                  severity: 'warning',
+                  description: 'Failed to generate unique ID for new contact.',
+                }),
+              );
             }
           }
         }
 
         logDev('[ContactForm] Attempting to create contact...');
-        setSubmitProgress("Creating contact...");
+        setSubmitProgress('Creating contact...');
         result = await Contact.create({
           ...enrichedData,
           tenant_id: tenantIdForNewContact,
@@ -563,18 +624,23 @@ export default function ContactForm({
 
         try {
           logDev('[ContactForm] Creating audit log for create...');
-          setSubmitProgress("Creating audit log...");
+          setSubmitProgress('Creating audit log...');
           const auditLogData = {
             action_type: 'create',
             entity_type: 'Contact',
             entity_id: result?.id || 'unknown',
             description: `Contact created: ${formData.first_name} ${formData.last_name}`,
-            new_values: enrichedData
+            new_values: enrichedData,
           };
-          await cachedRequest('Utility', 'createAuditLog', auditLogData, () => createAuditLog(auditLogData));
+          await cachedRequest('Utility', 'createAuditLog', auditLogData, () =>
+            createAuditLog(auditLogData),
+          );
           logDev('[ContactForm] Audit log created for create');
         } catch (auditError) {
-          console.warn('[ContactForm] Audit log creation failed (non-critical) during create:', auditError.message);
+          console.warn(
+            '[ContactForm] Audit log creation failed (non-critical) during create:',
+            auditError.message,
+          );
           if (logError) {
             logError(handleApiError('Contact Form - Create Audit Log', auditError));
           }
@@ -582,15 +648,15 @@ export default function ContactForm({
       }
 
       logDev('[ContactForm] Finalizing submission...');
-      setSubmitProgress("Finalizing...");
+      setSubmitProgress('Finalizing...');
       clearCache();
       window.dispatchEvent(new CustomEvent('entity-modified', { detail: { entity: 'Contact' } }));
 
       logDev('[ContactForm] === SUBMIT SUCCESS ===');
       toast({
-        title: "Success!",
-        description: contact ? "Contact updated successfully!" : "Contact created successfully!",
-        variant: "default",
+        title: 'Success!',
+        description: contact ? 'Contact updated successfully!' : 'Contact created successfully!',
+        variant: 'default',
       });
 
       logDev('[ContactForm] Calling onSuccess callback:', typeof onSuccess, result?.id);
@@ -604,17 +670,18 @@ export default function ContactForm({
       if (logError) {
         logError(handleApiError('Contact Form - Submit', error));
       }
-      
+
       toast({
-        title: "Error Saving Contact",
-        description: "Failed to save contact. Please try again or contact support if the issue persists.",
-        variant: "destructive",
+        title: 'Error Saving Contact',
+        description:
+          'Failed to save contact. Please try again or contact support if the issue persists.',
+        variant: 'destructive',
       });
-      setSubmitError(error.message || "An unexpected error occurred while saving the contact.");
+      setSubmitError(error.message || 'An unexpected error occurred while saving the contact.');
     } finally {
       logDev('[ContactForm] Submit complete, cleaning up submission state');
       setIsSubmitting(false);
-      setSubmitProgress("");
+      setSubmitProgress('');
     }
   };
 
@@ -645,18 +712,27 @@ export default function ContactForm({
       <div className="p-6">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-slate-100">
-            {contact ? "Edit Contact" : "New Contact"}
+            {contact ? 'Edit Contact' : 'New Contact'}
           </h2>
-          <Button variant="ghost" size="icon" onClick={onCancel} className="text-slate-400 hover:text-slate-200">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onCancel}
+            className="text-slate-400 hover:text-slate-200"
+          >
             <X className="w-5 h-5" />
           </Button>
         </div>
 
         {!user?.tenant_id && user?.role !== 'superadmin' && (
-          <Alert variant="destructive" className="mb-6 bg-red-900/20 border-red-700/50 text-red-300">
+          <Alert
+            variant="destructive"
+            className="mb-6 bg-red-900/20 border-red-700/50 text-red-300"
+          >
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              Your account is not configured with a client. You cannot save records. Please contact your administrator.
+              Your account is not configured with a client. You cannot save records. Please contact
+              your administrator.
             </AlertDescription>
           </Alert>
         )}
@@ -664,18 +740,17 @@ export default function ContactForm({
         {isSubmitting && submitProgress && (
           <Alert className="mb-6 bg-blue-900/20 border-blue-700/50">
             <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
-            <AlertDescription className="text-blue-300">
-              {submitProgress}
-            </AlertDescription>
+            <AlertDescription className="text-blue-300">{submitProgress}</AlertDescription>
           </Alert>
         )}
 
         {submitError && (
-          <Alert variant="destructive" className="mb-6 bg-red-900/20 border-red-700/50 text-red-300">
+          <Alert
+            variant="destructive"
+            className="mb-6 bg-red-900/20 border-red-700/50 text-red-300"
+          >
             <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              {submitError}
-            </AlertDescription>
+            <AlertDescription>{submitError}</AlertDescription>
           </Alert>
         )}
 
@@ -684,13 +759,19 @@ export default function ContactForm({
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
               <div className="font-semibold mb-2">
-                {duplicateWarning.length} potential duplicate{duplicateWarning.length !== 1 ? 's' : ''} found:
+                {duplicateWarning.length} potential duplicate
+                {duplicateWarning.length !== 1 ? 's' : ''} found:
               </div>
               <div className="space-y-2">
                 {duplicateWarning.slice(0, 3).map((dup, idx) => (
-                  <div key={idx} className="text-sm flex items-center justify-between bg-slate-800/50 p-2 rounded">
+                  <div
+                    key={idx}
+                    className="text-sm flex items-center justify-between bg-slate-800/50 p-2 rounded"
+                  >
                     <div>
-                      <div className="font-medium">{dup.first_name} {dup.last_name}</div>
+                      <div className="font-medium">
+                        {dup.first_name} {dup.last_name}
+                      </div>
                       <div className="text-xs text-slate-400">
                         {dup.email && `${dup.email}`}
                         {dup.email && dup.phone && ` • `}
@@ -715,10 +796,10 @@ export default function ContactForm({
         )}
 
         {!contact && checkingDuplicates && (
-            <div className="mb-6 flex items-center gap-2 text-sm text-slate-400">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-slate-500"></div>
-                Checking for duplicates...
-            </div>
+          <div className="mb-6 flex items-center gap-2 text-sm text-slate-400">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-slate-500"></div>
+            Checking for duplicates...
+          </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -734,7 +815,7 @@ export default function ContactForm({
                 value={formData.first_name}
                 onChange={(e) => handleChange('first_name', e.target.value)}
                 aria-invalid={!!fieldErrors.first_name}
-                aria-describedby={fieldErrors.first_name ? "first_name-error" : undefined}
+                aria-describedby={fieldErrors.first_name ? 'first_name-error' : undefined}
                 className={`mt-1 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500 ${
                   fieldErrors.first_name ? 'border-red-500 focus:border-red-500' : ''
                 }`}
@@ -755,7 +836,7 @@ export default function ContactForm({
                 value={formData.last_name}
                 onChange={(e) => handleChange('last_name', e.target.value)}
                 aria-invalid={!!fieldErrors.last_name}
-                aria-describedby={fieldErrors.last_name ? "last_name-error" : undefined}
+                aria-describedby={fieldErrors.last_name ? 'last_name-error' : undefined}
                 className={`mt-1 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500 ${
                   fieldErrors.last_name ? 'border-red-500 focus:border-red-500' : ''
                 }`}
@@ -770,7 +851,9 @@ export default function ContactForm({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="email" className="text-slate-200">Email (Optional)</Label>
+              <Label htmlFor="email" className="text-slate-200">
+                Email (Optional)
+              </Label>
               <Input
                 id="email"
                 type="email"
@@ -779,7 +862,9 @@ export default function ContactForm({
                 className="mt-1 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500"
                 placeholder="Leave blank if no email available"
               />
-              <p className="text-xs text-slate-500 mt-1">Email is optional - unique ID will be generated for tracking</p>
+              <p className="text-xs text-slate-500 mt-1">
+                Email is optional - unique ID will be generated for tracking
+              </p>
             </div>
             <PhoneInput
               id="phone"
@@ -807,7 +892,9 @@ export default function ContactForm({
               showPrefixPicker={true}
             />
             <div>
-              <Label htmlFor="job_title" className="text-slate-200">Job Title</Label>
+              <Label htmlFor="job_title" className="text-slate-200">
+                Job Title
+              </Label>
               <Input
                 id="job_title"
                 value={formData.job_title}
@@ -821,7 +908,9 @@ export default function ContactForm({
             <h3 className="text-lg font-semibold text-slate-200 mb-3">Company Information</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="account_id" className="text-slate-200">Associated Account</Label>
+                <Label htmlFor="account_id" className="text-slate-200">
+                  Associated Account
+                </Label>
                 <LazyAccountSelector
                   value={formData.account_id}
                   onValueChange={(value) => handleChange('account_id', value)}
@@ -838,7 +927,9 @@ export default function ContactForm({
               </div>
 
               <div>
-                <Label htmlFor="department" className="text-slate-200">Department</Label>
+                <Label htmlFor="department" className="text-slate-200">
+                  Department
+                </Label>
                 <Input
                   id="department"
                   value={formData.department}
@@ -853,47 +944,63 @@ export default function ContactForm({
             <h3 className="text-lg font-semibold text-slate-200 mb-3">Lead & Assignment</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="lead_source" className="text-slate-200">Lead Source</Label>
-                <Select value={formData.lead_source} onValueChange={(value) => handleChange('lead_source', value)}>
+                <Label htmlFor="lead_source" className="text-slate-200">
+                  Lead Source
+                </Label>
+                <Select
+                  value={formData.lead_source}
+                  onValueChange={(value) => handleChange('lead_source', value)}
+                >
                   <SelectTrigger className="mt-1 bg-slate-700 border-slate-600 text-slate-200">
                     <SelectValue placeholder="Select source..." />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-800 border-slate-700">
-                    {leadSourceOptions.map(option => (
-                      <SelectItem key={option.value} value={option.value} className="text-slate-200 hover:bg-slate-700">
+                    {leadSourceOptions.map((option) => (
+                      <SelectItem
+                        key={option.value}
+                        value={option.value}
+                        className="text-slate-200 hover:bg-slate-700"
+                      >
                         {option.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <Label htmlFor="assigned_to" className="text-slate-200">Assigned To</Label>
-                <LazyEmployeeSelector
-                  value={formData.assigned_to}
-                  onValueChange={(value) => handleChange('assigned_to', value)}
-                  placeholder="Assign to sales person..."
-                  className="w-full mt-1 bg-slate-700 border-slate-600 text-slate-200"
-                  contentClassName="bg-slate-800 border-slate-700"
-                  itemClassName="text-slate-200 hover:bg-slate-700"
-                  allowUnassigned={true}
-                  showLoadingState={true}
-                />
-              </div>
+              <AssignmentField
+                value={formData.assigned_to}
+                onChange={(value) => handleChange('assigned_to', value)}
+                user={user}
+                isManager={
+                  user?.role === 'manager' || user?.role === 'admin' || user?.role === 'superadmin'
+                }
+                entityId={contact?.id}
+                entityType="contact"
+                tenantId={user?.tenant_id || selectedTenantId}
+              />
             </div>
           </div>
 
           <div className="border-t pt-6 border-slate-600">
             <h3 className="text-lg font-semibold text-slate-200 mb-3">Status</h3>
             <div>
-              <Label htmlFor="status" className="text-slate-200">Status</Label>
-              <Select value={formData.status} onValueChange={(value) => handleChange('status', value)}>
+              <Label htmlFor="status" className="text-slate-200">
+                Status
+              </Label>
+              <Select
+                value={formData.status}
+                onValueChange={(value) => handleChange('status', value)}
+              >
                 <SelectTrigger className="mt-1 bg-slate-700 border-slate-600 text-slate-200">
                   <SelectValue placeholder="Select status..." />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-700">
-                  {filteredStatusOptions.map(option => (
-                    <SelectItem key={option.value} value={option.value} className="text-slate-200 hover:bg-slate-700">
+                  {filteredStatusOptions.map((option) => (
+                    <SelectItem
+                      key={option.value}
+                      value={option.value}
+                      className="text-slate-200 hover:bg-slate-700"
+                    >
                       {option.label}
                     </SelectItem>
                   ))}
@@ -934,9 +1041,7 @@ export default function ContactForm({
               <Label htmlFor="is_test_data" className="text-amber-300 font-medium">
                 Mark as Test Data
               </Label>
-              <span className="text-xs text-amber-400 ml-2">
-                (For Superadmin cleanup purposes)
-              </span>
+              <span className="text-xs text-amber-400 ml-2">(For Superadmin cleanup purposes)</span>
             </div>
           )}
 
@@ -958,7 +1063,7 @@ export default function ContactForm({
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {contact ? "Updating..." : "Creating..."}
+                  {contact ? 'Updating...' : 'Creating...'}
                 </>
               ) : (
                 <>
@@ -974,12 +1079,12 @@ export default function ContactForm({
       {/* Create Account Dialog - Direct DOM rendering outside React portal */}
       {showCreateAccount && (
         <>
-          <div 
-            className="fixed inset-0 bg-black/70" 
+          <div
+            className="fixed inset-0 bg-black/70"
             style={{ zIndex: 2147483646 }}
             onClick={() => setShowCreateAccount(false)}
           />
-          <div 
+          <div
             className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-800 rounded-lg shadow-2xl border border-slate-700 w-[min(96vw,56rem)] max-h-[90vh] overflow-y-auto"
             style={{ zIndex: 2147483647 }}
           >

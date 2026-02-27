@@ -60,7 +60,7 @@ export default function createBizDevSourceRoutes(pgPool) {
    *               $ref: '#/components/schemas/Success'
    */
   // Get all bizdev sources (with optional filtering)
-  router.get('/', cacheList('bizdevsources', 180), async (req, res) => {
+  router.get('/', cacheList('bizdevsources', 30), async (req, res) => {
     try {
       const { status, source_type, priority, limit, sort } = req.query;
 

@@ -293,7 +293,7 @@ export default function createActivityV2Routes(_pgPool) {
     }
   });
 
-  router.get('/', cacheList('activities', 180), async (req, res) => {
+  router.get('/', cacheList('activities', 30), async (req, res) => {
     try {
       const { tenant_id, filter, sort } = req.query;
       if (!tenant_id) {
@@ -907,7 +907,7 @@ export default function createActivityV2Routes(_pgPool) {
     }
   });
 
-  router.get('/:id', cacheDetail('activities', 300), async (req, res) => {
+  router.get('/:id', cacheDetail('activities', 60), async (req, res) => {
     try {
       const { id } = req.params;
       const tenant_id = req.query.tenant_id || req.tenant?.id;

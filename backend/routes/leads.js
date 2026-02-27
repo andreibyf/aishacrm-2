@@ -12,14 +12,9 @@ import {
   buildContactProvenanceMetadata,
   determineConversionAction,
   validateLeadConversion,
-  determineContactType
+  determineContactType,
 } from '../utils/conversionHelpers.js';
-import {
-  toNullableString,
-  toNumeric,
-  toInteger,
-  toBoolean,
-} from '../lib/typeConversions.js';
+import { toNullableString, toNumeric, toInteger, toBoolean } from '../lib/typeConversions.js';
 
 export default function createLeadRoutes(_pgPool) {
   const router = express.Router();
@@ -153,9 +148,7 @@ export default function createLeadRoutes(_pgPool) {
 
   const toTagArray = (value) => {
     if (!Array.isArray(value)) return null;
-    return value
-      .map((tag) => (typeof tag === 'string' ? tag.trim() : ''))
-      .filter(Boolean);
+    return value.map((tag) => (typeof tag === 'string' ? tag.trim() : '')).filter(Boolean);
   };
 
   const MIRRORED_METADATA_KEYS = [
@@ -248,7 +241,7 @@ export default function createLeadRoutes(_pgPool) {
     }
   };
 
-// Helper function to expand metadata fields to top-level properties
+  // Helper function to expand metadata fields to top-level properties
   const expandMetadata = (record) => {
     if (!record) return record;
     const { metadata = {}, ...rest } = record;
@@ -310,7 +303,9 @@ export default function createLeadRoutes(_pgPool) {
         .from('leads')
         .select('*', { count: 'exact' })
         .eq('tenant_id', tenant_id)
-        .or(`first_name.ilike.${like},last_name.ilike.${like},email.ilike.${like},company.ilike.${like}`)
+        .or(
+          `first_name.ilike.${like},last_name.ilike.${like},email.ilike.${like},company.ilike.${like}`,
+        )
         .order('updated_at', { ascending: false })
         .range(offset, offset + limit - 1);
       if (error) throw new Error(error.message);
@@ -343,7 +338,7 @@ export default function createLeadRoutes(_pgPool) {
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
-      
+
       // Parse sort parameter: -field for descending, field for ascending
       let sortField = 'created_at';
       let sortAscending = false;
@@ -368,9 +363,17 @@ export default function createLeadRoutes(_pgPool) {
       if (typeof isTestData !== 'undefined') {
         const flag = String(isTestData).toLowerCase();
         if (flag === 'false') {
-          try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore if column absent */ }
+          try {
+            q = q.or('is_test_data.is.false,is_test_data.is.null');
+          } catch {
+            /* ignore if column absent */
+          }
         } else if (flag === 'true') {
-          try { q = q.eq('is_test_data', true); } catch { /* ignore if column absent */ }
+          try {
+            q = q.eq('is_test_data', true);
+          } catch {
+            /* ignore if column absent */
+          }
         }
       }
 
@@ -397,14 +400,18 @@ export default function createLeadRoutes(_pgPool) {
           logger.debug('[Leads] Applying is_test_data filter:', parsedFilter.is_test_data);
           q = q.eq('is_test_data', parsedFilter.is_test_data);
         }
-        
+
         // Handle $or for unassigned or dynamic search
-        if (typeof parsedFilter === 'object' && parsedFilter.$or && Array.isArray(parsedFilter.$or)) {
+        if (
+          typeof parsedFilter === 'object' &&
+          parsedFilter.$or &&
+          Array.isArray(parsedFilter.$or)
+        ) {
           // Check if this is an "unassigned" filter
-          const isUnassignedFilter = parsedFilter.$or.some(cond => 
-            cond.assigned_to === null || cond.assigned_to === ''
+          const isUnassignedFilter = parsedFilter.$or.some(
+            (cond) => cond.assigned_to === null || cond.assigned_to === '',
           );
-          
+
           if (isUnassignedFilter) {
             logger.debug('[Leads] Applying unassigned filter');
             // For unassigned, check for null or empty string
@@ -413,15 +420,17 @@ export default function createLeadRoutes(_pgPool) {
             // Handle other $or conditions (like search)
             // Build OR condition: match any of the $or criteria
             // Use Supabase's or() method for multiple OR conditions
-            const orConditions = parsedFilter.$or.map(condition => {
-              // Each condition is like { first_name: { $icontains: "search_term" } }
-              const [field, opObj] = Object.entries(condition)[0];
-              if (opObj && opObj.$icontains) {
-                return `${field}.ilike.%${opObj.$icontains}%`;
-              }
-              return null;
-            }).filter(Boolean);
-            
+            const orConditions = parsedFilter.$or
+              .map((condition) => {
+                // Each condition is like { first_name: { $icontains: "search_term" } }
+                const [field, opObj] = Object.entries(condition)[0];
+                if (opObj && opObj.$icontains) {
+                  return `${field}.ilike.%${opObj.$icontains}%`;
+                }
+                return null;
+              })
+              .filter(Boolean);
+
             if (orConditions.length > 0) {
               // Use Supabase or() to combine conditions with OR logic
               q = q.or(orConditions.join(','));
@@ -430,7 +439,13 @@ export default function createLeadRoutes(_pgPool) {
         }
       }
 
-      if (status && status !== 'all' && status !== 'any' && status !== '' && status !== 'undefined') {
+      if (
+        status &&
+        status !== 'all' &&
+        status !== 'any' &&
+        status !== '' &&
+        status !== 'undefined'
+      ) {
         let parsedStatus = status;
         if (typeof status === 'string' && status.startsWith('{')) {
           try {
@@ -449,9 +464,15 @@ export default function createLeadRoutes(_pgPool) {
         }
       }
       if (account_id) q = q.eq('account_id', account_id);
-      
+
       // Apply dynamic sorting (default: created_at descending)
-      q = q.order(sortField, { ascending: sortAscending }).range(offset, offset + limit - 1);
+      // Always add deterministic secondary sort by id so pagination is stable
+      // when many rows share the same primary sort value (e.g., created_at).
+      q = q.order(sortField, { ascending: sortAscending });
+      if (sortField !== 'id') {
+        q = q.order('id', { ascending: sortAscending });
+      }
+      q = q.range(offset, offset + limit - 1);
 
       const { data, error, count } = await q;
       if (error) throw new Error(error.message);
@@ -767,18 +788,18 @@ export default function createLeadRoutes(_pgPool) {
 
       // Validate required name fields if provided
       if (first_name !== undefined && (!first_name || !first_name.trim())) {
-        return res.status(400).json({ 
-          status: 'error', 
+        return res.status(400).json({
+          status: 'error',
           message: 'first_name cannot be empty',
-          field: 'first_name'
+          field: 'first_name',
         });
       }
 
       if (last_name !== undefined && (!last_name || !last_name.trim())) {
-        return res.status(400).json({ 
-          status: 'error', 
+        return res.status(400).json({
+          status: 'error',
           message: 'last_name cannot be empty',
-          field: 'last_name'
+          field: 'last_name',
         });
       }
 
@@ -798,7 +819,12 @@ export default function createLeadRoutes(_pgPool) {
       if (title !== undefined) metadataExtras.title = title;
       if (description !== undefined) metadataExtras.description = description;
       if (account_id !== undefined) metadataExtras.account_id = account_id;
-      const updatedMetadata = sanitizeMetadataPayload(current?.metadata, metadata, otherFields, metadataExtras);
+      const updatedMetadata = sanitizeMetadataPayload(
+        current?.metadata,
+        metadata,
+        otherFields,
+        metadataExtras,
+      );
 
       const payload = { metadata: updatedMetadata, updated_at: new Date().toISOString() };
       if (first_name !== undefined) payload.first_name = first_name.trim();
@@ -967,14 +993,16 @@ export default function createLeadRoutes(_pgPool) {
           const nowIso = new Date().toISOString();
           const { data: acc, error: accErr } = await supabase
             .from('accounts')
-            .insert([{
-              tenant_id,
-              name,
-              phone: lead.phone || null,
-              assigned_to: lead.assigned_to || performed_by || null,
-              created_at: nowIso,
-              updated_at: nowIso,
-            }])
+            .insert([
+              {
+                tenant_id,
+                name,
+                phone: lead.phone || null,
+                assigned_to: lead.assigned_to || performed_by || null,
+                created_at: nowIso,
+                updated_at: nowIso,
+              },
+            ])
             .select('*')
             .single();
           if (accErr) throw new Error(accErr.message);
@@ -1000,58 +1028,69 @@ export default function createLeadRoutes(_pgPool) {
 
         // Determine conversion action
         const conversionAction = determineConversionAction(lead.status);
-        logger.info(`[Lead Conversion] Converting lead ${lead.id} with action: ${conversionAction}`);
+        logger.info(
+          `[Lead Conversion] Converting lead ${lead.id} with action: ${conversionAction}`,
+        );
 
         // Create contact from lead (v3.0.0: preserves account_id, captures full provenance)
         const nowIso = new Date().toISOString();
         const { data: cont, error: contErr } = await supabase
           .from('contacts')
-          .insert([{
-            tenant_id,
-            account_id: accountId || lead.account_id || null,  // Preserve v3.0.0 account relationship
-            first_name: personData.first_name,
-            last_name: personData.last_name,
-            email: personData.email,
-            phone: personData.phone,
-            job_title: personData.job_title,
-            status: 'prospect',
-            metadata: provenanceMetadata,  // Full lifecycle provenance
-            assigned_to: lead.assigned_to || performed_by || null,
-            created_at: nowIso,
-            updated_at: nowIso,
-          }])
+          .insert([
+            {
+              tenant_id,
+              account_id: accountId || lead.account_id || null, // Preserve v3.0.0 account relationship
+              first_name: personData.first_name,
+              last_name: personData.last_name,
+              email: personData.email,
+              phone: personData.phone,
+              job_title: personData.job_title,
+              status: 'prospect',
+              metadata: provenanceMetadata, // Full lifecycle provenance
+              assigned_to: lead.assigned_to || performed_by || null,
+              created_at: nowIso,
+              updated_at: nowIso,
+            },
+          ])
           .select('*')
           .single();
         if (contErr) throw new Error(contErr.message);
         contact = cont;
-        
+
         logger.debug('[Leads Convert v3.0.0] Contact created:', {
           contact_id: contact.id,
           account_id: accountId || lead.account_id,
           lead_type: contactType,
-          has_provenance: !!provenanceMetadata.converted_from_lead_id
+          has_provenance: !!provenanceMetadata.converted_from_lead_id,
         });
 
         // Optionally create Opportunity
         if (create_opportunity) {
-          const oppName = (opportunity_name && opportunity_name.trim()) || `${lead.first_name || ''} ${lead.last_name || ''}`.trim() || 'New Opportunity';
+          const oppName =
+            (opportunity_name && opportunity_name.trim()) ||
+            `${lead.first_name || ''} ${lead.last_name || ''}`.trim() ||
+            'New Opportunity';
           const oppAmt = Number(opportunity_amount || lead.estimated_value || 0) || 0;
-          const closeDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+          const closeDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+            .toISOString()
+            .slice(0, 10);
           const { data: opp, error: oppErr } = await supabase
             .from('opportunities')
-            .insert([{
-              tenant_id,
-              name: oppName,
-              account_id: accountId || null,
-              contact_id: contact.id,
-              stage: 'prospecting',
-              amount: oppAmt,
-              probability: 25,
-              assigned_to: lead.assigned_to || performed_by || null,
-              close_date: closeDate,
-              created_at: nowIso,
-              updated_at: nowIso,
-            }])
+            .insert([
+              {
+                tenant_id,
+                name: oppName,
+                account_id: accountId || null,
+                contact_id: contact.id,
+                stage: 'prospecting',
+                amount: oppAmt,
+                probability: 25,
+                assigned_to: lead.assigned_to || performed_by || null,
+                close_date: closeDate,
+                created_at: nowIso,
+                updated_at: nowIso,
+              },
+            ])
             .select('*')
             .single();
           if (oppErr) throw new Error(oppErr.message);
@@ -1104,24 +1143,49 @@ export default function createLeadRoutes(_pgPool) {
         return res.json({
           status: 'success',
           message: 'Lead converted and moved to contacts',
-          data: { contact, account: newAccount, opportunity }
+          data: { contact, account: newAccount, opportunity },
         });
-
       } catch (innerErr) {
         // Compensate created records when running without DB transactions (best-effort)
-        logger.error('[Leads] conversion inner error, attempting cleanup:', innerErr.message || innerErr);
+        logger.error(
+          '[Leads] conversion inner error, attempting cleanup:',
+          innerErr.message || innerErr,
+        );
         try {
-          if (opportunity && opportunity.id) await supabase.from('opportunities').delete().eq('id', opportunity.id).eq('tenant_id', tenant_id);
-        } catch (e) { logger.warn('Cleanup opportunity failed', e.message || e); }
+          if (opportunity && opportunity.id)
+            await supabase
+              .from('opportunities')
+              .delete()
+              .eq('id', opportunity.id)
+              .eq('tenant_id', tenant_id);
+        } catch (e) {
+          logger.warn('Cleanup opportunity failed', e.message || e);
+        }
         try {
-          if (contact && contact.id) await supabase.from('contacts').delete().eq('id', contact.id).eq('tenant_id', tenant_id);
-        } catch (e) { logger.warn('Cleanup contact failed', e.message || e); }
+          if (contact && contact.id)
+            await supabase
+              .from('contacts')
+              .delete()
+              .eq('id', contact.id)
+              .eq('tenant_id', tenant_id);
+        } catch (e) {
+          logger.warn('Cleanup contact failed', e.message || e);
+        }
         try {
-          if (newAccount && newAccount.id) await supabase.from('accounts').delete().eq('id', newAccount.id).eq('tenant_id', tenant_id);
-        } catch (e) { logger.warn('Cleanup account failed', e.message || e); }
+          if (newAccount && newAccount.id)
+            await supabase
+              .from('accounts')
+              .delete()
+              .eq('id', newAccount.id)
+              .eq('tenant_id', tenant_id);
+        } catch (e) {
+          logger.warn('Cleanup account failed', e.message || e);
+        }
 
         logger.error('[Leads] convert error:', innerErr);
-        return res.status(500).json({ status: 'error', message: innerErr.message || String(innerErr) });
+        return res
+          .status(500)
+          .json({ status: 'error', message: innerErr.message || String(innerErr) });
       }
     } catch (error) {
       logger.error('[Leads] convert error:', error);

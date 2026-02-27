@@ -9,10 +9,10 @@ export const ApiProvider = ({ children }) => {
 
   const cachedRequest = useCallback(async (entityName, methodName, params, fetcher) => {
     const cacheKey = `${entityName}.${methodName}:${JSON.stringify(params)}`;
-    
-    // Cache timeout: 2 seconds in dev, 5 seconds in production for faster updates
-    const CACHE_TIMEOUT = import.meta.env.DEV ? 2000 : 5000;
-    
+
+    // Cache timeout: 1 second in dev, 2 seconds in production (reduced from 2s/5s - app perf improved)
+    const CACHE_TIMEOUT = import.meta.env.DEV ? 1000 : 2000;
+
     if (cacheRef.current.has(cacheKey)) {
       const cached = cacheRef.current.get(cacheKey);
       const age = Date.now() - cached.timestamp;
@@ -26,12 +26,12 @@ export const ApiProvider = ({ children }) => {
     }
 
     const promise = fetcher()
-      .then(data => {
+      .then((data) => {
         cacheRef.current.set(cacheKey, { data, timestamp: Date.now() });
         pendingRequestsRef.current.delete(cacheKey);
         return data;
       })
-      .catch(error => {
+      .catch((error) => {
         pendingRequestsRef.current.delete(cacheKey);
         throw error;
       });
@@ -53,16 +53,19 @@ export const ApiProvider = ({ children }) => {
         keysToDelete.push(key);
       }
     }
-    keysToDelete.forEach(key => {
+    keysToDelete.forEach((key) => {
       cacheRef.current.delete(key);
       pendingRequestsRef.current.delete(key); // Also clear pending requests
     });
   }, []);
 
   // Backward-compatible alias expected by some pages (e.g., Accounts.jsx)
-  const clearCacheByKey = useCallback((pattern) => {
-    return clearCache(pattern);
-  }, [clearCache]);
+  const clearCacheByKey = useCallback(
+    (pattern) => {
+      return clearCache(pattern);
+    },
+    [clearCache],
+  );
 
   return (
     <ApiContext.Provider value={{ cachedRequest, clearCache, clearCacheByKey }}>

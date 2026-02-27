@@ -15,8 +15,20 @@ export default function AssignmentHistory({ entityId, entityType = 'lead', tenan
     const fetchHistory = async () => {
       try {
         const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4001';
+
+        // Map entity types to their API route prefixes
+        const routeMap = {
+          lead: '/api/v2/leads',
+          contact: '/api/v2/contacts',
+          account: '/api/v2/accounts',
+          opportunity: '/api/v2/opportunities',
+          activity: '/api/v2/activities',
+          bizdev_source: '/api/bizdevsources',
+        };
+        const routePrefix = routeMap[entityType] || routeMap.lead;
+
         const res = await fetch(
-          `${BACKEND_URL}/api/v2/leads/${entityId}/assignment-history?tenant_id=${tenantId}`,
+          `${BACKEND_URL}${routePrefix}/${entityId}/assignment-history?tenant_id=${tenantId}`,
           { credentials: 'include' },
         );
         if (res.ok) {
@@ -31,7 +43,7 @@ export default function AssignmentHistory({ entityId, entityType = 'lead', tenan
     };
 
     fetchHistory();
-  }, [entityId, tenantId]);
+  }, [entityId, entityType, tenantId]);
 
   if (loading) {
     return <div className="text-xs text-slate-500 py-2">Loading history...</div>;

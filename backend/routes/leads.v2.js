@@ -222,7 +222,7 @@ export default function createLeadsV2Routes() {
    *       200:
    *         description: Leads list with flattened metadata
    */
-  router.get('/', cacheList('leads', 180), async (req, res) => {
+  router.get('/', cacheList('leads', 30), async (req, res) => {
     try {
       const {
         tenant_id,
@@ -818,7 +818,7 @@ export default function createLeadsV2Routes() {
    *       404:
    *         description: Lead not found
    */
-  router.get('/:id', cacheDetail('leads', 300), async (req, res) => {
+  router.get('/:id', cacheDetail('leads', 60), async (req, res) => {
     try {
       const { id } = req.params;
       const tenant_id = req.query.tenant_id || req.tenant?.id;

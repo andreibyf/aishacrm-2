@@ -12,10 +12,10 @@ class CacheManager {
     this.client = null;
     this.connected = false;
     this.defaultTTL = {
-      list: 180,        // 3 minutes for list data
-      detail: 300,      // 5 minutes for detail views
-      count: 600,       // 10 minutes for counts
-      settings: 1800,   // 30 minutes for settings
+      list: 30, // 30 seconds for list data (reduced from 180s - app perf improved)
+      detail: 60, // 1 minute for detail views (reduced from 300s)
+      count: 120, // 2 minutes for counts (reduced from 600s)
+      settings: 1800, // 30 minutes for settings (unchanged - rarely mutated)
     };
   }
 
@@ -26,7 +26,7 @@ class CacheManager {
     if (this.connected) return;
 
     const redisUrl = process.env.REDIS_CACHE_URL || 'redis://localhost:6380';
-    
+
     try {
       this.client = createClient({
         url: redisUrl,
@@ -38,8 +38,8 @@ class CacheManager {
               return new Error('Max reconnection attempts');
             }
             return Math.min(retries * 100, 3000);
-          }
-        }
+          },
+        },
       });
 
       this.client.on('error', (err) => {
@@ -73,7 +73,7 @@ class CacheManager {
       .update(JSON.stringify(params))
       .digest('hex')
       .substring(0, 8);
-    
+
     return `tenant:${tenantId}:${module}:${operation}:${paramsHash}`;
   }
 
@@ -88,7 +88,7 @@ class CacheManager {
       if (!data) return null;
 
       const parsed = JSON.parse(data);
-      
+
       // Check if expired
       if (parsed.expiresAt && Date.now() > parsed.expiresAt) {
         await this.client.del(key);
@@ -113,7 +113,7 @@ class CacheManager {
       const cacheData = {
         data,
         cachedAt: Date.now(),
-        expiresAt: Date.now() + (ttlSeconds * 1000)
+        expiresAt: Date.now() + ttlSeconds * 1000,
       };
 
       await this.client.setEx(key, ttlSeconds, JSON.stringify(cacheData));
@@ -148,7 +148,7 @@ class CacheManager {
     try {
       const pattern = `tenant:${tenantId}:${module}:*`;
       const keys = [];
-      
+
       // Scan for matching keys
       for await (const key of this.client.scanIterator({ MATCH: pattern, COUNT: 100 })) {
         keys.push(key);
@@ -156,7 +156,10 @@ class CacheManager {
 
       if (keys.length > 0) {
         await this.client.del(keys);
-        logger.debug({ tenantId, module, count: keys.length }, '[CacheManager] Invalidated keys for tenant module');
+        logger.debug(
+          { tenantId, module, count: keys.length },
+          '[CacheManager] Invalidated keys for tenant module',
+        );
       }
 
       return true;
@@ -177,14 +180,17 @@ class CacheManager {
       // Dashboard bundle keys use pattern: dashboard:bundle:${tenant_id}:*
       const pattern = `dashboard:bundle:${tenantId}:*`;
       const keys = [];
-      
+
       for await (const key of this.client.scanIterator({ MATCH: pattern, COUNT: 100 })) {
         keys.push(key);
       }
 
       if (keys.length > 0) {
         await this.client.del(keys);
-        logger.debug({ tenantId, count: keys.length }, '[CacheManager] Invalidated dashboard bundle keys');
+        logger.debug(
+          { tenantId, count: keys.length },
+          '[CacheManager] Invalidated dashboard bundle keys',
+        );
       }
 
       return true;
@@ -203,14 +209,17 @@ class CacheManager {
     try {
       const pattern = `tenant:${tenantId}:*`;
       const keys = [];
-      
+
       for await (const key of this.client.scanIterator({ MATCH: pattern, COUNT: 100 })) {
         keys.push(key);
       }
 
       if (keys.length > 0) {
         await this.client.del(keys);
-        logger.debug({ tenantId, count: keys.length }, '[CacheManager] Invalidated keys for tenant');
+        logger.debug(
+          { tenantId, count: keys.length },
+          '[CacheManager] Invalidated keys for tenant',
+        );
       }
 
       return true;
@@ -225,7 +234,7 @@ class CacheManager {
    */
   async getOrFetch(module, tenantId, operation, params, fetchFn, ttl = null) {
     const key = this.generateKey(module, tenantId, operation, params);
-    
+
     // Try cache first
     const cached = await this.get(key);
     if (cached !== null) {
@@ -236,10 +245,10 @@ class CacheManager {
     // Cache miss - fetch from database
     logger.debug({ key }, '[CacheManager] Cache miss');
     const data = await fetchFn();
-    
+
     // Cache the result
     await this.set(key, data, ttl);
-    
+
     return { data, cached: false };
   }
 
@@ -252,11 +261,11 @@ class CacheManager {
     try {
       const info = await this.client.info('stats');
       const memory = await this.client.info('memory');
-      
+
       return {
         connected: this.connected,
         info,
-        memory
+        memory,
       };
     } catch (error) {
       logger.error({ err: error }, '[CacheManager] Stats error');
@@ -275,12 +284,12 @@ class CacheManager {
 
     try {
       const newValue = await this.client.incr(key);
-      
+
       // Set TTL if this is the first increment (value is 1)
       if (ttl && newValue === 1) {
         await this.client.expire(key, ttl);
       }
-      
+
       return newValue;
     } catch (error) {
       logger.error({ err: error, key }, '[CacheManager] Increment error');

@@ -111,7 +111,7 @@ export default function createAccountV2Routes(_pgPool) {
    *       200:
    *         description: List of accounts
    */
-  router.get('/', cacheList('accounts', 180), async (req, res) => {
+  router.get('/', cacheList('accounts', 30), async (req, res) => {
     try {
       const { tenant_id, type, industry, search, filter, assigned_to, sort } = req.query;
       if (!tenant_id) {
@@ -480,7 +480,7 @@ export default function createAccountV2Routes(_pgPool) {
    *       404:
    *         description: Account not found
    */
-  router.get('/:id', cacheDetail('accounts', 300), async (req, res) => {
+  router.get('/:id', cacheDetail('accounts', 60), async (req, res) => {
     try {
       const tenant_id = req.query.tenant_id || req.tenant?.id;
       const { id } = req.params;

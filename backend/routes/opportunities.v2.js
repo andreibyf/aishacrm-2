@@ -54,7 +54,7 @@ export default function createOpportunityV2Routes(_pgPool) {
   };
 
   // GET /api/v2/opportunities/stats - aggregate counts by stage (optimized)
-  router.get('/stats', cacheList('opportunities', 300), async (req, res) => {
+  router.get('/stats', cacheList('opportunities', 60), async (req, res) => {
     try {
       const { tenant_id, stage: _stage, assigned_to, is_test_data } = req.query;
 
@@ -135,7 +135,7 @@ export default function createOpportunityV2Routes(_pgPool) {
   });
 
   // GET /api/v2/opportunities/count - get total count (optimized)
-  router.get('/count', cacheList('opportunities', 600), async (req, res) => {
+  router.get('/count', cacheList('opportunities', 120), async (req, res) => {
     try {
       const { tenant_id, stage, assigned_to, is_test_data, filter } = req.query;
 
@@ -228,7 +228,7 @@ export default function createOpportunityV2Routes(_pgPool) {
   });
 
   // GET /api/v2/opportunities - list opportunities (v2 shape, internal pilot)
-  router.get('/', cacheList('opportunities', 180), async (req, res) => {
+  router.get('/', cacheList('opportunities', 30), async (req, res) => {
     try {
       const {
         tenant_id,
@@ -682,7 +682,7 @@ export default function createOpportunityV2Routes(_pgPool) {
   });
 
   // GET /api/v2/opportunities/:id - fetch single opportunity (v2 shape)
-  router.get('/:id', cacheDetail('opportunities', 300), async (req, res) => {
+  router.get('/:id', cacheDetail('opportunities', 60), async (req, res) => {
     try {
       const { id } = req.params;
       const tenant_id = req.query.tenant_id || req.tenant?.id;
