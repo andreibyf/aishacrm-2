@@ -33,6 +33,7 @@ import {
   Tags, // Added for Entity Labels
   Search,
   ChevronRight,
+  ShieldCheck,
 
   // Icons for components not in outline's tabs array but preserved:
   Globe, // for TimezoneSettings (Regional Settings)
@@ -72,6 +73,7 @@ const RateLimitManager = lazy(() => import('../components/settings/RateLimitMana
 
 // Team Management - lazy loaded
 const EnhancedUserManagement = lazy(() => import('../components/settings/EnhancedUserManagement'));
+const TeamManagement = lazy(() => import('../components/settings/TeamManagement'));
 
 // Client Management - lazy loaded
 const TenantManagement = lazy(() => import('../components/settings/TenantManagement'));
@@ -253,6 +255,14 @@ export default function SettingsPage() {
           roles: ['admin'],
         },
         {
+          id: 'teams-visibility',
+          label: 'Teams & Visibility',
+          description: 'Create teams, assign members, and configure data visibility',
+          icon: ShieldCheck,
+          category: 'team',
+          roles: ['admin'],
+        },
+        {
           id: 'tenant-integrations',
           label: 'Client Integrations',
           description: 'Configure Gmail SMTP, webhooks, and other integrations',
@@ -310,6 +320,14 @@ export default function SettingsPage() {
           label: 'User Management',
           description: 'Invite and manage all users',
           icon: Users,
+          category: 'team',
+          roles: ['superadmin'],
+        },
+        {
+          id: 'teams-visibility',
+          label: 'Teams & Visibility',
+          description: 'Create teams, assign members, and configure data visibility',
+          icon: ShieldCheck,
           category: 'team',
           roles: ['superadmin'],
         },
@@ -762,6 +780,8 @@ export default function SettingsPage() {
                 </CardContent>
               </Card>
             )}
+
+            {activeTab === 'teams-visibility' && isAdmin && <TeamManagement />}
 
             {/* Access & Security */}
             {activeTab === 'security' && isAdmin && (
