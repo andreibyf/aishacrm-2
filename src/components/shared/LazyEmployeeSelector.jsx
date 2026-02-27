@@ -77,7 +77,7 @@ export default function LazyEmployeeSelector({
       <SelectTrigger className={className}>
         <SelectValue>{getDisplayValue()}</SelectValue>
       </SelectTrigger>
-      <SelectContent className="bg-slate-800 border-slate-700 text-slate-200 max-h-[300px]">
+      <SelectContent className="bg-slate-800 border-slate-700 text-slate-200 max-h-[300px] z-[2147483010]">
         {includeAll && (
           <SelectItem value="all" className="hover:bg-slate-700">
             All Employees
