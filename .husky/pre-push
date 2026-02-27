@@ -37,45 +37,56 @@ echo ""
 
 # ── 3. Frontend Tests (Vitest) ───────────────────────
 echo "▶ [3/4] Running frontend tests (Vitest)..."
-# Use forks pool in pre-push for Windows/Git-Bash stability.
-# Also clear inherited NODE_OPTIONS (some shells inject invalid --localstorage-file)
-# and retry once in single-worker mode on runner bootstrap flukes.
-# Keep JSON parsing fallback for non-zero exits when suites are still clean.
 VITEST_JSON=$(mktemp -t vitest.XXXXXX 2>/dev/null || mktemp 2>/dev/null || echo "/tmp/vitest-$$.json")
-trap 'rm -f "$VITEST_JSON"' EXIT
+VITEST_LOG=$(mktemp -t vitest-log.XXXXXX 2>/dev/null || mktemp 2>/dev/null || echo "/tmp/vitest-log-$$.txt")
+trap 'rm -f "$VITEST_JSON" "$VITEST_LOG"' EXIT
+
+vitest_zero_failures() {
+  [ -f "$VITEST_JSON" ] && grep -q '"numFailedTests":0' "$VITEST_JSON" 2>/dev/null && grep -q '"numFailedTestSuites":0' "$VITEST_JSON" 2>/dev/null
+}
+
 set +e
-env -u NODE_OPTIONS ./node_modules/.bin/vitest run --pool=forks --reporter=verbose --reporter=json --outputFile="$VITEST_JSON" 2>&1
+env -u NODE_OPTIONS ./node_modules/.bin/vitest run --pool=forks --reporter=verbose --reporter=json --outputFile="$VITEST_JSON" 2>&1 | tee "$VITEST_LOG"
 VITEST_EXIT=$?
 set -e
+
 if [ $VITEST_EXIT -eq 0 ]; then
   echo "✅ Frontend tests passed"
-elif [ $VITEST_EXIT -ne 0 ]; then
-  echo "⚠️  Frontend tests hit a Vitest runner startup error — retrying once in safe mode..."
+elif vitest_zero_failures; then
+  echo "⚠️  Vitest exited with code $VITEST_EXIT but reported 0 test failures"
+  echo "✅ Frontend tests passed (0 failures)"
+elif grep -qi 'failed to find the runner\|Timeout starting .*runner' "$VITEST_LOG"; then
+  echo "⚠️  Vitest runner bootstrap failed — retrying once in safe mode..."
   set +e
-  env -u NODE_OPTIONS ./node_modules/.bin/vitest run --pool=forks --maxWorkers=1 --reporter=verbose --reporter=json --outputFile="$VITEST_JSON" 2>&1
+  env -u NODE_OPTIONS ./node_modules/.bin/vitest run --pool=forks --maxWorkers=1 --reporter=verbose --reporter=json --outputFile="$VITEST_JSON" 2>&1 | tee "$VITEST_LOG"
   VITEST_EXIT=$?
   set -e
+
   if [ $VITEST_EXIT -eq 0 ]; then
     echo "✅ Frontend tests passed on retry"
-  elif [ -f "$VITEST_JSON" ] && grep -q '"numFailedTests":0' "$VITEST_JSON" 2>/dev/null && grep -q '"numFailedTestSuites":0' "$VITEST_JSON" 2>/dev/null; then
-    echo "⚠️  Vitest exited with code $VITEST_EXIT (runner timeout) but all tests passed"
+  elif vitest_zero_failures; then
+    echo "⚠️  Vitest exited with code $VITEST_EXIT on retry but reported 0 test failures"
     echo "✅ Frontend tests passed (0 failures)"
+  elif grep -qi 'failed to find the runner\|Timeout starting .*runner' "$VITEST_LOG"; then
+    echo "⚠️  Runner flake persisted — executing fallback safe frontend runner (file-by-file)..."
+    bash scripts/run-tests-safe.sh
+    if [ -s "./test-results/failed-tests.txt" ] || [ -s "./test-results/skipped-tests.txt" ]; then
+      echo ""
+      echo "❌ FRONTEND TESTS FAILED — fallback runner reported failures/timeouts"
+      exit 1
+    fi
+    echo "✅ Frontend tests passed via fallback safe runner"
   else
     echo ""
     echo "❌ FRONTEND TESTS FAILED — fix errors above before pushing"
-    rm -f "$VITEST_JSON"
     exit 1
   fi
-elif [ -f "$VITEST_JSON" ] && grep -q '"numFailedTests":0' "$VITEST_JSON" 2>/dev/null && grep -q '"numFailedTestSuites":0' "$VITEST_JSON" 2>/dev/null; then
-  echo "⚠️  Vitest exited with code $VITEST_EXIT (thread pool timeout) but all tests passed"
-  echo "✅ Frontend tests passed (0 failures)"
 else
   echo ""
   echo "❌ FRONTEND TESTS FAILED — fix errors above before pushing"
-  rm -f "$VITEST_JSON"
   exit 1
 fi
-rm -f "$VITEST_JSON"
+rm -f "$VITEST_JSON" "$VITEST_LOG"
 echo ""
 
 # ── 4. Backend Tests (Docker) ────────────────────────
