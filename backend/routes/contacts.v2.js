@@ -1,7 +1,7 @@
 /**
  * Contacts V2 Routes
  * Streamlined CRUD with flattened metadata fields
- * 
+ *
  * @openapi
  * tags:
  *   - name: contacts-v2
@@ -9,9 +9,10 @@
  */
 
 import express from 'express';
-import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
+import { validateTenantAccess } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildContactAiContext } from '../lib/aiContextEnricher.js';
+import { getVisibilityScope } from '../lib/teamVisibility.js';
 import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 import { sanitizeUuidInput } from '../lib/uuidValidator.js';
 import logger from '../lib/logger.js';
@@ -20,7 +21,6 @@ export default function createContactV2Routes(_pgPool) {
   const router = express.Router();
 
   router.use(validateTenantAccess);
-  router.use(enforceEmployeeDataScope);
 
   /**
    * Flatten metadata fields into top-level properties for consistent API shape
@@ -42,7 +42,9 @@ export default function createContactV2Routes(_pgPool) {
     const is_test_data =
       typeof rest.is_test_data === 'boolean'
         ? rest.is_test_data
-        : (typeof metadataObj.is_test_data === 'boolean' ? metadataObj.is_test_data : false);
+        : typeof metadataObj.is_test_data === 'boolean'
+          ? metadataObj.is_test_data
+          : false;
     const tags = Array.isArray(rest.tags)
       ? rest.tags
       : Array.isArray(metadataObj.tags)
@@ -108,6 +110,12 @@ export default function createContactV2Routes(_pgPool) {
       const limit = parseInt(req.query.limit || '50', 10);
       const offset = parseInt(req.query.offset || '0', 10);
 
+      // ── Team visibility scoping ──
+      let visibilityScope = null;
+      if (req.user) {
+        visibilityScope = await getVisibilityScope(req.user, supabase);
+      }
+
       // Parse sort parameter: -field for descending, field for ascending
       let sortField = 'created_at';
       let sortAscending = false;
@@ -123,17 +131,26 @@ export default function createContactV2Routes(_pgPool) {
 
       let q = supabase
         .from('contacts')
-        .select('*, employee:employees!contacts_assigned_to_fkey(id, first_name, last_name, email), account:accounts!contacts_account_id_fkey(id, name)', { count: 'exact' })
+        .select(
+          '*, employee:employees!contacts_assigned_to_fkey(id, first_name, last_name, email), account:accounts!contacts_account_id_fkey(id, name)',
+          { count: 'exact' },
+        )
         .eq('tenant_id', tenant_id)
         .order(sortField, { ascending: sortAscending })
         .range(offset, offset + limit - 1);
+
+      // Apply team visibility filter
+      if (visibilityScope && !visibilityScope.bypass && visibilityScope.employeeIds.length > 0) {
+        const idList = visibilityScope.employeeIds.join(',');
+        q = q.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+      }
 
       // Handle name search - search by first_name or last_name
       // Supports: "Jackie", "Knight", "Jackie Knight" (splits and searches each part)
       if (search && search.trim()) {
         const searchTerm = search.trim();
-        const parts = searchTerm.split(/\s+/).filter(p => p.length > 0);
-        
+        const parts = searchTerm.split(/\s+/).filter((p) => p.length > 0);
+
         if (parts.length === 1) {
           // Single word: search first_name OR last_name
           q = q.or(`first_name.ilike.%${parts[0]}%,last_name.ilike.%${parts[0]}%`);
@@ -143,7 +160,9 @@ export default function createContactV2Routes(_pgPool) {
           // OR (first_name ILIKE full_search OR last_name ILIKE full_search)
           const firstName = parts[0];
           const lastName = parts[parts.length - 1];
-          q = q.or(`first_name.ilike.%${firstName}%,last_name.ilike.%${lastName}%,first_name.ilike.%${searchTerm}%,last_name.ilike.%${searchTerm}%`);
+          q = q.or(
+            `first_name.ilike.%${firstName}%,last_name.ilike.%${lastName}%,first_name.ilike.%${searchTerm}%,last_name.ilike.%${searchTerm}%`,
+          );
         }
       }
 
@@ -168,25 +187,25 @@ export default function createContactV2Routes(_pgPool) {
               q = q.eq('is_test_data', parsed.is_test_data);
             }
           }
-          
+
           // Handle $or for assigned_to (including NULL)
           if (parsed.$or && Array.isArray(parsed.$or)) {
-            const normalizedOr = parsed.$or.filter(c => c && typeof c === 'object');
-            const hasUnassigned = normalizedOr.some(c => c.assigned_to === null);
+            const normalizedOr = parsed.$or.filter((c) => c && typeof c === 'object');
+            const hasUnassigned = normalizedOr.some((c) => c.assigned_to === null);
             const assignedVals = normalizedOr
-              .map(c => c.assigned_to)
-              .filter(v => v !== undefined && v !== null && String(v).trim() !== '');
+              .map((c) => c.assigned_to)
+              .filter((v) => v !== undefined && v !== null && String(v).trim() !== '');
 
             if (hasUnassigned && assignedVals.length === 0) {
               q = q.is('assigned_to', null);
             } else if (assignedVals.length > 0) {
-              const orParts = assignedVals.map(v => `assigned_to.eq.${v}`);
+              const orParts = assignedVals.map((v) => `assigned_to.eq.${v}`);
               q = q.or(orParts.join(','));
             }
 
             // Preserve any ilike search conditions alongside assigned_to
             const searchOrs = normalizedOr
-              .map(condition => {
+              .map((condition) => {
                 const [field, opObj] = Object.entries(condition)[0] || [];
                 if (opObj && opObj.$icontains) {
                   return `${field}.ilike.%${opObj.$icontains}%`;
@@ -204,18 +223,21 @@ export default function createContactV2Routes(_pgPool) {
       // Apply direct query params
       if (status) q = q.eq('status', status);
       const safeAccountId = sanitizeUuidInput(account_id);
-      if (safeAccountId !== undefined && safeAccountId !== null) q = q.eq('account_id', safeAccountId);
+      if (safeAccountId !== undefined && safeAccountId !== null)
+        q = q.eq('account_id', safeAccountId);
       const safeAssignedTo = sanitizeUuidInput(assigned_to);
-      if (safeAssignedTo !== undefined && safeAssignedTo !== null) q = q.eq('assigned_to', safeAssignedTo);
+      if (safeAssignedTo !== undefined && safeAssignedTo !== null)
+        q = q.eq('assigned_to', safeAssignedTo);
 
       const { data, error, count } = await q;
       if (error) throw new Error(error.message);
 
-      const contacts = (data || []).map(contact => {
+      const contacts = (data || []).map((contact) => {
         const expanded = expandMetadata(contact);
         // Add denormalized names from FK joins
         if (contact.employee) {
-          expanded.assigned_to_name = `${contact.employee.first_name || ''} ${contact.employee.last_name || ''}`.trim();
+          expanded.assigned_to_name =
+            `${contact.employee.first_name || ''} ${contact.employee.last_name || ''}`.trim();
           expanded.assigned_to_email = contact.employee.email;
         }
         if (contact.account) {
@@ -295,7 +317,7 @@ export default function createContactV2Routes(_pgPool) {
 
       const created = expandMetadata(data);
       const aiContext = await buildContactAiContext(created, {});
-      
+
       res.status(201).json({
         status: 'success',
         data: { contact: created, aiContext },
@@ -303,6 +325,60 @@ export default function createContactV2Routes(_pgPool) {
     } catch (error) {
       logger.error('Error in v2 contact create:', error);
       res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  /**
+   * Get assignment history for a specific contact.
+   */
+  router.get('/:id/assignment-history', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const tenant_id = req.query.tenant_id || req.tenant?.id;
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('assignment_history')
+        .select('id, assigned_from, assigned_to, assigned_by, action, note, created_at')
+        .eq('entity_type', 'contact')
+        .eq('entity_id', id)
+        .eq('tenant_id', tenant_id)
+        .order('created_at', { ascending: true });
+
+      if (error) throw new Error(error.message);
+
+      const empIds = new Set();
+      (data || []).forEach((h) => {
+        if (h.assigned_from) empIds.add(h.assigned_from);
+        if (h.assigned_to) empIds.add(h.assigned_to);
+        if (h.assigned_by) empIds.add(h.assigned_by);
+      });
+
+      let empMap = {};
+      if (empIds.size > 0) {
+        const { data: emps } = await supabase
+          .from('employees')
+          .select('id, first_name, last_name')
+          .in('id', [...empIds]);
+        (emps || []).forEach((e) => {
+          empMap[e.id] = `${e.first_name || ''} ${e.last_name || ''}`.trim();
+        });
+      }
+
+      const history = (data || []).map((h) => ({
+        ...h,
+        assigned_from_name: empMap[h.assigned_from] || null,
+        assigned_to_name: empMap[h.assigned_to] || null,
+        assigned_by_name: empMap[h.assigned_by] || null,
+      }));
+
+      res.json({ status: 'success', data: history });
+    } catch (err) {
+      logger.error('[Contacts v2 GET /:id/assignment-history] Error:', err.message);
+      res.status(500).json({ status: 'error', message: err.message });
     }
   });
 
@@ -351,7 +427,7 @@ export default function createContactV2Routes(_pgPool) {
 
       const contact = expandMetadata(data);
       const aiContext = await buildContactAiContext(contact, {});
-      
+
       res.json({ status: 'success', data: { contact, aiContext } });
     } catch (error) {
       logger.error('Error in v2 contact get:', error);
@@ -407,10 +483,10 @@ export default function createContactV2Routes(_pgPool) {
         ...(Array.isArray(tags) ? { tags } : {}),
       };
 
-      // Fetch existing metadata to merge
+      // Fetch existing record to merge metadata + track assignment changes
       const { data: current, error: fetchErr } = await supabase
         .from('contacts')
-        .select('metadata')
+        .select('metadata, assigned_to')
         .eq('id', id)
         .eq('tenant_id', tenant_id)
         .single();
@@ -420,8 +496,11 @@ export default function createContactV2Routes(_pgPool) {
       }
       if (fetchErr) throw new Error(fetchErr.message);
 
+      const previousAssignedTo = current?.assigned_to || null;
+
       // Merge metadata
-      const existingMeta = current?.metadata && typeof current.metadata === 'object' ? current.metadata : {};
+      const existingMeta =
+        current?.metadata && typeof current.metadata === 'object' ? current.metadata : {};
       const mergedMeta = {
         ...existingMeta,
         ...(metadata && typeof metadata === 'object' ? metadata : {}),
@@ -440,6 +519,30 @@ export default function createContactV2Routes(_pgPool) {
         return res.status(404).json({ status: 'error', message: 'Contact not found' });
       }
       if (error) throw new Error(error.message);
+
+      // Record assignment change in history (non-blocking)
+      const newAssignedTo = data.assigned_to || null;
+      if (payload.assigned_to !== undefined && previousAssignedTo !== newAssignedTo) {
+        const action = !newAssignedTo ? 'unassign' : !previousAssignedTo ? 'assign' : 'reassign';
+        supabase
+          .from('assignment_history')
+          .insert({
+            tenant_id,
+            entity_type: 'contact',
+            entity_id: id,
+            assigned_from: previousAssignedTo,
+            assigned_to: newAssignedTo,
+            assigned_by: req.user?.id || null,
+            action,
+          })
+          .then(({ error: histErr }) => {
+            if (histErr)
+              logger.warn(
+                '[Contacts v2 PUT] Failed to record assignment history:',
+                histErr.message,
+              );
+          });
+      }
 
       const updated = expandMetadata(data);
       res.json({ status: 'success', data: { contact: updated } });

@@ -1,7 +1,7 @@
 /**
  * Accounts V2 Routes
  * Streamlined CRUD with flattened metadata fields
- * 
+ *
  * @openapi
  * tags:
  *   - name: accounts-v2
@@ -9,9 +9,10 @@
  */
 
 import express from 'express';
-import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
+import { validateTenantAccess } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildAccountAiContext } from '../lib/aiContextEnricher.js';
+import { getVisibilityScope } from '../lib/teamVisibility.js';
 import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 import { sanitizeUuidInput } from '../lib/uuidValidator.js';
 import logger from '../lib/logger.js';
@@ -20,7 +21,6 @@ export default function createAccountV2Routes(_pgPool) {
   const router = express.Router();
 
   router.use(validateTenantAccess);
-  router.use(enforceEmployeeDataScope);
 
   /**
    * Flatten metadata fields into top-level properties for consistent API shape
@@ -31,7 +31,8 @@ export default function createAccountV2Routes(_pgPool) {
     const metadataObj = metadata && typeof metadata === 'object' ? metadata : {};
 
     // Flatten common fields - prefer column value, fallback to metadata
-    const address_1 = rest.address_1 ?? rest.street ?? metadataObj.address_1 ?? metadataObj.street ?? null;
+    const address_1 =
+      rest.address_1 ?? rest.street ?? metadataObj.address_1 ?? metadataObj.street ?? null;
     const address_2 = rest.address_2 ?? metadataObj.address_2 ?? null;
     const zip = rest.zip ?? metadataObj.zip ?? null;
     const country = rest.country ?? metadataObj.country ?? null;
@@ -39,12 +40,15 @@ export default function createAccountV2Routes(_pgPool) {
     const unique_id = rest.unique_id ?? metadataObj.unique_id ?? null;
     const assigned_to = rest.assigned_to ?? metadataObj.assigned_to ?? null;
     const legacy_id = rest.legacy_id ?? metadataObj.legacy_id ?? null;
-    const processed_by_ai_doc = rest.processed_by_ai_doc ?? metadataObj.processed_by_ai_doc ?? false;
+    const processed_by_ai_doc =
+      rest.processed_by_ai_doc ?? metadataObj.processed_by_ai_doc ?? false;
     const ai_doc_source_type = rest.ai_doc_source_type ?? metadataObj.ai_doc_source_type ?? null;
     const is_test_data =
       typeof rest.is_test_data === 'boolean'
         ? rest.is_test_data
-        : (typeof metadataObj.is_test_data === 'boolean' ? metadataObj.is_test_data : false);
+        : typeof metadataObj.is_test_data === 'boolean'
+          ? metadataObj.is_test_data
+          : false;
     const tags = Array.isArray(rest.tags)
       ? rest.tags
       : Array.isArray(metadataObj.tags)
@@ -118,6 +122,12 @@ export default function createAccountV2Routes(_pgPool) {
       const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
       const offset = parseInt(req.query.offset, 10) || 0;
 
+      // ── Team visibility scoping ──
+      let visibilityScope = null;
+      if (req.user) {
+        visibilityScope = await getVisibilityScope(req.user, supabase);
+      }
+
       // Parse sort parameter: -field for descending, field for ascending
       let sortField = 'created_at';
       let sortAscending = false;
@@ -133,10 +143,19 @@ export default function createAccountV2Routes(_pgPool) {
 
       let query = supabase
         .from('accounts')
-        .select('*, employee:employees!accounts_assigned_to_fkey(id, first_name, last_name, email)', { count: 'exact' })
+        .select(
+          '*, employee:employees!accounts_assigned_to_fkey(id, first_name, last_name, email)',
+          { count: 'exact' },
+        )
         .eq('tenant_id', tenant_id)
         .order(sortField, { ascending: sortAscending })
         .range(offset, offset + limit - 1);
+
+      // Apply team visibility filter
+      if (visibilityScope && !visibilityScope.bypass && visibilityScope.employeeIds.length > 0) {
+        const idList = visibilityScope.employeeIds.join(',');
+        query = query.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+      }
 
       if (type) query = query.eq('type', type);
       if (industry) query = query.eq('industry', industry);
@@ -164,22 +183,22 @@ export default function createAccountV2Routes(_pgPool) {
 
           // assigned_to via $or including NULL
           if (parsed.$or && Array.isArray(parsed.$or)) {
-            const normalizedOr = parsed.$or.filter(c => c && typeof c === 'object');
-            const hasUnassigned = normalizedOr.some(c => c.assigned_to === null);
+            const normalizedOr = parsed.$or.filter((c) => c && typeof c === 'object');
+            const hasUnassigned = normalizedOr.some((c) => c.assigned_to === null);
             const assignedVals = normalizedOr
-              .map(c => c.assigned_to)
-              .filter(v => v !== undefined && v !== null && String(v).trim() !== '');
+              .map((c) => c.assigned_to)
+              .filter((v) => v !== undefined && v !== null && String(v).trim() !== '');
 
             if (hasUnassigned && assignedVals.length === 0) {
               query = query.is('assigned_to', null);
             } else if (assignedVals.length > 0) {
-              const orParts = assignedVals.map(v => `assigned_to.eq.${v}`);
+              const orParts = assignedVals.map((v) => `assigned_to.eq.${v}`);
               query = query.or(orParts.join(','));
             }
 
             // Preserve any ilike search conditions in $or
             const searchOrs = normalizedOr
-              .map(condition => {
+              .map((condition) => {
                 const [field, opObj] = Object.entries(condition)[0] || [];
                 if (opObj && opObj.$icontains) {
                   return `${field}.ilike.%${opObj.$icontains}%`;
@@ -207,11 +226,12 @@ export default function createAccountV2Routes(_pgPool) {
         return res.status(500).json({ status: 'error', message: error.message });
       }
 
-      const accounts = (data || []).map(account => {
+      const accounts = (data || []).map((account) => {
         const expanded = expandMetadata(account);
         // Add denormalized names from FK joins
         if (account.employee) {
-          expanded.assigned_to_name = `${account.employee.first_name || ''} ${account.employee.last_name || ''}`.trim();
+          expanded.assigned_to_name =
+            `${account.employee.first_name || ''} ${account.employee.last_name || ''}`.trim();
           expanded.assigned_to_email = account.employee.email;
         }
         delete expanded.employee;
@@ -318,6 +338,7 @@ export default function createAccountV2Routes(_pgPool) {
         tenant_id: _ignoreTenant,
         ...extraFields
       } = body;
+      const normalizedAssignedTo = sanitizeUuidInput(assigned_to);
 
       const insertData = {
         tenant_id,
@@ -332,6 +353,7 @@ export default function createAccountV2Routes(_pgPool) {
         street: address_1 || street || null,
         city: city || null,
         state: state || null,
+        assigned_to: normalizedAssignedTo,
         is_test_data: is_test_data ?? false,
         metadata: {
           ...(incomingMetadata || {}),
@@ -342,18 +364,14 @@ export default function createAccountV2Routes(_pgPool) {
           description: description || null,
           tags: Array.isArray(tags) ? tags : [],
           unique_id: unique_id || null,
-          assigned_to: assigned_to || null,
+          assigned_to: normalizedAssignedTo,
           legacy_id: legacy_id || null,
           processed_by_ai_doc: processed_by_ai_doc ?? false,
           ai_doc_source_type: ai_doc_source_type || null,
         },
       };
 
-      const { data, error } = await supabase
-        .from('accounts')
-        .insert(insertData)
-        .select()
-        .single();
+      const { data, error } = await supabase.from('accounts').insert(insertData).select().single();
 
       if (error) {
         logger.error('[accounts.v2] Create error:', error);
@@ -361,16 +379,16 @@ export default function createAccountV2Routes(_pgPool) {
       }
 
       const created = expandMetadata(data);
-      
+
       // Build AI context asynchronously - don't wait for it
       // This keeps the response fast (~200ms) instead of waiting for AI enrichment (~5+ seconds)
       buildAccountAiContext(created, { tenantId: tenant_id })
-        .then(aiContext => {
+        .then((aiContext) => {
           if (aiContext) {
             logger.debug('[accounts.v2] AI context built in background');
           }
         })
-        .catch(err => {
+        .catch((err) => {
           logger.warn('[accounts.v2] Background AI context building failed:', err.message);
         });
 
@@ -382,6 +400,60 @@ export default function createAccountV2Routes(_pgPool) {
     } catch (err) {
       logger.error('[accounts.v2] Create exception:', err);
       return res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
+  /**
+   * Get assignment history for a specific account.
+   */
+  router.get('/:id/assignment-history', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const tenant_id = req.query.tenant_id || req.tenant?.id;
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('assignment_history')
+        .select('id, assigned_from, assigned_to, assigned_by, action, note, created_at')
+        .eq('entity_type', 'account')
+        .eq('entity_id', id)
+        .eq('tenant_id', tenant_id)
+        .order('created_at', { ascending: true });
+
+      if (error) throw new Error(error.message);
+
+      const empIds = new Set();
+      (data || []).forEach((h) => {
+        if (h.assigned_from) empIds.add(h.assigned_from);
+        if (h.assigned_to) empIds.add(h.assigned_to);
+        if (h.assigned_by) empIds.add(h.assigned_by);
+      });
+
+      let empMap = {};
+      if (empIds.size > 0) {
+        const { data: emps } = await supabase
+          .from('employees')
+          .select('id, first_name, last_name')
+          .in('id', [...empIds]);
+        (emps || []).forEach((e) => {
+          empMap[e.id] = `${e.first_name || ''} ${e.last_name || ''}`.trim();
+        });
+      }
+
+      const history = (data || []).map((h) => ({
+        ...h,
+        assigned_from_name: empMap[h.assigned_from] || null,
+        assigned_to_name: empMap[h.assigned_to] || null,
+        assigned_by_name: empMap[h.assigned_by] || null,
+      }));
+
+      res.json({ status: 'success', data: history });
+    } catch (err) {
+      logger.error('[accounts.v2 GET /:id/assignment-history] Error:', err.message);
+      res.status(500).json({ status: 'error', message: err.message });
     }
   });
 
@@ -488,7 +560,7 @@ export default function createAccountV2Routes(_pgPool) {
 
       const supabase = getSupabaseClient();
 
-      // Fetch existing record to merge metadata
+      // Fetch existing record to merge metadata + track assignment changes
       const { data: existing, error: fetchError } = await supabase
         .from('accounts')
         .select('*')
@@ -500,7 +572,9 @@ export default function createAccountV2Routes(_pgPool) {
         return res.status(404).json({ status: 'error', message: 'Account not found' });
       }
 
-      const existingMeta = existing.metadata && typeof existing.metadata === 'object' ? existing.metadata : {};
+      const previousAssignedTo = existing.assigned_to || null;
+      const existingMeta =
+        existing.metadata && typeof existing.metadata === 'object' ? existing.metadata : {};
 
       const {
         name,
@@ -530,6 +604,8 @@ export default function createAccountV2Routes(_pgPool) {
         tenant_id: _ignoreTenant,
         ...extraFields
       } = body;
+      const normalizedAssignedTo =
+        assigned_to !== undefined ? sanitizeUuidInput(assigned_to) : undefined;
 
       const updateData = {};
 
@@ -545,6 +621,7 @@ export default function createAccountV2Routes(_pgPool) {
       if (address_1 !== undefined || street !== undefined) updateData.street = address_1 || street;
       if (city !== undefined) updateData.city = city;
       if (state !== undefined) updateData.state = state;
+      if (normalizedAssignedTo !== undefined) updateData.assigned_to = normalizedAssignedTo;
       if (is_test_data !== undefined) updateData.is_test_data = is_test_data;
 
       // Merge metadata
@@ -555,7 +632,7 @@ export default function createAccountV2Routes(_pgPool) {
       if (description !== undefined) mergedMeta.description = description;
       if (tags !== undefined) mergedMeta.tags = tags;
       if (unique_id !== undefined) mergedMeta.unique_id = unique_id;
-      if (assigned_to !== undefined) mergedMeta.assigned_to = assigned_to;
+      if (normalizedAssignedTo !== undefined) mergedMeta.assigned_to = normalizedAssignedTo;
       if (legacy_id !== undefined) mergedMeta.legacy_id = legacy_id;
       if (processed_by_ai_doc !== undefined) mergedMeta.processed_by_ai_doc = processed_by_ai_doc;
       if (ai_doc_source_type !== undefined) mergedMeta.ai_doc_source_type = ai_doc_source_type;
@@ -575,6 +652,30 @@ export default function createAccountV2Routes(_pgPool) {
       if (error) {
         logger.error('[accounts.v2] Update error:', error);
         return res.status(500).json({ status: 'error', message: error.message });
+      }
+
+      // Record assignment change in history (non-blocking)
+      const newAssignedTo = data.assigned_to || null;
+      if (assigned_to !== undefined && previousAssignedTo !== newAssignedTo) {
+        const action = !newAssignedTo ? 'unassign' : !previousAssignedTo ? 'assign' : 'reassign';
+        supabase
+          .from('assignment_history')
+          .insert({
+            tenant_id,
+            entity_type: 'account',
+            entity_id: id,
+            assigned_from: previousAssignedTo,
+            assigned_to: newAssignedTo,
+            assigned_by: req.user?.id || null,
+            action,
+          })
+          .then(({ error: histErr }) => {
+            if (histErr)
+              logger.warn(
+                '[accounts.v2 PUT] Failed to record assignment history:',
+                histErr.message,
+              );
+          });
       }
 
       return res.json({

@@ -1,7 +1,8 @@
 import express from 'express';
-import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
+import { validateTenantAccess } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildActivityAiContext } from '../lib/aiContextEnricher.js';
+import { getVisibilityScope } from '../lib/teamVisibility.js';
 import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 import { setCorsHeaders, isAllowedOrigin } from '../lib/cors.js';
@@ -155,7 +156,6 @@ export default function createActivityV2Routes(_pgPool) {
   const router = express.Router();
 
   router.use(validateTenantAccess);
-  router.use(enforceEmployeeDataScope);
 
   const expandMetadata = (record) => {
     if (!record) return record;
@@ -306,6 +306,12 @@ export default function createActivityV2Routes(_pgPool) {
       // Enable stats when explicitly requested via query param
       const includeStats = req.query.include_stats === 'true' || req.query.include_stats === '1';
 
+      // ── Team visibility scoping ──
+      let visibilityScope = null;
+      if (req.user) {
+        visibilityScope = await getVisibilityScope(req.user, supabase);
+      }
+
       // Parse sort parameter: -field for descending, field for ascending
       let sortField = 'created_at';
       let sortAscending = false;
@@ -328,6 +334,12 @@ export default function createActivityV2Routes(_pgPool) {
         .eq('tenant_id', tenant_id)
         .order(sortField, { ascending: sortAscending })
         .range(offset, offset + limit - 1);
+
+      // Apply team visibility filter
+      if (visibilityScope && !visibilityScope.bypass && visibilityScope.employeeIds.length > 0) {
+        const idList = visibilityScope.employeeIds.join(',');
+        q = q.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+      }
 
       // Handle direct query parameters (compatibility with generic frontend filters)
       const {
@@ -843,6 +855,58 @@ export default function createActivityV2Routes(_pgPool) {
     }
   });
 
+  // GET /api/v2/activities/:id/assignment-history
+  router.get('/:id/assignment-history', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const tenant_id = req.query.tenant_id || req.tenant?.id;
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('assignment_history')
+        .select('id, assigned_from, assigned_to, assigned_by, action, note, created_at')
+        .eq('entity_type', 'activity')
+        .eq('entity_id', id)
+        .eq('tenant_id', tenant_id)
+        .order('created_at', { ascending: true });
+
+      if (error) throw new Error(error.message);
+
+      const empIds = new Set();
+      (data || []).forEach((h) => {
+        if (h.assigned_from) empIds.add(h.assigned_from);
+        if (h.assigned_to) empIds.add(h.assigned_to);
+        if (h.assigned_by) empIds.add(h.assigned_by);
+      });
+
+      let empMap = {};
+      if (empIds.size > 0) {
+        const { data: emps } = await supabase
+          .from('employees')
+          .select('id, first_name, last_name')
+          .in('id', [...empIds]);
+        (emps || []).forEach((e) => {
+          empMap[e.id] = `${e.first_name || ''} ${e.last_name || ''}`.trim();
+        });
+      }
+
+      const history = (data || []).map((h) => ({
+        ...h,
+        assigned_from_name: empMap[h.assigned_from] || null,
+        assigned_to_name: empMap[h.assigned_to] || null,
+        assigned_by_name: empMap[h.assigned_by] || null,
+      }));
+
+      res.json({ status: 'success', data: history });
+    } catch (err) {
+      logger.error('[Activities v2 GET /:id/assignment-history] Error:', err.message);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
   router.get('/:id', cacheDetail('activities', 300), async (req, res) => {
     try {
       const { id } = req.params;
@@ -934,7 +998,7 @@ export default function createActivityV2Routes(_pgPool) {
 
       const { data: current, error: fetchErr } = await supabase
         .from('activities')
-        .select('metadata')
+        .select('metadata, assigned_to')
         .eq('id', id)
         .eq('tenant_id', tenant_id)
         .single();
@@ -944,6 +1008,7 @@ export default function createActivityV2Routes(_pgPool) {
       }
       if (fetchErr) throw new Error(fetchErr.message);
 
+      const previousAssignedTo = current?.assigned_to || null;
       const existingMeta =
         current?.metadata && typeof current.metadata === 'object' ? current.metadata : {};
       const mergedMeta = {
@@ -982,6 +1047,34 @@ export default function createActivityV2Routes(_pgPool) {
         return res.status(404).json({ status: 'error', message: 'Activity not found' });
       }
       if (error) throw new Error(error.message);
+
+      // Record assignment change in history (non-blocking)
+      const newAssignedTo = data.assigned_to || null;
+      if (payload.assigned_to !== undefined && previousAssignedTo !== newAssignedTo) {
+        const histAction = !newAssignedTo
+          ? 'unassign'
+          : !previousAssignedTo
+            ? 'assign'
+            : 'reassign';
+        supabase
+          .from('assignment_history')
+          .insert({
+            tenant_id,
+            entity_type: 'activity',
+            entity_id: id,
+            assigned_from: previousAssignedTo,
+            assigned_to: newAssignedTo,
+            assigned_by: req.user?.id || null,
+            action: histAction,
+          })
+          .then(({ error: histErr }) => {
+            if (histErr)
+              logger.warn(
+                '[Activities v2 PUT] Failed to record assignment history:',
+                histErr.message,
+              );
+          });
+      }
 
       const updated = expandMetadata(data);
       res.json({ status: 'success', data: { activity: updated } });
