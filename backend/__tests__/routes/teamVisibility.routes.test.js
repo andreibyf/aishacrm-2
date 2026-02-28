@@ -227,8 +227,13 @@ for (const entity of ENTITIES) {
     it(`PUT ${entity.routePath}/:id with assigned_to records assignment history`, async () => {
       if (!supabaseReady || !testEmployeeId || !createdId) return;
 
+      const putPath =
+        entity.name === 'bizdevsources'
+          ? `${entity.routePath}/${createdId}?tenant_id=${TEST_TENANT_ID}`
+          : `${entity.routePath}/${createdId}`;
+
       // Assign to employee
-      const res = await req(entity.port, 'PUT', `${entity.routePath}/${createdId}`, {
+      const res = await req(entity.port, 'PUT', putPath, {
         tenant_id: TEST_TENANT_ID,
         assigned_to: testEmployeeId,
       });
@@ -262,8 +267,13 @@ for (const entity of ENTITIES) {
     it(`PUT ${entity.routePath}/:id unassign records history`, async () => {
       if (!supabaseReady || !testEmployeeId || !createdId) return;
 
+      const putPath =
+        entity.name === 'bizdevsources'
+          ? `${entity.routePath}/${createdId}?tenant_id=${TEST_TENANT_ID}`
+          : `${entity.routePath}/${createdId}`;
+
       // Unassign
-      const res = await req(entity.port, 'PUT', `${entity.routePath}/${createdId}`, {
+      const res = await req(entity.port, 'PUT', putPath, {
         tenant_id: TEST_TENANT_ID,
         assigned_to: null,
       });

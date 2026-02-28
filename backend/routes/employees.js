@@ -108,7 +108,7 @@ export default function createEmployeeRoutes(_pgPool) {
    *               $ref: '#/components/schemas/Error'
    */
   // GET /api/employees - List employees
-  router.get('/', cacheList('employees', 180), async (req, res) => {
+  router.get('/', cacheList('employees', 30), async (req, res) => {
     try {
       const { tenant_id, email, limit = 50, offset = 0 } = req.query;
 
@@ -836,6 +836,198 @@ export default function createEmployeeRoutes(_pgPool) {
    *             schema:
    *               $ref: '#/components/schemas/Error'
    */
+  // POST /api/employees/:id/link-user - Link employee to CRM user by email match
+  router.post('/:id/link-user', invalidateCache('employees'), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { employee_email } = req.body;
+      const tenant_id = req.body.tenant_id || req.query.tenant_id;
+
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+      if (!employee_email) {
+        return res.status(400).json({ status: 'error', message: 'employee_email is required' });
+      }
+
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+
+      // Verify employee exists
+      const { data: employee, error: empErr } = await supabase
+        .from('employees')
+        .select('id, email, metadata, tenant_id')
+        .eq('id', id)
+        .eq('tenant_id', tenant_id)
+        .single();
+
+      if (empErr || !employee) {
+        return res.status(404).json({ status: 'error', message: 'Employee not found' });
+      }
+
+      // Find matching CRM user by email
+      const { data: user, error: userErr } = await supabase
+        .from('users')
+        .select('id, email, role')
+        .ilike('email', employee_email.trim())
+        .eq('tenant_id', tenant_id)
+        .maybeSingle();
+
+      if (userErr) {
+        logger.error('[Employees POST /:id/link-user] User lookup error:', userErr.message);
+        return res.status(500).json({ status: 'error', message: 'Failed to look up user' });
+      }
+
+      if (!user) {
+        return res.status(404).json({
+          status: 'error',
+          success: false,
+          error: `No CRM user found with email: ${employee_email}`,
+        });
+      }
+
+      // Update employee metadata with user link
+      const existingMeta =
+        employee.metadata && typeof employee.metadata === 'object' ? employee.metadata : {};
+      const updatedMeta = {
+        ...existingMeta,
+        user_email: user.email,
+        user_id: user.id,
+        has_crm_access: true,
+        linked_at: new Date().toISOString(),
+      };
+
+      const { error: updateErr } = await supabase
+        .from('employees')
+        .update({ metadata: updatedMeta })
+        .eq('id', id)
+        .eq('tenant_id', tenant_id);
+
+      if (updateErr) {
+        logger.error('[Employees POST /:id/link-user] Update error:', updateErr.message);
+        return res.status(500).json({ status: 'error', message: 'Failed to link employee' });
+      }
+
+      logger.info(
+        `[Employees POST /:id/link-user] Linked employee ${id} to user ${user.id} (${user.email})`,
+      );
+      return res.json({
+        status: 'success',
+        success: true,
+        message: `Successfully linked to CRM user: ${user.email}`,
+        data: { user_email: user.email, user_id: user.id },
+      });
+    } catch (err) {
+      logger.error('[Employees POST /:id/link-user] Error:', err.message);
+      return res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
+  // POST /api/employees/:id/sync-permissions - Sync employee role/permissions to linked CRM user
+  router.post('/:id/sync-permissions', invalidateCache('employees'), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const tenant_id = req.body.tenant_id || req.query.tenant_id;
+
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+
+      // Get employee with metadata
+      const { data: employee, error: empErr } = await supabase
+        .from('employees')
+        .select('id, email, role, metadata, tenant_id')
+        .eq('id', id)
+        .eq('tenant_id', tenant_id)
+        .single();
+
+      if (empErr || !employee) {
+        return res.status(404).json({ status: 'error', message: 'Employee not found' });
+      }
+
+      const meta =
+        employee.metadata && typeof employee.metadata === 'object' ? employee.metadata : {};
+
+      if (!meta.user_email) {
+        return res.status(400).json({
+          status: 'error',
+          success: false,
+          error: 'Employee is not linked to a CRM user. Link them first.',
+        });
+      }
+
+      // Find the linked CRM user
+      const { data: user, error: userErr } = await supabase
+        .from('users')
+        .select('id, email, role, metadata')
+        .ilike('email', meta.user_email.trim())
+        .eq('tenant_id', tenant_id)
+        .maybeSingle();
+
+      if (userErr || !user) {
+        return res.status(404).json({
+          status: 'error',
+          success: false,
+          error: `Linked CRM user not found: ${meta.user_email}`,
+        });
+      }
+
+      // Sync: copy employee role to user record, and update employee metadata
+      const userMeta = user.metadata && typeof user.metadata === 'object' ? user.metadata : {};
+      const updatedUserMeta = {
+        ...userMeta,
+        employee_id: employee.id,
+        employee_role: employee.role,
+        synced_at: new Date().toISOString(),
+      };
+
+      // Update user with employee role info
+      const userRole = employee.role || user.role;
+      const { error: updateUserErr } = await supabase
+        .from('users')
+        .update({ role: userRole, metadata: updatedUserMeta })
+        .eq('id', user.id)
+        .eq('tenant_id', tenant_id);
+
+      if (updateUserErr) {
+        logger.error(
+          '[Employees POST /:id/sync-permissions] User update error:',
+          updateUserErr.message,
+        );
+        return res.status(500).json({ status: 'error', message: 'Failed to sync user record' });
+      }
+
+      // Update employee metadata with sync timestamp
+      const updatedEmpMeta = {
+        ...meta,
+        permissions_synced_at: new Date().toISOString(),
+        user_role: userRole,
+      };
+
+      await supabase
+        .from('employees')
+        .update({ metadata: updatedEmpMeta })
+        .eq('id', id)
+        .eq('tenant_id', tenant_id);
+
+      logger.info(
+        `[Employees POST /:id/sync-permissions] Synced employee ${id} -> user ${user.id}`,
+      );
+      return res.json({
+        status: 'success',
+        success: true,
+        message: 'Permissions synced successfully',
+        data: { user_id: user.id, role: userRole },
+      });
+    } catch (err) {
+      logger.error('[Employees POST /:id/sync-permissions] Error:', err.message);
+      return res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
   // DELETE /api/employees/:id - Delete employee
   router.delete('/:id', invalidateCache('employees'), async (req, res) => {
     try {

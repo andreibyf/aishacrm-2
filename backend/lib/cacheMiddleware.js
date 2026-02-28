@@ -10,7 +10,7 @@ import cacheManager from './cacheManager.js';
  * @param {string} module - Module name (accounts, leads, contacts, bizdevsources)
  * @param {number} ttl - Cache TTL in seconds (optional)
  */
-export function cacheList(module, ttl = 180) {
+export function cacheList(module, ttl = 30) {
   return async (req, res, next) => {
     // Only cache GET requests
     if (req.method !== 'GET') {
@@ -73,7 +73,7 @@ export function cacheList(module, ttl = 180) {
  * @param {string} module - Module name (accounts, leads, contacts, etc.)
  * @param {number} ttl - Cache TTL in seconds (optional, default 300s for detail views)
  */
-export function cacheDetail(module, ttl = 300) {
+export function cacheDetail(module, ttl = 60) {
   return async (req, res, next) => {
     // Only cache GET requests
     if (req.method !== 'GET') {

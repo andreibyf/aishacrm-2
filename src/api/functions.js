@@ -256,6 +256,63 @@ const createFunctionProxy = (functionName) => {
       }
     }
 
+    // linkEmployeeToCRMUser & syncEmployeeUserPermissions — always call backend route (works in all modes)
+    if (functionName === 'syncEmployeeUserPermissions') {
+      try {
+        const payload = args[0] || {};
+        const BACKEND_URL = getBackendUrl();
+        const tenantId =
+          payload.tenant_id ||
+          (typeof localStorage !== 'undefined'
+            ? localStorage.getItem('selected_tenant_id') || localStorage.getItem('tenant_id')
+            : '');
+        const headers = { 'Content-Type': 'application/json' };
+        const authHeader = await getAuthorizationHeader();
+        if (authHeader) headers['Authorization'] = authHeader;
+        const resp = await fetch(
+          `${BACKEND_URL}/api/employees/${payload.employee_id}/sync-permissions`,
+          {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ tenant_id: tenantId }),
+          },
+        );
+        const json = await resp.json();
+        return { status: resp.status, data: json };
+      } catch (err) {
+        console.error('[syncEmployeeUserPermissions] Error:', err);
+        return { status: 500, data: { success: false, error: err?.message || String(err) } };
+      }
+    }
+
+    if (functionName === 'linkEmployeeToCRMUser') {
+      try {
+        const payload = args[0] || {};
+        const BACKEND_URL = getBackendUrl();
+        const tenantId =
+          payload.tenant_id ||
+          (typeof localStorage !== 'undefined'
+            ? localStorage.getItem('selected_tenant_id') || localStorage.getItem('tenant_id')
+            : '');
+        const headers = { 'Content-Type': 'application/json' };
+        const authHeader = await getAuthorizationHeader();
+        if (authHeader) headers['Authorization'] = authHeader;
+        const resp = await fetch(`${BACKEND_URL}/api/employees/${payload.employee_id}/link-user`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            employee_email: payload.employee_email,
+            tenant_id: tenantId,
+          }),
+        });
+        const json = await resp.json();
+        return { status: resp.status, data: json };
+      } catch (err) {
+        console.error('[linkEmployeeToCRMUser] Error:', err);
+        return { status: 500, data: { success: false, error: err?.message || String(err) } };
+      }
+    }
+
     if (isLocalDevMode()) {
       // ========================================
       // Dashboard Stats & Bundle (Local Dev -> call backend directly)

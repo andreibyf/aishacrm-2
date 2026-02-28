@@ -300,6 +300,23 @@ export default function TeamManagement() {
     }
   };
 
+  const handleDeleteTeam = async (team) => {
+    if (team.member_count > 0) {
+      toast.error('Remove all members before deleting a team');
+      return;
+    }
+    if (!window.confirm(`Permanently delete "${team.name}"? This cannot be undone.`)) return;
+    try {
+      await apiFetch(`/api/v2/teams/${team.id}?hard=true&tenant_id=${tenantId}`, {
+        method: 'DELETE',
+      });
+      toast.success(`Team "${team.name}" deleted`);
+      await loadTeams();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
   const handleToggleTeamActive = async (team) => {
     try {
       if (team.is_active) {
@@ -815,6 +832,17 @@ export default function TeamManagement() {
                           <Eye className="w-3.5 h-3.5" />
                         )}
                       </Button>
+                      {team.member_count === 0 && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0 text-slate-400 hover:text-red-500"
+                          title="Delete team permanently"
+                          onClick={() => handleDeleteTeam(team)}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
                     </div>
                   </>
                 )}

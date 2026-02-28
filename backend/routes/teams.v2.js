@@ -492,12 +492,47 @@ export default function createTeamsV2Routes(_pgPool) {
     try {
       const { id } = req.params;
       const tenant_id = getTenantId(req);
+      const hardDelete = req.query.hard === 'true';
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
 
       const supabase = getSupabaseClient();
 
+      if (hardDelete) {
+        // Hard delete — only allowed for teams with 0 members
+        const { data: memberCheck } = await supabase
+          .from('team_members')
+          .select('id')
+          .eq('team_id', id)
+          .limit(1);
+
+        if (memberCheck && memberCheck.length > 0) {
+          return res.status(400).json({
+            status: 'error',
+            message: 'Cannot hard-delete a team with members. Remove all members first.',
+          });
+        }
+
+        const { data, error } = await supabase
+          .from('teams')
+          .delete()
+          .eq('id', id)
+          .eq('tenant_id', tenant_id)
+          .select('id, name')
+          .single();
+
+        if (error?.code === 'PGRST116' || !data) {
+          return res.status(404).json({ status: 'error', message: 'Team not found' });
+        }
+        if (error) throw new Error(error.message);
+
+        clearVisibilityCache();
+        logger.info(`[Teams v2] Hard-deleted team '${data.name}' (${data.id})`);
+        return res.json({ status: 'success', message: `Team '${data.name}' permanently deleted` });
+      }
+
+      // Soft delete (default) — set is_active = false
       const { data, error } = await supabase
         .from('teams')
         .update({ is_active: false, updated_at: new Date().toISOString() })
@@ -564,16 +599,20 @@ export default function createTeamsV2Routes(_pgPool) {
       const empIds = (members || []).map((m) => m.employee_id).filter(Boolean);
       let empMap = {};
       if (empIds.length > 0) {
-        const { data: emps } = await supabase
+        const { data: emps, error: empErr } = await supabase
           .from('employees')
-          .select('id, first_name, last_name, email, is_active')
+          .select('id, first_name, last_name, email, status')
           .in('id', empIds);
+
+        if (empErr) {
+          logger.warn('[Teams v2 GET /:id/members] Employee lookup error:', empErr.message);
+        }
 
         (emps || []).forEach((e) => {
           empMap[e.id] = {
             name: `${e.first_name || ''} ${e.last_name || ''}`.trim(),
             email: e.email,
-            is_active: e.is_active,
+            status: e.status,
           };
         });
       }
@@ -582,7 +621,7 @@ export default function createTeamsV2Routes(_pgPool) {
         ...m,
         employee_name: empMap[m.employee_id]?.name || null,
         employee_email: empMap[m.employee_id]?.email || null,
-        employee_is_active: empMap[m.employee_id]?.is_active ?? null,
+        employee_status: empMap[m.employee_id]?.status ?? null,
       }));
 
       res.json({

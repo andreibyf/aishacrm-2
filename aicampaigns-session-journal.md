@@ -1,4 +1,11 @@
-# AICampaigns Multi-Channel Overhaul — Session Journal
+# AishaCRM Development — Session Journal
+
+> **Note:** Team visibility & assignment docs have moved to:
+>
+> - `docs/architecture/TEAM_VISIBILITY_SYSTEM.md` — system architecture & current state
+> - `docs/architecture/TEAM_ASSIGNMENT_HANDOFF.md` — implementation spec & phase status
+>
+> This journal retains the session history for all features.
 
 ## 2026-02-27 (Thursday) — Phase 6: AiSHA Identity Context (Team Visibility)
 
@@ -554,8 +561,109 @@ All 6 v2 routes updated:
 
 ### What's Next
 
-1. **Phase 4**: Frontend cascade UI — team dropdown → person dropdown (filtered by team members)
-2. **Phase 5**: Braid tool updates — add `assigned_to_team` parameter to all list/search tools
-3. **Phase 6**: AiSHA identity context — add team info to system prompt
+1. ~~**Phase 4**: Frontend cascade UI~~ ✅ Complete
+2. ~~**Phase 5**: Braid tool updates~~ ✅ Complete
+3. ~~**Phase 6**: AiSHA identity context~~ ✅ Complete
 4. **Phase 7**: Backfill production data — populate `assigned_to_team` on existing records
 5. Re-test full visibility matrix with all 6 test users
+
+---
+
+## Session: Feb 27–28, 2026 — Phase 4+5+6 Complete, Teams V2 API, Copilot Fixes
+
+### Phase 4: Frontend Cascade UI ✅
+
+- Rewrote `src/components/shared/AssignmentField.jsx` — Team→Person cascade dropdown
+- New `src/hooks/useTeams.js` — fetches teams + member mapping
+- Expanded `src/hooks/useTeamScope.js` return values (teamIds, fullAccessTeamIds, highestRole)
+- All 6 entity forms updated: LeadForm, AccountForm, ContactForm, OpportunityForm, ActivityForm, BizDevSourceForm
+- Role-based: Admin/Director see all teams, Manager sees own teams, Member sees read-only with claim/unassign
+- Migrated LeadForm from inline assignment logic to shared AssignmentField component
+
+### Phase 5: Braid Tool Updates ✅
+
+- All 6 .braid files accept `assigned_to_team` parameter on list/search functions
+- `backend/lib/braid/registry.js` — tool descriptions include team filtering guidance, `summarizeToolResult` includes `assigned_to_team_name`
+- All 6 v2 routes accept `?assigned_to_team=UUID` query parameter with sanitized UUID filtering
+- BizDevSources: `assigned_to` + `assigned_to_team` query params, team name batch enrichment
+
+### Phase 6: AiSHA Identity Context ✅
+
+- Extracted `fetchUserTeamContext()` into `backend/lib/aiTeamContext.js` (standalone, testable)
+- Injects team name, role, member list, and team ID into system prompt identity block
+- Team-aware pronoun rules: "my team leads" → `assigned_to_team=<team_id>` routing
+- Multi-team ambiguity hints for directors on multiple teams
+- Updated both identity block locations in `backend/routes/ai.js` (WhatsApp + web chat)
+
+### Teams V2 API
+
+- New `backend/routes/teams.v2.js` — Team CRUD, member management, visibility mode, /scope endpoint
+- Frontend `src/components/settings/TeamManagement.jsx` — admin UI with terminology labels
+- Customizable role labels (Director/Manager/Member) and tier labels (Division/Department/Team)
+
+### Test Coverage (79 new tests)
+
+- 58 backend tests (`backend/__tests__/ai/aiTeamContext.test.js`)
+- 21 frontend tests (`src/components/shared/__tests__/AssignmentField.test.jsx`)
+- 12 existing frontend tests (`src/components/settings/__tests__/TeamManagement.test.jsx`)
+- `assigned_to_team` added to field-parity schema tests (5 entities)
+
+### Copilot PR Review Fixes
+
+- **Security**: Tenant-bound team verification on PUT/DELETE member routes (cross-tenant prevention)
+- **Security**: Reject whitespace-only team name on PUT
+- **Bugs**: `parent_team_id: "none"` → null on create/update, description wipe prevention, tenant_id on member role update, legacy endpoint switch
+- **Cleanup**: Duplicate assertion removed, pre-push vitest exit code capture fixed
+- **New**: `useTeams` hook passes `tenant_id` query param for superadmin cross-tenant support
+
+### Files Modified
+
+**Phase 4 — Frontend:**
+
+- `src/hooks/useTeamScope.js`, `src/hooks/useTeams.js` (NEW)
+- `src/components/shared/AssignmentField.jsx` (complete rewrite)
+- LeadForm, AccountForm, ContactForm, OpportunityForm, ActivityForm, BizDevSourceForm
+- `backend/routes/leads.v2.js` (new `/teams-with-members` endpoint)
+
+**Phase 5 — Braid & Backend:**
+
+- 6 .braid files + `backend/lib/braid/registry.js`
+- 6 v2 route files (assigned_to_team query filter)
+
+**Phase 6 — AI Identity:**
+
+- `backend/lib/aiTeamContext.js` (NEW)
+- `backend/routes/ai.js` (both identity blocks)
+
+**Tests:**
+
+- `backend/__tests__/ai/aiTeamContext.test.js` (NEW, 58 tests)
+- `src/components/shared/__tests__/AssignmentField.test.jsx` (NEW, 21 tests)
+- `backend/__tests__/schema/field-parity.test.js` (assigned_to_team added)
+
+**Copilot Fixes:**
+
+- `backend/routes/teams.v2.js` (tenant checks, name validation)
+- `src/components/settings/TeamManagement.jsx` (parent_team_id, description, tenant_id, endpoint)
+- `src/hooks/useTeams.js` (tenant_id query param)
+- `backend/__tests__/routes/teams.v2.route.test.js` (duplicate assertion)
+- `.husky/pre-push` (vitest exit code)
+
+### Implementation Status
+
+| Phase                     | Description                                               | Status         |
+| ------------------------- | --------------------------------------------------------- | -------------- |
+| 1. Schema Migration       | `assigned_to_team` column on all 6 tables, both databases | ✅ Complete    |
+| 2. teamVisibility.js      | Two-tier access model, getAccessLevel, isNotesOnlyUpdate  | ✅ Complete    |
+| 3. Route Updates          | Org-wide read, team FK join, PUT/DELETE write checks      | ✅ Complete    |
+| 4. Frontend Cascade UI    | Team→Person dropdown, auto-set team, cascade clear        | ✅ Complete    |
+| 5. Braid Tool Updates     | assigned_to_team param, registry descriptions, summarize  | ✅ Complete    |
+| 6. AiSHA Identity Context | Team info in system prompt, testable extraction           | ✅ Complete    |
+| 7. Production Backfill    | Populate assigned_to_team on existing records             | 🔲 Not started |
+| 8. Test Data Update       | Dev leads backfilled with assigned_to_team                | ✅ Complete    |
+
+### What's Next
+
+1. **Phase 7**: Production data backfill — populate `assigned_to_team` on existing records
+2. Commit useTeams tenant_id fix and push
+3. Merge PR #321 to main

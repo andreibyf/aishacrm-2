@@ -282,7 +282,7 @@ export default function createLeadRoutes(_pgPool) {
    *             schema:
    *               $ref: '#/components/schemas/Success'
    */
-  router.get('/search', cacheList('leads', 180), async (req, res) => {
+  router.get('/search', cacheList('leads', 30), async (req, res) => {
     try {
       let { tenant_id, q = '' } = req.query;
       const limit = parseInt(req.query.limit || '25', 10);
@@ -328,7 +328,7 @@ export default function createLeadRoutes(_pgPool) {
   });
 
   // GET /api/leads - List leads
-  router.get('/', cacheList('leads', 180), async (req, res) => {
+  router.get('/', cacheList('leads', 30), async (req, res) => {
     try {
       let { tenant_id, status, account_id, filter, sort } = req.query;
       const isTestData = req.query.is_test_data;
