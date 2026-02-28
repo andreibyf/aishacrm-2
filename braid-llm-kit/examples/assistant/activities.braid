@@ -153,6 +153,7 @@ fn listActivities(
   status: String,
   entity_type: String,
   entity_id: String,
+  assigned_to: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
   let url = "/api/v2/activities";
@@ -163,6 +164,7 @@ fn listActivities(
     status: status,
     related_to_type: entity_type,
     related_to_id: entity_id,
+    assigned_to: assigned_to,
     limit: limit
   };
   
@@ -197,6 +199,7 @@ fn getActivityDetails(
 fn searchActivities(
   tenant_id: String,
   query: String,
+  assigned_to: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
   // Use list endpoint with search param - filters by subject
@@ -204,6 +207,7 @@ fn searchActivities(
   let params = {
     tenant_id: tenant_id,
     search: query,
+    assigned_to: assigned_to,
     limit: limit
   };
   

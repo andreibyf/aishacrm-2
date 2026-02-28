@@ -571,9 +571,9 @@ export const TOOL_DESCRIPTIONS = {
   convert_lead_to_account:
     'v3.0.0 WORKFLOW: Convert a Lead to Contact + Account + Opportunity. This is the key transition that creates the full customer record. Options: create_account (bool), account_name (string), selected_account_id (UUID for existing account), create_opportunity (bool), opportunity_name, opportunity_amount. Returns contact, account, opportunity.',
   list_leads:
-    '⚠️ NOT FOR COUNTING! Use get_dashboard_bundle for counts. This tool lists individual Lead records. Use ONLY when user wants to SEE the leads, not count them. Pass status filter or "all".',
+    '⚠️ NOT FOR COUNTING! Use get_dashboard_bundle for counts. This tool lists individual Lead records. Use ONLY when user wants to SEE the leads, not count them. Pass status filter or "all". Pass assigned_to with a user UUID to filter by owner — when user says "my leads", pass their User ID from CURRENT USER IDENTITY. Pass assigned_to="unassigned" for unowned leads.',
   search_leads:
-    'Search for Leads by name, email, or company. ALWAYS use this first when user asks about a lead by name or wants lead details. Use get_lead_details only when you have the lead ID.',
+    'Search for Leads by name, email, or company text. ALWAYS use this first when user asks about a lead by name or wants lead details. Use get_lead_details only when you have the lead_id. ⚠️ NOT for filtering by assignment — use list_leads with assigned_to param instead when user asks "my leads" or "leads assigned to me".',
   get_lead_details:
     'Get the full details of a specific Lead by its UUID. Only use when you already have the lead_id from a previous search or list.',
 
@@ -1087,10 +1087,13 @@ export function summarizeToolResult(result, toolName) {
       const details = [];
       if (firstItem.id) details.push(`id: ${firstItem.id}`);
       if (firstItem.company) details.push(`company: ${firstItem.company}`);
+      if (firstItem.job_title) details.push(`job_title: ${firstItem.job_title}`);
       if (firstItem.status) details.push(`status: ${firstItem.status}`);
       if (firstItem.email) details.push(`email: ${firstItem.email}`);
       if (firstItem.phone || firstItem.phone_number)
         details.push(`phone: ${firstItem.phone || firstItem.phone_number}`);
+      if (firstItem.assigned_to_name) details.push(`assigned_to: ${firstItem.assigned_to_name}`);
+      else if (firstItem.assigned_to) details.push(`assigned_to_id: ${firstItem.assigned_to}`);
       if (firstItem.stage) details.push(`stage: ${firstItem.stage}`);
       if (firstItem.amount) details.push(`amount: ${firstItem.amount}`);
       const detailStr = details.length > 0 ? ` (${details.join(', ')})` : '';
@@ -1106,7 +1109,14 @@ export function summarizeToolResult(result, toolName) {
             ? `${item.first_name} ${item.last_name}`
             : item.name || item.title || item.id;
         const id = item.id ? ` [id: ${item.id}]` : '';
-        const extra = item.status ? ` (${item.status})` : item.stage ? ` (${item.stage})` : '';
+        const parts = [];
+        if (item.company) parts.push(item.company);
+        if (item.job_title) parts.push(item.job_title);
+        if (item.status) parts.push(item.status);
+        else if (item.stage) parts.push(item.stage);
+        if (item.assigned_to_name) parts.push(`assigned: ${item.assigned_to_name}`);
+        else if (item.assigned_to) parts.push(`assigned_id: ${item.assigned_to}`);
+        const extra = parts.length > 0 ? ` (${parts.join(', ')})` : '';
         return `${name}${id}${extra}`;
       })
       .join('; ');
@@ -1114,11 +1124,41 @@ export function summarizeToolResult(result, toolName) {
     return `${toolName} found ${data.length} results: ${preview}${data.length > 5 ? '; ...' : ''}`;
   }
 
-  // Generic fallback
-  if (typeof data === 'object') {
+  // Object with nested array (common v2 response shape: { leads: [...], total: N })
+  if (typeof data === 'object' && !Array.isArray(data)) {
     const keys = Object.keys(data);
     if (keys.length === 0) return `${toolName} returned empty object`;
-    // Include id if present
+
+    // Unwrap nested arrays (e.g., { leads: [...], total: 5 } or { contacts: [...] })
+    const arrayKey = keys.find((k) => Array.isArray(data[k]) && data[k].length > 0);
+    if (arrayKey) {
+      const items = data[arrayKey];
+      const total = data.total || items.length;
+      // Show up to 25 items — enough for most CRM lists without excessive tokens
+      const maxPreview = Math.min(items.length, 25);
+      const preview = items
+        .slice(0, maxPreview)
+        .map((item) => {
+          const name =
+            item.first_name && item.last_name
+              ? `${item.first_name} ${item.last_name}`
+              : item.name || item.title || item.id;
+          const id = item.id ? ` [id: ${item.id}]` : '';
+          const parts = [];
+          if (item.company) parts.push(item.company);
+          if (item.job_title) parts.push(item.job_title);
+          if (item.status) parts.push(item.status);
+          else if (item.stage) parts.push(item.stage);
+          if (item.assigned_to_name) parts.push(`assigned: ${item.assigned_to_name}`);
+          else if (item.assigned_to) parts.push(`assigned_id: ${item.assigned_to}`);
+          const extra = parts.length > 0 ? ` (${parts.join(', ')})` : '';
+          return `${name}${id}${extra}`;
+        })
+        .join('; ');
+      return `${toolName} found ${total} results: ${preview}${items.length > maxPreview ? '; ...' : ''}`;
+    }
+
+    // Include id if present (single record)
     if (data.id) {
       return `${toolName} returned record with ID: ${data.id}, fields: ${keys.slice(0, 5).join(', ')}${keys.length > 5 ? '...' : ''}`;
     }

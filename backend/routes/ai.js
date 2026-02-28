@@ -894,8 +894,10 @@ export default function createAIRoutes(pgPool) {
     toolName,
     args,
     tenantRecord,
+    userId = null,
     userEmail = null,
     userName = null,
+    userRole = null,
     accessToken = null,
   }) => {
     // Handle suggest_next_actions directly (not a Braid tool)
@@ -910,19 +912,22 @@ export default function createAIRoutes(pgPool) {
     }
 
     // Build dynamic access token with user info for Braid execution
+    // Include user_role so visibility scoping is applied (not bypassed as superadmin)
     const dynamicAccessToken = {
       ...accessToken,
       user_email: userEmail,
       user_name: userName,
+      user_role: userRole || 'employee',
     };
 
     // Route execution through Braid SDK tool registry
     // SECURITY: accessToken must be provided after tenant authorization passes
+    // Pass userId (employee UUID) so internal JWT carries real identity for visibility scoping
     return await executeBraidTool(
       toolName,
       args || {},
       tenantRecord,
-      userEmail,
+      userId || userEmail,
       dynamicAccessToken,
     );
   };
@@ -933,8 +938,10 @@ export default function createAIRoutes(pgPool) {
     tenantIdentifier,
     conversation,
     requestDescriptor = {},
+    userId = null,
     userEmail = null,
     userName = null,
+    userRole = null,
   }) => {
     try {
       const supa = getSupabaseClient();
@@ -1043,9 +1050,12 @@ export default function createAIRoutes(pgPool) {
       const tenantName =
         conversationMetadata?.tenant_name || tenantRecord?.name || tenantSlug || 'CRM Tenant';
       const agentNameForPrompt = conversation?.agent_name || null;
-      const userContext = userName
-        ? `\n\n**CURRENT USER:**\n- Name: ${userName}\n- Email: ${userEmail}\n- When creating activities or assigning tasks, use this user's name ("${userName}") unless explicitly asked to assign to someone else.`
-        : '';
+      const rtUserId = req.user?.id || null;
+      const rtUserRole = req.user?.role || 'employee';
+      const userContext =
+        userName || userEmail
+          ? `\n\n**CURRENT USER IDENTITY:**\n- Name: ${userName || 'Unknown'}\n- Email: ${userEmail || 'Unknown'}\n- User ID: ${rtUserId || 'Unknown'}\n- Role: ${rtUserRole}\n- When creating activities or assigning tasks, use this user's name ("${userName || userEmail}") unless explicitly asked to assign to someone else.\n\n**PRONOUN RESOLUTION RULES (MANDATORY):**\n- "my leads", "leads assigned to me", "how many leads do I have" → call list_leads with assigned_to="${rtUserId}"\n- "my team leads", "team leads" → call list_leads WITHOUT assigned_to (visibility scoping handles team filtering)\n- "unassigned leads" → call list_leads with assigned_to="unassigned"\n- NEVER use search_leads for assignment queries — it only searches by text. Use list_leads with assigned_to param.\n- Always include the assigned_to_name field when listing records so users can see who owns each record`
+          : '';
       const baseSystemPrompt = `${buildSystemPrompt({ tenantName, agentName: agentNameForPrompt })}
 
 ${getBraidSystemPrompt('America/New_York')}${userContext}
@@ -1439,8 +1449,10 @@ Use this summary for context about prior discussion topics, goals, and decisions
                 toolName,
                 args: parsedArgs,
                 tenantRecord,
+                userId,
                 userEmail,
                 userName,
+                userRole,
                 accessToken: TOOL_ACCESS_TOKEN, // SECURITY: Unlocks tool execution after authorization
               });
             } catch (toolError) {
@@ -2568,8 +2580,10 @@ ${toolContextSummary}`,
             tenantIdentifier,
             conversation: { ...conversation, metadata: conversationMetadata },
             requestDescriptor,
+            userId: req.user?.id || null,
             userEmail,
             userName,
+            userRole: req.user?.role || null,
           }).catch((err) => {
             logger.error('[AI Routes] Async agent follow-up error:', err);
           });
@@ -3197,7 +3211,15 @@ ${toolContextSummary}`,
       }
 
       const tenantName = tenantRecord?.name || tenantRecord?.tenant_id || 'CRM Tenant';
-      const baseSystemPrompt = `${buildSystemPrompt({ tenantName })}\n\n${getBraidSystemPrompt(timezone)}\n\n- ALWAYS call fetch_tenant_snapshot before answering tenant data questions.\n- NEVER hallucinate records; only reference tool data.\n`;
+      // Build user identity context for pronoun resolution
+      const userId = req.user?.id || null;
+      const userRole = req.user?.role || 'employee';
+      const userIdentityContext =
+        userName || userEmail
+          ? `\n\n**CURRENT USER IDENTITY:**\n- Name: ${userName || 'Unknown'}\n- Email: ${userEmail || 'Unknown'}\n- User ID: ${userId || 'Unknown'}\n- Role: ${userRole}\n\n**PRONOUN RESOLUTION RULES (MANDATORY):**\n- "my leads", "leads assigned to me", "how many leads do I have" → call list_leads with assigned_to="${userId}"\n- "my team leads", "team leads" → call list_leads WITHOUT assigned_to (visibility scoping handles team filtering)\n- "unassigned leads" → call list_leads with assigned_to="unassigned"\n- NEVER use search_leads for assignment queries — it only searches by text. Use list_leads with assigned_to param.\n- Always include the assigned_to_name field when listing records so users can see who owns each record\n`
+          : '';
+
+      const baseSystemPrompt = `${buildSystemPrompt({ tenantName })}\n\n${getBraidSystemPrompt(timezone)}${userIdentityContext}\n\n- ALWAYS call fetch_tenant_snapshot before answering tenant data questions.\n- NEVER hallucinate records; only reference tool data.\n`;
 
       // Get current user message for context detection
       const currentUserMessage = messages.filter((m) => m.role === 'user').pop()?.content || '';
@@ -3612,17 +3634,18 @@ ${conversationSummary}`;
           try {
             // SECURITY: Pass the access token to unlock tool execution
             // The token is only available after tenant authorization passed above
-            // Include user identity for created_by fields
+            // Include user identity and role for created_by fields + visibility scoping
             const dynamicAccessToken = {
               ...TOOL_ACCESS_TOKEN,
               user_email: userEmail,
               user_name: userName,
+              user_role: req.user?.role || 'employee',
             };
             toolResult = await executeBraidTool(
               toolName,
               args,
               tenantRecord,
-              userEmail,
+              req.user?.id || userEmail,
               dynamicAccessToken,
             );
           } catch (err) {
@@ -4322,12 +4345,18 @@ ${conversationSummary}`;
 
       // Execute the tool via Braid
       // SECURITY: Pass the access token - only available after authorization validated above
+      // Include user_role for visibility scoping in v2 routes
+      const realtimeAccessToken = {
+        ...TOOL_ACCESS_TOKEN,
+        user_email: req.user?.email,
+        user_role: req.user?.role || 'employee',
+      };
       const toolResult = await executeBraidTool(
         tool_name,
         tool_args,
         tenantRecord,
-        req.user?.email,
-        TOOL_ACCESS_TOKEN,
+        req.user?.id || req.user?.email,
+        realtimeAccessToken,
       );
 
       const duration = Date.now() - startTime;

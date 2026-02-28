@@ -466,9 +466,15 @@ export default function createLeadsV2Routes() {
           query = query.eq('account_id', safeAccountId);
         }
         // Sanitize potential UUID query params to avoid "invalid input syntax for type uuid" errors
-        const safeAssignedTo = sanitizeUuidInput(assigned_to);
-        if (!filter && safeAssignedTo !== undefined && safeAssignedTo !== null) {
-          query = query.eq('assigned_to', safeAssignedTo);
+        if (!filter && assigned_to !== undefined && assigned_to !== null && assigned_to !== '') {
+          if (assigned_to === 'unassigned' || assigned_to === 'null') {
+            query = query.is('assigned_to', null);
+          } else {
+            const safeAssignedTo = sanitizeUuidInput(assigned_to);
+            if (safeAssignedTo !== undefined && safeAssignedTo !== null) {
+              query = query.eq('assigned_to', safeAssignedTo);
+            }
+          }
         }
 
         // Handle is_test_data from query param

@@ -234,3 +234,154 @@ Multiple commits made during session. Ready for continued work.
 
 Branch: main (or current working branch)
 Ready for commit + browser verification testing.
+
+---
+
+## 2026-02-27 — AiSHA Visibility Fix + assigned_to Filtering + Team Assignment Design
+
+---
+
+### What Was Done
+
+**Phase 1 — AiSHA Security Gap Fixed (3-Layer Chain):**
+
+Discovered that AiSHA bypassed team visibility entirely. Root cause: `execution.js` created internal JWT without `user_role` → `authenticate.js` hardcoded `role='superadmin'` → `getVisibilityScope` bypassed filtering. Every AiSHA user got admin-level data access.
+
+Fix applied across 3 files:
+
+- `backend/middleware/authenticate.js` — internal JWT handling now reads `user_role` from token payload
+- `backend/lib/braid/execution.js` — internal JWT now embeds `user_role` and `email` from accessToken
+- `backend/routes/ai.js` — `executeToolCall()` and `generateAssistantResponse()` signatures pass userId, userRole
+
+Test suite: 38 tests across 3 files (authenticate.internal-jwt, execution.visibility, aisha-visibility-chain)
+
+**Phase 2 — Token Budget & Identity Context:**
+
+AiSHA couldn't resolve "my leads" because identity context was truncated by tight token budgets.
+
+- `backend/lib/aiBudgetConfig.js` — HARD_CEILING: 4000→8000, SYSTEM_PROMPT_CAP: 1200→2500, TOOL_SCHEMA_CAP: 800→1200, TOOL_RESULT_CAP: 700→1200, OUTPUT_MAX_TOKENS: 350→600
+- `backend/lib/entityLabelInjector.js` — truncation limits raised to match budget (1200→2500)
+- `backend/routes/ai.js` — User identity block injected into system prompt (both chat handlers):
+  ```
+  CURRENT USER IDENTITY: Name, Email, User ID, Role
+  PRONOUN RESOLUTION RULES: "my leads" → list_leads with assigned_to=UUID
+  ```
+
+**Phase 3 — assigned_to Query Param Across All Entities:**
+
+Added `assigned_to` parameter support to all v2 routes and Braid tool signatures.
+
+V2 routes updated with "unassigned"/"null" → IS NULL handling:
+
+- leads.v2.js ✅
+- accounts.v2.js ✅
+- contacts.v2.js ✅
+- opportunities.v2.js ✅ (already had it)
+- activities.v2.js ✅
+
+Braid tool signatures updated (added `assigned_to` param):
+
+- leads.braid — listLeads, searchLeads
+- accounts.braid — listAccounts, searchAccounts
+- contacts.braid — listContactsForAccount, searchContacts, listAllContacts
+- opportunities.braid — listOpportunitiesByStage, searchOpportunities
+- activities.braid — listActivities, searchActivities
+
+Tool descriptions updated in `registry.js` with pronoun routing guidance.
+
+**Phase 4 — Tool Result Summary Fix:**
+
+`summarizeToolResult` was getting `{ leads: [...], total: N }` (object) but only reporting field names, not actual data. AiSHA was hallucinating counts.
+
+- Added nested array unwrapping in `registry.js` — detects `{ leads: [...] }` pattern and extracts items
+- Preview includes: name, id, company, job_title, status/stage, assigned_to_name
+- Increased preview limit from 8→25 items to avoid truncation on manager-level queries
+
+**Phase 5 — Test Data:**
+
+23 clean leads inserted into Dev Playground tenant with proper assignments:
+
+- Tom RepA1: 5 leads
+- Amy RepA2: 3 leads
+- Mike ManagerA: 5 leads
+- Bob RepB1: 5 leads
+- Jane ManagerB: 2 leads
+- Unassigned: 3 leads
+
+### Validation Results
+
+| User                   | Query                            | Expected                           | Actual                       | Status |
+| ---------------------- | -------------------------------- | ---------------------------------- | ---------------------------- | ------ |
+| Tom (employee, Team A) | "how many leads assigned to me?" | 5 leads                            | 5 leads                      | ✅     |
+| Tom (employee, Team A) | "does Amy have any leads?"       | No access                          | "no results for Amy"         | ✅     |
+| Mike (manager, Team A) | "list all leads"                 | 16 leads (Team A + unassigned)     | 16 leads                     | ✅     |
+| Mike (manager, Team A) | "who has what?"                  | Tom 5, Amy 3, Mike 5, Unassigned 3 | Correct breakdown            | ✅     |
+| Bob (employee, Team B) | Add note to Amy's lead           | No access                          | "couldn't find Carlos Reyes" | ✅     |
+
+### Files Modified
+
+| Category           | Files                                                                                           |
+| ------------------ | ----------------------------------------------------------------------------------------------- |
+| Security fix       | authenticate.js, execution.js, ai.js                                                            |
+| Token budget       | aiBudgetConfig.js, entityLabelInjector.js                                                       |
+| Identity context   | ai.js (2 chat handlers)                                                                         |
+| assigned_to routes | leads.v2.js, accounts.v2.js, contacts.v2.js, opportunities.v2.js, activities.v2.js              |
+| Braid tools        | leads.braid, accounts.braid, contacts.braid, opportunities.braid, activities.braid              |
+| Tool summaries     | registry.js (summarizeToolResult nested array unwrap + preview limit)                           |
+| Tests              | authenticate.internal-jwt.test.js, execution.visibility.test.js, aisha-visibility-chain.test.js |
+
+### Design Decision: Team-Level Assignment (Next Phase)
+
+Current model is binary visibility — you see records or you don't. Agreed on a two-tier access model:
+
+**Team scope** = full R/W on your team's records
+**Org scope** = read + add notes only on other teams' records
+
+**Proposed visibility matrix:**
+
+| Login as                     | Team Clients           | Other Clients      | Lead count |
+| ---------------------------- | ---------------------- | ------------------ | ---------- |
+| Tom (member, Team A)         | R/W own leads only     | No access          | 5          |
+| Bob (member, Team B)         | R/W own + Team B leads | R + Add Notes only | 5          |
+| Mike (manager, Team A)       | R/W Team A leads       | R + Add Notes only | 13         |
+| Sarah (director, both teams) | R/W all                | R/W all            | 20         |
+| Admin                        | R/W all (bypass)       | R/W all            | all        |
+
+**Proposed assignment model — Team first, then Person:**
+
+```
+Team: Unassigned  → Person: Unassigned     (new lead, nobody owns it)
+Team: Unassigned  → Person: Anyone          (no team restriction, any employee)
+Team: Sales Team A → Person: Unassigned     (team owns it, no individual yet — team queue)
+Team: Sales Team A → Person: Amy RepA2      (fully assigned — team + person)
+Team: Sales Team A → Person: Mike ManagerA  (manager took ownership)
+```
+
+**Assignment rules:**
+
+- No team selected → any employee can be assigned (or nobody)
+- Team selected → only members of that team appear in person dropdown
+- Team assigned + person unassigned = team work queue
+- Changing team clears the person assignment
+- Directors/admins can assign to any team
+- Assigning to a person auto-sets team if they're on exactly one team
+- Multi-team employees (directors) require explicit team selection
+
+**Schema change required:**
+
+- `assigned_to_team` column (FK → teams.id) on leads, contacts, accounts, opportunities, activities
+- `assigned_to_team` = NULL means "Unassigned" team (same as current behavior)
+- Two-tier visibility filter in `teamVisibility.js`: team scope vs org scope
+- UI cascade: team dropdown → person dropdown (filtered by team members)
+
+**Director problem solved:**
+Sarah is on both teams. When she takes a lead, the assigner picks which team context. The team lives on the record, not derived from the employee.
+
+### What's Next
+
+1. **New chat**: Implement `assigned_to_team` schema + two-tier visibility
+2. Schema migration: add `assigned_to_team` column to all entity tables
+3. Update visibility filter for team R/W vs org R+notes
+4. Update assignment UI with team→person cascade
+5. Update Braid tools with team assignment support
+6. Re-test full visibility matrix with team-aware scoping

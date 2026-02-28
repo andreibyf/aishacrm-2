@@ -121,15 +121,18 @@ fn listLeads(
   tenant_id: String,
   status: String,
   account_id: String,
+  assigned_to: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
   let url = "/api/v2/leads";
   
-  // Build params with optional status and account_id filters
+  // Build params with optional filters
+  // assigned_to: pass a user/employee UUID to filter by assignment, or "unassigned" for leads with no owner
   let params = {
     tenant_id: tenant_id,
     status: status,
     account_id: account_id,
+    assigned_to: assigned_to,
     limit: limit
   };
   
@@ -164,6 +167,7 @@ fn getLeadDetails(
 fn searchLeads(
   tenant_id: String,
   query: String,
+  assigned_to: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
   // Use list endpoint - v2 leads doesn't have dedicated search
@@ -171,7 +175,8 @@ fn searchLeads(
   let params = {
     tenant_id: tenant_id,
     limit: limit,
-    query: query
+    query: query,
+    assigned_to: assigned_to
   };
   
   let response = http.get(url, { params: params });

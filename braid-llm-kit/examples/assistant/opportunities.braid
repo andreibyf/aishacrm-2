@@ -79,6 +79,7 @@ fn listOpportunitiesByStage(
   tenant_id: String,
   stage: String,
   account_id: String,
+  assigned_to: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
   let url = "/api/v2/opportunities";
@@ -86,6 +87,7 @@ fn listOpportunitiesByStage(
     tenant_id: tenant_id,
     stage: stage,
     account_id: account_id,
+    assigned_to: assigned_to,
     limit: limit
   };
   
@@ -120,12 +122,14 @@ fn getOpportunityDetails(
 fn searchOpportunities(
   tenant_id: String,
   query: String,
+  assigned_to: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
   // Use list endpoint - v2 opportunities doesn't have dedicated search
   let url = "/api/v2/opportunities";
   let params = {
     tenant_id: tenant_id,
+    assigned_to: assigned_to,
     limit: limit
   };
   

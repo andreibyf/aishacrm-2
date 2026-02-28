@@ -213,10 +213,16 @@ export default function createAccountV2Routes(_pgPool) {
         }
       }
 
-      // Direct assigned_to param (sanitized)
-      const safeAssignedTo = sanitizeUuidInput(assigned_to);
-      if (safeAssignedTo !== undefined && safeAssignedTo !== null) {
-        query = query.eq('assigned_to', safeAssignedTo);
+      // Direct assigned_to param (supports UUID or "unassigned" for NULL)
+      if (assigned_to !== undefined && assigned_to !== null && assigned_to !== '') {
+        if (assigned_to === 'unassigned' || assigned_to === 'null') {
+          query = query.is('assigned_to', null);
+        } else {
+          const safeAssignedTo = sanitizeUuidInput(assigned_to);
+          if (safeAssignedTo !== undefined && safeAssignedTo !== null) {
+            query = query.eq('assigned_to', safeAssignedTo);
+          }
+        }
       }
 
       const { data, error, count } = await query;

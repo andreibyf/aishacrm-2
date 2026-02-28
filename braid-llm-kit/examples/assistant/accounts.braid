@@ -75,12 +75,14 @@ fn getAccountDetails(
 @policy(READ_ONLY)
 fn listAccounts(
   tenant_id: String,
+  assigned_to: String,
   limit: Number,
   offset: Number
 ) -> Result<Array, CRMError> !net {
   let url = "/api/v2/accounts";
   let params = {
     tenant_id: tenant_id,
+    assigned_to: assigned_to,
     limit: limit,
     offset: offset
   };
@@ -99,6 +101,7 @@ fn listAccounts(
 fn searchAccounts(
   tenant_id: String,
   query: String,
+  assigned_to: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
   // Use the list endpoint with search parameter instead of a separate search endpoint
@@ -106,6 +109,7 @@ fn searchAccounts(
   let params = {
     tenant_id: tenant_id,
     search: query,
+    assigned_to: assigned_to,
     limit: limit
   };
   

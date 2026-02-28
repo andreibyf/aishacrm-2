@@ -84,7 +84,12 @@ export default function createOpportunityV2Routes(_pgPool) {
 
       // Apply same filters as main query
       if (assigned_to !== undefined) {
-        if (assigned_to === null || assigned_to === 'null' || assigned_to === '') {
+        if (
+          assigned_to === null ||
+          assigned_to === 'null' ||
+          assigned_to === '' ||
+          assigned_to === 'unassigned'
+        ) {
           q = q.is('assigned_to', null);
         } else {
           q = q.eq('assigned_to', assigned_to);
@@ -164,7 +169,12 @@ export default function createOpportunityV2Routes(_pgPool) {
 
       // Apply same filters as main query
       if (assigned_to !== undefined) {
-        if (assigned_to === null || assigned_to === 'null' || assigned_to === '') {
+        if (
+          assigned_to === null ||
+          assigned_to === 'null' ||
+          assigned_to === '' ||
+          assigned_to === 'unassigned'
+        ) {
           q = q.is('assigned_to', null);
         } else {
           q = q.eq('assigned_to', assigned_to);
@@ -301,7 +311,12 @@ export default function createOpportunityV2Routes(_pgPool) {
       // Handle direct assigned_to parameter
       else if (assigned_to !== undefined) {
         // Treat explicit null or empty string as unassigned
-        if (assigned_to === null || assigned_to === 'null' || assigned_to === '') {
+        if (
+          assigned_to === null ||
+          assigned_to === 'null' ||
+          assigned_to === '' ||
+          assigned_to === 'unassigned'
+        ) {
           logger.debug(
             '[V2 Opportunities] Applying unassigned filter from assigned_to query param',
           );

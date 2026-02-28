@@ -225,9 +225,17 @@ export default function createContactV2Routes(_pgPool) {
       const safeAccountId = sanitizeUuidInput(account_id);
       if (safeAccountId !== undefined && safeAccountId !== null)
         q = q.eq('account_id', safeAccountId);
-      const safeAssignedTo = sanitizeUuidInput(assigned_to);
-      if (safeAssignedTo !== undefined && safeAssignedTo !== null)
-        q = q.eq('assigned_to', safeAssignedTo);
+      // Direct assigned_to param (supports UUID or "unassigned" for NULL)
+      if (assigned_to !== undefined && assigned_to !== null && assigned_to !== '') {
+        if (assigned_to === 'unassigned' || assigned_to === 'null') {
+          q = q.is('assigned_to', null);
+        } else {
+          const safeAssignedTo = sanitizeUuidInput(assigned_to);
+          if (safeAssignedTo !== undefined && safeAssignedTo !== null) {
+            q = q.eq('assigned_to', safeAssignedTo);
+          }
+        }
+      }
 
       const { data, error, count } = await q;
       if (error) throw new Error(error.message);

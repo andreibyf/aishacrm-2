@@ -60,12 +60,14 @@ fn updateContact(
 fn listContactsForAccount(
   tenant_id: String,
   account_id: String,
+  assigned_to: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
   let url = "/api/v2/contacts";
   let params = {
     tenant_id: tenant_id,
     account_id: account_id,
+    assigned_to: assigned_to,
     limit: limit
   };
   
@@ -83,6 +85,7 @@ fn listContactsForAccount(
 fn searchContacts(
   tenant_id: String,
   query: String,
+  assigned_to: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
   // Search contacts by name using the search parameter
@@ -90,6 +93,7 @@ fn searchContacts(
   let params = {
     tenant_id: tenant_id,
     search: query,
+    assigned_to: assigned_to,
     limit: limit
   };
   
@@ -136,11 +140,13 @@ fn getContactByName(
 @policy(READ_ONLY)
 fn listAllContacts(
   tenant_id: String,
+  assigned_to: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
   let url = "/api/v2/contacts";
   let params = {
     tenant_id: tenant_id,
+    assigned_to: assigned_to,
     limit: limit
   };
   

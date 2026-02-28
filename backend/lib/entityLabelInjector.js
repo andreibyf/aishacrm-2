@@ -406,7 +406,7 @@ export async function enhanceSystemPromptCondensed(basePrompt, pool, tenantIdOrS
       }
     }
 
-    return truncatePromptToTokenLimit(basePrompt + condensedContext, 1200);
+    return truncatePromptToTokenLimit(basePrompt + condensedContext, 2500);
   } catch (err) {
     console.error('[entityLabelInjector] Error enhancing with condensed context:', err.message);
     return basePrompt;
@@ -437,7 +437,7 @@ export async function enhanceSystemPromptSmart(basePrompt, pool, tenantIdOrSlug,
     console.log('[SystemPrompt] Using FULL context (first msg, CRM question, or forced)');
     const fullPrompt = await enhanceSystemPromptWithFullContext(basePrompt, pool, tenantIdOrSlug);
     // Still apply token cap to full context
-    return truncatePromptToTokenLimit(fullPrompt, 1500); // Slightly higher cap for full context
+    return truncatePromptToTokenLimit(fullPrompt, 2500); // Match AI_SYSTEM_PROMPT_CAP budget
   }
 
   console.log('[SystemPrompt] Using CONDENSED context (follow-up message)');

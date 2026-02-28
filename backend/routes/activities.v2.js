@@ -359,13 +359,17 @@ export default function createActivityV2Routes(_pgPool) {
       if (related_to_type) q = q.eq('related_to', related_to_type);
       if (related_to_id) q = q.eq('related_id', related_to_id);
 
-      // Resolve assigned_to (supports both UUID and email)
+      // Resolve assigned_to (supports UUID, email, or "unassigned" for NULL)
       if (assigned_to) {
-        const resolvedAssignee = await resolveAssignedTo(assigned_to, tenant_id, supabase);
-        if (resolvedAssignee) {
-          q = q.eq('assigned_to', resolvedAssignee);
+        if (assigned_to === 'unassigned' || assigned_to === 'null') {
+          q = q.is('assigned_to', null);
         } else {
-          logger.warn(`[Activities V2] Could not resolve assigned_to: ${assigned_to}`);
+          const resolvedAssignee = await resolveAssignedTo(assigned_to, tenant_id, supabase);
+          if (resolvedAssignee) {
+            q = q.eq('assigned_to', resolvedAssignee);
+          } else {
+            logger.warn(`[Activities V2] Could not resolve assigned_to: ${assigned_to}`);
+          }
         }
       }
 
