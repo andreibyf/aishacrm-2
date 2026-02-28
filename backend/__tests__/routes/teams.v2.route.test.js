@@ -417,7 +417,6 @@ describe('Teams v2 — team CRUD', () => {
       is_active: true,
     });
     assert.strictEqual(res.status, 200);
-    assert.strictEqual(res.status, 200);
     const json = await res.json();
     assert.strictEqual(json.data.team.is_active, true);
   });

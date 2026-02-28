@@ -355,14 +355,17 @@ export default function createTeamsV2Routes(_pgPool) {
         return res.status(400).json({ status: 'error', message: 'Team name is required' });
       }
 
+      const normalizedParentTeamId =
+        parent_team_id === 'none' || parent_team_id === '' ? null : parent_team_id;
+
       const supabase = getSupabaseClient();
 
       // Validate parent_team_id belongs to same tenant (if provided)
-      if (parent_team_id) {
+      if (normalizedParentTeamId) {
         const { data: parent, error: parentErr } = await supabase
           .from('teams')
           .select('id')
-          .eq('id', parent_team_id)
+          .eq('id', normalizedParentTeamId)
           .eq('tenant_id', tenant_id)
           .eq('is_active', true)
           .maybeSingle();
@@ -378,7 +381,7 @@ export default function createTeamsV2Routes(_pgPool) {
           tenant_id,
           name: name.trim(),
           description: description?.trim() || null,
-          parent_team_id: parent_team_id || null,
+          parent_team_id: normalizedParentTeamId || null,
           is_active: true,
         })
         .select()
@@ -407,27 +410,40 @@ export default function createTeamsV2Routes(_pgPool) {
 
       const { name, description, parent_team_id, is_active } = req.body;
       const supabase = getSupabaseClient();
+      const normalizedParentTeamId =
+        parent_team_id === 'none' || parent_team_id === '' ? null : parent_team_id;
 
       // Build update payload — only include provided fields
       const updateData = { updated_at: new Date().toISOString() };
-      if (name !== undefined) updateData.name = name.trim();
-      if (description !== undefined) updateData.description = description?.trim() || null;
-      if (parent_team_id !== undefined) updateData.parent_team_id = parent_team_id || null;
+      if (name !== undefined) {
+        const trimmed = name.trim();
+        if (!trimmed) {
+          return res.status(400).json({ status: 'error', message: 'Team name cannot be empty' });
+        }
+        updateData.name = trimmed;
+      }
+      if (description !== undefined) {
+        const trimmedDescription = description?.trim();
+        if (trimmedDescription) {
+          updateData.description = trimmedDescription;
+        }
+      }
+      if (parent_team_id !== undefined) updateData.parent_team_id = normalizedParentTeamId || null;
       if (is_active !== undefined) updateData.is_active = is_active;
 
       // Prevent circular parent reference
-      if (parent_team_id === id) {
+      if (normalizedParentTeamId === id) {
         return res
           .status(400)
           .json({ status: 'error', message: 'A team cannot be its own parent' });
       }
 
       // Validate parent team if provided
-      if (parent_team_id) {
+      if (normalizedParentTeamId) {
         const { data: parent } = await supabase
           .from('teams')
           .select('id, parent_team_id')
-          .eq('id', parent_team_id)
+          .eq('id', normalizedParentTeamId)
           .eq('tenant_id', tenant_id)
           .eq('is_active', true)
           .maybeSingle();
@@ -680,6 +696,11 @@ export default function createTeamsV2Routes(_pgPool) {
     try {
       const { id, memberId } = req.params;
       const { role } = req.body;
+      const tenant_id = getTenantId(req);
+
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
 
       const validRoles = ['member', 'manager', 'director'];
       if (!validRoles.includes(role)) {
@@ -690,6 +711,17 @@ export default function createTeamsV2Routes(_pgPool) {
       }
 
       const supabase = getSupabaseClient();
+
+      // Verify team belongs to current tenant (team_members has no tenant_id)
+      const { data: team } = await supabase
+        .from('teams')
+        .select('id')
+        .eq('id', id)
+        .eq('tenant_id', tenant_id)
+        .maybeSingle();
+      if (!team) {
+        return res.status(404).json({ status: 'error', message: 'Team not found' });
+      }
 
       const { data, error } = await supabase
         .from('team_members')
@@ -720,8 +752,24 @@ export default function createTeamsV2Routes(_pgPool) {
   router.delete('/:id/members/:memberId', requireAdminRole, async (req, res) => {
     try {
       const { id, memberId } = req.params;
+      const tenant_id = getTenantId(req);
+
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
 
       const supabase = getSupabaseClient();
+
+      // Verify team belongs to current tenant (team_members has no tenant_id)
+      const { data: team } = await supabase
+        .from('teams')
+        .select('id')
+        .eq('id', id)
+        .eq('tenant_id', tenant_id)
+        .maybeSingle();
+      if (!team) {
+        return res.status(404).json({ status: 'error', message: 'Team not found' });
+      }
 
       // Fetch before delete to get employee_id for cache invalidation
       const { data: member } = await supabase

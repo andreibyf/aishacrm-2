@@ -163,7 +163,7 @@ export default function TeamManagement() {
   const loadEmployees = useCallback(async () => {
     if (!tenantId) return;
     try {
-      const json = await apiFetch(`/api/v2/leads/team-scope`);
+      await apiFetch(`/api/v2/teams/scope`);
       // Also load employee list for the selector
       const empRes = await apiFetch(`/api/employees?tenant_id=${tenantId}&limit=200`);
       const empList = empRes.data?.employees || empRes.employees || [];
@@ -261,7 +261,7 @@ export default function TeamManagement() {
           tenant_id: tenantId,
           name: newTeamName.trim(),
           description: newTeamDesc.trim() || null,
-          parent_team_id: newTeamParent || null,
+          parent_team_id: newTeamParent && newTeamParent !== 'none' ? newTeamParent : null,
         }),
       });
       toast.success(`Team "${newTeamName.trim()}" created`);
@@ -279,14 +279,18 @@ export default function TeamManagement() {
 
   const handleUpdateTeam = async (teamId) => {
     try {
+      const updatePayload = {
+        tenant_id: tenantId,
+        name: editName.trim(),
+        parent_team_id: editParent && editParent !== 'none' ? editParent : null,
+      };
+      // Only send description if it was explicitly changed (no edit UI yet, preserve existing)
+      if (editDesc.trim()) {
+        updatePayload.description = editDesc.trim();
+      }
       await apiFetch(`/api/v2/teams/${teamId}`, {
         method: 'PUT',
-        body: JSON.stringify({
-          tenant_id: tenantId,
-          name: editName.trim(),
-          description: editDesc.trim() || null,
-          parent_team_id: editParent || null,
-        }),
+        body: JSON.stringify(updatePayload),
       });
       toast.success('Team updated');
       setEditingTeamId(null);
@@ -353,7 +357,7 @@ export default function TeamManagement() {
     try {
       await apiFetch(`/api/v2/teams/${teamId}/members/${memberId}`, {
         method: 'PUT',
-        body: JSON.stringify({ role: newRole }),
+        body: JSON.stringify({ tenant_id: tenantId, role: newRole }),
       });
       toast.success('Role updated');
       await loadMembers(teamId);
@@ -364,7 +368,9 @@ export default function TeamManagement() {
 
   const handleRemoveMember = async (teamId, memberId, empName) => {
     try {
-      await apiFetch(`/api/v2/teams/${teamId}/members/${memberId}`, { method: 'DELETE' });
+      await apiFetch(`/api/v2/teams/${teamId}/members/${memberId}?tenant_id=${tenantId}`, {
+        method: 'DELETE',
+      });
       toast.success(`${empName || 'Member'} removed from team`);
       await loadMembers(teamId);
       await loadTeams(); // refresh member counts

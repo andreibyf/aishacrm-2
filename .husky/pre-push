@@ -46,8 +46,9 @@ vitest_zero_failures() {
 }
 
 set +e
-env -u NODE_OPTIONS ./node_modules/.bin/vitest run --pool=forks --reporter=verbose --reporter=json --outputFile="$VITEST_JSON" 2>&1 | tee "$VITEST_LOG"
+env -u NODE_OPTIONS ./node_modules/.bin/vitest run --pool=forks --reporter=verbose --reporter=json --outputFile="$VITEST_JSON" > "$VITEST_LOG" 2>&1
 VITEST_EXIT=$?
+cat "$VITEST_LOG"
 set -e
 
 if [ $VITEST_EXIT -eq 0 ]; then
@@ -58,8 +59,9 @@ elif vitest_zero_failures; then
 elif grep -qi 'failed to find the runner\|Timeout starting .*runner' "$VITEST_LOG"; then
   echo "⚠️  Vitest runner bootstrap failed — retrying once in safe mode..."
   set +e
-  env -u NODE_OPTIONS ./node_modules/.bin/vitest run --pool=forks --maxWorkers=1 --reporter=verbose --reporter=json --outputFile="$VITEST_JSON" 2>&1 | tee "$VITEST_LOG"
+  env -u NODE_OPTIONS ./node_modules/.bin/vitest run --pool=forks --maxWorkers=1 --reporter=verbose --reporter=json --outputFile="$VITEST_JSON" > "$VITEST_LOG" 2>&1
   VITEST_EXIT=$?
+  cat "$VITEST_LOG"
   set -e
 
   if [ $VITEST_EXIT -eq 0 ]; then
