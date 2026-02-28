@@ -125,7 +125,7 @@ export async function executeBraidTool(
   const basePolicy = CRM_POLICIES[config.policy];
 
   // Extract user info from access token for audit logging and created_by fields
-  const userRole = accessToken?.user_role || 'user';
+  const userRole = accessToken?.user_role || 'employee';
   const userEmail = accessToken?.user_email || null;
   const userName = accessToken?.user_name || null;
   // Use userName for created_by (more readable), fallback to email
@@ -220,8 +220,15 @@ export async function executeBraidTool(
   const tenantUuid = tenantRecord?.id || tenantRecord?.tenant_id || null;
 
   // Generate internal service JWT for server-to-server API calls
+  // Embed user_role so v2 routes can apply visibility scoping (not bypass as superadmin)
   const internalToken = jwt.sign(
-    { sub: userId, tenant_id: tenantUuid, internal: true },
+    {
+      sub: userId,
+      tenant_id: tenantUuid,
+      internal: true,
+      user_role: userRole || 'employee',
+      email: userEmail || null,
+    },
     process.env.JWT_SECRET,
     { expiresIn: '5m' },
   );

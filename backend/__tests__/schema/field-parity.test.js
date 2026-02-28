@@ -57,6 +57,7 @@ const ENTITY_FIELD_CONTRACTS = {
       'estimated_value',
       // Assignment and tracking
       'assigned_to',
+      'assigned_to_team',
       'unique_id',
       'tags',
       // Test data flag
@@ -98,6 +99,7 @@ const ENTITY_FIELD_CONTRACTS = {
       'department',
       // Assignment and tracking
       'assigned_to',
+      'assigned_to_team',
       'lead_source',
       'tags',
       // Test data flag
@@ -135,6 +137,7 @@ const ENTITY_FIELD_CONTRACTS = {
       'employee_count',
       // Assignment and tracking
       'assigned_to',
+      'assigned_to_team',
       'tags',
       'notes',
       // Test data flag
@@ -164,6 +167,7 @@ const ENTITY_FIELD_CONTRACTS = {
       'type',
       // Assignment and tracking
       'assigned_to',
+      'assigned_to_team',
       'source',
       'notes',
       'tags',
@@ -196,6 +200,7 @@ const ENTITY_FIELD_CONTRACTS = {
       // Assignment/ownership
       'created_by',
       'assigned_to',
+      'assigned_to_team',
       // Test data flag
       'is_test_data',
       // Timestamps (activities uses created_date/updated_date per migration 002)
@@ -308,6 +313,7 @@ function addOptionalFields(payload, fields) {
     lead_id: null,
     opportunity_id: null,
     assigned_to: null,
+    assigned_to_team: null,
     owner_id: null,
     user_id: null,
 

@@ -1,6 +1,6 @@
 /**
  * Token Budget Manager - Acceptance Tests
- * 
+ *
  * Tests for:
  * 1. Token estimation functions
  * 2. Budget enforcement (applyBudgetCaps)
@@ -133,7 +133,7 @@ describe('TokenBudgetManager', () => {
 
     it('should correctly identify when over budget', () => {
       // Create a very long system prompt
-      const longPrompt = 'a'.repeat(20000); // ~5000 tokens
+      const longPrompt = 'a'.repeat(40000); // ~10000 tokens
       const report = buildBudgetReport({
         systemPrompt: longPrompt,
         messages: [],
@@ -195,7 +195,7 @@ describe('TokenBudgetManager', () => {
       });
 
       // Forced tool should be preserved
-      const hasForced = result.tools.some(t => t.function.name === 'tool_15');
+      const hasForced = result.tools.some((t) => t.function.name === 'tool_15');
       assert.strictEqual(hasForced, true);
     });
   });
@@ -229,7 +229,7 @@ describe('TokenBudgetManager', () => {
         cap: 300,
       });
 
-      const hasForced = result.some(t => t.function.name === 'tool_15');
+      const hasForced = result.some((t) => t.function.name === 'tool_15');
       assert.strictEqual(hasForced, true);
     });
 
@@ -287,31 +287,49 @@ describe('TokenBudgetManager', () => {
     });
 
     it('should have reasonable default values', () => {
-      assert.strictEqual(TOKEN_CAPS.HARD_CEILING, 4000);
-      assert.strictEqual(TOKEN_CAPS.SYSTEM_PROMPT, 1200);
-      assert.strictEqual(TOKEN_CAPS.TOOL_SCHEMA, 800);
-      assert.strictEqual(TOKEN_CAPS.MEMORY, 250);
+      assert.strictEqual(TOKEN_CAPS.HARD_CEILING, 8000);
+      assert.strictEqual(TOKEN_CAPS.SYSTEM_PROMPT, 2500);
+      assert.strictEqual(TOKEN_CAPS.TOOL_SCHEMA, 1200);
+      assert.strictEqual(TOKEN_CAPS.MEMORY, 500);
     });
   });
 
   describe('Integration: Full budget enforcement pipeline', () => {
     it('should produce a valid request payload under budget from oversized inputs', () => {
-      // Simulate oversized inputs that EXCEED the 4000 token budget
-      const bigSystemPrompt = 'You are a helpful CRM assistant that helps users manage leads, contacts, accounts, and opportunities. '.repeat(50); // ~1250 tokens
+      // Simulate oversized inputs that EXCEED the 8000 token budget
+      const bigSystemPrompt =
+        'You are a helpful CRM assistant that helps users manage leads, contacts, accounts, and opportunities. '.repeat(
+          50,
+        ); // ~1250 tokens
       const manyTools = Array.from({ length: 30 }, (_, i) => ({
         type: 'function',
         function: {
           name: `tool_${i}`,
-          description: 'A tool that performs an important operation and has a long description to increase token count. '.repeat(8),
-          parameters: { type: 'object', properties: { id: { type: 'string' }, name: { type: 'string' }, query: { type: 'string' } } },
+          description:
+            'A tool that performs an important operation and has a long description to increase token count. '.repeat(
+              8,
+            ),
+          parameters: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              name: { type: 'string' },
+              query: { type: 'string' },
+            },
+          },
         },
       })); // ~2000+ tokens
-      const longMemory = 'Previous conversation context about the customer interaction: '.repeat(30); // ~400 tokens
+      const longMemory = 'Previous conversation context about the customer interaction: '.repeat(
+        30,
+      ); // ~400 tokens
       const messages = [
         { role: 'user', content: 'First question about leads and how to manage them effectively' },
         { role: 'assistant', content: 'Here is detailed info about leads and best practices...' },
         { role: 'user', content: 'What about contacts and their relationship to accounts?' },
-        { role: 'assistant', content: 'Contacts are connected to accounts in the following way...' },
+        {
+          role: 'assistant',
+          content: 'Contacts are connected to accounts in the following way...',
+        },
         { role: 'user', content: 'Can you show me accounts now?' }, // LAST user message
         { role: 'assistant', content: 'Here are your accounts with all their details...' },
       ];
@@ -327,39 +345,44 @@ describe('TokenBudgetManager', () => {
       });
 
       // ASSERTIONS for valid output
-      
+
       // 1. System prompt should exist and be capped
       assert.ok(result.systemPrompt, 'System prompt should exist');
-      
+
       // 2. Some reduction should have occurred given the massive input
-      const totalInputTokens = estimateTokens(bigSystemPrompt) + 
-                               estimateTokens(longMemory) +
-                               estimateToolsTokens(manyTools);
+      const totalInputTokens =
+        estimateTokens(bigSystemPrompt) +
+        estimateTokens(longMemory) +
+        estimateToolsTokens(manyTools);
       assert.ok(totalInputTokens > TOKEN_CAPS.HARD_CEILING, 'Test input should exceed budget');
-      
+
       // 3. Forced tool should be preserved
-      const hasForced = result.tools.some(t => t.function.name === 'tool_5');
+      const hasForced = result.tools.some((t) => t.function.name === 'tool_5');
       assert.strictEqual(hasForced, true, 'Forced tool must be preserved');
-      
+
       // 4. Messages should include the LAST user message
-      const lastUserInResult = result.messages.filter(m => m.role === 'user').pop();
+      const lastUserInResult = result.messages.filter((m) => m.role === 'user').pop();
       assert.ok(lastUserInResult, 'Last user message must be retained');
-      assert.ok(lastUserInResult.content.includes('accounts'), 'Last user message content must be the actual last one');
-      
+      assert.ok(
+        lastUserInResult.content.includes('accounts'),
+        'Last user message content must be the actual last one',
+      );
+
       // 5. Report should be generated
       assert.ok(result.report, 'Budget report should be generated');
       assert.ok('totalTokens' in result.report, 'Report should have totalTokens');
-      
+
       // 6. Actions should be logged since reductions occurred
       assert.ok(Array.isArray(result.actionsTaken), 'Actions taken should be an array');
-      assert.ok(result.actionsTaken.length > 0, 'Actions should have been taken for oversized input');
+      assert.ok(
+        result.actionsTaken.length > 0,
+        'Actions should have been taken for oversized input',
+      );
     });
 
     it('should not modify inputs that are already within budget', () => {
       const smallPrompt = 'You are helpful.';
-      const fewTools = [
-        { type: 'function', function: { name: 'search', description: 'Search' } },
-      ];
+      const fewTools = [{ type: 'function', function: { name: 'search', description: 'Search' } }];
       const messages = [{ role: 'user', content: 'Hello' }];
 
       const result = applyBudgetCaps({
@@ -373,7 +396,11 @@ describe('TokenBudgetManager', () => {
       assert.strictEqual(result.systemPrompt, smallPrompt);
       assert.strictEqual(result.tools.length, 1);
       assert.strictEqual(result.messages.length, 1);
-      assert.strictEqual(result.actionsTaken.length, 0, 'No actions should be taken for small inputs');
+      assert.strictEqual(
+        result.actionsTaken.length,
+        0,
+        'No actions should be taken for small inputs',
+      );
     });
   });
 });

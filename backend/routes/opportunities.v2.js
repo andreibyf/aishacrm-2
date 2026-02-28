@@ -2,7 +2,7 @@ import express from 'express';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildOpportunityAiContext } from '../lib/opportunityAiContext.js';
-import { getVisibilityScope } from '../lib/teamVisibility.js';
+import { getVisibilityScope, getAccessLevel, isNotesOnlyUpdate } from '../lib/teamVisibility.js';
 import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 
@@ -30,6 +30,7 @@ export default function createOpportunityV2Routes(_pgPool) {
     'account_id',
     'contact_id',
     'assigned_to',
+    'assigned_to_team',
     // Date fields
     'close_date',
     'expected_close_date',
@@ -56,7 +57,7 @@ export default function createOpportunityV2Routes(_pgPool) {
   // GET /api/v2/opportunities/stats - aggregate counts by stage (optimized)
   router.get('/stats', cacheList('opportunities', 60), async (req, res) => {
     try {
-      const { tenant_id, stage: _stage, assigned_to, is_test_data } = req.query;
+      const { tenant_id, stage: _stage, assigned_to, assigned_to_team, is_test_data } = req.query;
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -76,19 +77,33 @@ export default function createOpportunityV2Routes(_pgPool) {
         .select('stage', { count: 'exact' })
         .eq('tenant_id', tenant_id);
 
-      // Apply team visibility filter
-      if (visibilityScope && !visibilityScope.bypass && visibilityScope.employeeIds.length > 0) {
-        const idList = visibilityScope.employeeIds.join(',');
-        q = q.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+      // Apply team visibility filter (two-tier: org-wide read for team members)
+      if (visibilityScope && !visibilityScope.bypass) {
+        if (visibilityScope.teamIds && visibilityScope.teamIds.length > 0) {
+          // org-wide read
+        } else if (visibilityScope.employeeIds.length > 0) {
+          const idList = visibilityScope.employeeIds.join(',');
+          q = q.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+        }
       }
 
       // Apply same filters as main query
       if (assigned_to !== undefined) {
-        if (assigned_to === null || assigned_to === 'null' || assigned_to === '') {
+        if (
+          assigned_to === null ||
+          assigned_to === 'null' ||
+          assigned_to === '' ||
+          assigned_to === 'unassigned'
+        ) {
           q = q.is('assigned_to', null);
         } else {
           q = q.eq('assigned_to', assigned_to);
         }
+      }
+
+      // Filter by assigned_to_team (team UUID)
+      if (assigned_to_team !== undefined && assigned_to_team !== null && assigned_to_team !== '') {
+        q = q.eq('assigned_to_team', assigned_to_team);
       }
 
       if (is_test_data !== undefined) {
@@ -137,7 +152,7 @@ export default function createOpportunityV2Routes(_pgPool) {
   // GET /api/v2/opportunities/count - get total count (optimized)
   router.get('/count', cacheList('opportunities', 120), async (req, res) => {
     try {
-      const { tenant_id, stage, assigned_to, is_test_data, filter } = req.query;
+      const { tenant_id, stage, assigned_to, assigned_to_team, is_test_data, filter } = req.query;
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -156,19 +171,33 @@ export default function createOpportunityV2Routes(_pgPool) {
         .select('id', { count: 'exact', head: true })
         .eq('tenant_id', tenant_id);
 
-      // Apply team visibility filter
-      if (visibilityScope && !visibilityScope.bypass && visibilityScope.employeeIds.length > 0) {
-        const idList = visibilityScope.employeeIds.join(',');
-        q = q.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+      // Apply team visibility filter (two-tier: org-wide read for team members)
+      if (visibilityScope && !visibilityScope.bypass) {
+        if (visibilityScope.teamIds && visibilityScope.teamIds.length > 0) {
+          // org-wide read
+        } else if (visibilityScope.employeeIds.length > 0) {
+          const idList = visibilityScope.employeeIds.join(',');
+          q = q.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+        }
       }
 
       // Apply same filters as main query
       if (assigned_to !== undefined) {
-        if (assigned_to === null || assigned_to === 'null' || assigned_to === '') {
+        if (
+          assigned_to === null ||
+          assigned_to === 'null' ||
+          assigned_to === '' ||
+          assigned_to === 'unassigned'
+        ) {
           q = q.is('assigned_to', null);
         } else {
           q = q.eq('assigned_to', assigned_to);
         }
+      }
+
+      // Filter by assigned_to_team (team UUID)
+      if (assigned_to_team !== undefined && assigned_to_team !== null && assigned_to_team !== '') {
+        q = q.eq('assigned_to_team', assigned_to_team);
       }
 
       if (stage && stage !== 'all' && stage !== 'any' && stage !== '' && stage !== 'undefined') {
@@ -238,6 +267,7 @@ export default function createOpportunityV2Routes(_pgPool) {
         contact_id,
         lead_id,
         assigned_to,
+        assigned_to_team,
         is_test_data,
         $or,
       } = req.query;
@@ -271,15 +301,19 @@ export default function createOpportunityV2Routes(_pgPool) {
       let q = supabase
         .from('opportunities')
         .select(
-          '*, employee:employees!opportunities_assigned_to_fkey(id, first_name, last_name, email), account:accounts!opportunities_account_id_fkey(id, name), contact:contacts!opportunities_contact_id_fkey(id, first_name, last_name, email)',
+          '*, employee:employees!opportunities_assigned_to_fkey(id, first_name, last_name, email), account:accounts!opportunities_account_id_fkey(id, name), contact:contacts!opportunities_contact_id_fkey(id, first_name, last_name, email), team:teams!opportunities_assigned_to_team_fkey(id, name)',
           { count: 'exact' },
         )
         .eq('tenant_id', tenant_id);
 
-      // Apply team visibility filter
-      if (visibilityScope && !visibilityScope.bypass && visibilityScope.employeeIds.length > 0) {
-        const idList = visibilityScope.employeeIds.join(',');
-        q = q.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+      // Apply team visibility filter (two-tier: org-wide read for team members)
+      if (visibilityScope && !visibilityScope.bypass) {
+        if (visibilityScope.teamIds && visibilityScope.teamIds.length > 0) {
+          // User has team membership → org-wide read, no additional filter
+        } else if (visibilityScope.employeeIds.length > 0) {
+          const idList = visibilityScope.employeeIds.join(',');
+          q = q.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+        }
       }
 
       // Handle $or for unassigned filter (highest priority)
@@ -301,7 +335,12 @@ export default function createOpportunityV2Routes(_pgPool) {
       // Handle direct assigned_to parameter
       else if (assigned_to !== undefined) {
         // Treat explicit null or empty string as unassigned
-        if (assigned_to === null || assigned_to === 'null' || assigned_to === '') {
+        if (
+          assigned_to === null ||
+          assigned_to === 'null' ||
+          assigned_to === '' ||
+          assigned_to === 'unassigned'
+        ) {
           logger.debug(
             '[V2 Opportunities] Applying unassigned filter from assigned_to query param',
           );
@@ -313,6 +352,11 @@ export default function createOpportunityV2Routes(_pgPool) {
           );
           q = q.eq('assigned_to', assigned_to);
         }
+      }
+
+      // Filter by assigned_to_team (team UUID)
+      if (assigned_to_team !== undefined && assigned_to_team !== null && assigned_to_team !== '') {
+        q = q.eq('assigned_to_team', assigned_to_team);
       }
 
       // Handle stage filter
@@ -550,9 +594,13 @@ export default function createOpportunityV2Routes(_pgPool) {
             `${opp.contact.first_name || ''} ${opp.contact.last_name || ''}`.trim();
           expanded.contact_email = opp.contact.email;
         }
+        if (opp.team) {
+          expanded.assigned_to_team_name = opp.team.name;
+        }
         delete expanded.employee;
         delete expanded.account;
         delete expanded.contact;
+        delete expanded.team;
         return expanded;
       });
 
@@ -750,9 +798,37 @@ export default function createOpportunityV2Routes(_pgPool) {
         updated_at: new Date().toISOString(),
       };
 
-      // Track assignment changes: fetch current assigned_to before update
+      // ── Two-tier write access check ──
       let previousAssignedTo = undefined;
-      if (cleanedPayload.assigned_to !== undefined) {
+      if (req.user) {
+        const { data: current } = await supabase
+          .from('opportunities')
+          .select('assigned_to, assigned_to_team')
+          .eq('id', id)
+          .eq('tenant_id', tenant_id)
+          .single();
+        previousAssignedTo = current?.assigned_to || null;
+
+        const scope = await getVisibilityScope(req.user, supabase);
+        const access = getAccessLevel(
+          scope,
+          current?.assigned_to_team,
+          current?.assigned_to,
+          req.user.id,
+        );
+
+        if (access === 'none') {
+          return res
+            .status(403)
+            .json({ status: 'error', message: 'You do not have access to this record' });
+        }
+        if (access === 'read_notes' && !isNotesOnlyUpdate(updatePayload)) {
+          return res.status(403).json({
+            status: 'error',
+            message: 'You can only add notes to records outside your team',
+          });
+        }
+      } else if (cleanedPayload.assigned_to !== undefined) {
         const { data: current } = await supabase
           .from('opportunities')
           .select('assigned_to')
@@ -824,6 +900,32 @@ export default function createOpportunityV2Routes(_pgPool) {
       }
 
       const supabase = getSupabaseClient();
+
+      // ── Two-tier write access check for delete ──
+      if (req.user) {
+        const { data: current } = await supabase
+          .from('opportunities')
+          .select('assigned_to, assigned_to_team')
+          .eq('id', id)
+          .eq('tenant_id', tenant_id)
+          .single();
+
+        if (current) {
+          const scope = await getVisibilityScope(req.user, supabase);
+          const access = getAccessLevel(
+            scope,
+            current.assigned_to_team,
+            current.assigned_to,
+            req.user.id,
+          );
+          if (access !== 'full') {
+            return res.status(403).json({
+              status: 'error',
+              message: 'You do not have permission to delete this record',
+            });
+          }
+        }
+      }
 
       const { data, error } = await supabase
         .from('opportunities')

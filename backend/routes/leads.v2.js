@@ -8,7 +8,7 @@ import express from 'express';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { sanitizeUuidInput } from '../lib/uuidValidator.js';
 import { buildLeadAiContext } from '../lib/aiContextEnricher.js';
-import { getVisibilityScope } from '../lib/teamVisibility.js';
+import { getVisibilityScope, getAccessLevel, isNotesOnlyUpdate } from '../lib/teamVisibility.js';
 import {
   cacheList,
   cacheDetail,
@@ -49,12 +49,64 @@ export default function createLeadsV2Routes() {
         status: 'success',
         data: {
           bypass: scope.bypass,
+          teamIds: scope.teamIds || [],
+          fullAccessTeamIds: scope.fullAccessTeamIds || [],
           employeeIds: scope.employeeIds,
           mode: scope.mode,
+          highestRole: scope.highestRole || 'none',
         },
       });
     } catch (err) {
       logger.error('[Leads v2 GET /team-scope] Error:', err.message);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
+  /**
+   * Returns all teams for the tenant with their member employee IDs.
+   * Used by the frontend TeamSelector to cascade team→person assignment.
+   */
+  router.get('/teams-with-members', async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ status: 'error', message: 'Authentication required' });
+      }
+      const supabase = getSupabaseClient();
+      const tenant_id = req.query.tenant_id || req.user.tenant_id;
+
+      // Fetch teams for this tenant
+      const { data: teams, error: tErr } = await supabase
+        .from('teams')
+        .select('id, name')
+        .eq('tenant_id', tenant_id)
+        .order('name');
+
+      if (tErr) throw tErr;
+
+      // Fetch all team_members for these teams
+      const teamIdList = (teams || []).map((t) => t.id);
+      let membersByTeam = {};
+
+      if (teamIdList.length > 0) {
+        const { data: members, error: mErr } = await supabase
+          .from('team_members')
+          .select('team_id, employee_id')
+          .in('team_id', teamIdList);
+
+        if (mErr) throw mErr;
+
+        for (const m of members || []) {
+          if (!membersByTeam[m.team_id]) membersByTeam[m.team_id] = [];
+          membersByTeam[m.team_id].push(m.employee_id);
+        }
+      }
+
+      res.json({
+        status: 'success',
+        data: { teams: teams || [], membersByTeam },
+      });
+    } catch (err) {
+      logger.error('[Leads v2 GET /teams-with-members] Error:', err.message);
       res.status(500).json({ status: 'error', message: err.message });
     }
   });
@@ -95,10 +147,17 @@ export default function createLeadsV2Routes() {
       }
 
       // Build SQL fragments for visibility + test data filtering
+      // Two-tier: team members see all tenant records (org-wide read)
+      // Only users with NO team membership get filtered to own + unassigned
       let visibilityFilter = '';
-      if (visibilityScope && !visibilityScope.bypass && visibilityScope.employeeIds.length > 0) {
-        const ids = visibilityScope.employeeIds.map((id) => `'${id}'`).join(',');
-        visibilityFilter = `AND (assigned_to IN (${ids}) OR assigned_to IS NULL)`;
+      if (visibilityScope && !visibilityScope.bypass) {
+        if (visibilityScope.teamIds && visibilityScope.teamIds.length > 0) {
+          // User has team membership → org-wide read, no filter needed
+        } else if (visibilityScope.employeeIds.length > 0) {
+          // No team membership → own records + unassigned only
+          const ids = visibilityScope.employeeIds.map((id) => `'${id}'`).join(',');
+          visibilityFilter = `AND (assigned_to IN (${ids}) OR assigned_to IS NULL)`;
+        }
       }
 
       let testDataFilter = '';
@@ -120,10 +179,16 @@ export default function createLeadsV2Routes() {
       });
 
       // Helper: apply visibility filter to a Supabase query builder
+      // Two-tier: team members see all tenant records, no filter needed
       const applyVisibility = (query) => {
-        if (visibilityScope && !visibilityScope.bypass && visibilityScope.employeeIds.length > 0) {
-          const idList = visibilityScope.employeeIds.join(',');
-          return query.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+        if (visibilityScope && !visibilityScope.bypass) {
+          if (visibilityScope.teamIds && visibilityScope.teamIds.length > 0) {
+            return query; // org-wide read
+          }
+          if (visibilityScope.employeeIds.length > 0) {
+            const idList = visibilityScope.employeeIds.join(',');
+            return query.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+          }
         }
         return query;
       };
@@ -230,6 +295,7 @@ export default function createLeadsV2Routes() {
         source,
         filter,
         assigned_to,
+        assigned_to_team,
         account_id,
         is_test_data,
         query: searchQuery,
@@ -304,9 +370,15 @@ export default function createLeadsV2Routes() {
           .eq('tenant_id', tenant_id);
 
         // Apply team visibility filter (pre-computed above)
-        if (visibilityScope && !visibilityScope.bypass && visibilityScope.employeeIds.length > 0) {
-          const idList = visibilityScope.employeeIds.join(',');
-          query = query.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+        // Two-tier: team members see all tenant records (org-wide read)
+        if (visibilityScope && !visibilityScope.bypass) {
+          if (visibilityScope.teamIds && visibilityScope.teamIds.length > 0) {
+            // User has team membership → org-wide read, no additional filter
+          } else if (visibilityScope.employeeIds.length > 0) {
+            // No team membership → own records + unassigned only
+            const idList = visibilityScope.employeeIds.join(',');
+            query = query.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+          }
         }
 
         // Text search across name and email fields
@@ -466,9 +538,27 @@ export default function createLeadsV2Routes() {
           query = query.eq('account_id', safeAccountId);
         }
         // Sanitize potential UUID query params to avoid "invalid input syntax for type uuid" errors
-        const safeAssignedTo = sanitizeUuidInput(assigned_to);
-        if (!filter && safeAssignedTo !== undefined && safeAssignedTo !== null) {
-          query = query.eq('assigned_to', safeAssignedTo);
+        if (!filter && assigned_to !== undefined && assigned_to !== null && assigned_to !== '') {
+          if (assigned_to === 'unassigned' || assigned_to === 'null') {
+            query = query.is('assigned_to', null);
+          } else {
+            const safeAssignedTo = sanitizeUuidInput(assigned_to);
+            if (safeAssignedTo !== undefined && safeAssignedTo !== null) {
+              query = query.eq('assigned_to', safeAssignedTo);
+            }
+          }
+        }
+
+        // Filter by assigned_to_team (team UUID)
+        if (
+          assigned_to_team !== undefined &&
+          assigned_to_team !== null &&
+          assigned_to_team !== ''
+        ) {
+          const safeTeamId = sanitizeUuidInput(assigned_to_team);
+          if (safeTeamId !== undefined && safeTeamId !== null) {
+            query = query.eq('assigned_to_team', safeTeamId);
+          }
         }
 
         // Handle is_test_data from query param
@@ -493,7 +583,7 @@ export default function createLeadsV2Routes() {
       let data, error, count;
 
       const fkJoinSelect =
-        '*, employee:employees!leads_assigned_to_fkey(id, first_name, last_name, email)';
+        '*, employee:employees!leads_assigned_to_fkey(id, first_name, last_name, email), team:teams!leads_assigned_to_team_fkey(id, name)';
       const simpleSelect = '*';
 
       let result = await buildBaseQuery(fkJoinSelect);
@@ -522,8 +612,13 @@ export default function createLeadsV2Routes() {
             `${lead.employee.first_name || ''} ${lead.employee.last_name || ''}`.trim();
           expanded.assigned_to_email = lead.employee.email;
         }
-        // Remove the nested employee object from response
+        // Add assigned_to_team_name from joined team data
+        if (lead.team) {
+          expanded.assigned_to_team_name = lead.team.name;
+        }
+        // Remove the nested objects from response
         delete expanded.employee;
+        delete expanded.team;
         return expanded;
       });
 
@@ -927,6 +1022,7 @@ export default function createLeadsV2Routes() {
         'is_test_data',
         'metadata',
         'assigned_to',
+        'assigned_to_team',
       ];
 
       allowedFields.forEach((field) => {
@@ -955,9 +1051,42 @@ export default function createLeadsV2Routes() {
       // ── Use SECURITY DEFINER for UPDATE (bypasses 8s PostgREST timeout) ──
       const supabase = getSupabaseClient();
 
-      // Track assignment changes: fetch current assigned_to before update
+      // ── Two-tier write access check ──
+      // Fetch current record to check access level before allowing update
+      let currentRecord = null;
       let previousAssignedTo = undefined;
-      if (payload.assigned_to !== undefined) {
+
+      if (req.user) {
+        const { data: current } = await supabase
+          .from('leads')
+          .select('assigned_to, assigned_to_team')
+          .eq('id', id)
+          .eq('tenant_id', tenant_id)
+          .single();
+        currentRecord = current;
+        previousAssignedTo = current?.assigned_to || null;
+
+        const scope = await getVisibilityScope(req.user, supabase);
+        const access = getAccessLevel(
+          scope,
+          current?.assigned_to_team,
+          current?.assigned_to,
+          req.user.id,
+        );
+
+        if (access === 'none') {
+          return res
+            .status(403)
+            .json({ status: 'error', message: 'You do not have access to this record' });
+        }
+        if (access === 'read_notes' && !isNotesOnlyUpdate(payload)) {
+          return res.status(403).json({
+            status: 'error',
+            message: 'You can only add notes to records outside your team',
+          });
+        }
+      } else if (payload.assigned_to !== undefined) {
+        // No user context (internal call) — still track assignment changes
         const { data: current } = await supabase
           .from('leads')
           .select('assigned_to')
@@ -1115,8 +1244,35 @@ export default function createLeadsV2Routes() {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
 
-      // ── Use SECURITY DEFINER for DELETE (bypasses 8s PostgREST timeout) ──
       const supabase = getSupabaseClient();
+
+      // ── Two-tier write access check for delete ──
+      if (req.user) {
+        const { data: current } = await supabase
+          .from('leads')
+          .select('assigned_to, assigned_to_team')
+          .eq('id', id)
+          .eq('tenant_id', tenant_id)
+          .single();
+
+        if (current) {
+          const scope = await getVisibilityScope(req.user, supabase);
+          const access = getAccessLevel(
+            scope,
+            current.assigned_to_team,
+            current.assigned_to,
+            req.user.id,
+          );
+          if (access !== 'full') {
+            return res.status(403).json({
+              status: 'error',
+              message: 'You do not have permission to delete this record',
+            });
+          }
+        }
+      }
+
+      // ── Use SECURITY DEFINER for DELETE (bypasses 8s PostgREST timeout) ──
       const deleteStart = Date.now();
       const { error } = await supabase.rpc('leads_delete_definer', {
         p_lead_id: id,

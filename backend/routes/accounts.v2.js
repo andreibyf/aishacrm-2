@@ -12,7 +12,7 @@ import express from 'express';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildAccountAiContext } from '../lib/aiContextEnricher.js';
-import { getVisibilityScope } from '../lib/teamVisibility.js';
+import { getVisibilityScope, getAccessLevel, isNotesOnlyUpdate } from '../lib/teamVisibility.js';
 import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 import { sanitizeUuidInput } from '../lib/uuidValidator.js';
 import logger from '../lib/logger.js';
@@ -113,7 +113,8 @@ export default function createAccountV2Routes(_pgPool) {
    */
   router.get('/', cacheList('accounts', 30), async (req, res) => {
     try {
-      const { tenant_id, type, industry, search, filter, assigned_to, sort } = req.query;
+      const { tenant_id, type, industry, search, filter, assigned_to, assigned_to_team, sort } =
+        req.query;
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
@@ -144,17 +145,21 @@ export default function createAccountV2Routes(_pgPool) {
       let query = supabase
         .from('accounts')
         .select(
-          '*, employee:employees!accounts_assigned_to_fkey(id, first_name, last_name, email)',
+          '*, employee:employees!accounts_assigned_to_fkey(id, first_name, last_name, email), team:teams!accounts_assigned_to_team_fkey(id, name)',
           { count: 'exact' },
         )
         .eq('tenant_id', tenant_id)
         .order(sortField, { ascending: sortAscending })
         .range(offset, offset + limit - 1);
 
-      // Apply team visibility filter
-      if (visibilityScope && !visibilityScope.bypass && visibilityScope.employeeIds.length > 0) {
-        const idList = visibilityScope.employeeIds.join(',');
-        query = query.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+      // Apply team visibility filter (two-tier: org-wide read for team members)
+      if (visibilityScope && !visibilityScope.bypass) {
+        if (visibilityScope.teamIds && visibilityScope.teamIds.length > 0) {
+          // org-wide read
+        } else if (visibilityScope.employeeIds.length > 0) {
+          const idList = visibilityScope.employeeIds.join(',');
+          query = query.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+        }
       }
 
       if (type) query = query.eq('type', type);
@@ -213,10 +218,24 @@ export default function createAccountV2Routes(_pgPool) {
         }
       }
 
-      // Direct assigned_to param (sanitized)
-      const safeAssignedTo = sanitizeUuidInput(assigned_to);
-      if (safeAssignedTo !== undefined && safeAssignedTo !== null) {
-        query = query.eq('assigned_to', safeAssignedTo);
+      // Direct assigned_to param (supports UUID or "unassigned" for NULL)
+      if (assigned_to !== undefined && assigned_to !== null && assigned_to !== '') {
+        if (assigned_to === 'unassigned' || assigned_to === 'null') {
+          query = query.is('assigned_to', null);
+        } else {
+          const safeAssignedTo = sanitizeUuidInput(assigned_to);
+          if (safeAssignedTo !== undefined && safeAssignedTo !== null) {
+            query = query.eq('assigned_to', safeAssignedTo);
+          }
+        }
+      }
+
+      // Filter by assigned_to_team (team UUID)
+      if (assigned_to_team !== undefined && assigned_to_team !== null && assigned_to_team !== '') {
+        const safeTeamId = sanitizeUuidInput(assigned_to_team);
+        if (safeTeamId !== undefined && safeTeamId !== null) {
+          query = query.eq('assigned_to_team', safeTeamId);
+        }
       }
 
       const { data, error, count } = await query;
@@ -234,7 +253,11 @@ export default function createAccountV2Routes(_pgPool) {
             `${account.employee.first_name || ''} ${account.employee.last_name || ''}`.trim();
           expanded.assigned_to_email = account.employee.email;
         }
+        if (account.team) {
+          expanded.assigned_to_team_name = account.team.name;
+        }
         delete expanded.employee;
+        delete expanded.team;
         return expanded;
       });
       return res.json({
@@ -560,7 +583,7 @@ export default function createAccountV2Routes(_pgPool) {
 
       const supabase = getSupabaseClient();
 
-      // Fetch existing record to merge metadata + track assignment changes
+      // Fetch existing record to merge metadata + track assignment changes + access check
       const { data: existing, error: fetchError } = await supabase
         .from('accounts')
         .select('*')
@@ -570,6 +593,30 @@ export default function createAccountV2Routes(_pgPool) {
 
       if (fetchError || !existing) {
         return res.status(404).json({ status: 'error', message: 'Account not found' });
+      }
+
+      // Two-tier write access check
+      if (req.user) {
+        const scope = await getVisibilityScope(req.user, supabase);
+        const access = getAccessLevel(
+          scope,
+          existing.assigned_to_team,
+          existing.assigned_to,
+          req.user.id,
+        );
+        if (access === 'none') {
+          return res
+            .status(403)
+            .json({ status: 'error', message: 'You do not have access to this record' });
+        }
+        if (access === 'read_notes' && !isNotesOnlyUpdate(body)) {
+          return res
+            .status(403)
+            .json({
+              status: 'error',
+              message: 'You can only add notes to records outside your team',
+            });
+        }
       }
 
       const previousAssignedTo = existing.assigned_to || null;
@@ -721,6 +768,33 @@ export default function createAccountV2Routes(_pgPool) {
       }
 
       const supabase = getSupabaseClient();
+
+      // Two-tier write access check for delete
+      if (req.user) {
+        const { data: current } = await supabase
+          .from('accounts')
+          .select('assigned_to, assigned_to_team')
+          .eq('id', id)
+          .eq('tenant_id', tenant_id)
+          .single();
+        if (current) {
+          const scope = await getVisibilityScope(req.user, supabase);
+          const access = getAccessLevel(
+            scope,
+            current.assigned_to_team,
+            current.assigned_to,
+            req.user.id,
+          );
+          if (access !== 'full') {
+            return res
+              .status(403)
+              .json({
+                status: 'error',
+                message: 'You do not have permission to delete this record',
+              });
+          }
+        }
+      }
 
       const { data, error } = await supabase
         .from('accounts')

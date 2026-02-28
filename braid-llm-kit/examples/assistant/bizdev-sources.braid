@@ -76,6 +76,8 @@ fn listBizDevSources(
   tenant_id: String,
   status: String,
   priority: String,
+  assigned_to: String,
+  assigned_to_team: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
   let url = "/api/bizdevsources";
@@ -84,6 +86,8 @@ fn listBizDevSources(
     tenant_id: tenant_id,
     status: status,
     priority: priority,
+    assigned_to: assigned_to,
+    assigned_to_team: assigned_to_team,
     limit: limit
   };
   
@@ -101,6 +105,8 @@ fn searchBizDevSources(
   tenant_id: String,
   query: String,
   source_type: String,
+  assigned_to: String,
+  assigned_to_team: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
   let url = "/api/bizdevsources";
@@ -109,6 +115,8 @@ fn searchBizDevSources(
     tenant_id: tenant_id,
     q: query,
     source_type: source_type,
+    assigned_to: assigned_to,
+    assigned_to_team: assigned_to_team,
     limit: limit
   };
   

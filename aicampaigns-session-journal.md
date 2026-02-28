@@ -1,5 +1,76 @@
 # AICampaigns Multi-Channel Overhaul — Session Journal
 
+## 2026-02-27 (Thursday) — Phase 6: AiSHA Identity Context (Team Visibility)
+
+### What Was Done
+
+Added team identity context to AiSHA's system prompt in `backend/routes/ai.js` so AiSHA can contextually respond to team-aware queries like "show my team's leads" or "what's Tom working on".
+
+**New helper function: `fetchUserTeamContext(employeeId)`**
+
+- Uses Supabase client (not pgPool) per project convention
+- Three lightweight queries: user's team memberships → team names → all teammates
+- Returns `{ teamLines, teamPronounRules }` for system prompt injection
+- Fully non-blocking on failure — returns empty strings if team data unavailable
+- Placed alongside other utility functions before `insertAssistantMessage`
+
+**Identity block updates (both locations):**
+
+1. `generateAssistantResponse` (~line 1143) — WhatsApp/agent path
+2. `POST /api/ai/chat` handler (~line 3309) — main web chat path
+
+Both now include:
+
+- Team name(s) with user's role: `- Team: Sales Team A (manager)`
+- Team members list: `Members: Tom RepA1, Amy RepA2, Mike ManagerA`
+- Team ID: UUID for passing to `assigned_to_team` on Braid tools
+- Updated pronoun resolution rules with team-specific `assigned_to_team` routing
+- Multi-team users (like directors) get all teams listed + ambiguity prompt
+
+**Bugfix:** Block 1 previously referenced `req.user?.id` inside `generateAssistantResponse` which doesn't have `req` in scope — corrected to use `userId` parameter.
+
+**Token budget impact:** ~200 tokens for single-team, ~280 for dual-team. Well within the 2500 SYSTEM_PROMPT_CAP.
+
+### Example Output (Mike ManagerA)
+
+```
+**CURRENT USER IDENTITY:**
+- Name: Mike ManagerA
+- Email: mike.managera@test.com
+- User ID: aa000001-...-02
+- Role: manager
+- Team: Sales Team A (manager)
+  Members: Sarah Director, Mike ManagerA, Tom RepA1, Amy RepA2
+  Team ID: bb000001-...-01
+
+**PRONOUN RESOLUTION RULES (MANDATORY):**
+- "my leads" → list_leads with assigned_to="aa000001-...-02"
+- "my team's leads" → list_leads with assigned_to_team="bb000001-...-01"
+- "Sales Team A leads" → list_leads with assigned_to_team="bb000001-...-01"
+- "[person name]'s leads" → find UUID, use assigned_to
+- Same pattern for all 6 entities
+```
+
+### Files Modified
+
+- `backend/routes/ai.js` — `fetchUserTeamContext` helper + both identity blocks updated
+
+### Files NOT Modified (as required)
+
+- `backend/middleware/authenticate.js`
+- `backend/lib/braid/execution.js`
+- `backend/lib/aiBudgetConfig.js`
+- `backend/lib/entityLabelInjector.js`
+
+### Implementation Status Update
+
+| Phase                       | Status      |
+| --------------------------- | ----------- |
+| 6. AiSHA Identity Context   | ✅ Complete |
+| 7. Production Data Backfill | 🔲 Next     |
+
+---
+
 ## 2026-02-23 (Sunday evening)
 
 ---
@@ -234,3 +305,257 @@ Multiple commits made during session. Ready for continued work.
 
 Branch: main (or current working branch)
 Ready for commit + browser verification testing.
+
+---
+
+## 2026-02-27 — AiSHA Visibility Fix + assigned_to Filtering + Team Assignment Design
+
+---
+
+### What Was Done
+
+**Phase 1 — AiSHA Security Gap Fixed (3-Layer Chain):**
+
+Discovered that AiSHA bypassed team visibility entirely. Root cause: `execution.js` created internal JWT without `user_role` → `authenticate.js` hardcoded `role='superadmin'` → `getVisibilityScope` bypassed filtering. Every AiSHA user got admin-level data access.
+
+Fix applied across 3 files:
+
+- `backend/middleware/authenticate.js` — internal JWT handling now reads `user_role` from token payload
+- `backend/lib/braid/execution.js` — internal JWT now embeds `user_role` and `email` from accessToken
+- `backend/routes/ai.js` — `executeToolCall()` and `generateAssistantResponse()` signatures pass userId, userRole
+
+Test suite: 38 tests across 3 files (authenticate.internal-jwt, execution.visibility, aisha-visibility-chain)
+
+**Phase 2 — Token Budget & Identity Context:**
+
+AiSHA couldn't resolve "my leads" because identity context was truncated by tight token budgets.
+
+- `backend/lib/aiBudgetConfig.js` — HARD_CEILING: 4000→8000, SYSTEM_PROMPT_CAP: 1200→2500, TOOL_SCHEMA_CAP: 800→1200, TOOL_RESULT_CAP: 700→1200, OUTPUT_MAX_TOKENS: 350→600
+- `backend/lib/entityLabelInjector.js` — truncation limits raised to match budget (1200→2500)
+- `backend/routes/ai.js` — User identity block injected into system prompt (both chat handlers):
+  ```
+  CURRENT USER IDENTITY: Name, Email, User ID, Role
+  PRONOUN RESOLUTION RULES: "my leads" → list_leads with assigned_to=UUID
+  ```
+
+**Phase 3 — assigned_to Query Param Across All Entities:**
+
+Added `assigned_to` parameter support to all v2 routes and Braid tool signatures.
+
+V2 routes updated with "unassigned"/"null" → IS NULL handling:
+
+- leads.v2.js ✅
+- accounts.v2.js ✅
+- contacts.v2.js ✅
+- opportunities.v2.js ✅ (already had it)
+- activities.v2.js ✅
+
+Braid tool signatures updated (added `assigned_to` param):
+
+- leads.braid — listLeads, searchLeads
+- accounts.braid — listAccounts, searchAccounts
+- contacts.braid — listContactsForAccount, searchContacts, listAllContacts
+- opportunities.braid — listOpportunitiesByStage, searchOpportunities
+- activities.braid — listActivities, searchActivities
+
+Tool descriptions updated in `registry.js` with pronoun routing guidance.
+
+**Phase 4 — Tool Result Summary Fix:**
+
+`summarizeToolResult` was getting `{ leads: [...], total: N }` (object) but only reporting field names, not actual data. AiSHA was hallucinating counts.
+
+- Added nested array unwrapping in `registry.js` — detects `{ leads: [...] }` pattern and extracts items
+- Preview includes: name, id, company, job_title, status/stage, assigned_to_name
+- Increased preview limit from 8→25 items to avoid truncation on manager-level queries
+
+**Phase 5 — Test Data:**
+
+23 clean leads inserted into Dev Playground tenant with proper assignments:
+
+- Tom RepA1: 5 leads
+- Amy RepA2: 3 leads
+- Mike ManagerA: 5 leads
+- Bob RepB1: 5 leads
+- Jane ManagerB: 2 leads
+- Unassigned: 3 leads
+
+### Validation Results
+
+| User                   | Query                            | Expected                           | Actual                       | Status |
+| ---------------------- | -------------------------------- | ---------------------------------- | ---------------------------- | ------ |
+| Tom (employee, Team A) | "how many leads assigned to me?" | 5 leads                            | 5 leads                      | ✅     |
+| Tom (employee, Team A) | "does Amy have any leads?"       | No access                          | "no results for Amy"         | ✅     |
+| Mike (manager, Team A) | "list all leads"                 | 16 leads (Team A + unassigned)     | 16 leads                     | ✅     |
+| Mike (manager, Team A) | "who has what?"                  | Tom 5, Amy 3, Mike 5, Unassigned 3 | Correct breakdown            | ✅     |
+| Bob (employee, Team B) | Add note to Amy's lead           | No access                          | "couldn't find Carlos Reyes" | ✅     |
+
+### Files Modified
+
+| Category           | Files                                                                                           |
+| ------------------ | ----------------------------------------------------------------------------------------------- |
+| Security fix       | authenticate.js, execution.js, ai.js                                                            |
+| Token budget       | aiBudgetConfig.js, entityLabelInjector.js                                                       |
+| Identity context   | ai.js (2 chat handlers)                                                                         |
+| assigned_to routes | leads.v2.js, accounts.v2.js, contacts.v2.js, opportunities.v2.js, activities.v2.js              |
+| Braid tools        | leads.braid, accounts.braid, contacts.braid, opportunities.braid, activities.braid              |
+| Tool summaries     | registry.js (summarizeToolResult nested array unwrap + preview limit)                           |
+| Tests              | authenticate.internal-jwt.test.js, execution.visibility.test.js, aisha-visibility-chain.test.js |
+
+### Design Decision: Team-Level Assignment (Next Phase)
+
+Current model is binary visibility — you see records or you don't. Agreed on a two-tier access model:
+
+**Team scope** = full R/W on your team's records
+**Org scope** = read + add notes only on other teams' records
+
+**Proposed visibility matrix:**
+
+| Login as                     | Team Clients           | Other Clients      | Lead count |
+| ---------------------------- | ---------------------- | ------------------ | ---------- |
+| Tom (member, Team A)         | R/W own leads only     | No access          | 5          |
+| Bob (member, Team B)         | R/W own + Team B leads | R + Add Notes only | 5          |
+| Mike (manager, Team A)       | R/W Team A leads       | R + Add Notes only | 13         |
+| Sarah (director, both teams) | R/W all                | R/W all            | 20         |
+| Admin                        | R/W all (bypass)       | R/W all            | all        |
+
+**Proposed assignment model — Team first, then Person:**
+
+```
+Team: Unassigned  → Person: Unassigned     (new lead, nobody owns it)
+Team: Unassigned  → Person: Anyone          (no team restriction, any employee)
+Team: Sales Team A → Person: Unassigned     (team owns it, no individual yet — team queue)
+Team: Sales Team A → Person: Amy RepA2      (fully assigned — team + person)
+Team: Sales Team A → Person: Mike ManagerA  (manager took ownership)
+```
+
+**Assignment rules:**
+
+- No team selected → any employee can be assigned (or nobody)
+- Team selected → only members of that team appear in person dropdown
+- Team assigned + person unassigned = team work queue
+- Changing team clears the person assignment
+- Directors/admins can assign to any team
+- Assigning to a person auto-sets team if they're on exactly one team
+- Multi-team employees (directors) require explicit team selection
+
+**Schema change required:**
+
+- `assigned_to_team` column (FK → teams.id) on leads, contacts, accounts, opportunities, activities
+- `assigned_to_team` = NULL means "Unassigned" team (same as current behavior)
+- Two-tier visibility filter in `teamVisibility.js`: team scope vs org scope
+- UI cascade: team dropdown → person dropdown (filtered by team members)
+
+**Director problem solved:**
+Sarah is on both teams. When she takes a lead, the assigner picks which team context. The team lives on the record, not derived from the employee.
+
+---
+
+## 2026-02-27 — Two-Tier Team Access Model Implementation
+
+### Phase 1: Schema Migration ✅
+
+Added `assigned_to_team` (UUID, FK → teams.id, nullable, ON DELETE SET NULL) to **all 6 entity tables** on both databases:
+
+- leads, contacts, accounts, opportunities, activities, bizdev_sources
+- Partial indexes: `idx_{table}_assigned_to_team` (WHERE NOT NULL)
+- Composite indexes: `idx_{table}_tenant_team` (tenant_id, assigned_to_team)
+- Applied to dev (`efzqxjpfewkrgpdootte`) and prod (`ehjlenywplgyiahgxkfj`)
+
+Backfilled dev test data:
+
+- Team A leads (13): Mike 5, Tom 5, Amy 3
+- Team B leads (7): Jane 2, Bob 5
+- Unassigned (5): NULL team + NULL person
+
+### Phase 2: teamVisibility.js Rewrite ✅
+
+`getVisibilityScope()` now returns expanded shape:
+
+```javascript
+{
+  bypass: boolean,
+  teamIds: string[],           // All teams visible (for list filtering)
+  fullAccessTeamIds: string[], // Teams with full R/W (subset of teamIds)
+  employeeIds: string[],       // Kept for backward compat + dropdown scoping
+  mode: string,
+  highestRole: 'director' | 'manager' | 'member' | 'none' | 'admin'
+}
+```
+
+`applyVisibilityFilter()` now implements org-wide read:
+
+- Team members → **no filter** (see all tenant records)
+- No-team users → own + unassigned only (backward compatible fallback)
+- Write access enforced per-record at route level via `getAccessLevel()`
+
+New exported functions:
+
+- `getAccessLevel(scope, recordTeamId, recordAssignedTo, userId)` → `'full'` | `'read_notes'` | `'none'`
+- `isNotesOnlyUpdate(payload, noteFields)` → boolean (checks if PUT body only touches note fields)
+
+Access matrix:
+| User | Own records | Team records | Other team records | Unassigned |
+|------|-----------|-------------|-------------------|------------|
+| Tom (member, A) | full | read_notes | read_notes | read_notes |
+| Mike (manager, A) | full | full | read_notes | full |
+| Sarah (director, both) | full | full | full | full |
+| Admin | full (bypass) | full | full | full |
+
+### Phase 3: Route Updates ✅
+
+All 6 v2 routes updated:
+
+**GET (list) endpoints** — Two-tier org-wide read:
+
+- Team members see ALL tenant records (no visibility filter needed)
+- No-team users see own + unassigned only
+- `assigned_to` column and all existing filtering UNTOUCHED (additive only)
+
+**FK join + team name** — Added to list responses:
+
+- leads: `team:teams!leads_assigned_to_team_fkey(id, name)` → `assigned_to_team_name`
+- contacts: `team:teams!contacts_assigned_to_team_fkey(id, name)` → `assigned_to_team_name`
+- accounts: `team:teams!accounts_assigned_to_team_fkey(id, name)` → `assigned_to_team_name`
+- opportunities: `team:teams!opportunities_assigned_to_team_fkey(id, name)` → `assigned_to_team_name`
+- activities: `team:teams!activities_assigned_to_team_fkey(id, name)` → `assigned_to_team_name`
+- bizdevsources: via `select('*')` (different pattern, column comes through automatically)
+
+**PUT endpoints** — Write access check:
+
+- Fetch current record's `assigned_to` + `assigned_to_team`
+- Call `getAccessLevel()` to determine access tier
+- `access === 'none'` → 403
+- `access === 'read_notes'` + non-notes update → 403 "You can only add notes to records outside your team"
+- `access === 'full'` → allow update
+
+**DELETE endpoints** — Write access check:
+
+- Fetch current record, check `getAccessLevel()`
+- Only `access === 'full'` allows deletion
+
+**`/team-scope` endpoint** — Now returns:
+
+- `teamIds`, `fullAccessTeamIds`, `highestRole` (in addition to existing `bypass`, `employeeIds`, `mode`)
+
+### Files Modified
+
+| Category        | Files                                                                                                |
+| --------------- | ---------------------------------------------------------------------------------------------------- |
+| Schema          | Supabase migration on both dev + prod (6 tables, 12 indexes each)                                    |
+| Core visibility | backend/lib/teamVisibility.js (rewritten for two-tier)                                               |
+| Route updates   | leads.v2.js, contacts.v2.js, accounts.v2.js, opportunities.v2.js, activities.v2.js, bizdevsources.js |
+
+### Critical Design Decisions
+
+1. **`assigned_to` NOT removed** — both columns coexist per handoff spec. All AiSHA identity context, pronoun resolution, Braid tools, and existing `assigned_to` filtering remain untouched.
+2. **Org-wide read for team members** — list endpoints show ALL tenant records to anyone with team membership. This is a deliberate shift from the old binary model where you couldn't see other teams' records at all.
+3. **Write protection at route level** — `applyVisibilityFilter` no longer restricts which records you see (for team members). Instead, `getAccessLevel` + `isNotesOnlyUpdate` enforce write restrictions per-record in PUT/DELETE handlers.
+4. **Unassigned records** — managers/directors get full R/W, members get read_notes only.
+
+### What's Next
+
+1. **Phase 4**: Frontend cascade UI — team dropdown → person dropdown (filtered by team members)
+2. **Phase 5**: Braid tool updates — add `assigned_to_team` parameter to all list/search tools
+3. **Phase 6**: AiSHA identity context — add team info to system prompt
+4. **Phase 7**: Backfill production data — populate `assigned_to_team` on existing records
+5. Re-test full visibility matrix with all 6 test users

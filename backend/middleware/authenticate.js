@@ -206,10 +206,13 @@ export async function authenticateRequest(req, _res, next) {
           const internalPayload = jwt.verify(bearer, jwtSecret, { algorithms: ['HS256'] });
           if (internalPayload.internal === true) {
             // This is an internal service token - trust it directly
+            // If user_role is embedded, use it for visibility scoping (AiSHA calls)
+            // Security default: missing role must NOT escalate privileges
+            const effectiveRole = internalPayload.user_role || 'employee';
             req.user = {
               id: internalPayload.sub || null,
               email: internalPayload.email || 'internal-service',
-              role: 'superadmin', // Internal service calls have full access
+              role: effectiveRole,
               tenant_id: internalPayload.tenant_id || null,
               tenant_uuid: internalPayload.tenant_uuid || null,
               internal: true,

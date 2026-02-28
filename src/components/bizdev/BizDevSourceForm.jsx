@@ -66,6 +66,7 @@ export default function BizDevSourceForm({
     license_expiry_date: '',
     status: 'Active',
     assigned_to: '',
+    assigned_to_team: '',
   });
 
   const [leads, setLeads] = useState([]);
@@ -144,6 +145,7 @@ export default function BizDevSourceForm({
         license_expiry_date: source.license_expiry_date || '',
         status: source.status || 'Active',
         assigned_to: source.assigned_to || '',
+        assigned_to_team: source.assigned_to_team || '',
       });
     } else {
       // New source: default assigned_to to current user's employee ID if available
@@ -197,6 +199,9 @@ export default function BizDevSourceForm({
       // Handle assigned_to: 'unassigned' or empty -> null
       if (payload.assigned_to === 'unassigned' || payload.assigned_to === '') {
         payload.assigned_to = null;
+      }
+      if (payload.assigned_to_team === 'unassigned' || payload.assigned_to_team === '') {
+        payload.assigned_to_team = null;
       }
       Object.keys(payload).forEach((k) => {
         if (k !== 'assigned_to' && payload[k] === '' && typeof payload[k] === 'string')
@@ -618,7 +623,9 @@ export default function BizDevSourceForm({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <AssignmentField
               value={formData.assigned_to}
+              teamValue={formData.assigned_to_team}
               onChange={(value) => handleChange('assigned_to', value)}
+              onTeamChange={(value) => handleChange('assigned_to_team', value)}
               user={user}
               isManager={isManager}
               entityId={source?.id}

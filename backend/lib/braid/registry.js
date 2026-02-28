@@ -558,7 +558,7 @@ export const TOOL_DESCRIPTIONS = {
   get_account_details:
     'Get the full details of a specific Account by its ID. Returns all fields including name, annual_revenue, industry, website, email, phone, assigned_to, and metadata.',
   list_accounts:
-    'List Accounts in the CRM. IMPORTANT: If more than 5 results, summarize the count and tell user to check the Accounts page in the UI for the full list. Use industry filter to narrow results.',
+    'List Accounts in the CRM. IMPORTANT: If more than 5 results, summarize the count and tell user to check the Accounts page in the UI for the full list. Use industry filter to narrow results. Pass assigned_to_team with a team UUID to filter by team assignment.',
   search_accounts:
     'Search for Accounts by name, industry, or website. Use this when the user mentions an account by name (e.g., "Acme Corp") to find matching account records.',
 
@@ -571,9 +571,9 @@ export const TOOL_DESCRIPTIONS = {
   convert_lead_to_account:
     'v3.0.0 WORKFLOW: Convert a Lead to Contact + Account + Opportunity. This is the key transition that creates the full customer record. Options: create_account (bool), account_name (string), selected_account_id (UUID for existing account), create_opportunity (bool), opportunity_name, opportunity_amount. Returns contact, account, opportunity.',
   list_leads:
-    '⚠️ NOT FOR COUNTING! Use get_dashboard_bundle for counts. This tool lists individual Lead records. Use ONLY when user wants to SEE the leads, not count them. Pass status filter or "all".',
+    '⚠️ NOT FOR COUNTING! Use get_dashboard_bundle for counts. This tool lists individual Lead records. Use ONLY when user wants to SEE the leads, not count them. Pass status filter or "all". Pass assigned_to with a user UUID to filter by owner — when user says "my leads", pass their User ID from CURRENT USER IDENTITY. Pass assigned_to="unassigned" for unowned leads. Pass assigned_to_team with a team UUID to filter by team — when user says "Team A leads" or "my team\'s leads", pass their Team ID from CURRENT USER IDENTITY.',
   search_leads:
-    'Search for Leads by name, email, or company. ALWAYS use this first when user asks about a lead by name or wants lead details. Use get_lead_details only when you have the lead ID.',
+    'Search for Leads by name, email, or company text. ALWAYS use this first when user asks about a lead by name or wants lead details. Use get_lead_details only when you have the lead_id. ⚠️ NOT for filtering by assignment — use list_leads with assigned_to param instead when user asks "my leads" or "leads assigned to me".',
   get_lead_details:
     'Get the full details of a specific Lead by its UUID. Only use when you already have the lead_id from a previous search or list.',
 
@@ -589,7 +589,7 @@ export const TOOL_DESCRIPTIONS = {
   schedule_meeting:
     'Schedule a new meeting with attendees. Creates a meeting-type activity with date, time, duration, and attendee list. ALWAYS use the timezone offset from system prompt in date_time.',
   list_activities:
-    'List all Activities in the CRM. Use this for calendar/schedule queries. Pass status="planned" for upcoming/pending, status="overdue" for overdue, status="completed" for past, or status="all" for everything. IMPORTANT: Results include activity IDs - remember these for follow-up actions like update or complete.',
+    'List all Activities in the CRM. Use this for calendar/schedule queries. Pass status="planned" for upcoming/pending, status="overdue" for overdue, status="completed" for past, or status="all" for everything. Pass assigned_to_team to filter by team. IMPORTANT: Results include activity IDs - remember these for follow-up actions like update or complete.',
   search_activities:
     'Search for Activities by subject, body, or type. ALWAYS use this first when user asks about an activity by name or keyword. Results include IDs for follow-up actions.',
   get_activity_details:
@@ -611,7 +611,7 @@ export const TOOL_DESCRIPTIONS = {
   update_opportunity:
     'Update an existing Opportunity by its ID. Can modify name, amount, stage, probability, close_date, etc.',
   list_opportunities_by_stage:
-    'List Opportunities filtered by stage. FIRST ask user: "Which stage would you like? Options: prospecting, qualification, proposal, negotiation, closed_won, closed_lost, or all?" IMPORTANT: If more than 5 results, summarize the count and tell user to check the Opportunities page in the UI.',
+    'List Opportunities filtered by stage. Pass assigned_to_team to filter by team. FIRST ask user: "Which stage would you like? Options: prospecting, qualification, proposal, negotiation, closed_won, closed_lost, or all?" IMPORTANT: If more than 5 results, summarize the count and tell user to check the Opportunities page in the UI.',
   search_opportunities:
     'Search for Opportunities by name or description. Use this when the user mentions an opportunity/deal by name (e.g., "Enterprise License Deal") to find matching opportunities.',
   get_opportunity_details:
@@ -623,7 +623,7 @@ export const TOOL_DESCRIPTIONS = {
   create_contact: 'Create a new Contact (individual person) associated with an Account.',
   update_contact: 'Update an existing Contact by its ID.',
   list_contacts_for_account:
-    'List all Contacts belonging to a specific Account. IMPORTANT: If more than 5 results, summarize the count and tell user to check the Contacts page in the UI for the full list.',
+    'List all Contacts belonging to a specific Account. Pass assigned_to_team to filter by team. IMPORTANT: If more than 5 results, summarize the count and tell user to check the Contacts page in the UI for the full list.',
   get_contact_details:
     'Get the full details of a specific Contact by its ID. Returns first_name, last_name, email, phone, job_title, account_id.',
   get_contact_by_name:
@@ -665,8 +665,9 @@ export const TOOL_DESCRIPTIONS = {
     'Update an existing BizDev Source by its ID. Can modify source_name, company_name, contact_name, email, phone, priority, status.',
   get_bizdev_source_details: 'Get the full details of a specific BizDev Source by its ID.',
   list_bizdev_sources:
-    'List BizDev Sources with optional filtering by status (active, promoted, rejected) or priority.',
-  search_bizdev_sources: 'Search BizDev Sources by name, company, or contact information.',
+    'List BizDev Sources with optional filtering by status (active, promoted, rejected), priority, assigned_to, or assigned_to_team.',
+  search_bizdev_sources:
+    'Search BizDev Sources by name, company, or contact information. Pass assigned_to_team to filter by team.',
   promote_bizdev_source_to_lead:
     'Promote a BizDev Source to a Lead. This is the key v3.0.0 workflow transition: BizDev Source → Lead. Creates a Lead with provenance tracking.',
   delete_bizdev_source: 'Delete a BizDev Source by its ID.',
@@ -1087,10 +1088,14 @@ export function summarizeToolResult(result, toolName) {
       const details = [];
       if (firstItem.id) details.push(`id: ${firstItem.id}`);
       if (firstItem.company) details.push(`company: ${firstItem.company}`);
+      if (firstItem.job_title) details.push(`job_title: ${firstItem.job_title}`);
       if (firstItem.status) details.push(`status: ${firstItem.status}`);
       if (firstItem.email) details.push(`email: ${firstItem.email}`);
       if (firstItem.phone || firstItem.phone_number)
         details.push(`phone: ${firstItem.phone || firstItem.phone_number}`);
+      if (firstItem.assigned_to_name) details.push(`assigned_to: ${firstItem.assigned_to_name}`);
+      else if (firstItem.assigned_to) details.push(`assigned_to_id: ${firstItem.assigned_to}`);
+      if (firstItem.assigned_to_team_name) details.push(`team: ${firstItem.assigned_to_team_name}`);
       if (firstItem.stage) details.push(`stage: ${firstItem.stage}`);
       if (firstItem.amount) details.push(`amount: ${firstItem.amount}`);
       const detailStr = details.length > 0 ? ` (${details.join(', ')})` : '';
@@ -1106,7 +1111,15 @@ export function summarizeToolResult(result, toolName) {
             ? `${item.first_name} ${item.last_name}`
             : item.name || item.title || item.id;
         const id = item.id ? ` [id: ${item.id}]` : '';
-        const extra = item.status ? ` (${item.status})` : item.stage ? ` (${item.stage})` : '';
+        const parts = [];
+        if (item.company) parts.push(item.company);
+        if (item.job_title) parts.push(item.job_title);
+        if (item.status) parts.push(item.status);
+        else if (item.stage) parts.push(item.stage);
+        if (item.assigned_to_name) parts.push(`assigned: ${item.assigned_to_name}`);
+        else if (item.assigned_to) parts.push(`assigned_id: ${item.assigned_to}`);
+        if (item.assigned_to_team_name) parts.push(`team: ${item.assigned_to_team_name}`);
+        const extra = parts.length > 0 ? ` (${parts.join(', ')})` : '';
         return `${name}${id}${extra}`;
       })
       .join('; ');
@@ -1114,11 +1127,42 @@ export function summarizeToolResult(result, toolName) {
     return `${toolName} found ${data.length} results: ${preview}${data.length > 5 ? '; ...' : ''}`;
   }
 
-  // Generic fallback
-  if (typeof data === 'object') {
+  // Object with nested array (common v2 response shape: { leads: [...], total: N })
+  if (typeof data === 'object' && !Array.isArray(data)) {
     const keys = Object.keys(data);
     if (keys.length === 0) return `${toolName} returned empty object`;
-    // Include id if present
+
+    // Unwrap nested arrays (e.g., { leads: [...], total: 5 } or { contacts: [...] })
+    const arrayKey = keys.find((k) => Array.isArray(data[k]) && data[k].length > 0);
+    if (arrayKey) {
+      const items = data[arrayKey];
+      const total = data.total || items.length;
+      // Show up to 25 items — enough for most CRM lists without excessive tokens
+      const maxPreview = Math.min(items.length, 25);
+      const preview = items
+        .slice(0, maxPreview)
+        .map((item) => {
+          const name =
+            item.first_name && item.last_name
+              ? `${item.first_name} ${item.last_name}`
+              : item.name || item.title || item.id;
+          const id = item.id ? ` [id: ${item.id}]` : '';
+          const parts = [];
+          if (item.company) parts.push(item.company);
+          if (item.job_title) parts.push(item.job_title);
+          if (item.status) parts.push(item.status);
+          else if (item.stage) parts.push(item.stage);
+          if (item.assigned_to_name) parts.push(`assigned: ${item.assigned_to_name}`);
+          else if (item.assigned_to) parts.push(`assigned_id: ${item.assigned_to}`);
+          if (item.assigned_to_team_name) parts.push(`team: ${item.assigned_to_team_name}`);
+          const extra = parts.length > 0 ? ` (${parts.join(', ')})` : '';
+          return `${name}${id}${extra}`;
+        })
+        .join('; ');
+      return `${toolName} found ${total} results: ${preview}${items.length > maxPreview ? '; ...' : ''}`;
+    }
+
+    // Include id if present (single record)
     if (data.id) {
       return `${toolName} returned record with ID: ${data.id}, fields: ${keys.slice(0, 5).join(', ')}${keys.length > 5 ? '...' : ''}`;
     }

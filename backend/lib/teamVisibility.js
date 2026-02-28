@@ -1,30 +1,39 @@
 /**
  * Team Visibility — Shared utility for team-based data scoping
  *
- * Determines which employee IDs a user can see based on team membership
- * and the tenant's configured visibility mode.
+ * Two-tier access model:
+ *   Team scope  = full R/W on records assigned to your team(s)
+ *   Org scope   = read + add notes only on other teams' records
+ *
+ * Visibility is now team-based (assigned_to_team column) rather than
+ * employee-based (assigned_to column). This solves multi-team employees
+ * like directors — the team lives on the record, not derived from the person.
  *
  * Visibility Modes (per-tenant via modulesettings → teams):
  *   "shared"       — All team members see all records assigned to anyone on their team
  *   "hierarchical" — Members see own only, managers see team, directors see multi-team
  *
  * Role behaviour:
- *   superadmin / admin → bypass (see all tenant data)
- *   director           → own teams + child teams (both modes)
- *   manager            → own teams (both modes)
- *   employee (member)  → shared: team records | hierarchical: own records only
+ *   superadmin / admin → bypass (see all tenant data, full R/W)
+ *   director           → own teams + child teams: full R/W; other teams: R + notes
+ *   manager            → own teams: full R/W; other teams: R + notes
+ *   employee (member)  → shared: team R/W | hierarchical: own R/W only; other teams: R + notes
  *   no team membership → own records only
  *
- * Unassigned records (assigned_to IS NULL) are always visible to everyone.
+ * Unassigned records (assigned_to_team IS NULL) are always visible to everyone.
  *
  * Usage in routes:
- *   import { getVisibilityScope } from '../lib/teamVisibility.js';
+ *   import { getVisibilityScope, getAccessLevel } from '../lib/teamVisibility.js';
  *
+ *   // GET (list) — org-wide read for team members, own-only for non-team:
  *   const scope = await getVisibilityScope(req.user, supabase);
- *   if (!scope.bypass) {
- *     // Filter: show records assigned to visible employees OR unassigned
- *     query = query.or(`assigned_to.in.(${scope.employeeIds.join(',')}),assigned_to.is.null`);
- *   }
+ *   // applyVisibilityFilter handles this automatically.
+ *
+ *   // PUT/DELETE — check write access per-record:
+ *   const access = getAccessLevel(scope, record.assigned_to_team, record.assigned_to, req.user.id);
+ *   if (access === 'none') return res.status(403).json({ message: 'No access' });
+ *   if (access === 'read_notes' && !isNotesOnlyUpdate(body))
+ *     return res.status(403).json({ message: 'Read + notes only' });
  */
 
 import logger from './logger.js';
@@ -120,29 +129,45 @@ export function clearSettingsCache(tenantId) {
 /**
  * Get the visibility scope for a user.
  *
+ * Returns both team-based and employee-based ID sets:
+ *   - teamIds:     teams the user has FULL R/W access to (for assigned_to_team filtering)
+ *   - employeeIds: employees the user can see (kept for backward compat + employee dropdown scoping)
+ *
  * @param {Object} user     - req.user from authenticate middleware
  * @param {Object} supabase - Supabase client (service role)
- * @returns {Promise<{ bypass: boolean, employeeIds: string[], mode: string }>}
+ * @returns {Promise<{ bypass: boolean, teamIds: string[], employeeIds: string[], mode: string, highestRole: string }>}
  *   bypass=true  → don't filter (admin/superadmin)
- *   bypass=false → filter assigned_to IN (employeeIds) OR assigned_to IS NULL
+ *   bypass=false → filter assigned_to_team IN (teamIds) OR assigned_to_team IS NULL
  */
 export async function getVisibilityScope(user, supabase) {
   if (!user?.id) {
     logger.warn('[TeamVisibility] No user provided, defaulting to empty scope');
-    return { bypass: false, employeeIds: [], mode: 'hierarchical' };
+    return {
+      bypass: false,
+      teamIds: [],
+      employeeIds: [],
+      mode: 'hierarchical',
+      highestRole: 'none',
+    };
   }
 
   const role = (user.role || '').toLowerCase();
 
   // Admins and superadmins bypass entirely
   if (role === 'superadmin' || role === 'admin') {
-    return { bypass: true, employeeIds: [], mode: 'bypass' };
+    return { bypass: true, teamIds: [], employeeIds: [], mode: 'bypass', highestRole: 'admin' };
   }
 
   const tenantId = user.tenant_id || user.tenant_uuid;
   if (!tenantId) {
     logger.warn('[TeamVisibility] User has no tenant_id → own-only');
-    return { bypass: false, employeeIds: [user.id], mode: 'hierarchical' };
+    return {
+      bypass: false,
+      teamIds: [],
+      employeeIds: [user.id],
+      mode: 'hierarchical',
+      highestRole: 'none',
+    };
   }
 
   // Check cache
@@ -161,7 +186,13 @@ export async function getVisibilityScope(user, supabase) {
 
     if (memErr) {
       logger.error('[TeamVisibility] Failed to fetch memberships:', memErr.message);
-      const fallback = { bypass: false, employeeIds: [user.id], mode };
+      const fallback = {
+        bypass: false,
+        teamIds: [],
+        employeeIds: [user.id],
+        mode,
+        highestRole: 'none',
+      };
       _setCache(key, fallback);
       return fallback;
     }
@@ -169,7 +200,13 @@ export async function getVisibilityScope(user, supabase) {
     // No team membership → own records only (regardless of mode)
     if (!memberships || memberships.length === 0) {
       logger.debug('[TeamVisibility]', user.email, 'has no team → own-only');
-      const result = { bypass: false, employeeIds: [user.id], mode };
+      const result = {
+        bypass: false,
+        teamIds: [],
+        employeeIds: [user.id],
+        mode,
+        highestRole: 'none',
+      };
       _setCache(key, result);
       return result;
     }
@@ -179,47 +216,50 @@ export async function getVisibilityScope(user, supabase) {
     const isDirector = teamRoles.includes('director');
     const isManager = teamRoles.includes('manager');
     const isMemberOnly = !isDirector && !isManager;
+    const highestRole = isDirector ? 'director' : isManager ? 'manager' : 'member';
 
-    // In hierarchical mode, plain members see only their own data
-    if (mode === 'hierarchical' && isMemberOnly) {
-      logger.debug('[TeamVisibility]', user.email, 'is member (hierarchical) → own-only');
-      const result = { bypass: false, employeeIds: [user.id], mode };
-      _setCache(key, result);
-      return result;
-    }
+    // ── Determine which teams the user has FULL R/W access to ──
+    // In hierarchical mode, plain members only have R/W on their OWN records
+    //   (their team is still their "home" team for visibility, but write access is own-only)
+    // In shared mode, ALL memberships grant team-wide R/W
 
-    // Shared mode: all members see team data
-    // Hierarchical mode: managers/directors see team data
-    // Either way, we need to collect all employees in the user's teams
+    let fullAccessTeamIds; // Teams where user has full R/W
+    let memberTeamIds; // All teams user belongs to (for org-wide read)
 
-    // Get team IDs where user has access
-    let teamIds;
+    memberTeamIds = memberships.map((m) => m.team_id);
+
     if (mode === 'shared') {
-      // In shared mode, ALL memberships grant team-wide visibility
-      teamIds = memberships.map((m) => m.team_id);
+      // Shared: all memberships grant full team R/W
+      fullAccessTeamIds = [...memberTeamIds];
     } else {
-      // In hierarchical mode, only manager/director memberships grant team-wide visibility
-      teamIds = memberships
+      // Hierarchical: only manager/director get full team R/W
+      // Members get R/W only on own records (enforced at route level, not filter level)
+      fullAccessTeamIds = memberships
         .filter((m) => m.role === 'manager' || m.role === 'director')
         .map((m) => m.team_id);
+
+      // In hierarchical mode, members still see their team's records for read access
+      // but write access is limited to own records (handled by getAccessLevel)
     }
 
     // For directors, also include child teams (one level of hierarchy)
-    let allTeamIds = [...teamIds];
+    let allTeamIds = [...new Set([...fullAccessTeamIds, ...memberTeamIds])];
     if (isDirector) {
       const { data: childTeams, error: childErr } = await supabase
         .from('teams')
         .select('id')
-        .in('parent_team_id', teamIds)
+        .in('parent_team_id', memberTeamIds)
         .eq('tenant_id', tenantId)
         .eq('is_active', true);
 
       if (!childErr && childTeams?.length > 0) {
-        allTeamIds = [...new Set([...allTeamIds, ...childTeams.map((t) => t.id)])];
+        const childIds = childTeams.map((t) => t.id);
+        allTeamIds = [...new Set([...allTeamIds, ...childIds])];
+        fullAccessTeamIds = [...new Set([...fullAccessTeamIds, ...childIds])];
       }
     }
 
-    // Get all employees in those teams
+    // Get all employees in accessible teams (for employee dropdown scoping)
     const { data: teamMembers, error: tmErr } = await supabase
       .from('team_members')
       .select('employee_id')
@@ -227,7 +267,7 @@ export async function getVisibilityScope(user, supabase) {
 
     if (tmErr) {
       logger.error('[TeamVisibility] Failed to fetch team members:', tmErr.message);
-      const fallback = { bypass: false, employeeIds: [user.id], mode };
+      const fallback = { bypass: false, teamIds: [], employeeIds: [user.id], mode, highestRole };
       _setCache(key, fallback);
       return fallback;
     }
@@ -235,45 +275,138 @@ export async function getVisibilityScope(user, supabase) {
     // Deduplicate, always include self
     const employeeIds = [...new Set([user.id, ...(teamMembers || []).map((m) => m.employee_id)])];
 
-    const label = isDirector ? 'director' : isManager ? 'manager' : 'member';
     logger.debug(
-      `[TeamVisibility] ${user.email} (${label}, ${mode}) → sees ${employeeIds.length} employees`,
+      `[TeamVisibility] ${user.email} (${highestRole}, ${mode}) → ${allTeamIds.length} teams, ${employeeIds.length} employees`,
     );
 
-    const result = { bypass: false, employeeIds, mode };
+    const result = {
+      bypass: false,
+      teamIds: allTeamIds, // All teams visible (for list filtering)
+      fullAccessTeamIds, // Teams with full R/W (for write permission checks)
+      employeeIds, // Employees visible (for dropdown scoping)
+      mode,
+      highestRole,
+    };
     _setCache(key, result);
     return result;
   } catch (err) {
     logger.error('[TeamVisibility] Unexpected error:', err.message);
-    return { bypass: false, employeeIds: [user.id], mode: 'hierarchical' };
+    return {
+      bypass: false,
+      teamIds: [],
+      employeeIds: [user.id],
+      mode: 'hierarchical',
+      highestRole: 'none',
+    };
   }
 }
 
 /**
  * Apply visibility scope to a Supabase query builder.
- * This is the convenience method most routes should use.
+ *
+ * Two-tier model (handoff spec §3):
+ *   - Users WITH team membership → org-wide read (see ALL tenant records)
+ *     Write access enforced per-record at route level via getAccessLevel().
+ *   - Users WITHOUT team membership → own records + unassigned only
+ *     (backward-compatible fallback for tenants without teams configured)
+ *   - Admin/superadmin → bypass (no filter)
  *
  * @param {Object} query    - Supabase query builder (already has .from() and .eq('tenant_id', ...))
  * @param {Object} user     - req.user
  * @param {Object} supabase - Supabase client
- * @param {string} [assignedColumn='assigned_to'] - Column name for the assigned employee FK
+ * @param {Object} [options] - Options
+ * @param {string} [options.assignedColumn='assigned_to'] - Column for employee FK (fallback for no-team users)
  * @returns {Promise<Object>} The modified query builder
  */
-export async function applyVisibilityFilter(query, user, supabase, assignedColumn = 'assigned_to') {
+export async function applyVisibilityFilter(query, user, supabase, options = {}) {
+  // Support legacy signature: applyVisibilityFilter(query, user, supabase, 'column_name')
+  const opts = typeof options === 'string' ? { assignedColumn: options } : options;
+  const { assignedColumn = 'assigned_to' } = opts;
+
   const scope = await getVisibilityScope(user, supabase);
 
   if (scope.bypass) {
     return query; // Admin/superadmin — no filter
   }
 
-  // Show records assigned to visible employees OR unassigned (NULL)
-  const idList = scope.employeeIds.join(',');
-  return query.or(`${assignedColumn}.in.(${idList}),${assignedColumn}.is.null`);
+  // Two-tier model (handoff spec §3):
+  // Users WITH team membership → org-wide read (see ALL tenant records).
+  // Write access is enforced per-record at the route level via getAccessLevel().
+  // The tenant_id filter (already applied by the caller) is sufficient.
+  if (scope.teamIds.length > 0) {
+    return query;
+  }
+
+  // Fallback: user has NO team membership → own records + unassigned only.
+  // Backward-compatible for tenants that haven't set up teams.
+  return query.or(`${assignedColumn}.eq.${user.id},${assignedColumn}.is.null`);
+}
+
+/**
+ * Determine the access level a user has on a specific record.
+ *
+ * @param {Object} scope         - Result from getVisibilityScope()
+ * @param {string|null} recordTeamId - The record's assigned_to_team value
+ * @param {string|null} recordAssignedTo - The record's assigned_to value (employee)
+ * @param {string} userId        - The current user's ID
+ * @returns {'full'|'read_notes'|'none'}
+ *   'full'       → can read, edit, delete, reassign
+ *   'read_notes' → can read all fields + add notes only
+ *   'none'       → no access (shouldn't happen if list filter is correct)
+ */
+export function getAccessLevel(scope, recordTeamId, recordAssignedTo, userId) {
+  // Admin/superadmin → always full
+  if (scope.bypass) return 'full';
+
+  // Own record → always full R/W
+  if (recordAssignedTo && recordAssignedTo === userId) return 'full';
+
+  // Unassigned record (no team) → managers/directors get full, members get read+notes
+  // Per handoff spec §3: managers can R/W unassigned, members get R + Add Notes
+  if (!recordTeamId) {
+    const role = scope.highestRole;
+    if (role === 'director' || role === 'manager' || role === 'admin') return 'full';
+    return 'read_notes';
+  }
+
+  // Record is on one of user's full-access teams → full R/W
+  if (scope.fullAccessTeamIds && scope.fullAccessTeamIds.includes(recordTeamId)) return 'full';
+
+  // Record is on one of user's visible teams (but not full-access)
+  // This happens for hierarchical members — they can see team records but only edit own
+  if (scope.teamIds && scope.teamIds.includes(recordTeamId)) return 'read_notes';
+
+  // Record is outside user's teams entirely
+  // With org-wide read, they can still see it but only add notes
+  // (The list filter should prevent 'none' from happening, but safety net)
+  return 'none';
+}
+
+/**
+ * Check if an update payload contains only note-related fields.
+ * Used to enforce read_notes access level — users with org-wide read
+ * can add notes but not modify core record fields.
+ *
+ * @param {Object} payload       - The update body
+ * @param {string[]} noteFields  - Fields allowed under read_notes access
+ * @returns {boolean}
+ */
+export function isNotesOnlyUpdate(
+  payload,
+  noteFields = ['notes', 'note', 'internal_notes', 'comments'],
+) {
+  const payloadKeys = Object.keys(payload).filter((k) => {
+    // Ignore meta fields that are always allowed
+    return !['tenant_id', 'id', 'updated_at'].includes(k);
+  });
+  return payloadKeys.length > 0 && payloadKeys.every((k) => noteFields.includes(k));
 }
 
 export default {
   getVisibilityScope,
   applyVisibilityFilter,
+  getAccessLevel,
+  isNotesOnlyUpdate,
   clearVisibilityCache,
   clearSettingsCache,
 };

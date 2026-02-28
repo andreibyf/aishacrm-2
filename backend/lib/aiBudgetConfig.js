@@ -1,9 +1,9 @@
 /**
  * AI BUDGET CONFIGURATION
- * 
+ *
  * Single source of truth for all token budget constants and behavior.
  * All values have sensible defaults and can be overridden via environment variables.
- * 
+ *
  * @see backend/README-ai-budget.md for full documentation
  */
 
@@ -46,22 +46,22 @@ export function clampInt(name, value, min, max, fallback) {
  */
 export const DEFAULT_BUDGET = {
   // Total token budget for entire request (input + reserved output)
-  HARD_CEILING: 4000,
-  
+  HARD_CEILING: 8000,
+
   // Maximum tokens for system prompt (includes tenant context, instructions)
-  SYSTEM_PROMPT_CAP: 1200,
-  
+  SYSTEM_PROMPT_CAP: 2500,
+
   // Maximum tokens for tool schemas (JSON definitions)
-  TOOL_SCHEMA_CAP: 800,
-  
+  TOOL_SCHEMA_CAP: 1200,
+
   // Maximum tokens for memory/RAG context injection
-  MEMORY_CAP: 250,
-  
+  MEMORY_CAP: 500,
+
   // Maximum tokens for tool result summaries
-  TOOL_RESULT_CAP: 700,
-  
+  TOOL_RESULT_CAP: 1200,
+
   // Reserved tokens for model output (max_tokens parameter)
-  OUTPUT_MAX_TOKENS: 350,
+  OUTPUT_MAX_TOKENS: 600,
 };
 
 /**
@@ -70,13 +70,13 @@ export const DEFAULT_BUDGET = {
 export const DEFAULT_MEMORY = {
   // Number of memory chunks to retrieve
   TOP_K: 8,
-  
+
   // Max characters per memory chunk (before token estimation)
   MAX_CHUNK_CHARS: 2000,
-  
+
   // Minimum similarity score for memory retrieval
   MIN_SIMILARITY: 0.7,
-  
+
   // Embedding provider and model
   EMBEDDING_PROVIDER: 'openai',
   EMBEDDING_MODEL: 'text-embedding-3-small',
@@ -86,12 +86,12 @@ export const DEFAULT_MEMORY = {
  * Bounds for environment variable validation
  */
 export const BOUNDS = {
-  HARD_CEILING: { min: 1000, max: 16000 },
-  SYSTEM_PROMPT_CAP: { min: 200, max: 4000 },
-  TOOL_SCHEMA_CAP: { min: 100, max: 2000 },
-  MEMORY_CAP: { min: 50, max: 1000 },
-  TOOL_RESULT_CAP: { min: 100, max: 2000 },
-  OUTPUT_MAX_TOKENS: { min: 100, max: 2000 },
+  HARD_CEILING: { min: 1000, max: 32000 },
+  SYSTEM_PROMPT_CAP: { min: 200, max: 8000 },
+  TOOL_SCHEMA_CAP: { min: 100, max: 4000 },
+  MEMORY_CAP: { min: 50, max: 2000 },
+  TOOL_RESULT_CAP: { min: 100, max: 4000 },
+  OUTPUT_MAX_TOKENS: { min: 100, max: 4000 },
   TOP_K: { min: 1, max: 20 },
   MAX_CHUNK_CHARS: { min: 50, max: 2000 },
 };
@@ -108,7 +108,7 @@ export const DROP_ORDER = ['memory', 'tools', 'messages', 'system'];
 export const CORE_TOOLS = [
   'fetch_tenant_snapshot',
   'search_leads',
-  'search_contacts', 
+  'search_contacts',
   'search_accounts',
   'search_activities',
   'search_notes',
@@ -138,56 +138,92 @@ export function getAiBudgetConfig() {
       process.env.AI_TOKEN_HARD_CEILING,
       BOUNDS.HARD_CEILING.min,
       BOUNDS.HARD_CEILING.max,
-      DEFAULT_BUDGET.HARD_CEILING
+      DEFAULT_BUDGET.HARD_CEILING,
     ),
     systemPromptCap: clampInt(
       'AI_SYSTEM_PROMPT_CAP',
       process.env.AI_SYSTEM_PROMPT_CAP,
       BOUNDS.SYSTEM_PROMPT_CAP.min,
       BOUNDS.SYSTEM_PROMPT_CAP.max,
-      DEFAULT_BUDGET.SYSTEM_PROMPT_CAP
+      DEFAULT_BUDGET.SYSTEM_PROMPT_CAP,
     ),
     toolSchemaCap: clampInt(
       'AI_TOOL_SCHEMA_CAP',
       process.env.AI_TOOL_SCHEMA_CAP,
       BOUNDS.TOOL_SCHEMA_CAP.min,
       BOUNDS.TOOL_SCHEMA_CAP.max,
-      DEFAULT_BUDGET.TOOL_SCHEMA_CAP
+      DEFAULT_BUDGET.TOOL_SCHEMA_CAP,
     ),
     memoryCap: clampInt(
       'AI_MEMORY_CAP',
       process.env.AI_MEMORY_CAP,
       BOUNDS.MEMORY_CAP.min,
       BOUNDS.MEMORY_CAP.max,
-      DEFAULT_BUDGET.MEMORY_CAP
+      DEFAULT_BUDGET.MEMORY_CAP,
     ),
     toolResultCap: clampInt(
       'AI_TOOL_RESULT_CAP',
       process.env.AI_TOOL_RESULT_CAP,
       BOUNDS.TOOL_RESULT_CAP.min,
       BOUNDS.TOOL_RESULT_CAP.max,
-      DEFAULT_BUDGET.TOOL_RESULT_CAP
+      DEFAULT_BUDGET.TOOL_RESULT_CAP,
     ),
     outputMaxTokens: clampInt(
       'AI_OUTPUT_MAX_TOKENS',
       process.env.AI_OUTPUT_MAX_TOKENS,
       BOUNDS.OUTPUT_MAX_TOKENS.min,
       BOUNDS.OUTPUT_MAX_TOKENS.max,
-      DEFAULT_BUDGET.OUTPUT_MAX_TOKENS
+      DEFAULT_BUDGET.OUTPUT_MAX_TOKENS,
     ),
-    
+
     // Policy
     dropOrder: DROP_ORDER,
     coreTools: CORE_TOOLS,
-    
+
     // Derived caps object for tokenBudget.js compatibility
     caps: {
-      HARD_CEILING: clampInt('AI_TOKEN_HARD_CEILING', process.env.AI_TOKEN_HARD_CEILING, BOUNDS.HARD_CEILING.min, BOUNDS.HARD_CEILING.max, DEFAULT_BUDGET.HARD_CEILING),
-      SYSTEM_PROMPT: clampInt('AI_SYSTEM_PROMPT_CAP', process.env.AI_SYSTEM_PROMPT_CAP, BOUNDS.SYSTEM_PROMPT_CAP.min, BOUNDS.SYSTEM_PROMPT_CAP.max, DEFAULT_BUDGET.SYSTEM_PROMPT_CAP),
-      TOOL_SCHEMA: clampInt('AI_TOOL_SCHEMA_CAP', process.env.AI_TOOL_SCHEMA_CAP, BOUNDS.TOOL_SCHEMA_CAP.min, BOUNDS.TOOL_SCHEMA_CAP.max, DEFAULT_BUDGET.TOOL_SCHEMA_CAP),
-      MEMORY: clampInt('AI_MEMORY_CAP', process.env.AI_MEMORY_CAP, BOUNDS.MEMORY_CAP.min, BOUNDS.MEMORY_CAP.max, DEFAULT_BUDGET.MEMORY_CAP),
-      TOOL_RESULT: clampInt('AI_TOOL_RESULT_CAP', process.env.AI_TOOL_RESULT_CAP, BOUNDS.TOOL_RESULT_CAP.min, BOUNDS.TOOL_RESULT_CAP.max, DEFAULT_BUDGET.TOOL_RESULT_CAP),
-      OUTPUT_MAX: clampInt('AI_OUTPUT_MAX_TOKENS', process.env.AI_OUTPUT_MAX_TOKENS, BOUNDS.OUTPUT_MAX_TOKENS.min, BOUNDS.OUTPUT_MAX_TOKENS.max, DEFAULT_BUDGET.OUTPUT_MAX_TOKENS),
+      HARD_CEILING: clampInt(
+        'AI_TOKEN_HARD_CEILING',
+        process.env.AI_TOKEN_HARD_CEILING,
+        BOUNDS.HARD_CEILING.min,
+        BOUNDS.HARD_CEILING.max,
+        DEFAULT_BUDGET.HARD_CEILING,
+      ),
+      SYSTEM_PROMPT: clampInt(
+        'AI_SYSTEM_PROMPT_CAP',
+        process.env.AI_SYSTEM_PROMPT_CAP,
+        BOUNDS.SYSTEM_PROMPT_CAP.min,
+        BOUNDS.SYSTEM_PROMPT_CAP.max,
+        DEFAULT_BUDGET.SYSTEM_PROMPT_CAP,
+      ),
+      TOOL_SCHEMA: clampInt(
+        'AI_TOOL_SCHEMA_CAP',
+        process.env.AI_TOOL_SCHEMA_CAP,
+        BOUNDS.TOOL_SCHEMA_CAP.min,
+        BOUNDS.TOOL_SCHEMA_CAP.max,
+        DEFAULT_BUDGET.TOOL_SCHEMA_CAP,
+      ),
+      MEMORY: clampInt(
+        'AI_MEMORY_CAP',
+        process.env.AI_MEMORY_CAP,
+        BOUNDS.MEMORY_CAP.min,
+        BOUNDS.MEMORY_CAP.max,
+        DEFAULT_BUDGET.MEMORY_CAP,
+      ),
+      TOOL_RESULT: clampInt(
+        'AI_TOOL_RESULT_CAP',
+        process.env.AI_TOOL_RESULT_CAP,
+        BOUNDS.TOOL_RESULT_CAP.min,
+        BOUNDS.TOOL_RESULT_CAP.max,
+        DEFAULT_BUDGET.TOOL_RESULT_CAP,
+      ),
+      OUTPUT_MAX: clampInt(
+        'AI_OUTPUT_MAX_TOKENS',
+        process.env.AI_OUTPUT_MAX_TOKENS,
+        BOUNDS.OUTPUT_MAX_TOKENS.min,
+        BOUNDS.OUTPUT_MAX_TOKENS.max,
+        DEFAULT_BUDGET.OUTPUT_MAX_TOKENS,
+      ),
     },
   };
 }
@@ -206,16 +242,18 @@ export function getAiMemoryConfig() {
       process.env.MEMORY_TOP_K,
       BOUNDS.TOP_K.min,
       BOUNDS.TOP_K.max,
-      DEFAULT_MEMORY.TOP_K
+      DEFAULT_MEMORY.TOP_K,
     ),
     maxChunkChars: clampInt(
       'MEMORY_MAX_CHUNK_CHARS',
       process.env.MEMORY_MAX_CHUNK_CHARS,
       BOUNDS.MAX_CHUNK_CHARS.min,
       BOUNDS.MAX_CHUNK_CHARS.max,
-      DEFAULT_MEMORY.MAX_CHUNK_CHARS
+      DEFAULT_MEMORY.MAX_CHUNK_CHARS,
     ),
-    minSimilarity: parseFloat(process.env.MEMORY_MIN_SIMILARITY || String(DEFAULT_MEMORY.MIN_SIMILARITY)),
+    minSimilarity: parseFloat(
+      process.env.MEMORY_MIN_SIMILARITY || String(DEFAULT_MEMORY.MIN_SIMILARITY),
+    ),
     embeddingProvider: process.env.MEMORY_EMBEDDING_PROVIDER || DEFAULT_MEMORY.EMBEDDING_PROVIDER,
     embeddingModel: process.env.MEMORY_EMBEDDING_MODEL || DEFAULT_MEMORY.EMBEDDING_MODEL,
   };
@@ -227,7 +265,7 @@ export function getAiMemoryConfig() {
 export function logAiBudgetConfig() {
   const budget = getAiBudgetConfig();
   const memory = getAiMemoryConfig();
-  
+
   console.log('[AiBudgetConfig] Token Budget:', {
     hardCeiling: budget.hardCeiling,
     systemPromptCap: budget.systemPromptCap,
@@ -236,7 +274,7 @@ export function logAiBudgetConfig() {
     toolResultCap: budget.toolResultCap,
     outputMaxTokens: budget.outputMaxTokens,
   });
-  
+
   console.log('[AiBudgetConfig] Memory Config:', {
     enabled: memory.enabled,
     alwaysOn: memory.alwaysOn,

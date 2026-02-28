@@ -12,7 +12,7 @@ import express from 'express';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildContactAiContext } from '../lib/aiContextEnricher.js';
-import { getVisibilityScope } from '../lib/teamVisibility.js';
+import { getVisibilityScope, getAccessLevel, isNotesOnlyUpdate } from '../lib/teamVisibility.js';
 import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 import { sanitizeUuidInput } from '../lib/uuidValidator.js';
 import logger from '../lib/logger.js';
@@ -101,7 +101,8 @@ export default function createContactV2Routes(_pgPool) {
    */
   router.get('/', cacheList('contacts', 30), async (req, res) => {
     try {
-      const { tenant_id, status, account_id, filter, assigned_to, sort, search } = req.query;
+      const { tenant_id, status, account_id, filter, assigned_to, assigned_to_team, sort, search } =
+        req.query;
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
@@ -132,17 +133,21 @@ export default function createContactV2Routes(_pgPool) {
       let q = supabase
         .from('contacts')
         .select(
-          '*, employee:employees!contacts_assigned_to_fkey(id, first_name, last_name, email), account:accounts!contacts_account_id_fkey(id, name)',
+          '*, employee:employees!contacts_assigned_to_fkey(id, first_name, last_name, email), account:accounts!contacts_account_id_fkey(id, name), team:teams!contacts_assigned_to_team_fkey(id, name)',
           { count: 'exact' },
         )
         .eq('tenant_id', tenant_id)
         .order(sortField, { ascending: sortAscending })
         .range(offset, offset + limit - 1);
 
-      // Apply team visibility filter
-      if (visibilityScope && !visibilityScope.bypass && visibilityScope.employeeIds.length > 0) {
-        const idList = visibilityScope.employeeIds.join(',');
-        q = q.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+      // Apply team visibility filter (two-tier: org-wide read for team members)
+      if (visibilityScope && !visibilityScope.bypass) {
+        if (visibilityScope.teamIds && visibilityScope.teamIds.length > 0) {
+          // User has team membership → org-wide read, no additional filter
+        } else if (visibilityScope.employeeIds.length > 0) {
+          const idList = visibilityScope.employeeIds.join(',');
+          q = q.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+        }
       }
 
       // Handle name search - search by first_name or last_name
@@ -225,9 +230,25 @@ export default function createContactV2Routes(_pgPool) {
       const safeAccountId = sanitizeUuidInput(account_id);
       if (safeAccountId !== undefined && safeAccountId !== null)
         q = q.eq('account_id', safeAccountId);
-      const safeAssignedTo = sanitizeUuidInput(assigned_to);
-      if (safeAssignedTo !== undefined && safeAssignedTo !== null)
-        q = q.eq('assigned_to', safeAssignedTo);
+      // Direct assigned_to param (supports UUID or "unassigned" for NULL)
+      if (assigned_to !== undefined && assigned_to !== null && assigned_to !== '') {
+        if (assigned_to === 'unassigned' || assigned_to === 'null') {
+          q = q.is('assigned_to', null);
+        } else {
+          const safeAssignedTo = sanitizeUuidInput(assigned_to);
+          if (safeAssignedTo !== undefined && safeAssignedTo !== null) {
+            q = q.eq('assigned_to', safeAssignedTo);
+          }
+        }
+      }
+
+      // Filter by assigned_to_team (team UUID)
+      if (assigned_to_team !== undefined && assigned_to_team !== null && assigned_to_team !== '') {
+        const safeTeamId = sanitizeUuidInput(assigned_to_team);
+        if (safeTeamId !== undefined && safeTeamId !== null) {
+          q = q.eq('assigned_to_team', safeTeamId);
+        }
+      }
 
       const { data, error, count } = await q;
       if (error) throw new Error(error.message);
@@ -243,8 +264,12 @@ export default function createContactV2Routes(_pgPool) {
         if (contact.account) {
           expanded.account_name = contact.account.name;
         }
+        if (contact.team) {
+          expanded.assigned_to_team_name = contact.team.name;
+        }
         delete expanded.employee;
         delete expanded.account;
+        delete expanded.team;
         return expanded;
       });
 
@@ -483,10 +508,10 @@ export default function createContactV2Routes(_pgPool) {
         ...(Array.isArray(tags) ? { tags } : {}),
       };
 
-      // Fetch existing record to merge metadata + track assignment changes
+      // Fetch existing record to merge metadata + track assignment changes + access check
       const { data: current, error: fetchErr } = await supabase
         .from('contacts')
-        .select('metadata, assigned_to')
+        .select('metadata, assigned_to, assigned_to_team')
         .eq('id', id)
         .eq('tenant_id', tenant_id)
         .single();
@@ -495,6 +520,30 @@ export default function createContactV2Routes(_pgPool) {
         return res.status(404).json({ status: 'error', message: 'Contact not found' });
       }
       if (fetchErr) throw new Error(fetchErr.message);
+
+      // Two-tier write access check
+      if (req.user) {
+        const scope = await getVisibilityScope(req.user, supabase);
+        const access = getAccessLevel(
+          scope,
+          current?.assigned_to_team,
+          current?.assigned_to,
+          req.user.id,
+        );
+        if (access === 'none') {
+          return res
+            .status(403)
+            .json({ status: 'error', message: 'You do not have access to this record' });
+        }
+        if (access === 'read_notes' && !isNotesOnlyUpdate(updatePayload)) {
+          return res
+            .status(403)
+            .json({
+              status: 'error',
+              message: 'You can only add notes to records outside your team',
+            });
+        }
+      }
 
       const previousAssignedTo = current?.assigned_to || null;
 
@@ -582,6 +631,33 @@ export default function createContactV2Routes(_pgPool) {
       }
 
       const supabase = getSupabaseClient();
+
+      // Two-tier write access check for delete
+      if (req.user) {
+        const { data: current } = await supabase
+          .from('contacts')
+          .select('assigned_to, assigned_to_team')
+          .eq('id', id)
+          .eq('tenant_id', tenant_id)
+          .single();
+        if (current) {
+          const scope = await getVisibilityScope(req.user, supabase);
+          const access = getAccessLevel(
+            scope,
+            current.assigned_to_team,
+            current.assigned_to,
+            req.user.id,
+          );
+          if (access !== 'full') {
+            return res
+              .status(403)
+              .json({
+                status: 'error',
+                message: 'You do not have permission to delete this record',
+              });
+          }
+        }
+      }
 
       const { data, error } = await supabase
         .from('contacts')
