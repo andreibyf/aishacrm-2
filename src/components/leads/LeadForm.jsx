@@ -108,6 +108,7 @@ export default function LeadForm({
     country: 'United States',
     tags: [],
     assigned_to: '',
+    assigned_to_team: '',
     is_test_data: false,
   });
 
@@ -191,6 +192,7 @@ export default function LeadForm({
             country: lead.country || 'United States',
             tags: lead.tags || [],
             assigned_to: initialAssignedTo || '',
+            assigned_to_team: lead.assigned_to_team || '',
             is_test_data: lead.is_test_data || false,
           });
         } else {
@@ -202,6 +204,7 @@ export default function LeadForm({
           setFormData((prev) => ({
             ...prev,
             assigned_to: initialAssignedTo || '',
+            assigned_to_team: '',
             account_id: accountId || '',
             company: accountName || '',
           }));
@@ -380,6 +383,10 @@ export default function LeadForm({
       // Normalize assigned_to: empty/unassigned → null (truly unassigned in DB)
       if (!submissionData.assigned_to || submissionData.assigned_to === 'unassigned') {
         submissionData.assigned_to = null;
+      }
+      // Normalize assigned_to_team: empty → null
+      if (!submissionData.assigned_to_team || submissionData.assigned_to_team === 'unassigned') {
+        submissionData.assigned_to_team = null;
       }
 
       if (!lead) {
@@ -743,7 +750,9 @@ export default function LeadForm({
           </div>
           <AssignmentField
             value={formData.assigned_to}
+            teamValue={formData.assigned_to_team}
             onChange={(v) => handleChange('assigned_to', v)}
+            onTeamChange={(v) => handleChange('assigned_to_team', v)}
             user={user}
             isManager={isManager}
             entityId={lead?.id}

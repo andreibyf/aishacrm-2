@@ -42,6 +42,7 @@ export default function OpportunityForm({
     account_id: '',
     contact_id: '',
     assigned_to: '',
+    assigned_to_team: '',
     stage: 'prospecting',
     amount: '',
     close_date: '',
@@ -159,6 +160,7 @@ export default function OpportunityForm({
         account_id: opportunity.account_id || '',
         contact_id: opportunity.contact_id || '',
         assigned_to: opportunity.assigned_to || '',
+        assigned_to_team: opportunity.assigned_to_team || '',
         stage: opportunity.stage || 'prospecting',
         amount: opportunity.amount || '',
         close_date: opportunity.close_date || '',
@@ -176,6 +178,7 @@ export default function OpportunityForm({
       setFormData((prev) => ({
         ...prev,
         assigned_to: '',
+        assigned_to_team: '',
       }));
     }
   }, [opportunity, currentUser]);
@@ -232,6 +235,7 @@ export default function OpportunityForm({
         contact_id: formData.contact_id || undefined,
         lead_id: formData.lead_id || undefined,
         assigned_to: formData.assigned_to || undefined,
+        assigned_to_team: formData.assigned_to_team || undefined,
       };
 
       if (isE2E) console.log('[E2E] OpportunityForm submitting with payload:', payload);
@@ -495,7 +499,9 @@ export default function OpportunityForm({
           {/* Assigned To */}
           <AssignmentField
             value={formData.assigned_to}
+            teamValue={formData.assigned_to_team}
             onChange={(value) => handleChange('assigned_to', value)}
+            onTeamChange={(value) => handleChange('assigned_to_team', value)}
             user={currentUser}
             isManager={
               currentUser?.role === 'manager' ||

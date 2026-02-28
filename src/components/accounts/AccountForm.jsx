@@ -76,6 +76,7 @@ export default function AccountForm({ account: legacyAccount, initialData, onSub
   const [formData, setFormData] = useState({
     name: '',
     assigned_to: '',
+    assigned_to_team: '',
     type: 'prospect',
     industry: '',
     website: '',
@@ -147,6 +148,7 @@ export default function AccountForm({ account: legacyAccount, initialData, onSub
           description: account.description || '',
           tags: Array.isArray(account.tags) ? account.tags : [],
           assigned_to: account.assigned_to || '',
+          assigned_to_team: account.assigned_to_team || '',
           is_test_data: account.is_test_data || false,
         });
       } else {
@@ -154,6 +156,7 @@ export default function AccountForm({ account: legacyAccount, initialData, onSub
         setFormData((prev) => ({
           ...prev,
           assigned_to: '',
+          assigned_to_team: '',
         }));
       }
     } catch (error) {
@@ -283,7 +286,9 @@ export default function AccountForm({ account: legacyAccount, initialData, onSub
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <AssignmentField
             value={formData.assigned_to}
+            teamValue={formData.assigned_to_team}
             onChange={(value) => handleChange('assigned_to', value)}
+            onTeamChange={(value) => handleChange('assigned_to_team', value)}
             user={currentUser}
             isManager={
               currentUser?.role === 'manager' ||

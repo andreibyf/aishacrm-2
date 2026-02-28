@@ -25,16 +25,15 @@
  * Usage in routes:
  *   import { getVisibilityScope, getAccessLevel } from '../lib/teamVisibility.js';
  *
+ *   // GET (list) — org-wide read for team members, own-only for non-team:
  *   const scope = await getVisibilityScope(req.user, supabase);
- *   if (!scope.bypass) {
- *     // Two-tier filter: team records + org-wide read access
- *     const teamList = scope.teamIds.join(',');
- *     query = query.or(`assigned_to_team.in.(${teamList}),assigned_to_team.is.null`);
- *   }
+ *   // applyVisibilityFilter handles this automatically.
  *
- *   // On PUT/DELETE — check write access:
- *   const access = getAccessLevel(scope, record.assigned_to_team);
- *   if (access !== 'full') return res.status(403).json(...);
+ *   // PUT/DELETE — check write access per-record:
+ *   const access = getAccessLevel(scope, record.assigned_to_team, record.assigned_to, req.user.id);
+ *   if (access === 'none') return res.status(403).json({ message: 'No access' });
+ *   if (access === 'read_notes' && !isNotesOnlyUpdate(body))
+ *     return res.status(403).json({ message: 'Read + notes only' });
  */
 
 import logger from './logger.js';
@@ -304,26 +303,25 @@ export async function getVisibilityScope(user, supabase) {
 
 /**
  * Apply visibility scope to a Supabase query builder.
- * Now filters on assigned_to_team (team-based) instead of assigned_to (employee-based).
  *
- * Records are visible if:
- *   - assigned_to_team is in the user's teamIds (team member/manager/director)
- *   - assigned_to_team IS NULL (unassigned records visible to all)
- *   - assigned_to matches user's own ID (own records always visible even if team mismatch)
+ * Two-tier model (handoff spec §3):
+ *   - Users WITH team membership → org-wide read (see ALL tenant records)
+ *     Write access enforced per-record at route level via getAccessLevel().
+ *   - Users WITHOUT team membership → own records + unassigned only
+ *     (backward-compatible fallback for tenants without teams configured)
+ *   - Admin/superadmin → bypass (no filter)
  *
  * @param {Object} query    - Supabase query builder (already has .from() and .eq('tenant_id', ...))
  * @param {Object} user     - req.user
  * @param {Object} supabase - Supabase client
  * @param {Object} [options] - Options
- * @param {string} [options.teamColumn='assigned_to_team'] - Column name for team FK
- * @param {string} [options.assignedColumn='assigned_to'] - Column name for employee FK (for own-record fallback)
+ * @param {string} [options.assignedColumn='assigned_to'] - Column for employee FK (fallback for no-team users)
  * @returns {Promise<Object>} The modified query builder
  */
 export async function applyVisibilityFilter(query, user, supabase, options = {}) {
   // Support legacy signature: applyVisibilityFilter(query, user, supabase, 'column_name')
   const opts = typeof options === 'string' ? { assignedColumn: options } : options;
-
-  const { teamColumn = 'assigned_to_team', assignedColumn = 'assigned_to' } = opts;
+  const { assignedColumn = 'assigned_to' } = opts;
 
   const scope = await getVisibilityScope(user, supabase);
 
@@ -331,19 +329,17 @@ export async function applyVisibilityFilter(query, user, supabase, options = {})
     return query; // Admin/superadmin — no filter
   }
 
-  // Build OR filter:
-  //   1. Record's team is in user's visible teams
-  //   2. Record is unassigned (no team)
-  //   3. Record is assigned to the user themselves (own-record safety net)
-  const parts = [];
-
+  // Two-tier model (handoff spec §3):
+  // Users WITH team membership → org-wide read (see ALL tenant records).
+  // Write access is enforced per-record at the route level via getAccessLevel().
+  // The tenant_id filter (already applied by the caller) is sufficient.
   if (scope.teamIds.length > 0) {
-    parts.push(`${teamColumn}.in.(${scope.teamIds.join(',')})`);
+    return query;
   }
-  parts.push(`${teamColumn}.is.null`);
-  parts.push(`${assignedColumn}.eq.${user.id}`);
 
-  return query.or(parts.join(','));
+  // Fallback: user has NO team membership → own records + unassigned only.
+  // Backward-compatible for tenants that haven't set up teams.
+  return query.or(`${assignedColumn}.eq.${user.id},${assignedColumn}.is.null`);
 }
 
 /**
@@ -365,8 +361,13 @@ export function getAccessLevel(scope, recordTeamId, recordAssignedTo, userId) {
   // Own record → always full R/W
   if (recordAssignedTo && recordAssignedTo === userId) return 'full';
 
-  // Unassigned record (no team) → full access (anyone can claim)
-  if (!recordTeamId) return 'full';
+  // Unassigned record (no team) → managers/directors get full, members get read+notes
+  // Per handoff spec §3: managers can R/W unassigned, members get R + Add Notes
+  if (!recordTeamId) {
+    const role = scope.highestRole;
+    if (role === 'director' || role === 'manager' || role === 'admin') return 'full';
+    return 'read_notes';
+  }
 
   // Record is on one of user's full-access teams → full R/W
   if (scope.fullAccessTeamIds && scope.fullAccessTeamIds.includes(recordTeamId)) return 'full';

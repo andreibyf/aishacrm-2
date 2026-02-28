@@ -8,7 +8,7 @@ import { validateTenantScopedId } from '../lib/validation.js';
 import { logEntityTransition } from '../lib/transitions.js';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
-import { getVisibilityScope } from '../lib/teamVisibility.js';
+import { getVisibilityScope, getAccessLevel, isNotesOnlyUpdate } from '../lib/teamVisibility.js';
 import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 import {
@@ -62,7 +62,8 @@ export default function createBizDevSourceRoutes(pgPool) {
   // Get all bizdev sources (with optional filtering)
   router.get('/', cacheList('bizdevsources', 30), async (req, res) => {
     try {
-      const { status, source_type, priority, limit, sort } = req.query;
+      const { status, source_type, priority, limit, sort, assigned_to, assigned_to_team } =
+        req.query;
 
       // Enforce tenant isolation - support both middleware tenant and query param
       const tenant_id = req.tenant?.id || req.query.tenant_id;
@@ -135,10 +136,30 @@ export default function createBizDevSourceRoutes(pgPool) {
         if (priority && priority !== 'undefined') {
           q = q.eq('priority', priority);
         }
-        // Apply team visibility filter
-        if (visibilityScope && !visibilityScope.bypass && visibilityScope.employeeIds.length > 0) {
-          const idList = visibilityScope.employeeIds.join(',');
-          q = q.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+        // Filter by assigned_to (person UUID or "unassigned")
+        if (assigned_to !== undefined && assigned_to !== null && assigned_to !== '') {
+          if (assigned_to === 'unassigned' || assigned_to === 'null') {
+            q = q.is('assigned_to', null);
+          } else {
+            q = q.eq('assigned_to', assigned_to);
+          }
+        }
+        // Filter by assigned_to_team (team UUID)
+        if (
+          assigned_to_team !== undefined &&
+          assigned_to_team !== null &&
+          assigned_to_team !== ''
+        ) {
+          q = q.eq('assigned_to_team', assigned_to_team);
+        }
+        // Apply team visibility filter (two-tier: org-wide read for team members)
+        if (visibilityScope && !visibilityScope.bypass) {
+          if (visibilityScope.teamIds && visibilityScope.teamIds.length > 0) {
+            // User has team membership → org-wide read, no additional filter
+          } else if (visibilityScope.employeeIds.length > 0) {
+            const idList = visibilityScope.employeeIds.join(',');
+            q = q.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+          }
         }
         return q;
       }
@@ -178,11 +199,31 @@ export default function createBizDevSourceRoutes(pgPool) {
         }
       }
 
+      // Enrich with assigned_to_team names (batch lookup)
+      const teamIds = [...new Set((data || []).map((r) => r.assigned_to_team).filter(Boolean))];
+      let teamNameMap = {};
+      if (teamIds.length > 0) {
+        try {
+          const { data: teamData } = await supabase
+            .from('teams')
+            .select('id, name')
+            .in('id', teamIds);
+          if (teamData) {
+            teamNameMap = Object.fromEntries(teamData.map((t) => [t.id, t.name]));
+          }
+        } catch (teamErr) {
+          logger.warn('[BizDevSources] Team name lookup failed (non-fatal):', teamErr?.message);
+        }
+      }
+
       // Map 'source' column to 'source_name' for frontend compatibility
       const mappedData = (data || []).map((row) => ({
         ...row,
         source_name: row.source || row.source_name,
         assigned_to_name: row.assigned_to ? employeeNameMap[row.assigned_to] || null : null,
+        assigned_to_team_name: row.assigned_to_team
+          ? teamNameMap[row.assigned_to_team] || null
+          : null,
       }));
 
       res.json({
@@ -324,10 +365,32 @@ export default function createBizDevSourceRoutes(pgPool) {
         }
       }
 
+      // Resolve assigned_to_team name
+      let assigned_to_team_name = null;
+      if (data.assigned_to_team) {
+        try {
+          const { data: teamData } = await supabase
+            .from('teams')
+            .select('name')
+            .eq('id', data.assigned_to_team)
+            .maybeSingle();
+          if (teamData) {
+            assigned_to_team_name = teamData.name;
+          }
+        } catch (_e) {
+          /* non-fatal */
+        }
+      }
+
       // Map 'source' column to 'source_name' for frontend compatibility
       res.json({
         status: 'success',
-        data: { ...data, source_name: data.source || data.source_name, assigned_to_name },
+        data: {
+          ...data,
+          source_name: data.source || data.source_name,
+          assigned_to_name,
+          assigned_to_team_name,
+        },
       });
     } catch (error) {
       logger.error('Error fetching bizdev source:', error);
@@ -659,9 +722,37 @@ export default function createBizDevSourceRoutes(pgPool) {
       if (assigned_to !== undefined) updateObj.assigned_to = assigned_to || null;
       updateObj.updated_at = new Date().toISOString();
 
-      // Track assignment changes: fetch current assigned_to before update
+      // ── Two-tier write access check ──
       let previousAssignedTo = undefined;
-      if (assigned_to !== undefined) {
+      if (req.user) {
+        const { data: current } = await supabase
+          .from('bizdev_sources')
+          .select('assigned_to, assigned_to_team')
+          .eq('id', id)
+          .eq('tenant_id', tenant_id)
+          .single();
+        previousAssignedTo = current?.assigned_to || null;
+
+        const scope = await getVisibilityScope(req.user, supabase);
+        const access = getAccessLevel(
+          scope,
+          current?.assigned_to_team,
+          current?.assigned_to,
+          req.user.id,
+        );
+
+        if (access === 'none') {
+          return res
+            .status(403)
+            .json({ status: 'error', message: 'You do not have access to this record' });
+        }
+        if (access === 'read_notes' && !isNotesOnlyUpdate(updateObj)) {
+          return res.status(403).json({
+            status: 'error',
+            message: 'You can only add notes to records outside your team',
+          });
+        }
+      } else if (assigned_to !== undefined) {
         const { data: current } = await supabase
           .from('bizdev_sources')
           .select('assigned_to')
@@ -760,6 +851,32 @@ export default function createBizDevSourceRoutes(pgPool) {
       let { tenant_id } = req.query || {};
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
+
+      // ── Two-tier write access check for delete ──
+      if (req.user) {
+        const { data: current } = await supabase
+          .from('bizdev_sources')
+          .select('assigned_to, assigned_to_team')
+          .eq('id', id)
+          .eq('tenant_id', tenant_id)
+          .single();
+
+        if (current) {
+          const scope = await getVisibilityScope(req.user, supabase);
+          const access = getAccessLevel(
+            scope,
+            current.assigned_to_team,
+            current.assigned_to,
+            req.user.id,
+          );
+          if (access !== 'full') {
+            return res.status(403).json({
+              status: 'error',
+              message: 'You do not have permission to delete this record',
+            });
+          }
+        }
+      }
 
       const { data, error } = await supabase
         .from('bizdev_sources')

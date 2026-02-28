@@ -84,6 +84,7 @@ export default function ActivityForm({
       status: activity?.status || 'scheduled',
       priority: activity?.priority || 'normal',
       assigned_to: activity?.assigned_to || '',
+      assigned_to_team: activity?.assigned_to_team || '',
       related_to: 'none', // Default, will be overridden
       related_id: 'none', // Default, will be overridden
       outcome: activity?.outcome || '',
@@ -508,6 +509,7 @@ export default function ActivityForm({
         status: processedData.status,
         priority: processedData.priority,
         assigned_to: processedData.assigned_to || null,
+        assigned_to_team: processedData.assigned_to_team || null,
         related_to: processedData.related_to === 'none' ? null : processedData.related_to,
         related_id: processedData.related_id === 'none' ? null : processedData.related_id,
         outcome: processedData.outcome || null,
@@ -844,7 +846,9 @@ export default function ActivityForm({
 
         <AssignmentField
           value={formData.assigned_to}
+          teamValue={formData.assigned_to_team}
           onChange={(value) => handleChange('assigned_to', value)}
+          onTeamChange={(value) => handleChange('assigned_to_team', value)}
           user={effectiveUser}
           isManager={
             effectiveUser?.role === 'manager' ||

@@ -89,6 +89,7 @@ export default function ContactForm({
     department: contact?.department || '',
     account_id: contact?.account_id || '',
     assigned_to: contact?.assigned_to || '',
+    assigned_to_team: contact?.assigned_to_team || '',
     lead_source: contact?.lead_source || 'website',
     status: contact?.status || 'prospect',
     address_1: contact?.address_1 || '',
@@ -261,6 +262,7 @@ export default function ContactForm({
           country: contact.country || 'United States',
           tags: contact.tags || [],
           assigned_to: contact.assigned_to || '',
+          assigned_to_team: contact.assigned_to_team || '',
           is_test_data: contact.is_test_data || false,
         });
         logDev('[ContactForm] Form data loaded for existing contact');
@@ -286,6 +288,7 @@ export default function ContactForm({
           department: '',
           account_id: accountId || '',
           assigned_to: '',
+          assigned_to_team: '',
           lead_source: 'website',
           status: 'prospect',
           address_1: '',
@@ -969,7 +972,9 @@ export default function ContactForm({
               </div>
               <AssignmentField
                 value={formData.assigned_to}
+                teamValue={formData.assigned_to_team}
                 onChange={(value) => handleChange('assigned_to', value)}
+                onTeamChange={(value) => handleChange('assigned_to_team', value)}
                 user={user}
                 isManager={
                   user?.role === 'manager' || user?.role === 'admin' || user?.role === 'superadmin'

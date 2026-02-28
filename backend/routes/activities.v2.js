@@ -2,7 +2,7 @@ import express from 'express';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildActivityAiContext } from '../lib/aiContextEnricher.js';
-import { getVisibilityScope } from '../lib/teamVisibility.js';
+import { getVisibilityScope, getAccessLevel, isNotesOnlyUpdate } from '../lib/teamVisibility.js';
 import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 import { setCorsHeaders, isAllowedOrigin } from '../lib/cors.js';
@@ -328,17 +328,21 @@ export default function createActivityV2Routes(_pgPool) {
       let q = supabase
         .from('activities')
         .select(
-          '*, employee:employees!activities_assigned_to_fkey(id, first_name, last_name, email)',
+          '*, employee:employees!activities_assigned_to_fkey(id, first_name, last_name, email), team:teams!activities_assigned_to_team_fkey(id, name)',
           { count: 'exact' },
         )
         .eq('tenant_id', tenant_id)
         .order(sortField, { ascending: sortAscending })
         .range(offset, offset + limit - 1);
 
-      // Apply team visibility filter
-      if (visibilityScope && !visibilityScope.bypass && visibilityScope.employeeIds.length > 0) {
-        const idList = visibilityScope.employeeIds.join(',');
-        q = q.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+      // Apply team visibility filter (two-tier: org-wide read for team members)
+      if (visibilityScope && !visibilityScope.bypass) {
+        if (visibilityScope.teamIds && visibilityScope.teamIds.length > 0) {
+          // User has team membership → org-wide read, no additional filter
+        } else if (visibilityScope.employeeIds.length > 0) {
+          const idList = visibilityScope.employeeIds.join(',');
+          q = q.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+        }
       }
 
       // Handle direct query parameters (compatibility with generic frontend filters)
@@ -349,6 +353,7 @@ export default function createActivityV2Routes(_pgPool) {
         related_to_type,
         related_to_id,
         assigned_to,
+        assigned_to_team,
         is_test_data,
       } = req.query;
 
@@ -371,6 +376,11 @@ export default function createActivityV2Routes(_pgPool) {
             logger.warn(`[Activities V2] Could not resolve assigned_to: ${assigned_to}`);
           }
         }
+      }
+
+      // Filter by assigned_to_team (team UUID)
+      if (assigned_to_team !== undefined && assigned_to_team !== null && assigned_to_team !== '') {
+        q = q.eq('assigned_to_team', assigned_to_team);
       }
 
       // Handle simple text search via 'q' parameter (WAF-safe alternative to MongoDB $regex)
@@ -539,7 +549,11 @@ export default function createActivityV2Routes(_pgPool) {
             `${activity.employee.first_name || ''} ${activity.employee.last_name || ''}`.trim();
           expanded.assigned_to_email = activity.employee.email;
         }
+        if (activity.team) {
+          expanded.assigned_to_team_name = activity.team.name;
+        }
         delete expanded.employee;
+        delete expanded.team;
         return expanded;
       });
 
@@ -1002,7 +1016,7 @@ export default function createActivityV2Routes(_pgPool) {
 
       const { data: current, error: fetchErr } = await supabase
         .from('activities')
-        .select('metadata, assigned_to')
+        .select('metadata, assigned_to, assigned_to_team')
         .eq('id', id)
         .eq('tenant_id', tenant_id)
         .single();
@@ -1011,6 +1025,29 @@ export default function createActivityV2Routes(_pgPool) {
         return res.status(404).json({ status: 'error', message: 'Activity not found' });
       }
       if (fetchErr) throw new Error(fetchErr.message);
+
+      // ── Two-tier write access check ──
+      if (req.user) {
+        const scope = await getVisibilityScope(req.user, supabase);
+        const access = getAccessLevel(
+          scope,
+          current?.assigned_to_team,
+          current?.assigned_to,
+          req.user.id,
+        );
+
+        if (access === 'none') {
+          return res
+            .status(403)
+            .json({ status: 'error', message: 'You do not have access to this record' });
+        }
+        if (access === 'read_notes' && !isNotesOnlyUpdate(updatePayload)) {
+          return res.status(403).json({
+            status: 'error',
+            message: 'You can only add notes to records outside your team',
+          });
+        }
+      }
 
       const previousAssignedTo = current?.assigned_to || null;
       const existingMeta =
@@ -1102,10 +1139,10 @@ export default function createActivityV2Routes(_pgPool) {
 
       const supabase = getSupabaseClient();
 
-      // DEBUG: First verify the activity exists before attempting delete
+      // Verify exists + two-tier write access check
       const { data: existing, error: fetchErr } = await supabase
         .from('activities')
-        .select('id, tenant_id')
+        .select('id, tenant_id, assigned_to, assigned_to_team')
         .eq('id', id)
         .maybeSingle();
 
@@ -1127,6 +1164,23 @@ export default function createActivityV2Routes(_pgPool) {
           actual: existing.tenant_id,
         });
         return res.status(404).json({ status: 'error', message: 'Activity not found' });
+      }
+
+      // ── Two-tier write access check for delete ──
+      if (req.user) {
+        const scope = await getVisibilityScope(req.user, supabase);
+        const access = getAccessLevel(
+          scope,
+          existing.assigned_to_team,
+          existing.assigned_to,
+          req.user.id,
+        );
+        if (access !== 'full') {
+          return res.status(403).json({
+            status: 'error',
+            message: 'You do not have permission to delete this record',
+          });
+        }
       }
 
       const { data, error } = await supabase

@@ -78,6 +78,7 @@ import {
 import { loadAiSettings, getAiSetting } from '../lib/aiSettingsLoader.js';
 // Anthropic adapter for Claude tool calling
 import { createAnthropicClientWrapper } from '../lib/aiEngine/anthropicAdapter.js';
+import { fetchUserTeamContext as _fetchUserTeamContext } from '../lib/aiTeamContext.js';
 
 /**
  * Create provider-specific client for tool calling.
@@ -834,6 +835,10 @@ export default function createAIRoutes(pgPool) {
 
     return metadata;
   };
+  // Thin wrapper that binds Supabase client factory + logger for use inside route handlers
+  const fetchTeamContext = (employeeId) =>
+    _fetchUserTeamContext(getSupabaseClient, employeeId, logger);
+
   const insertAssistantMessage = async (conversationId, content, metadata = {}) => {
     try {
       const supabase = getSupabaseClient();
@@ -1050,11 +1055,16 @@ export default function createAIRoutes(pgPool) {
       const tenantName =
         conversationMetadata?.tenant_name || tenantRecord?.name || tenantSlug || 'CRM Tenant';
       const agentNameForPrompt = conversation?.agent_name || null;
-      const rtUserId = req.user?.id || null;
-      const rtUserRole = req.user?.role || 'employee';
+      const rtUserId = userId || null;
+      const rtUserRole = userRole || 'employee';
+
+      // Fetch team context for identity block (non-blocking on failure)
+      const { teamLines: rtTeamLines, teamPronounRules: rtTeamPronounRules } =
+        await fetchTeamContext(rtUserId);
+
       const userContext =
         userName || userEmail
-          ? `\n\n**CURRENT USER IDENTITY:**\n- Name: ${userName || 'Unknown'}\n- Email: ${userEmail || 'Unknown'}\n- User ID: ${rtUserId || 'Unknown'}\n- Role: ${rtUserRole}\n- When creating activities or assigning tasks, use this user's name ("${userName || userEmail}") unless explicitly asked to assign to someone else.\n\n**PRONOUN RESOLUTION RULES (MANDATORY):**\n- "my leads", "leads assigned to me", "how many leads do I have" → call list_leads with assigned_to="${rtUserId}"\n- "my team leads", "team leads" → call list_leads WITHOUT assigned_to (visibility scoping handles team filtering)\n- "unassigned leads" → call list_leads with assigned_to="unassigned"\n- NEVER use search_leads for assignment queries — it only searches by text. Use list_leads with assigned_to param.\n- Always include the assigned_to_name field when listing records so users can see who owns each record`
+          ? `\n\n**CURRENT USER IDENTITY:**\n- Name: ${userName || 'Unknown'}\n- Email: ${userEmail || 'Unknown'}\n- User ID: ${rtUserId || 'Unknown'}\n- Role: ${rtUserRole}${rtTeamLines ? `\n${rtTeamLines}` : ''}\n- When creating activities or assigning tasks, use this user's name ("${userName || userEmail}") unless explicitly asked to assign to someone else.\n\n**PRONOUN RESOLUTION RULES (MANDATORY):**\n- "my leads", "leads assigned to me", "how many leads do I have" → call list_leads with assigned_to="${rtUserId}"\n${rtTeamPronounRules || '- "my team leads", "team leads" → call list_leads WITHOUT assigned_to (visibility scoping handles team filtering)'}\n- "unassigned leads" → call list_leads with assigned_to="unassigned"\n- NEVER use search_leads for assignment queries — it only searches by text. Use list_leads with assigned_to param.\n- Always include the assigned_to_name field when listing records so users can see who owns each record`
           : '';
       const baseSystemPrompt = `${buildSystemPrompt({ tenantName, agentName: agentNameForPrompt })}
 
@@ -3214,9 +3224,13 @@ ${toolContextSummary}`,
       // Build user identity context for pronoun resolution
       const userId = req.user?.id || null;
       const userRole = req.user?.role || 'employee';
+
+      // Fetch team context for identity block (non-blocking on failure)
+      const { teamLines, teamPronounRules } = await fetchTeamContext(userId);
+
       const userIdentityContext =
         userName || userEmail
-          ? `\n\n**CURRENT USER IDENTITY:**\n- Name: ${userName || 'Unknown'}\n- Email: ${userEmail || 'Unknown'}\n- User ID: ${userId || 'Unknown'}\n- Role: ${userRole}\n\n**PRONOUN RESOLUTION RULES (MANDATORY):**\n- "my leads", "leads assigned to me", "how many leads do I have" → call list_leads with assigned_to="${userId}"\n- "my team leads", "team leads" → call list_leads WITHOUT assigned_to (visibility scoping handles team filtering)\n- "unassigned leads" → call list_leads with assigned_to="unassigned"\n- NEVER use search_leads for assignment queries — it only searches by text. Use list_leads with assigned_to param.\n- Always include the assigned_to_name field when listing records so users can see who owns each record\n`
+          ? `\n\n**CURRENT USER IDENTITY:**\n- Name: ${userName || 'Unknown'}\n- Email: ${userEmail || 'Unknown'}\n- User ID: ${userId || 'Unknown'}\n- Role: ${userRole}${teamLines ? `\n${teamLines}` : ''}\n\n**PRONOUN RESOLUTION RULES (MANDATORY):**\n- "my leads", "leads assigned to me", "how many leads do I have" → call list_leads with assigned_to="${userId}"\n${teamPronounRules || '- "my team leads", "team leads" → call list_leads WITHOUT assigned_to (visibility scoping handles team filtering)'}\n- "unassigned leads" → call list_leads with assigned_to="unassigned"\n- NEVER use search_leads for assignment queries — it only searches by text. Use list_leads with assigned_to param.\n- Always include the assigned_to_name field when listing records so users can see who owns each record\n`
           : '';
 
       const baseSystemPrompt = `${buildSystemPrompt({ tenantName })}\n\n${getBraidSystemPrompt(timezone)}${userIdentityContext}\n\n- ALWAYS call fetch_tenant_snapshot before answering tenant data questions.\n- NEVER hallucinate records; only reference tool data.\n`;

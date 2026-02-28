@@ -5,29 +5,45 @@ import { getBackendUrl } from '@/api/backendUrl';
 /**
  * useTeamScope — fetches the team visibility scope for the current user.
  *
- * Returns `allowedIds`:
- *   null  = admin/superadmin (no filtering, show all employees)
- *   []    = loading or error
- *   [...] = array of employee UUIDs this user can see/assign to
+ * Returns:
+ *   allowedIds:        null (admin bypass) | string[] (employee UUIDs this user can see/assign to)
+ *   teamIds:           string[] — all team IDs this user belongs to
+ *   fullAccessTeamIds: string[] — team IDs where user has full R/W
+ *   highestRole:       'director' | 'manager' | 'member' | 'none' | 'admin'
+ *   bypass:            boolean — true for admin/superadmin
+ *   loading:           boolean — true while fetching scope
  *
  * Usage:
- *   const { allowedIds } = useTeamScope(user);
- *   <LazyEmployeeSelector allowedIds={allowedIds} ... />
+ *   const { allowedIds, teamIds, fullAccessTeamIds, highestRole, bypass, loading } = useTeamScope(user);
  */
 export default function useTeamScope(user) {
   const [allowedIds, setAllowedIds] = useState(null);
+  const [teamIds, setTeamIds] = useState([]);
+  const [fullAccessTeamIds, setFullAccessTeamIds] = useState([]);
+  const [highestRole, setHighestRole] = useState('none');
+  const [bypass, setBypass] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
 
     const role = (user.role || '').toLowerCase();
     // Admins/superadmins bypass — null means no filtering
     if (role === 'superadmin' || role === 'admin') {
       setAllowedIds(null);
+      setTeamIds([]);
+      setFullAccessTeamIds([]);
+      setHighestRole('admin');
+      setBypass(true);
+      setLoading(false);
       return;
     }
 
     const fetchScope = async () => {
+      setLoading(true);
       try {
         const BACKEND_URL = getBackendUrl();
         const headers = { 'Content-Type': 'application/json' };
@@ -52,25 +68,36 @@ export default function useTeamScope(user) {
         });
         if (res.ok) {
           const json = await res.json();
-          if (json.data?.bypass) {
+          const data = json.data || {};
+          if (data.bypass) {
             setAllowedIds(null);
-          } else if (json.data?.employeeIds) {
-            setAllowedIds(json.data.employeeIds);
+            setBypass(true);
+            setHighestRole('admin');
+          } else {
+            setAllowedIds(data.employeeIds || []);
+            setBypass(false);
+            setHighestRole(data.highestRole || 'none');
           }
+          setTeamIds(data.teamIds || []);
+          setFullAccessTeamIds(data.fullAccessTeamIds || []);
         } else {
           console.warn('[useTeamScope] team-scope returned', res.status);
           // Fail open — don't restrict
           setAllowedIds(null);
+          setBypass(true);
         }
       } catch (err) {
         console.warn('[useTeamScope] Could not fetch team scope:', err);
         // Fail open — don't restrict
         setAllowedIds(null);
+        setBypass(true);
+      } finally {
+        setLoading(false);
       }
     };
 
     fetchScope();
   }, [user]);
 
-  return { allowedIds };
+  return { allowedIds, teamIds, fullAccessTeamIds, highestRole, bypass, loading };
 }
