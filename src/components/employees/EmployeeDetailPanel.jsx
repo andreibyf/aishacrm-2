@@ -144,17 +144,17 @@ export default function EmployeeDetailPanel({
   };
 
   const statusColors = {
-    active: 'bg-green-100 text-green-700 border-green-200',
-    inactive: 'bg-gray-100 text-gray-700 border-gray-200',
-    terminated: 'bg-red-100 text-red-700 border-red-200',
-    on_leave: 'bg-yellow-100 text-yellow-700 border-yellow-200',
+    active: 'bg-green-900/30 text-green-400 border-green-700',
+    inactive: 'bg-slate-700 text-slate-400 border-slate-600',
+    terminated: 'bg-red-900/30 text-red-400 border-red-700',
+    on_leave: 'bg-yellow-900/30 text-yellow-400 border-yellow-700',
   };
 
   const employmentTypeColors = {
-    full_time: 'bg-blue-100 text-blue-700 border-blue-200',
-    part_time: 'bg-purple-100 text-purple-700 border-purple-200',
-    contractor: 'bg-orange-100 text-orange-700 border-orange-200',
-    seasonal: 'bg-teal-100 text-teal-700 border-teal-200',
+    full_time: 'bg-blue-900/30 text-blue-400 border-blue-700',
+    part_time: 'bg-purple-900/30 text-purple-400 border-purple-700',
+    contractor: 'bg-orange-900/30 text-orange-400 border-orange-700',
+    seasonal: 'bg-teal-900/30 text-teal-400 border-teal-700',
   };
 
   const formatDate = (dateString) => {
@@ -180,7 +180,7 @@ export default function EmployeeDetailPanel({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-lg overflow-y-auto bg-slate-900 border-slate-700 text-slate-100">
+      <SheetContent className="!w-1/2 !max-w-none overflow-y-auto bg-slate-900 border-l border-slate-700 text-slate-100">
         <SheetHeader className="space-y-3">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">

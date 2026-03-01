@@ -323,8 +323,8 @@ export default function BizDevSourceDetailPanel({
     linkedOpportunities.length > 0;
 
   return (
-    <div className="fixed inset-y-0 right-0 w-full md:w-2/3 lg:w-1/2 bg-slate-800 shadow-2xl z-50 overflow-y-auto border-l border-slate-700">
-      <CardHeader className="border-b border-slate-700 sticky top-0 bg-slate-800 z-10">
+    <div className="fixed inset-y-0 right-0 w-full md:w-2/3 lg:w-1/2 bg-slate-900 shadow-2xl z-50 overflow-y-auto border-l border-slate-700">
+      <CardHeader className="border-b border-slate-700 sticky top-0 bg-slate-900 z-10">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div
@@ -338,7 +338,7 @@ export default function BizDevSourceDetailPanel({
                 />
               )}
               {hasActivity && (
-                <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-800 flex items-center justify-center">
+                <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900 flex items-center justify-center">
                   <CheckCircle className="w-3 h-3 text-white" />
                 </div>
               )}

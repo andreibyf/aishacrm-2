@@ -24,12 +24,12 @@ import { format } from 'date-fns';
 import { parseContacts } from '../../utils/campaignUtils';
 
 const statusColors = {
-  draft: 'bg-gray-500 text-gray-100',
-  scheduled: 'bg-blue-500 text-blue-100',
-  running: 'bg-green-500 text-green-100',
-  paused: 'bg-yellow-500 text-yellow-100',
-  completed: 'bg-purple-500 text-purple-100',
-  cancelled: 'bg-red-500 text-red-100',
+  draft: 'bg-slate-700 text-slate-300 border-slate-600',
+  scheduled: 'bg-blue-900/30 text-blue-400 border-blue-700',
+  running: 'bg-green-900/30 text-green-400 border-green-700',
+  paused: 'bg-yellow-900/30 text-yellow-400 border-yellow-700',
+  completed: 'bg-purple-900/30 text-purple-400 border-purple-700',
+  cancelled: 'bg-red-900/30 text-red-400 border-red-700',
 };
 
 export default function AICampaignDetailPanel({

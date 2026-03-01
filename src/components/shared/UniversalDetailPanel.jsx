@@ -1,22 +1,23 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from 'react';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from '@/components/ui/dropdown-menu';
 import {
   Mail,
   Phone,
@@ -41,11 +42,11 @@ import {
   Presentation,
   ClipboardCheck,
   Loader2, // Added Loader2
-  Eye // Added Eye
-} from "lucide-react";
-import { format } from "date-fns";
-import { Note, Activity, Contact } from "@/api/entities"; // Added Contact
-import { toast } from "sonner";
+  Eye, // Added Eye
+} from 'lucide-react';
+import { format } from 'date-fns';
+import { Note, Activity, Contact } from '@/api/entities'; // Added Contact
+import { toast } from 'sonner';
 
 /**
  * Universal Detail Panel - Consolidates all entity detail panels
@@ -57,30 +58,30 @@ export default function UniversalDetailPanel({
   entityType, // 'contact', 'account', 'lead', 'opportunity', 'activity'
   open,
   onOpenChange,
-  
+
   // Actions
   onEdit,
   onDelete,
   customActions = [],
-  
+
   // User context
   user,
-  
+
   // Optional display data
   displayData = {},
-  
+
   // Optional sections
   showNotes = true, // Kept default to true as per existing code
-  customSections = []
+  customSections = [],
 }) {
   const [notes, setNotes] = useState([]);
   const [activities, setActivities] = useState([]);
-  const [newNoteTitle, setNewNoteTitle] = useState("");
-  const [newNoteContent, setNewNoteContent] = useState("");
-  const [newNoteType, setNewNoteType] = useState("general");
+  const [newNoteTitle, setNewNoteTitle] = useState('');
+  const [newNoteContent, setNewNoteContent] = useState('');
+  const [newNoteType, setNewNoteType] = useState('general');
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [editingNote, setEditingNote] = useState(null);
-  
+
   // New states for related contacts
   const [relatedContacts, setRelatedContacts] = useState([]);
   const [relatedDataLoading, setRelatedDataLoading] = useState(false);
@@ -90,34 +91,35 @@ export default function UniversalDetailPanel({
     try {
       const relatedType = entityType.toLowerCase();
       const tenantId = user?.tenant_id || entity.tenant_id;
-      
+
       // Use consistent backend URL pattern (same as loadActivities)
-      const backendUrl = import.meta.env.VITE_AISHACRM_BACKEND_URL || 
-        (typeof window !== 'undefined' && window._env_?.VITE_AISHACRM_BACKEND_URL) || 
+      const backendUrl =
+        import.meta.env.VITE_AISHACRM_BACKEND_URL ||
+        (typeof window !== 'undefined' && window._env_?.VITE_AISHACRM_BACKEND_URL) ||
         'http://localhost:4001';
-      
+
       const notesUrl = `${backendUrl}/api/notes?tenant_id=${tenantId}&related_type=${relatedType}&related_id=${entity.id}`;
-      
+
       console.log('[UniversalDetailPanel] Fetching notes from:', notesUrl);
-      
+
       const notesRes = await fetch(notesUrl, {
         credentials: 'include',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          'x-tenant-id': tenantId // Add explicit tenant header
-        }
+          'x-tenant-id': tenantId, // Add explicit tenant header
+        },
       });
-      
+
       console.log('[UniversalDetailPanel] Notes response status:', notesRes?.status);
-      
+
       if (notesRes?.ok) {
         const notesData = await notesRes.json();
         console.log('[UniversalDetailPanel] Notes data received:', notesData);
-        
+
         // Extract notes array with multiple fallback patterns
         const rawNotes = notesData?.data?.notes || notesData?.notes || notesData?.data || notesData;
         const notesArray = Array.isArray(rawNotes) ? rawNotes : [];
-        
+
         // Sort by created_at descending
         notesArray.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         setNotes(notesArray);
@@ -128,9 +130,11 @@ export default function UniversalDetailPanel({
           status: notesRes?.status,
           statusText: notesRes?.statusText,
           url: notesUrl,
-          responseBody: errorText
+          responseBody: errorText,
         });
-        toast.error(`Failed to load notes: ${notesRes?.status || 'Network error'} - ${notesRes?.statusText || 'Unknown error'}`);
+        toast.error(
+          `Failed to load notes: ${notesRes?.status || 'Network error'} - ${notesRes?.statusText || 'Unknown error'}`,
+        );
         setNotes([]);
       }
     } catch (error) {
@@ -140,7 +144,7 @@ export default function UniversalDetailPanel({
         message: error?.message,
         stack: error?.stack,
         entityType,
-        entityId: entity?.id
+        entityId: entity?.id,
       });
       toast.error(`Failed to load notes: ${error?.message || 'Network error'}`);
       setNotes([]);
@@ -152,25 +156,26 @@ export default function UniversalDetailPanel({
     try {
       const relatedTo = entityType.toLowerCase();
       const tenantId = user?.tenant_id || entity.tenant_id;
-      
+
       // Use v2 API with proper filtering
-      const backendUrl = import.meta.env.VITE_AISHACRM_BACKEND_URL || 
-        (typeof window !== 'undefined' && window._env_?.VITE_AISHACRM_BACKEND_URL) || 
+      const backendUrl =
+        import.meta.env.VITE_AISHACRM_BACKEND_URL ||
+        (typeof window !== 'undefined' && window._env_?.VITE_AISHACRM_BACKEND_URL) ||
         'http://localhost:4001';
-      
+
       // Fetch activities directly linked to this entity
       const url = `${backendUrl}/api/v2/activities?tenant_id=${tenantId}&related_to_type=${relatedTo}&related_to_id=${entity.id}&limit=10`;
       const response = await fetch(url, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
       });
-      
+
       let allActivities = [];
       if (response.ok) {
         const data = await response.json();
         allActivities = data.data?.activities || data.activities || [];
       }
-      
+
       // Also fetch activities from related opportunities (for contacts, leads, accounts)
       if (['contact', 'lead', 'account'].includes(relatedTo)) {
         try {
@@ -179,19 +184,20 @@ export default function UniversalDetailPanel({
           if (relatedTo === 'contact') oppsUrl += `&contact_id=${entity.id}`;
           else if (relatedTo === 'lead') oppsUrl += `&lead_id=${entity.id}`;
           else if (relatedTo === 'account') oppsUrl += `&account_id=${entity.id}`;
-          
+
           const oppsRes = await fetch(oppsUrl, {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' },
           });
-          
+
           if (oppsRes.ok) {
             const oppsData = await oppsRes.json();
             const opportunities = oppsData.data?.opportunities || oppsData.opportunities || [];
-            
+
             // Fetch activities for each opportunity
-            const existingIds = new Set(allActivities.map(a => a.id));
-            for (const opp of opportunities.slice(0, 5)) { // Limit to first 5 opps
+            const existingIds = new Set(allActivities.map((a) => a.id));
+            for (const opp of opportunities.slice(0, 5)) {
+              // Limit to first 5 opps
               const oppActUrl = `${backendUrl}/api/v2/activities?tenant_id=${tenantId}&related_to_type=opportunity&related_to_id=${opp.id}`;
               const oppActRes = await fetch(oppActUrl, {
                 method: 'GET',
@@ -214,13 +220,16 @@ export default function UniversalDetailPanel({
           console.error('Failed to load opportunity activities:', e);
         }
       }
-      
+
       // Sort by created_date descending and limit
-      allActivities.sort((a, b) => new Date(b.created_date || b.created_at) - new Date(a.created_date || a.created_at));
+      allActivities.sort(
+        (a, b) =>
+          new Date(b.created_date || b.created_at) - new Date(a.created_date || a.created_at),
+      );
       setActivities(allActivities.slice(0, 10));
     } catch (error) {
-      console.error("Failed to load activities:", error);
-      toast.error("Failed to load activities");
+      console.error('Failed to load activities:', error);
+      toast.error('Failed to load activities');
     }
   }, [entity, entityType, user?.tenant_id]);
 
@@ -239,14 +248,14 @@ export default function UniversalDetailPanel({
         setRelatedContacts([]); // Clear contacts if not an account or no entity
         return;
       }
-      
+
       setRelatedDataLoading(true);
       try {
         const contacts = await Contact.filter({ account_id: entity.id });
         setRelatedContacts(contacts);
       } catch (error) {
         console.error('[UniversalDetailPanel] Error loading contacts:', error);
-        toast.error("Failed to load related contacts");
+        toast.error('Failed to load related contacts');
       } finally {
         setRelatedDataLoading(false);
       }
@@ -274,21 +283,30 @@ export default function UniversalDetailPanel({
   const mapNoteTypeToActivityType = (noteType) => {
     // Valid activity types: task, email, call, meeting, demo, proposal, note, scheduled_ai_call, scheduled_ai_email
     switch (noteType) {
-      case 'call_log': return 'call';
-      case 'meeting': return 'meeting';
-      case 'email': return 'email';
-      case 'follow_up': return 'task'; // Follow-up creates a task
-      case 'task': return 'task';
-      case 'demo': return 'demo';
-      case 'proposal': return 'proposal';
-      case 'important': return 'task'; // Important notes create tasks
-      default: return 'note'; // Fallback for unmapped types
+      case 'call_log':
+        return 'call';
+      case 'meeting':
+        return 'meeting';
+      case 'email':
+        return 'email';
+      case 'follow_up':
+        return 'task'; // Follow-up creates a task
+      case 'task':
+        return 'task';
+      case 'demo':
+        return 'demo';
+      case 'proposal':
+        return 'proposal';
+      case 'important':
+        return 'task'; // Important notes create tasks
+      default:
+        return 'note'; // Fallback for unmapped types
     }
   };
 
   const handleSaveNote = async () => {
     if (!newNoteContent.trim()) {
-      toast.error("Note content cannot be empty");
+      toast.error('Note content cannot be empty');
       return;
     }
 
@@ -305,7 +323,7 @@ export default function UniversalDetailPanel({
         title: newNoteTitle || `${newNoteType.charAt(0).toUpperCase() + newNoteType.slice(1)} Note`,
         content: newNoteContent,
         tenant_id: effectiveTenantId,
-        created_by: user?.email // Assuming user.email for created_by
+        created_by: user?.email, // Assuming user.email for created_by
       };
 
       // Persist note type inside metadata (backend has no 'type' column for notes)
@@ -314,11 +332,11 @@ export default function UniversalDetailPanel({
       // Create or update note
       if (editingNote) {
         await Note.update(editingNote.id, noteData);
-        toast.success("Note updated successfully");
+        toast.success('Note updated successfully');
       } else {
         await Note.create(noteData);
-        toast.success("Note added successfully");
-        
+        toast.success('Note added successfully');
+
         // If this is an Activity with a related record, also create a note on the related record
         if (entityType === 'activity' && entity.related_to && entity.related_id) {
           try {
@@ -329,25 +347,25 @@ export default function UniversalDetailPanel({
               content: newNoteContent,
               tenant_id: effectiveTenantId,
               created_by: user?.email,
-              metadata: { 
+              metadata: {
                 type: newNoteType,
                 source_activity_id: entity.id,
-                source_activity_subject: entity.subject
-              }
+                source_activity_subject: entity.subject,
+              },
             };
             await Note.create(relatedNoteData);
             toast.success(`Note also added to related ${entity.related_to}`);
           } catch (relatedNoteError) {
-            console.error("Failed to create note on related record:", relatedNoteError);
+            console.error('Failed to create note on related record:', relatedNoteError);
             // Don't block - the primary note was saved successfully
           }
         }
       }
 
       // If type is NOT general, also create an Activity
-      if (newNoteType !== "general") {
+      if (newNoteType !== 'general') {
         const activityType = mapNoteTypeToActivityType(newNoteType); // Use the updated helper
-        
+
         // Get entity email for denormalized activity fields (entityName already calculated above)
         const entityEmail = entity.email || null;
 
@@ -355,7 +373,7 @@ export default function UniversalDetailPanel({
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         const tomorrowStr = tomorrow.toISOString().split('T')[0];
-        
+
         const activityData = {
           tenant_id: effectiveTenantId,
           type: activityType,
@@ -367,58 +385,62 @@ export default function UniversalDetailPanel({
           related_name: entityName, // Denormalized entity name for display
           related_email: entityEmail, // Denormalized entity email for display
           assigned_to: entity.assigned_to || null, // Use entity's assigned_to (UUID) or null
-          due_date: tomorrowStr // Default to tomorrow so activity shows on calendar
+          due_date: tomorrowStr, // Default to tomorrow so activity shows on calendar
         };
 
         try {
           await Activity.create(activityData);
           toast.success(`Activity created for this ${newNoteType}`);
-          window.dispatchEvent(new CustomEvent('entity-modified', { detail: { entity: 'Activity' } })); // Dispatch event for activities list refresh
+          window.dispatchEvent(
+            new CustomEvent('entity-modified', { detail: { entity: 'Activity' } }),
+          ); // Dispatch event for activities list refresh
         } catch (activityError) {
-          console.error("Failed to create activity from note:", activityError);
+          console.error('Failed to create activity from note:', activityError);
           // Don't block note save if activity creation fails
-          toast.error("Note saved, but failed to create related activity");
+          toast.error('Note saved, but failed to create related activity');
         }
       }
 
       // Reset form
-      setNewNoteTitle("");
-      setNewNoteContent("");
-      setNewNoteType("general");
+      setNewNoteTitle('');
+      setNewNoteContent('');
+      setNewNoteType('general');
       setEditingNote(null);
 
       // Reload both notes and activities
       await Promise.all([loadNotes(), loadActivities()]);
     } catch (error) {
-      console.error("Failed to save note:", error);
-      toast.error("Failed to save note");
+      console.error('Failed to save note:', error);
+      toast.error('Failed to save note');
     } finally {
       setIsSavingNote(false);
     }
   };
 
   const handleDeleteNote = async (noteId) => {
-    if (!window.confirm("Are you sure you want to delete this note?")) return;
+    if (!window.confirm('Are you sure you want to delete this note?')) return;
 
     try {
       await Note.delete(noteId);
-      toast.success("Note deleted successfully");
+      toast.success('Note deleted successfully');
       loadNotes();
     } catch (error) {
-      console.error("Failed to delete note:", error);
-      toast.error("Failed to delete note");
+      console.error('Failed to delete note:', error);
+      toast.error('Failed to delete note');
     }
   };
 
   const handleViewActivity = (activity) => {
     // Dispatch event to open activity detail panel
-    window.dispatchEvent(new CustomEvent('view-entity-detail', {
-      detail: {
-        entityType: 'activity',
-        entityId: activity.id,
-        entityName: activity.subject
-      }
-    }));
+    window.dispatchEvent(
+      new CustomEvent('view-entity-detail', {
+        detail: {
+          entityType: 'activity',
+          entityId: activity.id,
+          entityName: activity.subject,
+        },
+      }),
+    );
   };
 
   const getActivityIcon = (type) => {
@@ -429,7 +451,7 @@ export default function UniversalDetailPanel({
       task: CheckCircle,
       note: FileText,
       demo: Presentation,
-      proposal: ClipboardCheck
+      proposal: ClipboardCheck,
     };
     const Icon = icons[type] || FileText;
     return <Icon className="w-4 h-4 text-slate-400" />;
@@ -445,7 +467,7 @@ export default function UniversalDetailPanel({
       follow_up: CheckCircle,
       important: Star,
       demo: Presentation,
-      proposal: ClipboardCheck
+      proposal: ClipboardCheck,
     };
     const Icon = icons[type] || FileText;
     return <Icon className="w-4 h-4 text-slate-400" />;
@@ -453,12 +475,18 @@ export default function UniversalDetailPanel({
 
   const getIcon = () => {
     switch (entityType) {
-      case 'contact': return <User className="w-5 h-5" />;
-      case 'account': return <Building2 className="w-5 h-5" />;
-      case 'lead': return <Target className="w-5 h-5" />;
-      case 'opportunity': return <DollarSign className="w-5 h-5" />;
-      case 'activity': return <Calendar className="w-5 h-5" />;
-      default: return null;
+      case 'contact':
+        return <User className="w-5 h-5" />;
+      case 'account':
+        return <Building2 className="w-5 h-5" />;
+      case 'lead':
+        return <Target className="w-5 h-5" />;
+      case 'opportunity':
+        return <DollarSign className="w-5 h-5" />;
+      case 'activity':
+        return <Calendar className="w-5 h-5" />;
+      default:
+        return null;
     }
   };
 
@@ -501,19 +529,37 @@ export default function UniversalDetailPanel({
   // Helper function for badge colors (example, adjust as needed)
   const getStatusColor = (value) => {
     const lowerValue = value ? String(value).toLowerCase() : '';
-    if (lowerValue.includes('open') || lowerValue.includes('new') || lowerValue.includes('pending') || lowerValue.includes('scheduled')) {
-      return "bg-blue-600 text-blue-50 hover:bg-blue-700";
+    if (
+      lowerValue.includes('open') ||
+      lowerValue.includes('new') ||
+      lowerValue.includes('pending') ||
+      lowerValue.includes('scheduled')
+    ) {
+      return 'bg-blue-600 text-blue-50 hover:bg-blue-700';
     }
-    if (lowerValue.includes('won') || lowerValue.includes('active') || lowerValue.includes('completed') || lowerValue.includes('qualified')) {
-      return "bg-green-600 text-green-50 hover:bg-green-700";
+    if (
+      lowerValue.includes('won') ||
+      lowerValue.includes('active') ||
+      lowerValue.includes('completed') ||
+      lowerValue.includes('qualified')
+    ) {
+      return 'bg-green-600 text-green-50 hover:bg-green-700';
     }
-    if (lowerValue.includes('lost') || lowerValue.includes('cancelled') || lowerValue.includes('declined')) {
-      return "bg-red-600 text-red-50 hover:bg-red-700";
+    if (
+      lowerValue.includes('lost') ||
+      lowerValue.includes('cancelled') ||
+      lowerValue.includes('declined')
+    ) {
+      return 'bg-red-600 text-red-50 hover:bg-red-700';
     }
-    if (lowerValue.includes('meeting') || lowerValue.includes('contacted') || lowerValue.includes('in progress')) {
-      return "bg-purple-600 text-purple-50 hover:bg-purple-700";
+    if (
+      lowerValue.includes('meeting') ||
+      lowerValue.includes('contacted') ||
+      lowerValue.includes('in progress')
+    ) {
+      return 'bg-purple-600 text-purple-50 hover:bg-purple-700';
     }
-    return "bg-slate-700 text-slate-200 border-slate-600 hover:bg-slate-600"; // Default
+    return 'bg-slate-700 text-slate-200 border-slate-600 hover:bg-slate-600'; // Default
   };
 
   // Render "Contact Information" section (from outline)
@@ -526,11 +572,14 @@ export default function UniversalDetailPanel({
           <Mail className="w-4 h-4 text-slate-400" />
           <div>
             <Label className="text-xs text-slate-500">Email</Label>
-            <a href={`mailto:${entity.email}`} className="text-blue-400 hover:text-blue-300 text-base block">
+            <a
+              href={`mailto:${entity.email}`}
+              className="text-blue-400 hover:text-blue-300 text-base block"
+            >
               {entity.email}
             </a>
           </div>
-        </div>
+        </div>,
       );
     }
 
@@ -540,11 +589,14 @@ export default function UniversalDetailPanel({
           <Phone className="w-4 h-4 text-slate-400" />
           <div>
             <Label className="text-xs text-slate-500">Phone</Label>
-            <a href={`tel:${entity.phone}`} className="text-blue-400 hover:text-blue-300 text-base block">
+            <a
+              href={`tel:${entity.phone}`}
+              className="text-blue-400 hover:text-blue-300 text-base block"
+            >
               {entity.phone}
             </a>
           </div>
-        </div>
+        </div>,
       );
     }
 
@@ -554,11 +606,14 @@ export default function UniversalDetailPanel({
           <Phone className="w-4 h-4 text-slate-400" />
           <div>
             <Label className="text-xs text-slate-500">Mobile</Label>
-            <a href={`tel:${entity.mobile}`} className="text-blue-400 hover:text-blue-300 text-base block">
+            <a
+              href={`tel:${entity.mobile}`}
+              className="text-blue-400 hover:text-blue-300 text-base block"
+            >
               {entity.mobile}
             </a>
           </div>
-        </div>
+        </div>,
       );
     }
 
@@ -567,9 +622,7 @@ export default function UniversalDetailPanel({
     return (
       <div>
         <h3 className="text-sm font-semibold text-slate-400 uppercase mb-4">Contact Information</h3>
-        <div className="space-y-3">
-          {infoFields}
-        </div>
+        <div className="space-y-3">{infoFields}</div>
       </div>
     );
   };
@@ -586,11 +639,9 @@ export default function UniversalDetailPanel({
 
         detailFields.push(
           <div key={`display-${label}`} className="grid grid-cols-2 gap-4 items-center">
-            <Label className="text-slate-400">{ label}</Label>
-            <div className="text-base text-slate-200 font-medium">
-              {value}
-            </div>
-          </div>
+            <Label className="text-slate-400">{label}</Label>
+            <div className="text-base text-slate-200 font-medium">{value}</div>
+          </div>,
         );
       });
     }
@@ -642,13 +693,22 @@ export default function UniversalDetailPanel({
     standardFields.forEach(({ key, label, isLink, isCurrency, isPercent, isDate }) => {
       // Check if the entity has the key and its value is not null/undefined
       // Also, ensure displayData doesn't already provide a custom field for this label
-      if (entity[key] !== undefined && entity[key] !== null && entity[key] !== '' && !Object.keys(displayData).includes(label)) {
+      if (
+        entity[key] !== undefined &&
+        entity[key] !== null &&
+        entity[key] !== '' &&
+        !Object.keys(displayData).includes(label)
+      ) {
         let value = entity[key];
-        
+
         // Format specific fields based on metadata
         if (isCurrency && (typeof value === 'number' || !isNaN(parseFloat(value)))) {
           const numValue = typeof value === 'number' ? value : parseFloat(value);
-          value = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(numValue);
+          value = new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: 'USD',
+            maximumFractionDigits: 0,
+          }).format(numValue);
         } else if (isPercent && (typeof value === 'number' || !isNaN(parseFloat(value)))) {
           value = `${value}%`;
         } else if (isDate) {
@@ -660,15 +720,18 @@ export default function UniversalDetailPanel({
         } else if (isLink && typeof value === 'string') {
           const href = value.startsWith('http') ? value : `https://${value}`;
           value = (
-            <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 hover:underline">
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-400 hover:text-blue-300 hover:underline"
+            >
               {value}
             </a>
           );
         } else if (['status', 'stage', 'priority', 'type'].includes(key)) {
           value = (
-            <Badge className={getStatusColor(value)}>
-              {String(value).replace(/_/g, ' ')}
-            </Badge>
+            <Badge className={getStatusColor(value)}>{String(value).replace(/_/g, ' ')}</Badge>
           );
         } else if (typeof value === 'string') {
           value = String(value).replace(/_/g, ' ');
@@ -677,10 +740,8 @@ export default function UniversalDetailPanel({
         detailFields.push(
           <div key={`entity-${key}`} className="grid grid-cols-2 gap-4 items-center">
             <Label className="text-slate-400">{label}</Label>
-            <div className="text-base text-slate-200 font-medium">
-              {value}
-            </div>
-          </div>
+            <div className="text-base text-slate-200 font-medium">{value}</div>
+          </div>,
         );
       }
     });
@@ -690,18 +751,15 @@ export default function UniversalDetailPanel({
     return (
       <div>
         <h3 className="text-sm font-semibold text-slate-400 uppercase mb-4">Details</h3>
-        <div className="space-y-3">
-          {detailFields}
-        </div>
+        <div className="space-y-3">{detailFields}</div>
       </div>
     );
   };
 
-
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent 
-        side="right" 
+      <SheetContent
+        side="right"
         className="!w-1/2 !max-w-none bg-slate-900 text-slate-100 border-l border-slate-700 overflow-y-auto"
         style={{ width: '50%' }}
         onPointerDownOutside={(e) => {
@@ -722,27 +780,33 @@ export default function UniversalDetailPanel({
         <SheetHeader className="border-b border-slate-700 pb-4">
           <div className="flex items-start justify-between">
             <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-slate-700 text-slate-300">
+              <div
+                className="p-2 rounded-lg text-slate-200"
+                style={{
+                  backgroundColor:
+                    'color-mix(in srgb, var(--primary-color) 18%, var(--color-slate-800))',
+                }}
+              >
                 {getIcon()}
               </div>
               <div>
                 <SheetTitle className="text-2xl font-bold text-slate-100">{getTitle()}</SheetTitle>
-                {getSubtitle() && (
-                  <p className="text-sm text-slate-300 mt-1">{getSubtitle()}</p>
-                )}
+                {getSubtitle() && <p className="text-sm text-slate-300 mt-1">{getSubtitle()}</p>}
                 {entity.job_title && (
                   <p className="text-sm text-slate-400 mt-1">{entity.job_title}</p>
                 )}
                 {/* For B2C leads or contacts, show company. For B2B leads, company is already in title */}
-                {entity.company && !(entityType === 'lead' && (entity.lead_type === 'b2b' || entity.lead_type === 'B2B')) && (
-                  <p className="text-sm text-slate-400 mt-1">{entity.company}</p>
-                )}
+                {entity.company &&
+                  !(
+                    entityType === 'lead' &&
+                    (entity.lead_type === 'b2b' || entity.lead_type === 'B2B')
+                  ) && <p className="text-sm text-slate-400 mt-1">{entity.company}</p>}
                 {entity.unique_id && !entity.job_title && !entity.company && (
                   <p className="text-sm text-slate-500 mt-1">ID: {entity.unique_id}</p>
                 )}
               </div>
             </div>
-            
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="text-slate-400 hover:text-slate-200">
@@ -750,11 +814,14 @@ export default function UniversalDetailPanel({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="bg-slate-800 border-slate-700">
-                <DropdownMenuItem onClick={() => onEdit?.(entity)} className="text-slate-200 hover:bg-slate-700 cursor-pointer">
+                <DropdownMenuItem
+                  onClick={() => onEdit?.(entity)}
+                  className="text-slate-200 hover:bg-slate-700 cursor-pointer"
+                >
                   <Edit className="w-4 h-4 mr-2" />
                   Edit
                 </DropdownMenuItem>
-                
+
                 {customActions.map((action, idx) => (
                   <DropdownMenuItem
                     key={idx}
@@ -765,7 +832,7 @@ export default function UniversalDetailPanel({
                     {action.label}
                   </DropdownMenuItem>
                 ))}
-                
+
                 <DropdownMenuItem
                   onClick={() => onDelete?.(entity.id)}
                   className="text-red-400 hover:bg-red-900/20 cursor-pointer"
@@ -778,7 +845,7 @@ export default function UniversalDetailPanel({
           </div>
         </SheetHeader>
 
-        <div className="space-y-6 p-6">
+        <div className="p-6 divide-y divide-slate-700/50 [&>*]:py-5 [&>*:first-child]:pt-0 [&>*:last-child]:pb-0">
           {/* Contact Information Section */}
           {renderContactInfo()}
 
@@ -796,7 +863,9 @@ export default function UniversalDetailPanel({
                   {entity.address_2 && <div>{entity.address_2}</div>}
                   {(entity.city || entity.state || entity.zip) && (
                     <div>
-                      {entity.city}{entity.city && (entity.state || entity.zip) && ', '}{entity.state} {entity.zip}
+                      {entity.city}
+                      {entity.city && (entity.state || entity.zip) && ', '}
+                      {entity.state} {entity.zip}
                     </div>
                   )}
                   {entity.country && <div>{entity.country}</div>}
@@ -827,9 +896,7 @@ export default function UniversalDetailPanel({
           {entity.description && (
             <div>
               <div className="flex items-center gap-2 mb-3">
-                <h3 className="text-sm font-semibold text-slate-400 uppercase">
-                  Description
-                </h3>
+                <h3 className="text-sm font-semibold text-slate-400 uppercase">Description</h3>
                 <span className="text-xs text-slate-500 italic">— What is this about?</span>
               </div>
               <div className="text-base text-slate-300 bg-slate-800 rounded-lg p-4 border border-slate-700 whitespace-pre-wrap">
@@ -854,7 +921,7 @@ export default function UniversalDetailPanel({
               ))}
             </div>
           )}
-          
+
           {/* Related Contacts Section - IMPROVED */}
           {entityType === 'account' && (
             <div className="border-t border-slate-700 pt-6">
@@ -885,7 +952,10 @@ export default function UniversalDetailPanel({
                               {contact.first_name} {contact.last_name}
                             </span>
                             {contact.job_title && (
-                              <Badge variant="outline" className="text-xs bg-slate-700 text-slate-300 border-slate-600">
+                              <Badge
+                                variant="outline"
+                                className="text-xs bg-slate-700 text-slate-300 border-slate-600"
+                              >
                                 {contact.job_title}
                               </Badge>
                             )}
@@ -895,7 +965,7 @@ export default function UniversalDetailPanel({
                           {contact.phone && (
                             <div className="flex items-center gap-2 text-base">
                               <Phone className="w-4 h-4 text-slate-400" />
-                              <a 
+                              <a
                                 href={`tel:${contact.phone}`}
                                 className="text-blue-400 hover:text-blue-300"
                                 onClick={(e) => e.stopPropagation()} // Prevent sheet from closing/re-rendering
@@ -909,7 +979,7 @@ export default function UniversalDetailPanel({
                           {contact.email && (
                             <div className="flex items-center gap-2 text-base">
                               <Mail className="w-4 h-4 text-slate-400" />
-                              <a 
+                              <a
                                 href={`mailto:${contact.email}`}
                                 className="text-blue-400 hover:text-blue-300"
                                 onClick={(e) => e.stopPropagation()} // Prevent sheet from closing/re-rendering
@@ -924,7 +994,7 @@ export default function UniversalDetailPanel({
                             <div className="flex items-center gap-2 text-base">
                               <Phone className="w-4 h-4 text-slate-400" />
                               <span className="text-slate-400 text-xs mr-1">Mobile:</span>
-                              <a 
+                              <a
                                 href={`tel:${contact.mobile}`}
                                 className="text-blue-400 hover:text-blue-300"
                                 onClick={(e) => e.stopPropagation()} // Prevent sheet from closing/re-rendering
@@ -963,7 +1033,9 @@ export default function UniversalDetailPanel({
           {/* Recent Activities Section - New from outline */}
           {activities.length > 0 && (
             <div>
-              <h3 className="text-sm font-semibold text-slate-400 uppercase mb-4">Recent Activities</h3>
+              <h3 className="text-sm font-semibold text-slate-400 uppercase mb-4">
+                Recent Activities
+              </h3>
               <div className="space-y-2">
                 {activities.slice(0, 5).map((activity) => (
                   <button
@@ -971,12 +1043,12 @@ export default function UniversalDetailPanel({
                     onClick={() => handleViewActivity(activity)}
                     className="w-full flex items-start gap-3 p-3 rounded-lg bg-slate-800/50 hover:bg-slate-800 border border-slate-700 text-left transition-colors"
                   >
-                    <div className="mt-0.5">
-                      {getActivityIcon(activity.type)}
-                    </div>
+                    <div className="mt-0.5">{getActivityIcon(activity.type)}</div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium text-slate-200 text-base">{activity.subject}</span>
+                        <span className="font-medium text-slate-200 text-base">
+                          {activity.subject}
+                        </span>
                         <Badge className={getStatusColor(activity.status)}>
                           {activity.type.replace(/_/g, ' ')}
                         </Badge>
@@ -987,7 +1059,9 @@ export default function UniversalDetailPanel({
                         </p>
                       )}
                       <p className="text-sm text-slate-500 mt-1">
-                        {activity.created_date ? format(new Date(activity.created_date), 'MMM d, yyyy') : 'N/A'}
+                        {activity.created_date
+                          ? format(new Date(activity.created_date), 'MMM d, yyyy')
+                          : 'N/A'}
                       </p>
                     </div>
                   </button>
@@ -995,7 +1069,7 @@ export default function UniversalDetailPanel({
               </div>
             </div>
           )}
-        
+
           {/* Custom Sections - Kept as is */}
           {customSections && customSections.length > 0 && (
             <div className="space-y-4">
@@ -1007,9 +1081,7 @@ export default function UniversalDetailPanel({
                       {section.title}
                     </h3>
                   )}
-                  <div>
-                    {section.content}
-                  </div>
+                  <div>{section.content}</div>
                 </div>
               ))}
             </div>
@@ -1022,7 +1094,7 @@ export default function UniversalDetailPanel({
                 <h3 className="text-sm font-semibold text-slate-400 uppercase">Notes & Activity</h3>
                 <span className="text-xs text-slate-500 italic">— What happened?</span>
               </div>
-              
+
               {/* Add Note Form */}
               <div className="space-y-3 mb-4 p-4 border border-slate-700 rounded-lg bg-slate-800">
                 <Input
@@ -1049,7 +1121,10 @@ export default function UniversalDetailPanel({
                           General
                         </div>
                       </SelectItem>
-                      <SelectItem value="call_log" className="hover:bg-slate-700 focus:bg-slate-700">
+                      <SelectItem
+                        value="call_log"
+                        className="hover:bg-slate-700 focus:bg-slate-700"
+                      >
                         <div className="flex items-center gap-2">
                           <PhoneCall className="w-4 h-4 text-slate-400" />
                           Call Log
@@ -1073,13 +1148,19 @@ export default function UniversalDetailPanel({
                           Task
                         </div>
                       </SelectItem>
-                      <SelectItem value="follow_up" className="hover:bg-slate-700 focus:bg-slate-700">
+                      <SelectItem
+                        value="follow_up"
+                        className="hover:bg-slate-700 focus:bg-slate-700"
+                      >
                         <div className="flex items-center gap-2">
                           <CheckCircle className="w-4 h-4 text-slate-400" />
                           Follow-up
                         </div>
                       </SelectItem>
-                      <SelectItem value="important" className="hover:bg-slate-700 focus:bg-slate-700">
+                      <SelectItem
+                        value="important"
+                        className="hover:bg-slate-700 focus:bg-slate-700"
+                      >
                         <div className="flex items-center gap-2">
                           <Star className="w-4 h-4 text-slate-400" />
                           Important
@@ -1091,7 +1172,10 @@ export default function UniversalDetailPanel({
                           Demo
                         </div>
                       </SelectItem>
-                      <SelectItem value="proposal" className="hover:bg-slate-700 focus:bg-slate-700">
+                      <SelectItem
+                        value="proposal"
+                        className="hover:bg-slate-700 focus:bg-slate-700"
+                      >
                         <div className="flex items-center gap-2">
                           <ClipboardCheck className="w-4 h-4 text-slate-400" />
                           Proposal
@@ -1102,18 +1186,22 @@ export default function UniversalDetailPanel({
                   <Button
                     onClick={handleSaveNote}
                     disabled={isSavingNote || !newNoteContent.trim()}
-                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                    className="text-white"
+                    style={{
+                      backgroundColor: 'var(--primary-color)',
+                      opacity: isSavingNote || !newNoteContent.trim() ? 0.5 : 1,
+                    }}
                   >
-                    {isSavingNote ? "Saving..." : editingNote ? "Update Note" : "Add Note"}
+                    {isSavingNote ? 'Saving...' : editingNote ? 'Update Note' : 'Add Note'}
                   </Button>
                   {editingNote && (
                     <Button
                       variant="ghost"
                       onClick={() => {
                         setEditingNote(null);
-                        setNewNoteTitle("");
-                        setNewNoteContent("");
-                        setNewNoteType("general");
+                        setNewNoteTitle('');
+                        setNewNoteContent('');
+                        setNewNoteType('general');
                       }}
                       className="text-slate-400 hover:bg-slate-700"
                     >
@@ -1121,10 +1209,11 @@ export default function UniversalDetailPanel({
                     </Button>
                   )}
                 </div>
-                {newNoteType !== "general" && (
+                {newNoteType !== 'general' && (
                   <p className="text-xs text-amber-400 flex items-center gap-1 mt-2">
                     <Star className="w-3 h-3" />
-                    This will also create an Activity record of type &quot;{mapNoteTypeToActivityType(newNoteType)}&quot;
+                    This will also create an Activity record of type &quot;
+                    {mapNoteTypeToActivityType(newNoteType)}&quot;
                   </p>
                 )}
               </div>
@@ -1147,7 +1236,10 @@ export default function UniversalDetailPanel({
                         <div className="flex items-center gap-2">
                           {getNoteTypeIcon(note.type || note.metadata?.type || 'general')}
                           <span className="font-medium text-slate-200">{note.title}</span>
-                          <Badge variant="secondary" className="text-xs bg-slate-700 text-slate-300 border-slate-600">
+                          <Badge
+                            variant="secondary"
+                            className="text-xs bg-slate-700 text-slate-300 border-slate-600"
+                          >
                             {(note.type || note.metadata?.type || 'general').replace(/_/g, ' ')}
                           </Badge>
                         </div>
@@ -1182,7 +1274,10 @@ export default function UniversalDetailPanel({
                       </div>
                       <p className="text-sm text-slate-300 whitespace-pre-wrap">{note.content}</p>
                       <p className="text-xs text-slate-500 mt-2">
-                        {note.created_date ? format(new Date(note.created_date), 'MMM d, yyyy HH:mm') : 'N/A'} by {note.created_by || 'Unknown'}
+                        {note.created_date
+                          ? format(new Date(note.created_date), 'MMM d, yyyy HH:mm')
+                          : 'N/A'}{' '}
+                        by {note.created_by || 'Unknown'}
                       </p>
                     </div>
                   ))}
