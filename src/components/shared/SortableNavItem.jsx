@@ -1,13 +1,13 @@
-import React from "react";
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { Link } from "react-router-dom";
-import { GripVertical } from "lucide-react";
-import { useLoadingToast } from "@/hooks/useLoadingToast";
+import React from 'react';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { Link } from 'react-router-dom';
+import { GripVertical } from 'lucide-react';
+import { useLoadingToast } from '@/hooks/useLoadingToast';
 
 /**
  * SortableNavItem - A draggable navigation item using @dnd-kit
- * 
+ *
  * @param {Object} props
  * @param {Object} props.item - Navigation item with href, icon, label
  * @param {boolean} props.isActive - Whether this item is currently active
@@ -15,23 +15,12 @@ import { useLoadingToast } from "@/hooks/useLoadingToast";
  * @param {Function} props.onNavClick - Callback when nav item is clicked
  * @param {boolean} props.isDragMode - Whether drag mode is enabled (shows grip handles)
  */
-export function SortableNavItem({
-  item,
-  isActive,
-  createPageUrl,
-  onNavClick,
-  isDragMode = false,
-}) {
+export function SortableNavItem({ item, isActive, createPageUrl, onNavClick, isDragMode = false }) {
   const loadingToast = useLoadingToast();
 
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: item.href });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.href,
+  });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -56,7 +45,7 @@ export function SortableNavItem({
     <li
       ref={setNodeRef}
       style={style}
-      className={`${isDragging ? "bg-slate-700 rounded-lg shadow-lg" : ""}`}
+      className={`${isDragging ? 'bg-slate-700 rounded-lg shadow-lg' : ''}`}
     >
       <div className="flex items-center">
         {/* Drag handle - only visible in drag mode */}
@@ -75,32 +64,27 @@ export function SortableNavItem({
         <Link
           to={createPageUrl(item.href)}
           data-testid={`nav-${item.href.toLowerCase()}`}
-          className={`flex-1 flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-base font-medium ${
+          className={`flex-1 flex items-center gap-2.5 px-3 py-2 rounded-md transition-all duration-150 text-sm ${
             isActive
-              ? "shadow-lg nav-active"
-              : "text-slate-400 hover:bg-slate-800 hover:text-slate-300"
+              ? 'font-semibold bg-white/[0.07] border-l-[3px]'
+              : 'font-medium text-slate-400 hover:bg-white/[0.04] hover:text-slate-200'
           }`}
           onClick={handleClick}
           style={
             isActive
               ? {
-                  backgroundColor: "var(--primary-color)",
-                  color: "var(--on-primary-text)",
+                  borderLeftColor: 'var(--primary-color)',
+                  paddingLeft: 'calc(0.75rem - 3px)',
+                  color: '#f1f5f9',
                 }
               : {}
           }
         >
           <Icon
-            className={`w-5 h-5 ${isActive ? "" : "text-slate-400"}`}
-            style={
-              isActive
-                ? {
-                    color: "var(--on-primary-text)",
-                  }
-                : {}
-            }
+            className="w-4 h-4 flex-shrink-0"
+            style={{ color: isActive ? 'var(--primary-color)' : undefined }}
           />
-          <span className="text-lg">{item.label}</span>
+          <span>{item.label}</span>
         </Link>
       </div>
     </li>

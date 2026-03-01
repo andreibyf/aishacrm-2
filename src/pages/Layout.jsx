@@ -2595,14 +2595,14 @@ function Layout({ children, currentPageName }) {
   const SidebarContent = ({ onNavClick }) => (
     <div className="flex flex-col h-full bg-slate-900 border-r border-slate-800">
       <div
-        className="border-b border-slate-800 px-4 py-2 flex flex-col items-center"
+        className="border-b border-slate-800 px-4 py-4 flex flex-col items-center"
         data-testid="sidebar-header"
       >
         {logoUrl ? (
           <img
             src={displayedLogoUrl}
             alt={companyName}
-            className="h-20 w-auto max-w-[180px] object-contain"
+            className="h-16 w-auto max-w-[160px] object-contain"
             onError={(e) => {
               // Hard fallback to global app logo so branding is always visible
               try {
@@ -2747,20 +2747,21 @@ function Layout({ children, currentPageName }) {
                       to={createPageUrl(item.href)}
                       data-testid={`nav-${item.href.toLowerCase()}`}
                       className={`flex-1 flex items-center ${
-                        item.isAvatar ? 'justify-center' : 'gap-3'
-                      } px-3 py-2.5 rounded-lg transition-all text-base font-medium ${
+                        item.isAvatar ? 'justify-center' : 'gap-2.5'
+                      } px-3 py-2 rounded-md transition-all duration-150 text-sm ${
                         currentPageName === item.href
                           ? item.isAvatar
                             ? 'bg-transparent'
-                            : 'shadow-lg nav-active'
-                          : 'text-slate-400 hover:bg-slate-800 hover:text-slate-300'
+                            : 'font-semibold bg-white/[0.07] border-l-[3px]'
+                          : 'font-medium text-slate-400 hover:bg-white/[0.04] hover:text-slate-200'
                       }`}
                       onClick={onNavClick}
                       style={
                         currentPageName === item.href && !item.isAvatar
                           ? {
-                              backgroundColor: 'var(--primary-color)',
-                              color: 'var(--on-primary-text)',
+                              borderLeftColor: 'var(--primary-color)',
+                              paddingLeft: 'calc(0.75rem - 3px)',
+                              color: '#f1f5f9',
                             }
                           : {}
                       }
@@ -2798,16 +2799,11 @@ function Layout({ children, currentPageName }) {
                         </div>
                       ) : (
                         <item.icon
-                          className={`w-5 h-5 ${
-                            currentPageName === item.href ? '' : 'text-slate-400'
-                          }`}
-                          style={
-                            currentPageName === item.href
-                              ? {
-                                  color: 'var(--on-primary-text)',
-                                }
-                              : {}
-                          }
+                          className="w-4 h-4 flex-shrink-0"
+                          style={{
+                            color:
+                              currentPageName === item.href ? 'var(--primary-color)' : undefined,
+                          }}
                         />
                       )}
 
@@ -2865,6 +2861,20 @@ function Layout({ children, currentPageName }) {
           * {
             min-width: 0; /* Prevent flex items from overflowing */
           }
+
+          /* ---------- CARD DEPTH ---------- */
+          /* Add subtle depth to content cards for visual layering */
+          .theme-dark main .bg-slate-800 {
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.25), 0 1px 2px -1px rgba(0, 0, 0, 0.2);
+          }
+          .theme-light main .bg-slate-800 {
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+          }
+
+          /* ---------- SPINNER COLOR STANDARDIZATION ---------- */
+          /* Unify loading spinner color across all pages to match brand accent */
+          .animate-spin[class*="text-blue-"] { color: var(--primary-color, #06b6d4) !important; }
+          .animate-spin[class*="text-purple-"] { color: var(--primary-color, #06b6d4) !important; }
 
           /* ------------ WIDTH STANDARDIZATION (match Activities) ------------ */
 
@@ -3661,29 +3671,8 @@ function Layout({ children, currentPageName }) {
       <div className="lg:pl-64">
         <header
           data-testid="app-header"
-          className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-x-4 border-b border-slate-800 bg-slate-900 px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8"
+          className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-x-4 border-b border-slate-800 bg-slate-900/95 backdrop-blur-sm px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8"
         >
-          {/* Removed AI Command brain button */}
-          {/* THEME TOGGLE BUTTON */}
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={toggleTheme}
-                  className="text-slate-400 hover:text-slate-300 hover:bg-slate-800"
-                  aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-                >
-                  {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent className="bg-slate-800 border-slate-700 text-slate-200">
-                <p>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
           <div className="flex flex-1 items-center justify-end gap-3 lg:gap-4">
             <div className="flex max-w-[520px] items-center justify-center gap-2 rounded-2xl border border-white/10 bg-slate-900/70 px-2.5 py-1 shadow-inner shadow-slate-950/30">
               <AiAssistantLauncher
@@ -3713,6 +3702,27 @@ function Layout({ children, currentPageName }) {
 
             {/* DEFERRED: mount notifications after initial load to reduce rate-limit hits */}
             {showNotificationsWidget ? <NotificationPanel user={user} /> : null}
+
+            {/* THEME TOGGLE BUTTON */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={toggleTheme}
+                    className="text-slate-400 hover:text-slate-300 hover:bg-slate-800"
+                    aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                  >
+                    {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="bg-slate-800 border-slate-700 text-slate-200">
+                  <p>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
             <div className="hidden lg:block lg:h-6 lg:w-px lg:bg-slate-700" aria-hidden="true" />
             <UserNav user={user} handleLogout={handleLogout} createPageUrl={createPageUrl} />
           </div>
