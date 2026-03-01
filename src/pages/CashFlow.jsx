@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from 'react';
 import { CashFlow } from '@/api/entities';
 import { Account } from '@/api/entities';
@@ -23,7 +22,7 @@ import { Plus, Loader2 } from 'lucide-react';
 import { useLogger } from '../components/shared/Logger';
 
 function ensurePlain(obj) {
-  if (obj && typeof obj === "object" && typeof obj.hasOwnProperty !== "function") {
+  if (obj && typeof obj === 'object' && typeof obj.hasOwnProperty !== 'function') {
     return JSON.parse(JSON.stringify(obj));
   }
   return obj;
@@ -38,7 +37,7 @@ function CashFlowPage() {
   const [filters, setFilters] = useState({
     searchTerm: '',
     type: 'all',
-    period: 'month'
+    period: 'month',
   });
   const [showForm, setShowForm] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
@@ -50,20 +49,23 @@ function CashFlowPage() {
   useEffect(() => {
     const loadStaticData = async () => {
       if (!currentUser) return;
-      
+
       try {
         const tenantFilter = getTenantFilter(currentUser, selectedTenantId);
-        
+
         // Guard: Don't load if no tenant_id for superadmin (must select a tenant first)
-        if ((currentUser.role === 'superadmin' || currentUser.role === 'admin') && !tenantFilter?.tenant_id) {
+        if (
+          (currentUser.role === 'superadmin' || currentUser.role === 'admin') &&
+          !tenantFilter?.tenant_id
+        ) {
           if (import.meta.env.DEV) {
-            console.log("[CashFlow] Skipping data load - no tenant selected");
+            console.log('[CashFlow] Skipping data load - no tenant selected');
           }
           setAccounts([]);
           setOpportunities([]);
           return;
         }
-        
+
         const [accountsData, opportunitiesData] = await Promise.all([
           Account.filter(tenantFilter),
           Opportunity.filter(tenantFilter),
@@ -72,7 +74,7 @@ function CashFlowPage() {
         setOpportunities(opportunitiesData || []);
         logger.info('Static data (accounts, opportunities) loaded', 'CashFlowPage', {
           accountsCount: accountsData?.length || 0,
-          opportunitiesCount: opportunitiesData?.length || 0
+          opportunitiesCount: opportunitiesData?.length || 0,
         });
       } catch (error) {
         logger.error('Failed to load static data', 'CashFlowPage', { error: error.message });
@@ -87,11 +89,11 @@ function CashFlowPage() {
     setLoading(true);
     try {
       const tenantFilter = getTenantFilter(currentUser, selectedTenantId);
-      
+
       if (!tenantFilter || !tenantFilter.tenant_id) {
         logger.warning('No tenant context available for CashFlow', 'CashFlowPage', {
           userId: currentUser.email,
-          selectedTenantId
+          selectedTenantId,
         });
         setTransactions([]);
         setLoading(false);
@@ -108,14 +110,14 @@ function CashFlowPage() {
       }
 
       const data = await CashFlow.filter(combinedFilter, '-transaction_date');
-      
+
       const sanitized = Array.isArray(data) ? data.map(ensurePlain) : [];
       setTransactions(sanitized);
-      
+
       logger.info('Cash flow transactions loaded', 'CashFlowPage', {
         count: sanitized.length,
         tenantId: tenantFilter.tenant_id,
-        filters: filters
+        filters: filters,
       });
     } catch (error) {
       logger.error('Failed to fetch cash flow transactions', 'CashFlowPage', {
@@ -123,7 +125,7 @@ function CashFlowPage() {
         stack: error.stack,
         userId: currentUser?.id,
         selectedTenantId,
-        filters
+        filters,
       });
       setTransactions([]);
     } finally {
@@ -151,13 +153,15 @@ function CashFlowPage() {
     if (window.confirm('Are you sure you want to delete this transaction?')) {
       try {
         await CashFlow.delete(id);
-        logger.info('Cash flow transaction deleted successfully', 'CashFlowPage', { transactionId: id });
+        logger.info('Cash flow transaction deleted successfully', 'CashFlowPage', {
+          transactionId: id,
+        });
         await fetchTransactions();
       } catch (error) {
         logger.error('Failed to delete transaction', 'CashFlowPage', {
           error: error.message,
           transactionId: id,
-          stack: error.stack
+          stack: error.stack,
         });
       }
     }
@@ -178,28 +182,28 @@ function CashFlowPage() {
 
   const calculateSummary = (data) => {
     const sanitizedData = Array.isArray(data) ? data.map(ensurePlain) : [];
-    
+
     let totalIncome = 0;
     let totalExpenses = 0;
-    
+
     for (let i = 0; i < sanitizedData.length; i++) {
       const transaction = sanitizedData[i];
       if (!transaction) continue;
-      
+
       const type = transaction['transaction_type'];
       const amount = parseFloat(transaction['amount']) || 0;
-      
+
       if (type === 'income') {
         totalIncome += amount;
       } else if (type === 'expense') {
         totalExpenses += amount;
       }
     }
-    
+
     return {
       totalIncome,
       totalExpenses,
-      netCashFlow: totalIncome - totalExpenses
+      netCashFlow: totalIncome - totalExpenses,
     };
   };
 
@@ -209,25 +213,22 @@ function CashFlowPage() {
 
   if (loading && !currentUser) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin" />
-        <span className="ml-2">Loading...</span>
+      <div className="flex items-center justify-center h-64 bg-slate-900 min-h-screen">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+        <span className="ml-2 text-slate-400">Loading...</span>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-4 lg:p-6 bg-slate-900 min-h-screen text-slate-100 space-y-6">
       <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-3xl font-bold">Cash Flow Management</h1>
-          <p className="text-slate-600 mt-2">Track income, expenses, and financial performance</p>
+          <h1 className="text-2xl lg:text-3xl font-bold text-slate-100">Cash Flow Management</h1>
+          <p className="text-slate-400 mt-2">Track income, expenses, and financial performance</p>
         </div>
         <div className="flex gap-3">
-          <Button 
-            onClick={handleAddTransaction}
-            className="bg-green-600 hover:bg-green-700"
-          >
+          <Button onClick={handleAddTransaction} className="bg-green-600 hover:bg-green-700">
             <Plus className="w-4 h-4 mr-2" />
             Add Transaction
           </Button>
@@ -235,7 +236,7 @@ function CashFlowPage() {
       </div>
 
       <CashFlowSummary summary={safeSummary} />
-      
+
       <CashFlowChart transactions={safeTransactions} />
 
       <div className="bg-slate-800 border-slate-700 rounded-lg p-6">
@@ -290,16 +291,17 @@ function CashFlowPage() {
           ) : safeTransactions.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-slate-400 mb-4">No transactions found</p>
-              <Button onClick={handleAddTransaction}>
-                Add Your First Transaction
-              </Button>
+              <Button onClick={handleAddTransaction}>Add Your First Transaction</Button>
             </div>
           ) : (
             <div className="space-y-2">
               {safeTransactions.map((transaction, index) => {
                 const t = ensurePlain(transaction);
                 return (
-                  <div key={t['id'] || index} className="flex items-center justify-between p-4 bg-slate-700/50 rounded-lg">
+                  <div
+                    key={t['id'] || index}
+                    className="flex items-center justify-between p-4 bg-slate-700/50 rounded-lg"
+                  >
                     <div className="flex-1">
                       <p className="font-medium text-slate-200">{t['description']}</p>
                       <p className="text-sm text-slate-400">{t['category']}</p>
@@ -308,19 +310,22 @@ function CashFlowPage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-4">
-                      <span className={`text-lg font-bold ${t['transaction_type'] === 'income' ? 'text-green-400' : 'text-red-400'}`}>
-                        {t['transaction_type'] === 'income' ? '+' : '-'}${Math.abs(parseFloat(t['amount']) || 0).toFixed(2)}
+                      <span
+                        className={`text-lg font-bold ${t['transaction_type'] === 'income' ? 'text-green-400' : 'text-red-400'}`}
+                      >
+                        {t['transaction_type'] === 'income' ? '+' : '-'}$
+                        {Math.abs(parseFloat(t['amount']) || 0).toFixed(2)}
                       </span>
                       <div className="flex gap-2">
-                        <Button 
-                          onClick={() => handleEditTransaction(t)} 
+                        <Button
+                          onClick={() => handleEditTransaction(t)}
                           variant="outline"
                           size="sm"
                         >
                           Edit
                         </Button>
-                        <Button 
-                          onClick={() => handleDeleteTransaction(t['id'])} 
+                        <Button
+                          onClick={() => handleDeleteTransaction(t['id'])}
                           variant="destructive"
                           size="sm"
                         >
@@ -337,7 +342,7 @@ function CashFlowPage() {
       </div>
 
       {showForm && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/80 flex items-center justify-center p-4"
           style={{ zIndex: 9999 }}
           onClick={(e) => {
@@ -346,15 +351,15 @@ function CashFlowPage() {
             }
           }}
         >
-          <div 
-            className="w-full max-w-2xl bg-slate-800 rounded-lg shadow-2xl border border-slate-700" 
+          <div
+            className="w-full max-w-2xl bg-slate-800 rounded-lg shadow-2xl border border-slate-700"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b border-slate-700 flex justify-between items-center">
               <h2 className="text-xl font-bold text-slate-100">
                 {editingTransaction ? 'Edit Transaction' : 'Add Transaction'}
               </h2>
-              <Button 
+              <Button
                 onClick={handleFormClose}
                 variant="ghost"
                 size="sm"

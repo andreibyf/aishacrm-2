@@ -3,30 +3,25 @@
  * Manages construction workers, contractors, and temporary labor pool
  */
 
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { Worker } from "@/api/entities";
-import { useTenant } from "@/components/shared/tenantContext";
-import { useUser } from "@/components/shared/useUser";
-import { useEntityLabel } from "@/components/shared/entityLabelsHooks";
-import { useLoadingToast } from "@/hooks/useLoadingToast";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Worker } from '@/api/entities';
+import { useTenant } from '@/components/shared/tenantContext';
+import { useUser } from '@/components/shared/useUser';
+import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
+import { useLoadingToast } from '@/hooks/useLoadingToast';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -34,7 +29,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from '@/components/ui/dialog';
 import {
   Table,
   TableBody,
@@ -42,7 +37,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from '@/components/ui/table';
 import {
   Plus,
   Search,
@@ -54,21 +49,21 @@ import {
   Mail,
   Award,
   DollarSign,
-} from "lucide-react";
-import { toast } from "sonner";
-import { useConfirmDialog } from "@/components/shared/ConfirmDialog";
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { useConfirmDialog } from '@/components/shared/ConfirmDialog';
 
-// Status badge colors
+// Status badge colors (dark-first — Layout CSS overrides handle light theme)
 const statusColors = {
-  Active: "bg-green-100 text-green-800",
-  Inactive: "bg-gray-100 text-gray-800",
-  Blacklisted: "bg-red-100 text-red-800",
+  Active: 'bg-green-900/30 text-green-400 border-green-700',
+  Inactive: 'bg-slate-700 text-slate-400 border-slate-600',
+  Blacklisted: 'bg-red-900/30 text-red-400 border-red-700',
 };
 
 const workerTypeColors = {
-  Contractor: "bg-blue-100 text-blue-800",
-  "Temp Labor": "bg-purple-100 text-purple-800",
-  Subcontractor: "bg-orange-100 text-orange-800",
+  Contractor: 'bg-blue-900/30 text-blue-400 border-blue-700',
+  'Temp Labor': 'bg-purple-900/30 text-purple-400 border-purple-700',
+  Subcontractor: 'bg-orange-900/30 text-orange-400 border-orange-700',
 };
 
 export default function WorkersPage() {
@@ -83,10 +78,10 @@ export default function WorkersPage() {
   // State
   const [workers, setWorkers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [workerTypeFilter, setWorkerTypeFilter] = useState("all");
-  const [skillFilter, setSkillFilter] = useState("");
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [workerTypeFilter, setWorkerTypeFilter] = useState('all');
+  const [skillFilter, setSkillFilter] = useState('');
 
   // Dialog states
   const [showDialog, setShowDialog] = useState(false);
@@ -95,22 +90,22 @@ export default function WorkersPage() {
 
   // Form state
   const [form, setForm] = useState({
-    first_name: "",
-    last_name: "",
-    email: "",
-    phone: "",
-    worker_type: "Contractor",
-    status: "Active",
-    primary_skill: "",
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone: '',
+    worker_type: 'Contractor',
+    status: 'Active',
+    primary_skill: '',
     skills: [],
     certifications: [],
-    default_pay_rate: "",
-    default_rate_type: "hourly",
-    available_from: "",
-    available_until: "",
-    emergency_contact_name: "",
-    emergency_contact_phone: "",
-    notes: "",
+    default_pay_rate: '',
+    default_rate_type: 'hourly',
+    available_from: '',
+    available_until: '',
+    emergency_contact_name: '',
+    emergency_contact_phone: '',
+    notes: '',
   });
 
   // Load workers
@@ -123,9 +118,9 @@ export default function WorkersPage() {
       setWorkers(data || []);
       loadingToast.showSuccess(`${workersLabel} loading! ✨`);
     } catch (error) {
-      console.error("Failed to load workers:", error);
+      console.error('Failed to load workers:', error);
       loadingToast.showError(`Failed to load ${workersLabel.toLowerCase()}`);
-      toast.error("Failed to load workers");
+      toast.error('Failed to load workers');
     } finally {
       setLoading(false);
     }
@@ -146,18 +141,14 @@ export default function WorkersPage() {
         worker.phone?.includes(searchTerm) ||
         worker.primary_skill?.toLowerCase().includes(searchTerm.toLowerCase());
 
-      const matchesStatus =
-        statusFilter === "all" || worker.status === statusFilter;
+      const matchesStatus = statusFilter === 'all' || worker.status === statusFilter;
 
-      const matchesType =
-        workerTypeFilter === "all" || worker.worker_type === workerTypeFilter;
+      const matchesType = workerTypeFilter === 'all' || worker.worker_type === workerTypeFilter;
 
       const matchesSkill =
         !skillFilter ||
         worker.primary_skill?.toLowerCase().includes(skillFilter.toLowerCase()) ||
-        worker.skills?.some((s) =>
-          s.toLowerCase().includes(skillFilter.toLowerCase())
-        );
+        worker.skills?.some((s) => s.toLowerCase().includes(skillFilter.toLowerCase()));
 
       return matchesSearch && matchesStatus && matchesType && matchesSkill;
     });
@@ -168,42 +159,42 @@ export default function WorkersPage() {
     if (worker) {
       setEditingWorker(worker);
       setForm({
-        first_name: worker.first_name || "",
-        last_name: worker.last_name || "",
-        email: worker.email || "",
-        phone: worker.phone || "",
-        worker_type: worker.worker_type || "Contractor",
-        status: worker.status || "Active",
-        primary_skill: worker.primary_skill || "",
+        first_name: worker.first_name || '',
+        last_name: worker.last_name || '',
+        email: worker.email || '',
+        phone: worker.phone || '',
+        worker_type: worker.worker_type || 'Contractor',
+        status: worker.status || 'Active',
+        primary_skill: worker.primary_skill || '',
         skills: worker.skills || [],
         certifications: worker.certifications || [],
-        default_pay_rate: worker.default_pay_rate || "",
-        default_rate_type: worker.default_rate_type || "hourly",
-        available_from: worker.available_from || "",
-        available_until: worker.available_until || "",
-        emergency_contact_name: worker.emergency_contact_name || "",
-        emergency_contact_phone: worker.emergency_contact_phone || "",
-        notes: worker.notes || "",
+        default_pay_rate: worker.default_pay_rate || '',
+        default_rate_type: worker.default_rate_type || 'hourly',
+        available_from: worker.available_from || '',
+        available_until: worker.available_until || '',
+        emergency_contact_name: worker.emergency_contact_name || '',
+        emergency_contact_phone: worker.emergency_contact_phone || '',
+        notes: worker.notes || '',
       });
     } else {
       setEditingWorker(null);
       setForm({
-        first_name: "",
-        last_name: "",
-        email: "",
-        phone: "",
-        worker_type: "Contractor",
-        status: "Active",
-        primary_skill: "",
+        first_name: '',
+        last_name: '',
+        email: '',
+        phone: '',
+        worker_type: 'Contractor',
+        status: 'Active',
+        primary_skill: '',
         skills: [],
         certifications: [],
-        default_pay_rate: "",
-        default_rate_type: "hourly",
-        available_from: "",
-        available_until: "",
-        emergency_contact_name: "",
-        emergency_contact_phone: "",
-        notes: "",
+        default_pay_rate: '',
+        default_rate_type: 'hourly',
+        available_from: '',
+        available_until: '',
+        emergency_contact_name: '',
+        emergency_contact_phone: '',
+        notes: '',
       });
     }
     setShowDialog(true);
@@ -212,7 +203,7 @@ export default function WorkersPage() {
   // Handle save
   const handleSave = async () => {
     if (!form.first_name || !form.last_name) {
-      toast.error("First name and last name are required");
+      toast.error('First name and last name are required');
       return;
     }
 
@@ -221,9 +212,7 @@ export default function WorkersPage() {
       const payload = {
         ...form,
         tenant_id: effectiveTenantId,
-        default_pay_rate: form.default_pay_rate
-          ? parseFloat(form.default_pay_rate)
-          : null,
+        default_pay_rate: form.default_pay_rate ? parseFloat(form.default_pay_rate) : null,
       };
 
       if (editingWorker) {
@@ -237,10 +226,8 @@ export default function WorkersPage() {
       setShowDialog(false);
       loadWorkers();
     } catch (error) {
-      console.error("Failed to save worker:", error);
-      toast.error(
-        `Failed to ${editingWorker ? "update" : "create"} ${workerLabel.toLowerCase()}`
-      );
+      console.error('Failed to save worker:', error);
+      toast.error(`Failed to ${editingWorker ? 'update' : 'create'} ${workerLabel.toLowerCase()}`);
     } finally {
       setSaving(false);
     }
@@ -251,8 +238,8 @@ export default function WorkersPage() {
     const confirmed = await confirmDialog({
       title: `Delete ${workerLabel}`,
       description: `Are you sure you want to delete ${worker.first_name} ${worker.last_name}? This action cannot be undone.`,
-      confirmText: "Delete",
-      variant: "destructive",
+      confirmText: 'Delete',
+      variant: 'destructive',
     });
 
     if (!confirmed) return;
@@ -262,7 +249,7 @@ export default function WorkersPage() {
       toast.success(`${workerLabel} deleted successfully`);
       loadWorkers();
     } catch (error) {
-      console.error("Failed to delete worker:", error);
+      console.error('Failed to delete worker:', error);
       toast.error(`Failed to delete ${workerLabel.toLowerCase()}`);
     }
   };
@@ -270,46 +257,44 @@ export default function WorkersPage() {
   // Handle array input (skills, certifications)
   const handleArrayInput = (field, value) => {
     const items = value
-      .split(",")
+      .split(',')
       .map((item) => item.trim())
       .filter(Boolean);
     setForm({ ...form, [field]: items });
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 lg:p-6 bg-slate-900 min-h-screen text-slate-100 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
+          <h1 className="text-3xl font-bold flex items-center gap-2 text-slate-100">
             <HardHat className="h-8 w-8" />
             {workersLabel}
           </h1>
-          <p className="text-muted-foreground mt-1">
-            Manage contractors, temp labor, and subcontractors
-          </p>
+          <p className="text-slate-400 mt-1">Manage contractors, temp labor, and subcontractors</p>
         </div>
-        <Button onClick={() => openDialog()}>
+        <Button onClick={() => openDialog()} className="bg-blue-600 hover:bg-blue-700">
           <Plus className="h-4 w-4 mr-2" />
           Add {workerLabel}
         </Button>
       </div>
 
       {/* Filters */}
-      <Card>
+      <Card className="bg-slate-800 border-slate-700">
         <CardContent className="pt-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="relative">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
               <Input
                 placeholder="Search workers..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9"
+                className="pl-9 bg-slate-700 border-slate-600 text-slate-200"
               />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger>
+              <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-200">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
@@ -319,11 +304,8 @@ export default function WorkersPage() {
                 <SelectItem value="Blacklisted">Blacklisted</SelectItem>
               </SelectContent>
             </Select>
-            <Select
-              value={workerTypeFilter}
-              onValueChange={setWorkerTypeFilter}
-            >
-              <SelectTrigger>
+            <Select value={workerTypeFilter} onValueChange={setWorkerTypeFilter}>
+              <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-200">
                 <SelectValue placeholder="Worker Type" />
               </SelectTrigger>
               <SelectContent>
@@ -337,56 +319,60 @@ export default function WorkersPage() {
               placeholder="Filter by skill..."
               value={skillFilter}
               onChange={(e) => setSkillFilter(e.target.value)}
+              className="bg-slate-700 border-slate-600 text-slate-200"
             />
           </div>
         </CardContent>
       </Card>
 
       {/* Workers Table */}
-      <Card>
+      <Card className="bg-slate-800 border-slate-700">
         <CardHeader>
-          <CardTitle>
+          <CardTitle className="text-slate-100">
             {filteredWorkers.length} {filteredWorkers.length === 1 ? workerLabel : workersLabel}
           </CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
             </div>
           ) : filteredWorkers.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
+            <div className="text-center py-8 text-slate-400">
               No {workersLabel.toLowerCase()} found
             </div>
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Contact</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Primary Skill</TableHead>
-                  <TableHead>Pay Rate</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                <TableRow className="border-slate-700 hover:bg-slate-700/50">
+                  <TableHead className="text-slate-300">Name</TableHead>
+                  <TableHead className="text-slate-300">Contact</TableHead>
+                  <TableHead className="text-slate-300">Type</TableHead>
+                  <TableHead className="text-slate-300">Status</TableHead>
+                  <TableHead className="text-slate-300">Primary Skill</TableHead>
+                  <TableHead className="text-slate-300">Pay Rate</TableHead>
+                  <TableHead className="text-right text-slate-300">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredWorkers.map((worker) => (
-                  <TableRow key={worker.id}>
-                    <TableCell className="font-medium">
+                  <TableRow
+                    key={worker.id}
+                    className="hover:bg-slate-700/50 border-b border-slate-800"
+                  >
+                    <TableCell className="font-medium text-slate-200">
                       {worker.first_name} {worker.last_name}
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-1 text-sm">
                         {worker.email && (
-                          <div className="flex items-center gap-1 text-muted-foreground">
+                          <div className="flex items-center gap-1 text-slate-400">
                             <Mail className="h-3 w-3" />
                             {worker.email}
                           </div>
                         )}
                         {worker.phone && (
-                          <div className="flex items-center gap-1 text-muted-foreground">
+                          <div className="flex items-center gap-1 text-slate-400">
                             <Phone className="h-3 w-3" />
                             {worker.phone}
                           </div>
@@ -394,29 +380,29 @@ export default function WorkersPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge className={workerTypeColors[worker.worker_type]}>
+                      <Badge variant="outline" className={workerTypeColors[worker.worker_type]}>
                         {worker.worker_type}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge className={statusColors[worker.status]}>
+                      <Badge variant="outline" className={statusColors[worker.status]}>
                         {worker.status}
                       </Badge>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="text-slate-300">
                       {worker.primary_skill && (
                         <div className="flex items-center gap-1">
-                          <Award className="h-3 w-3 text-muted-foreground" />
+                          <Award className="h-3 w-3 text-slate-400" />
                           {worker.primary_skill}
                         </div>
                       )}
                       {worker.skills?.length > 0 && (
-                        <div className="text-xs text-muted-foreground mt-1">
+                        <div className="text-xs text-slate-500 mt-1">
                           +{worker.skills.length} more
                         </div>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="text-slate-300">
                       {worker.default_pay_rate && (
                         <div className="flex items-center gap-1 text-sm">
                           <DollarSign className="h-3 w-3" />
@@ -430,6 +416,7 @@ export default function WorkersPage() {
                           variant="ghost"
                           size="icon"
                           onClick={() => openDialog(worker)}
+                          className="h-8 w-8 text-slate-400 hover:text-slate-200 hover:bg-slate-700"
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -437,6 +424,7 @@ export default function WorkersPage() {
                           variant="ghost"
                           size="icon"
                           onClick={() => handleDelete(worker)}
+                          className="h-8 w-8 text-slate-400 hover:text-red-400 hover:bg-slate-700"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -452,12 +440,12 @@ export default function WorkersPage() {
 
       {/* Create/Edit Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-800 border-slate-700 text-slate-200">
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className="text-slate-100">
               {editingWorker ? `Edit ${workerLabel}` : `Add ${workerLabel}`}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-slate-400">
               {editingWorker
                 ? `Update ${workerLabel.toLowerCase()} information`
                 : `Add a new ${workerLabel.toLowerCase()} to your pool`}
@@ -474,9 +462,7 @@ export default function WorkersPage() {
                 <Input
                   id="first_name"
                   value={form.first_name}
-                  onChange={(e) =>
-                    setForm({ ...form, first_name: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, first_name: e.target.value })}
                 />
               </div>
               <div>
@@ -486,9 +472,7 @@ export default function WorkersPage() {
                 <Input
                   id="last_name"
                   value={form.last_name}
-                  onChange={(e) =>
-                    setForm({ ...form, last_name: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, last_name: e.target.value })}
                 />
               </div>
             </div>
@@ -519,9 +503,7 @@ export default function WorkersPage() {
                 <Label htmlFor="worker_type">Worker Type</Label>
                 <Select
                   value={form.worker_type}
-                  onValueChange={(value) =>
-                    setForm({ ...form, worker_type: value })
-                  }
+                  onValueChange={(value) => setForm({ ...form, worker_type: value })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -558,9 +540,7 @@ export default function WorkersPage() {
                 id="primary_skill"
                 placeholder="e.g., Carpentry, Electrical, Plumbing"
                 value={form.primary_skill}
-                onChange={(e) =>
-                  setForm({ ...form, primary_skill: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, primary_skill: e.target.value })}
               />
             </div>
 
@@ -569,22 +549,18 @@ export default function WorkersPage() {
               <Input
                 id="skills"
                 placeholder="e.g., Framing, Drywall, Painting"
-                value={form.skills.join(", ")}
-                onChange={(e) => handleArrayInput("skills", e.target.value)}
+                value={form.skills.join(', ')}
+                onChange={(e) => handleArrayInput('skills', e.target.value)}
               />
             </div>
 
             <div>
-              <Label htmlFor="certifications">
-                Certifications (comma-separated)
-              </Label>
+              <Label htmlFor="certifications">Certifications (comma-separated)</Label>
               <Input
                 id="certifications"
                 placeholder="e.g., OSHA 30, Forklift, First Aid"
-                value={form.certifications.join(", ")}
-                onChange={(e) =>
-                  handleArrayInput("certifications", e.target.value)
-                }
+                value={form.certifications.join(', ')}
+                onChange={(e) => handleArrayInput('certifications', e.target.value)}
               />
             </div>
 
@@ -598,18 +574,14 @@ export default function WorkersPage() {
                   step="0.01"
                   placeholder="25.00"
                   value={form.default_pay_rate}
-                  onChange={(e) =>
-                    setForm({ ...form, default_pay_rate: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, default_pay_rate: e.target.value })}
                 />
               </div>
               <div>
                 <Label htmlFor="default_rate_type">Rate Type</Label>
                 <Select
                   value={form.default_rate_type}
-                  onValueChange={(value) =>
-                    setForm({ ...form, default_rate_type: value })
-                  }
+                  onValueChange={(value) => setForm({ ...form, default_rate_type: value })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -632,9 +604,7 @@ export default function WorkersPage() {
                   id="available_from"
                   type="date"
                   value={form.available_from}
-                  onChange={(e) =>
-                    setForm({ ...form, available_from: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, available_from: e.target.value })}
                 />
               </div>
               <div>
@@ -643,9 +613,7 @@ export default function WorkersPage() {
                   id="available_until"
                   type="date"
                   value={form.available_until}
-                  onChange={(e) =>
-                    setForm({ ...form, available_until: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, available_until: e.target.value })}
                 />
               </div>
             </div>
@@ -653,9 +621,7 @@ export default function WorkersPage() {
             {/* Emergency Contact */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="emergency_contact_name">
-                  Emergency Contact Name
-                </Label>
+                <Label htmlFor="emergency_contact_name">Emergency Contact Name</Label>
                 <Input
                   id="emergency_contact_name"
                   value={form.emergency_contact_name}
@@ -668,9 +634,7 @@ export default function WorkersPage() {
                 />
               </div>
               <div>
-                <Label htmlFor="emergency_contact_phone">
-                  Emergency Contact Phone
-                </Label>
+                <Label htmlFor="emergency_contact_phone">Emergency Contact Phone</Label>
                 <Input
                   id="emergency_contact_phone"
                   value={form.emergency_contact_phone}
@@ -701,17 +665,24 @@ export default function WorkersPage() {
               variant="outline"
               onClick={() => setShowDialog(false)}
               disabled={saving}
+              className="border-slate-600 text-slate-300 hover:bg-slate-700"
             >
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={saving}>
+            <Button
+              onClick={handleSave}
+              disabled={saving}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
               {saving ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Saving...
                 </>
               ) : (
-                <>{editingWorker ? "Update" : "Create"} {workerLabel}</>
+                <>
+                  {editingWorker ? 'Update' : 'Create'} {workerLabel}
+                </>
               )}
             </Button>
           </DialogFooter>
