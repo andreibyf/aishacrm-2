@@ -21,7 +21,14 @@ import {
 import { differenceInDays, format, startOfMonth, subMonths } from 'date-fns';
 import { Opportunity } from '@/api/entities';
 
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+const COLORS_MAP = [
+  ['#60a5fa', '#3b82f6'], // blue
+  ['#34d399', '#10b981'], // emerald
+  ['#fbbf24', '#f59e0b'], // amber
+  ['#f87171', '#ef4444'], // red
+  ['#a78bfa', '#8b5cf6'], // violet
+  ['#2dd4bf', '#059669'], // teal
+];
 
 // Changed component props to accept tenantFilter instead of direct opportunities/accounts
 export default function SalesAnalytics({ tenantFilter }) {
@@ -262,25 +269,50 @@ export default function SalesAnalytics({ tenantFilter }) {
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={dealsOverTime}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
+                    <defs>
+                      <linearGradient id="colorRevenueLine" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.8} />
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
                     <XAxis
                       dataKey="month"
                       tick={{ fontSize: 12, fill: '#94a3b8' }}
                       angle={-45}
                       textAnchor="end"
                       height={80}
+                      axisLine={{ stroke: '#475569' }}
+                      tickLine={false}
+                      dy={10}
                     />
-                    <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} />
+                    <YAxis
+                      tick={{ fontSize: 12, fill: '#94a3b8' }}
+                      axisLine={{ stroke: '#475569' }}
+                      tickLine={false}
+                      dx={-10}
+                    />
                     <Tooltip
+                      cursor={{ stroke: '#34d399', strokeWidth: 1, strokeDasharray: '3 3' }}
                       formatter={(value) => [`$${value}K`, 'Revenue']}
                       contentStyle={{
                         backgroundColor: '#1e293b',
                         border: '1px solid #475569',
                         borderRadius: '8px',
-                        color: '#f1f5f9',
+                        boxShadow:
+                          '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
                       }}
+                      itemStyle={{ color: '#34d399' }}
+                      labelStyle={{ color: '#f1f5f9' }}
                     />
-                    <Line type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={3} />
+                    <Line
+                      type="monotone"
+                      dataKey="revenue"
+                      stroke="#34d399"
+                      strokeWidth={2}
+                      dot={{ r: 4, fill: '#34d399' }}
+                      activeDot={{ r: 8, stroke: '#10b981', strokeWidth: 2 }}
+                    />
                   </LineChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -330,27 +362,75 @@ export default function SalesAnalytics({ tenantFilter }) {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
+                <ResponsiveContainer width="100%" height={350}>
                   <PieChart>
+                    <defs>
+                      {COLORS_MAP.map((colorPair, index) => (
+                        <linearGradient
+                          key={`gradSalesAnalytics-${index}`}
+                          id={`gradSalesAnalytics-${index}`}
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1"
+                        >
+                          <stop offset="0%" stopColor={colorPair[0]} stopOpacity={1} />
+                          <stop offset="100%" stopColor={colorPair[1]} stopOpacity={1} />
+                        </linearGradient>
+                      ))}
+                    </defs>
                     <Pie
-                      data={revenueByStage}
+                      data={revenueByStage.filter((s) => s.value > 0)}
                       cx="50%"
                       cy="50%"
-                      outerRadius={80}
+                      outerRadius={100}
+                      innerRadius={60}
+                      paddingAngle={5}
+                      cornerRadius={8}
                       fill="#8884d8"
                       dataKey="value"
-                      label={({ name, percent }) => {
-                        // Only show labels for slices that are 3% or larger to avoid overlap
-                        if (percent >= 0.03) {
-                          return `${name} (${(percent * 100).toFixed(0)}%)`;
-                        }
-                        return '';
-                      }}
                       labelLine={false}
+                      label={({ name, percent, x, y, midAngle }) => {
+                        if (percent < 0.05) return null;
+                        const RADIAN = Math.PI / 180;
+                        const sin = Math.sin(-RADIAN * midAngle);
+                        const cos = Math.cos(-RADIAN * midAngle);
+                        const sx = x;
+                        const sy = y;
+                        const mx = x + (120 - 100) * cos;
+                        const my = y + (120 - 100) * sin;
+                        const ex = mx + (cos >= 0 ? 1 : -1) * 22;
+                        const ey = my;
+                        const textAnchor = cos >= 0 ? 'start' : 'end';
+
+                        return (
+                          <g>
+                            <path
+                              d={`M${sx},${sy}L${mx},${my}L${ex},${ey}`}
+                              stroke="#94a3b8"
+                              fill="none"
+                            />
+                            <circle cx={ex} cy={ey} r={2} fill="#94a3b8" />
+                            <text
+                              x={ex + (cos >= 0 ? 1 : -1) * 12}
+                              y={ey}
+                              textAnchor={textAnchor}
+                              fill="#e2e8f0"
+                              fontSize={12}
+                            >{`${name} (${(percent * 100).toFixed(0)}%)`}</text>
+                          </g>
+                        );
+                      }}
                     >
-                      {revenueByStage.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
+                      {revenueByStage
+                        .filter((s) => s.value > 0)
+                        .map((entry, index) => (
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={`url(#gradSalesAnalytics-${index % COLORS_MAP.length})`}
+                            stroke="rgba(0,0,0,0.1)"
+                          />
+                        ))}
                     </Pie>
                     <Tooltip
                       formatter={(value) => [`$${value}K`, 'Pipeline Value']}
@@ -358,25 +438,8 @@ export default function SalesAnalytics({ tenantFilter }) {
                         backgroundColor: '#1e293b',
                         border: '1px solid #475569',
                         borderRadius: '8px',
-                        color: '#f1f5f9',
-                      }}
-                    />
-                    <Legend
-                      align="center"
-                      verticalAlign="bottom"
-                      layout="horizontal"
-                      iconType="circle"
-                      wrapperStyle={{
-                        paddingTop: '20px',
-                        color: '#f1f5f9',
-                        fontSize: '12px',
-                      }}
-                      formatter={(value) => {
-                        const item = revenueByStage.find((item) => item.name === value);
-                        const total = revenueByStage.reduce((sum, item) => sum + item.value, 0);
-                        const percent =
-                          total > 0 ? (((item?.value || 0) / total) * 100).toFixed(0) : 0;
-                        return `${value} (${percent}%)`;
+                        boxShadow:
+                          '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
                       }}
                     />
                   </PieChart>
@@ -388,41 +451,64 @@ export default function SalesAnalytics({ tenantFilter }) {
               <CardHeader>
                 <CardTitle className="text-lg text-slate-100">Lead Source Performance</CardTitle>
                 <CardDescription className="text-slate-400">
-                  Opportunities and revenue by lead source.
+                  Revenue and win rate by lead source.
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {leadSourcePerformance.length > 0 ? (
-                    leadSourcePerformance.map((source) => (
-                      <div
-                        key={source.source}
-                        className="flex items-center justify-between p-3 bg-slate-700 rounded-lg"
-                      >
-                        <div className="flex-1">
-                          <p className="font-medium text-slate-200 capitalize">{source.source}</p>
-                          <p className="text-sm text-slate-400">
-                            {source.opportunities} opportunities • ${source.revenue}K revenue
-                          </p>
-                        </div>
-                        <Badge
-                          variant={
-                            source.winRate > 30
-                              ? 'default'
-                              : source.winRate > 15
-                                ? 'secondary'
-                                : 'outline'
-                          }
-                          className="ml-4 bg-slate-600 text-slate-200 border-slate-500"
-                        >
-                          {source.winRate}% win rate
-                        </Badge>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-slate-400">No lead source data available.</p>
-                  )}
-                </div>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart
+                    data={leadSourcePerformance}
+                    layout="vertical"
+                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                  >
+                    <defs>
+                      <linearGradient id="colorRevenueBar" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.8} />
+                        <stop offset="100%" stopColor="#60a5fa" stopOpacity={1} />
+                      </linearGradient>
+                      <linearGradient id="colorWinRateBar" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stopColor="#10b981" stopOpacity={0.8} />
+                        <stop offset="100%" stopColor="#34d399" stopOpacity={1} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 12, fill: '#94a3b8' }} />
+                    <YAxis
+                      type="category"
+                      dataKey="source"
+                      tick={{ fontSize: 12, fill: '#94a3b8' }}
+                      width={80}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <Tooltip
+                      cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                      contentStyle={{
+                        backgroundColor: '#1e293b',
+                        border: '1px solid #475569',
+                        borderRadius: '8px',
+                        color: '#f1f5f9',
+                        boxShadow:
+                          '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+                      }}
+                    />
+                    <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                    <Bar
+                      dataKey="revenue"
+                      name="Revenue ($K)"
+                      fill="url(#colorRevenueBar)"
+                      radius={[0, 6, 6, 0]}
+                      barSize={15}
+                    />
+                    <Bar
+                      dataKey="winRate"
+                      name="Win Rate (%)"
+                      fill="url(#colorWinRateBar)"
+                      radius={[0, 6, 6, 0]}
+                      barSize={15}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
               </CardContent>
             </Card>
           </div>

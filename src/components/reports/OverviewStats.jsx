@@ -18,7 +18,14 @@ import { Account, Lead, Opportunity } from '@/api/entities';
 import TrendIndicator from './TrendIndicator';
 import { getBackendUrl } from '@/api/backendUrl';
 
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+const COLORS_MAP = [
+  ['#60a5fa', '#3b82f6'], // blue
+  ['#34d399', '#10b981'], // emerald
+  ['#fbbf24', '#f59e0b'], // amber
+  ['#f87171', '#ef4444'], // red
+  ['#a78bfa', '#8b5cf6'], // violet
+  ['#2dd4bf', '#059669'], // teal
+];
 
 const BACKEND_URL = getBackendUrl();
 
@@ -319,6 +326,21 @@ export default function OverviewStats({ tenantFilter }) {
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
+                <defs>
+                  {COLORS_MAP.map((colorPair, index) => (
+                    <linearGradient
+                      key={`gradOverviewStats-${index}`}
+                      id={`gradOverviewStats-${index}`}
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop offset="0%" stopColor={colorPair[0]} stopOpacity={1} />
+                      <stop offset="100%" stopColor={colorPair[1]} stopOpacity={1} />
+                    </linearGradient>
+                  ))}
+                </defs>
                 <Pie
                   data={(() => {
                     const sources = chartData.leadSources || [];
@@ -341,7 +363,12 @@ export default function OverviewStats({ tenantFilter }) {
                   {(chartData.leadSources || [])
                     .filter((item) => item.value > 0)
                     .map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={`url(#gradOverviewStats-${index % COLORS_MAP.length})`}
+                        stroke="rgba(0,0,0,0.1)"
+                        strokeWidth={1}
+                      />
                     ))}
                 </Pie>
                 <Tooltip
@@ -350,7 +377,9 @@ export default function OverviewStats({ tenantFilter }) {
                     border: '1px solid #475569',
                     borderRadius: '8px',
                     color: '#f1f5f9',
+                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
                   }}
+                  itemStyle={{ color: '#f8fafc' }}
                 />
                 <Legend
                   align="center"
@@ -370,7 +399,7 @@ export default function OverviewStats({ tenantFilter }) {
                     );
                     const color =
                       item.value > 0
-                        ? COLORS[filteredItems.indexOf(itemInFiltered) % COLORS.length]
+                        ? COLORS_MAP[filteredItems.indexOf(itemInFiltered) % COLORS_MAP.length][1]
                         : '#64748b'; // Grey out items with 0 value
                     return {
                       value: item.name,
@@ -413,24 +442,47 @@ export default function OverviewStats({ tenantFilter }) {
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={(chartData.opportunityStages || []).filter((item) => item.value > 0)}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
+                <defs>
+                  <linearGradient id="colorPipeline" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#3b82f6" stopOpacity={1} />
+                    <stop offset="100%" stopColor="#2563eb" stopOpacity={0.8} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
                 <XAxis
                   dataKey="name"
                   tick={{ fontSize: 12, fill: '#94a3b8' }}
                   angle={-45}
                   textAnchor="end"
                   height={80}
+                  axisLine={{ stroke: '#475569' }}
+                  tickLine={false}
+                  dy={10}
                 />
-                <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} />
+                <YAxis
+                  tick={{ fontSize: 12, fill: '#94a3b8' }}
+                  axisLine={{ stroke: '#475569' }}
+                  tickLine={false}
+                  dx={-10}
+                />
                 <Tooltip
+                  cursor={{ fill: 'rgba(255,255,255,0.05)' }}
                   contentStyle={{
                     backgroundColor: '#1e293b',
                     border: '1px solid #475569',
                     borderRadius: '8px',
                     color: '#f1f5f9',
+                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
                   }}
+                  itemStyle={{ color: '#60a5fa' }}
                 />
-                <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                <Bar
+                  dataKey="value"
+                  fill="url(#colorPipeline)"
+                  radius={[6, 6, 0, 0]}
+                  barSize={40}
+                  animationDuration={1500}
+                />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>

@@ -20,7 +20,14 @@ import {
 import { format, isThisWeek, isToday, startOfWeek, subWeeks } from 'date-fns';
 import { Activity, Employee } from '@/api/entities';
 
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+const COLORS_MAP = [
+  ['#60a5fa', '#3b82f6'], // blue
+  ['#34d399', '#10b981'], // emerald
+  ['#fbbf24', '#f59e0b'], // amber
+  ['#f87171', '#ef4444'], // red
+  ['#a78bfa', '#8b5cf6'], // violet
+  ['#2dd4bf', '#059669'], // teal
+];
 
 export default function ProductivityAnalytics({ tenantFilter }) {
   const [activities, setActivities] = useState([]);
@@ -397,31 +404,57 @@ export default function ProductivityAnalytics({ tenantFilter }) {
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={weeklyData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                <XAxis dataKey="week" tick={{ fontSize: 12, fill: '#94a3b8' }} />
-                <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} />
+                <defs>
+                  <linearGradient id="colorActivities" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="colorCompleted" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.8} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                <XAxis
+                  dataKey="week"
+                  tick={{ fontSize: 12, fill: '#94a3b8' }}
+                  axisLine={{ stroke: '#475569' }}
+                  tickLine={false}
+                  dy={10}
+                />
+                <YAxis
+                  tick={{ fontSize: 12, fill: '#94a3b8' }}
+                  axisLine={{ stroke: '#475569' }}
+                  tickLine={false}
+                  dx={-10}
+                />
                 <Tooltip
+                  cursor={{ fill: 'rgba(255,255,255,0.05)' }}
                   contentStyle={{
                     backgroundColor: '#1e293b',
                     border: '1px solid #475569',
                     borderRadius: '8px',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
                     color: '#f1f5f9',
+                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
                   }}
+                  labelStyle={{ color: '#f1f5f9' }}
                 />
+                <Legend wrapperStyle={{ paddingTop: '20px' }} />
                 <Line
                   type="monotone"
                   dataKey="activities"
                   stroke="#3b82f6"
                   strokeWidth={2}
-                  name="Total"
+                  dot={false}
+                  activeDot={{ r: 6 }}
                 />
                 <Line
                   type="monotone"
                   dataKey="completed"
                   stroke="#10b981"
                   strokeWidth={2}
-                  name="Completed"
+                  dot={false}
+                  activeDot={{ r: 6 }}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -435,17 +468,42 @@ export default function ProductivityAnalytics({ tenantFilter }) {
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
+                <defs>
+                  {COLORS_MAP.map((colorPair, index) => (
+                    <linearGradient
+                      key={`gradTaskCompletion-${index}`}
+                      id={`gradTaskCompletion-${index}`}
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop offset="0%" stopColor={colorPair[0]} stopOpacity={1} />
+                      <stop offset="100%" stopColor={colorPair[1]} stopOpacity={1} />
+                    </linearGradient>
+                  ))}
+                </defs>
                 <Pie
                   data={efficiencyData}
                   cx="50%"
                   cy="50%"
                   outerRadius={80}
+                  innerRadius={40}
+                  paddingAngle={3}
+                  cornerRadius={5}
                   fill="#8884d8"
                   dataKey="value"
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  labelLine={false}
+                  label={({ name, percent }) =>
+                    percent > 0.05 ? `${name} (${(percent * 100).toFixed(0)}%)` : ''
+                  }
                 >
                   {efficiencyData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={`url(#gradTaskCompletion-${index % COLORS_MAP.length})`}
+                      stroke="rgba(0,0,0,0.1)"
+                    />
                   ))}
                 </Pie>
                 <Tooltip
@@ -454,9 +512,11 @@ export default function ProductivityAnalytics({ tenantFilter }) {
                     border: '1px solid #475569',
                     borderRadius: '8px',
                     color: '#f1f5f9',
+                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
                   }}
+                  labelStyle={{ color: '#f1f5f9' }}
                 />
-                <Legend wrapperStyle={{ paddingTop: '20px', color: '#f1f5f9' }} />
+                <Legend wrapperStyle={{ paddingTop: '20px' }} />
               </PieChart>
             </ResponsiveContainer>
           </CardContent>
@@ -470,20 +530,56 @@ export default function ProductivityAnalytics({ tenantFilter }) {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={priorityData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#94a3b8' }} />
-                <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} />
+              <PieChart>
+                <defs>
+                  {COLORS_MAP.map((colorPair, index) => (
+                    <linearGradient
+                      key={`gradPriorityDist-${index}`}
+                      id={`gradPriorityDist-${index}`}
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop offset="0%" stopColor={colorPair[0]} stopOpacity={1} />
+                      <stop offset="100%" stopColor={colorPair[1]} stopOpacity={1} />
+                    </linearGradient>
+                  ))}
+                </defs>
+                <Pie
+                  data={priorityData}
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={80}
+                  innerRadius={0}
+                  paddingAngle={3}
+                  cornerRadius={5}
+                  fill="#8884d8"
+                  dataKey="value"
+                  labelLine={false}
+                  label={({ name, percent }) =>
+                    percent > 0.05 ? `${name} (${(percent * 100).toFixed(0)}%)` : ''
+                  }
+                >
+                  {priorityData.map((entry, index) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={`url(#gradPriorityDist-${index % COLORS_MAP.length})`}
+                      stroke="rgba(0,0,0,0.1)"
+                    />
+                  ))}
+                </Pie>
                 <Tooltip
                   contentStyle={{
                     backgroundColor: '#1e293b',
                     border: '1px solid #475569',
                     borderRadius: '8px',
                     color: '#f1f5f9',
+                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
                   }}
                 />
-                <Bar dataKey="value" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-              </BarChart>
+                <Legend wrapperStyle={{ paddingTop: '20px' }} />
+              </PieChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
@@ -493,33 +589,62 @@ export default function ProductivityAnalytics({ tenantFilter }) {
             <CardTitle className="text-lg text-slate-100">Activity Type Performance</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {typeData.map((type) => (
-                <div
-                  key={type.type}
-                  className="flex items-center justify-between p-3 bg-slate-700 rounded-lg"
-                >
-                  <div className="flex-1">
-                    <p className="font-medium text-slate-200 capitalize">{type.type}</p>
-                    <p className="text-sm text-slate-400">
-                      {type.total} total • {type.completed} completed
-                    </p>
-                  </div>
-                  <Badge
-                    variant={
-                      type.completionRate > 80
-                        ? 'default'
-                        : type.completionRate > 60
-                          ? 'secondary'
-                          : 'outline'
-                    }
-                    className="ml-4 bg-slate-600 text-slate-200 border-slate-500"
-                  >
-                    {type.completionRate}% done
-                  </Badge>
-                </div>
-              ))}
-            </div>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={typeData} layout="vertical">
+                <defs>
+                  {COLORS_MAP.map((colorPair, index) => (
+                    <linearGradient
+                      key={`gradActivityType-${index}`}
+                      id={`gradActivityType-${index}`}
+                      x1="0"
+                      y1="0"
+                      x2="1"
+                      y2="0"
+                    >
+                      <stop offset="0%" stopColor={colorPair[0]} stopOpacity={0.6} />
+                      <stop offset="100%" stopColor={colorPair[1]} stopOpacity={1} />
+                    </linearGradient>
+                  ))}
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" horizontal={false} />
+                <XAxis type="number" hide />
+                <YAxis
+                  type="category"
+                  dataKey="type"
+                  tick={{ fontSize: 12, fill: '#94a3b8' }}
+                  axisLine={false}
+                  tickLine={false}
+                  dx={-10}
+                  width={80}
+                />
+                <Tooltip
+                  cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                  contentStyle={{
+                    backgroundColor: '#1e293b',
+                    border: '1px solid #475569',
+                    borderRadius: '8px',
+                    color: '#f1f5f9',
+                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+                  }}
+                  labelStyle={{ color: '#f1f5f9' }}
+                />
+                <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                <Bar
+                  dataKey="total"
+                  name="Total"
+                  stackId="a"
+                  fill="#3b82f6"
+                  radius={[0, 4, 4, 0]}
+                />
+                <Bar
+                  dataKey="completed"
+                  name="Completed"
+                  stackId="a"
+                  fill="#10b981"
+                  radius={[0, 4, 4, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
       </div>
@@ -561,25 +686,57 @@ export default function ProductivityAnalytics({ tenantFilter }) {
         </CardHeader>
         <CardContent>
           {activitiesPerUser.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={400}>
               <BarChart
                 data={activitiesPerUser}
+                layout="vertical"
                 margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#94a3b8' }} />
-                <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} />
+                <defs>
+                  <linearGradient id="gradTotal" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#60a5fa" stopOpacity={0.6} />
+                    <stop offset="100%" stopColor="#3b82f6" stopOpacity={1} />
+                  </linearGradient>
+                  <linearGradient id="gradCompleted" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#34d399" stopOpacity={0.6} />
+                    <stop offset="100%" stopColor="#10b981" stopOpacity={1} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 12, fill: '#94a3b8' }} />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  tick={{ fontSize: 12, fill: '#94a3b8' }}
+                  axisLine={false}
+                  tickLine={false}
+                  dx={-10}
+                  width={100}
+                />
                 <Tooltip
+                  cursor={{ fill: 'rgba(255,255,255,0.05)' }}
                   contentStyle={{
                     backgroundColor: '#1e293b',
                     border: '1px solid #475569',
                     borderRadius: '8px',
                     color: '#f1f5f9',
+                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
                   }}
+                  labelStyle={{ color: '#f1f5f9' }}
                 />
-                <Legend wrapperStyle={{ color: '#f1f5f9' }} />
-                <Bar dataKey="totalActivities" fill="#3b82f6" name="Total Activities" />
-                <Bar dataKey="completedActivities" fill="#10b981" name="Completed Activities" />
+                <Legend wrapperStyle={{ color: '#f1f5f9', paddingTop: '10px' }} />
+                <Bar
+                  dataKey="totalActivities"
+                  name="Total Activities"
+                  fill="url(#gradTotal)"
+                  radius={[0, 4, 4, 0]}
+                />
+                <Bar
+                  dataKey="completedActivities"
+                  name="Completed Activities"
+                  fill="url(#gradCompleted)"
+                  radius={[0, 4, 4, 0]}
+                />
               </BarChart>
             </ResponsiveContainer>
           ) : (

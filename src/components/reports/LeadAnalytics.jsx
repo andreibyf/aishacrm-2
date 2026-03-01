@@ -21,7 +21,14 @@ import { format, subDays } from 'date-fns'; // Changed from subMonths/startOfMon
 import { Lead } from '@/api/entities';
 
 // Updated COLORS as per outline + added a few more for variety
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#A28FDF', '#FF6347'];
+const COLORS_MAP = [
+  ['#60a5fa', '#3b82f6'], // blue
+  ['#34d399', '#10b981'], // emerald
+  ['#fbbf24', '#f59e0b'], // amber
+  ['#f87171', '#ef4444'], // red
+  ['#a78bfa', '#8b5cf6'], // violet
+  ['#2dd4bf', '#059669'], // teal
+];
 
 export default function LeadAnalytics({ tenantFilter }) {
   // State for fetched and processed data
@@ -291,39 +298,58 @@ export default function LeadAnalytics({ tenantFilter }) {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={leadsOverTime} margin={{ top: 5, right: 30, left: 20, bottom: 50 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
+              <LineChart data={leadsOverTime}>
+                <defs>
+                  <linearGradient id="colorLeads" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="colorConverted" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.8} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
                 <XAxis
                   dataKey="date"
-                  tick={{ fontSize: 10, fill: '#94a3b8' }}
-                  angle={-45}
-                  textAnchor="end"
-                  height={80}
-                  interval="preserveStartEnd"
+                  tick={{ fontSize: 12, fill: '#94a3b8' }}
+                  axisLine={{ stroke: '#475569' }}
+                  tickLine={false}
+                  dy={10}
                 />
-                <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} />
+                <YAxis
+                  tick={{ fontSize: 12, fill: '#94a3b8' }}
+                  axisLine={{ stroke: '#475569' }}
+                  tickLine={false}
+                  dx={-10}
+                />
                 <Tooltip
+                  cursor={{ fill: 'rgba(255,255,255,0.05)' }}
                   contentStyle={{
                     backgroundColor: '#1e293b',
                     border: '1px solid #475569',
                     borderRadius: '8px',
                     color: '#f1f5f9',
+                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
                   }}
+                  labelStyle={{ color: '#f1f5f9' }}
                 />
-                <Legend wrapperStyle={{ paddingTop: '20px', color: '#f1f5f9' }} />
+                <Legend wrapperStyle={{ paddingTop: '20px' }} />
                 <Line
                   type="monotone"
                   dataKey="leads"
                   stroke="#3b82f6"
                   strokeWidth={2}
-                  name="Total Leads"
+                  dot={false}
+                  activeDot={{ r: 6 }}
                 />
                 <Line
                   type="monotone"
                   dataKey="converted"
                   stroke="#10b981"
                   strokeWidth={2}
-                  name="Converted"
+                  dot={false}
+                  activeDot={{ r: 6 }}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -337,28 +363,46 @@ export default function LeadAnalytics({ tenantFilter }) {
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
+                <defs>
+                  {COLORS_MAP.map((colorPair, index) => (
+                    <linearGradient
+                      key={`gradLeadAnalyticsStatus-${index}`}
+                      id={`gradLeadAnalyticsStatus-${index}`}
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop offset="0%" stopColor={colorPair[0]} stopOpacity={1} />
+                      <stop offset="100%" stopColor={colorPair[1]} stopOpacity={1} />
+                    </linearGradient>
+                  ))}
+                </defs>
                 <Pie
                   data={leadsByStatus}
                   cx="50%"
                   cy="50%"
                   outerRadius={80}
+                  innerRadius={40}
+                  paddingAngle={3}
+                  cornerRadius={5}
+                  fill="#8884d8"
                   dataKey="value"
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  labelLine={false}
+                  label={({ name, percent }) =>
+                    percent > 0.05 ? `${name} (${(percent * 100).toFixed(0)}%)` : ''
+                  }
                 >
                   {leadsByStatus.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={`url(#gradLeadAnalyticsStatus-${index % COLORS_MAP.length})`}
+                      stroke="rgba(0,0,0,0.1)"
+                    />
                   ))}
                 </Pie>
-                <Tooltip
-                  content={renderCustomizedTooltip}
-                  contentStyle={{
-                    backgroundColor: '#1e293b',
-                    border: '1px solid #475569',
-                    borderRadius: '8px',
-                    color: '#f1f5f9',
-                  }}
-                />
-                <Legend wrapperStyle={{ paddingTop: '20px', color: '#f1f5f9' }} />
+                <Tooltip content={renderCustomizedTooltip} />
+                <Legend wrapperStyle={{ paddingTop: '20px' }} />
               </PieChart>
             </ResponsiveContainer>
           </CardContent>
@@ -372,19 +416,44 @@ export default function LeadAnalytics({ tenantFilter }) {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={leadQualityData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                <XAxis dataKey="range" tick={{ fontSize: 12, fill: '#94a3b8' }} />
-                <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} allowDecimals={false} />
+              <BarChart data={leadQualityData}>
+                <defs>
+                  <linearGradient id="colorQuality" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.8} />
+                    <stop offset="100%" stopColor="#fbbf24" stopOpacity={1} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                <XAxis
+                  dataKey="range"
+                  tick={{ fontSize: 12, fill: '#94a3b8' }}
+                  axisLine={{ stroke: '#475569' }}
+                  tickLine={false}
+                />
+                <YAxis
+                  tick={{ fontSize: 12, fill: '#94a3b8' }}
+                  axisLine={{ stroke: '#475569' }}
+                  tickLine={false}
+                  dx={-10}
+                />
                 <Tooltip
+                  cursor={{ fill: 'rgba(255,255,255,0.05)' }}
                   contentStyle={{
                     backgroundColor: '#1e293b',
                     border: '1px solid #475569',
                     borderRadius: '8px',
                     color: '#f1f5f9',
+                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
                   }}
+                  labelStyle={{ color: '#f1f5f9' }}
                 />
-                <Bar dataKey="count" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                <Bar
+                  dataKey="count"
+                  name="Number of Leads"
+                  fill="url(#colorQuality)"
+                  radius={[6, 6, 0, 0]}
+                  barSize={40}
+                />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -395,33 +464,69 @@ export default function LeadAnalytics({ tenantFilter }) {
             <CardTitle className="text-lg text-slate-100">Lead Source Performance</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {leadsBySource.map((source) => (
-                <div
-                  key={source.source}
-                  className="flex items-center justify-between p-3 bg-slate-700 rounded-lg"
-                >
-                  <div className="flex-1">
-                    <p className="font-medium text-slate-200 capitalize">{source.source}</p>
-                    <p className="text-sm text-slate-400">
-                      {source.leads} leads • {source.converted} converted • ${source.value}K value
-                    </p>
-                  </div>
-                  <Badge
-                    variant={
-                      source.conversionRate > 30
-                        ? 'default'
-                        : source.conversionRate > 15
-                          ? 'secondary'
-                          : 'outline'
-                    }
-                    className="ml-4 bg-slate-600 text-slate-200 border-slate-500"
-                  >
-                    {source.conversionRate}% rate
-                  </Badge>
-                </div>
-              ))}
-            </div>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={leadsBySource}>
+                <defs>
+                  <linearGradient id="colorLeadsSource" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.8} />
+                    <stop offset="100%" stopColor="#a78bfa" stopOpacity={1} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                <XAxis
+                  dataKey="source"
+                  tick={{ fontSize: 12, fill: '#94a3b8' }}
+                  angle={-45}
+                  textAnchor="end"
+                  height={80}
+                  axisLine={{ stroke: '#475569' }}
+                  tickLine={false}
+                  dy={10}
+                />
+                <YAxis
+                  yAxisId="left"
+                  tick={{ fontSize: 12, fill: '#94a3b8' }}
+                  axisLine={{ stroke: '#475569' }}
+                  tickLine={false}
+                  dx={-10}
+                />
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  tick={{ fontSize: 12, fill: '#94a3b8' }}
+                  axisLine={{ stroke: '#475569' }}
+                  tickLine={false}
+                />
+                <Tooltip
+                  cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                  contentStyle={{
+                    backgroundColor: '#1e293b',
+                    border: '1px solid #475569',
+                    borderRadius: '8px',
+                    color: '#f1f5f9',
+                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+                  }}
+                  labelStyle={{ color: '#f1f5f9' }}
+                />
+                <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                <Bar
+                  yAxisId="left"
+                  dataKey="leads"
+                  name="Total Leads"
+                  fill="url(#colorLeadsSource)"
+                  radius={[6, 6, 0, 0]}
+                  barSize={20}
+                />
+                <Bar
+                  yAxisId="right"
+                  dataKey="conversionRate"
+                  name="Conversion Rate (%)"
+                  fill="#fbbf24"
+                  radius={[6, 6, 0, 0]}
+                  barSize={20}
+                />
+              </BarChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
       </div>
