@@ -19,16 +19,12 @@ import {
 } from 'recharts';
 import { format, subDays } from 'date-fns'; // Changed from subMonths/startOfMonth
 import { Lead } from '@/api/entities';
-
-// Updated COLORS as per outline + added a few more for variety
-const COLORS_MAP = [
-  ['#60a5fa', '#3b82f6'], // blue
-  ['#34d399', '#10b981'], // emerald
-  ['#fbbf24', '#f59e0b'], // amber
-  ['#f87171', '#ef4444'], // red
-  ['#a78bfa', '#8b5cf6'], // violet
-  ['#2dd4bf', '#059669'], // teal
-];
+import {
+  unwrapApiResponse,
+  COLORS_MAP,
+  DARK_TOOLTIP_STYLE,
+  DARK_LABEL_STYLE,
+} from './shared/chartUtils';
 
 export default function LeadAnalytics({ tenantFilter }) {
   // State for fetched and processed data
@@ -51,21 +47,6 @@ export default function LeadAnalytics({ tenantFilter }) {
       setLoading(true);
       setError(null);
       try {
-        // DEFENSIVE UNWRAPPING - handle both array and wrapped responses
-        const unwrap = (result) => {
-          // Already an array - return as-is
-          if (Array.isArray(result)) return result;
-
-          // Wrapped in { data: [...] } shape
-          if (result?.data && Array.isArray(result.data)) return result.data;
-
-          // Wrapped in { status: "success", data: [...] } shape
-          if (result?.status === 'success' && Array.isArray(result.data)) return result.data;
-
-          // Invalid response - log warning and return empty array
-          return [];
-        };
-
         // Guard: require a tenant_id to avoid cross-tenant loads for admins/superadmins
         if (!tenantFilter || (tenantFilter && !tenantFilter.tenant_id)) {
           setAllLeads([]);
@@ -88,7 +69,7 @@ export default function LeadAnalytics({ tenantFilter }) {
 
         // Fetch leads from real API/entity layer
         const fetchedLeadsResult = await Lead.filter(effectiveFilter).catch(() => null);
-        const fetchedLeads = unwrap(fetchedLeadsResult);
+        const fetchedLeads = unwrapApiResponse(fetchedLeadsResult);
         setAllLeads(fetchedLeads); // Store raw leads if needed elsewhere, otherwise just process
 
         // --- Calculate Key Metrics ---
@@ -325,14 +306,8 @@ export default function LeadAnalytics({ tenantFilter }) {
                 />
                 <Tooltip
                   cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                  contentStyle={{
-                    backgroundColor: '#1e293b',
-                    border: '1px solid #475569',
-                    borderRadius: '8px',
-                    color: '#f1f5f9',
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-                  }}
-                  labelStyle={{ color: '#f1f5f9' }}
+                  contentStyle={DARK_TOOLTIP_STYLE}
+                  labelStyle={DARK_LABEL_STYLE}
                 />
                 <Legend wrapperStyle={{ paddingTop: '20px' }} />
                 <Line
@@ -438,14 +413,8 @@ export default function LeadAnalytics({ tenantFilter }) {
                 />
                 <Tooltip
                   cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                  contentStyle={{
-                    backgroundColor: '#1e293b',
-                    border: '1px solid #475569',
-                    borderRadius: '8px',
-                    color: '#f1f5f9',
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-                  }}
-                  labelStyle={{ color: '#f1f5f9' }}
+                  contentStyle={DARK_TOOLTIP_STYLE}
+                  labelStyle={DARK_LABEL_STYLE}
                 />
                 <Bar
                   dataKey="count"
@@ -499,14 +468,8 @@ export default function LeadAnalytics({ tenantFilter }) {
                 />
                 <Tooltip
                   cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                  contentStyle={{
-                    backgroundColor: '#1e293b',
-                    border: '1px solid #475569',
-                    borderRadius: '8px',
-                    color: '#f1f5f9',
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-                  }}
-                  labelStyle={{ color: '#f1f5f9' }}
+                  contentStyle={DARK_TOOLTIP_STYLE}
+                  labelStyle={DARK_LABEL_STYLE}
                 />
                 <Legend wrapperStyle={{ paddingTop: '20px' }} />
                 <Bar

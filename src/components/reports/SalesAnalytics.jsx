@@ -20,15 +20,12 @@ import {
 } from 'recharts';
 import { differenceInDays, format, startOfMonth, subMonths } from 'date-fns';
 import { Opportunity } from '@/api/entities';
-
-const COLORS_MAP = [
-  ['#60a5fa', '#3b82f6'], // blue
-  ['#34d399', '#10b981'], // emerald
-  ['#fbbf24', '#f59e0b'], // amber
-  ['#f87171', '#ef4444'], // red
-  ['#a78bfa', '#8b5cf6'], // violet
-  ['#2dd4bf', '#059669'], // teal
-];
+import {
+  unwrapApiResponse,
+  COLORS_MAP,
+  DARK_TOOLTIP_STYLE,
+  DARK_LABEL_STYLE,
+} from './shared/chartUtils';
 
 // Changed component props to accept tenantFilter instead of direct opportunities/accounts
 export default function SalesAnalytics({ tenantFilter }) {
@@ -43,25 +40,10 @@ export default function SalesAnalytics({ tenantFilter }) {
   // useEffect to fetch and process data when tenantFilter or period changes
   useEffect(() => {
     const fetchAndProcessSalesData = async () => {
-      // DEFENSIVE UNWRAPPING - handle both array and wrapped responses
-      const unwrap = (result) => {
-        // Already an array - return as-is
-        if (Array.isArray(result)) return result;
-
-        // Wrapped in { data: [...] } shape
-        if (result?.data && Array.isArray(result.data)) return result.data;
-
-        // Wrapped in { status: "success", data: [...] } shape
-        if (result?.status === 'success' && Array.isArray(result.data)) return result.data;
-
-        // Invalid response - log warning and return empty array
-        return [];
-      };
-
       // Assuming Opportunity.filter is an async function that fetches opportunities
       // based on the provided tenantFilter (e.g., tenantId, or 'all' for superadmin)
       const fetchedOpportunitiesResult = await Opportunity.filter(tenantFilter);
-      const fetchedOpportunities = unwrap(fetchedOpportunitiesResult);
+      const fetchedOpportunities = unwrapApiResponse(fetchedOpportunitiesResult);
       setOpportunities(fetchedOpportunities); // Store the raw fetched opportunities
 
       // Process the fetched data for various analytics charts
@@ -295,15 +277,9 @@ export default function SalesAnalytics({ tenantFilter }) {
                     <Tooltip
                       cursor={{ stroke: '#34d399', strokeWidth: 1, strokeDasharray: '3 3' }}
                       formatter={(value) => [`$${value}K`, 'Revenue']}
-                      contentStyle={{
-                        backgroundColor: '#1e293b',
-                        border: '1px solid #475569',
-                        borderRadius: '8px',
-                        boxShadow:
-                          '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-                      }}
+                      contentStyle={DARK_TOOLTIP_STYLE}
                       itemStyle={{ color: '#34d399' }}
-                      labelStyle={{ color: '#f1f5f9' }}
+                      labelStyle={DARK_LABEL_STYLE}
                     />
                     <Line
                       type="monotone"
@@ -337,14 +313,7 @@ export default function SalesAnalytics({ tenantFilter }) {
                       height={80}
                     />
                     <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#1e293b',
-                        border: '1px solid #475569',
-                        borderRadius: '8px',
-                        color: '#f1f5f9',
-                      }}
-                    />
+                    <Tooltip contentStyle={DARK_TOOLTIP_STYLE} />
                     <Bar dataKey="deals" fill="#3b82f6" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -434,13 +403,7 @@ export default function SalesAnalytics({ tenantFilter }) {
                     </Pie>
                     <Tooltip
                       formatter={(value) => [`$${value}K`, 'Pipeline Value']}
-                      contentStyle={{
-                        backgroundColor: '#1e293b',
-                        border: '1px solid #475569',
-                        borderRadius: '8px',
-                        boxShadow:
-                          '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-                      }}
+                      contentStyle={DARK_TOOLTIP_STYLE}
                     />
                   </PieChart>
                 </ResponsiveContainer>
@@ -483,14 +446,7 @@ export default function SalesAnalytics({ tenantFilter }) {
                     />
                     <Tooltip
                       cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                      contentStyle={{
-                        backgroundColor: '#1e293b',
-                        border: '1px solid #475569',
-                        borderRadius: '8px',
-                        color: '#f1f5f9',
-                        boxShadow:
-                          '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-                      }}
+                      contentStyle={DARK_TOOLTIP_STYLE}
                     />
                     <Legend wrapperStyle={{ paddingTop: '20px' }} />
                     <Bar
