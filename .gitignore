@@ -122,6 +122,7 @@ THUNDER_CLIENT_GUIDE.md
 # Debugging/investigation scripts (temporary)
 check-*.js
 backend/check-*.js
+backend/scripts/checks/check-*.js
 query-*.sql
 .copilotignore
 .vs/
@@ -138,6 +139,8 @@ playwright/.auth/
 test-developer-ai*.js
 backend/test-openai-direct.js
 backend/test-parameter-descriptions.js
+backend/scripts/debug/test-openai-direct.js
+backend/scripts/debug/test-parameter-descriptions.js
 
 # Claude Code local config
 .claude/
@@ -156,6 +159,7 @@ FIX_CRON_TIMEOUTS.md
 Supabase.txt
 fix-cron-jobs.sql
 backend/pause-cron-jobs.js
+backend/scripts/debug/pause-cron-jobs.js
 
 # Temporary working docs and artifacts
 ESLINT_FIXES.md
@@ -164,4 +168,8 @@ PRE_PUSH_ANALYSIS_COMPLETE.md
 SEVEN_FILES_FIXED.md
 TEN_FILES_COMPLETE.md
 backend/fix-all-tests.js
+backend/scripts/debug/fix-all-tests.js
 vitest-results.json
+
+# Claude Code temp files
+tmpclaude-*
