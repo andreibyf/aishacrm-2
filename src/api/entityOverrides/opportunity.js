@@ -1,7 +1,7 @@
 // Opportunity entity with getStats and getCount extensions
 // Extracted from src/api/entities.js
 import { createEntity } from '../core/createEntity';
-import { BACKEND_URL } from '../core/httpClient';
+import { BACKEND_URL, getAuthFetchOptions } from '../core/httpClient';
 
 export const Opportunity = {
   ...createEntity('Opportunity'),
@@ -15,9 +15,10 @@ export const Opportunity = {
       if (filter.assigned_to !== undefined) params.append('assigned_to', filter.assigned_to);
       if (filter.is_test_data !== undefined) params.append('is_test_data', filter.is_test_data);
 
+      const authOpts = await getAuthFetchOptions();
       const response = await fetch(`${BACKEND_URL}/api/v2/opportunities/stats?${params}`, {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
+        ...authOpts,
       });
 
       if (!response.ok) {
@@ -56,9 +57,10 @@ export const Opportunity = {
         }
       }
 
+      const authOpts = await getAuthFetchOptions();
       const response = await fetch(`${BACKEND_URL}/api/v2/opportunities/count?${params}`, {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
+        ...authOpts,
       });
 
       if (!response.ok) {

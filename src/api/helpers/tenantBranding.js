@@ -46,12 +46,12 @@ export async function getTenantBrandingFast(tenantId = null) {
           logo_url: data.logo_url,
           primary_color: data.primary_color,
           accent_color: data.accent_color,
+          ...data,
           settings: data.settings || data.branding_settings || {},
           country: data.country,
           industry: data.industry,
           created_at: data.created_at,
           updated_at: data.updated_at,
-          ...data,
         },
       },
     };

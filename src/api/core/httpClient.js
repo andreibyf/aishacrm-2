@@ -62,6 +62,35 @@ export const pluralize = (entityName) => {
 };
 
 // Helper to generate a safe local-dev fallback result to keep UI responsive
+/**
+ * Get authenticated fetch options (credentials + Authorization header).
+ * Use this in entity overrides that make raw fetch() calls instead of callBackendAPI.
+ * @param {Object} [extraHeaders={}] - Additional headers to merge
+ * @returns {Promise<{credentials: string, headers: Object}>}
+ */
+export const getAuthFetchOptions = async (extraHeaders = {}) => {
+  const options = {
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...extraHeaders,
+    },
+  };
+  if (isSupabaseConfigured()) {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        options.headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+    } catch (_err) {
+      // Continue without token — cookie auth as fallback
+    }
+  }
+  return options;
+};
+
 export const makeDevFallback = (entityName, method, data, id) => {
   const now = new Date().toISOString();
   const lname = entityName.toLowerCase();
@@ -705,9 +734,11 @@ export const callBackendAPI = async (entityName, method, data = null, id = null)
           gotType: typeof result,
           gotValue: result,
         });
-        alert(
-          `ENTITY ERROR: ${entityName}.filter() returned ${typeof result} instead of array. Check window.__ENTITY_DEBUG`,
-        );
+        if (import.meta.env.DEV) {
+          alert(
+            `ENTITY ERROR: ${entityName}.filter() returned ${typeof result} instead of array. Check window.__ENTITY_DEBUG`,
+          );
+        }
       }
 
       console.warn(

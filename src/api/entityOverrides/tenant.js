@@ -1,18 +1,18 @@
 // Tenant entity - direct backend API calls
 // Extracted from src/api/entities.js
-import { BACKEND_URL } from '../core/httpClient';
+import { BACKEND_URL, getAuthFetchOptions } from '../core/httpClient';
 import { logDev } from '../../utils/devLogger';
 
 export const Tenant = {
   async list(orderBy = 'display_order') {
     try {
+      const authOpts = await getAuthFetchOptions({
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        Pragma: 'no-cache',
+      });
       const response = await fetch(`${BACKEND_URL}/api/tenants`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          Pragma: 'no-cache',
-        },
+        ...authOpts,
       });
 
       if (!response.ok) {
@@ -47,11 +47,10 @@ export const Tenant = {
 
   async get(id) {
     try {
+      const authOpts = await getAuthFetchOptions();
       const response = await fetch(`${BACKEND_URL}/api/tenants/${id}`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        ...authOpts,
       });
 
       if (!response.ok) {
@@ -70,11 +69,10 @@ export const Tenant = {
 
   async create(data) {
     try {
+      const authOpts = await getAuthFetchOptions();
       const response = await fetch(`${BACKEND_URL}/api/tenants`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        ...authOpts,
         body: JSON.stringify(data),
       });
 
@@ -94,11 +92,10 @@ export const Tenant = {
     try {
       logDev('[Tenant.update] Updating tenant:', id, 'with data:', data);
 
+      const authOpts = await getAuthFetchOptions();
       const response = await fetch(`${BACKEND_URL}/api/tenants/${id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        ...authOpts,
         body: JSON.stringify(data),
       });
 
@@ -121,11 +118,10 @@ export const Tenant = {
 
   async delete(id) {
     try {
+      const authOpts = await getAuthFetchOptions();
       const response = await fetch(`${BACKEND_URL}/api/tenants/${id}`, {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        ...authOpts,
       });
 
       if (!response.ok) {

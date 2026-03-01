@@ -1,6 +1,6 @@
 // AuditLog entity - direct backend API calls with clear() method
 // Extracted from src/api/entities.js
-import { BACKEND_URL } from '../core/httpClient';
+import { BACKEND_URL, getAuthFetchOptions } from '../core/httpClient';
 import { logDev } from '../../utils/devLogger';
 
 export const AuditLog = {
@@ -21,13 +21,13 @@ export const AuditLog = {
       const url = `${BACKEND_URL}/api/audit-logs?${params}`;
       logDev('[AuditLog.list] Fetching from:', url);
 
+      const authOpts = await getAuthFetchOptions({
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        Pragma: 'no-cache',
+      });
       const response = await fetch(url, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          Pragma: 'no-cache',
-        },
+        ...authOpts,
       });
 
       logDev('[AuditLog.list] Response status:', response.status, response.statusText);
@@ -56,11 +56,10 @@ export const AuditLog = {
 
   async get(id) {
     try {
+      const authOpts = await getAuthFetchOptions();
       const response = await fetch(`${BACKEND_URL}/api/audit-logs/${id}`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        ...authOpts,
       });
 
       if (!response.ok) {
@@ -77,11 +76,10 @@ export const AuditLog = {
 
   async create(data) {
     try {
+      const authOpts = await getAuthFetchOptions();
       const response = await fetch(`${BACKEND_URL}/api/audit-logs`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        ...authOpts,
         body: JSON.stringify(data),
       });
 
@@ -99,11 +97,10 @@ export const AuditLog = {
 
   async delete(id) {
     try {
+      const authOpts = await getAuthFetchOptions();
       const response = await fetch(`${BACKEND_URL}/api/audit-logs/${id}`, {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        ...authOpts,
       });
 
       if (!response.ok) {
@@ -131,11 +128,10 @@ export const AuditLog = {
         params.append('older_than_days', filters.older_than_days);
       }
 
+      const authOpts = await getAuthFetchOptions();
       const response = await fetch(`${BACKEND_URL}/api/audit-logs?${params}`, {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        ...authOpts,
       });
 
       if (!response.ok) {

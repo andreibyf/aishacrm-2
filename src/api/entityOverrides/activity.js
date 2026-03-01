@@ -1,7 +1,7 @@
 // Activity entity with WAF-safe search extension
 // Extracted from src/api/entities.js
 import { createEntity } from '../core/createEntity';
-import { BACKEND_URL } from '../core/httpClient';
+import { BACKEND_URL, getAuthFetchOptions } from '../core/httpClient';
 import { logDev } from '../../utils/devLogger';
 
 export const Activity = createEntity('Activity');
@@ -39,13 +39,12 @@ Activity.search = async function (searchParams = {}) {
   }
 
   try {
+    const authOpts = await getAuthFetchOptions();
     const response = await fetch(
       `${BACKEND_URL}/api/v2/activities/search?tenant_id=${encodeURIComponent(tenantId)}`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        ...authOpts,
         body: JSON.stringify({
           q,
           fields,

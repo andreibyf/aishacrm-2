@@ -1,7 +1,7 @@
 // BizDevSource entity with create/update overrides and promote()
 // Extracted from src/api/entities.js
 import { createEntity } from '../core/createEntity';
-import { BACKEND_URL } from '../core/httpClient';
+import { BACKEND_URL, getAuthFetchOptions } from '../core/httpClient';
 import { logDev } from '../../utils/devLogger';
 
 export const BizDevSource = {
@@ -23,9 +23,10 @@ export const BizDevSource = {
       const url = `${BACKEND_URL}/api/bizdevsources`;
       logDev('[BizDevSource.create] POST', { url, tenant_id });
 
+      const authOpts = await getAuthFetchOptions();
       const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        ...authOpts,
         body: JSON.stringify(data),
       });
       logDev('[BizDevSource.create] Response', { status: response.status, ok: response.ok });
@@ -56,9 +57,10 @@ export const BizDevSource = {
       logDev('[BizDevSource.update] PUT', { url, id, tenant_id });
       // Exclude tenant_id from body (route expects it only in query for validation)
       const { tenant_id: _omit, tenantId: _omit2, ...rest } = data || {};
+      const authOpts = await getAuthFetchOptions();
       const response = await fetch(url, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        ...authOpts,
         body: JSON.stringify(rest),
       });
       logDev('[BizDevSource.update] Response', { status: response.status, ok: response.ok });
@@ -95,10 +97,11 @@ export const BizDevSource = {
       }, timeoutMs);
 
       let response;
+      const authOpts = await getAuthFetchOptions();
       try {
         response = await fetch(url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          ...authOpts,
           // Keep source after promotion so UI can gray it out and stats reflect immediately
           body: JSON.stringify({ tenant_id, delete_source: false }),
           signal: controller.signal,

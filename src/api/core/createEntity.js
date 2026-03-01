@@ -12,20 +12,24 @@ export const createEntity = (entityName) => {
       if (sortField) queryObj.sort = sortField;
       if (limit !== undefined) queryObj.limit = limit;
       if (offset !== undefined) queryObj.offset = offset;
-      console.log(
-        `[Entity.filter] ${entityName} CALLING with sort:`,
-        sortField,
-        'limit:',
-        limit,
-        'queryObj:',
-        queryObj,
-      );
+      if (import.meta.env.DEV) {
+        console.log(
+          `[Entity.filter] ${entityName} CALLING with sort:`,
+          sortField,
+          'limit:',
+          limit,
+          'queryObj:',
+          queryObj,
+        );
+      }
       const result = await callBackendAPI(entityName, 'GET', queryObj);
-      console.log(`[Entity.filter] ${entityName}:`, {
-        type: typeof result,
-        isArray: Array.isArray(result),
-        length: result?.length,
-      });
+      if (import.meta.env.DEV) {
+        console.log(`[Entity.filter] ${entityName}:`, {
+          type: typeof result,
+          isArray: Array.isArray(result),
+          length: result?.length,
+        });
+      }
       return result;
     },
     // List method - handle both string orderBy and object filters

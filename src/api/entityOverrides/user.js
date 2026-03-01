@@ -555,7 +555,7 @@ export const User = {
   list: async (filters) => {
     // ALWAYS use backend API for listing users (don't mock this - we need real data)
     logDev('[User.list] Fetching users via backend API');
-    return callBackendAPI('user', 'GET', filters);
+    return callBackendAPI('User', 'GET', filters);
   },
 
   /**
@@ -564,7 +564,7 @@ export const User = {
   update: async (userId, updates) => {
     // ALWAYS use backend API for user updates (don't mock this - we need real persistence)
     logDev('[User.update] Updating user via backend API:', userId, updates);
-    return callBackendAPI('user', 'PUT', updates, userId);
+    return callBackendAPI('User', 'PUT', updates, userId);
   },
 
   /**
