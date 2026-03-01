@@ -1,14 +1,30 @@
-
 import { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+} from 'recharts';
 import { TrendingUp, Calendar, DollarSign, Target, Loader2, AlertCircle } from 'lucide-react';
 import { Opportunity, Lead } from '@/api/entities';
 import { useUser } from '@/components/shared/useUser.js';
 import { getTenantFilter } from '../shared/tenantUtils';
 import { useTenant } from '../shared/tenantContext';
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function ForecastingDashboard() {
   const [loading, setLoading] = useState(true);
@@ -19,106 +35,108 @@ export default function ForecastingDashboard() {
     totalPipeline: 0,
     weightedPipeline: 0,
     forecastedRevenue: 0,
-    conversionRate: 0
+    conversionRate: 0,
   });
   const { selectedTenantId } = useTenant();
 
   const getDefaultProbability = useCallback((stage) => {
     const stageProbabilities = {
-      'prospecting': 10,
-      'qualification': 25,
-      'proposal': 50,
-      'negotiation': 75,
-      'closed_won': 100,
-      'closed_lost': 0
+      prospecting: 10,
+      qualification: 25,
+      proposal: 50,
+      negotiation: 75,
+      closed_won: 100,
+      closed_lost: 0,
     };
     return stageProbabilities[stage] || 25;
   }, []); // No dependencies, as it's a static mapping
 
-  const generateDailyForecast = useCallback((opportunities, days) => {
-    const forecast = [];
-    const today = new Date();
-    
-    for (let i = 0; i < days; i++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + i);
-      const dateStr = date.toISOString().split('T')[0];
-      
-      // Find opportunities expected to close on this date
-      const closingOpps = opportunities.filter(opp => {
-        if (!opp.close_date) return false;
-        const closeDate = new Date(opp.close_date);
-        return closeDate.toISOString().split('T')[0] === dateStr;
-      });
+  const generateDailyForecast = useCallback(
+    (opportunities, days) => {
+      const forecast = [];
+      const today = new Date();
 
-      const expectedRevenue = closingOpps.reduce((sum, opp) => {
-        const probability = opp.probability || getDefaultProbability(opp.stage);
-        return sum + ((opp.amount || 0) * (probability / 100));
-      }, 0);
+      for (let i = 0; i < days; i++) {
+        const date = new Date(today);
+        date.setDate(today.getDate() + i);
+        const dateStr = date.toISOString().split('T')[0];
 
-      const potentialRevenue = closingOpps.reduce((sum, opp) => sum + (opp.amount || 0), 0);
+        // Find opportunities expected to close on this date
+        const closingOpps = opportunities.filter((opp) => {
+          if (!opp.close_date) return false;
+          const closeDate = new Date(opp.close_date);
+          return closeDate.toISOString().split('T')[0] === dateStr;
+        });
 
-      forecast.push({
-        date: dateStr,
-        displayDate: date.toLocaleDateString('en-US', { 
-          month: 'short', 
-          day: 'numeric' 
-        }),
-        expectedRevenue,
-        potentialRevenue,
-        opportunities: closingOpps.length
-      });
-    }
+        const expectedRevenue = closingOpps.reduce((sum, opp) => {
+          const probability = opp.probability || getDefaultProbability(opp.stage);
+          return sum + (opp.amount || 0) * (probability / 100);
+        }, 0);
 
-    return forecast;
-  }, [getDefaultProbability]); // Depends on getDefaultProbability
+        const potentialRevenue = closingOpps.reduce((sum, opp) => sum + (opp.amount || 0), 0);
+
+        forecast.push({
+          date: dateStr,
+          displayDate: date.toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+          }),
+          expectedRevenue,
+          potentialRevenue,
+          opportunities: closingOpps.length,
+        });
+      }
+
+      return forecast;
+    },
+    [getDefaultProbability],
+  ); // Depends on getDefaultProbability
 
   const loadForecastData = useCallback(async () => {
     if (!user) return; // Ensure user is loaded before making API calls
-    
+
     setLoading(true);
     try {
       // DEFENSIVE UNWRAPPING - handle both array and wrapped responses
       const unwrap = (result) => {
         // Already an array - return as-is
         if (Array.isArray(result)) return result;
-        
+
         // Wrapped in { data: [...] } shape
         if (result?.data && Array.isArray(result.data)) return result.data;
-        
+
         // Wrapped in { status: "success", data: [...] } shape
         if (result?.status === 'success' && Array.isArray(result.data)) return result.data;
-        
+
         // Invalid response - log warning and return empty array
-        console.warn("ForecastingDashboard: API response not in expected format:", result);
         return [];
       };
 
       const tenantFilter = getTenantFilter(user, selectedTenantId);
-      
+
       const [opportunitiesResult, leadsResult] = await Promise.all([
         Opportunity.filter(tenantFilter).catch(() => null),
-        Lead.filter(tenantFilter).catch(() => null)
+        Lead.filter(tenantFilter).catch(() => null),
       ]);
 
       const opportunities = unwrap(opportunitiesResult);
       const leads = unwrap(leadsResult);
 
       // Calculate pipeline metrics
-      const activeOpportunities = opportunities.filter(opp => 
-        opp.stage !== 'closed_won' && opp.stage !== 'closed_lost'
+      const activeOpportunities = opportunities.filter(
+        (opp) => opp.stage !== 'closed_won' && opp.stage !== 'closed_lost',
       );
 
       const totalPipeline = activeOpportunities.reduce((sum, opp) => sum + (opp.amount || 0), 0);
-      
+
       // Calculate weighted pipeline (amount * probability)
       const weightedPipeline = activeOpportunities.reduce((sum, opp) => {
         const probability = opp.probability || getDefaultProbability(opp.stage);
-        return sum + ((opp.amount || 0) * (probability / 100));
+        return sum + (opp.amount || 0) * (probability / 100);
       }, 0);
 
       // Calculate conversion rate from leads
-      const convertedLeads = leads.filter(lead => lead.status === 'converted').length;
+      const convertedLeads = leads.filter((lead) => lead.status === 'converted').length;
       const totalLeads = leads.length;
       const conversionRate = totalLeads > 0 ? (convertedLeads / totalLeads) * 100 : 0;
 
@@ -130,7 +148,7 @@ export default function ForecastingDashboard() {
         totalPipeline,
         weightedPipeline,
         forecastedRevenue: weightedPipeline,
-        conversionRate
+        conversionRate,
       });
 
       setForecastData(dailyForecast);
@@ -180,7 +198,8 @@ export default function ForecastingDashboard() {
       <Alert className="bg-slate-800 border-slate-700">
         <AlertCircle className="h-4 w-4 text-blue-400" />
         <AlertDescription className="text-slate-300">
-          Forecasts are based on current pipeline data and stage probabilities. Accuracy depends on data quality and regular updates.
+          Forecasts are based on current pipeline data and stage probabilities. Accuracy depends on
+          data quality and regular updates.
         </AlertDescription>
       </Alert>
 
@@ -192,7 +211,9 @@ export default function ForecastingDashboard() {
             <DollarSign className="h-4 w-4 text-blue-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-slate-100">${pipelineMetrics.totalPipeline.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-slate-100">
+              ${pipelineMetrics.totalPipeline.toLocaleString()}
+            </div>
             <p className="text-xs text-slate-500">Active opportunities</p>
           </CardContent>
         </Card>
@@ -203,7 +224,9 @@ export default function ForecastingDashboard() {
             <Target className="h-4 w-4 text-purple-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-slate-100">${pipelineMetrics.weightedPipeline.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-slate-100">
+              ${pipelineMetrics.weightedPipeline.toLocaleString()}
+            </div>
             <p className="text-xs text-slate-500">Probability adjusted</p>
           </CardContent>
         </Card>
@@ -214,7 +237,9 @@ export default function ForecastingDashboard() {
             <TrendingUp className="h-4 w-4 text-green-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-slate-100">${pipelineMetrics.forecastedRevenue.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-slate-100">
+              ${pipelineMetrics.forecastedRevenue.toLocaleString()}
+            </div>
             <p className="text-xs text-slate-500">Expected to close</p>
           </CardContent>
         </Card>
@@ -225,7 +250,9 @@ export default function ForecastingDashboard() {
             <Target className="h-4 w-4 text-orange-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-slate-100">{pipelineMetrics.conversionRate.toFixed(1)}%</div>
+            <div className="text-2xl font-bold text-slate-100">
+              {pipelineMetrics.conversionRate.toFixed(1)}%
+            </div>
             <p className="text-xs text-slate-500">Lead to opportunity</p>
           </CardContent>
         </Card>
@@ -242,31 +269,34 @@ export default function ForecastingDashboard() {
               <LineChart data={forecastData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
                 <XAxis dataKey="displayDate" tick={{ fontSize: 12, fill: '#94a3b8' }} />
-                <YAxis tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} tick={{ fontSize: 12, fill: '#94a3b8' }} />
-                <Tooltip 
-                  formatter={(value) => [`$${value.toLocaleString()}`, 'Revenue']} 
-                  contentStyle={{ 
-                    backgroundColor: '#1e293b', 
-                    border: '1px solid #475569', 
-                    borderRadius: '8px', 
-                    color: '#f1f5f9' 
-                  }} 
+                <YAxis
+                  tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+                  tick={{ fontSize: 12, fill: '#94a3b8' }}
+                />
+                <Tooltip
+                  formatter={(value) => [`$${value.toLocaleString()}`, 'Revenue']}
+                  contentStyle={{
+                    backgroundColor: '#1e293b',
+                    border: '1px solid #475569',
+                    borderRadius: '8px',
+                    color: '#f1f5f9',
+                  }}
                 />
                 <Legend wrapperStyle={{ color: '#f1f5f9' }} />
-                <Line 
-                  type="monotone" 
-                  dataKey="expectedRevenue" 
-                  stroke="#10b981" 
-                  strokeWidth={2} 
-                  name="Expected Revenue" 
+                <Line
+                  type="monotone"
+                  dataKey="expectedRevenue"
+                  stroke="#10b981"
+                  strokeWidth={2}
+                  name="Expected Revenue"
                 />
-                <Line 
-                  type="monotone" 
-                  dataKey="potentialRevenue" 
-                  stroke="#3b82f6" 
-                  strokeWidth={2} 
-                  strokeDasharray="5 5" 
-                  name="Potential Revenue" 
+                <Line
+                  type="monotone"
+                  dataKey="potentialRevenue"
+                  stroke="#3b82f6"
+                  strokeWidth={2}
+                  strokeDasharray="5 5"
+                  name="Potential Revenue"
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -283,13 +313,13 @@ export default function ForecastingDashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
                 <XAxis dataKey="displayDate" tick={{ fontSize: 12, fill: '#94a3b8' }} />
                 <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#1e293b', 
-                    border: '1px solid #475569', 
-                    borderRadius: '8px', 
-                    color: '#f1f5f9' 
-                  }} 
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#1e293b',
+                    border: '1px solid #475569',
+                    borderRadius: '8px',
+                    color: '#f1f5f9',
+                  }}
                 />
                 <Bar dataKey="opportunities" fill="#8b5cf6" />
               </BarChart>
@@ -303,7 +333,9 @@ export default function ForecastingDashboard() {
           <CardContent className="p-12 text-center">
             <Calendar className="w-12 h-12 text-slate-500 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-slate-300 mb-2">No Forecast Data</h3>
-            <p className="text-slate-400">Add opportunities with close dates to see revenue forecasts.</p>
+            <p className="text-slate-400">
+              Add opportunities with close dates to see revenue forecasts.
+            </p>
           </CardContent>
         </Card>
       )}

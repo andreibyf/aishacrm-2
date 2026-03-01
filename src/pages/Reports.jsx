@@ -37,22 +37,6 @@ import { Opportunity } from '@/api/entities';
 import { Activity } from '@/api/entities';
 import { Tenant } from '@/api/entities';
 
-// DEBUG: Check imports in Reports.jsx
-console.log('Reports.jsx IMPORT CHECK:', {
-  Lead: typeof Lead,
-  Contact: typeof Contact,
-  Opportunity: typeof Opportunity,
-  Activity: typeof Activity,
-  LeadFilter: typeof Lead?.filter,
-  OpportunityFilter: typeof Opportunity?.filter,
-  LeadKeys: Lead ? Object.keys(Lead).join(', ') : 'null',
-});
-if (typeof Lead?.filter !== 'function') {
-  alert(
-    `Reports.jsx: Lead.filter is ${typeof Lead?.filter}. Lead = ${JSON.stringify(Object.keys(Lead || {}))}`,
-  );
-}
-
 import { useTenant } from '../components/shared/tenantContext';
 import { useEmployeeScope } from '../components/shared/EmployeeScopeContext';
 import { useApiManager } from '../components/shared/ApiManager';
@@ -190,7 +174,6 @@ export default function ReportsPage() {
             return result[pluralName];
           }
           // Only warn if unwrapping failed - if we reach here, result is not an array and not a valid pagination object
-          console.warn(`Reports.jsx: Failed to unwrap ${entityName}, got:`, typeof result, result);
           return [];
         };
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Activity as ActivityIcon, Calendar, CheckCircle, Lightbulb, Zap } from 'lucide-react'; // Added Lightbulb and Renamed Activity to ActivityIcon to avoid conflict
+import { Activity as ActivityIcon, Calendar, CheckCircle, Lightbulb, Zap } from 'lucide-react';
 import {
   Bar,
   BarChart,
@@ -54,8 +54,6 @@ export default function ProductivityAnalytics({ tenantFilter }) {
           if (result?.data?.activities && Array.isArray(result.data.activities))
             return result.data.activities;
 
-          // Invalid response - log warning and return empty array
-          console.warn('ProductivityAnalytics: API response not in expected format:', result);
           return [];
         };
 
@@ -70,13 +68,7 @@ export default function ProductivityAnalytics({ tenantFilter }) {
           : [];
         const employees = Array.isArray(unwrap(employeesResult)) ? unwrap(employeesResult) : [];
 
-        console.log('[ProductivityAnalytics] Fetched data:', {
-          activitiesCount: rawActivities.length,
-          employeesCount: employees.length,
-          tenantFilter,
-        });
-
-        setActivities(rawActivities); // Set the main activities state for overall calculations
+        setActivities(rawActivities);
 
         // Process data for activitiesPerUser — activities use assigned_to (employees.id)
         const employeeMap = employees.reduce((acc, emp) => {
@@ -115,7 +107,7 @@ export default function ProductivityAnalytics({ tenantFilter }) {
         setActivitiesPerUser(processedActivitiesPerUser);
       } catch (error) {
         console.error('Failed to fetch productivity data:', error);
-        setActivities([]); // Clear activities on error
+        setActivities([]);
         setActivitiesPerUser([]);
       } finally {
         setIsLoading(false);
@@ -354,7 +346,7 @@ export default function ProductivityAnalytics({ tenantFilter }) {
                 <p className="text-sm font-medium text-slate-400">Total Activities</p>
                 <p className="text-2xl font-bold text-slate-100">{safeActivities.length}</p>
               </div>
-              <ActivityIcon className="w-8 h-8 text-blue-400" /> {/* Changed to ActivityIcon */}
+              <ActivityIcon className="w-8 h-8 text-blue-400" />
             </div>
           </CardContent>
         </Card>
@@ -540,7 +532,7 @@ export default function ProductivityAnalytics({ tenantFilter }) {
             Productivity Insights & Recommendations
           </CardTitle>
           <CardDescription className="text-slate-400">
-            Insights are based on tenant ID: {tenantFilter?.tenant_id || 'N/A'}
+            AI-generated recommendations based on your activity patterns.
           </CardDescription>
         </CardHeader>
         <CardContent>

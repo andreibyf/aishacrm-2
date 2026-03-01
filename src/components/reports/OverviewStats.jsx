@@ -1,13 +1,6 @@
-import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Activity,
-  Building,
-  DollarSign,
-  Star,
-  Target,
-  Users,
-} from "lucide-react";
+import { useEffect, useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Activity, Building, DollarSign, Star, Target, Users } from 'lucide-react';
 import {
   Bar,
   BarChart,
@@ -20,37 +13,16 @@ import {
   Tooltip,
   XAxis,
   YAxis,
-} from "recharts";
-import { Account, Lead, Opportunity } from "@/api/entities";
-import TrendIndicator from "./TrendIndicator";
-import { getBackendUrl } from "@/api/backendUrl";
+} from 'recharts';
+import { Account, Lead, Opportunity } from '@/api/entities';
+import TrendIndicator from './TrendIndicator';
+import { getBackendUrl } from '@/api/backendUrl';
 
-// DEBUG: Check what entities are actually imported
-const importDebug = {
-  Account: typeof Account,
-  Lead: typeof Lead,
-  Opportunity: typeof Opportunity,
-  AccountFilter: typeof Account?.filter,
-  LeadFilter: typeof Lead?.filter,
-  OpportunityFilter: typeof Opportunity?.filter,
-  LeadKeys: Lead ? Object.keys(Lead).join(', ') : 'null',
-};
-console.log("OverviewStats IMPORT CHECK:", importDebug);
-if (typeof Lead?.filter !== 'function') {
-  alert(`ERROR: Lead.filter is ${typeof Lead?.filter}. Lead keys: ${importDebug.LeadKeys}`);
-}
-
-const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
+const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
 const BACKEND_URL = getBackendUrl();
 
 export default function OverviewStats({ tenantFilter }) {
-  // DEBUG: Log every render to catch state corruption
-  console.log("OverviewStats RENDER:", {
-    timestamp: new Date().toISOString(),
-    tenantFilter,
-  });
-
   const [stats, setStats] = useState({
     contacts: 0,
     accounts: 0,
@@ -76,26 +48,15 @@ export default function OverviewStats({ tenantFilter }) {
 
   const [error, setError] = useState(null);
 
-  // DEBUG: Log chartData state on every render
-  console.log("OverviewStats chartData state:", {
-    chartData,
-    leadSourcesType: typeof chartData?.leadSources,
-    leadSourcesIsArray: Array.isArray(chartData?.leadSources),
-    opportunityStagesType: typeof chartData?.opportunityStages,
-    opportunityStagesIsArray: Array.isArray(chartData?.opportunityStages),
-  });
-
   useEffect(() => {
     const fetchStats = async () => {
       try {
         // Clear any previous errors
         setError(null);
-        
-        console.log("OverviewStats: Fetching stats with filter:", tenantFilter);
 
         // Ensure test data is excluded unless explicitly included for direct entity fetches
         const effectiveFilter = { ...tenantFilter };
-        if (!("is_test_data" in effectiveFilter)) {
+        if (!('is_test_data' in effectiveFilter)) {
           effectiveFilter.is_test_data = false;
         }
 
@@ -106,8 +67,10 @@ export default function OverviewStats({ tenantFilter }) {
         }
 
         // Call backend API endpoint for dashboard stats
-        const response = await fetch(`${BACKEND_URL}/api/reports/dashboard-stats?${queryParams.toString()}`);
-        
+        const response = await fetch(
+          `${BACKEND_URL}/api/reports/dashboard-stats?${queryParams.toString()}`,
+        );
+
         if (!response.ok) {
           throw new Error(`Backend API error: ${response.status} ${response.statusText}`);
         }
@@ -115,7 +78,7 @@ export default function OverviewStats({ tenantFilter }) {
         const result = await response.json();
 
         // Fetch additional data for charts and specific stats that backend might not provide
-        console.log("OverviewStats: About to fetch entity data with filter:", effectiveFilter);
+
         let leadsResult, opportunitiesResult, accountsResult;
         try {
           [leadsResult, opportunitiesResult, accountsResult] = await Promise.all([
@@ -123,19 +86,7 @@ export default function OverviewStats({ tenantFilter }) {
             Opportunity.filter(effectiveFilter),
             Account.filter(effectiveFilter),
           ]);
-          console.log("OverviewStats: Raw API results:", {
-            leadsResult: leadsResult,
-            leadsType: typeof leadsResult,
-            leadsIsArray: Array.isArray(leadsResult),
-            opportunitiesResult: opportunitiesResult,
-            opportunitiesType: typeof opportunitiesResult,
-            opportunitiesIsArray: Array.isArray(opportunitiesResult),
-            accountsResult: accountsResult,
-            accountsType: typeof accountsResult,
-            accountsIsArray: Array.isArray(accountsResult)
-          });
         } catch (err) {
-          console.error("OverviewStats: Error fetching entity data:", err);
           leadsResult = [];
           opportunitiesResult = [];
           accountsResult = [];
@@ -145,46 +96,25 @@ export default function OverviewStats({ tenantFilter }) {
         const unwrap = (result) => {
           // Already an array - return as-is
           if (Array.isArray(result)) return result;
-          
+
           // Wrapped in { data: [...] } shape
           if (result?.data && Array.isArray(result.data)) return result.data;
-          
+
           // Wrapped in { status: "success", data: [...] } shape
           if (result?.status === 'success' && Array.isArray(result.data)) return result.data;
-          
+
           // Invalid response - log warning and return empty array
-          console.warn("OverviewStats: API response not in expected format:", result);
           return [];
         };
 
         const allLeads = Array.isArray(unwrap(leadsResult)) ? unwrap(leadsResult) : [];
-        const allOpportunities = Array.isArray(unwrap(opportunitiesResult)) ? unwrap(opportunitiesResult) : [];
+        const allOpportunities = Array.isArray(unwrap(opportunitiesResult))
+          ? unwrap(opportunitiesResult)
+          : [];
         const allAccounts = Array.isArray(unwrap(accountsResult)) ? unwrap(accountsResult) : [];
-
-        console.log("OverviewStats: Unwrapped data:", {
-          leadsCount: allLeads.length,
-          opportunitiesCount: allOpportunities.length,
-          accountsCount: allAccounts.length,
-          leadsIsArray: Array.isArray(allLeads),
-          opportunitiesIsArray: Array.isArray(allOpportunities),
-          accountsIsArray: Array.isArray(allAccounts)
-        });
 
         if (result.status === 'success' && result.data) {
           const dashboardStats = result.data;
-
-          console.log(
-            "OverviewStats: Received dashboard stats from backend:",
-            dashboardStats,
-          );
-          console.log(
-            "OverviewStats: Chart data counts from direct entity fetches:",
-            {
-              leads: allLeads.length,
-              opportunities: allOpportunities.length,
-              accounts: allAccounts.length,
-            },
-          );
 
           // Calculate pipeline value from opportunities
           const pipelineValue = allOpportunities.reduce((sum, opp) => {
@@ -205,92 +135,71 @@ export default function OverviewStats({ tenantFilter }) {
           if (dashboardStats.trends) {
             setTrends(dashboardStats.trends);
           }
-        } else {
-          console.warn(
-            "OverviewStats: No stats data received from backend API.",
-          );
         }
 
         // Prepare chart data
         // Initialize all possible lead sources
         const allLeadSources = {
-          "website": 0,
-          "referral": 0,
-          "cold_call": 0,
-          "email": 0,
-          "social_media": 0,
-          "trade_show": 0,
-          "advertising": 0,
-          "other": 0,
+          website: 0,
+          referral: 0,
+          cold_call: 0,
+          email: 0,
+          social_media: 0,
+          trade_show: 0,
+          advertising: 0,
+          other: 0,
         };
 
         // Defensive: Ensure allLeads is an array before iterating
         if (Array.isArray(allLeads)) {
           allLeads.forEach((lead) => {
-            const source = (lead.source || "").toLowerCase();
-            const key =
-              Object.prototype.hasOwnProperty.call(allLeadSources, source)
-                ? source
-                : "other";
+            const source = (lead.source || '').toLowerCase();
+            const key = Object.prototype.hasOwnProperty.call(allLeadSources, source)
+              ? source
+              : 'other';
             allLeadSources[key]++;
           });
         }
 
         // Initialize all possible opportunity stages
         const allOpportunityStages = {
-          "prospecting": 0,
-          "qualification": 0,
-          "proposal": 0,
-          "negotiation": 0,
-          "closed_won": 0,
-          "closed_lost": 0,
+          prospecting: 0,
+          qualification: 0,
+          proposal: 0,
+          negotiation: 0,
+          closed_won: 0,
+          closed_lost: 0,
         };
 
         // Defensive: Ensure allOpportunities is an array before iterating
         if (Array.isArray(allOpportunities)) {
           allOpportunities.forEach((opp) => {
-            const stage = (opp.stage || "").toLowerCase();
-            const key =
-              Object.prototype.hasOwnProperty.call(allOpportunityStages, stage)
-                ? stage
-                : "prospecting";
+            const stage = (opp.stage || '').toLowerCase();
+            const key = Object.prototype.hasOwnProperty.call(allOpportunityStages, stage)
+              ? stage
+              : 'prospecting';
             allOpportunityStages[key]++;
           });
         }
 
         const newChartData = {
           leadSources: Object.entries(allLeadSources).map(([name, value]) => ({
-            name: name.replace(/_/g, " ").replace(
-              /\b\w/g,
-              (l) => l.toUpperCase(),
-            ),
+            name: name.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase()),
             value,
             originalKey: name,
           })),
-          opportunityStages: Object.entries(allOpportunityStages).map((
-            [name, value],
-          ) => ({
-            name: name.replace(/_/g, " ").replace(
-              /\b\w/g,
-              (l) => l.toUpperCase(),
-            ),
+          opportunityStages: Object.entries(allOpportunityStages).map(([name, value]) => ({
+            name: name.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase()),
             value,
             originalKey: name,
           })),
         };
-        
-        console.log("OverviewStats: Setting chartData:", {
-          leadSourcesIsArray: Array.isArray(newChartData.leadSources),
-          leadSourcesLength: newChartData.leadSources?.length,
-          opportunityStagesIsArray: Array.isArray(newChartData.opportunityStages),
-          opportunityStagesLength: newChartData.opportunityStages?.length,
-        });
-        
+
         setChartData(newChartData);
       } catch (error) {
-        console.error("Error fetching overview stats:", error);
-        setError(error.message || "Failed to load overview stats. Please try again later.");
-        
+        console.error('Error fetching overview stats:', error);
+        setError(error.message || 'Failed to load overview stats. Please try again later.');
+
         // Set default empty state on error
         setStats({
           contacts: 0,
@@ -312,45 +221,45 @@ export default function OverviewStats({ tenantFilter }) {
 
   const statItems = [
     {
-      title: "Total Contacts",
+      title: 'Total Contacts',
       value: stats.contacts,
       icon: Users,
-      color: "bg-blue-500",
+      color: 'bg-blue-500',
       trend: trends.contacts,
     },
     {
-      title: "Active Accounts",
+      title: 'Active Accounts',
       value: stats.accounts,
       icon: Building,
-      color: "bg-emerald-500",
+      color: 'bg-emerald-500',
       trend: trends.accounts,
     },
     {
-      title: "Total Leads",
+      title: 'Total Leads',
       value: stats.leads,
       icon: Star,
-      color: "bg-purple-500",
+      color: 'bg-purple-500',
       trend: trends.leads,
     },
     {
-      title: "Opportunities",
+      title: 'Opportunities',
       value: stats.opportunities,
       icon: Target,
-      color: "bg-orange-500",
+      color: 'bg-orange-500',
       trend: trends.opportunities,
     },
     {
-      title: "Pipeline Value",
+      title: 'Pipeline Value',
       value: `$${stats.pipelineValue.toLocaleString()}`,
       icon: DollarSign,
-      color: "bg-amber-500",
+      color: 'bg-amber-500',
       trend: trends.pipelineValue,
     },
     {
-      title: "Activities This Month",
+      title: 'Activities This Month',
       value: stats.activities,
       icon: Activity,
-      color: "bg-indigo-500",
+      color: 'bg-indigo-500',
       trend: trends.activities,
     },
   ];
@@ -362,12 +271,7 @@ export default function OverviewStats({ tenantFilter }) {
           <CardContent className="pt-6">
             <div className="flex items-start gap-3">
               <div className="text-red-400">
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -377,9 +281,7 @@ export default function OverviewStats({ tenantFilter }) {
                 </svg>
               </div>
               <div className="flex-1">
-                <h3 className="text-red-300 font-medium mb-1">
-                  Failed to load overview stats
-                </h3>
+                <h3 className="text-red-300 font-medium mb-1">Failed to load overview stats</h3>
                 <p className="text-red-200 text-sm">{error}</p>
               </div>
             </div>
@@ -396,19 +298,13 @@ export default function OverviewStats({ tenantFilter }) {
               className={`absolute top-0 right-0 w-32 h-32 ${stat.color} opacity-5 rounded-full transform translate-x-8 -translate-y-8`}
             />
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-slate-400">
-                {stat.title}
-              </CardTitle>
+              <CardTitle className="text-sm font-medium text-slate-400">{stat.title}</CardTitle>
               <div className={`p-2 rounded-lg ${stat.color} bg-opacity-10`}>
-                <stat.icon
-                  className={`w-4 h-4 ${stat.color.replace("bg-", "text-")}`}
-                />
+                <stat.icon className={`w-4 h-4 ${stat.color.replace('bg-', 'text-')}`} />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-slate-100 mb-1">
-                {stat.value}
-              </div>
+              <div className="text-2xl font-bold text-slate-100 mb-1">{stat.value}</div>
               <TrendIndicator percentage={stat.trend} />
             </CardContent>
           </Card>
@@ -418,9 +314,7 @@ export default function OverviewStats({ tenantFilter }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="shadow-lg bg-slate-800 border-slate-700">
           <CardHeader>
-            <CardTitle className="text-slate-100">
-              Lead Sources Distribution
-            </CardTitle>
+            <CardTitle className="text-slate-100">Lead Sources Distribution</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
@@ -428,11 +322,7 @@ export default function OverviewStats({ tenantFilter }) {
                 <Pie
                   data={(() => {
                     const sources = chartData.leadSources || [];
-                    if (!Array.isArray(sources)) {
-                      console.error("leadSources is not an array:", typeof sources, sources);
-                      alert(`ERROR: leadSources is ${typeof sources}, not array. Check console.`);
-                      return [];
-                    }
+                    if (!Array.isArray(sources)) return [];
                     return sources.filter((item) => item.value > 0);
                   })()} // Only show slices with data
                   cx="50%"
@@ -445,25 +335,21 @@ export default function OverviewStats({ tenantFilter }) {
                     if (percent >= 0.05) {
                       return `${name} ${(percent * 100).toFixed(0)}%`;
                     }
-                    return "";
+                    return '';
                   }}
                 >
-                  {(chartData.leadSources || []).filter((item) => item.value > 0).map((
-                    entry,
-                    index,
-                  ) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={COLORS[index % COLORS.length]}
-                    />
-                  ))}
+                  {(chartData.leadSources || [])
+                    .filter((item) => item.value > 0)
+                    .map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
                 </Pie>
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: "#1e293b",
-                    border: "1px solid #475569",
-                    borderRadius: "8px",
-                    color: "#f1f5f9",
+                    backgroundColor: '#1e293b',
+                    border: '1px solid #475569',
+                    borderRadius: '8px',
+                    color: '#f1f5f9',
                   }}
                 />
                 <Legend
@@ -472,27 +358,23 @@ export default function OverviewStats({ tenantFilter }) {
                   layout="horizontal"
                   iconType="circle"
                   wrapperStyle={{
-                    paddingTop: "15px",
-                    fontSize: "12px",
+                    paddingTop: '15px',
+                    fontSize: '12px',
                   }}
                   payload={chartData.leadSources.map((item) => {
-                    const filteredItems = (chartData.leadSources || []).filter((d) =>
-                      d.value > 0
+                    const filteredItems = (chartData.leadSources || []).filter((d) => d.value > 0);
+                    const itemInFiltered = filteredItems.find(
+                      (fItem) =>
+                        Object.prototype.hasOwnProperty.call(fItem, 'originalKey') &&
+                        fItem.originalKey === item.originalKey,
                     );
-                    const itemInFiltered = filteredItems.find((fItem) =>
-                      Object.prototype.hasOwnProperty.call(
-                        fItem,
-                        "originalKey",
-                      ) && fItem.originalKey === item.originalKey
-                    );
-                    const color = item.value > 0
-                      ? COLORS[
-                        filteredItems.indexOf(itemInFiltered) % COLORS.length
-                      ]
-                      : "#64748b"; // Grey out items with 0 value
+                    const color =
+                      item.value > 0
+                        ? COLORS[filteredItems.indexOf(itemInFiltered) % COLORS.length]
+                        : '#64748b'; // Grey out items with 0 value
                     return {
                       value: item.name,
-                      type: "circle",
+                      type: 'circle',
                       color: color,
                       payload: item, // Keep the original item data in payload
                     };
@@ -503,17 +385,18 @@ export default function OverviewStats({ tenantFilter }) {
                       (sum, item) => sum + (item.value > 0 ? item.value : 0),
                       0,
                     );
-                    const percent = totalWithData > 0 && item.value > 0
-                      ? ((item.value / totalWithData) * 100).toFixed(0)
-                      : 0;
+                    const percent =
+                      totalWithData > 0 && item.value > 0
+                        ? ((item.value / totalWithData) * 100).toFixed(0)
+                        : 0;
                     return (
                       <span
                         style={{
                           color: entry.color, // match slice color; grey for zero
-                          fontStyle: item.value === 0 ? "italic" : "normal",
+                          fontStyle: item.value === 0 ? 'italic' : 'normal',
                         }}
                       >
-                        {value} ({item.value > 0 ? `${percent}%` : "0"})
+                        {value} ({item.value > 0 ? `${percent}%` : '0'})
                       </span>
                     );
                   }}
@@ -525,32 +408,26 @@ export default function OverviewStats({ tenantFilter }) {
 
         <Card className="shadow-lg bg-slate-800 border-slate-700">
           <CardHeader>
-            <CardTitle className="text-slate-100">
-              Sales Pipeline by Stage
-            </CardTitle>
+            <CardTitle className="text-slate-100">Sales Pipeline by Stage</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart
-                data={(chartData.opportunityStages || []).filter((item) =>
-                  item.value > 0
-                )}
-              >
+              <BarChart data={(chartData.opportunityStages || []).filter((item) => item.value > 0)}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
                 <XAxis
                   dataKey="name"
-                  tick={{ fontSize: 12, fill: "#94a3b8" }}
+                  tick={{ fontSize: 12, fill: '#94a3b8' }}
                   angle={-45}
                   textAnchor="end"
                   height={80}
                 />
-                <YAxis tick={{ fontSize: 12, fill: "#94a3b8" }} />
+                <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: "#1e293b",
-                    border: "1px solid #475569",
-                    borderRadius: "8px",
-                    color: "#f1f5f9",
+                    backgroundColor: '#1e293b',
+                    border: '1px solid #475569',
+                    borderRadius: '8px',
+                    color: '#f1f5f9',
                   }}
                 />
                 <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]} />
