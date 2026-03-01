@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   DndContext,
   pointerWithin,
@@ -70,9 +70,60 @@ export default function OpportunityKanbanBoard({
 }) {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingOpportunity, setEditingOpportunity] = useState(null);
-  const [localOpportunities, setLocalOpportunities] = useState(opportunities);
-  // Track ids with an in-flight stage update to prevent premature reversion from parent prop sync
-  const [pendingStageIds, setPendingStageIds] = useState(new Set());
+
+  // Optimistic stage overrides: Map<oppId string, newStage string>
+  // These override the parent prop data until the server confirms the change.
+  const [optimisticStages, setOptimisticStages] = useState(() => new Map());
+
+  // Derive the display list: apply optimistic overrides on top of parent props.
+  // No useEffect sync—this is a pure computation, immune to race conditions.
+  const localOpportunities = useMemo(() => {
+    if (!optimisticStages.size) return opportunities;
+    return opportunities.map((opp) => {
+      const override = optimisticStages.get(String(opp.id));
+      if (override !== undefined) {
+        return { ...opp, stage: override };
+      }
+      return opp;
+    });
+  }, [opportunities, optimisticStages]);
+
+  // Auto-clear optimistic overrides once the server data (props) confirms the new stage.
+  // This runs after every prop update and garbage-collects stale overrides.
+  React.useEffect(() => {
+    if (!optimisticStages.size) return;
+    setOptimisticStages((prev) => {
+      const next = new Map(prev);
+      let changed = false;
+      for (const [id, stage] of prev.entries()) {
+        const serverOpp = opportunities.find((o) => String(o.id) === id);
+        if (serverOpp && serverOpp.stage === stage) {
+          // Server data caught up — remove the override
+          next.delete(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [opportunities, optimisticStages]);
+
+  // Helper to set an optimistic override
+  const setOptimisticStage = useCallback((id, stage) => {
+    setOptimisticStages((prev) => {
+      const next = new Map(prev);
+      next.set(String(id), stage);
+      return next;
+    });
+  }, []);
+
+  // Helper to clear an optimistic override (on error / revert)
+  const clearOptimisticStage = useCallback((id) => {
+    setOptimisticStages((prev) => {
+      const next = new Map(prev);
+      next.delete(String(id));
+      return next;
+    });
+  }, []);
 
   // Configure sensors for drag and drop
   const sensors = useSensors(
@@ -99,38 +150,6 @@ export default function OpportunityKanbanBoard({
         color: stageConfig[stage].color,
       }));
   }, [isCardVisible, getCardLabel]);
-
-  // Sync local state with props unless an optimistic stage change is pending for specific ids.
-  React.useEffect(() => {
-    console.log('[Kanban] Prop sync triggered. Pending IDs:', Array.from(pendingStageIds));
-    console.log('[Kanban] Incoming opportunities count:', opportunities.length);
-
-    if (!pendingStageIds.size) {
-      console.log('[Kanban] No pending - replacing all local state with props');
-      setLocalOpportunities(opportunities);
-      return;
-    }
-
-    // Merge: keep optimistic versions for pending ids, use fresh data for the rest
-    setLocalOpportunities((prev) => {
-      const prevById = new Map(prev.map((o) => [String(o.id), o]));
-      const merged = opportunities.map((o) => {
-        const idStr = String(o.id);
-        if (pendingStageIds.has(idStr) && prevById.has(idStr)) {
-          console.log(
-            '[Kanban] Preserving optimistic stage for ID:',
-            idStr,
-            'stage:',
-            prevById.get(idStr).stage,
-          );
-          return prevById.get(idStr);
-        }
-        return o;
-      });
-      console.log('[Kanban] Merged opportunities count:', merged.length);
-      return merged;
-    });
-  }, [opportunities, pendingStageIds]);
 
   const getDisplayInfo = (opp) => {
     if (opp.account_id) {
@@ -196,60 +215,22 @@ export default function OpportunityKanbanBoard({
       }
     }
 
-    console.log('[Kanban] Drag ended:', { activeId, sourceStage, destinationStage });
+    // If dropped in same stage, no backend update needed
+    if (destinationStage === sourceStage) return;
 
-    // If dropped in same stage, no backend update needed (position reordering is local only)
-    if (destinationStage === sourceStage) {
-      // In @dnd-kit, we'd handle sorting here, but since we're not persisting order
-      // we'll just return
-      return;
-    }
-
-    // Moving to a different stage
-    console.log('[Kanban] Stage change:', {
-      id: activeId,
-      oldStage: sourceStage,
-      newStage: destinationStage,
-    });
-
-    // Mark id as pending so parent prop sync won't overwrite optimistic state
-    setPendingStageIds((prev) => {
-      const next = new Set(prev).add(activeId);
-      console.log('[Kanban] Pending IDs after add:', Array.from(next));
-      return next;
-    });
-
-    // OPTIMISTIC UPDATE
-    setLocalOpportunities((prev) => {
-      const updated = prev.map((opp) =>
-        String(opp.id) === activeId ? { ...opp, stage: destinationStage } : opp,
-      );
-      console.log('[Kanban] Optimistic update applied for', activeId);
-      return updated;
-    });
+    // OPTIMISTIC UPDATE — card moves instantly via useMemo overlay.
+    // The override persists until the server data (props) confirms the new stage.
+    setOptimisticStage(activeId, destinationStage);
 
     try {
-      console.log('[Kanban] Calling onStageChange...');
-      const result = await onStageChange(activeId, destinationStage);
-      console.log('[Kanban] onStageChange result:', result);
-
-      // onStageChange already clears cache + reloads data.
-      // Skip onDataRefresh to avoid a second reload that can race with pending-ID cleanup.
+      await onStageChange(activeId, destinationStage);
+      // Parent reloads data → opportunities prop updates → useMemo recomputes →
+      // auto-clear effect removes the override once server stage matches.
     } catch (error) {
       console.error('[Kanban] Error updating stage:', error);
       toast.error('Failed to move opportunity');
-      setLocalOpportunities(opportunities); // revert
-    } finally {
-      // Delay clearing the pending flag so the prop-sync useEffect has time to
-      // run with the refreshed data while the ID is still protected.
-      setTimeout(() => {
-        setPendingStageIds((prev) => {
-          const next = new Set(prev);
-          next.delete(activeId);
-          console.log('[Kanban] Pending IDs after remove:', Array.from(next));
-          return next;
-        });
-      }, 1200);
+      // Revert: remove the optimistic override so the card returns to its server-side stage
+      clearOptimisticStage(activeId);
     }
   };
 
