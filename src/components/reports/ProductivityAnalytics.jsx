@@ -19,15 +19,12 @@ import {
 } from 'recharts';
 import { format, isThisWeek, isToday, startOfWeek, subWeeks } from 'date-fns';
 import { Activity, Employee } from '@/api/entities';
-
-const COLORS_MAP = [
-  ['#60a5fa', '#3b82f6'], // blue
-  ['#34d399', '#10b981'], // emerald
-  ['#fbbf24', '#f59e0b'], // amber
-  ['#f87171', '#ef4444'], // red
-  ['#a78bfa', '#8b5cf6'], // violet
-  ['#2dd4bf', '#059669'], // teal
-];
+import {
+  unwrapApiResponse,
+  COLORS_MAP,
+  DARK_TOOLTIP_STYLE,
+  DARK_LABEL_STYLE,
+} from './shared/chartUtils';
 
 export default function ProductivityAnalytics({ tenantFilter }) {
   const [activities, setActivities] = useState([]);
@@ -40,40 +37,18 @@ export default function ProductivityAnalytics({ tenantFilter }) {
     const fetchProductivityData = async () => {
       setIsLoading(true);
       try {
-        // DEFENSIVE UNWRAPPING - handle both array and wrapped responses
-        const unwrap = (result) => {
-          // Already an array - return as-is
-          if (Array.isArray(result)) return result;
-
-          // Wrapped in { data: [...] } shape
-          if (result?.data && Array.isArray(result.data)) return result.data;
-
-          // Wrapped in { status: "success", data: [...] } shape
-          if (result?.status === 'success' && Array.isArray(result.data)) return result.data;
-
-          // Activities-specific: { activities: [...], total, counts } shape
-          if (result?.activities && Array.isArray(result.activities)) return result.activities;
-
-          // Employees-specific: { employees: [...] } shape
-          if (result?.employees && Array.isArray(result.employees)) return result.employees;
-
-          // Wrapped in { data: { activities: [...] } } shape (V2 API format)
-          if (result?.data?.activities && Array.isArray(result.data.activities))
-            return result.data.activities;
-
-          return [];
-        };
-
         const [rawActivitiesResult, employeesResult] = await Promise.all([
           Activity.filter(tenantFilter),
           Employee.filter(tenantFilter),
         ]);
 
         // Handle API response - ensure we have arrays with explicit validation
-        const rawActivities = Array.isArray(unwrap(rawActivitiesResult))
-          ? unwrap(rawActivitiesResult)
+        const rawActivities = Array.isArray(unwrapApiResponse(rawActivitiesResult))
+          ? unwrapApiResponse(rawActivitiesResult)
           : [];
-        const employees = Array.isArray(unwrap(employeesResult)) ? unwrap(employeesResult) : [];
+        const employees = Array.isArray(unwrapApiResponse(employeesResult))
+          ? unwrapApiResponse(employeesResult)
+          : [];
 
         setActivities(rawActivities);
 
@@ -430,14 +405,8 @@ export default function ProductivityAnalytics({ tenantFilter }) {
                 />
                 <Tooltip
                   cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                  contentStyle={{
-                    backgroundColor: '#1e293b',
-                    border: '1px solid #475569',
-                    borderRadius: '8px',
-                    color: '#f1f5f9',
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-                  }}
-                  labelStyle={{ color: '#f1f5f9' }}
+                  contentStyle={DARK_TOOLTIP_STYLE}
+                  labelStyle={DARK_LABEL_STYLE}
                 />
                 <Legend wrapperStyle={{ paddingTop: '20px' }} />
                 <Line
@@ -506,16 +475,7 @@ export default function ProductivityAnalytics({ tenantFilter }) {
                     />
                   ))}
                 </Pie>
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#1e293b',
-                    border: '1px solid #475569',
-                    borderRadius: '8px',
-                    color: '#f1f5f9',
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-                  }}
-                  labelStyle={{ color: '#f1f5f9' }}
-                />
+                <Tooltip contentStyle={DARK_TOOLTIP_STYLE} labelStyle={DARK_LABEL_STYLE} />
                 <Legend wrapperStyle={{ paddingTop: '20px' }} />
               </PieChart>
             </ResponsiveContainer>
@@ -569,15 +529,7 @@ export default function ProductivityAnalytics({ tenantFilter }) {
                     />
                   ))}
                 </Pie>
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#1e293b',
-                    border: '1px solid #475569',
-                    borderRadius: '8px',
-                    color: '#f1f5f9',
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-                  }}
-                />
+                <Tooltip contentStyle={DARK_TOOLTIP_STYLE} />
                 <Legend wrapperStyle={{ paddingTop: '20px' }} />
               </PieChart>
             </ResponsiveContainer>
@@ -619,14 +571,8 @@ export default function ProductivityAnalytics({ tenantFilter }) {
                 />
                 <Tooltip
                   cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                  contentStyle={{
-                    backgroundColor: '#1e293b',
-                    border: '1px solid #475569',
-                    borderRadius: '8px',
-                    color: '#f1f5f9',
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-                  }}
-                  labelStyle={{ color: '#f1f5f9' }}
+                  contentStyle={DARK_TOOLTIP_STYLE}
+                  labelStyle={DARK_LABEL_STYLE}
                 />
                 <Legend wrapperStyle={{ paddingTop: '20px' }} />
                 <Bar
@@ -715,14 +661,8 @@ export default function ProductivityAnalytics({ tenantFilter }) {
                 />
                 <Tooltip
                   cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                  contentStyle={{
-                    backgroundColor: '#1e293b',
-                    border: '1px solid #475569',
-                    borderRadius: '8px',
-                    color: '#f1f5f9',
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-                  }}
-                  labelStyle={{ color: '#f1f5f9' }}
+                  contentStyle={DARK_TOOLTIP_STYLE}
+                  labelStyle={DARK_LABEL_STYLE}
                 />
                 <Legend wrapperStyle={{ color: '#f1f5f9', paddingTop: '10px' }} />
                 <Bar
