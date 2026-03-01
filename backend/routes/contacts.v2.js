@@ -495,7 +495,9 @@ export default function createContactV2Routes(_pgPool) {
   router.put('/:id', invalidateCache('contacts'), async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id, metadata, tags, ...payload } = req.body || {};
+      const { tenant_id: body_tenant_id, metadata, tags, ...payload } = req.body || {};
+      // Resolve tenant_id consistently: body → query → middleware-resolved tenant
+      const tenant_id = body_tenant_id || req.query.tenant_id || req.tenant?.id;
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
@@ -536,12 +538,10 @@ export default function createContactV2Routes(_pgPool) {
             .json({ status: 'error', message: 'You do not have access to this record' });
         }
         if (access === 'read_notes' && !isNotesOnlyUpdate(updatePayload)) {
-          return res
-            .status(403)
-            .json({
-              status: 'error',
-              message: 'You can only add notes to records outside your team',
-            });
+          return res.status(403).json({
+            status: 'error',
+            message: 'You can only add notes to records outside your team',
+          });
         }
       }
 
@@ -649,12 +649,10 @@ export default function createContactV2Routes(_pgPool) {
             req.user.id,
           );
           if (access !== 'full') {
-            return res
-              .status(403)
-              .json({
-                status: 'error',
-                message: 'You do not have permission to delete this record',
-              });
+            return res.status(403).json({
+              status: 'error',
+              message: 'You do not have permission to delete this record',
+            });
           }
         }
       }

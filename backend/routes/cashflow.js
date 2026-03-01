@@ -213,7 +213,9 @@ export default function createCashFlowRoutes(_pgPool) {
   router.put('/:id', invalidateCache('cashflow'), async (req, res) => {
     try {
       const { id } = req.params;
+      // Resolve tenant_id consistently: query → body → middleware-resolved tenant
       let { tenant_id } = req.query || {};
+      if (!tenant_id) tenant_id = req.body?.tenant_id || req.tenant?.id;
       const u = req.body;
       if (!validateTenantScopedId(id, tenant_id, res)) return;
 

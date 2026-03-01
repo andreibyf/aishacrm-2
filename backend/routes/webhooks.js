@@ -225,7 +225,8 @@ export default function createWebhookRoutes(_pgPool) {
   router.put('/:id', invalidateCache('webhooks'), async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id } = req.query;
+      // Resolve tenant_id consistently: query → body → middleware-resolved tenant
+      const tenant_id = req.query?.tenant_id || req.body?.tenant_id || req.tenant?.id;
       const updates = req.body;
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;

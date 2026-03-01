@@ -303,7 +303,8 @@ export default function createNoteRoutes(_pgPool) {
   router.put('/:id', invalidateCache('notes'), async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id } = req.query || {};
+      // Resolve tenant_id consistently: query → body → middleware-resolved tenant
+      const tenant_id = req.query?.tenant_id || req.body?.tenant_id || req.tenant?.id;
       const u = req.body;
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;

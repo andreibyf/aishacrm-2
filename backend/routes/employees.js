@@ -577,7 +577,7 @@ export default function createEmployeeRoutes(_pgPool) {
     try {
       const { id } = req.params;
       const {
-        tenant_id,
+        tenant_id: body_tenant_id,
         first_name,
         last_name,
         email,
@@ -587,6 +587,8 @@ export default function createEmployeeRoutes(_pgPool) {
         metadata,
         ...otherFields
       } = req.body;
+      // Resolve tenant_id consistently: body → query → middleware-resolved tenant
+      const tenant_id = body_tenant_id || req.query.tenant_id || req.tenant?.id;
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });

@@ -495,7 +495,9 @@ export default function createDocumentV2Routes(_pgPool) {
   router.put('/:id', invalidateCache('documents'), async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id, ...payload } = req.body;
+      const { tenant_id: body_tenant_id, ...payload } = req.body;
+      // Resolve tenant_id consistently: body → query → middleware-resolved tenant
+      const tenant_id = body_tenant_id || req.query.tenant_id || req.tenant?.id;
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });

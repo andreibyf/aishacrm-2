@@ -1809,7 +1809,17 @@ export default function createWorkflowRoutes(pgPool) {
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id, name, description, trigger, nodes, connections, is_active } = req.body;
+      const {
+        tenant_id: body_tenant_id,
+        name,
+        description,
+        trigger,
+        nodes,
+        connections,
+        is_active,
+      } = req.body;
+      // Resolve tenant_id consistently: body → query → middleware-resolved tenant
+      const tenant_id = body_tenant_id || req.query.tenant_id || req.tenant?.id;
 
       console.log(
         '[Workflows PUT] Received nodes:',
@@ -2018,7 +2028,9 @@ export default function createWorkflowRoutes(pgPool) {
   router.patch('/:id/status', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id, is_active } = req.body;
+      const { tenant_id: body_tenant_id, is_active } = req.body;
+      // Resolve tenant_id consistently: body → query → middleware-resolved tenant
+      const tenant_id = body_tenant_id || req.query.tenant_id || req.tenant?.id;
 
       if (!tenant_id) {
         return res.status(400).json({

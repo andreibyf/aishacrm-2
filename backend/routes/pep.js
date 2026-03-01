@@ -601,7 +601,9 @@ export default function createPepRoutes(_pgPool, _supabaseOverride = null) {
   router.patch('/saved-reports/:id/run', async (req, res) => {
     if (!checkSavedReportsRateLimit(req, res)) return;
     const { id } = req.params;
-    const { tenant_id } = req.body;
+    const { tenant_id: body_tenant_id } = req.body;
+    // Resolve tenant_id consistently: body → query → middleware-resolved tenant
+    const tenant_id = body_tenant_id || req.query.tenant_id || req.tenant?.id;
 
     if (!tenant_id) {
       return res

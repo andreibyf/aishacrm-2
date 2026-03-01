@@ -964,7 +964,7 @@ export default function createActivityV2Routes(_pgPool) {
     try {
       const { id } = req.params;
       const {
-        tenant_id,
+        tenant_id: body_tenant_id,
         metadata,
         description,
         body,
@@ -973,6 +973,9 @@ export default function createActivityV2Routes(_pgPool) {
         tags,
         ...payload
       } = req.body || {};
+      // Resolve tenant_id consistently: body → query → middleware-resolved tenant
+      // (matches GET /:id pattern to avoid 404s when body tenant_id is missing/mismatched)
+      const tenant_id = body_tenant_id || req.query.tenant_id || req.tenant?.id;
       // Accept either duration_minutes or duration (legacy) - prefer duration_minutes
       const durationValue = duration_minutes ?? duration ?? undefined;
       if (!tenant_id) {
@@ -1022,6 +1025,13 @@ export default function createActivityV2Routes(_pgPool) {
         .single();
 
       if (fetchErr?.code === 'PGRST116') {
+        logger.warn('[Activities V2 PUT] Activity not found for update:', {
+          id,
+          tenant_id,
+          body_tenant_id: body_tenant_id || null,
+          query_tenant_id: req.query.tenant_id || null,
+          resolved_tenant_id: req.tenant?.id || null,
+        });
         return res.status(404).json({ status: 'error', message: 'Activity not found' });
       }
       if (fetchErr) throw new Error(fetchErr.message);

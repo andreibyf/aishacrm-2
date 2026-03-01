@@ -135,7 +135,8 @@ export default function createAnnouncementRoutes(_pgPool) {
   router.put('/:id', invalidateCache('announcements'), async (req, res) => {
     try {
       const { id } = req.params;
-      const tenant_id = req.tenant?.id || req.query.tenant_id;
+      // Resolve tenant_id consistently: middleware → query → body
+      const tenant_id = req.tenant?.id || req.query.tenant_id || req.body?.tenant_id;
       const u = req.body;
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;

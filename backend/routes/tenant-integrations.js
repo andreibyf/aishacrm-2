@@ -111,7 +111,8 @@ export default function createTenantIntegrationRoutes() {
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id } = req.query;
+      // Resolve tenant_id consistently: query → body → middleware-resolved tenant
+      const tenant_id = req.query?.tenant_id || req.body?.tenant_id || req.tenant?.id;
       const {
         integration_type,
         integration_name,

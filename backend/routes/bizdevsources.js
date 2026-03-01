@@ -642,7 +642,9 @@ export default function createBizDevSourceRoutes(pgPool) {
   router.put('/:id', invalidateCache('bizdevsources'), async (req, res) => {
     try {
       const { id } = req.params;
+      // Resolve tenant_id consistently: query → body → middleware-resolved tenant
       let { tenant_id } = req.query || {};
+      if (!tenant_id) tenant_id = req.body?.tenant_id || req.tenant?.id;
       const {
         source_name, // Frontend may send this
         source, // Production DB uses this column name

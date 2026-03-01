@@ -257,8 +257,8 @@ export default function createModuleSettingsRoutes(_pool) {
   router.put('/:id', invalidateCache('modulesettings'), async (req, res) => {
     try {
       const { id } = req.params;
-      // Accept tenant_id from query params OR body (prefer query for security)
-      const tenant_id = req.query.tenant_id || req.body.tenant_id;
+      // Resolve tenant_id consistently: query → body → middleware-resolved tenant
+      const tenant_id = req.query.tenant_id || req.body.tenant_id || req.tenant?.id;
       const { module_name, settings, is_enabled } = req.body;
 
       // Tenant ID is required for tenant-scoped updates

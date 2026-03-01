@@ -1819,7 +1819,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
     try {
       const { id } = req.params;
       const {
-        tenant_id,
+        tenant_id: body_tenant_id,
         first_name,
         last_name,
         role,
@@ -1834,6 +1834,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         new_password, // Password reset field
         ...otherFields // Capture any unknown fields
       } = req.body;
+      // Resolve tenant_id consistently: body → query → middleware-resolved tenant
+      const tenant_id = body_tenant_id || req.query.tenant_id || req.tenant?.id;
 
       // 🔒 CRITICAL: Define immutable superadmin accounts that cannot be modified via API
       // These accounts can ONLY be changed directly in Supabase Auth dashboard

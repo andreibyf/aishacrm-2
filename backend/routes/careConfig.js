@@ -1,6 +1,6 @@
 /**
  * CARE Workflow Config API Routes
- * 
+ *
  * Per-tenant CARE workflow configuration management.
  * Allows admins to configure which workflow handles CARE triggers
  * and customize CARE behavior per tenant.
@@ -21,19 +21,20 @@ const router = Router();
 router.get('/', validateTenantAccess, async (req, res) => {
   try {
     const tenantId = req.tenant?.id || req.query.tenant_id;
-    
+
     if (!tenantId) {
       return res.status(400).json({
         status: 'error',
-        message: 'tenant_id is required'
+        message: 'tenant_id is required',
       });
     }
 
     const supabase = getSupabaseClient();
-    
+
     const { data, error } = await supabase
       .from('care_workflow_config')
-      .select(`
+      .select(
+        `
         *,
         workflow:workflow_id (
           id,
@@ -42,7 +43,8 @@ router.get('/', validateTenantAccess, async (req, res) => {
           is_active,
           metadata
         )
-      `)
+      `,
+      )
       .eq('tenant_id', tenantId)
       .maybeSingle();
 
@@ -50,7 +52,7 @@ router.get('/', validateTenantAccess, async (req, res) => {
       logger.error('[CareConfig] Error fetching config:', error);
       return res.status(500).json({
         status: 'error',
-        message: 'Failed to fetch CARE configuration'
+        message: 'Failed to fetch CARE configuration',
       });
     }
 
@@ -67,8 +69,8 @@ router.get('/', validateTenantAccess, async (req, res) => {
           webhook_max_retries: 2,
           workflow: null,
           webhook_url: null,
-          _isDefault: true
-        }
+          _isDefault: true,
+        },
       });
     }
 
@@ -84,14 +86,14 @@ router.get('/', validateTenantAccess, async (req, res) => {
       status: 'success',
       data: {
         ...data,
-        effective_webhook_url: effectiveWebhookUrl
-      }
+        effective_webhook_url: effectiveWebhookUrl,
+      },
     });
   } catch (err) {
     logger.error('[CareConfig] Unexpected error:', err);
     res.status(500).json({
       status: 'error',
-      message: 'Internal server error'
+      message: 'Internal server error',
     });
   }
 });
@@ -102,12 +104,13 @@ router.get('/', validateTenantAccess, async (req, res) => {
  */
 router.put('/', validateTenantAccess, requireSuperAdminRole, async (req, res) => {
   try {
-    const tenantId = req.tenant?.id || req.body.tenant_id;
-    
+    // Resolve tenant_id consistently: middleware → query → body
+    const tenantId = req.tenant?.id || req.query.tenant_id || req.body.tenant_id;
+
     if (!tenantId) {
       return res.status(400).json({
         status: 'error',
-        message: 'tenant_id is required'
+        message: 'tenant_id is required',
       });
     }
 
@@ -119,15 +122,15 @@ router.put('/', validateTenantAccess, requireSuperAdminRole, async (req, res) =>
       state_write_enabled,
       shadow_mode,
       webhook_timeout_ms,
-      webhook_max_retries
+      webhook_max_retries,
     } = req.body;
 
     const supabase = getSupabaseClient();
-    
+
     // Build upsert payload
     const payload = {
       tenant_id: tenantId,
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
     };
 
     // Only include fields that were explicitly provided
@@ -144,7 +147,7 @@ router.put('/', validateTenantAccess, requireSuperAdminRole, async (req, res) =>
       .from('care_workflow_config')
       .upsert(payload, {
         onConflict: 'tenant_id',
-        ignoreDuplicates: false
+        ignoreDuplicates: false,
       })
       .select()
       .single();
@@ -153,14 +156,14 @@ router.put('/', validateTenantAccess, requireSuperAdminRole, async (req, res) =>
       logger.error('[CareConfig] Error updating config:', error);
       return res.status(500).json({
         status: 'error',
-        message: 'Failed to update CARE configuration'
+        message: 'Failed to update CARE configuration',
       });
     }
 
     logger.info(`[CareConfig] Updated config for tenant ${tenantId}`, {
       workflow_id: data.workflow_id,
       is_enabled: data.is_enabled,
-      state_write_enabled: data.state_write_enabled
+      state_write_enabled: data.state_write_enabled,
     });
 
     // Invalidate cache so aiTriggersWorker picks up new config immediately
@@ -169,13 +172,13 @@ router.put('/', validateTenantAccess, requireSuperAdminRole, async (req, res) =>
     res.json({
       status: 'success',
       data,
-      message: 'CARE configuration updated successfully'
+      message: 'CARE configuration updated successfully',
     });
   } catch (err) {
     logger.error('[CareConfig] Unexpected error:', err);
     res.status(500).json({
       status: 'error',
-      message: 'Internal server error'
+      message: 'Internal server error',
     });
   }
 });
@@ -188,16 +191,16 @@ router.put('/', validateTenantAccess, requireSuperAdminRole, async (req, res) =>
 router.get('/workflows', validateTenantAccess, async (req, res) => {
   try {
     const tenantId = req.tenant?.id || req.query.tenant_id;
-    
+
     if (!tenantId) {
       return res.status(400).json({
         status: 'error',
-        message: 'tenant_id is required'
+        message: 'tenant_id is required',
       });
     }
 
     const supabase = getSupabaseClient();
-    
+
     const { data, error } = await supabase
       .from('workflow')
       .select('id, name, description, is_active, metadata, created_at')
@@ -209,35 +212,35 @@ router.get('/workflows', validateTenantAccess, async (req, res) => {
       logger.error('[CareConfig] Error fetching workflows:', error);
       return res.status(500).json({
         status: 'error',
-        message: 'Failed to fetch workflows'
+        message: 'Failed to fetch workflows',
       });
     }
 
     // Filter to only workflows that have a care_trigger node
-    const careWorkflows = (data || []).filter(workflow => {
+    const careWorkflows = (data || []).filter((workflow) => {
       const nodes = workflow.metadata?.nodes || [];
-      return nodes.some(node => node.type === 'care_trigger');
+      return nodes.some((node) => node.type === 'care_trigger');
     });
 
     // Add webhook URL for each workflow
     const baseUrl = process.env.CARE_WEBHOOK_BASE_URL || 'http://localhost:3001';
-    const workflowsWithUrls = careWorkflows.map(wf => ({
+    const workflowsWithUrls = careWorkflows.map((wf) => ({
       ...wf,
-      webhook_url: `${baseUrl}/api/workflows/${wf.id}/webhook`
+      webhook_url: `${baseUrl}/api/workflows/${wf.id}/webhook`,
     }));
 
     res.json({
       status: 'success',
       data: {
         workflows: workflowsWithUrls,
-        total: workflowsWithUrls.length
-      }
+        total: workflowsWithUrls.length,
+      },
     });
   } catch (err) {
     logger.error('[CareConfig] Unexpected error:', err);
     res.status(500).json({
       status: 'error',
-      message: 'Internal server error'
+      message: 'Internal server error',
     });
   }
 });
@@ -249,16 +252,16 @@ router.get('/workflows', validateTenantAccess, async (req, res) => {
 router.delete('/', validateTenantAccess, requireSuperAdminRole, async (req, res) => {
   try {
     const tenantId = req.tenant?.id || req.query.tenant_id;
-    
+
     if (!tenantId) {
       return res.status(400).json({
         status: 'error',
-        message: 'tenant_id is required'
+        message: 'tenant_id is required',
       });
     }
 
     const supabase = getSupabaseClient();
-    
+
     const { error } = await supabase
       .from('care_workflow_config')
       .delete()
@@ -268,7 +271,7 @@ router.delete('/', validateTenantAccess, requireSuperAdminRole, async (req, res)
       logger.error('[CareConfig] Error deleting config:', error);
       return res.status(500).json({
         status: 'error',
-        message: 'Failed to delete CARE configuration'
+        message: 'Failed to delete CARE configuration',
       });
     }
 
@@ -279,13 +282,13 @@ router.delete('/', validateTenantAccess, requireSuperAdminRole, async (req, res)
 
     res.json({
       status: 'success',
-      message: 'CARE configuration reset to defaults'
+      message: 'CARE configuration reset to defaults',
     });
   } catch (err) {
     logger.error('[CareConfig] Unexpected error:', err);
     res.status(500).json({
       status: 'error',
-      message: 'Internal server error'
+      message: 'Internal server error',
     });
   }
 });
