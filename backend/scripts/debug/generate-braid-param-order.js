@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 /**
  * generate-braid-param-order.js
- * 
+ *
  * Parses all .braid files in examples/assistant/ and extracts function parameter
  * orders directly from the AST. Outputs a JS module that can replace the
  * hand-maintained BRAID_PARAM_ORDER in analysis.js.
- * 
+ *
  * Usage:
  *   node backend/scripts/generate-braid-param-order.js          # print to stdout
  *   node backend/scripts/generate-braid-param-order.js --check   # validate current vs parsed
  *   node backend/scripts/generate-braid-param-order.js --json    # output JSON
- * 
+ *
  * This eliminates the risk of param order drift between .braid files and
  * the execution engine (Issue #4 from braid-refactoring-issues.md).
  */
@@ -24,8 +24,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ASSISTANT_DIR = path.resolve(__dirname, '../../braid-llm-kit/examples/assistant');
 
 function extractParamOrders() {
-  const braidFiles = fs.readdirSync(ASSISTANT_DIR)
-    .filter(f => f.endsWith('.braid'))
+  const braidFiles = fs
+    .readdirSync(ASSISTANT_DIR)
+    .filter((f) => f.endsWith('.braid'))
     .sort();
 
   const paramOrder = {};
@@ -40,17 +41,19 @@ function extractParamOrders() {
 
       for (const item of ast.items) {
         if (item.type === 'FnDecl') {
-          const params = (item.params || []).map(p => p.name);
-          
+          const params = (item.params || []).map((p) => p.name);
+
           if (paramOrder[item.name]) {
-            errors.push(`Duplicate function name '${item.name}' in ${file} (also in previous file)`);
+            errors.push(
+              `Duplicate function name '${item.name}' in ${file} (also in previous file)`,
+            );
           }
-          
+
           paramOrder[item.name] = {
             params,
             file,
             effects: item.effects || [],
-            returnType: item.returnType || null
+            returnType: item.returnType || null,
           };
         }
       }
@@ -76,7 +79,7 @@ function generateJSBlock(paramOrder) {
   for (const [file, fns] of Object.entries(byFile)) {
     lines.push(`  // === ${file} ===`);
     for (const fn of fns) {
-      const paramStr = fn.params.map(p => `'${p}'`).join(', ');
+      const paramStr = fn.params.map((p) => `'${p}'`).join(', ');
       lines.push(`  ${fn.fnName}: [${paramStr}],`);
     }
     lines.push('');
@@ -100,7 +103,7 @@ if (errors.length > 0) {
 }
 
 const fnCount = Object.keys(paramOrder).length;
-const fileCount = new Set(Object.values(paramOrder).map(v => v.file)).size;
+const fileCount = new Set(Object.values(paramOrder).map((v) => v.file)).size;
 
 if (mode === '--json') {
   // Output clean JSON (params only, no metadata)
@@ -109,12 +112,11 @@ if (mode === '--json') {
     clean[fn] = info.params;
   }
   console.log(JSON.stringify(clean, null, 2));
-  
 } else if (mode === '--check') {
   // Validate mode: compare parsed vs what's in analysis.js
   // Import the current BRAID_PARAM_ORDER dynamically
   console.log(`✅ Parsed ${fnCount} functions from ${fileCount} .braid files\n`);
-  
+
   // Output the parsed order for manual comparison
   for (const [fn, info] of Object.entries(paramOrder)) {
     console.log(`  ${fn}: [${info.params.join(', ')}]  // ${info.file}`);
@@ -123,7 +125,6 @@ if (mode === '--json') {
   if (errors.length > 0) {
     process.exit(1);
   }
-  
 } else {
   // Default: print the JS block ready to paste into analysis.js
   console.log(`/**`);
@@ -136,7 +137,7 @@ if (mode === '--json') {
   console.log(`const BRAID_PARAM_ORDER = {`);
   console.log(generateJSBlock(paramOrder));
   console.log(`};`);
-  
+
   console.error(`\n✅ Generated param order for ${fnCount} functions from ${fileCount} files`);
   if (errors.length > 0) {
     process.exit(1);

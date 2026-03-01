@@ -2,12 +2,12 @@
 
 /**
  * Phase 3 Verification Runner
- * 
+ *
  * Executes all Phase 3 verification tests and generates a comprehensive report.
- * 
+ *
  * Usage:
  *   node scripts/run_phase3_verification.js
- * 
+ *
  * Output:
  *   - Console summary
  *   - artifacts/phase3_verification_report.json
@@ -74,7 +74,7 @@ const SECTIONS = {
 function runTestFile(testFile) {
   return new Promise((resolve) => {
     const fullPath = join(BACKEND_DIR, testFile);
-    
+
     if (!existsSync(fullPath)) {
       resolve({
         status: 'skipped',
@@ -164,7 +164,7 @@ function generateMarkdownReport(report) {
   for (const [section, data] of Object.entries(report.sections)) {
     const statusIcon = data.status === 'pass' ? '✅' : data.status === 'fail' ? '❌' : '⏭️';
     lines.push(
-      `| ${section}: ${data.name} | ${statusIcon} ${data.status} | ${data.tests} | ${data.passed} | ${data.failed} | ${data.duration}ms |`
+      `| ${section}: ${data.name} | ${statusIcon} ${data.status} | ${data.tests} | ${data.passed} | ${data.failed} | ${data.duration}ms |`,
     );
   }
 
@@ -176,11 +176,11 @@ function generateMarkdownReport(report) {
     lines.push(`**Description:** ${data.description}`);
     lines.push('');
     lines.push(`**Status:** ${data.status.toUpperCase()}`);
-    
+
     if (data.reason) {
       lines.push(`**Reason:** ${data.reason}`);
     }
-    
+
     lines.push('');
     lines.push('**Metrics:**');
     lines.push(`- Total Tests: ${data.tests}`);
@@ -195,9 +195,10 @@ function generateMarkdownReport(report) {
       lines.push('');
       lines.push('```');
       // Truncate very long output
-      const truncatedOutput = data.output.length > 5000 
-        ? data.output.substring(0, 5000) + '\n... (truncated)'
-        : data.output;
+      const truncatedOutput =
+        data.output.length > 5000
+          ? data.output.substring(0, 5000) + '\n... (truncated)'
+          : data.output;
       lines.push(truncatedOutput);
       lines.push('```');
       lines.push('</details>');
@@ -239,9 +240,9 @@ async function main() {
   // Run each section
   for (const [section, config] of Object.entries(SECTIONS)) {
     console.log(`Running Section ${section}: ${config.name}...`);
-    
+
     const result = await runTestFile(config.file);
-    
+
     report.sections[section] = {
       name: config.name,
       description: config.description,
@@ -254,7 +255,9 @@ async function main() {
     }
 
     const icon = result.status === 'pass' ? '✅' : result.status === 'fail' ? '❌' : '⏭️';
-    console.log(`  ${icon} ${result.status.toUpperCase()} - ${result.passed}/${result.tests} passed (${result.duration}ms)`);
+    console.log(
+      `  ${icon} ${result.status.toUpperCase()} - ${result.passed}/${result.tests} passed (${result.duration}ms)`,
+    );
   }
 
   report.totalDuration = Date.now() - startTime;

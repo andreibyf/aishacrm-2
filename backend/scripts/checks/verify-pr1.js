@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
  * PR1 Verification Script
- * 
+ *
  * Validates that C.A.R.E. (Cognitive Adaptive Response Engine) database tables were created correctly.
- * 
+ *
  * Run: node backend/scripts/verify-pr1.js
- * 
+ *
  * Prerequisites:
  * - Migration 116 applied to database
  * - Supabase connection configured
@@ -37,17 +37,14 @@ let allPassed = true;
 async function test1() {
   console.log('Test 1: customer_care_state table exists');
   try {
-    const { error } = await supabase
-      .from('customer_care_state')
-      .select('count')
-      .limit(0);
-    
+    const { error } = await supabase.from('customer_care_state').select('count').limit(0);
+
     if (error && error.code === '42P01') {
       console.log('  ❌ FAIL: Table does not exist');
       allPassed = false;
       return false;
     }
-    
+
     console.log('  ✅ PASS: Table exists\n');
     return true;
   } catch (err) {
@@ -61,17 +58,14 @@ async function test1() {
 async function test2() {
   console.log('Test 2: customer_care_state_history table exists');
   try {
-    const { error } = await supabase
-      .from('customer_care_state_history')
-      .select('count')
-      .limit(0);
-    
+    const { error } = await supabase.from('customer_care_state_history').select('count').limit(0);
+
     if (error && error.code === '42P01') {
       console.log('  ❌ FAIL: Table does not exist');
       allPassed = false;
       return false;
     }
-    
+
     console.log('  ✅ PASS: Table exists\n');
     return true;
   } catch (err) {
@@ -84,17 +78,14 @@ async function test2() {
 // Test 3: hands_off_enabled defaults to false (check via insert)
 async function test3() {
   console.log('Test 3: hands_off_enabled defaults to FALSE');
-  
+
   const testTenantId = 'a11dfb63-4b18-4eb8-872e-747af2e37c46'; // System tenant
   const testEntityId = 'f47ac10b-58cc-4372-a567-000000000001'; // Test entity
-  
+
   try {
     // Clean up any existing test record
-    await supabase
-      .from('customer_care_state')
-      .delete()
-      .eq('entity_id', testEntityId);
-    
+    await supabase.from('customer_care_state').delete().eq('entity_id', testEntityId);
+
     // Insert without specifying hands_off_enabled
     const { data, error } = await supabase
       .from('customer_care_state')
@@ -102,36 +93,30 @@ async function test3() {
         tenant_id: testTenantId,
         entity_type: 'lead',
         entity_id: testEntityId,
-        care_state: 'evaluating'
+        care_state: 'evaluating',
       })
       .select()
       .single();
-    
+
     if (error) {
       console.log(`  ❌ FAIL: Insert error: ${error.message}`);
       allPassed = false;
       return false;
     }
-    
+
     if (data.hands_off_enabled !== false) {
       console.log(`  ❌ FAIL: Expected false, got ${data.hands_off_enabled}`);
       allPassed = false;
-      
+
       // Cleanup
-      await supabase
-        .from('customer_care_state')
-        .delete()
-        .eq('entity_id', testEntityId);
-      
+      await supabase.from('customer_care_state').delete().eq('entity_id', testEntityId);
+
       return false;
     }
-    
+
     // Cleanup
-    await supabase
-      .from('customer_care_state')
-      .delete()
-      .eq('entity_id', testEntityId);
-    
+    await supabase.from('customer_care_state').delete().eq('entity_id', testEntityId);
+
     console.log('  ✅ PASS: Defaults to false (safety-first)\n');
     return true;
   } catch (err) {
@@ -144,39 +129,35 @@ async function test3() {
 // Test 4: Check constraints work (invalid care_state should fail)
 async function test4() {
   console.log('Test 4: Check constraints enforce valid care_state');
-  
+
   const testTenantId = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
   const testEntityId = 'f47ac10b-58cc-4372-a567-000000000002';
-  
+
   try {
-    const { error } = await supabase
-      .from('customer_care_state')
-      .insert({
-        tenant_id: testTenantId,
-        entity_type: 'lead',
-        entity_id: testEntityId,
-        care_state: 'invalid_state'  // Should fail
-      });
-    
+    const { error } = await supabase.from('customer_care_state').insert({
+      tenant_id: testTenantId,
+      entity_type: 'lead',
+      entity_id: testEntityId,
+      care_state: 'invalid_state', // Should fail
+    });
+
     if (!error) {
       console.log('  ❌ FAIL: Invalid care_state was accepted');
       allPassed = false;
-      
+
       // Cleanup
-      await supabase
-        .from('customer_care_state')
-        .delete()
-        .eq('entity_id', testEntityId);
-      
+      await supabase.from('customer_care_state').delete().eq('entity_id', testEntityId);
+
       return false;
     }
-    
+
     // Check if it's a constraint violation
-    if (error.code === '23514') {  // CHECK constraint violation
+    if (error.code === '23514') {
+      // CHECK constraint violation
       console.log('  ✅ PASS: Invalid care_state correctly rejected\n');
       return true;
     }
-    
+
     console.log(`  ⚠️  WARN: Unexpected error: ${error.message}\n`);
     return true; // Still pass, just unexpected error type
   } catch (err) {
@@ -189,54 +170,45 @@ async function test4() {
 // Test 5: Unique constraint (duplicate entity should fail)
 async function test5() {
   console.log('Test 5: Unique constraint prevents duplicates');
-  
+
   const testTenantId = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
   const testEntityId = 'f47ac10b-58cc-4372-a567-000000000003';
-  
+
   try {
     // Clean up
-    await supabase
-      .from('customer_care_state')
-      .delete()
-      .eq('entity_id', testEntityId);
-    
+    await supabase.from('customer_care_state').delete().eq('entity_id', testEntityId);
+
     // Insert first record
-    await supabase
-      .from('customer_care_state')
-      .insert({
-        tenant_id: testTenantId,
-        entity_type: 'contact',
-        entity_id: testEntityId,
-        care_state: 'aware'
-      });
-    
+    await supabase.from('customer_care_state').insert({
+      tenant_id: testTenantId,
+      entity_type: 'contact',
+      entity_id: testEntityId,
+      care_state: 'aware',
+    });
+
     // Try to insert duplicate
-    const { error } = await supabase
-      .from('customer_care_state')
-      .insert({
-        tenant_id: testTenantId,
-        entity_type: 'contact',
-        entity_id: testEntityId,  // Same entity
-        care_state: 'engaged'
-      });
-    
+    const { error } = await supabase.from('customer_care_state').insert({
+      tenant_id: testTenantId,
+      entity_type: 'contact',
+      entity_id: testEntityId, // Same entity
+      care_state: 'engaged',
+    });
+
     // Cleanup
-    await supabase
-      .from('customer_care_state')
-      .delete()
-      .eq('entity_id', testEntityId);
-    
+    await supabase.from('customer_care_state').delete().eq('entity_id', testEntityId);
+
     if (!error) {
       console.log('  ❌ FAIL: Duplicate entity was accepted');
       allPassed = false;
       return false;
     }
-    
-    if (error.code === '23505') {  // UNIQUE constraint violation
+
+    if (error.code === '23505') {
+      // UNIQUE constraint violation
       console.log('  ✅ PASS: Duplicate entity correctly rejected\n');
       return true;
     }
-    
+
     console.log(`  ⚠️  WARN: Unexpected error: ${error.message}\n`);
     return true;
   } catch (err) {
@@ -249,10 +221,10 @@ async function test5() {
 // Test 6: History table can accept records
 async function test6() {
   console.log('Test 6: customer_care_state_history accepts records');
-  
+
   const testTenantId = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
   const testEntityId = 'f47ac10b-58cc-4372-a567-000000000004';
-  
+
   try {
     const { data, error } = await supabase
       .from('customer_care_state_history')
@@ -264,23 +236,20 @@ async function test6() {
         to_state: 'aware',
         event_type: 'state_applied',
         reason: 'Test record from PR1 verification',
-        actor_type: 'system'
+        actor_type: 'system',
       })
       .select()
       .single();
-    
+
     if (error) {
       console.log(`  ❌ FAIL: Insert error: ${error.message}`);
       allPassed = false;
       return false;
     }
-    
+
     // Cleanup
-    await supabase
-      .from('customer_care_state_history')
-      .delete()
-      .eq('id', data.id);
-    
+    await supabase.from('customer_care_state_history').delete().eq('id', data.id);
+
     console.log('  ✅ PASS: History record inserted successfully\n');
     return true;
   } catch (err) {
@@ -298,7 +267,7 @@ async function runTests() {
   await test4();
   await test5();
   await test6();
-  
+
   console.log('═══════════════════════════════════════════════════════');
   if (allPassed) {
     console.log('✅ All PR1 verification tests PASSED');

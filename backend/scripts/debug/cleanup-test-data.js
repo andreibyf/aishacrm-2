@@ -18,19 +18,14 @@ const pool = new Pool({
 });
 
 // Patterns used by E2E tests for contacts/leads
-const CONTACT_PATTERNS = [
-  "contact-%@example.com",
-  "tag-test-%@example.com",
-];
+const CONTACT_PATTERNS = ['contact-%@example.com', 'tag-test-%@example.com'];
 
-const LEAD_PATTERNS = [
-  "lead-%@example.com",
-];
+const LEAD_PATTERNS = ['lead-%@example.com'];
 
 async function hasColumn(table, column) {
   const { rows } = await pool.query(
     `SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=$1 AND column_name=$2`,
-    [table.replace('public.', ''), column]
+    [table.replace('public.', ''), column],
   );
   return rows.length > 0;
 }
@@ -53,7 +48,7 @@ async function cleanupTable(table, column, patterns, tenantId) {
   // Count matches
   const { rows: countRows } = await pool.query(
     `SELECT COUNT(*)::int AS count FROM ${table} WHERE tenant_id = $1 AND (${likeClauses})`,
-    params
+    params,
   );
   const count = countRows[0]?.count ?? 0;
   if (count === 0) {
@@ -64,7 +59,7 @@ async function cleanupTable(table, column, patterns, tenantId) {
   console.log(`🧹 Deleting ${count} records from ${table} matching test patterns...`);
   const { rowCount } = await pool.query(
     `DELETE FROM ${table} WHERE tenant_id = $1 AND (${likeClauses})`,
-    params
+    params,
   );
   console.log(`✅ Deleted ${rowCount} ${table} records.`);
   return rowCount;
@@ -100,7 +95,9 @@ async function removeTestTagsFromContacts(tenantId) {
     const res = await pool.query(sql, params);
     total += res.rowCount || 0;
   }
-  console.log(`✅ Scrubbed tags on ${total} contact rows (some rows may be updated multiple times).`);
+  console.log(
+    `✅ Scrubbed tags on ${total} contact rows (some rows may be updated multiple times).`,
+  );
 }
 
 async function main() {
@@ -111,14 +108,15 @@ async function main() {
     let tenantId = process.env.STAGING_TENANT_ID;
     const tenantSlug = process.env.STAGING_TENANT_SLUG;
     if (!tenantId && tenantSlug) {
-      const { rows } = await pool.query(
-        'SELECT id FROM public.tenant WHERE slug = $1 LIMIT 1',
-        [tenantSlug]
-      );
+      const { rows } = await pool.query('SELECT id FROM public.tenant WHERE slug = $1 LIMIT 1', [
+        tenantSlug,
+      ]);
       tenantId = rows[0]?.id;
     }
     if (!tenantId) {
-      console.error('❌ Missing STAGING_TENANT_ID (or set STAGING_TENANT_SLUG to resolve it). Aborting to protect other tenants.');
+      console.error(
+        '❌ Missing STAGING_TENANT_ID (or set STAGING_TENANT_SLUG to resolve it). Aborting to protect other tenants.',
+      );
       await pool.end();
       exit(1);
     }
@@ -130,16 +128,18 @@ async function main() {
     if (await hasColumn('public.contacts', 'is_test_data')) {
       const resC = await pool.query(
         'DELETE FROM public.contacts WHERE tenant_id = $1 AND is_test_data = true',
-        [tenantId]
+        [tenantId],
       );
       delContactsFlag = resC.rowCount || 0;
     } else {
-      console.log('ℹ️  contacts.is_test_data column not found — skipping flagged contact deletion.');
+      console.log(
+        'ℹ️  contacts.is_test_data column not found — skipping flagged contact deletion.',
+      );
     }
     if (await hasColumn('public.leads', 'is_test_data')) {
       const resL = await pool.query(
         'DELETE FROM public.leads WHERE tenant_id = $1 AND is_test_data = true',
-        [tenantId]
+        [tenantId],
       );
       delLeadsFlag = resL.rowCount || 0;
     } else {
@@ -149,12 +149,19 @@ async function main() {
     console.log(`🧹 Deleted leads by is_test_data flag: ${delLeadsFlag}`);
 
     // 2) Fallback: delete by known email patterns (in case older test data lacks the flag)
-    const deletedContacts = await cleanupTable('public.contacts', 'email', CONTACT_PATTERNS, tenantId);
+    const deletedContacts = await cleanupTable(
+      'public.contacts',
+      'email',
+      CONTACT_PATTERNS,
+      tenantId,
+    );
     const deletedLeads = await cleanupTable('public.leads', 'email', LEAD_PATTERNS, tenantId);
 
     // 3) Scrub test tags only on test-marked contacts
     await removeTestTagsFromContacts(tenantId);
-    console.log(`\n🎉 Cleanup complete. Deleted contacts: ${deletedContacts}, deleted leads: ${deletedLeads}.`);
+    console.log(
+      `\n🎉 Cleanup complete. Deleted contacts: ${deletedContacts}, deleted leads: ${deletedLeads}.`,
+    );
     await pool.end();
     exit(0);
   } catch (err) {

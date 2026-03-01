@@ -39,11 +39,15 @@ async function main() {
       };
       console.log(JSON.stringify({ summary, value: v }, null, 2));
     } else {
-      console.error(JSON.stringify({ tool: toolName, ok: false, error: result?.error || result }, null, 2));
+      console.error(
+        JSON.stringify({ tool: toolName, ok: false, error: result?.error || result }, null, 2),
+      );
       process.exitCode = 1;
     }
   } catch (e) {
-    console.error(JSON.stringify({ tool: toolName, ok: false, error: e?.message || String(e) }, null, 2));
+    console.error(
+      JSON.stringify({ tool: toolName, ok: false, error: e?.message || String(e) }, null, 2),
+    );
     process.exitCode = 1;
   }
 }

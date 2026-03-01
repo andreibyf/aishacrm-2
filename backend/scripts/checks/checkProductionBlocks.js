@@ -7,7 +7,7 @@ const PROD_PROJECT_ID = 'ehjlenywplgyiahgxkfj';
 
 async function main() {
   const shouldClear = process.argv[2] === 'clear';
-  
+
   // Check if targeting production
   const supabaseUrl = process.env.SUPABASE_URL;
   if (!supabaseUrl?.includes(PROD_PROJECT_ID)) {
@@ -18,7 +18,7 @@ async function main() {
 
   const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').replace(/^-/, '');
   const client = createClient(supabaseUrl, serviceKey, {
-    auth: { autoRefreshToken: false, persistSession: false }
+    auth: { autoRefreshToken: false, persistSession: false },
   });
 
   console.log('🔍 Checking production security events...\n');
@@ -37,7 +37,7 @@ async function main() {
     console.error('Error fetching security events:', eventsError);
   } else {
     console.log(`Found ${events?.length || 0} security events in last hour:`);
-    events?.forEach(e => {
+    events?.forEach((e) => {
       console.log(`  [${e.created_at}] ${e.source}: ${e.message}`);
       console.log(`    IP: ${e.ip_address}, Violation: ${e.violation_type}`);
     });
@@ -49,7 +49,7 @@ async function main() {
   console.log('  - In-memory rate limits clear when backend restarts');
   console.log('  - Redis IP blocks persist until expiration');
   console.log('  - Check backend logs for current rate limit status');
-  
+
   if (shouldClear) {
     console.log('\n🧹 To clear blocks:');
     console.log('  1. Restart backend: docker-compose restart backend');
@@ -60,7 +60,7 @@ async function main() {
   console.log('\n✅ Check complete');
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error('Error:', err);
   process.exit(1);
 });

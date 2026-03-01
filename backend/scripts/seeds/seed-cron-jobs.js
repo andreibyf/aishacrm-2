@@ -24,8 +24,8 @@ const defaultJobs = [
       description: 'Detects stagnant leads, escalations, and triggers C.A.R.E. workflow webhooks',
       type: 'system_worker',
       interval_ms: 15000,
-      env_var: 'AI_TRIGGERS_WORKER_ENABLED'
-    }
+      env_var: 'AI_TRIGGERS_WORKER_ENABLED',
+    },
   },
   {
     name: 'Campaign Worker',
@@ -36,57 +36,58 @@ const defaultJobs = [
       description: 'Processes scheduled AI campaign operations',
       type: 'system_worker',
       interval_ms: 30000,
-      env_var: 'CAMPAIGN_WORKER_ENABLED'
-    }
+      env_var: 'CAMPAIGN_WORKER_ENABLED',
+    },
   },
   {
     name: 'Mark Users Offline',
     schedule: 'every_5_minutes',
-    function_name: 'markUsersOffline',  // Match the executor function name
+    function_name: 'markUsersOffline', // Match the executor function name
     is_active: true,
     metadata: {
       description: 'Marks users as offline when last_seen > 5 minutes',
-      timeout_minutes: 5
-    }
+      timeout_minutes: 5,
+    },
   },
   {
     name: 'Mark Activities Overdue',
     schedule: 'hourly',
-    function_name: 'markActivitiesOverdue',  // Match the executor function name
+    function_name: 'markActivitiesOverdue', // Match the executor function name
     is_active: true,
     metadata: {
-      description: 'Updates status to overdue for activities past their due date'
-    }
+      description: 'Updates status to overdue for activities past their due date',
+    },
   },
   {
     name: 'Clean Old Activities',
     schedule: 'daily',
-    function_name: 'cleanOldActivities',  // Match the executor function name
+    function_name: 'cleanOldActivities', // Match the executor function name
     is_active: false,
     metadata: {
       description: 'Archives activities older than 1 year',
-      retention_days: 365
-    }
+      retention_days: 365,
+    },
   },
   {
     name: 'Warm Dashboard Bundle Cache',
-    schedule: 'cron:0 0 * * *',  // Every day at midnight UTC
-    function_name: 'warmDashboardBundleCache',  // Match the executor function name
+    schedule: 'cron:0 0 * * *', // Every day at midnight UTC
+    function_name: 'warmDashboardBundleCache', // Match the executor function name
     is_active: true,
     metadata: {
-      description: 'Pre-populates redis-cache with dashboard bundles for all tenants to ensure fast first loads',
-      run_time: 'midnight_utc'
-    }
+      description:
+        'Pre-populates redis-cache with dashboard bundles for all tenants to ensure fast first loads',
+      run_time: 'midnight_utc',
+    },
   },
   {
     name: 'Sync Denormalized Fields',
     schedule: 'hourly',
-    function_name: 'syncDenormalizedFields',  // Match the executor function name
+    function_name: 'syncDenormalizedFields', // Match the executor function name
     is_active: false,
     metadata: {
-      description: 'Syncs denormalized data across tables for performance'
-    }
-  }
+      description: 'Syncs denormalized data across tables for performance',
+    },
+  },
 ];
 
 async function seedCronJobs() {
@@ -95,10 +96,7 @@ async function seedCronJobs() {
 
     for (const job of defaultJobs) {
       // Check if job already exists
-      const existing = await pool.query(
-        'SELECT id FROM cron_job WHERE name = $1',
-        [job.name]
-      );
+      const existing = await pool.query('SELECT id FROM cron_job WHERE name = $1', [job.name]);
 
       if (existing.rows.length > 0) {
         console.log(`⊘ Job "${job.name}" already exists, skipping`);
@@ -108,7 +106,7 @@ async function seedCronJobs() {
       // Calculate initial next_run
       const now = new Date();
       let next_run = null;
-      
+
       if (job.schedule === 'every_15_seconds') {
         next_run = new Date(now.getTime() + 15 * 1000);
       } else if (job.schedule === 'every_30_seconds') {
@@ -129,15 +127,16 @@ async function seedCronJobs() {
         `INSERT INTO cron_job (name, schedule, function_name, is_active, next_run, metadata, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
          RETURNING id, name`,
-        [job.name, job.schedule, job.function_name, job.is_active, next_run, job.metadata]
+        [job.name, job.schedule, job.function_name, job.is_active, next_run, job.metadata],
       );
 
       console.log(`✓ Created job: "${result.rows[0].name}" (${result.rows[0].id})`);
     }
 
     console.log('\n✅ Cron job seeding complete!');
-    console.log(`\nTo view jobs, run:\nSELECT id, name, schedule, is_active, next_run FROM cron_job ORDER BY created_at;`);
-    
+    console.log(
+      `\nTo view jobs, run:\nSELECT id, name, schedule, is_active, next_run FROM cron_job ORDER BY created_at;`,
+    );
   } catch (error) {
     console.error('❌ Error seeding cron jobs:', error.message);
     throw error;
@@ -146,7 +145,7 @@ async function seedCronJobs() {
   }
 }
 
-seedCronJobs().catch(err => {
+seedCronJobs().catch((err) => {
   console.error(err);
   process.exit(1);
 });

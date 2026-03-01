@@ -27,10 +27,11 @@ if (!connectionString) {
 console.log('🔍 Running final validation checks for PR #19...\n');
 
 // Enforce SSL if DB_SSL=true or if PGSSLMODE provided (Supabase requires TLS)
-const sslEnabled = process.env.DB_SSL === 'true' || /require|verify-full/i.test(process.env.PGSSLMODE || '');
+const sslEnabled =
+  process.env.DB_SSL === 'true' || /require|verify-full/i.test(process.env.PGSSLMODE || '');
 const pool = new Pool({
   connectionString,
-  ssl: sslEnabled ? { rejectUnauthorized: false } : undefined
+  ssl: sslEnabled ? { rejectUnauthorized: false } : undefined,
 });
 if (sslEnabled) {
   console.log('🔐 SSL enforcement active (rejectUnauthorized=false for Supabase pooler).');
@@ -40,7 +41,7 @@ if (sslEnabled) {
 
 async function runValidation() {
   const client = await pool.connect();
-  
+
   try {
     console.log('1️⃣  Checking composite index on leads...');
     const indexCheck = await client.query(`
@@ -69,12 +70,12 @@ async function runValidation() {
       HAVING COUNT(*) < 1
       ORDER BY tablename
     `);
-    
+
     if (rlsCheck.rows.length === 0) {
       console.log('   ✅ All critical tables have RLS policies\n');
     } else {
       console.log('   ❌ Tables with missing policies:');
-      rlsCheck.rows.forEach(row => {
+      rlsCheck.rows.forEach((row) => {
         console.log(`      - ${row.tablename}: ${row.policy_count} policies`);
       });
       console.log();
@@ -98,12 +99,12 @@ async function runValidation() {
       AND p.proname NOT LIKE '%_safe'
       ORDER BY table_name, trigger_name
     `);
-    
+
     if (triggerCheck.rows.length === 0) {
       console.log('   ✅ All triggers use _safe function variants\n');
     } else {
       console.log('   ⚠️  Triggers NOT using safe functions:');
-      triggerCheck.rows.forEach(row => {
+      triggerCheck.rows.forEach((row) => {
         console.log(`      - ${row.table_name}.${row.trigger_name} → ${row.function_name}`);
       });
       console.log();
@@ -123,12 +124,12 @@ async function runValidation() {
         )
       ORDER BY tablename
     `);
-    
+
     if (rlsNoPolicy.rows.length === 0) {
       console.log('   ✅ No tables with RLS enabled but zero policies\n');
     } else {
       console.log('   ❌ Tables with RLS but NO POLICIES:');
-      rlsNoPolicy.rows.forEach(row => {
+      rlsNoPolicy.rows.forEach((row) => {
         console.log(`      - ${row.tablename}`);
       });
       console.log();
@@ -141,7 +142,7 @@ async function runValidation() {
         (SELECT COUNT(*) FROM pg_policies WHERE schemaname = 'public') as total_policies,
         (SELECT COUNT(*) FROM pg_proc WHERE proname LIKE '%_safe') as safe_functions
     `);
-    
+
     const stats = summary.rows[0];
     console.log(`   📊 RLS-enabled tables: ${stats.rls_tables}`);
     console.log(`   📊 Total RLS policies: ${stats.total_policies}`);
@@ -150,7 +151,6 @@ async function runValidation() {
     console.log('✅ Final validation complete!\n');
     console.log('📋 All security improvements from migrations 054-074 are in place.');
     console.log('🚀 PR #19 is ready to merge.\n');
-
   } catch (error) {
     console.error('❌ Validation error:', error.message);
     process.exit(1);

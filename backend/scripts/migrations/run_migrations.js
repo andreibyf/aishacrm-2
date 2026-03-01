@@ -23,8 +23,9 @@ if (!fs.existsSync(migrationsDir)) {
 }
 
 // Get all .sql files in migrations directory, sorted
-const migrationFiles = fs.readdirSync(migrationsDir)
-  .filter(file => file.endsWith('.sql'))
+const migrationFiles = fs
+  .readdirSync(migrationsDir)
+  .filter((file) => file.endsWith('.sql'))
   .sort();
 
 if (migrationFiles.length === 0) {
@@ -38,18 +39,18 @@ async function run() {
   const client = await pool.connect();
   try {
     console.log(`Found ${migrationFiles.length} migration file(s)`);
-    
+
     for (const file of migrationFiles) {
       const filePath = path.join(migrationsDir, file);
       const sql = fs.readFileSync(filePath, 'utf8');
-      
+
       console.log(`Applying migration: ${file}...`);
       await client.query('BEGIN');
       await client.query(sql);
       await client.query('COMMIT');
       console.log(`  ✓ ${file} applied successfully`);
     }
-    
+
     console.log('\n✓ All migrations completed successfully');
     process.exit(0);
   } catch (err) {

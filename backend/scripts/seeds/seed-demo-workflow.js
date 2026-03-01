@@ -19,15 +19,15 @@ const demoMetadata = {
     {
       id: 'node-1',
       type: 'webhook_trigger',
-      config: { description: 'Receives lead data via webhook' }
+      config: { description: 'Receives lead data via webhook' },
     },
     {
       id: 'node-2',
       type: 'find_lead',
       config: {
         email: '{{email}}',
-        description: 'Check if lead already exists'
-      }
+        description: 'Check if lead already exists',
+      },
     },
     {
       id: 'node-3',
@@ -36,8 +36,8 @@ const demoMetadata = {
         field: 'found_lead',
         operator: 'exists',
         value: 'true',
-        description: 'Branch based on whether lead exists'
-      }
+        description: 'Branch based on whether lead exists',
+      },
     },
     {
       id: 'node-4',
@@ -49,8 +49,8 @@ const demoMetadata = {
         company: '{{company}}',
         status: 'new',
         source: 'webhook',
-        description: 'Create new lead if not found'
-      }
+        description: 'Create new lead if not found',
+      },
     },
     {
       id: 'node-5',
@@ -58,29 +58,31 @@ const demoMetadata = {
       config: {
         method: 'POST',
         url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK',
-        headers: [
-          { key: 'Content-Type', value: 'application/json' }
-        ],
+        headers: [{ key: 'Content-Type', value: 'application/json' }],
         body_type: 'raw',
-        body_raw: JSON.stringify({
-          text: 'New Lead Created!',
-          blocks: [
-            {
-              type: 'section',
-              text: { type: 'mrkdwn', text: '*New Lead Alert* 🎯' }
-            },
-            {
-              type: 'section',
-              fields: [
-                { type: 'mrkdwn', text: '*Name:*\n{{first_name}} {{last_name}}' },
-                { type: 'mrkdwn', text: '*Email:*\n{{email}}' },
-                { type: 'mrkdwn', text: '*Company:*\n{{company}}' }
-              ]
-            }
-          ]
-        }, null, 2),
-        description: 'Send Slack notification for new lead'
-      }
+        body_raw: JSON.stringify(
+          {
+            text: 'New Lead Created!',
+            blocks: [
+              {
+                type: 'section',
+                text: { type: 'mrkdwn', text: '*New Lead Alert* 🎯' },
+              },
+              {
+                type: 'section',
+                fields: [
+                  { type: 'mrkdwn', text: '*Name:*\n{{first_name}} {{last_name}}' },
+                  { type: 'mrkdwn', text: '*Email:*\n{{email}}' },
+                  { type: 'mrkdwn', text: '*Company:*\n{{company}}' },
+                ],
+              },
+            ],
+          },
+          null,
+          2,
+        ),
+        description: 'Send Slack notification for new lead',
+      },
     },
     {
       id: 'node-6',
@@ -89,25 +91,22 @@ const demoMetadata = {
         lead_id: '{{found_lead.id}}',
         last_contacted: 'NOW()',
         notes: 'Duplicate submission received via webhook',
-        description: 'Update existing lead with timestamp'
-      }
-    }
+        description: 'Update existing lead with timestamp',
+      },
+    },
   ],
   connections: [
     { from: 'node-1', to: 'node-2' },
     { from: 'node-2', to: 'node-3' },
     { from: 'node-3', to: 'node-4', type: 'FALSE' },
     { from: 'node-3', to: 'node-6', type: 'TRUE' },
-    { from: 'node-4', to: 'node-5' }
+    { from: 'node-4', to: 'node-5' },
   ],
-  execution_count: 0
+  execution_count: 0,
 };
 
 async function seedDemoWorkflow() {
-  const supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  );
+  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
   try {
     console.log('🔧 Seeding Demo Workflow...');
@@ -142,23 +141,24 @@ async function seedDemoWorkflow() {
     if (existing && existing.length > 0) {
       console.log('ℹ Demo workflow already exists. Updating...');
       const workflowId = existing[0].id;
-      
+
       // Update metadata with webhook_url
       const updatedMetadata = {
         ...demoMetadata,
-        webhook_url: `/api/workflows/${workflowId}/webhook`
+        webhook_url: `/api/workflows/${workflowId}/webhook`,
       };
 
       // Update existing workflow
       const { error: updateErr } = await supabase
         .from('workflow')
         .update({
-          description: 'Demo workflow showcasing lead capture → condition check → Slack notification',
+          description:
+            'Demo workflow showcasing lead capture → condition check → Slack notification',
           trigger_type: 'webhook',
           trigger_config: { method: 'POST', auth_required: false },
           is_active: true,
           metadata: updatedMetadata,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         })
         .eq('id', workflowId);
 
@@ -169,7 +169,9 @@ async function seedDemoWorkflow() {
       console.log('\n📋 Test with:');
       console.log(`curl -X POST http://localhost:4001/api/workflows/${workflowId}/webhook \\`);
       console.log(`  -H "Content-Type: application/json" \\`);
-      console.log(`  -d '{"email":"test@example.com","first_name":"John","last_name":"Doe","company":"Acme Corp"}'`);
+      console.log(
+        `  -d '{"email":"test@example.com","first_name":"John","last_name":"Doe","company":"Acme Corp"}'`,
+      );
     } else {
       // Create new workflow first to get ID
       const { data: newWorkflow, error: createErr } = await supabase
@@ -177,13 +179,14 @@ async function seedDemoWorkflow() {
         .insert({
           tenant_id: tenantId,
           name: 'Demo',
-          description: 'Demo workflow showcasing lead capture → condition check → Slack notification',
+          description:
+            'Demo workflow showcasing lead capture → condition check → Slack notification',
           trigger_type: 'webhook',
           trigger_config: { method: 'POST', auth_required: false },
           is_active: true,
           metadata: demoMetadata,
           created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         })
         .select()
         .single();
@@ -195,7 +198,7 @@ async function seedDemoWorkflow() {
       // Update metadata with webhook_url now that we have the ID
       const updatedMetadata = {
         ...demoMetadata,
-        webhook_url: `/api/workflows/${workflowId}/webhook`
+        webhook_url: `/api/workflows/${workflowId}/webhook`,
       };
 
       const { error: updateErr } = await supabase
@@ -210,12 +213,15 @@ async function seedDemoWorkflow() {
       console.log('\n📋 Test with:');
       console.log(`curl -X POST http://localhost:4001/api/workflows/${workflowId}/webhook \\`);
       console.log(`  -H "Content-Type: application/json" \\`);
-      console.log(`  -d '{"email":"test@example.com","first_name":"John","last_name":"Doe","company":"Acme Corp"}'`);
+      console.log(
+        `  -d '{"email":"test@example.com","first_name":"John","last_name":"Doe","company":"Acme Corp"}'`,
+      );
     }
 
-    console.log('\n💡 Flow: Webhook → Find Lead → Condition → [New: Create + Slack | Existing: Update]');
+    console.log(
+      '\n💡 Flow: Webhook → Find Lead → Condition → [New: Create + Slack | Existing: Update]',
+    );
     console.log('💡 Replace Slack webhook URL in the UI to receive real notifications');
-
   } catch (error) {
     console.error('❌ Error seeding demo workflow:', error);
     process.exit(1);
@@ -223,4 +229,3 @@ async function seedDemoWorkflow() {
 }
 
 seedDemoWorkflow();
-

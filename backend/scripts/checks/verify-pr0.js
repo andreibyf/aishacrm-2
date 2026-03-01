@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
  * PR0 Verification Script
- * 
+ *
  * Validates that C.A.R.E. (Cognitive Adaptive Response Engine) kill switch and shadow mode are correctly implemented.
- * 
+ *
  * Run: node backend/scripts/verify-pr0.js
  */
 
@@ -44,7 +44,9 @@ const status3 = getCareAutonomyStatus();
 console.log(`  isCareAutonomyEnabled() = ${test3}`);
 console.log(`  mode = ${status3.mode}`);
 console.log(`  Expected: true (autonomous)`);
-console.log(`  Status: ${test3 === true && status3.mode === 'autonomous' ? '✅ PASS' : '❌ FAIL'}\n`);
+console.log(
+  `  Status: ${test3 === true && status3.mode === 'autonomous' ? '✅ PASS' : '❌ FAIL'}\n`,
+);
 
 // Test 4: Autonomy disabled
 console.log('Test 4: Autonomy Disabled (Autonomy OFF, Shadow OFF)');
@@ -56,7 +58,9 @@ const status4 = getCareAutonomyStatus();
 console.log(`  isCareAutonomyEnabled() = ${test4}`);
 console.log(`  mode = ${status4.mode}`);
 console.log(`  Expected: false (disabled)`);
-console.log(`  Status: ${test4 === false && status4.mode === 'disabled' ? '✅ PASS' : '❌ FAIL'}\n`);
+console.log(
+  `  Status: ${test4 === false && status4.mode === 'disabled' ? '✅ PASS' : '❌ FAIL'}\n`,
+);
 
 // Summary
 const allPassed = test1 === false && test2 === false && test3 === true && test4 === false;

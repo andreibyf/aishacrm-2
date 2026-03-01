@@ -35,7 +35,8 @@ async function main() {
     process.exit(1);
   }
 
-  const connStr = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/aishacrm';
+  const connStr =
+    process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/aishacrm';
   const pool = new Pool({ connectionString: connStr });
 
   console.log('\n⚠ Purging ALL data except user:', email);
@@ -60,7 +61,9 @@ async function main() {
     await client.query('BEGIN');
 
     // Ensure the superadmin row exists before we purge anything
-    const sup = await client.query('SELECT id, email FROM users WHERE lower(email) = lower($1)', [email]);
+    const sup = await client.query('SELECT id, email FROM users WHERE lower(email) = lower($1)', [
+      email,
+    ]);
     if (sup.rowCount === 0) {
       throw new Error(`Superadmin user not found in users table: ${email}`);
     }
@@ -86,7 +89,9 @@ async function main() {
     }
 
     // Delete all users except the superadmin email
-    const delRes = await client.query('DELETE FROM users WHERE id <> $1 RETURNING id, email', [keepId]);
+    const delRes = await client.query('DELETE FROM users WHERE id <> $1 RETURNING id, email', [
+      keepId,
+    ]);
     console.log(`→ Deleted ${delRes.rowCount} other user(s)`);
 
     await client.query('COMMIT');

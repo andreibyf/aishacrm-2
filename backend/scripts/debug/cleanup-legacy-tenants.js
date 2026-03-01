@@ -1,17 +1,17 @@
 /**
  * Cleanup Legacy Tenant Test Data
- * 
+ *
  * Purpose: Remove test records created with old text-based tenant IDs
  * Context: Post-UUID migration cleanup script
- * 
+ *
  * This script:
  * - Identifies test records using deprecated text-based tenant IDs
  * - Safely deletes them (they reference non-existent tenants)
  * - Ensures all remaining data uses UUID-based tenant_id
- * 
+ *
  * Safe to run: YES - only removes orphaned test data
  * Frequency: One-time cleanup, or after E2E test failures
- * 
+ *
  * Note: This script uses tenant_id (UUID) column exclusively.
  * Legacy LEGACY_TENANT_IDS array contains TEXT values that should NOT
  * exist in the tenant_id column (which is UUID type).
@@ -50,10 +50,10 @@ const LEGACY_TENANT_IDS = [
 
 async function clearLegacyTenantData() {
   console.log('🔧 Clearing legacy tenant data from E2E tests...\n');
-  
+
   const tables = [
     'contacts',
-    'leads', 
+    'leads',
     'accounts',
     'opportunities',
     'activities',
@@ -62,7 +62,7 @@ async function clearLegacyTenantData() {
     'workflows',
     'system_logs',
     'import_logs',
-    'audit_logs'
+    'audit_logs',
   ];
 
   let totalDeleted = 0;
@@ -72,9 +72,9 @@ async function clearLegacyTenantData() {
       // Check if table exists
       const { rows: tableCheck } = await pool.query(
         `SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=$1`,
-        [table]
+        [table],
       );
-      
+
       if (tableCheck.length === 0) {
         console.log(`⏭️  Table ${table} does not exist, skipping...`);
         continue;
@@ -83,7 +83,7 @@ async function clearLegacyTenantData() {
       // Check if table has tenant_id column
       const { rows: columnCheck } = await pool.query(
         `SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=$1 AND column_name='tenant_id'`,
-        [table]
+        [table],
       );
 
       if (columnCheck.length === 0) {
@@ -94,7 +94,7 @@ async function clearLegacyTenantData() {
       // Delete records with legacy tenant IDs
       const { rowCount } = await pool.query(
         `DELETE FROM ${table} WHERE tenant_id = ANY($1::text[])`,
-        [LEGACY_TENANT_IDS]
+        [LEGACY_TENANT_IDS],
       );
 
       if (rowCount > 0) {
@@ -113,7 +113,7 @@ async function clearLegacyTenantData() {
 
 async function ensureStandardTenant() {
   console.log('\n🏗️  Ensuring standard test tenant exists...\n');
-  
+
   try {
     // Upsert the standard tenant
     const { rows } = await pool.query(
@@ -124,7 +124,7 @@ async function ensureStandardTenant() {
          status = EXCLUDED.status,
          updated_at = NOW()
        RETURNING tenant_id, name`,
-      [STANDARD_TENANT_UUID]
+      [STANDARD_TENANT_UUID],
     );
 
     console.log(`✅ Standard tenant ready: ${rows[0].name} (${rows[0].tenant_id})`);
@@ -147,7 +147,7 @@ async function main() {
     console.log('✅ Cleanup complete! All test data now uses UUID:');
     console.log(`   ${STANDARD_TENANT_UUID}`);
     console.log('═'.repeat(60));
-    
+
     await pool.end();
     process.exit(0);
   } catch (err) {

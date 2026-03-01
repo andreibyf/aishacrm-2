@@ -17,7 +17,9 @@ async function main() {
   const email = process.argv[2];
   const newPassword = process.argv[3];
   if (!email || !newPassword) {
-    console.error('Usage: node backend/scripts/resetDevSuperadminPassword.js <email> <newPassword>');
+    console.error(
+      'Usage: node backend/scripts/resetDevSuperadminPassword.js <email> <newPassword>',
+    );
     process.exit(1);
   }
 
@@ -30,7 +32,9 @@ async function main() {
     process.exit(1);
   }
   if (!supabaseUrl.includes(DEV_PROJECT_ID)) {
-    console.error('⚠️ Unknown project id in SUPABASE_URL. Expected development project. Aborting for safety.');
+    console.error(
+      '⚠️ Unknown project id in SUPABASE_URL. Expected development project. Aborting for safety.',
+    );
     process.exit(1);
   }
 
@@ -38,14 +42,14 @@ async function main() {
   // Use REST endpoint to list users with pagination; dev environment small so single page is fine.
   const listUrl = `${supabaseUrl}/auth/v1/admin/users?per_page=200`;
   const listResp = await fetch(listUrl, {
-    headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey }
+    headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey },
   });
   if (!listResp.ok) {
     console.error('Failed to list users via REST:', listResp.status, await listResp.text());
     process.exit(1);
   }
   const listJson = await listResp.json();
-  const user = (listJson.users || []).find(u => u.email === email);
+  const user = (listJson.users || []).find((u) => u.email === email);
   if (!user) {
     console.error('User not found for email:', email);
     process.exit(1);
@@ -57,9 +61,9 @@ async function main() {
     headers: {
       Authorization: `Bearer ${serviceKey}`,
       apikey: serviceKey,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ password: newPassword })
+    body: JSON.stringify({ password: newPassword }),
   });
   if (!putResp.ok) {
     console.error('Password update failed:', putResp.status, await putResp.text());
@@ -69,7 +73,7 @@ async function main() {
   console.log('Next: run verify script to test login.');
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error('Unexpected error:', err);
   process.exit(1);
 });

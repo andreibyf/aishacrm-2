@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 /**
  * Cleanup E2E Test Users
- * 
+ *
  * Removes any test users created during E2E runs that weren't properly cleaned up.
  * Safe to run manually or as part of maintenance tasks.
- * 
+ *
  * Targets users with:
  * - email patterns: audit.test.*, e2e.temp.*, *@playwright.test
  * - tenant_id: e2e-test-tenant-* or test-tenant (legacy)
  * - metadata.is_e2e_test_data === true
- * 
+ *
  * Usage:
  *   node backend/scripts/cleanup-e2e-users.js
  *   node backend/scripts/cleanup-e2e-users.js --dry-run  # Preview only
@@ -27,7 +27,7 @@ const dryRun = process.argv.includes('--dry-run');
 async function cleanupE2EUsers() {
   console.log('🧹 E2E Test User Cleanup');
   console.log('========================\n');
-  
+
   if (dryRun) {
     console.log('⚠️  DRY RUN MODE - No changes will be made\n');
   }
@@ -74,7 +74,7 @@ async function cleanupE2EUsers() {
     }
 
     console.log(`Found ${testUsers.length} E2E test user(s):\n`);
-    
+
     testUsers.forEach((user, index) => {
       console.log(`${index + 1}. ${user.email}`);
       console.log(`   ID: ${user.id}`);
@@ -95,7 +95,7 @@ async function cleanupE2EUsers() {
     if (!isAutomated) {
       console.log('⚠️  WARNING: This will permanently delete these users.');
       console.log('   Press Ctrl+C to cancel, or wait 5 seconds to continue...\n');
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await new Promise((resolve) => setTimeout(resolve, 5000));
     }
 
     // Delete users
@@ -119,7 +119,6 @@ async function cleanupE2EUsers() {
       console.log(`❌ Failed: ${failedCount} user(s)`);
     }
     console.log('🧹 Cleanup complete!');
-
   } catch (error) {
     console.error('❌ Cleanup failed:', error.message);
     console.error(error.stack);

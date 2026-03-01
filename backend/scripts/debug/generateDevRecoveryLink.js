@@ -35,7 +35,7 @@ async function main() {
   let payloads = [
     { type: 'recovery', email, redirect_to: 'http://localhost:4000' },
     // Fallback: some Supabase versions expect email_otp_type for recovery verification
-    { type: 'recovery', email, email_otp_type: 'recovery', redirect_to: 'http://localhost:4000' }
+    { type: 'recovery', email, email_otp_type: 'recovery', redirect_to: 'http://localhost:4000' },
   ];
   let lastError = null;
   for (const body of payloads) {
@@ -44,9 +44,9 @@ async function main() {
       headers: {
         Authorization: `Bearer ${serviceKey}`,
         apikey: serviceKey,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
     });
     if (resp.ok) {
       const json = await resp.json();
@@ -63,7 +63,7 @@ async function main() {
   process.exit(0);
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error('Unexpected error:', err);
   process.exit(1);
 });

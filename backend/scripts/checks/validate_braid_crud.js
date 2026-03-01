@@ -23,7 +23,7 @@ async function run() {
       attendees: [],
       date_time: new Date().toISOString(),
       duration_minutes: 30,
-      assigned_to: ''
+      assigned_to: '',
     };
     const res = await executeBraidTool('schedule_meeting', args, tenantRecord, null);
     if (res?.tag === 'Ok' && res.value?.id) {
@@ -40,7 +40,7 @@ async function run() {
     const args = {
       tenant: tenantSlug,
       activity_id: createdId,
-      updates: { subject: 'Updated subject', body: 'Updated body', status: 'planned' }
+      updates: { subject: 'Updated subject', body: 'Updated body', status: 'planned' },
     };
     const res = await executeBraidTool('update_activity', args, tenantRecord, null);
     if (res?.tag === 'Ok' && res.value?.subject === 'Updated subject') {
@@ -55,7 +55,7 @@ async function run() {
   {
     const args = {
       tenant: tenantSlug,
-      activity_id: createdId
+      activity_id: createdId,
     };
     const res = await executeBraidTool('mark_activity_complete', args, tenantRecord, null);
     if (res?.tag === 'Ok' && res.value?.status === 'completed') {
@@ -70,7 +70,7 @@ async function run() {
   {
     const args = {
       tenant: tenantSlug,
-      activity_id: createdId
+      activity_id: createdId,
     };
     const res = await executeBraidTool('delete_activity', args, tenantRecord, null);
     if (res?.tag === 'Ok' && res.value === true) {

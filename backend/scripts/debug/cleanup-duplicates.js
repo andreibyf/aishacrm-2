@@ -13,12 +13,12 @@ dotenv.config({ path: join(__dirname, '..', '.env') });
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 });
 
 async function findAndDeleteDuplicateContacts() {
   console.log('🔍 Finding duplicate contacts...\n');
-  
+
   // Find all contacts ordered by email and creation date
   const result = await pool.query(`
     SELECT id, email, first_name, last_name, created_date
@@ -26,27 +26,27 @@ async function findAndDeleteDuplicateContacts() {
     WHERE email IS NOT NULL
     ORDER BY email, created_date ASC
   `);
-  
+
   const contacts = result.rows;
   console.log(`📊 Total contacts with emails: ${contacts.length}`);
-  
+
   // Group by email
   const emailGroups = {};
-  contacts.forEach(contact => {
+  contacts.forEach((contact) => {
     if (!emailGroups[contact.email]) {
       emailGroups[contact.email] = [];
     }
     emailGroups[contact.email].push(contact);
   });
-  
+
   // Find duplicates (groups with more than 1 contact)
   const duplicates = Object.entries(emailGroups).filter(([_, cs]) => cs.length > 1);
-  
+
   console.log(`\n🔍 Found ${duplicates.length} duplicate email groups\n`);
-  
+
   let totalDuplicates = 0;
   const idsToDelete = [];
-  
+
   duplicates.forEach(([email, cs]) => {
     console.log(`📧 ${email} (${cs.length} records):`);
     // Keep the first one (oldest), mark others for deletion
@@ -61,27 +61,24 @@ async function findAndDeleteDuplicateContacts() {
     });
     console.log();
   });
-  
+
   if (idsToDelete.length === 0) {
     console.log('✅ No duplicates to delete!');
     return;
   }
-  
+
   console.log(`\n📝 Summary: ${totalDuplicates} duplicate contacts to delete`);
   console.log(`🔥 Deleting ${idsToDelete.length} duplicate records...\n`);
-  
+
   // Delete all at once using IN clause
-  await pool.query(
-    'DELETE FROM public.contacts WHERE id = ANY($1)',
-    [idsToDelete]
-  );
-  
+  await pool.query('DELETE FROM public.contacts WHERE id = ANY($1)', [idsToDelete]);
+
   console.log(`✅ Deleted ${idsToDelete.length} duplicate contacts.`);
 }
 
 async function findAndDeleteDuplicateLeads() {
   console.log('\n\n🔍 Finding duplicate leads...\n');
-  
+
   // Find all leads ordered by email and creation date
   const result = await pool.query(`
     SELECT id, email, first_name, last_name, created_date
@@ -89,27 +86,27 @@ async function findAndDeleteDuplicateLeads() {
     WHERE email IS NOT NULL
     ORDER BY email, created_date ASC
   `);
-  
+
   const leads = result.rows;
   console.log(`📊 Total leads with emails: ${leads.length}`);
-  
+
   // Group by email
   const emailGroups = {};
-  leads.forEach(lead => {
+  leads.forEach((lead) => {
     if (!emailGroups[lead.email]) {
       emailGroups[lead.email] = [];
     }
     emailGroups[lead.email].push(lead);
   });
-  
+
   // Find duplicates
   const duplicates = Object.entries(emailGroups).filter(([_, ls]) => ls.length > 1);
-  
+
   console.log(`\n🔍 Found ${duplicates.length} duplicate email groups\n`);
-  
+
   let totalDuplicates = 0;
   const idsToDelete = [];
-  
+
   duplicates.forEach(([email, ls]) => {
     console.log(`📧 ${email} (${ls.length} records):`);
     // Keep the first one (oldest), mark others for deletion
@@ -124,21 +121,18 @@ async function findAndDeleteDuplicateLeads() {
     });
     console.log();
   });
-  
+
   if (idsToDelete.length === 0) {
     console.log('✅ No duplicates to delete!');
     return;
   }
-  
+
   console.log(`\n📝 Summary: ${totalDuplicates} duplicate leads to delete`);
   console.log(`🔥 Deleting ${idsToDelete.length} duplicate records...\n`);
-  
+
   // Delete all at once using IN clause
-  await pool.query(
-    'DELETE FROM public.leads WHERE id = ANY($1)',
-    [idsToDelete]
-  );
-  
+  await pool.query('DELETE FROM public.leads WHERE id = ANY($1)', [idsToDelete]);
+
   console.log(`✅ Deleted ${idsToDelete.length} duplicate leads.`);
 }
 
@@ -154,13 +148,13 @@ async function findAndDeleteDuplicateLeads() {
       AND table_schema NOT IN ('pg_catalog', 'information_schema')
       ORDER BY table_schema, table_name
     `);
-    
+
     console.log('Available tables:');
-    tablesResult.rows.forEach(row => {
+    tablesResult.rows.forEach((row) => {
       console.log(`  - ${row.table_schema}.${row.table_name}`);
     });
     console.log('\n');
-    
+
     await findAndDeleteDuplicateContacts();
     await findAndDeleteDuplicateLeads();
     console.log('\n\n🎉 All cleanup operations complete!');

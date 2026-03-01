@@ -15,7 +15,12 @@ import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
 import dotenv from 'dotenv';
 import fs from 'fs';
-import { initSupabaseAuth, getAuthUserByEmail, updateAuthUserMetadata, createAuthUser } from '../lib/supabaseAuth.js';
+import {
+  initSupabaseAuth,
+  getAuthUserByEmail,
+  updateAuthUserMetadata,
+  createAuthUser,
+} from '../lib/supabaseAuth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -34,9 +39,10 @@ function parseArgs(argv) {
   const args = {};
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
-    const [k, v] = a.startsWith('--') && a.includes('=')
-      ? a.replace(/^--/, '').split('=')
-      : [a.replace(/^--/, ''), argv[i + 1]];
+    const [k, v] =
+      a.startsWith('--') && a.includes('=')
+        ? a.replace(/^--/, '').split('=')
+        : [a.replace(/^--/, ''), argv[i + 1]];
     if (a.startsWith('--') && a.includes('=')) {
       args[k] = v;
     } else if (a.startsWith('--')) {
@@ -56,13 +62,14 @@ const password = args.password; // optional
 
 if (!email) {
   console.error('\n✗ Missing required --email');
-  console.error('  Example: node backend/scripts/sync-user-from-auth.js --email test@aishacrm.com --role superadmin');
+  console.error(
+    '  Example: node backend/scripts/sync-user-from-auth.js --email test@aishacrm.com --role superadmin',
+  );
   process.exit(1);
 }
 
-const BACKEND_URL = process.env.VITE_AISHACRM_BACKEND_URL
-  || process.env.BACKEND_URL
-  || 'http://localhost:3001';
+const BACKEND_URL =
+  process.env.VITE_AISHACRM_BACKEND_URL || process.env.BACKEND_URL || 'http://localhost:3001';
 
 const wantsMetadataUpdate = role !== undefined || tenant !== undefined;
 
@@ -71,7 +78,9 @@ async function main() {
   if (wantsMetadataUpdate || wantsCreate) {
     const supa = initSupabaseAuth();
     if (!supa) {
-      console.warn('⚠ Supabase Admin not configured (SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY). Skipping metadata update.');
+      console.warn(
+        '⚠ Supabase Admin not configured (SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY). Skipping metadata update.',
+      );
     } else {
       let { user, error } = await getAuthUserByEmail(email);
       if (error) {
@@ -82,10 +91,24 @@ async function main() {
         if (wantsCreate) {
           const metaForCreate = {
             ...(role ? { role } : {}),
-            ...(tenant !== undefined ? { tenant_id: (tenant === '' || tenant === 'no-client' || tenant === 'none' || tenant === 'null') ? null : tenant } : {}),
+            ...(tenant !== undefined
+              ? {
+                  tenant_id:
+                    tenant === '' ||
+                    tenant === 'no-client' ||
+                    tenant === 'none' ||
+                    tenant === 'null'
+                      ? null
+                      : tenant,
+                }
+              : {}),
           };
           const pwd = password || `TempPass${Date.now()}!Secure#`;
-          const { user: created, error: createErr } = await createAuthUser(email, pwd, metaForCreate);
+          const { user: created, error: createErr } = await createAuthUser(
+            email,
+            pwd,
+            metaForCreate,
+          );
           if (createErr || !created) {
             console.error('✗ Failed to create auth user:', createErr?.message || 'unknown error');
             process.exit(1);
@@ -102,7 +125,14 @@ async function main() {
         ...(user.user_metadata || {}),
         ...(role ? { role } : {}),
         // Normalize tenant: allow '', 'no-client', 'none', 'null' to clear
-        ...(tenant !== undefined ? { tenant_id: (tenant === '' || tenant === 'no-client' || tenant === 'none' || tenant === 'null') ? null : tenant } : {}),
+        ...(tenant !== undefined
+          ? {
+              tenant_id:
+                tenant === '' || tenant === 'no-client' || tenant === 'none' || tenant === 'null'
+                  ? null
+                  : tenant,
+            }
+          : {}),
       };
 
       const { error: updErr } = await updateAuthUserMetadata(user.id, newMeta);
@@ -110,7 +140,10 @@ async function main() {
         console.error('✗ Failed to update auth metadata:', updErr.message);
         process.exit(1);
       }
-      console.log(`✓ Updated auth metadata for ${email}:`, { role: newMeta.role, tenant_id: newMeta.tenant_id ?? null });
+      console.log(`✓ Updated auth metadata for ${email}:`, {
+        role: newMeta.role,
+        tenant_id: newMeta.tenant_id ?? null,
+      });
     }
   }
 
@@ -130,12 +163,18 @@ async function main() {
   }
 
   let body;
-  try { body = await res.json(); } catch { body = null; }
+  try {
+    body = await res.json();
+  } catch {
+    body = null;
+  }
 
   if (!res.ok) {
     console.error(`✗ Sync failed [${res.status}]`, body?.message || body || 'Unknown error');
     if (body?.message?.includes('tenant_id metadata is required')) {
-      console.error('  Hint: provide --tenant <tenant-id> or set tenant_id in Supabase user metadata.');
+      console.error(
+        '  Hint: provide --tenant <tenant-id> or set tenant_id in Supabase user metadata.',
+      );
     }
     process.exit(1);
   }

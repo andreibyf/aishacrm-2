@@ -23,7 +23,9 @@ async function main() {
     console.error('Refusing: Not dev project URL.');
     process.exit(1);
   }
-  const client = createClient(supabaseUrl, anonKey, { auth: { autoRefreshToken: false, persistSession: false } });
+  const client = createClient(supabaseUrl, anonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
   console.log('🔐 Attempting signInWithPassword for', email);
   const { data, error } = await client.auth.signInWithPassword({ email, password });
   if (error) {
@@ -34,7 +36,7 @@ async function main() {
   process.exit(0);
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error('Unexpected error:', err);
   process.exit(1);
 });

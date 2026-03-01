@@ -8,20 +8,22 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const { Pool } = pkg;
 
-const connectionString = process.env.DATABASE_URL ? process.env.DATABASE_URL.replace('?sslmode=require', '') : '';
+const connectionString = process.env.DATABASE_URL
+  ? process.env.DATABASE_URL.replace('?sslmode=require', '')
+  : '';
 
 const pool = new Pool({
   connectionString,
   ssl: {
-    rejectUnauthorized: false
-  }
+    rejectUnauthorized: false,
+  },
 });
 
 async function createTasksTable() {
   const client = await pool.connect();
   try {
     console.log('Checking for tasks table...');
-    
+
     // Check if table exists
     const res = await client.query("SELECT to_regclass('public.tasks')");
     if (res.rows[0].to_regclass) {
@@ -44,7 +46,7 @@ async function createTasksTable() {
         updated_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
-    
+
     // Add RLS policies if needed (skipping for now as per "surgical edits" but good practice)
     // For now, we assume the backend has full access.
 
