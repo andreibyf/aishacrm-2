@@ -11,6 +11,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Legend,
   Line,
   LineChart,
@@ -270,30 +271,60 @@ export default function HistoricalTrends({ tenantFilter }) {
 
       {/* Trends Chart */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="bg-slate-800 border-slate-700">
+        <Card className="shadow-lg bg-slate-800 border-slate-700">
           <CardHeader>
             <CardTitle className="text-slate-100">Daily Activity Trends</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={trendsData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                <XAxis dataKey="displayDate" tick={{ fontSize: 12, fill: '#94a3b8' }} />
-                <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} />
+                <defs>
+                  <linearGradient id="gradContacts" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="gradLeads" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.8} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="gradOps" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.8} />
+                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                <XAxis
+                  dataKey="displayDate"
+                  tick={{ fontSize: 12, fill: '#94a3b8' }}
+                  axisLine={{ stroke: '#475569' }}
+                  tickLine={false}
+                  dy={10}
+                />
+                <YAxis
+                  tick={{ fontSize: 12, fill: '#94a3b8' }}
+                  axisLine={{ stroke: '#475569' }}
+                  tickLine={false}
+                  dx={-10}
+                />
                 <Tooltip
+                  cursor={{ fill: 'rgba(255,255,255,0.05)' }}
                   contentStyle={{
                     backgroundColor: '#1e293b',
                     border: '1px solid #475569',
                     borderRadius: '8px',
                     color: '#f1f5f9',
+                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
                   }}
+                  labelStyle={{ color: '#f1f5f9' }}
                 />
-                <Legend wrapperStyle={{ color: '#f1f5f9' }} />
+                <Legend wrapperStyle={{ paddingTop: '20px' }} />
                 <Line
                   type="monotone"
                   dataKey="contacts"
                   stroke="#3b82f6"
                   strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 6 }}
                   name="Contacts"
                 />
                 <Line
@@ -301,6 +332,8 @@ export default function HistoricalTrends({ tenantFilter }) {
                   dataKey="leads"
                   stroke="#10b981"
                   strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 6 }}
                   name="Leads"
                 />
                 <Line
@@ -308,6 +341,8 @@ export default function HistoricalTrends({ tenantFilter }) {
                   dataKey="opportunities"
                   stroke="#f59e0b"
                   strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 6 }}
                   name="Opportunities"
                 />
               </LineChart>
@@ -315,26 +350,51 @@ export default function HistoricalTrends({ tenantFilter }) {
           </CardContent>
         </Card>
 
-        <Card className="bg-slate-800 border-slate-700">
+        <Card className="shadow-lg bg-slate-800 border-slate-700">
           <CardHeader>
             <CardTitle className="text-slate-100">Daily Pipeline Value</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={trendsData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                <XAxis dataKey="displayDate" tick={{ fontSize: 12, fill: '#94a3b8' }} />
-                <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} />
+                <defs>
+                  <linearGradient id="gradPipelineBar" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#a78bfa" stopOpacity={1} />
+                    <stop offset="100%" stopColor="#8b5cf6" stopOpacity={1} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                <XAxis
+                  dataKey="displayDate"
+                  tick={{ fontSize: 12, fill: '#94a3b8' }}
+                  axisLine={{ stroke: '#475569' }}
+                  tickLine={false}
+                  dy={10}
+                />
+                <YAxis
+                  tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+                  tick={{ fontSize: 12, fill: '#94a3b8' }}
+                  axisLine={{ stroke: '#475569' }}
+                  tickLine={false}
+                  dx={-10}
+                />
                 <Tooltip
                   formatter={(value) => [`$${value.toLocaleString()}`, 'Value']}
+                  cursor={{ fill: 'rgba(255,255,255,0.05)' }}
                   contentStyle={{
                     backgroundColor: '#1e293b',
                     border: '1px solid #475569',
                     borderRadius: '8px',
                     color: '#f1f5f9',
+                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
                   }}
+                  labelStyle={{ color: '#f1f5f9' }}
                 />
-                <Bar dataKey="value" fill="#8b5cf6" />
+                <Bar dataKey="value" fill="url(#gradPipelineBar)" radius={[4, 4, 0, 0]}>
+                  {trendsData.map((_, index) => (
+                    <Cell key={`cell-${index}`} fill="url(#gradPipelineBar)" />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
