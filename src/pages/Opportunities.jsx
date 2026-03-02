@@ -1,660 +1,179 @@
-import { logDev } from "@/utils/devLogger";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Opportunity } from "@/api/entities";
-import { Account } from "@/api/entities";
-import { Contact } from "@/api/entities";
-import { Lead } from "@/api/entities";
-// User entity not needed here; user comes from context
-import { Employee } from "@/api/entities";
-import { useApiManager } from "../components/shared/ApiManager";
-import OpportunityCard from "../components/opportunities/OpportunityCard";
-import OpportunityForm from "../components/opportunities/OpportunityForm";
-import OpportunityDetailPanel from "../components/opportunities/OpportunityDetailPanel";
-import OpportunityKanbanBoard from "../components/opportunities/OpportunityKanbanBoard";
-import BulkActionsMenu from "../components/opportunities/BulkActionsMenu";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { logDev } from '@/utils/devLogger';
+import { useCallback, useMemo, useState } from 'react';
+import { Opportunity } from '@/api/entities';
+import { useApiManager } from '../components/shared/ApiManager';
+import OpportunityCard from '../components/opportunities/OpportunityCard';
+import OpportunityForm from '../components/opportunities/OpportunityForm';
+import OpportunityDetailPanel from '../components/opportunities/OpportunityDetailPanel';
+import OpportunityKanbanBoard from '../components/opportunities/OpportunityKanbanBoard';
+import BulkActionsMenu from '../components/opportunities/BulkActionsMenu';
+import OpportunityStatsCards from '../components/opportunities/OpportunityStatsCards';
+import OpportunityFilters from '../components/opportunities/OpportunityFilters';
+import OpportunityTable from '../components/opportunities/OpportunityTable';
+import { Button } from '@/components/ui/button';
 import {
   AlertCircle,
   AppWindow,
-  Edit,
-  Eye,
   Grid,
   List,
   Loader2,
   Plus,
-  Search,
-  Trash2,
   Upload,
   X,
-} from "lucide-react";
-import { AnimatePresence } from "framer-motion";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import CsvExportButton from "../components/shared/CsvExportButton";
-import CsvImportDialog from "../components/shared/CsvImportDialog";
-import { useTenant } from "../components/shared/tenantContext";
-import Pagination from "../components/shared/Pagination";
-import { toast } from "sonner";
-import TagFilter from "../components/shared/TagFilter";
-import { useEmployeeScope } from "../components/shared/EmployeeScopeContext";
-import RefreshButton from "../components/shared/RefreshButton";
-import { useLoadingToast } from "@/hooks/useLoadingToast";
-import { useProgress } from "@/components/shared/ProgressOverlay";
-import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { format } from "date-fns";
-import SimpleModal from "../components/shared/SimpleModal";
-import StatusHelper from "../components/shared/StatusHelper";
-import { loadUsersSafely } from "../components/shared/userLoader";
-import { useConfirmDialog } from "../components/shared/ConfirmDialog";
-import { useUser } from "@/components/shared/useUser.js";
-import { useEntityLabel } from "@/components/shared/entityLabelsHooks";
-import { useAiShaEvents } from "@/hooks/useAiShaEvents";
-
-const stageColors = {
-  prospecting: "bg-blue-900/20 text-blue-300 border-blue-700",
-  qualification: "bg-indigo-900/20 text-indigo-300 border-indigo-700",
-  proposal: "bg-purple-900/20 text-purple-300 border-purple-700",
-  negotiation: "bg-yellow-900/20 text-yellow-300 border-yellow-700",
-  closed_won: "bg-emerald-900/20 text-emerald-300 border-emerald-700",
-  closed_lost: "bg-red-900/20 text-red-300 border-red-700",
-};
-
-// Map stage IDs to their card IDs for custom label lookup
-const stageToCardId = {
-  prospecting: 'opportunity_prospecting',
-  qualification: 'opportunity_qualification',
-  proposal: 'opportunity_proposal',
-  negotiation: 'opportunity_negotiation',
-  closed_won: 'opportunity_won',
-  closed_lost: 'opportunity_lost',
-};
+} from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
+import CsvExportButton from '../components/shared/CsvExportButton';
+import CsvImportDialog from '../components/shared/CsvImportDialog';
+import { useTenant } from '../components/shared/tenantContext';
+import Pagination from '../components/shared/Pagination';
+import { toast } from 'sonner';
+import { useEmployeeScope } from '../components/shared/EmployeeScopeContext';
+import RefreshButton from '../components/shared/RefreshButton';
+import { useLoadingToast } from '@/hooks/useLoadingToast';
+import { useProgress } from '@/components/shared/ProgressOverlay';
+import { useStatusCardPreferences } from '@/hooks/useStatusCardPreferences';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import SimpleModal from '../components/shared/SimpleModal';
+import { useConfirmDialog } from '../components/shared/ConfirmDialog';
+import { useUser } from '@/components/shared/useUser.js';
+import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
+import { useAiShaEvents } from '@/hooks/useAiShaEvents';
+import { useOpportunitiesData } from '@/hooks/useOpportunitiesData';
+import { useOpportunitiesBulkOps } from '@/hooks/useOpportunitiesBulkOps';
 
 export default function OpportunitiesPage() {
-  const { plural: opportunitiesLabel, singular: opportunityLabel } = useEntityLabel('opportunities');
+  const { plural: opportunitiesLabel, singular: opportunityLabel } =
+    useEntityLabel('opportunities');
   const loadingToast = useLoadingToast();
-  const [opportunities, setOpportunities] = useState([]);
-  const [accounts, setAccounts] = useState([]);
-  const [contacts, setContacts] = useState([]);
-  const [leads, setLeads] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [employees, setEmployees] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [stageFilter, setStageFilter] = useState("all");
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingOpportunity, setEditingOpportunity] = useState(null);
-  const [viewMode, setViewMode] = useState("table");
-  const [selectedOpportunities, setSelectedOpportunities] = useState(() =>
-    new Set()
-  );
-  const [selectAllMode, setSelectAllMode] = useState(false);
-  const [isImportOpen, setIsImportOpen] = useState(false);
   const { user } = useUser();
   const { selectedTenantId } = useTenant();
-  const [detailOpportunity, setDetailOpportunity] = useState(null);
-  const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [selectedTags, setSelectedTags] = useState([]);
-  const [showTestData] = useState(true); // Default to showing all data
-
+  const { selectedEmail } = useEmployeeScope();
+  const { isCardVisible, getCardLabel } = useStatusCardPreferences();
+  const { cachedRequest, clearCacheByKey } = useApiManager();
   const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
   const { startProgress, updateProgress, completeProgress } = useProgress();
 
-  // Sort state
-  const [sortField, setSortField] = useState("updated_at");
-  const [sortDirection, setSortDirection] = useState("desc");
-
-  // Sort options for opportunities
-  const sortOptions = useMemo(() => [
-    { label: "Recently Updated", field: "updated_at", direction: "desc" },
-    { label: "Oldest Updated", field: "updated_at", direction: "asc" },
-    { label: "Newest First", field: "created_at", direction: "desc" },
-    { label: "Oldest First", field: "created_at", direction: "asc" },
-    { label: "Name A-Z", field: "name", direction: "asc" },
-    { label: "Name Z-A", field: "name", direction: "desc" },
-    { label: "Value (Highest)", field: "value", direction: "desc" },
-    { label: "Value (Lowest)", field: "value", direction: "asc" },
-    { label: "Close Date", field: "close_date", direction: "asc" },
-  ], []);
-
-  // Stats for ALL opportunities (not just current page)
-  const [totalStats, setTotalStats] = useState({
-    total: 0,
-    prospecting: 0,
-    qualification: 0,
-    proposal: 0,
-    negotiation: 0,
-    closed_won: 0,
-    closed_lost: 0,
-  });
-
-  // Pagination state
+  // Local UI state
+  const [searchTerm, setSearchTerm] = useState('');
+  const [stageFilter, setStageFilter] = useState('all');
+  const [sortField, setSortField] = useState('updated_at');
+  const [sortDirection, setSortDirection] = useState('desc');
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingOpportunity, setEditingOpportunity] = useState(null);
+  const [viewMode, setViewMode] = useState('table');
+  const [selectedOpportunities, setSelectedOpportunities] = useState(() => new Set());
+  const [selectAllMode, setSelectAllMode] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [detailOpportunity, setDetailOpportunity] = useState(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [selectedTags, setSelectedTags] = useState([]);
+  const [showTestData] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [totalItems, setTotalItems] = useState(0);
-  
-  // Keyset pagination cursors (for future backend optimization)
-  const [paginationCursors, setPaginationCursors] = useState({});
-  const [lastSeenRecord, setLastSeenRecord] = useState(null);
 
-  const { cachedRequest, clearCacheByKey } = useApiManager();
-  const { selectedEmail } = useEmployeeScope();
-  const { isCardVisible, getCardLabel } = useStatusCardPreferences();
+  // Sort options
+  const sortOptions = useMemo(
+    () => [
+      { label: 'Recently Updated', field: 'updated_at', direction: 'desc' },
+      { label: 'Oldest Updated', field: 'updated_at', direction: 'asc' },
+      { label: 'Newest First', field: 'created_at', direction: 'desc' },
+      { label: 'Oldest First', field: 'created_at', direction: 'asc' },
+      { label: 'Name A-Z', field: 'name', direction: 'asc' },
+      { label: 'Name Z-A', field: 'name', direction: 'desc' },
+      { label: 'Value (Highest)', field: 'value', direction: 'desc' },
+      { label: 'Value (Lowest)', field: 'value', direction: 'asc' },
+      { label: 'Close Date', field: 'close_date', direction: 'asc' },
+    ],
+    [],
+  );
 
-  // Ref to track if initial load is done
-  const initialLoadDone = useRef(false);
-  const supportingDataLoaded = useRef(false); // NEW: Track if supporting data is loaded
-  const [supportingDataReady, setSupportingDataReady] = useState(false); // trigger renders when supporting data completes
-
-  // Centralized tenant filter builder
-  const getTenantFilter = useCallback(() => {
-    // console.log('[Opportunities] getTenantFilter called with:', { selectedEmail, employeesCount: employees.length });
-    if (!user) return {};
-
-    let filter = {};
-
-    // Tenant filtering
-    if (user.role === 'superadmin' || user.role === 'admin') {
-      if (selectedTenantId) {
-        filter.tenant_id = selectedTenantId;
-      }
-      // If no tenant selected (admin views all), backend may enforce scope; callers guard accordingly
-    } else if (user.tenant_id) {
-      filter.tenant_id = user.tenant_id;
-    }
-
-    // Employee scope filtering from context
-    // Note: selectedEmail can contain either an email address or an employee ID
-    if (selectedEmail && selectedEmail !== 'all') {
-      if (selectedEmail === 'unassigned') {
-        // Opportunities.assigned_to is a UUID column; empty string causes backend UUID parse errors
-        // Filter only for NULL to represent unassigned
-        filter.$or = [{ assigned_to: null }];
-      } else {
-        // Use the selected value directly (works for both UUIDs and emails)
-        filter.assigned_to = selectedEmail;
-      }
-    } else if (user.employee_role === 'employee' && user.role !== 'admin' && user.role !== 'superadmin') {
-      filter.assigned_to = user.email;
-    }
-
-    // Test data filtering (only exclude when toggled off)
-    if (!showTestData) {
-      filter.is_test_data = false;
-    }
-
-    return filter;
-  }, [user, selectedTenantId, selectedEmail, showTestData]);
-
-  // Load supporting data (accounts, contacts, users, employees) ONCE - OPTIMIZED WITH CONCURRENT FETCHING
-  //
-  // Handle opening opportunity from URL parameter (e.g., from Activities page related_to link)
-  useEffect(() => {
-    const loadOpportunityFromUrl = async () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const opportunityId = urlParams.get("opportunityId");
-
-      if (opportunityId) {
-        try {
-          // Fetch the specific opportunity by ID
-          const opportunity = await Opportunity.get(opportunityId);
-          if (opportunity) {
-            setDetailOpportunity(opportunity);
-            setIsDetailOpen(true);
-          }
-        } catch (error) {
-          console.error("[Opportunities] Failed to load opportunity from URL:", error);
-          toast.error("Opportunity not found");
-        } finally {
-          // Clear the URL parameter
-          window.history.replaceState({}, "", "/Opportunities");
-        }
-      }
-    };
-
-    if (user) {
-      loadOpportunityFromUrl();
-    }
-  }, [user]); // Only depend on user, not opportunities array
-
-  // NOTE: Bundle endpoints exist (src/api/bundles.js → /api/bundles/opportunities) that could
-  // consolidate this into a single request. The bundle infrastructure is available for simpler
-  // use cases but wasn't integrated here to avoid risk. See: docs/BUNDLE_ENDPOINTS_TESTING.md
-  //
-  useEffect(() => {
-  // CRITICAL: Only load once if supportingDataLoaded.current is true or if user is not available yet.
-  if (!user || supportingDataLoaded.current) return;
-
-    const loadSupportingData = async () => {
-      try {
-        const tenantFilter = getTenantFilter();
-
-        // Guard: Don't load if no tenant_id for superadmin (must select a tenant first)
-        if ((user.role === 'superadmin' || user.role === 'admin') && !tenantFilter.tenant_id) {
-          if (import.meta.env.DEV) {
-            logDev("[Opportunities] Skipping data load - no tenant selected");
-          }
-          supportingDataLoaded.current = true;
-          setSupportingDataReady(true);
-          return;
-        }
-
-        if (import.meta.env.DEV) {
-          logDev(
-            "[Opportunities] Loading supporting data with tenant filter:",
-            tenantFilter,
-          );
-        }
-
-        // PERFORMANCE OPTIMIZATION: Load all data concurrently using Promise.all()
-        // This eliminates artificial delays and leverages ApiOptimizer's batching
-        const [
-          accountsData,
-          contactsData,
-          leadsData,
-          usersData,
-          employeesData,
-        ] = await Promise.all([
-          cachedRequest(
-            "Account",
-            "filter",
-            { filter: tenantFilter },
-            () => Account.filter(tenantFilter),
-          ),
-          cachedRequest(
-            "Contact",
-            "filter",
-            { filter: tenantFilter },
-            () => Contact.filter(tenantFilter),
-          ),
-          cachedRequest(
-            "Lead",
-            "filter",
-            { filter: tenantFilter },
-            () => Lead.filter(tenantFilter),
-          ),
-          loadUsersSafely(user, selectedTenantId, cachedRequest, 1000), // Updated with limit
-          cachedRequest(
-            "Employee",
-            "filter",
-            { filter: tenantFilter, limit: 1000 },
-            () => Employee.filter(tenantFilter, 'created_at', 1000),
-          ),
-        ]);
-
-        // Set all data at once
-        setAccounts(accountsData || []);
-        setContacts(contactsData || []);
-        setLeads(leadsData || []);
-        setUsers(usersData || []);
-        setEmployees(employeesData || []);
-
-        if (import.meta.env.DEV) {
-          logDev("[Opportunities] Supporting data loaded successfully");
-        }
-        supportingDataLoaded.current = true; // Mark as loaded (ref)
-        setSupportingDataReady(true); // notify effects to proceed
-      } catch (error) {
-        if (import.meta.env.DEV) {
-          console.error(
-            "[pages/Opportunities.js] Failed to load supporting data:",
-            error,
-          );
-        }
-        // Don't show error toast - continue with empty arrays
-        setEmployees([]);
-        setAccounts([]);
-        setContacts([]);
-        setLeads([]);
-        setUsers([user]); // Fallback to current user if all else fails
-        supportingDataLoaded.current = true;
-        setSupportingDataReady(true);
-      }
-    };
-
-    loadSupportingData();
-  }, [
-    user,
-    selectedTenantId,
-    selectedEmail,
-    showTestData,
+  // Data hook
+  const {
+    opportunities,
+    setOpportunities,
+    accounts,
+    contacts,
+    leads,
+    users,
+    employees,
+    loading,
+    totalStats,
+    totalItems,
+    setTotalItems,
+    loadOpportunities,
+    loadTotalStats,
     getTenantFilter,
-    cachedRequest,
-  ]);
-
-  const loadTotalStats = useCallback(async () => {
-    if (!user) return;
-
-    try {
-      const effectiveFilter = getTenantFilter();
-
-      // Guard: Don't load stats if no tenant_id for superadmin
-      if ((user.role === 'superadmin' || user.role === 'admin') && !effectiveFilter.tenant_id) {
-        setTotalStats({
-          total: 0,
-          prospecting: 0,
-          qualification: 0,
-          proposal: 0,
-          negotiation: 0,
-          closed_won: 0,
-          closed_lost: 0,
-        });
-        return;
-      }
-
-      logDev(
-        "[Opportunities] Loading stats with filter:",
-        effectiveFilter,
-      );
-
-      // Use optimized /stats endpoint - server-side aggregation instead of fetching all records
-      const stats = await Opportunity.getStats(effectiveFilter);
-
-      logDev("[Opportunities] Received stats from backend:", stats);
-      setTotalStats(stats);
-    } catch (error) {
-      console.error("Failed to load total stats:", error);
-    }
-  }, [user, getTenantFilter]); // Removed selectedTenantId, selectedEmail, getFilter as they are implicitly handled by getTenantFilter
-
-  // Load total stats when dependencies change
-  useEffect(() => {
-    if (user && supportingDataReady) { // Only load total stats after supporting data is loaded
-      loadTotalStats();
-    }
-  }, [user, selectedTenantId, selectedEmail, loadTotalStats, showTestData, supportingDataReady]);
-
-  // Main data loading function with proper pagination
-  const loadOpportunities = useCallback(async (page = 1, size = 25) => {
-    if (!user) return;
-
-    loadingToast.showLoading();
-    setLoading(true);
-    try {
-      let effectiveFilter = getTenantFilter();
-
-      // Guard: Don't load opportunities if no tenant_id for superadmin
-      if ((user.role === 'superadmin' || user.role === 'admin') && !effectiveFilter.tenant_id) {
-        setOpportunities([]);
-        setTotalItems(0);
-        setLoading(false);
-        return;
-      }
-
-      // Apply stage filter
-      if (stageFilter !== "all") {
-        effectiveFilter = { ...effectiveFilter, stage: stageFilter };
-      }
-
-      // Apply search term filter while preserving existing $or filters (e.g., unassigned)
-      if (searchTerm) {
-        const searchRegex = { $regex: searchTerm, $options: "i" };
-        const searchConditions = [
-          { name: searchRegex },
-          { account_name: searchRegex },
-          { contact_name: searchRegex },
-          { description: searchRegex },
-        ];
-
-        // If $or already exists (e.g., from unassigned filter), combine via $and
-        if (effectiveFilter.$or) {
-          effectiveFilter = {
-            ...effectiveFilter,
-            $and: [...(effectiveFilter.$and || []), { $or: effectiveFilter.$or }, { $or: searchConditions }],
-          };
-          delete effectiveFilter.$or;
-        } else {
-          effectiveFilter = { ...effectiveFilter, $or: searchConditions };
-        }
-      }
-
-      // Apply tag filter
-      if (selectedTags.length > 0) {
-        effectiveFilter = { ...effectiveFilter, tags: { $all: selectedTags } };
-      }
-
-      // KANBAN VIEW: Load ALL records (no pagination) to show full pipeline
-      // TABLE/GRID VIEW: Use pagination for performance
-      const effectiveSize = viewMode === "kanban" ? 10000 : size;
-      const skip = viewMode === "kanban" ? 0 : (page - 1) * size;
-
-      logDev(
-        "[Opportunities] Loading page:",
-        page,
-        "size:",
-        size,
-        "effectiveSize:",
-        effectiveSize,
-        "skip:",
-        skip,
-        "viewMode:",
-        viewMode,
-        "filter:",
-        effectiveFilter,
-        "cursor:",
-        paginationCursors[page - 1],
-      );
-
-      // Build API query with keyset cursor if available (only for paginated views)
-      const apiFilter = { ...effectiveFilter };
-      
-      // Add cursor for keyset pagination if navigating forward (skip for Kanban)
-      if (viewMode !== "kanban") {
-        const cursor = paginationCursors[page - 1];
-        if (cursor && cursor.updated_at && cursor.id) {
-          apiFilter.cursor_updated_at = cursor.updated_at;
-          apiFilter.cursor_id = cursor.id;
-          logDev("[Opportunities] Using keyset cursor:", cursor);
-        }
-      }
-
-      // Sort by user selection, with secondary id sort for stable pagination
-      // Build sort string: prefix with - for descending
-      const sortString = sortDirection === "desc" ? `-${sortField},-id` : `${sortField},-id`;
-      
-      const opportunitiesData = await Opportunity.filter(
-        apiFilter,
-        sortString,
-        effectiveSize,
-        skip,
-      );
-
-      // Track last record for keyset pagination (only for paginated views)
-      if (viewMode !== "kanban" && opportunitiesData && opportunitiesData.length > 0) {
-        const lastRecord = opportunitiesData[opportunitiesData.length - 1];
-        setLastSeenRecord({
-          updated_at: lastRecord.updated_at,
-          id: lastRecord.id,
-          page: page
-        });
-      }
-
-      // Use optimized count endpoint - server-side COUNT instead of fetching 10k records
-      const countFilter = { ...effectiveFilter };
-      if (searchTerm) {
-        // Convert search term to filter format for count endpoint
-        const searchRegex = { $regex: searchTerm, $options: "i" };
-        countFilter.$or = [
-          { name: searchRegex },
-          { account_name: searchRegex },
-          { contact_name: searchRegex },
-          { description: searchRegex },
-        ];
-      }
-      const totalCount = await Opportunity.getCount(countFilter);
-
-      logDev(
-        "[Opportunities] Loaded:",
-        opportunitiesData?.length,
-        "Total:",
-        totalCount,
-      );
-
-      setOpportunities(opportunitiesData || []);
-      setTotalItems(totalCount);
-      setCurrentPage(page);
-      initialLoadDone.current = true;
-      loadingToast.showSuccess(`${opportunitiesLabel} loading! ✨`);
-    } catch (error) {
-      console.error("Failed to load opportunities:", error);
-      loadingToast.showError(`Failed to load ${opportunitiesLabel.toLowerCase()}`);
-      toast.error("Failed to load opportunities");
-      setOpportunities([]);
-      setTotalItems(0);
-    } finally {
-      setLoading(false);
-    }
-  }, [user, searchTerm, stageFilter, selectedTags, getTenantFilter, viewMode, loadingToast, opportunitiesLabel, paginationCursors, sortField, sortDirection]); // Added viewMode dependency
-
-  // Load opportunities when dependencies change
-  useEffect(() => {
-    if (user && supportingDataReady) { // Ensure supporting data is loaded before loading opportunities
-      loadOpportunities(currentPage, pageSize);
-    }
-  }, [
-    user,
+    allTags,
+    usersMap,
+    employeesMap,
+    accountsMap,
+    initialLoadDone,
+    handlePageChange,
+    handlePageSizeChange,
+    resetSupportingData,
+    resetPaginationCursors,
+  } = useOpportunitiesData({
     selectedTenantId,
+    employeeScope: selectedEmail,
+    stageFilter,
+    searchTerm,
+    sortField,
+    sortDirection,
+    selectedTags,
+    showTestData,
     currentPage,
     pageSize,
-    selectedEmail,
-    searchTerm,
+    viewMode,
+    user,
+    loadingToast,
+    opportunitiesLabel,
+    cachedRequest,
+    clearCacheByKey,
+    setDetailOpportunity,
+    setIsDetailOpen,
+    setCurrentPage,
+  });
+
+  // Bulk ops hook
+  const { handleBulkDelete, handleBulkStageChange, handleBulkAssign } = useOpportunitiesBulkOps({
+    opportunities,
+    selectedOpportunities,
+    setSelectedOpportunities,
+    selectAllMode,
+    setSelectAllMode,
+    totalItems,
+    getTenantFilter,
     stageFilter,
+    searchTerm,
     selectedTags,
     loadOpportunities,
-    showTestData,
-    supportingDataReady,
-  ]);
+    loadTotalStats,
+    startProgress,
+    updateProgress,
+    completeProgress,
+    confirm,
+    clearCacheByKey,
+    setOpportunities,
+    setTotalItems,
+    currentPage,
+    pageSize,
+  });
 
-  // Clear cache when employee filter changes to force fresh data
-  useEffect(() => {
-    if (selectedEmail !== null) {
-      clearCacheByKey("Opportunity");
-    }
-  }, [selectedEmail, clearCacheByKey]);
-
-  const handlePageChange = useCallback((newPage) => {
-    // Store cursor for the page we're leaving
-    if (lastSeenRecord && lastSeenRecord.page === currentPage) {
-      setPaginationCursors(prev => ({
-        ...prev,
-        [currentPage]: {
-          updated_at: lastSeenRecord.updated_at,
-          id: lastSeenRecord.id
-        }
-      }));
-    }
-    
-    setCurrentPage(newPage);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [lastSeenRecord, currentPage]);
-
-  const handlePageSizeChange = useCallback((newSize) => {
-    setPageSize(newSize);
-    setCurrentPage(1);
-  }, []);
-
-  const allTags = useMemo(() => {
-    if (!Array.isArray(opportunities)) return [];
-
-    const tagCounts = {};
-    opportunities.forEach((opp) => {
-      if (Array.isArray(opp.tags)) {
-        opp.tags.forEach((tag) => {
-          if (tag && typeof tag === "string") {
-            tagCounts[tag] = (tagCounts[tag] || 0) + 1;
-          }
-        });
-      }
-    });
-
-    return Object.entries(tagCounts)
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count);
-  }, [opportunities]);
-
-  const usersMap = useMemo(() => {
-    return users.reduce((acc, user) => {
-      acc[user.email] = user.full_name || user.email;
-      if (user.id) acc[user.id] = user.full_name || user.email; // Index by ID
-      return acc;
-    }, {});
-  }, [users]);
-
-  const employeesMap = useMemo(() => {
-    const map = employees.reduce((acc, employee) => {
-      const fullName = `${employee.first_name} ${employee.last_name}`;
-      // Map by ID (new assignments)
-      if (employee.id) {
-        acc[employee.id] = fullName;
-      }
-      // Map by email (legacy assignments) for backwards compatibility
-      if (employee.email) {
-        acc[employee.email] = fullName;
-      }
-      return acc;
-    }, {});
-    
-    if (import.meta.env.DEV) {
-      logDev('[Opportunities] employeesMap built:', { 
-        employeeCount: employees.length, 
-        mappedKeys: Object.keys(map).length,
-        sampleKeys: Object.keys(map).slice(0, 3)
-      });
-    }
-    
-    return map;
-  }, [employees]);
-
-  const accountsMap = useMemo(() => {
-    return accounts.reduce((acc, account) => {
-      acc[account.id] = account.name;
-      return acc;
-    }, {});
-  }, [accounts]);
+  // --- Local handlers ---
 
   const handleSave = async () => {
     const wasCreating = !editingOpportunity;
-
     try {
-      // Reset to page 1 for new opportunities to show them
-      if (wasCreating) {
-        setCurrentPage(1);
-      }
-
-      // Clear cache and reload BEFORE closing the dialog
-      clearCacheByKey("Opportunity");
+      if (wasCreating) setCurrentPage(1);
+      clearCacheByKey('Opportunity');
       await Promise.all([
         loadOpportunities(wasCreating ? 1 : currentPage, pageSize),
         loadTotalStats(),
       ]);
-      
-      // Now close the dialog after data is fresh
       setIsFormOpen(false);
       setEditingOpportunity(null);
     } catch (error) {
       console.error('[Opportunities] Error in handleSave:', error);
-      // Still close the dialog even on error
       setIsFormOpen(false);
       setEditingOpportunity(null);
     }
@@ -662,447 +181,40 @@ export default function OpportunitiesPage() {
 
   const handleDelete = async (id) => {
     const confirmed = await confirm({
-      title: "Delete opportunity?",
-      description: "This action cannot be undone.",
-      variant: "destructive",
-      confirmText: "Delete",
-      cancelText: "Cancel",
+      title: 'Delete opportunity?',
+      description: 'This action cannot be undone.',
+      variant: 'destructive',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
     });
     if (!confirmed) return;
 
     try {
       await Opportunity.delete(id);
-      // Optimistically update UI
       setOpportunities((prev) => prev.filter((o) => o.id !== id));
       setTotalItems((prev) => (prev > 0 ? prev - 1 : 0));
-      toast.success("Opportunity deleted successfully");
+      toast.success('Opportunity deleted successfully');
 
-      // Small delay to let optimistic update settle
       await new Promise((resolve) => setTimeout(resolve, 100));
-
-      clearCacheByKey("Opportunity");
-      await Promise.all([
-        loadOpportunities(currentPage, pageSize),
-        loadTotalStats(),
-      ]);
+      clearCacheByKey('Opportunity');
+      await Promise.all([loadOpportunities(currentPage, pageSize), loadTotalStats()]);
     } catch (error) {
-      console.error("Failed to delete opportunity:", error);
-      toast.error("Failed to delete opportunity");
-      // Reload on error to ensure consistency
+      console.error('Failed to delete opportunity:', error);
+      toast.error('Failed to delete opportunity');
       await loadOpportunities(currentPage, pageSize);
-    }
-  };
-
-  const handleBulkDelete = async () => {
-    if (selectAllMode) {
-      const confirmed = await confirm({
-        title: "Delete all opportunities?",
-        description:
-          `Delete ALL ${totalItems} opportunity/opportunities matching current filters? This cannot be undone!`,
-        variant: "destructive",
-        confirmText: "Delete All",
-        cancelText: "Cancel",
-      });
-      if (!confirmed) return;
-
-      try {
-        startProgress({ message: 'Fetching opportunities to delete...' });
-        let effectiveFilter = getTenantFilter();
-
-        if (stageFilter !== "all") {
-          effectiveFilter = { ...effectiveFilter, stage: stageFilter };
-        }
-
-        if (searchTerm) {
-          const searchRegex = { $regex: searchTerm, $options: "i" };
-          const searchConditions = [
-            { name: searchRegex },
-            { account_name: searchRegex },
-            { contact_name: searchRegex },
-            { description: searchRegex },
-          ];
-
-          // If $or already exists (e.g., from unassigned filter), combine via $and
-          if (effectiveFilter.$or) {
-            effectiveFilter = {
-              ...effectiveFilter,
-              $and: [...(effectiveFilter.$and || []), { $or: effectiveFilter.$or }, { $or: searchConditions }],
-            };
-            delete effectiveFilter.$or;
-          } else {
-            effectiveFilter = {
-              ...effectiveFilter,
-              $or: searchConditions,
-            };
-          }
-        }
-
-        if (selectedTags.length > 0) {
-          effectiveFilter = {
-            ...effectiveFilter,
-            tags: { $all: selectedTags },
-          };
-        }
-
-        const allOpportunitiesToDelete = await Opportunity.filter(
-          effectiveFilter,
-          "id",
-          10000,
-        );
-        const deleteCount = allOpportunitiesToDelete.length;
-
-        updateProgress({ message: `Deleting ${deleteCount} opportunities...`, total: deleteCount, current: 0 });
-
-        const BATCH_SIZE = 50;
-        let successCount = 0;
-        let failCount = 0;
-        for (let i = 0; i < allOpportunitiesToDelete.length; i += BATCH_SIZE) {
-          const batch = allOpportunitiesToDelete.slice(i, i + BATCH_SIZE);
-          const results = await Promise.allSettled(batch.map((o) => Opportunity.delete(o.id)));
-          results.forEach((r) => {
-            if (r.status === 'fulfilled') successCount++;
-            else {
-              const is404 = r.reason?.message?.includes('404');
-              if (!is404) failCount++;
-              else successCount++;
-            }
-          });
-          updateProgress({ current: successCount + failCount, message: `Deleted ${successCount} of ${deleteCount} opportunities...` });
-        }
-
-        completeProgress();
-
-        // Optimistically remove from UI immediately
-        const deletedIds = new Set(allOpportunitiesToDelete.map(o => o.id));
-        setOpportunities((prev) => prev.filter((o) => !deletedIds.has(o.id)));
-        setTotalItems((t) => Math.max(0, (t || 0) - deleteCount));
-
-        setSelectedOpportunities(new Set());
-        setSelectAllMode(false);
-        
-        // Refresh in background to ensure sync
-        setTimeout(async () => {
-          clearCacheByKey("Opportunity");
-          await Promise.all([
-            loadOpportunities(1, pageSize),
-            loadTotalStats(),
-          ]);
-        }, 500);
-        
-        toast.success(`${successCount} opportunity/opportunities deleted`);
-        if (failCount > 0) toast.error(`${failCount} failed to delete`);
-      } catch (error) {
-        completeProgress();
-        console.error("Failed to delete opportunities:", error);
-        toast.error("Failed to delete opportunities");
-      }
-    } else {
-      if (!selectedOpportunities || selectedOpportunities.size === 0) {
-        toast.error("No opportunities selected");
-        return;
-      }
-
-      const confirmed = await confirm({
-        title: "Delete selected opportunities?",
-        description:
-          `Delete ${selectedOpportunities.size} opportunity/opportunities? This cannot be undone.`,
-        variant: "destructive",
-        confirmText: "Delete",
-        cancelText: "Cancel",
-      });
-      if (!confirmed) return;
-
-      try {
-        const selectedCount = selectedOpportunities.size;
-        startProgress({ message: `Deleting ${selectedCount} opportunities...`, total: selectedCount, current: 0 });
-        
-        const selectedArray = [...selectedOpportunities];
-        const BATCH_SIZE = 50;
-        let succeeded = 0;
-        let failed = 0;
-        
-        for (let i = 0; i < selectedArray.length; i += BATCH_SIZE) {
-          const batch = selectedArray.slice(i, i + BATCH_SIZE);
-          const batchResults = await Promise.allSettled(
-            batch.map((id) => Opportunity.delete(id)),
-          );
-          batchResults.forEach((r) => {
-            if (r.status === 'fulfilled') succeeded++;
-            else {
-              const is404 = r.reason?.message?.includes('404');
-              if (!is404) failed++;
-              else succeeded++;
-            }
-          });
-          updateProgress({ current: succeeded + failed, message: `Deleted ${succeeded} of ${selectedCount} opportunities...` });
-        }
-        
-        completeProgress();
-        
-        // Optimistically remove from UI immediately
-        const deletedIds = new Set(selectedOpportunities);
-        setOpportunities((prev) => prev.filter((o) => !deletedIds.has(o.id)));
-        setTotalItems((t) => Math.max(0, (t || 0) - deletedIds.size));
-        
-        setSelectedOpportunities(new Set());
-        
-        // Refresh in background to ensure sync
-        setTimeout(async () => {
-          clearCacheByKey("Opportunity");
-          await Promise.all([
-            loadOpportunities(currentPage, pageSize),
-            loadTotalStats(),
-          ]);
-        }, 500);
-        
-        toast.success(
-          `${succeeded} opportunity/opportunities deleted`,
-        );
-        if (failed > 0) toast.error(`${failed} failed to delete`);
-      } catch (error) {
-        completeProgress();
-        console.error("Failed to delete opportunities:", error);
-        toast.error("Failed to delete opportunities");
-      }
-    }
-  };
-
-  const handleBulkStageChange = async (newStage) => {
-    if (selectAllMode) {
-      const confirmed = await confirm({
-        title: "Update all opportunities?",
-        description:
-          `Update stage for ALL ${totalItems} opportunity/opportunities matching current filters to ${
-            newStage.replace(/_/g, " ")
-          }?`,
-        variant: "default",
-        confirmText: "Update All",
-        cancelText: "Cancel",
-      });
-      if (!confirmed) return;
-
-      try {
-        let effectiveFilter = getTenantFilter();
-
-        if (stageFilter !== "all") {
-          effectiveFilter = { ...effectiveFilter, stage: stageFilter };
-        }
-
-        if (searchTerm) {
-          const searchRegex = { $regex: searchTerm, $options: "i" };
-          const searchConditions = [
-            { name: searchRegex },
-            { account_name: searchRegex },
-            { contact_name: searchRegex },
-            { description: searchRegex },
-          ];
-
-          // If $or already exists (e.g., from unassigned filter), combine via $and
-          if (effectiveFilter.$or) {
-            effectiveFilter = {
-              ...effectiveFilter,
-              $and: [...(effectiveFilter.$and || []), { $or: effectiveFilter.$or }, { $or: searchConditions }],
-            };
-            delete effectiveFilter.$or;
-          } else {
-            effectiveFilter = {
-              ...effectiveFilter,
-              $or: searchConditions,
-            };
-          }
-        }
-
-        if (selectedTags.length > 0) {
-          effectiveFilter = {
-            ...effectiveFilter,
-            tags: { $all: selectedTags },
-          };
-        }
-
-        const allOpportunitiesToUpdate = await Opportunity.filter(
-          effectiveFilter,
-          "id",
-          10000,
-        );
-        const updateCount = allOpportunitiesToUpdate.length;
-
-        const BATCH_SIZE = 50;
-        for (let i = 0; i < allOpportunitiesToUpdate.length; i += BATCH_SIZE) {
-          const batch = allOpportunitiesToUpdate.slice(i, i + BATCH_SIZE);
-          await Promise.all(
-            batch.map((o) => Opportunity.update(o.id, { stage: newStage })),
-          );
-          // removed delay(1000); // Add delay between batches
-        }
-
-        setSelectedOpportunities(new Set());
-        setSelectAllMode(false);
-        clearCacheByKey("Opportunity");
-        await Promise.all([
-          loadOpportunities(currentPage, pageSize),
-          loadTotalStats(),
-        ]);
-        toast.success(
-          `Updated ${updateCount} opportunity/opportunities to ${
-            newStage.replace(/_/g, " ")
-          }`,
-        );
-      } catch (error) {
-        console.error("Failed to update opportunities:", error);
-        toast.error("Failed to update opportunities");
-      }
-    } else {
-      if (!selectedOpportunities || selectedOpportunities.size === 0) {
-        toast.error("No opportunities selected");
-        return;
-      }
-
-      try {
-        const promises = [...selectedOpportunities].map((id) =>
-          Opportunity.update(id, { stage: newStage })
-        );
-
-        await Promise.all(promises);
-        setSelectedOpportunities(new Set());
-        clearCacheByKey("Opportunity");
-        await Promise.all([
-          loadOpportunities(currentPage, pageSize),
-          loadTotalStats(),
-        ]);
-        toast.success(
-          `Updated ${promises.length} opportunity/opportunities to ${
-            newStage.replace(/_/g, " ")
-          }`,
-        );
-      } catch (error) {
-        console.error("Failed to update opportunities:", error);
-        toast.error("Failed to update opportunities");
-      }
-    }
-  };
-
-  const handleBulkAssign = async (assignedTo) => {
-    if (selectAllMode) {
-      const confirmed = await confirm({
-        title: "Assign all opportunities?",
-        description:
-          `Assign ALL ${totalItems} opportunity/opportunities matching current filters?`,
-        variant: "default",
-        confirmText: "Assign All",
-        cancelText: "Cancel",
-      });
-      if (!confirmed) return;
-
-      try {
-        let effectiveFilter = getTenantFilter();
-
-        if (stageFilter !== "all") {
-          effectiveFilter = { ...effectiveFilter, stage: stageFilter };
-        }
-
-        if (searchTerm) {
-          const searchRegex = { $regex: searchTerm, $options: "i" };
-          const searchConditions = [
-            { name: searchRegex },
-            { account_name: searchRegex },
-            { contact_name: searchRegex },
-            { description: searchRegex },
-          ];
-
-          // If $or already exists (e.g., from unassigned filter), combine via $and
-          if (effectiveFilter.$or) {
-            effectiveFilter = {
-              ...effectiveFilter,
-              $and: [...(effectiveFilter.$and || []), { $or: effectiveFilter.$or }, { $or: searchConditions }],
-            };
-            delete effectiveFilter.$or;
-          } else {
-            effectiveFilter = {
-              ...effectiveFilter,
-              $or: searchConditions,
-            };
-          }
-        }
-
-        if (selectedTags.length > 0) {
-          effectiveFilter = {
-            ...effectiveFilter,
-            tags: { $all: selectedTags },
-          };
-        }
-
-        const allOpportunitiesToAssign = await Opportunity.filter(
-          effectiveFilter,
-          "id",
-          10000,
-        );
-        const updateCount = allOpportunitiesToAssign.length;
-
-        const BATCH_SIZE = 50;
-        for (let i = 0; i < allOpportunitiesToAssign.length; i += BATCH_SIZE) {
-          const batch = allOpportunitiesToAssign.slice(i, i + BATCH_SIZE);
-          await Promise.all(
-            batch.map((o) =>
-              Opportunity.update(o.id, { assigned_to: assignedTo || null })
-            ),
-          );
-          // removed delay(1000); // Add delay between batches
-        }
-
-        setSelectedOpportunities(new Set());
-        setSelectAllMode(false);
-        clearCacheByKey("Opportunity");
-        await Promise.all([
-          loadOpportunities(currentPage, pageSize),
-          loadTotalStats(),
-        ]);
-        toast.success(`Assigned ${updateCount} opportunity/opportunities`);
-      } catch (error) {
-        console.error("Failed to assign opportunities:", error);
-        toast.error("Failed to assign opportunities");
-      }
-    } else {
-      if (!selectedOpportunities || selectedOpportunities.size === 0) {
-        toast.error("No opportunities selected");
-        return;
-      }
-
-      try {
-        const promises = [...selectedOpportunities].map((id) =>
-          Opportunity.update(id, { assigned_to: assignedTo || null })
-        );
-
-        await Promise.all(promises);
-        setSelectedOpportunities(new Set());
-        clearCacheByKey("Opportunity");
-        await Promise.all([
-          loadOpportunities(currentPage, pageSize),
-          loadTotalStats(),
-        ]);
-        toast.success(`Assigned ${promises.length} opportunity/opportunities`);
-      } catch (error) {
-        console.error("Failed to assign opportunities:", error);
-        toast.error("Failed to assign opportunities");
-      }
     }
   };
 
   const toggleSelection = (id) => {
     const newSet = new Set(selectedOpportunities);
-    if (newSet.has(id)) {
-      newSet.delete(id);
-    } else {
-      newSet.add(id);
-    }
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
     setSelectedOpportunities(newSet);
     setSelectAllMode(false);
   };
 
   const toggleSelectAll = () => {
-    if (
-      selectedOpportunities.size === opportunities.length &&
-      opportunities.length > 0
-    ) {
+    if (selectedOpportunities.size === opportunities.length && opportunities.length > 0) {
       setSelectedOpportunities(new Set());
       setSelectAllMode(false);
     } else {
@@ -1127,19 +239,15 @@ export default function OpportunitiesPage() {
   };
 
   const handleRefresh = async () => {
-    clearCacheByKey("Opportunity");
-    clearCacheByKey("Employee");
-    clearCacheByKey("Account");
-    clearCacheByKey("Contact");
-    clearCacheByKey("Lead");
-    clearCacheByKey("User"); // Added clearing User cache
-    supportingDataLoaded.current = false; // Force reload supporting data next time
-    setSupportingDataReady(false);
-    await Promise.all([
-      loadOpportunities(currentPage, pageSize),
-      loadTotalStats(),
-    ]);
-    toast.success("Opportunities refreshed");
+    clearCacheByKey('Opportunity');
+    clearCacheByKey('Employee');
+    clearCacheByKey('Account');
+    clearCacheByKey('Contact');
+    clearCacheByKey('Lead');
+    clearCacheByKey('User');
+    resetSupportingData();
+    await Promise.all([loadOpportunities(currentPage, pageSize), loadTotalStats()]);
+    toast.success('Opportunities refreshed');
   };
 
   const handleStageFilterClick = (stage) => {
@@ -1148,30 +256,51 @@ export default function OpportunitiesPage() {
   };
 
   const handleClearFilters = () => {
-    setSearchTerm("");
-    setStageFilter("all");
+    setSearchTerm('');
+    setStageFilter('all');
     setSelectedTags([]);
     setCurrentPage(1);
-    setPaginationCursors({});
-    setLastSeenRecord(null);
+    resetPaginationCursors();
     handleClearSelection();
   };
 
   const hasActiveFilters = useMemo(() => {
-    return searchTerm !== "" || stageFilter !== "all" ||
-      selectedTags.length > 0;
+    return searchTerm !== '' || stageFilter !== 'all' || selectedTags.length > 0;
   }, [searchTerm, stageFilter, selectedTags]);
 
-  // AiSHA events listener - allows AI to trigger page actions
+  const handleStageChange = async (opportunityId, newStage) => {
+    try {
+      logDev('[Opportunities] handleStageChange:', { opportunityId, newStage });
+      const updateData = { stage: newStage, tenant_id: selectedTenantId };
+      await Opportunity.update(opportunityId, updateData);
+
+      clearCacheByKey('Opportunity');
+      await Promise.all([loadOpportunities(currentPage, pageSize), loadTotalStats()]);
+      toast.success(`Opportunity moved to ${newStage.replace(/_/g, ' ')}`);
+
+      const updated = await Opportunity.filter(
+        { id: opportunityId, tenant_id: selectedTenantId },
+        'id',
+        1,
+      ).then((r) => r[0]);
+      return updated;
+    } catch (error) {
+      console.error('Error updating opportunity stage:', error);
+      toast.error('Failed to update opportunity stage');
+      return null;
+    }
+  };
+
+  // AiSHA events listener
   useAiShaEvents({
     entityType: 'opportunities',
     onOpenEdit: ({ id }) => {
-      const opportunity = opportunities.find(o => o.id === id);
+      const opportunity = opportunities.find((o) => o.id === id);
       if (opportunity) {
         setEditingOpportunity(opportunity);
         setIsFormOpen(true);
       } else {
-        Opportunity.get(id).then(result => {
+        Opportunity.get(id).then((result) => {
           if (result) {
             setEditingOpportunity(result);
             setIsFormOpen(true);
@@ -1180,7 +309,7 @@ export default function OpportunitiesPage() {
       }
     },
     onSelectRow: ({ id }) => {
-      const opportunity = opportunities.find(o => o.id === id);
+      const opportunity = opportunities.find((o) => o.id === id);
       if (opportunity) {
         setDetailOpportunity(opportunity);
         setIsDetailOpen(true);
@@ -1193,38 +322,7 @@ export default function OpportunitiesPage() {
     onRefresh: handleRefresh,
   });
 
-  const handleStageChange = async (opportunityId, newStage) => {
-    try {
-      logDev('[Opportunities] handleStageChange:', { opportunityId, newStage, tenant: selectedTenantId });
-      
-      // Include tenant_id in the update - use selectedTenantId from useTenant hook
-      const updateData = {
-        stage: newStage,
-        tenant_id: selectedTenantId
-      };
-      
-      await Opportunity.update(opportunityId, updateData);
-      logDev('[Opportunities] Stage update successful, clearing cache and reloading...');
-      
-      clearCacheByKey("Opportunity");
-      await Promise.all([
-        loadOpportunities(currentPage, pageSize),
-        loadTotalStats(),
-      ]);
-      
-      toast.success(`Opportunity moved to ${newStage.replace(/_/g, " ")}`);
-      
-      const updated = await Opportunity.filter({ id: opportunityId, tenant_id: selectedTenantId }, "id", 1).then(
-        (r) => r[0],
-      );
-      logDev('[Opportunities] Retrieved updated opportunity:', updated);
-      return updated;
-    } catch (error) {
-      console.error("Error updating opportunity stage:", error);
-      toast.error("Failed to update opportunity stage");
-      return null;
-    }
-  };
+  // --- Render ---
 
   if (!user) {
     return (
@@ -1243,15 +341,12 @@ export default function OpportunitiesPage() {
         <SimpleModal
           open={isFormOpen}
           onOpenChange={(open) => {
-            logDev("[Opportunities] Modal onOpenChange:", open);
             setIsFormOpen(open);
-            if (!open) {
-              setEditingOpportunity(null);
-            }
+            if (!open) setEditingOpportunity(null);
           }}
-          title={editingOpportunity
-            ? `Edit ${opportunityLabel}`
-            : `Add New ${opportunityLabel}`}
+          title={
+            editingOpportunity ? `Edit ${opportunityLabel}` : `Add New ${opportunityLabel}`
+          }
           size="lg"
         >
           <OpportunityForm
@@ -1261,11 +356,10 @@ export default function OpportunitiesPage() {
             users={users}
             leads={leads}
             onSubmit={async (result) => {
-              logDev("[Opportunities] Form submitted with result:", result);
+              logDev('[Opportunities] Form submitted with result:', result);
               await handleSave();
             }}
             onCancel={() => {
-              logDev("[Opportunities] Form cancelled");
               setIsFormOpen(false);
               setEditingOpportunity(null);
             }}
@@ -1277,11 +371,8 @@ export default function OpportunitiesPage() {
           onOpenChange={setIsImportOpen}
           schema={Opportunity.schema ? Opportunity.schema() : null}
           onSuccess={async () => {
-            clearCacheByKey("Opportunity");
-            await Promise.all([
-              loadOpportunities(1, pageSize),
-              loadTotalStats(),
-            ]);
+            clearCacheByKey('Opportunity');
+            await Promise.all([loadOpportunities(1, pageSize), loadTotalStats()]);
           }}
         />
 
@@ -1298,10 +389,6 @@ export default function OpportunitiesPage() {
               setDetailOpportunity(null);
             }}
             onEdit={(opp) => {
-              logDev(
-                "[Opportunities] Edit clicked from detail panel:",
-                opp.id,
-              );
               setEditingOpportunity(opp);
               setIsFormOpen(true);
               setIsDetailOpen(false);
@@ -1314,11 +401,10 @@ export default function OpportunitiesPage() {
           />
         )}
 
+        {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-slate-100">
-              {opportunitiesLabel}
-            </h1>
+            <h1 className="text-3xl font-bold text-slate-100">{opportunitiesLabel}</h1>
             <p className="text-slate-400 mt-1">
               Track and manage your sales {opportunitiesLabel.toLowerCase()} and pipeline.
             </p>
@@ -1330,21 +416,19 @@ export default function OpportunitiesPage() {
                 <Button
                   variant="outline"
                   onClick={() => {
-                    logDev(
-                      "[Opportunities] View mode button clicked, current:",
-                      viewMode,
-                    );
-                    if (viewMode === "table") setViewMode("grid");
-                    else if (viewMode === "grid") setViewMode("kanban");
-                    else setViewMode("table");
+                    if (viewMode === 'table') setViewMode('grid');
+                    else if (viewMode === 'grid') setViewMode('kanban');
+                    else setViewMode('table');
                   }}
                   className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
                 >
-                  {viewMode === "table"
-                    ? <List className="w-4 h-4" />
-                    : viewMode === "grid"
-                    ? <Grid className="w-4 h-4" />
-                    : <AppWindow className="w-4 h-4" />}
+                  {viewMode === 'table' ? (
+                    <List className="w-4 h-4" />
+                  ) : viewMode === 'grid' ? (
+                    <Grid className="w-4 h-4" />
+                  ) : (
+                    <AppWindow className="w-4 h-4" />
+                  )}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
@@ -1355,10 +439,7 @@ export default function OpportunitiesPage() {
               <TooltipTrigger asChild>
                 <Button
                   variant="outline"
-                  onClick={() => {
-                    logDev("[Opportunities] Import button clicked");
-                    setIsImportOpen(true);
-                  }}
+                  onClick={() => setIsImportOpen(true)}
                   className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
                 >
                   <Upload className="w-4 h-4 mr-2" />
@@ -1374,12 +455,9 @@ export default function OpportunitiesPage() {
               data={opportunities}
               filename="opportunities_export"
             />
-            {(selectedOpportunities.size > 0 || selectAllMode) &&
-              viewMode !== "kanban" && (
+            {(selectedOpportunities.size > 0 || selectAllMode) && viewMode !== 'kanban' && (
               <BulkActionsMenu
-                selectedCount={selectAllMode
-                  ? totalItems
-                  : selectedOpportunities.size}
+                selectedCount={selectAllMode ? totalItems : selectedOpportunities.size}
                 onBulkStageChange={handleBulkStageChange}
                 onBulkAssign={handleBulkAssign}
                 onBulkDelete={handleBulkDelete}
@@ -1391,13 +469,8 @@ export default function OpportunitiesPage() {
               <TooltipTrigger asChild>
                 <Button
                   onClick={() => {
-                    logDev("[Opportunities] Add button clicked");
                     setEditingOpportunity(null);
                     setIsFormOpen(true);
-                    logDev("[Opportunities] State after click:", {
-                      isFormOpen: true,
-                      editingOpportunity: null,
-                    });
                   }}
                   className="bg-blue-600 hover:bg-blue-700"
                 >
@@ -1413,199 +486,71 @@ export default function OpportunitiesPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-7 gap-4">
-          {[
-            {
-              label: `Total ${opportunitiesLabel}`,
-              value: totalStats.total,
-              filter: "all",
-              bgColor: "bg-slate-800",
-              tooltip: "total_all",
-            },
-            {
-              label: "Prospecting",
-              value: totalStats.prospecting,
-              filter: "prospecting",
-              bgColor: "bg-blue-900/20",
-              borderColor: "border-blue-700",
-              tooltip: "opportunity_prospecting",
-            },
-            {
-              label: "Qualification",
-              value: totalStats.qualification,
-              filter: "qualification",
-              bgColor: "bg-indigo-900/20",
-              borderColor: "border-indigo-700",
-              tooltip: "opportunity_qualification",
-            },
-            {
-              label: "Proposal",
-              value: totalStats.proposal,
-              filter: "proposal",
-              bgColor: "bg-purple-900/20",
-              borderColor: "border-purple-700",
-              tooltip: "opportunity_proposal",
-            },
-            {
-              label: "Negotiation",
-              value: totalStats.negotiation,
-              filter: "negotiation",
-              bgColor: "bg-yellow-900/20",
-              borderColor: "border-yellow-700",
-              tooltip: "opportunity_negotiation",
-            },
-            {
-              label: "Closed Won",
-              value: totalStats.closed_won,
-              filter: "closed_won",
-              bgColor: "bg-emerald-900/20",
-              borderColor: "border-emerald-700",
-              tooltip: "opportunity_closed_won",
-            },
-            {
-              label: "Closed Lost",
-              value: totalStats.closed_lost,
-              filter: "closed_lost",
-              bgColor: "bg-red-900/20",
-              borderColor: "border-red-700",
-              tooltip: "opportunity_closed_lost",
-            },
-          ]
-            .filter(stat => stat.tooltip === 'total_all' || isCardVisible(stat.tooltip))
-            .map((stat) => (
-            <div
-              key={stat.label}
-              className={`${stat.bgColor} ${
-                stat.borderColor || "border-slate-700"
-              } border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
-                stageFilter === stat.filter
-                  ? "ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900"
-                  : ""
-              }`}
-              onClick={() => handleStageFilterClick(stat.filter)}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-sm text-slate-400">{getCardLabel(stat.tooltip) || stat.label}</p>
-                <StatusHelper statusKey={stat.tooltip} />
-              </div>
-              <p className="text-2xl font-bold text-slate-100">{stat.value}</p>
-            </div>
-          ))}
-        </div>
+        <OpportunityStatsCards
+          totalStats={totalStats}
+          stageFilter={stageFilter}
+          onStageFilterClick={handleStageFilterClick}
+          opportunitiesLabel={opportunitiesLabel}
+          isCardVisible={isCardVisible}
+          getCardLabel={getCardLabel}
+        />
 
-        {viewMode !== "kanban" && (
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-3 w-5 h-5 text-slate-500" />
-              <Input
-                placeholder="Search opportunities by name, account, contact, or description..."
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="pl-10 bg-slate-800 border-slate-700 text-slate-200"
-              />
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <TagFilter
-                allTags={allTags}
-                selectedTags={selectedTags}
-                onTagsChange={(newTags) => {
-                  setSelectedTags(newTags);
-                  setCurrentPage(1);
-                }}
-              />
-
-              {/* Sort Dropdown */}
-              <Select
-                value={`${sortField}:${sortDirection}`}
-                onValueChange={(value) => {
-                  const option = sortOptions.find(o => `${o.field}:${o.direction}` === value);
-                  if (option) {
-                    setSortField(option.field);
-                    setSortDirection(option.direction);
-                    setCurrentPage(1);
-                  }
-                }}
-              >
-                <SelectTrigger className="w-44 bg-slate-800 border-slate-700 text-slate-200">
-                  <SelectValue placeholder="Sort by..." />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-700">
-                  {sortOptions.map((option) => (
-                    <SelectItem
-                      key={`${option.field}:${option.direction}`}
-                      value={`${option.field}:${option.direction}`}
-                      className="text-slate-200 hover:bg-slate-700"
-                    >
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {hasActiveFilters && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleClearFilters}
-                      className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
-                    >
-                      <X className="w-4 h-4 mr-1" />
-                      Clear
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Clear all filters</p>
-                  </TooltipContent>
-                </Tooltip>
-              )}
-            </div>
-          </div>
+        {/* Filters (hidden in kanban) */}
+        {viewMode !== 'kanban' && (
+          <OpportunityFilters
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+            allTags={allTags}
+            selectedTags={selectedTags}
+            setSelectedTags={setSelectedTags}
+            sortField={sortField}
+            sortDirection={sortDirection}
+            setSortField={setSortField}
+            setSortDirection={setSortDirection}
+            sortOptions={sortOptions}
+            hasActiveFilters={hasActiveFilters}
+            handleClearFilters={handleClearFilters}
+            setCurrentPage={setCurrentPage}
+          />
         )}
 
-        {/* Select All Banner */}
-        {viewMode !== "kanban" &&
+        {/* Select All Banners */}
+        {viewMode !== 'kanban' &&
           selectedOpportunities.size === opportunities.length &&
-          opportunities.length > 0 && !selectAllMode &&
+          opportunities.length > 0 &&
+          !selectAllMode &&
           totalItems > opportunities.length && (
-          <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-blue-400" />
-              <span className="text-blue-200">
-                All {opportunities.length}{" "}
-                opportunities on this page are selected.
-              </span>
+            <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-blue-400" />
+                <span className="text-blue-200">
+                  All {opportunities.length} opportunities on this page are selected.
+                </span>
+                <Button
+                  variant="link"
+                  onClick={handleSelectAllRecords}
+                  className="text-blue-400 hover:text-blue-300 p-0 h-auto"
+                >
+                  Select all {totalItems} opportunities matching current filters
+                </Button>
+              </div>
               <Button
-                variant="link"
-                onClick={handleSelectAllRecords}
-                className="text-blue-400 hover:text-blue-300 p-0 h-auto"
+                variant="ghost"
+                size="sm"
+                onClick={handleClearSelection}
+                className="text-slate-400 hover:text-slate-200"
               >
-                Select all {totalItems} opportunities matching current filters
+                <X className="w-4 h-4" />
               </Button>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleClearSelection}
-              className="text-slate-400 hover:text-slate-200"
-            >
-              <X className="w-4 h-4" />
-            </Button>
-          </div>
-        )}
+          )}
 
-        {viewMode !== "kanban" && selectAllMode && (
+        {viewMode !== 'kanban' && selectAllMode && (
           <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-blue-400" />
               <span className="text-blue-200 font-semibold">
-                All {totalItems}{" "}
-                opportunities matching current filters are selected.
+                All {totalItems} opportunities matching current filters are selected.
               </span>
             </div>
             <Button
@@ -1619,349 +564,139 @@ export default function OpportunitiesPage() {
           </div>
         )}
 
-        {loading && !initialLoadDone.current
-          ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="text-center">
-                <Loader2 className="w-8 h-8 animate-spin text-blue-400 mx-auto mb-4" />
-                <p className="text-slate-400">Loading opportunities...</p>
-              </div>
+        {/* Main Content */}
+        {loading && !initialLoadDone.current ? (
+          <div className="flex items-center justify-center py-20">
+            <div className="text-center">
+              <Loader2 className="w-8 h-8 animate-spin text-blue-400 mx-auto mb-4" />
+              <p className="text-slate-400">Loading opportunities...</p>
             </div>
-          )
-          : opportunities.length === 0
-          ? (
-            <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-12 text-center">
-              <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-slate-300 mb-2">
-                No {opportunitiesLabel.toLowerCase()} found
-              </h3>
-              <p className="text-slate-500 mb-6">
-                {hasActiveFilters
-                  ? "Try adjusting your filters or search term"
-                  : `Get started by adding your first ${opportunityLabel.toLowerCase()}`}
-              </p>
-              {!hasActiveFilters && (
-                <Button
-                  onClick={() => setIsFormOpen(true)}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Your First {opportunityLabel}
-                </Button>
-              )}
+          </div>
+        ) : opportunities.length === 0 ? (
+          <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-12 text-center">
+            <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-slate-300 mb-2">
+              No {opportunitiesLabel.toLowerCase()} found
+            </h3>
+            <p className="text-slate-500 mb-6">
+              {hasActiveFilters
+                ? 'Try adjusting your filters or search term'
+                : `Get started by adding your first ${opportunityLabel.toLowerCase()}`}
+            </p>
+            {!hasActiveFilters && (
+              <Button
+                onClick={() => setIsFormOpen(true)}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Your First {opportunityLabel}
+              </Button>
+            )}
+          </div>
+        ) : viewMode === 'kanban' ? (
+          <div className="overflow-x-auto">
+            <OpportunityKanbanBoard
+              opportunities={opportunities}
+              accounts={accounts}
+              contacts={contacts}
+              users={users}
+              leads={leads}
+              onEdit={(opp) => {
+                setEditingOpportunity(opp);
+                setIsFormOpen(true);
+              }}
+              onDelete={handleDelete}
+              onView={handleViewDetails}
+              onStageChange={handleStageChange}
+              onDataRefresh={async () => {
+                clearCacheByKey('Opportunity');
+                await Promise.all([loadOpportunities(currentPage, pageSize), loadTotalStats()]);
+              }}
+            />
+          </div>
+        ) : viewMode === 'grid' ? (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <AnimatePresence>
+                {opportunities.map((opp) => {
+                  const account = accounts.find((a) => a.id === opp.account_id);
+                  const contact = contacts.find((c) => c.id === opp.contact_id);
+
+                  return (
+                    <OpportunityCard
+                      key={opp.id}
+                      opportunity={opp}
+                      accountName={account?.name}
+                      contactName={
+                        contact ? `${contact.first_name} ${contact.last_name}` : ''
+                      }
+                      assignedUserName={(() => {
+                        if (!opp.assigned_to) return undefined;
+                        return (
+                          employeesMap[opp.assigned_to] ||
+                          usersMap[opp.assigned_to] ||
+                          opp.assigned_to_name ||
+                          opp.assigned_to
+                        );
+                      })()}
+                      onEdit={() => {
+                        setEditingOpportunity(opp);
+                        setIsFormOpen(true);
+                      }}
+                      onDelete={() => handleDelete(opp.id)}
+                      onViewDetails={() => handleViewDetails(opp)}
+                      isSelected={selectedOpportunities.has(opp.id)}
+                      onSelect={() => toggleSelection(opp.id)}
+                    />
+                  );
+                })}
+              </AnimatePresence>
             </div>
-          )
-          : viewMode === "kanban"
-          ? (
-            <div className="overflow-x-auto">
-              <OpportunityKanbanBoard
-                opportunities={opportunities}
-                accounts={accounts}
-                contacts={contacts}
-                users={users}
-                leads={leads}
-                onEdit={(opp) => {
-                  setEditingOpportunity(opp);
-                  setIsFormOpen(true);
-                }}
-                onDelete={handleDelete}
-                onView={handleViewDetails}
-                onStageChange={handleStageChange}
-                onDataRefresh={async () => {
-                  clearCacheByKey("Opportunity");
-                  await Promise.all([
-                    loadOpportunities(currentPage, pageSize),
-                    loadTotalStats(),
-                  ]);
-                }}
-              />
-            </div>
-          )
-          : viewMode === "grid"
-          ? (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <AnimatePresence>
-                  {opportunities.map((opp) => {
-                    const account = accounts.find((a) =>
-                      a.id === opp.account_id
-                    );
-                    const contact = contacts.find((c) =>
-                      c.id === opp.contact_id
-                    );
-
-                    return (
-                      <OpportunityCard
-                        key={opp.id}
-                        opportunity={opp}
-                        accountName={account?.name}
-                        contactName={contact
-                          ? `${contact.first_name} ${contact.last_name}`
-                          : ""}
-                        assignedUserName={(() => {
-                          if (!opp.assigned_to) return undefined;
-                          return employeesMap[opp.assigned_to] || 
-                                 usersMap[opp.assigned_to] || 
-                                 opp.assigned_to_name || 
-                                 opp.assigned_to;
-                        })()}
-                        onEdit={() => {
-                          setEditingOpportunity(opp);
-                          setIsFormOpen(true);
-                        }}
-                        onDelete={() => handleDelete(opp.id)}
-                        onViewDetails={() => handleViewDetails(opp)}
-                        isSelected={selectedOpportunities.has(opp.id)}
-                        onSelect={() => toggleSelection(opp.id)}
-                      />
-                    );
-                  })}
-                </AnimatePresence>
-              </div>
-
-              <Pagination
-                currentPage={currentPage}
-                totalPages={Math.ceil(totalItems / pageSize)}
-                totalItems={totalItems}
-                pageSize={pageSize}
-                onPageChange={handlePageChange}
-                onPageSizeChange={handlePageSizeChange}
-                loading={loading}
-              />
-            </>
-          )
-          : (
-            <>
-              {/* Table View */}
-              <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader className="bg-slate-700/50">
-                      <TableRow>
-                        <TableHead className="w-12 p-3 text-center">
-                          <Checkbox
-                            checked={selectedOpportunities.size ===
-                                opportunities.length &&
-                              opportunities.length > 0 && !selectAllMode}
-                            onCheckedChange={toggleSelectAll}
-                            className="border-slate-600"
-                          />
-                        </TableHead>
-                        <TableHead className="text-left p-3 font-medium text-slate-300">
-                          Opportunity
-                        </TableHead>
-                        <TableHead className="text-center p-3 font-medium text-slate-300">
-                          Stage
-                        </TableHead>
-                        <TableHead className="text-right p-3 font-medium text-slate-300">
-                          Amount
-                        </TableHead>
-                        <TableHead className="text-center p-3 font-medium text-slate-300">
-                          Probability
-                        </TableHead>
-                        <TableHead className="text-center p-3 font-medium text-slate-300">
-                          Close Date
-                        </TableHead>
-                        <TableHead className="text-center p-3 font-medium text-slate-300">
-                          Assigned To
-                        </TableHead>
-                        <TableHead className="w-24 p-3 font-medium text-slate-300 text-center">
-                          Actions
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {opportunities.map((opp) => (
-                        <TableRow
-                          key={opp.id}
-                          className="hover:bg-slate-700/30 transition-colors border-b border-slate-800"
-                        >
-                          <TableCell className="text-center p-3">
-                            <Checkbox
-                              checked={selectedOpportunities.has(opp.id) ||
-                                selectAllMode}
-                              onCheckedChange={() => toggleSelection(opp.id)}
-                              className="border-slate-600 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
-                            />
-                          </TableCell>
-                          <TableCell
-                            className="font-medium text-slate-200 cursor-pointer p-3"
-                            onClick={() => handleViewDetails(opp)}
-                          >
-                            <div className="font-semibold">{opp.name}</div>
-                            {opp.account_id && (
-                              <div className="text-xs text-slate-400">
-                                {accountsMap[opp.account_id] ||
-                                  opp.account_name}
-                              </div>
-                            )}
-                          </TableCell>
-                          <TableCell
-                            className="text-center cursor-pointer p-3"
-                            onClick={() => handleViewDetails(opp)}
-                          >
-                            <Badge
-                              className={`${
-                                stageColors[opp.stage]
-                              } contrast-badge capitalize text-xs font-semibold whitespace-nowrap border`}
-                              data-variant="status"
-                              data-status={opp.stage}
-                            >
-                              {getCardLabel(stageToCardId[opp.stage]) || opp.stage?.replace(/_/g, " ")}
-                            </Badge>
-                          </TableCell>
-                          <TableCell
-                            className="text-right text-slate-300 cursor-pointer p-3"
-                            onClick={() => handleViewDetails(opp)}
-                          >
-                            <div className="font-medium">
-                              ${(opp.amount || 0).toLocaleString()}
-                            </div>
-                          </TableCell>
-                          <TableCell
-                            className="text-center text-slate-300 cursor-pointer p-3"
-                            onClick={() => handleViewDetails(opp)}
-                          >
-                            {opp.probability || 0}%
-                          </TableCell>
-                          <TableCell
-                            className="text-center text-slate-300 cursor-pointer p-3"
-                            onClick={() => handleViewDetails(opp)}
-                          >
-                            {opp.close_date
-                              ? format(new Date(opp.close_date), "MMM d, yyyy")
-                              : "—"}
-                          </TableCell>
-                          <TableCell
-                            className="text-center text-slate-300 cursor-pointer p-3"
-                            onClick={() => handleViewDetails(opp)}
-                          >
-                            {(() => {
-                              // If no assigned_to, show Unassigned
-                              if (!opp.assigned_to) {
-                                return <span className="text-slate-500">Unassigned</span>;
-                              }
-                              
-                              // Try employee lookup first (by ID or email)
-                              const employeeName = employeesMap[opp.assigned_to];
-                              if (employeeName) {
-                                return employeeName;
-                              }
-                              
-                              // Try user lookup
-                              const userName = usersMap[opp.assigned_to];
-                              if (userName) {
-                                return userName;
-                              }
-                              
-                              // Try the opportunity's embedded name field
-                              if (opp.assigned_to_name) {
-                                return opp.assigned_to_name;
-                              }
-                              
-                              // If we have a value but no lookup match, show it for debugging
-                              // This helps identify missing employee records
-                              if (import.meta.env.DEV) {
-                                logDev('[Opportunities] Missing employee lookup:', {
-                                  opportunityId: opp.id,
-                                  opportunityName: opp.name,
-                                  assigned_to: opp.assigned_to,
-                                  employeesMapKeys: Object.keys(employeesMap).length,
-                                  usersMapKeys: Object.keys(usersMap).length
-                                });
-                              }
-                              
-                              // Show abbreviated ID/email as fallback
-                              const assignedValue = String(opp.assigned_to);
-                              if (assignedValue.includes('@')) {
-                                // It's an email - show it
-                                return <span className="text-amber-400 text-xs" title={assignedValue}>{assignedValue}</span>;
-                              } else if (assignedValue.length > 20) {
-                                // It's likely a UUID - show abbreviated
-                                return <span className="text-amber-400 text-xs" title={assignedValue}>{assignedValue.substring(0, 8)}...</span>;
-                              } else {
-                                // Short value - show it
-                                return <span className="text-amber-400 text-xs">{assignedValue}</span>;
-                              }
-                            })()}
-                          </TableCell>
-                          <TableCell className="p-3 text-center">
-                            <div className="flex items-center justify-center gap-1">
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setEditingOpportunity(opp);
-                                      setIsFormOpen(true);
-                                    }}
-                                    className="h-8 w-8 text-slate-400 hover:text-slate-200 hover:bg-slate-700"
-                                  >
-                                    <Edit className="w-4 h-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Edit {opportunityLabel.toLowerCase()}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleViewDetails(opp);
-                                    }}
-                                    className="h-8 w-8 text-slate-400 hover:text-slate-200 hover:bg-slate-700"
-                                  >
-                                    <Eye className="w-4 h-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>View details</p>
-                                </TooltipContent>
-                              </Tooltip>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDelete(opp.id);
-                                    }}
-                                    className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-900/20"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Delete opportunity</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
-
-              <Pagination
-                currentPage={currentPage}
-                totalPages={Math.ceil(totalItems / pageSize)}
-                totalItems={totalItems}
-                pageSize={pageSize}
-                onPageChange={handlePageChange}
-                onPageSizeChange={handlePageSizeChange}
-                loading={loading}
-              />
-            </>
-          )}
+            <Pagination
+              currentPage={currentPage}
+              totalPages={Math.ceil(totalItems / pageSize)}
+              totalItems={totalItems}
+              pageSize={pageSize}
+              onPageChange={handlePageChange}
+              onPageSizeChange={(newSize) => {
+                setPageSize(newSize);
+                handlePageSizeChange(newSize);
+              }}
+              loading={loading}
+            />
+          </>
+        ) : (
+          <>
+            <OpportunityTable
+              opportunities={opportunities}
+              selectedOpportunities={selectedOpportunities}
+              selectAllMode={selectAllMode}
+              toggleSelectAll={toggleSelectAll}
+              toggleSelection={toggleSelection}
+              accountsMap={accountsMap}
+              employeesMap={employeesMap}
+              usersMap={usersMap}
+              handleViewDetails={handleViewDetails}
+              setEditingOpportunity={setEditingOpportunity}
+              setIsFormOpen={setIsFormOpen}
+              handleDelete={handleDelete}
+              opportunityLabel={opportunityLabel}
+              getCardLabel={getCardLabel}
+            />
+            <Pagination
+              currentPage={currentPage}
+              totalPages={Math.ceil(totalItems / pageSize)}
+              totalItems={totalItems}
+              pageSize={pageSize}
+              onPageChange={handlePageChange}
+              onPageSizeChange={(newSize) => {
+                setPageSize(newSize);
+                handlePageSizeChange(newSize);
+              }}
+              loading={loading}
+            />
+          </>
+        )}
       </div>
 
       <ConfirmDialogPortal />
