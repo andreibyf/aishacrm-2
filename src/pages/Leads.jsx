@@ -1,9 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
+import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import { Lead } from '@/api/entities';
-import { Account } from '@/api/entities';
 // User entity no longer needed here; user comes from context
 import { useUser } from '@/components/shared/useUser.js';
-import { Employee } from '@/api/entities';
 import { useApiManager } from '../components/shared/ApiManager';
 import { clearDashboardResultsCache } from '@/api/dashboard';
 import { clearAllDashboardCaches } from '@/api/dashboardCache';
@@ -60,22 +58,17 @@ import BulkActionsMenu from '../components/leads/BulkActionsMenu';
 import { Globe } from 'lucide-react';
 // Switch to internal profile page; stop using mintLeadLink
 import StatusHelper from '../components/shared/StatusHelper';
-import { loadUsersSafely } from '../components/shared/userLoader';
 import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
 import { useConfirmDialog } from '../components/shared/ConfirmDialog';
 import { useAiShaEvents } from '@/hooks/useAiShaEvents';
 import { useStatusCardPreferences } from '@/hooks/useStatusCardPreferences';
+import { useLeadsData } from '@/hooks/useLeadsData';
 
 export default function LeadsPage() {
   const { user } = useUser();
   const { plural: leadsLabel, singular: leadLabel } = useEntityLabel('leads');
   const { getCardLabel, isCardVisible } = useStatusCardPreferences();
   const loadingToast = useLoadingToast();
-  const [leads, setLeads] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [employees, setEmployees] = useState([]);
-  const [accounts, setAccounts] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [ageFilter, setAgeFilter] = useState('all');
@@ -192,468 +185,57 @@ export default function LeadsPage() {
     return user.role === 'superadmin';
   }, [user]);
 
-  // Stats for ALL leads (not just current page)
-  const [totalStats, setTotalStats] = useState({
-    total: 0,
-    new: 0,
-    contacted: 0,
-    qualified: 0,
-    unqualified: 0,
-    converted: 0,
-    lost: 0,
-  });
-
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [totalItems, setTotalItems] = useState(0);
 
   const { cachedRequest, clearCache, clearCacheByKey } = useApiManager();
   const { selectedEmail } = useEmployeeScope();
 
-  // Ref to track if initial load is done
-  const initialLoadDone = useRef(false);
-  const supportingDataLoaded = useRef(false);
-
-  // Load user once
-  // Removed per-page user fetch; user comes from global context
-
-  // New getTenantFilter function, moved here from tenantContext
-  const getTenantFilter = useCallback(() => {
-    // console.log('[Leads] getTenantFilter called with:', { selectedEmail, employeesCount: employees.length });
-    if (!user) return {};
-
-    let filter = {};
-    const filterObj = {}; // Object to hold complex filters (like $or) for JSON packing
-
-    // Tenant filtering
-    if (user.role === 'superadmin' || user.role === 'admin') {
-      if (selectedTenantId) {
-        filter.tenant_id = selectedTenantId;
-      }
-    } else if (user.tenant_id) {
-      filter.tenant_id = user.tenant_id;
-    }
-
-    // Employee scope filtering from context
-    // Note: assigned_to is a UUID field, only use UUIDs for filtering
-    if (selectedEmail && selectedEmail !== 'all') {
-      if (selectedEmail === 'unassigned') {
-        // Only filter by null
-        filterObj.$or = [{ assigned_to: null }];
-      } else {
-        // assigned_to is a UUID field, so only use UUID for filtering
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-          selectedEmail,
-        );
-
-        if (isUuid) {
-          // Use the UUID directly
-          filter.assigned_to = selectedEmail;
-        } else if (employees && employees.length > 0) {
-          // Find employee by email and use their ID (UUID)
-          const emp = employees.find((e) => e.email === selectedEmail);
-          if (emp && emp.id) {
-            filter.assigned_to = emp.id;
-          } else {
-            filter.assigned_to = selectedEmail;
-          }
-        } else {
-          filter.assigned_to = selectedEmail;
-        }
-      }
-    } else if (
-      user.employee_role === 'employee' &&
-      user.role !== 'admin' &&
-      user.role !== 'superadmin'
-    ) {
-      // Regular employees: lookup user's UUID from employees list
-      if (employees && employees.length > 0) {
-        const currentEmp = employees.find((e) => e.email === user.email);
-        if (currentEmp && currentEmp.id) {
-          filter.assigned_to = currentEmp.id;
-        } else {
-          filter.assigned_to = user.email; // Fallback
-        }
-      } else {
-        filter.assigned_to = user.email; // Fallback
-      }
-    }
-
-    // Test data filtering
-    if (!showTestData) {
-      filter.is_test_data = false; // Simple boolean, not complex operator
-    }
-
-    // Package the complex filterObj into the 'filter' parameter
-    if (Object.keys(filterObj).length > 0) {
-      filter.filter = JSON.stringify(filterObj);
-    }
-
-    return filter;
-  }, [user, selectedTenantId, showTestData, selectedEmail, employees]);
-
-  // Refresh accounts list (e.g., after creating a new account from the lead form)
-  const refreshAccounts = useCallback(async () => {
-    try {
-      const filterForSupportingData = getTenantFilter();
-      clearCacheByKey('Account');
-      const accountsData = await cachedRequest(
-        'Account',
-        'filter',
-        {
-          filter: filterForSupportingData,
-        },
-        () => Account.filter(filterForSupportingData),
-      );
-      setAccounts(accountsData || []);
-    } catch (error) {
-      console.error('[Leads] Failed to refresh accounts:', error);
-    }
-  }, [getTenantFilter, cachedRequest, clearCacheByKey]);
-
-  // Handle opening lead from URL parameter (e.g., from Activities page related_to link)
-  useEffect(() => {
-    const loadLeadFromUrl = async () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const leadId = urlParams.get('leadId');
-
-      if (leadId) {
-        try {
-          // Fetch the specific lead by ID
-          const lead = await Lead.get(leadId);
-          if (lead) {
-            setDetailLead(lead);
-            setIsDetailOpen(true);
-          }
-        } catch (error) {
-          console.error('[Leads] Failed to load lead from URL:', error);
-          toast.error('Lead not found');
-        } finally {
-          // Clear the URL parameter
-          window.history.replaceState({}, '', '/Leads');
-        }
-      }
-    };
-
-    if (user) {
-      loadLeadFromUrl();
-    }
-  }, [user]); // Only depend on user, not leads array
-
-  // Load supporting data (accounts, users, employees) ONCE with delays and error handling
-  //
-  // NOTE: Bundle endpoints exist (src/api/bundles.js → /api/bundles/leads) that could
-  // consolidate this into a single request. However, this page uses complex age filtering
-  // with hybrid client/server pagination that the bundle endpoints don't support.
-  // The bundle infrastructure is available for simpler use cases. See: docs/BUNDLE_ENDPOINTS_TESTING.md
-  //
-  useEffect(() => {
-    if (supportingDataLoaded.current || !user) return;
-
-    const loadSupportingData = async () => {
-      try {
-        // Base tenant filter without employee scope for Account and Employee entities
-        let baseTenantFilter = {};
-        if (user.role === 'superadmin' || user.role === 'admin') {
-          if (selectedTenantId) {
-            baseTenantFilter.tenant_id = selectedTenantId;
-          }
-        } else if (user.tenant_id) {
-          baseTenantFilter.tenant_id = user.tenant_id;
-        }
-
-        // Guard: Don't load if no tenant_id for superadmin (must select a tenant first)
-        if ((user.role === 'superadmin' || user.role === 'admin') && !baseTenantFilter.tenant_id) {
-          if (import.meta.env.DEV) {
-            console.log('[Leads] Skipping data load - no tenant selected');
-          }
-          supportingDataLoaded.current = true;
-          return;
-        }
-
-        // Load all supporting data in parallel (instead of sequential) for faster load time
-        const [accountsData, usersData, employeesData] = await Promise.all([
-          cachedRequest(
-            'Account',
-            'filter',
-            {
-              filter: baseTenantFilter,
-            },
-            () => Account.filter(baseTenantFilter),
-          ),
-          loadUsersSafely(user, selectedTenantId, cachedRequest, 1000),
-          cachedRequest(
-            'Employee',
-            'filter',
-            {
-              filter: baseTenantFilter,
-              limit: 1000,
-            },
-            () => Employee.filter(baseTenantFilter, 'created_at', 1000),
-          ),
-        ]);
-
-        setAccounts(accountsData || []);
-        setUsers(usersData || []);
-        setEmployees(employeesData || []);
-
-        supportingDataLoaded.current = true; // Mark as loaded
-      } catch (error) {
-        console.error('[Leads] Failed to load supporting data:', error);
-        // Even on error, allow leads to load
-      }
-    };
-
-    loadSupportingData();
-  }, [user, selectedTenantId, cachedRequest]);
-
-  // Load total stats for ALL leads using fast stats endpoint
-  const loadTotalStats = useCallback(async () => {
-    if (!user) return;
-
-    try {
-      // Use the new getTenantFilter which includes employee scope and test data filter
-      let filter = getTenantFilter();
-
-      // Guard: Don't load stats if no tenant_id for superadmin
-      if ((user.role === 'superadmin' || user.role === 'admin') && !filter.tenant_id) {
-        setTotalStats({
-          total: 0,
-          new: 0,
-          contacted: 0,
-          qualified: 0,
-          unqualified: 0,
-          converted: 0,
-          lost: 0,
-        });
-        return;
-      }
-
-      // Use optimized stats endpoint instead of fetching all leads
-      const stats = await Lead.getStats({
-        tenant_id: filter.tenant_id,
-        is_test_data: showTestData ? undefined : false,
-      });
-
-      setTotalStats({
-        total: stats?.total || 0,
-        new: stats?.new || 0,
-        contacted: stats?.contacted || 0,
-        qualified: stats?.qualified || 0,
-        unqualified: stats?.unqualified || 0,
-        converted: stats?.converted || 0,
-        lost: stats?.lost || 0,
-      });
-    } catch (error) {
-      console.error('Failed to load total stats:', error);
-    }
-  }, [user, getTenantFilter, showTestData]);
-
-  // Load total stats when dependencies change
-  useEffect(() => {
-    if (user) {
-      loadTotalStats();
-    }
-  }, [user, selectedTenantId, selectedEmail, loadTotalStats, showTestData]); // Added showTestData here
-
-  // Main data loading function with proper pagination and client-side age filtering
-  const loadLeads = useCallback(
-    async (page = 1, size = 25) => {
-      if (!user) return;
-
-      loadingToast.showLoading();
-
-      // Delay showing loading spinner to avoid flash for fast operations
-      const loadingTimer = setTimeout(() => setLoading(true), 300);
-
-      try {
-        let currentFilter = getTenantFilter();
-        let searchFilter = null;
-
-        // Guard: Don't load leads if no tenant_id for superadmin
-        if ((user.role === 'superadmin' || user.role === 'admin') && !currentFilter.tenant_id) {
-          setLeads([]);
-          setTotalItems(0);
-          setLoading(false);
-          return;
-        }
-
-        if (statusFilter !== 'all') {
-          currentFilter = { ...currentFilter, status: statusFilter };
-        }
-
-        if (searchTerm) {
-          // Separate search filter to be passed as 'filter' query param
-          searchFilter = {
-            $or: [
-              { first_name: { $icontains: searchTerm } },
-              { last_name: { $icontains: searchTerm } },
-              { email: { $icontains: searchTerm } },
-              { phone: { $icontains: searchTerm } },
-              { company: { $icontains: searchTerm } },
-              { job_title: { $icontains: searchTerm } },
-            ],
-          };
-          currentFilter = { ...currentFilter, filter: JSON.stringify(searchFilter) };
-        }
-
-        if (selectedTags.length > 0) {
-          currentFilter = { ...currentFilter, tags: { $all: selectedTags } };
-        }
-
-        // Determine pagination strategy:
-        // - If age filter is "all": Use true backend pagination (efficient)
-        // - If age filter is specific: Fetch larger batch for client-side age filtering
-        const useBackendPagination = ageFilter === 'all';
-        const fetchLimit = useBackendPagination ? size : Math.min(500, size * 5);
-        const fetchOffset = useBackendPagination ? (page - 1) * size : 0;
-
-        // Add pagination parameters to the filter
-        currentFilter = {
-          ...currentFilter,
-          limit: fetchLimit,
-          offset: fetchOffset,
-        };
-
-        // Build sort string: prefix with - for descending
-        const sortString = sortDirection === 'desc' ? `-${sortField}` : sortField;
-        console.log(
-          '[Leads] loadLeads called with sortField:',
-          sortField,
-          'sortDirection:',
-          sortDirection,
-          'sortString:',
-          sortString,
-        );
-
-        // Fetch leads with server-side pagination
-        const response = await Lead.filter(currentFilter, sortString);
-
-        // Apply client-side age filter if needed
-        let allFilteredLeads = response || [];
-        if (ageFilter !== 'all') {
-          const selectedBucket = ageBuckets.find((b) => b.value === ageFilter);
-          if (selectedBucket) {
-            allFilteredLeads = allFilteredLeads.filter((lead) => {
-              const age = calculateLeadAge(lead.created_date);
-              return age >= selectedBucket.min && age <= selectedBucket.max;
-            });
-          }
-        }
-
-        // Apply client-side pagination if age filtering was used
-        let paginatedLeads = allFilteredLeads;
-        // Use real total from backend when available (attached as _total by entities.js)
-        const serverTotal = response._total;
-        let estimatedTotal = allFilteredLeads.length;
-
-        if (!useBackendPagination) {
-          // Age filter active: paginate client-side after filtering
-          const skip = (page - 1) * size;
-          paginatedLeads = allFilteredLeads.slice(skip, skip + size);
-          // Estimate total based on whether we fetched a full batch
-          estimatedTotal =
-            response.length >= fetchLimit && paginatedLeads.length === size
-              ? page * size + 1 // More pages might exist
-              : skip + paginatedLeads.length; // Final page
-        } else if (typeof serverTotal === 'number') {
-          // Backend returned exact count via Supabase count: 'exact'
-          estimatedTotal = serverTotal;
-        } else {
-          // Fallback: estimate based on current page results
-          estimatedTotal =
-            paginatedLeads.length < size
-              ? (page - 1) * size + paginatedLeads.length
-              : page * size + 1;
-        }
-
-        console.log(
-          '[Leads] Loading page:',
-          page,
-          'size:',
-          size,
-          'ageFilter:',
-          ageFilter,
-          'fetchLimit:',
-          fetchLimit,
-          'fetchOffset:',
-          fetchOffset,
-          'filter:',
-          currentFilter,
-        );
-        console.log(
-          '[Leads] Fetched:',
-          response?.length,
-          'Server total:',
-          serverTotal,
-          'After age filter:',
-          allFilteredLeads?.length,
-          'Paginated:',
-          paginatedLeads?.length,
-          'Final total:',
-          estimatedTotal,
-        );
-
-        setLeads(paginatedLeads);
-        setTotalItems(estimatedTotal);
-        setCurrentPage(page);
-        initialLoadDone.current = true;
-        loadingToast.showSuccess(`${leadsLabel} loading! ✨`);
-      } catch (error) {
-        console.error('Failed to load leads:', error);
-        loadingToast.showError(`Failed to load ${leadsLabel.toLowerCase()}`);
-        toast.error('Failed to load leads');
-        setLeads([]);
-        setTotalItems(0);
-      } finally {
-        clearTimeout(loadingTimer);
-        setLoading(false);
-      }
-    },
-    [
-      user,
-      getTenantFilter,
-      searchTerm,
-      statusFilter,
-      selectedTags,
-      ageFilter,
-      sortField,
-      sortDirection,
-      leadsLabel,
-      loadingToast,
-      ageBuckets,
-    ],
-  ); // Removed unused pageSize, showTestData deps
-
-  // Load leads when dependencies change - no longer blocked by supportingDataReady
-  // since API now returns denormalized assigned_to_name directly
-  useEffect(() => {
-    if (user) {
-      loadLeads(currentPage, pageSize);
-    }
-  }, [
-    user,
-    searchTerm,
+  // Extract data loading to custom hook
+  const {
+    leads,
+    setLeads,
+    users,
+    employees,
+    accounts,
+    loading,
+    totalStats,
+    totalItems,
+    setTotalItems,
+    loadLeads,
+    loadTotalStats,
+    refreshAccounts,
+    getTenantFilter,
+    allTags,
+    usersMap,
+    employeesMap,
+    accountsMap,
+    getAssociatedAccountName,
+    initialLoadDone,
+  } = useLeadsData({
+    selectedTenantId,
+    employeeScope: selectedEmail,
     statusFilter,
-    ageFilter,
-    selectedTags,
+    searchTerm,
     sortField,
     sortDirection,
+    ageFilter,
+    selectedTags,
+    showTestData,
     currentPage,
     pageSize,
-    loadLeads,
-    selectedEmail,
-    selectedTenantId,
-  ]);
-
-  // Clear cache when employee filter changes to force fresh data
-  useEffect(() => {
-    if (selectedEmail !== null) {
-      clearCache('Lead');
-      clearCacheByKey('Lead');
-    }
-  }, [selectedEmail, clearCache, clearCacheByKey]);
+    ageBuckets,
+    user,
+    loadingToast,
+    leadsLabel,
+    cachedRequest,
+    clearCacheByKey,
+    clearCache,
+    setDetailLead,
+    setIsDetailOpen,
+    setCurrentPage,
+  });
 
   // Listen for AiSHA open-details events to open the detail panel
   useEffect(() => {
@@ -699,67 +281,6 @@ export default function LeadsPage() {
     setPageSize(newSize);
     setCurrentPage(1);
   }, []);
-
-  // Extract all tags from leads for TagFilter
-  const allTags = useMemo(() => {
-    if (!Array.isArray(leads)) return [];
-
-    const tagCounts = {};
-    leads.forEach((lead) => {
-      if (Array.isArray(lead.tags)) {
-        lead.tags.forEach((tag) => {
-          if (tag && typeof tag === 'string') {
-            tagCounts[tag] = (tagCounts[tag] || 0) + 1;
-          }
-        });
-      }
-    });
-
-    return Object.entries(tagCounts)
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count);
-  }, [leads]);
-
-  // Create lookup maps for denormalized fields
-  const usersMap = useMemo(() => {
-    return users.reduce((acc, user) => {
-      acc[user.email] = user.full_name || user.email;
-      if (user.id) acc[user.id] = user.full_name || user.email; // Index by ID
-      return acc;
-    }, {});
-  }, [users]);
-
-  const employeesMap = useMemo(() => {
-    return employees.reduce((acc, employee) => {
-      const fullName = `${employee.first_name} ${employee.last_name}`.trim();
-      // Map by both ID and email for backwards compatibility
-      if (employee.id) {
-        acc[employee.id] = fullName;
-      }
-      if (employee.email) {
-        acc[employee.email] = fullName;
-      }
-      return acc;
-    }, {});
-  }, [employees]);
-
-  const accountsMap = useMemo(() => {
-    return accounts.reduce((acc, account) => {
-      if (account?.id) {
-        acc[account.id] = account.name || account.company || '';
-      }
-      return acc;
-    }, {});
-  }, [accounts]);
-
-  const getAssociatedAccountName = useCallback(
-    (leadRecord) => {
-      if (!leadRecord) return '';
-      const accountId = leadRecord.account_id || leadRecord.metadata?.account_id;
-      return accountsMap[accountId] || leadRecord.account_name || '';
-    },
-    [accountsMap],
-  );
 
   const handleSave = async (result) => {
     try {
@@ -1297,7 +818,6 @@ export default function LeadsPage() {
     clearCache('Employee');
     clearCache('User');
     clearCache('Account');
-    supportingDataLoaded.current = false;
     await Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]);
     toast.success('Leads refreshed');
   };
