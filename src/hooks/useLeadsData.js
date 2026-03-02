@@ -77,6 +77,7 @@ export function useLeadsData({
     lost: 0,
   });
   const [totalItems, setTotalItems] = useState(0);
+  const [supportingDataReloadKey, setSupportingDataReloadKey] = useState(0);
 
   // Refs
   const initialLoadDone = useRef(false);
@@ -280,7 +281,7 @@ export function useLeadsData({
     };
 
     loadSupportingData();
-  }, [user, selectedTenantId, cachedRequest]);
+  }, [user, selectedTenantId, cachedRequest, supportingDataReloadKey]);
 
   // Load total stats for ALL leads
   const loadTotalStats = useCallback(async () => {
@@ -599,6 +600,7 @@ export function useLeadsData({
   // Allow parent to reset the supporting data loaded flag (e.g. on refresh)
   const resetSupportingData = useCallback(() => {
     supportingDataLoaded.current = false;
+    setSupportingDataReloadKey(k => k + 1);
   }, []);
 
   return {

@@ -4,6 +4,15 @@ import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Edit, Eye, Globe, Trash2, UserCheck } from 'lucide-react';
 
+const statusColors = {
+  new: 'bg-blue-900/20 text-blue-300 border-blue-700',
+  contacted: 'bg-indigo-900/20 text-indigo-300 border-indigo-700',
+  qualified: 'bg-emerald-900/20 text-emerald-300 border-emerald-700',
+  unqualified: 'bg-yellow-900/20 text-yellow-300 border-yellow-700',
+  converted: 'bg-green-900/20 text-green-300 border-green-700',
+  lost: 'bg-red-900/20 text-red-300 border-red-700',
+};
+
 /**
  * LeadTable - Table view for leads with selection and actions
  *
@@ -202,19 +211,9 @@ export default function LeadTable({
                     }}
                   >
                     <Badge
-                      className={`text-xs ${
-                        lead.status === 'new'
-                          ? 'bg-blue-900/30 text-blue-400 border-blue-700'
-                          : lead.status === 'contacted'
-                            ? 'bg-indigo-900/30 text-indigo-400 border-indigo-700'
-                            : lead.status === 'qualified'
-                              ? 'bg-emerald-900/30 text-emerald-400 border-emerald-700'
-                              : lead.status === 'unqualified'
-                                ? 'bg-yellow-900/30 text-yellow-400 border-yellow-700'
-                                : lead.status === 'converted'
-                                  ? 'bg-green-900/30 text-green-400 border-green-700'
-                                  : 'bg-red-900/30 text-red-400 border-red-700'
-                      }`}
+                      className={`${statusColors[lead.status] ?? 'bg-slate-900/30 text-slate-400 border-slate-700'} contrast-badge capitalize text-xs font-semibold border`}
+                      data-variant="status"
+                      data-status={lead.status}
                     >
                       {lead.status}
                     </Badge>
