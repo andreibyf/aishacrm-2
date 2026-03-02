@@ -327,17 +327,8 @@ export function useOpportunitiesData({
           });
         }
 
-        // Use optimized count endpoint
+        // Use optimized count endpoint with the exact same filter as the data query
         const countFilter = { ...effectiveFilter };
-        if (searchTerm) {
-          const searchRegex = { $regex: searchTerm, $options: 'i' };
-          countFilter.$or = [
-            { name: searchRegex },
-            { account_name: searchRegex },
-            { contact_name: searchRegex },
-            { description: searchRegex },
-          ];
-        }
         const totalCount = await Opportunity.getCount(countFilter);
 
         logDev('[Opportunities] Loaded:', opportunitiesData?.length, 'Total:', totalCount);
@@ -417,11 +408,10 @@ export function useOpportunitiesData({
     [lastSeenRecord, currentPage, setCurrentPage],
   );
 
-  // Handle page size change
+  // Handle page size change — resets to page 1 (pageSize is managed by parent)
   const handlePageSizeChange = useCallback(
-    (newSize) => {
+    () => {
       setCurrentPage(1);
-      // pageSize is managed by parent; this just resets page
     },
     [setCurrentPage],
   );

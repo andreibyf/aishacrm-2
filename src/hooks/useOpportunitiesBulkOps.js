@@ -14,7 +14,6 @@ import { toast } from 'sonner';
  * @returns {Object} Bulk operation handlers
  */
 export function useOpportunitiesBulkOps({
-  opportunities,
   selectedOpportunities,
   setSelectedOpportunities,
   selectAllMode,
@@ -49,14 +48,14 @@ export function useOpportunitiesBulkOps({
     ];
 
     if (effectiveFilter.$or) {
+      const { $or: existingOr, ...restFilter } = effectiveFilter;
       return {
-        ...effectiveFilter,
+        ...restFilter,
         $and: [
-          ...(effectiveFilter.$and || []),
-          { $or: effectiveFilter.$or },
+          ...(restFilter.$and || []),
+          { $or: existingOr },
           { $or: searchConditions },
         ],
-        $or: undefined,
       };
     }
     return { ...effectiveFilter, $or: searchConditions };
@@ -74,11 +73,6 @@ export function useOpportunitiesBulkOps({
 
     if (selectedTags.length > 0) {
       effectiveFilter = { ...effectiveFilter, tags: { $all: selectedTags } };
-    }
-
-    // Clean up undefined $or from buildSearchFilter
-    if (effectiveFilter.$or === undefined) {
-      delete effectiveFilter.$or;
     }
 
     return effectiveFilter;
