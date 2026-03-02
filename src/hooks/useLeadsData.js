@@ -401,8 +401,8 @@ export function useLeadsData({
           const selectedBucket = ageBuckets.find((b) => b.value === ageFilter);
           if (selectedBucket) {
             allFilteredLeads = allFilteredLeads.filter((lead) => {
-              const age = calculateLeadAge(lead.created_date);
-              return age >= selectedBucket.min && age <= selectedBucket.max;
+              const age = calculateLeadAge(lead.created_date || lead.created_at);
+              return age >= 0 && age >= selectedBucket.min && age <= selectedBucket.max;
             });
           }
         }
@@ -576,6 +576,11 @@ export function useLeadsData({
     [accountsMap],
   );
 
+  // Allow parent to reset the supporting data loaded flag (e.g. on refresh)
+  const resetSupportingData = useCallback(() => {
+    supportingDataLoaded.current = false;
+  }, []);
+
   return {
     leads,
     setLeads,
@@ -596,5 +601,6 @@ export function useLeadsData({
     accountsMap,
     getAssociatedAccountName,
     initialLoadDone,
+    resetSupportingData,
   };
 }

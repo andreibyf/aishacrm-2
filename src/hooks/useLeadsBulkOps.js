@@ -116,8 +116,8 @@ export function useLeadsBulkOps({
           const selectedBucket = ageBuckets.find((b) => b.value === ageFilter);
           if (selectedBucket) {
             allLeadsToDelete = allLeadsToDeleteServerFilter.filter((lead) => {
-              const age = calculateLeadAge(lead.created_date);
-              return age >= selectedBucket.min && age <= selectedBucket.max;
+              const age = calculateLeadAge(lead.created_date || lead.created_at || lead);
+              return age >= 0 && age >= selectedBucket.min && age <= selectedBucket.max;
             });
           }
         }
@@ -305,8 +305,8 @@ export function useLeadsBulkOps({
           const selectedBucket = ageBuckets.find((b) => b.value === ageFilter);
           if (selectedBucket) {
             allLeadsToUpdate = allLeadsToUpdateServerFilter.filter((lead) => {
-              const age = calculateLeadAge(lead.created_date);
-              return age >= selectedBucket.min && age <= selectedBucket.max;
+              const age = calculateLeadAge(lead.created_date || lead.created_at || lead);
+              return age >= 0 && age >= selectedBucket.min && age <= selectedBucket.max;
             });
           }
         }
@@ -403,8 +403,8 @@ export function useLeadsBulkOps({
           const selectedBucket = ageBuckets.find((b) => b.value === ageFilter);
           if (selectedBucket) {
             allLeadsToAssign = allLeadsToAssignServerFilter.filter((lead) => {
-              const age = calculateLeadAge(lead.created_date);
-              return age >= selectedBucket.min && age <= selectedBucket.max;
+              const age = calculateLeadAge(lead.created_date || lead.created_at || lead);
+              return age >= 0 && age >= selectedBucket.min && age <= selectedBucket.max;
             });
           }
         }

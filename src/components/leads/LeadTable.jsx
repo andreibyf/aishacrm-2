@@ -178,11 +178,18 @@ export default function LeadTable({
                   </td>
                   <td className="px-4 py-3 text-base text-slate-300">
                     {(() => {
+                      const assignedToName = lead.assigned_to_name;
                       const assignedTo = lead.assigned_to || lead.metadata?.assigned_to;
-                      if (!assignedTo) return <span className="text-slate-500">—</span>;
+
+                      if (!assignedToName && !assignedTo) {
+                        return <span className="text-slate-500">Unassigned</span>;
+                      }
 
                       const displayName =
-                        employeesMap[assignedTo] || usersMap[assignedTo] || assignedTo;
+                        assignedToName ||
+                        employeesMap[assignedTo] ||
+                        usersMap[assignedTo] ||
+                        assignedTo;
                       return displayName;
                     })()}
                   </td>

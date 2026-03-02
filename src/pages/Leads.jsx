@@ -197,7 +197,6 @@ export default function LeadsPage() {
   const {
     leads,
     setLeads,
-    users,
     employees,
     accounts,
     loading,
@@ -211,9 +210,9 @@ export default function LeadsPage() {
     allTags,
     usersMap,
     employeesMap,
-    accountsMap,
     getAssociatedAccountName,
     initialLoadDone,
+    resetSupportingData,
   } = useLeadsData({
     selectedTenantId,
     employeeScope: selectedEmail,
@@ -460,6 +459,8 @@ export default function LeadsPage() {
     clearCache('Employee');
     clearCache('User');
     clearCache('Account');
+    // Reset supporting data loaded flag so users/employees/accounts are re-fetched
+    resetSupportingData();
     await Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]);
     toast.success('Leads refreshed');
   };
