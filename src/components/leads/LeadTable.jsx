@@ -39,6 +39,7 @@ export default function LeadTable({
   leadLabel,
 }) {
   return (
+    <TooltipProvider>
     <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full">
@@ -220,7 +221,6 @@ export default function LeadTable({
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
-                      <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
@@ -317,7 +317,6 @@ export default function LeadTable({
                             <p>Delete lead</p>
                           </TooltipContent>
                         </Tooltip>
-                      </TooltipProvider>
                     </div>
                   </td>
                 </tr>
@@ -327,5 +326,6 @@ export default function LeadTable({
         </table>
       </div>
     </div>
+    </TooltipProvider>
   );
 }

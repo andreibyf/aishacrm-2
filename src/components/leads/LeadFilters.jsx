@@ -92,16 +92,11 @@ export default function LeadFilters({
         <Select
           value={`${sortField}:${sortDirection}`}
           onValueChange={(value) => {
-            console.log('[Leads] Sort dropdown changed to:', value);
             const option = sortOptions.find((o) => `${o.field}:${o.direction}` === value);
-            console.log('[Leads] Found option:', option);
+            if (import.meta?.env?.DEV) {
+              console.log('[Leads] Sort dropdown changed to:', value, '| option:', option);
+            }
             if (option) {
-              console.log(
-                '[Leads] Setting sortField to:',
-                option.field,
-                'sortDirection to:',
-                option.direction,
-              );
               setSortField(option.field);
               setSortDirection(option.direction);
               setCurrentPage(1);
