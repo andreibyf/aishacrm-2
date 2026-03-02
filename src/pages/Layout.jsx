@@ -1750,11 +1750,17 @@ function Layout({ children, currentPageName }) {
           }}
         />
         <div
-          className="relative bg-white border rounded-lg p-8 max-w-md w-full shadow-2xl"
+          className="relative bg-white border rounded-xl max-w-md w-full shadow-2xl overflow-hidden"
           style={{ borderColor: primaryColor }}
         >
+          {/* Colored top accent strip */}
+          <div
+            className="h-1.5 w-full"
+            style={{ background: `linear-gradient(90deg, ${primaryColor}, ${accentColor})` }}
+          />
+          <div className="p-8">
           <div className="text-center mb-6">
-            <img src="/assets/Ai-SHA-logo-2.png" alt="AI-SHA CRM" className="max-h-16 w-auto object-contain mx-auto mb-4" />
+            <img src={displayedLogoUrl || '/assets/Ai-SHA-logo-2.png'} alt="AI-SHA CRM" className="max-h-16 w-auto object-contain mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-slate-800 mb-2">Welcome to AI-SHA CRM</h2>
             <p className="text-slate-600">Sign in to access your account</p>
 
@@ -1893,7 +1899,7 @@ function Layout({ children, currentPageName }) {
                 required
                 autoComplete="email"
                 autoFocus
-                className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 bg-white text-slate-900"
+                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 bg-white text-slate-900"
                 style={{ '--tw-ring-color': accentColor }}
                 placeholder="your-email@example.com"
               />
@@ -1909,7 +1915,7 @@ function Layout({ children, currentPageName }) {
                 name="password"
                 required
                 autoComplete="current-password"
-                className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 bg-white text-slate-900"
+                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 bg-white text-slate-900"
                 style={{ '--tw-ring-color': accentColor }}
                 placeholder="Enter your password"
               />
@@ -1917,7 +1923,7 @@ function Layout({ children, currentPageName }) {
 
             <button
               type="submit"
-              className="w-full text-white px-4 py-2 rounded-md transition-all font-semibold shadow-lg hover:brightness-110"
+              className="w-full text-white px-4 py-3 rounded-lg transition-all font-semibold shadow-lg hover:brightness-110 text-base"
               style={{
                 background: `linear-gradient(90deg, ${primaryColor}, ${accentColor})`,
               }}
@@ -1973,6 +1979,12 @@ function Layout({ children, currentPageName }) {
               </button>
             </div>
           </form>
+
+          {/* Footer brand line */}
+          <p className="mt-6 text-center text-xs text-slate-400">
+            AiSHA CRM &mdash; AI-Native Executive Assistant
+          </p>
+          </div>{/* end p-8 */}
         </div>
       </div>
     );
