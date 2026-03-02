@@ -9,6 +9,7 @@ import {
 import SidebarContent from '@/components/layout/SidebarContent';
 import { useBranding } from '@/hooks/useBranding';
 import { useAiAvatarPositioning } from '@/hooks/useAiAvatarPositioning';
+import { useNavDragAndDrop } from '@/hooks/useNavDragAndDrop';
 import React, { useRef, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom'; // Import useNavigate
 import { createPageUrl } from '@/utils';
@@ -638,8 +639,6 @@ function Layout({ children, currentPageName }) {
   // };
 
   // Navigation order management with drag-and-drop (tenant-scoped + database persistence)
-  const [isDragMode, setIsDragMode] = useState(false);
-
   // Create save callbacks for navigation order persistence to database
   const saveNavOrderToDatabase = useCallback(
     async (orderArray) => {
@@ -716,44 +715,21 @@ function Layout({ children, currentPageName }) {
     }),
   );
 
-  // Handle drag end for primary nav
-  const handleNavDragEnd = useCallback(
-    (event) => {
-      const { active, over } = event;
-      if (active.id !== over?.id) {
-        const oldIndex = orderedNavItems.findIndex((item) => item.href === active.id);
-        const newIndex = orderedNavItems.findIndex((item) => item.href === over?.id);
-        if (oldIndex !== -1 && newIndex !== -1) {
-          const newOrder = arrayMove(orderedNavItems, oldIndex, newIndex);
-          setNavOrder(newOrder);
-        }
-      }
-    },
-    [orderedNavItems, setNavOrder],
-  );
-
-  // Handle drag end for secondary nav
-  const handleSecondaryDragEnd = useCallback(
-    (event) => {
-      const { active, over } = event;
-      if (active.id !== over?.id) {
-        const oldIndex = orderedSecondaryItems.findIndex((item) => item.href === active.id);
-        const newIndex = orderedSecondaryItems.findIndex((item) => item.href === over?.id);
-        if (oldIndex !== -1 && newIndex !== -1) {
-          const newOrder = arrayMove(orderedSecondaryItems, oldIndex, newIndex);
-          setSecondaryOrder(newOrder);
-        }
-      }
-    },
-    [orderedSecondaryItems, setSecondaryOrder],
-  );
-
-  // Reset all nav order to default
-  const handleResetNavOrder = useCallback(() => {
-    resetNavOrder();
-    resetSecondaryOrder();
-    setIsDragMode(false);
-  }, [resetNavOrder, resetSecondaryOrder]);
+  // Navigation drag-and-drop state and handlers
+  const {
+    isDragMode,
+    setIsDragMode,
+    handleNavDragEnd,
+    handleSecondaryDragEnd,
+    handleResetNavOrder,
+  } = useNavDragAndDrop({
+    orderedNavItems,
+    setNavOrder,
+    orderedSecondaryItems,
+    setSecondaryOrder,
+    resetNavOrder,
+    resetSecondaryOrder,
+  });
 
   const filteredNavItems = React.useMemo(() => {
     if (!user) return [];
