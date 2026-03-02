@@ -55,7 +55,9 @@ export default defineConfig({
     },
     extensions: [".mjs", ".js", ".jsx", ".ts", ".tsx", ".json"]
   },
-  optimizeDeps: {},
+  optimizeDeps: {
+    include: ['react-is']
+  },
   build: {
     sourcemap: false,
     cssCodeSplit: true,
@@ -69,7 +71,8 @@ export default defineConfig({
           if (
             id.includes("node_modules/react/") ||
             id.includes("node_modules/react-dom/") ||
-            id.includes("node_modules/scheduler/")
+            id.includes("node_modules/scheduler/") ||
+            id.includes("node_modules/react-is/")
           ) {
             return "react-core";
           }
