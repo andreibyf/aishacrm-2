@@ -1,9 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
+import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import { Lead } from '@/api/entities';
-import { Account } from '@/api/entities';
 // User entity no longer needed here; user comes from context
 import { useUser } from '@/components/shared/useUser.js';
-import { Employee } from '@/api/entities';
 import { useApiManager } from '../components/shared/ApiManager';
 import { clearDashboardResultsCache } from '@/api/dashboard';
 import { clearAllDashboardCaches } from '@/api/dashboardCache';
@@ -12,7 +10,6 @@ const LeadForm = lazy(() => import('../components/leads/LeadForm'));
 const LeadDetailPanel = lazy(() => import('../components/leads/LeadDetailPanel'));
 const LeadConversionDialog = lazy(() => import('../components/leads/LeadConversionDialog'));
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   Dialog,
   DialogContent,
@@ -21,25 +18,13 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
   AlertCircle,
-  Building2,
-  Edit,
   Eye,
   Grid,
   List,
   Loader2,
   Plus,
-  Search,
-  Trash2,
   Upload,
-  UserCheck,
   X,
 } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
@@ -48,34 +33,27 @@ const CsvImportDialog = lazy(() => import('../components/shared/CsvImportDialog'
 import { useTenant } from '../components/shared/tenantContext';
 import Pagination from '../components/shared/Pagination';
 import { toast } from 'sonner';
-import TagFilter from '../components/shared/TagFilter';
 import { useEmployeeScope } from '../components/shared/EmployeeScopeContext';
 import RefreshButton from '../components/shared/RefreshButton';
 import { useLoadingToast } from '@/hooks/useLoadingToast';
 import { useProgress } from '@/components/shared/ProgressOverlay';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import BulkActionsMenu from '../components/leads/BulkActionsMenu';
-import { Globe } from 'lucide-react';
-// Switch to internal profile page; stop using mintLeadLink
-import StatusHelper from '../components/shared/StatusHelper';
-import { loadUsersSafely } from '../components/shared/userLoader';
+import LeadStatsCards from '../components/leads/LeadStatsCards';
+import LeadTable from '../components/leads/LeadTable';
+import LeadFilters from '../components/leads/LeadFilters';
 import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
 import { useConfirmDialog } from '../components/shared/ConfirmDialog';
 import { useAiShaEvents } from '@/hooks/useAiShaEvents';
 import { useStatusCardPreferences } from '@/hooks/useStatusCardPreferences';
+import { useLeadsData } from '@/hooks/useLeadsData';
+import { useLeadsBulkOps } from '@/hooks/useLeadsBulkOps';
 
 export default function LeadsPage() {
   const { user } = useUser();
   const { plural: leadsLabel, singular: leadLabel } = useEntityLabel('leads');
   const { getCardLabel, isCardVisible } = useStatusCardPreferences();
   const loadingToast = useLoadingToast();
-  const [leads, setLeads] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [employees, setEmployees] = useState([]);
-  const [accounts, setAccounts] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [ageFilter, setAgeFilter] = useState('all');
@@ -192,468 +170,88 @@ export default function LeadsPage() {
     return user.role === 'superadmin';
   }, [user]);
 
-  // Stats for ALL leads (not just current page)
-  const [totalStats, setTotalStats] = useState({
-    total: 0,
-    new: 0,
-    contacted: 0,
-    qualified: 0,
-    unqualified: 0,
-    converted: 0,
-    lost: 0,
-  });
-
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [totalItems, setTotalItems] = useState(0);
 
   const { cachedRequest, clearCache, clearCacheByKey } = useApiManager();
   const { selectedEmail } = useEmployeeScope();
 
-  // Ref to track if initial load is done
-  const initialLoadDone = useRef(false);
-  const supportingDataLoaded = useRef(false);
-
-  // Load user once
-  // Removed per-page user fetch; user comes from global context
-
-  // New getTenantFilter function, moved here from tenantContext
-  const getTenantFilter = useCallback(() => {
-    // console.log('[Leads] getTenantFilter called with:', { selectedEmail, employeesCount: employees.length });
-    if (!user) return {};
-
-    let filter = {};
-    const filterObj = {}; // Object to hold complex filters (like $or) for JSON packing
-
-    // Tenant filtering
-    if (user.role === 'superadmin' || user.role === 'admin') {
-      if (selectedTenantId) {
-        filter.tenant_id = selectedTenantId;
-      }
-    } else if (user.tenant_id) {
-      filter.tenant_id = user.tenant_id;
-    }
-
-    // Employee scope filtering from context
-    // Note: assigned_to is a UUID field, only use UUIDs for filtering
-    if (selectedEmail && selectedEmail !== 'all') {
-      if (selectedEmail === 'unassigned') {
-        // Only filter by null
-        filterObj.$or = [{ assigned_to: null }];
-      } else {
-        // assigned_to is a UUID field, so only use UUID for filtering
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-          selectedEmail,
-        );
-
-        if (isUuid) {
-          // Use the UUID directly
-          filter.assigned_to = selectedEmail;
-        } else if (employees && employees.length > 0) {
-          // Find employee by email and use their ID (UUID)
-          const emp = employees.find((e) => e.email === selectedEmail);
-          if (emp && emp.id) {
-            filter.assigned_to = emp.id;
-          } else {
-            filter.assigned_to = selectedEmail;
-          }
-        } else {
-          filter.assigned_to = selectedEmail;
-        }
-      }
-    } else if (
-      user.employee_role === 'employee' &&
-      user.role !== 'admin' &&
-      user.role !== 'superadmin'
-    ) {
-      // Regular employees: lookup user's UUID from employees list
-      if (employees && employees.length > 0) {
-        const currentEmp = employees.find((e) => e.email === user.email);
-        if (currentEmp && currentEmp.id) {
-          filter.assigned_to = currentEmp.id;
-        } else {
-          filter.assigned_to = user.email; // Fallback
-        }
-      } else {
-        filter.assigned_to = user.email; // Fallback
-      }
-    }
-
-    // Test data filtering
-    if (!showTestData) {
-      filter.is_test_data = false; // Simple boolean, not complex operator
-    }
-
-    // Package the complex filterObj into the 'filter' parameter
-    if (Object.keys(filterObj).length > 0) {
-      filter.filter = JSON.stringify(filterObj);
-    }
-
-    return filter;
-  }, [user, selectedTenantId, showTestData, selectedEmail, employees]);
-
-  // Refresh accounts list (e.g., after creating a new account from the lead form)
-  const refreshAccounts = useCallback(async () => {
-    try {
-      const filterForSupportingData = getTenantFilter();
-      clearCacheByKey('Account');
-      const accountsData = await cachedRequest(
-        'Account',
-        'filter',
-        {
-          filter: filterForSupportingData,
-        },
-        () => Account.filter(filterForSupportingData),
-      );
-      setAccounts(accountsData || []);
-    } catch (error) {
-      console.error('[Leads] Failed to refresh accounts:', error);
-    }
-  }, [getTenantFilter, cachedRequest, clearCacheByKey]);
-
-  // Handle opening lead from URL parameter (e.g., from Activities page related_to link)
-  useEffect(() => {
-    const loadLeadFromUrl = async () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const leadId = urlParams.get('leadId');
-
-      if (leadId) {
-        try {
-          // Fetch the specific lead by ID
-          const lead = await Lead.get(leadId);
-          if (lead) {
-            setDetailLead(lead);
-            setIsDetailOpen(true);
-          }
-        } catch (error) {
-          console.error('[Leads] Failed to load lead from URL:', error);
-          toast.error('Lead not found');
-        } finally {
-          // Clear the URL parameter
-          window.history.replaceState({}, '', '/Leads');
-        }
-      }
-    };
-
-    if (user) {
-      loadLeadFromUrl();
-    }
-  }, [user]); // Only depend on user, not leads array
-
-  // Load supporting data (accounts, users, employees) ONCE with delays and error handling
-  //
-  // NOTE: Bundle endpoints exist (src/api/bundles.js → /api/bundles/leads) that could
-  // consolidate this into a single request. However, this page uses complex age filtering
-  // with hybrid client/server pagination that the bundle endpoints don't support.
-  // The bundle infrastructure is available for simpler use cases. See: docs/BUNDLE_ENDPOINTS_TESTING.md
-  //
-  useEffect(() => {
-    if (supportingDataLoaded.current || !user) return;
-
-    const loadSupportingData = async () => {
-      try {
-        // Base tenant filter without employee scope for Account and Employee entities
-        let baseTenantFilter = {};
-        if (user.role === 'superadmin' || user.role === 'admin') {
-          if (selectedTenantId) {
-            baseTenantFilter.tenant_id = selectedTenantId;
-          }
-        } else if (user.tenant_id) {
-          baseTenantFilter.tenant_id = user.tenant_id;
-        }
-
-        // Guard: Don't load if no tenant_id for superadmin (must select a tenant first)
-        if ((user.role === 'superadmin' || user.role === 'admin') && !baseTenantFilter.tenant_id) {
-          if (import.meta.env.DEV) {
-            console.log('[Leads] Skipping data load - no tenant selected');
-          }
-          supportingDataLoaded.current = true;
-          return;
-        }
-
-        // Load all supporting data in parallel (instead of sequential) for faster load time
-        const [accountsData, usersData, employeesData] = await Promise.all([
-          cachedRequest(
-            'Account',
-            'filter',
-            {
-              filter: baseTenantFilter,
-            },
-            () => Account.filter(baseTenantFilter),
-          ),
-          loadUsersSafely(user, selectedTenantId, cachedRequest, 1000),
-          cachedRequest(
-            'Employee',
-            'filter',
-            {
-              filter: baseTenantFilter,
-              limit: 1000,
-            },
-            () => Employee.filter(baseTenantFilter, 'created_at', 1000),
-          ),
-        ]);
-
-        setAccounts(accountsData || []);
-        setUsers(usersData || []);
-        setEmployees(employeesData || []);
-
-        supportingDataLoaded.current = true; // Mark as loaded
-      } catch (error) {
-        console.error('[Leads] Failed to load supporting data:', error);
-        // Even on error, allow leads to load
-      }
-    };
-
-    loadSupportingData();
-  }, [user, selectedTenantId, cachedRequest]);
-
-  // Load total stats for ALL leads using fast stats endpoint
-  const loadTotalStats = useCallback(async () => {
-    if (!user) return;
-
-    try {
-      // Use the new getTenantFilter which includes employee scope and test data filter
-      let filter = getTenantFilter();
-
-      // Guard: Don't load stats if no tenant_id for superadmin
-      if ((user.role === 'superadmin' || user.role === 'admin') && !filter.tenant_id) {
-        setTotalStats({
-          total: 0,
-          new: 0,
-          contacted: 0,
-          qualified: 0,
-          unqualified: 0,
-          converted: 0,
-          lost: 0,
-        });
-        return;
-      }
-
-      // Use optimized stats endpoint instead of fetching all leads
-      const stats = await Lead.getStats({
-        tenant_id: filter.tenant_id,
-        is_test_data: showTestData ? undefined : false,
-      });
-
-      setTotalStats({
-        total: stats?.total || 0,
-        new: stats?.new || 0,
-        contacted: stats?.contacted || 0,
-        qualified: stats?.qualified || 0,
-        unqualified: stats?.unqualified || 0,
-        converted: stats?.converted || 0,
-        lost: stats?.lost || 0,
-      });
-    } catch (error) {
-      console.error('Failed to load total stats:', error);
-    }
-  }, [user, getTenantFilter, showTestData]);
-
-  // Load total stats when dependencies change
-  useEffect(() => {
-    if (user) {
-      loadTotalStats();
-    }
-  }, [user, selectedTenantId, selectedEmail, loadTotalStats, showTestData]); // Added showTestData here
-
-  // Main data loading function with proper pagination and client-side age filtering
-  const loadLeads = useCallback(
-    async (page = 1, size = 25) => {
-      if (!user) return;
-
-      loadingToast.showLoading();
-
-      // Delay showing loading spinner to avoid flash for fast operations
-      const loadingTimer = setTimeout(() => setLoading(true), 300);
-
-      try {
-        let currentFilter = getTenantFilter();
-        let searchFilter = null;
-
-        // Guard: Don't load leads if no tenant_id for superadmin
-        if ((user.role === 'superadmin' || user.role === 'admin') && !currentFilter.tenant_id) {
-          setLeads([]);
-          setTotalItems(0);
-          setLoading(false);
-          return;
-        }
-
-        if (statusFilter !== 'all') {
-          currentFilter = { ...currentFilter, status: statusFilter };
-        }
-
-        if (searchTerm) {
-          // Separate search filter to be passed as 'filter' query param
-          searchFilter = {
-            $or: [
-              { first_name: { $icontains: searchTerm } },
-              { last_name: { $icontains: searchTerm } },
-              { email: { $icontains: searchTerm } },
-              { phone: { $icontains: searchTerm } },
-              { company: { $icontains: searchTerm } },
-              { job_title: { $icontains: searchTerm } },
-            ],
-          };
-          currentFilter = { ...currentFilter, filter: JSON.stringify(searchFilter) };
-        }
-
-        if (selectedTags.length > 0) {
-          currentFilter = { ...currentFilter, tags: { $all: selectedTags } };
-        }
-
-        // Determine pagination strategy:
-        // - If age filter is "all": Use true backend pagination (efficient)
-        // - If age filter is specific: Fetch larger batch for client-side age filtering
-        const useBackendPagination = ageFilter === 'all';
-        const fetchLimit = useBackendPagination ? size : Math.min(500, size * 5);
-        const fetchOffset = useBackendPagination ? (page - 1) * size : 0;
-
-        // Add pagination parameters to the filter
-        currentFilter = {
-          ...currentFilter,
-          limit: fetchLimit,
-          offset: fetchOffset,
-        };
-
-        // Build sort string: prefix with - for descending
-        const sortString = sortDirection === 'desc' ? `-${sortField}` : sortField;
-        console.log(
-          '[Leads] loadLeads called with sortField:',
-          sortField,
-          'sortDirection:',
-          sortDirection,
-          'sortString:',
-          sortString,
-        );
-
-        // Fetch leads with server-side pagination
-        const response = await Lead.filter(currentFilter, sortString);
-
-        // Apply client-side age filter if needed
-        let allFilteredLeads = response || [];
-        if (ageFilter !== 'all') {
-          const selectedBucket = ageBuckets.find((b) => b.value === ageFilter);
-          if (selectedBucket) {
-            allFilteredLeads = allFilteredLeads.filter((lead) => {
-              const age = calculateLeadAge(lead.created_date);
-              return age >= selectedBucket.min && age <= selectedBucket.max;
-            });
-          }
-        }
-
-        // Apply client-side pagination if age filtering was used
-        let paginatedLeads = allFilteredLeads;
-        // Use real total from backend when available (attached as _total by entities.js)
-        const serverTotal = response._total;
-        let estimatedTotal = allFilteredLeads.length;
-
-        if (!useBackendPagination) {
-          // Age filter active: paginate client-side after filtering
-          const skip = (page - 1) * size;
-          paginatedLeads = allFilteredLeads.slice(skip, skip + size);
-          // Estimate total based on whether we fetched a full batch
-          estimatedTotal =
-            response.length >= fetchLimit && paginatedLeads.length === size
-              ? page * size + 1 // More pages might exist
-              : skip + paginatedLeads.length; // Final page
-        } else if (typeof serverTotal === 'number') {
-          // Backend returned exact count via Supabase count: 'exact'
-          estimatedTotal = serverTotal;
-        } else {
-          // Fallback: estimate based on current page results
-          estimatedTotal =
-            paginatedLeads.length < size
-              ? (page - 1) * size + paginatedLeads.length
-              : page * size + 1;
-        }
-
-        console.log(
-          '[Leads] Loading page:',
-          page,
-          'size:',
-          size,
-          'ageFilter:',
-          ageFilter,
-          'fetchLimit:',
-          fetchLimit,
-          'fetchOffset:',
-          fetchOffset,
-          'filter:',
-          currentFilter,
-        );
-        console.log(
-          '[Leads] Fetched:',
-          response?.length,
-          'Server total:',
-          serverTotal,
-          'After age filter:',
-          allFilteredLeads?.length,
-          'Paginated:',
-          paginatedLeads?.length,
-          'Final total:',
-          estimatedTotal,
-        );
-
-        setLeads(paginatedLeads);
-        setTotalItems(estimatedTotal);
-        setCurrentPage(page);
-        initialLoadDone.current = true;
-        loadingToast.showSuccess(`${leadsLabel} loading! ✨`);
-      } catch (error) {
-        console.error('Failed to load leads:', error);
-        loadingToast.showError(`Failed to load ${leadsLabel.toLowerCase()}`);
-        toast.error('Failed to load leads');
-        setLeads([]);
-        setTotalItems(0);
-      } finally {
-        clearTimeout(loadingTimer);
-        setLoading(false);
-      }
-    },
-    [
-      user,
-      getTenantFilter,
-      searchTerm,
-      statusFilter,
-      selectedTags,
-      ageFilter,
-      sortField,
-      sortDirection,
-      leadsLabel,
-      loadingToast,
-      ageBuckets,
-    ],
-  ); // Removed unused pageSize, showTestData deps
-
-  // Load leads when dependencies change - no longer blocked by supportingDataReady
-  // since API now returns denormalized assigned_to_name directly
-  useEffect(() => {
-    if (user) {
-      loadLeads(currentPage, pageSize);
-    }
-  }, [
-    user,
-    searchTerm,
+  // Extract data loading to custom hook
+  const {
+    leads,
+    setLeads,
+    employees,
+    accounts,
+    loading,
+    totalStats,
+    totalItems,
+    setTotalItems,
+    loadLeads,
+    loadTotalStats,
+    refreshAccounts,
+    getTenantFilter,
+    allTags,
+    usersMap,
+    employeesMap,
+    getAssociatedAccountName,
+    initialLoadDone,
+    resetSupportingData,
+  } = useLeadsData({
+    selectedTenantId,
+    employeeScope: selectedEmail,
     statusFilter,
-    ageFilter,
-    selectedTags,
+    searchTerm,
     sortField,
     sortDirection,
+    ageFilter,
+    selectedTags,
+    showTestData,
     currentPage,
     pageSize,
-    loadLeads,
-    selectedEmail,
-    selectedTenantId,
-  ]);
+    ageBuckets,
+    user,
+    loadingToast,
+    leadsLabel,
+    cachedRequest,
+    clearCacheByKey,
+    clearCache,
+    setDetailLead,
+    setIsDetailOpen,
+    setCurrentPage,
+  });
 
-  // Clear cache when employee filter changes to force fresh data
-  useEffect(() => {
-    if (selectedEmail !== null) {
-      clearCache('Lead');
-      clearCacheByKey('Lead');
-    }
-  }, [selectedEmail, clearCache, clearCacheByKey]);
+  // Extract bulk operations to custom hook
+  const { handleBulkDelete, handleBulkStatusChange, handleBulkAssign } = useLeadsBulkOps({
+    leads,
+    selectedLeads,
+    setSelectedLeads,
+    selectAllMode,
+    setSelectAllMode,
+    totalItems,
+    getTenantFilter,
+    statusFilter,
+    searchTerm,
+    selectedTags,
+    ageFilter,
+    ageBuckets,
+    calculateLeadAge,
+    loadLeads,
+    loadTotalStats,
+    startProgress,
+    updateProgress,
+    completeProgress,
+    confirm,
+    clearCache,
+    clearCacheByKey,
+    clearDashboardResultsCache,
+    clearAllDashboardCaches,
+    setLeads,
+    setTotalItems,
+    currentPage,
+    pageSize,
+    user,
+  });
 
   // Listen for AiSHA open-details events to open the detail panel
   useEffect(() => {
@@ -699,67 +297,6 @@ export default function LeadsPage() {
     setPageSize(newSize);
     setCurrentPage(1);
   }, []);
-
-  // Extract all tags from leads for TagFilter
-  const allTags = useMemo(() => {
-    if (!Array.isArray(leads)) return [];
-
-    const tagCounts = {};
-    leads.forEach((lead) => {
-      if (Array.isArray(lead.tags)) {
-        lead.tags.forEach((tag) => {
-          if (tag && typeof tag === 'string') {
-            tagCounts[tag] = (tagCounts[tag] || 0) + 1;
-          }
-        });
-      }
-    });
-
-    return Object.entries(tagCounts)
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count);
-  }, [leads]);
-
-  // Create lookup maps for denormalized fields
-  const usersMap = useMemo(() => {
-    return users.reduce((acc, user) => {
-      acc[user.email] = user.full_name || user.email;
-      if (user.id) acc[user.id] = user.full_name || user.email; // Index by ID
-      return acc;
-    }, {});
-  }, [users]);
-
-  const employeesMap = useMemo(() => {
-    return employees.reduce((acc, employee) => {
-      const fullName = `${employee.first_name} ${employee.last_name}`.trim();
-      // Map by both ID and email for backwards compatibility
-      if (employee.id) {
-        acc[employee.id] = fullName;
-      }
-      if (employee.email) {
-        acc[employee.email] = fullName;
-      }
-      return acc;
-    }, {});
-  }, [employees]);
-
-  const accountsMap = useMemo(() => {
-    return accounts.reduce((acc, account) => {
-      if (account?.id) {
-        acc[account.id] = account.name || account.company || '';
-      }
-      return acc;
-    }, {});
-  }, [accounts]);
-
-  const getAssociatedAccountName = useCallback(
-    (leadRecord) => {
-      if (!leadRecord) return '';
-      const accountId = leadRecord.account_id || leadRecord.metadata?.account_id;
-      return accountsMap[accountId] || leadRecord.account_name || '';
-    },
-    [accountsMap],
-  );
 
   const handleSave = async (result) => {
     try {
@@ -824,397 +361,6 @@ export default function LeadsPage() {
       toast.error('Failed to delete lead');
       await loadLeads(currentPage, pageSize);
       await loadTotalStats();
-    }
-  };
-
-  const handleBulkDelete = async () => {
-    if (selectAllMode) {
-      const confirmed = await confirm({
-        title: 'Delete all leads?',
-        description: `Delete ALL ${totalItems} lead(s) matching current filters? This cannot be undone!`,
-        variant: 'destructive',
-        confirmText: 'Delete All',
-        cancelText: 'Cancel',
-      });
-      if (!confirmed) return;
-
-      try {
-        startProgress({ message: 'Fetching leads to delete...' });
-        let currentFilter = getTenantFilter();
-
-        if (statusFilter !== 'all') {
-          currentFilter = { ...currentFilter, status: statusFilter };
-        }
-
-        if (searchTerm) {
-          const searchFilter = {
-            $or: [
-              { first_name: { $icontains: searchTerm } },
-              { last_name: { $icontains: searchTerm } },
-              { email: { $icontains: searchTerm } },
-              { phone: { $icontains: searchTerm } },
-              { company: { $icontains: searchTerm } },
-              { job_title: { $icontains: searchTerm } },
-            ],
-          };
-          currentFilter = { ...currentFilter, filter: JSON.stringify(searchFilter) };
-        }
-
-        if (selectedTags.length > 0) {
-          currentFilter = { ...currentFilter, tags: { $all: selectedTags } };
-        }
-
-        const allLeadsToDeleteServerFilter = await Lead.filter(currentFilter, 'id', 10000);
-        let allLeadsToDelete = allLeadsToDeleteServerFilter;
-
-        if (ageFilter !== 'all') {
-          const selectedBucket = ageBuckets.find((b) => b.value === ageFilter);
-          if (selectedBucket) {
-            allLeadsToDelete = allLeadsToDeleteServerFilter.filter((lead) => {
-              const age = calculateLeadAge(lead.created_date);
-              return age >= selectedBucket.min && age <= selectedBucket.max;
-            });
-          }
-        }
-        const deleteCount = allLeadsToDelete.length;
-
-        updateProgress({
-          message: `Deleting ${deleteCount} leads...`,
-          total: deleteCount,
-          current: 0,
-        });
-
-        // Bulk delete via single endpoint — avoids N×429 from individual deletes
-        const CHUNK_SIZE = 500; // endpoint max
-        let successCount = 0;
-        let failCount = 0;
-        const idsToDelete = allLeadsToDelete.map((l) => l.id);
-        for (let i = 0; i < idsToDelete.length; i += CHUNK_SIZE) {
-          const chunk = idsToDelete.slice(i, i + CHUNK_SIZE);
-          try {
-            const result = await Lead.bulkDelete(
-              chunk,
-              getTenantFilter().tenant_id || user.tenant_id,
-            );
-            successCount += result?.deleted ?? chunk.length;
-          } catch (err) {
-            console.error('[Leads] Bulk delete chunk failed:', err);
-            failCount += chunk.length;
-          }
-          updateProgress({
-            current: Math.min(i + CHUNK_SIZE, idsToDelete.length),
-            message: `Deleted ${successCount} of ${deleteCount} leads...`,
-          });
-        }
-
-        completeProgress();
-
-        setSelectedLeads(new Set());
-        setSelectAllMode(false);
-
-        // Optimistic UI: only clear the list if all deletes succeeded
-        if (failCount === 0) {
-          setLeads([]);
-          setTotalItems(0);
-        }
-
-        if (successCount > 0) toast.success(`${successCount} lead(s) deleted`);
-        if (failCount > 0) toast.error(`${failCount} lead(s) failed to delete`);
-
-        // Clear all caches so dashboard and lead lists show fresh data
-        clearCache('Lead');
-        clearCacheByKey('Lead');
-        clearDashboardResultsCache();
-        clearAllDashboardCaches();
-        await Promise.all([loadLeads(1, pageSize), loadTotalStats()]);
-      } catch (error) {
-        completeProgress();
-        console.error('Failed to delete leads:', error);
-        toast.error('Failed to delete leads');
-      }
-    } else {
-      if (!selectedLeads || selectedLeads.size === 0) {
-        toast.error('No leads selected');
-        return;
-      }
-
-      const confirmed = await confirm({
-        title: 'Delete selected leads?',
-        description: `Delete ${selectedLeads.size} lead(s)?`,
-        variant: 'destructive',
-        confirmText: 'Delete',
-        cancelText: 'Cancel',
-      });
-      if (!confirmed) return;
-
-      try {
-        const tenantId = getTenantFilter().tenant_id || user.tenant_id;
-        if (!tenantId) {
-          throw new Error('Cannot delete: tenant_id is not available');
-        }
-
-        const selectedCount = selectedLeads.size;
-        startProgress({
-          message: `Deleting ${selectedCount} leads...`,
-          total: selectedCount,
-          current: 0,
-        });
-
-        // Bulk delete via single endpoint — avoids N×429 from individual deletes
-        const selectedArray = [...selectedLeads];
-        const CHUNK_SIZE = 500;
-        let successCount = 0;
-        let notFoundCount = 0;
-        let failedCount = 0;
-
-        for (let i = 0; i < selectedArray.length; i += CHUNK_SIZE) {
-          const chunk = selectedArray.slice(i, i + CHUNK_SIZE);
-          try {
-            const result = await Lead.bulkDelete(chunk, tenantId);
-            successCount += result?.deleted ?? chunk.length;
-          } catch (err) {
-            console.error('[Leads] Bulk delete chunk failed:', err);
-            failedCount += chunk.length;
-          }
-          updateProgress({
-            current: Math.min(i + CHUNK_SIZE, selectedArray.length),
-            message: `Deleted ${successCount} of ${selectedCount} leads...`,
-          });
-        }
-
-        completeProgress();
-
-        setSelectedLeads(new Set());
-
-        // Optimistic UI: only remove items if all chunks succeeded
-        if (failedCount === 0) {
-          const deletedIds = new Set(selectedArray);
-          setLeads((prev) => prev.filter((l) => !deletedIds.has(l.id)));
-          setTotalItems((prev) => Math.max(0, prev - successCount));
-        }
-
-        if (failedCount > 0) {
-          toast.error(`${successCount} deleted, ${failedCount} failed`);
-        } else if (notFoundCount > 0) {
-          toast.success(`${successCount} lead(s) deleted (${notFoundCount} already deleted)`);
-        } else {
-          toast.success(`${successCount} lead(s) deleted`);
-        }
-
-        // Clear all caches so dashboard and lead lists show fresh data
-        clearCache('Lead');
-        clearCacheByKey('Lead');
-        clearDashboardResultsCache();
-        clearAllDashboardCaches();
-        await Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]);
-      } catch (error) {
-        completeProgress();
-        console.error('Failed to delete leads:', error);
-        toast.error('Failed to delete leads');
-        setSelectedLeads(new Set());
-        clearCache('Lead');
-        clearCacheByKey('Lead');
-        await loadLeads(currentPage, pageSize);
-        await loadTotalStats();
-      }
-    }
-  };
-
-  const handleBulkStatusChange = async (newStatus) => {
-    if (selectAllMode) {
-      const confirmed = await confirm({
-        title: 'Update all leads?',
-        description: `Update status for ALL ${totalItems} lead(s) matching current filters to ${newStatus}?`,
-        variant: 'default',
-        confirmText: 'Update All',
-        cancelText: 'Cancel',
-      });
-      if (!confirmed) return;
-
-      try {
-        let currentFilter = getTenantFilter();
-
-        if (statusFilter !== 'all') {
-          currentFilter = { ...currentFilter, status: statusFilter };
-        }
-
-        if (searchTerm) {
-          const searchFilter = {
-            $or: [
-              { first_name: { $icontains: searchTerm } },
-              { last_name: { $icontains: searchTerm } },
-              { email: { $icontains: searchTerm } },
-              { phone: { $icontains: searchTerm } },
-              { company: { $icontains: searchTerm } },
-              { job_title: { $icontains: searchTerm } },
-            ],
-          };
-          currentFilter = { ...currentFilter, filter: JSON.stringify(searchFilter) };
-        }
-
-        if (selectedTags.length > 0) {
-          currentFilter = { ...currentFilter, tags: { $all: selectedTags } };
-        }
-
-        const allLeadsToUpdateServerFilter = await Lead.filter(currentFilter, 'id', 10000);
-        let allLeadsToUpdate = allLeadsToUpdateServerFilter;
-
-        if (ageFilter !== 'all') {
-          const selectedBucket = ageBuckets.find((b) => b.value === ageFilter);
-          if (selectedBucket) {
-            allLeadsToUpdate = allLeadsToUpdateServerFilter.filter((lead) => {
-              const age = calculateLeadAge(lead.created_date);
-              return age >= selectedBucket.min && age <= selectedBucket.max;
-            });
-          }
-        }
-        const updateCount = allLeadsToUpdate.length;
-
-        // Update in batches
-        const BATCH_SIZE = 50;
-        let successCount = 0;
-        let failCount = 0;
-        for (let i = 0; i < allLeadsToUpdate.length; i += BATCH_SIZE) {
-          const batch = allLeadsToUpdate.slice(i, i + BATCH_SIZE);
-          const results = await Promise.allSettled(
-            batch.map((l) => Lead.update(l.id, { status: newStatus })),
-          );
-          results.forEach((r) => {
-            if (r.status === 'fulfilled') successCount++;
-            else failCount++;
-          });
-        }
-
-        setSelectedLeads(new Set());
-        setSelectAllMode(false);
-        clearCache('Lead');
-        clearCacheByKey('Lead');
-        await Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]);
-        if (successCount > 0) toast.success(`Updated ${successCount} lead(s) to ${newStatus}`);
-        if (failCount > 0) toast.error(`${failCount} lead(s) failed to update`);
-      } catch (error) {
-        console.error('Failed to update leads:', error);
-        toast.error('Failed to update leads');
-      }
-    } else {
-      if (!selectedLeads || selectedLeads.size === 0) {
-        toast.error('No leads selected');
-        return;
-      }
-
-      try {
-        const promises = [...selectedLeads].map((id) => Lead.update(id, { status: newStatus }));
-
-        await Promise.all(promises);
-        setSelectedLeads(new Set());
-        clearCache('Lead');
-        clearCacheByKey('Lead');
-        await Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]);
-        toast.success(`Updated ${promises.length} lead(s) to ${newStatus}`);
-      } catch (error) {
-        console.error('Failed to update leads:', error);
-        toast.error('Failed to update leads');
-      }
-    }
-  };
-
-  const handleBulkAssign = async (assignedTo) => {
-    if (selectAllMode) {
-      const confirmed = await confirm({
-        title: 'Assign all leads?',
-        description: `Assign ALL ${totalItems} lead(s) matching current filters?`,
-        variant: 'default',
-        confirmText: 'Assign All',
-        cancelText: 'Cancel',
-      });
-      if (!confirmed) return;
-
-      try {
-        let currentFilter = getTenantFilter();
-
-        if (statusFilter !== 'all') {
-          currentFilter = { ...currentFilter, status: statusFilter };
-        }
-
-        if (searchTerm) {
-          const searchFilter = {
-            $or: [
-              { first_name: { $icontains: searchTerm } },
-              { last_name: { $icontains: searchTerm } },
-              { email: { $icontains: searchTerm } },
-              { phone: { $icontains: searchTerm } },
-              { company: { $icontains: searchTerm } },
-              { job_title: { $icontains: searchTerm } },
-            ],
-          };
-          currentFilter = { ...currentFilter, filter: JSON.stringify(searchFilter) };
-        }
-
-        if (selectedTags.length > 0) {
-          currentFilter = { ...currentFilter, tags: { $all: selectedTags } };
-        }
-
-        const allLeadsToAssignServerFilter = await Lead.filter(currentFilter, 'id', 10000);
-        let allLeadsToAssign = allLeadsToAssignServerFilter;
-
-        if (ageFilter !== 'all') {
-          const selectedBucket = ageBuckets.find((b) => b.value === ageFilter);
-          if (selectedBucket) {
-            allLeadsToAssign = allLeadsToAssignServerFilter.filter((lead) => {
-              const age = calculateLeadAge(lead.created_date);
-              return age >= selectedBucket.min && age <= selectedBucket.max;
-            });
-          }
-        }
-        const updateCount = allLeadsToAssign.length;
-
-        // Update in batches
-        const BATCH_SIZE = 50;
-        let successCount = 0;
-        let failCount = 0;
-        for (let i = 0; i < allLeadsToAssign.length; i += BATCH_SIZE) {
-          const batch = allLeadsToAssign.slice(i, i + BATCH_SIZE);
-          const results = await Promise.allSettled(
-            batch.map((l) => Lead.update(l.id, { assigned_to: assignedTo || null })),
-          );
-          results.forEach((r) => {
-            if (r.status === 'fulfilled') successCount++;
-            else failCount++;
-          });
-        }
-
-        setSelectedLeads(new Set());
-        setSelectAllMode(false);
-        clearCache('Lead');
-        clearCacheByKey('Lead');
-        await Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]);
-        if (successCount > 0) toast.success(`Assigned ${successCount} lead(s)`);
-        if (failCount > 0) toast.error(`${failCount} lead(s) failed to assign`);
-      } catch (error) {
-        console.error('Failed to assign leads:', error);
-        toast.error('Failed to assign leads');
-      }
-    } else {
-      if (!selectedLeads || selectedLeads.size === 0) {
-        toast.error('No leads selected');
-        return;
-      }
-
-      try {
-        const promises = [...selectedLeads].map((id) =>
-          Lead.update(id, { assigned_to: assignedTo || null }),
-        );
-
-        await Promise.all(promises);
-        setSelectedLeads(new Set());
-        clearCache('Lead');
-        clearCacheByKey('Lead');
-        await Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]);
-        toast.success(`Assigned ${promises.length} lead(s)`);
-      } catch (error) {
-        console.error('Failed to assign leads:', error);
-        toast.error('Failed to assign leads');
-      }
     }
   };
 
@@ -1297,7 +443,8 @@ export default function LeadsPage() {
     clearCache('Employee');
     clearCache('User');
     clearCache('Account');
-    supportingDataLoaded.current = false;
+    // Reset supporting data loaded flag so users/employees/accounts are re-fetched
+    resetSupportingData();
     await Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]);
     toast.success('Leads refreshed');
   };
@@ -1582,192 +729,34 @@ export default function LeadsPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-7 gap-4">
-          {[
-            {
-              label: `Total ${leadsLabel}`,
-              value: totalStats.total,
-              filter: 'all',
-              bgColor: 'bg-slate-800',
-              tooltip: 'total_all',
-            },
-            {
-              label: 'New',
-              value: totalStats.new,
-              filter: 'new',
-              bgColor: 'bg-blue-900/20',
-              borderColor: 'border-blue-700',
-              tooltip: 'lead_new',
-            },
-            {
-              label: 'Contacted',
-              value: totalStats.contacted,
-              filter: 'contacted',
-              bgColor: 'bg-indigo-900/20',
-              borderColor: 'border-indigo-700',
-              tooltip: 'lead_contacted',
-            },
-            {
-              label: 'Qualified',
-              value: totalStats.qualified,
-              filter: 'qualified',
-              bgColor: 'bg-emerald-900/20',
-              borderColor: 'border-emerald-700',
-              tooltip: 'lead_qualified',
-            },
-            {
-              label: 'Unqualified',
-              value: totalStats.unqualified,
-              filter: 'unqualified',
-              bgColor: 'bg-yellow-900/20',
-              borderColor: 'border-yellow-700',
-              tooltip: 'lead_unqualified',
-            },
-            {
-              label: 'Converted',
-              value: totalStats.converted,
-              filter: 'converted',
-              bgColor: 'bg-green-900/20',
-              borderColor: 'border-green-700',
-              tooltip: 'lead_converted',
-            },
-            {
-              label: 'Lost',
-              value: totalStats.lost,
-              filter: 'lost',
-              bgColor: 'bg-red-900/20',
-              borderColor: 'border-red-700',
-              tooltip: 'lead_lost',
-            },
-          ]
-            .filter((stat) => isCardVisible(stat.tooltip))
-            .map((stat) => (
-              <div
-                key={stat.label}
-                className={`${stat.bgColor} ${
-                  stat.borderColor || 'border-slate-700'
-                } border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
-                  statusFilter === stat.filter
-                    ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900'
-                    : ''
-                }`}
-                onClick={() => handleStatusFilterClick(stat.filter)}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-sm text-slate-400">
-                    {getCardLabel(stat.tooltip) || stat.label}
-                  </p>
-                  <StatusHelper statusKey={stat.tooltip} />
-                </div>
-                <p className="text-2xl font-bold text-slate-100">{stat.value}</p>
-              </div>
-            ))}
-        </div>
+        <LeadStatsCards
+          totalStats={totalStats}
+          statusFilter={statusFilter}
+          onStatusFilterClick={handleStatusFilterClick}
+          leadsLabel={leadsLabel}
+          isCardVisible={isCardVisible}
+          getCardLabel={getCardLabel}
+        />
 
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-3 w-5 h-5 text-slate-500" />
-            <Input
-              placeholder="Search leads by name, email, phone, company, or job title..."
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="pl-10 bg-slate-800 border-slate-700 text-slate-200"
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {/* Age Filter */}
-            <Select
-              value={ageFilter}
-              onValueChange={(value) => {
-                setAgeFilter(value);
-                setCurrentPage(1);
-              }}
-            >
-              <SelectTrigger className="w-40 bg-slate-800 border-slate-700 text-slate-200">
-                <SelectValue placeholder="Age filter" />
-              </SelectTrigger>
-              <SelectContent className="bg-slate-800 border-slate-700">
-                {ageBuckets.map((bucket) => (
-                  <SelectItem
-                    key={bucket.value}
-                    value={bucket.value}
-                    className="text-slate-200 hover:bg-slate-700"
-                  >
-                    <span className={bucket.color}>{bucket.label}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <TagFilter
-              allTags={allTags}
-              selectedTags={selectedTags}
-              onTagsChange={(newTags) => {
-                setSelectedTags(newTags);
-                setCurrentPage(1);
-              }}
-            />
-
-            {/* Sort Dropdown */}
-            <Select
-              value={`${sortField}:${sortDirection}`}
-              onValueChange={(value) => {
-                console.log('[Leads] Sort dropdown changed to:', value);
-                const option = sortOptions.find((o) => `${o.field}:${o.direction}` === value);
-                console.log('[Leads] Found option:', option);
-                if (option) {
-                  console.log(
-                    '[Leads] Setting sortField to:',
-                    option.field,
-                    'sortDirection to:',
-                    option.direction,
-                  );
-                  setSortField(option.field);
-                  setSortDirection(option.direction);
-                  setCurrentPage(1);
-                }
-              }}
-            >
-              <SelectTrigger className="w-44 bg-slate-800 border-slate-700 text-slate-200">
-                <SelectValue placeholder="Sort by..." />
-              </SelectTrigger>
-              <SelectContent className="bg-slate-800 border-slate-700">
-                {sortOptions.map((option) => (
-                  <SelectItem
-                    key={`${option.field}:${option.direction}`}
-                    value={`${option.field}:${option.direction}`}
-                    className="text-slate-200 hover:bg-slate-700"
-                  >
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {hasActiveFilters && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleClearFilters}
-                    className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
-                  >
-                    <X className="w-4 h-4 mr-1" />
-                    Clear
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Clear all filters</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
-          </div>
-        </div>
+        {/* Search and Filters */}
+        <LeadFilters
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          ageFilter={ageFilter}
+          setAgeFilter={setAgeFilter}
+          ageBuckets={ageBuckets}
+          allTags={allTags}
+          selectedTags={selectedTags}
+          setSelectedTags={setSelectedTags}
+          sortField={sortField}
+          sortDirection={sortDirection}
+          setSortField={setSortField}
+          setSortDirection={setSortDirection}
+          sortOptions={sortOptions}
+          hasActiveFilters={hasActiveFilters}
+          handleClearFilters={handleClearFilters}
+          setCurrentPage={setCurrentPage}
+        />
 
         {/* Select All Banner */}
         {selectedLeads.size === leads.length &&
@@ -1846,296 +835,25 @@ export default function LeadsPage() {
         ) : viewMode === 'list' ? (
           <>
             {/* List/Table View */}
-            <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-slate-700/50">
-                    <tr>
-                      <th className="px-4 py-3 text-left">
-                        <Checkbox
-                          checked={
-                            selectedLeads.size === leads.length &&
-                            leads.length > 0 &&
-                            !selectAllMode
-                          }
-                          onCheckedChange={toggleSelectAll}
-                          className="border-slate-600"
-                        />
-                      </th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                        Name
-                      </th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                        Email
-                      </th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                        Phone
-                      </th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                        Company
-                      </th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                        Job Title
-                      </th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                        Age (Days)
-                      </th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                        Assigned To
-                      </th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                        Status
-                      </th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-700">
-                    {leads.map((lead) => {
-                      const age = calculateLeadAge(lead);
-                      const ageBucket = getLeadAgeBucket(lead);
-                      const isConverted = lead.status === 'converted';
-
-                      return (
-                        <tr
-                          key={lead.id}
-                          data-testid={`lead-row-${lead.email}`}
-                          className={`hover:bg-slate-700/30 transition-colors ${isConverted ? 'opacity-70' : ''}`}
-                        >
-                          <td className="px-4 py-3">
-                            <Checkbox
-                              checked={selectedLeads.has(lead.id) || selectAllMode}
-                              onCheckedChange={() => toggleSelection(lead.id)}
-                              className="border-slate-600"
-                            />
-                          </td>
-                          <td className="px-4 py-3 text-base text-slate-300">
-                            {(() => {
-                              const isB2B = lead.lead_type === 'b2b' || lead.lead_type === 'B2B';
-                              const personName =
-                                `${lead.first_name || ''} ${lead.last_name || ''}`.trim();
-                              const companyName = lead.company;
-
-                              if (isB2B && companyName) {
-                                // B2B: Show company name prominently, contact person below
-                                return (
-                                  <div className={isConverted ? 'line-through' : ''}>
-                                    <span className="font-medium text-slate-200">
-                                      {companyName}
-                                    </span>
-                                    {personName && (
-                                      <div className="text-xs text-slate-400">{personName}</div>
-                                    )}
-                                  </div>
-                                );
-                              }
-                              // B2C or no company: Show person name
-                              return (
-                                <span className={isConverted ? 'line-through' : ''}>
-                                  {personName || <span className="text-slate-500">—</span>}
-                                </span>
-                              );
-                            })()}
-                          </td>
-                          <td
-                            className="px-4 py-3 text-base text-slate-300"
-                            data-testid="lead-email"
-                          >
-                            {lead.email || <span className="text-slate-500">—</span>}
-                          </td>
-                          <td className="px-4 py-3 text-base">
-                            <div className="flex items-center gap-2">
-                              <span className="text-slate-300">
-                                {lead.phone || <span className="text-slate-500">—</span>}
-                              </span>
-                              {lead.do_not_call && (
-                                <Badge className="bg-red-900/30 text-red-400 border-red-700 text-xs px-1.5 py-0">
-                                  DNC
-                                </Badge>
-                              )}
-                              {lead.do_not_text && (
-                                <Badge className="bg-red-900/30 text-red-400 border-red-700 text-xs px-1.5 py-0">
-                                  DNT
-                                </Badge>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-base text-slate-300">
-                            {(() => {
-                              const associatedAccountName = getAssociatedAccountName(lead);
-                              const companyLabel = associatedAccountName || lead.company;
-
-                              if (!companyLabel) {
-                                return <span className="text-slate-500">—</span>;
-                              }
-
-                              return (
-                                <div className="space-y-1">
-                                  <span className="font-medium text-slate-200 flex items-center gap-2">
-                                    <Building2 className="w-3 h-3 text-slate-500" />
-                                    {companyLabel}
-                                  </span>
-                                  {associatedAccountName &&
-                                    lead.company &&
-                                    lead.company !== associatedAccountName && (
-                                      <span className="text-xs text-slate-500">
-                                        Company: {lead.company}
-                                      </span>
-                                    )}
-                                </div>
-                              );
-                            })()}
-                          </td>
-                          <td
-                            className="px-4 py-3 text-base text-slate-300"
-                            data-testid="lead-job-title"
-                          >
-                            {lead.job_title || <span className="text-slate-500">—</span>}
-                          </td>
-                          <td className="px-4 py-3 text-base">
-                            <span
-                              className={`font-semibold ${ageBucket?.color || 'text-slate-300'}`}
-                            >
-                              {age >= 0 ? (
-                                `${age} ${age === 1 ? 'day' : 'days'}`
-                              ) : (
-                                <span className="text-slate-500">—</span>
-                              )}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-slate-300">
-                            {lead.assigned_to_name ||
-                              employeesMap[lead.assigned_to] ||
-                              usersMap[lead.assigned_to] || (
-                                <span className="text-slate-500">Unassigned</span>
-                              )}
-                          </td>
-                          <td
-                            className="cursor-pointer p-3"
-                            onClick={() => handleViewDetails(lead)}
-                          >
-                            <Badge
-                              className={`${
-                                statusColors[lead.status]
-                              } contrast-badge capitalize text-xs font-semibold border`}
-                              data-variant="status"
-                              data-status={lead.status}
-                            >
-                              {lead.status}
-                            </Badge>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleViewDetails(lead);
-                                    }}
-                                    className="h-8 w-8 text-slate-400 hover:text-blue-400"
-                                  >
-                                    <Eye className="w-4 h-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>View details</p>
-                                </TooltipContent>
-                              </Tooltip>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      try {
-                                        const href = `/leads/${lead.id}`;
-                                        window.open(href, '_blank', 'noopener,noreferrer');
-                                      } catch (err) {
-                                        console.error('Failed to open lead:', err);
-                                      }
-                                    }}
-                                    className="h-8 w-8 text-slate-400 hover:text-blue-400"
-                                  >
-                                    <Globe className="w-4 h-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Open web profile</p>
-                                </TooltipContent>
-                              </Tooltip>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setEditingLead(lead);
-                                      setIsFormOpen(true);
-                                    }}
-                                    className="h-8 w-8 text-slate-400 hover:text-blue-400"
-                                    disabled={isConverted}
-                                  >
-                                    <Edit className="w-4 h-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Edit {leadLabel.toLowerCase()}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                              {lead.status !== 'converted' && (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleConvert(lead);
-                                      }}
-                                      className="h-8 w-8 text-green-400 hover:text-green-300 hover:bg-green-900/20"
-                                    >
-                                      <UserCheck className="w-4 h-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Convert to contact</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              )}
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDelete(lead.id);
-                                    }}
-                                    className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-900/20"
-                                    disabled={isConverted}
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Delete lead</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <LeadTable
+              leads={leads}
+              selectedLeads={selectedLeads}
+              selectAllMode={selectAllMode}
+              toggleSelectAll={toggleSelectAll}
+              toggleSelection={toggleSelection}
+              calculateLeadAge={calculateLeadAge}
+              getLeadAgeBucket={getLeadAgeBucket}
+              getAssociatedAccountName={getAssociatedAccountName}
+              employeesMap={employeesMap}
+              usersMap={usersMap}
+              setDetailLead={setDetailLead}
+              setIsDetailOpen={setIsDetailOpen}
+              setEditingLead={setEditingLead}
+              setIsFormOpen={setIsFormOpen}
+              handleConvert={handleConvert}
+              handleDelete={handleDelete}
+              leadLabel={leadLabel}
+            />
 
             <Pagination
               currentPage={currentPage}

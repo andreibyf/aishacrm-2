@@ -32,7 +32,7 @@ RUN NODE_OPTIONS=--max-old-space-size=512 npm ci --include=dev --legacy-peer-dep
 COPY . .
 
 # Build the app with increased memory limit
-ENV NODE_OPTIONS=--max-old-space-size=896
+ENV NODE_OPTIONS=--max-old-space-size=2048
 RUN npm run build:ci
 
 # Production stage - serve static files
