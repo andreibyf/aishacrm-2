@@ -102,7 +102,21 @@ export function useLeadsBulkOps({
               { job_title: { $icontains: searchTerm } },
             ],
           };
-          currentFilter = { ...currentFilter, filter: JSON.stringify(searchFilter) };
+          // Merge with any existing JSON filter (e.g. unassigned scope) instead of overwriting
+          const existingFilter = currentFilter.filter;
+          let mergedFilter = searchFilter;
+          if (existingFilter) {
+            try {
+              const parsed =
+                typeof existingFilter === 'string' ? JSON.parse(existingFilter) : existingFilter;
+              if (parsed && typeof parsed === 'object') {
+                mergedFilter = { $and: [parsed, searchFilter] };
+              }
+            } catch {
+              // parsing failed — use searchFilter alone
+            }
+          }
+          currentFilter = { ...currentFilter, filter: JSON.stringify(mergedFilter) };
         }
 
         if (selectedTags.length > 0) {
@@ -291,7 +305,21 @@ export function useLeadsBulkOps({
               { job_title: { $icontains: searchTerm } },
             ],
           };
-          currentFilter = { ...currentFilter, filter: JSON.stringify(searchFilter) };
+          // Merge with any existing JSON filter (e.g. unassigned scope) instead of overwriting
+          const existingFilter = currentFilter.filter;
+          let mergedFilter = searchFilter;
+          if (existingFilter) {
+            try {
+              const parsed =
+                typeof existingFilter === 'string' ? JSON.parse(existingFilter) : existingFilter;
+              if (parsed && typeof parsed === 'object') {
+                mergedFilter = { $and: [parsed, searchFilter] };
+              }
+            } catch {
+              // parsing failed — use searchFilter alone
+            }
+          }
+          currentFilter = { ...currentFilter, filter: JSON.stringify(mergedFilter) };
         }
 
         if (selectedTags.length > 0) {
@@ -310,8 +338,6 @@ export function useLeadsBulkOps({
             });
           }
         }
-        const updateCount = allLeadsToUpdate.length;
-
         // Update in batches
         const BATCH_SIZE = 50;
         let successCount = 0;
@@ -389,7 +415,21 @@ export function useLeadsBulkOps({
               { job_title: { $icontains: searchTerm } },
             ],
           };
-          currentFilter = { ...currentFilter, filter: JSON.stringify(searchFilter) };
+          // Merge with any existing JSON filter (e.g. unassigned scope) instead of overwriting
+          const existingFilter = currentFilter.filter;
+          let mergedFilter = searchFilter;
+          if (existingFilter) {
+            try {
+              const parsed =
+                typeof existingFilter === 'string' ? JSON.parse(existingFilter) : existingFilter;
+              if (parsed && typeof parsed === 'object') {
+                mergedFilter = { $and: [parsed, searchFilter] };
+              }
+            } catch {
+              // parsing failed — use searchFilter alone
+            }
+          }
+          currentFilter = { ...currentFilter, filter: JSON.stringify(mergedFilter) };
         }
 
         if (selectedTags.length > 0) {
@@ -408,8 +448,6 @@ export function useLeadsBulkOps({
             });
           }
         }
-        const updateCount = allLeadsToAssign.length;
-
         // Update in batches
         const BATCH_SIZE = 50;
         let successCount = 0;

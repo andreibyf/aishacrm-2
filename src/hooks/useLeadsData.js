@@ -365,7 +365,23 @@ export function useLeadsData({
               { job_title: { $icontains: searchTerm } },
             ],
           };
-          currentFilter = { ...currentFilter, filter: JSON.stringify(searchFilter) };
+          // Merge with any existing JSON filter (e.g. unassigned scope from getTenantFilter)
+          const existingFilter = currentFilter.filter;
+          let mergedFilter = searchFilter;
+          if (existingFilter) {
+            try {
+              const parsed =
+                typeof existingFilter === 'string'
+                  ? JSON.parse(existingFilter)
+                  : existingFilter;
+              if (parsed && typeof parsed === 'object') {
+                mergedFilter = { $and: [parsed, searchFilter] };
+              }
+            } catch {
+              // parsing failed — fall through and use searchFilter alone
+            }
+          }
+          currentFilter = { ...currentFilter, filter: JSON.stringify(mergedFilter) };
         }
 
         if (selectedTags.length > 0) {
@@ -384,14 +400,16 @@ export function useLeadsData({
         };
 
         const sortString = sortDirection === 'desc' ? `-${sortField}` : sortField;
-        console.log(
-          '[Leads] loadLeads called with sortField:',
-          sortField,
-          'sortDirection:',
-          sortDirection,
-          'sortString:',
-          sortString,
-        );
+        if (import.meta?.env?.DEV) {
+          console.log(
+            '[Leads] loadLeads called with sortField:',
+            sortField,
+            'sortDirection:',
+            sortDirection,
+            'sortString:',
+            sortString,
+          );
+        }
 
         const response = await Lead.filter(currentFilter, sortString);
 
@@ -428,32 +446,34 @@ export function useLeadsData({
               : page * size + 1;
         }
 
-        console.log(
-          '[Leads] Loading page:',
-          page,
-          'size:',
-          size,
-          'ageFilter:',
-          ageFilter,
-          'fetchLimit:',
-          fetchLimit,
-          'fetchOffset:',
-          fetchOffset,
-          'filter:',
-          currentFilter,
-        );
-        console.log(
-          '[Leads] Fetched:',
-          response?.length,
-          'Server total:',
-          serverTotal,
-          'After age filter:',
-          allFilteredLeads?.length,
-          'Paginated:',
-          paginatedLeads?.length,
-          'Final total:',
-          estimatedTotal,
-        );
+        if (import.meta?.env?.DEV) {
+          console.log(
+            '[Leads] Loading page:',
+            page,
+            'size:',
+            size,
+            'ageFilter:',
+            ageFilter,
+            'fetchLimit:',
+            fetchLimit,
+            'fetchOffset:',
+            fetchOffset,
+            'filter:',
+            currentFilter,
+          );
+          console.log(
+            '[Leads] Fetched:',
+            response?.length,
+            'Server total:',
+            serverTotal,
+            'After age filter:',
+            allFilteredLeads?.length,
+            'Paginated:',
+            paginatedLeads?.length,
+            'Final total:',
+            estimatedTotal,
+          );
+        }
 
         setLeads(paginatedLeads);
         setTotalItems(estimatedTotal);

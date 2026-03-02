@@ -10,7 +10,6 @@ const LeadForm = lazy(() => import('../components/leads/LeadForm'));
 const LeadDetailPanel = lazy(() => import('../components/leads/LeadDetailPanel'));
 const LeadConversionDialog = lazy(() => import('../components/leads/LeadConversionDialog'));
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   Dialog,
   DialogContent,
@@ -19,25 +18,13 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
   AlertCircle,
-  Building2,
-  Edit,
   Eye,
   Grid,
   List,
   Loader2,
   Plus,
-  Search,
-  Trash2,
   Upload,
-  UserCheck,
   X,
 } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
@@ -46,7 +33,6 @@ const CsvImportDialog = lazy(() => import('../components/shared/CsvImportDialog'
 import { useTenant } from '../components/shared/tenantContext';
 import Pagination from '../components/shared/Pagination';
 import { toast } from 'sonner';
-import TagFilter from '../components/shared/TagFilter';
 import { useEmployeeScope } from '../components/shared/EmployeeScopeContext';
 import RefreshButton from '../components/shared/RefreshButton';
 import { useLoadingToast } from '@/hooks/useLoadingToast';
@@ -56,8 +42,6 @@ import BulkActionsMenu from '../components/leads/BulkActionsMenu';
 import LeadStatsCards from '../components/leads/LeadStatsCards';
 import LeadTable from '../components/leads/LeadTable';
 import LeadFilters from '../components/leads/LeadFilters';
-// Switch to internal profile page; stop using mintLeadLink
-import StatusHelper from '../components/shared/StatusHelper';
 import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
 import { useConfirmDialog } from '../components/shared/ConfirmDialog';
 import { useAiShaEvents } from '@/hooks/useAiShaEvents';
