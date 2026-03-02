@@ -141,6 +141,7 @@ export default function ActivitiesPage() {
     totalItems,
     buildFilter,
     searchTerm,
+    selectedTags,
     loadActivities,
     startProgress,
     updateProgress,
@@ -317,10 +318,10 @@ export default function ActivitiesPage() {
       if (!activity.due_date) return '—';
 
       try {
-        // Full ISO datetime with timezone offset
+        // Full ISO datetime with timezone offset or UTC Z suffix
         if (
           activity.due_date.includes('T') &&
-          (activity.due_date.includes('+') || activity.due_date.includes('-', 10))
+          (activity.due_date.includes('+') || activity.due_date.includes('-', 10) || activity.due_date.endsWith('Z'))
         ) {
           const parsedDate = new Date(activity.due_date);
           if (!isNaN(parsedDate.getTime())) {

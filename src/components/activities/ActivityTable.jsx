@@ -15,9 +15,11 @@ import { Edit, Eye, Trash2 } from 'lucide-react';
 const statusColors = {
   scheduled: 'bg-blue-900/20 text-blue-300 border-blue-700',
   in_progress: 'bg-yellow-900/20 text-yellow-300 border-yellow-700',
+  'in-progress': 'bg-yellow-900/20 text-yellow-300 border-yellow-700',
   overdue: 'bg-red-900/20 text-red-300 border-red-700',
   completed: 'bg-emerald-900/20 text-emerald-300 border-emerald-700',
   cancelled: 'bg-slate-900/20 text-slate-300 border-slate-700',
+  failed: 'bg-red-900/20 text-red-300 border-red-700',
 };
 
 const typeColors = {
@@ -28,6 +30,8 @@ const typeColors = {
   note: 'bg-slate-600 text-white',
   demo: 'bg-orange-600 text-white',
   proposal: 'bg-pink-600 text-white',
+  scheduled_ai_call: 'bg-indigo-600 text-white',
+  scheduled_ai_email: 'bg-purple-600 text-white',
 };
 
 /**

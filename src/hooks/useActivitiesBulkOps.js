@@ -22,6 +22,7 @@ export function useActivitiesBulkOps({
   totalItems,
   buildFilter,
   searchTerm,
+  selectedTags,
   loadActivities,
   startProgress,
   updateProgress,
@@ -38,6 +39,9 @@ export function useActivitiesBulkOps({
     let currentFilter = buildFilter();
     if (searchTerm) {
       currentFilter = { ...currentFilter, q: searchTerm.trim() };
+    }
+    if (selectedTags && selectedTags.length > 0) {
+      currentFilter = { ...currentFilter, tags: { $all: selectedTags } };
     }
     return currentFilter;
   };
