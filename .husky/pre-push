@@ -4,11 +4,13 @@
 # Runs before git push. Blocks push if anything fails.
 # Skip with: git push --no-verify
 # ============================================================
+# v4.9.2 — Vitest 4.x compat:
+#   - Replace --related <files> (removed in v4) with --changed origin/main
+#     (Vitest resolves affected tests itself; no file paths needed)
 # v4.9.1 — Security fix:
 #   - ESLint: use git diff -z | xargs -0 to avoid shell injection
 #     via filenames containing metacharacters
-#   - Vitest: use bash array for args so --related paths are never
-#     word-split or glob-expanded
+#   - Vitest: use bash array for args so paths are never word-split
 # v4.9.0 — Performance optimizations:
 #   - ESLint only lints files changed vs origin/main (fast)
 #   - Full lint fallback when >200 files changed (rare)
@@ -20,7 +22,7 @@ set -e
 
 echo ""
 echo "╔══════════════════════════════════════════════╗"
-echo "║        PRE-PUSH CHECKS (v4.9.1)             ║"
+echo "║        PRE-PUSH CHECKS (v4.9.2)             ║"
 echo "╚══════════════════════════════════════════════╝"
 echo ""
 
@@ -84,8 +86,8 @@ vitest_zero_failures() {
 CHANGED_SRC=$(git diff --name-only --diff-filter=d origin/main HEAD -- 'src/**/*.js' 'src/**/*.jsx' 'src/**/*.ts' 'src/**/*.tsx' 2>/dev/null || true)
 CHANGED_SRC_COUNT=$(echo "$CHANGED_SRC" | grep '[^[:space:]]' 2>/dev/null | wc -l | tr -d ' \t')
 
-# Build vitest args array: use --related for small changesets, full run for large ones
-# Using an array prevents word-splitting and glob-expansion of paths with metacharacters
+# Build vitest args array: use --changed for small changesets, full run for large ones
+# --changed origin/main lets Vitest resolve affected tests itself (no file paths needed)
 VITEST_ARGS=(run --pool=forks --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON")
 if [ "$CHANGED_SRC_COUNT" -eq 0 ]; then
   echo "   No frontend source files changed — skipping Vitest"
@@ -93,9 +95,7 @@ if [ "$CHANGED_SRC_COUNT" -eq 0 ]; then
   SKIP_VITEST=1
 elif [ "$CHANGED_SRC_COUNT" -le 50 ]; then
   echo "   Running tests related to $CHANGED_SRC_COUNT changed file(s)..."
-  # Read NUL-separated paths into an array so filenames are never word-split
-  mapfile -d '' CHANGED_SRC_ARRAY < <(git diff -z --name-only --diff-filter=d origin/main HEAD -- 'src/**/*.js' 'src/**/*.jsx' 'src/**/*.ts' 'src/**/*.tsx' 2>/dev/null || true)
-  VITEST_ARGS=(run --pool=forks --related "${CHANGED_SRC_ARRAY[@]}" --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON")
+  VITEST_ARGS=(run --pool=forks --changed origin/main --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON")
 else
   echo "   $CHANGED_SRC_COUNT files changed — running full test suite..."
 fi
