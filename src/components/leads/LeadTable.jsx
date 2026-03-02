@@ -154,19 +154,25 @@ export default function LeadTable({
                   </td>
                   <td className="px-4 py-3 text-base">
                     <div className="flex items-center gap-2">
-                      <span className="text-slate-300">{age}</span>
-                      {ageBucket && (
-                        <Badge
-                          className={`text-xs px-1.5 py-0 ${
-                            ageBucket.value === '0-7'
-                              ? 'bg-green-900/30 text-green-400 border-green-700'
-                              : ageBucket.value === '8-30'
-                                ? 'bg-yellow-900/30 text-yellow-400 border-yellow-700'
-                                : 'bg-red-900/30 text-red-400 border-red-700'
-                          }`}
-                        >
-                          {ageBucket.label}
-                        </Badge>
+                      {age < 0 ? (
+                        <span className="text-slate-500">—</span>
+                      ) : (
+                        <>
+                          <span className="text-slate-300">{age}</span>
+                          {ageBucket && (
+                            <Badge
+                              className={`text-xs px-1.5 py-0 ${
+                                ageBucket.value === '0-7'
+                                  ? 'bg-green-900/30 text-green-400 border-green-700'
+                                  : ['8-14', '15-21', '22-30'].includes(ageBucket.value)
+                                    ? 'bg-yellow-900/30 text-yellow-400 border-yellow-700'
+                                    : 'bg-red-900/30 text-red-400 border-red-700'
+                              }`}
+                            >
+                              {ageBucket.label}
+                            </Badge>
+                          )}
+                        </>
                       )}
                     </div>
                   </td>
@@ -180,7 +186,13 @@ export default function LeadTable({
                       return displayName;
                     })()}
                   </td>
-                  <td className="px-4 py-3">
+                  <td
+                    className="px-4 py-3 cursor-pointer"
+                    onClick={() => {
+                      setDetailLead(lead);
+                      setIsDetailOpen(true);
+                    }}
+                  >
                     <Badge
                       className={`text-xs ${
                         lead.status === 'new'
@@ -228,10 +240,7 @@ export default function LeadTable({
                               size="icon"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                const profileUrl = lead.metadata?.profile_url || lead.profile_url;
-                                if (profileUrl) {
-                                  window.open(profileUrl, '_blank', 'noopener,noreferrer');
-                                }
+                                window.open(`/leads/${lead.id}`, '_blank', 'noopener,noreferrer');
                               }}
                               className="h-8 w-8 text-slate-400 hover:text-blue-400"
                             >
@@ -239,7 +248,7 @@ export default function LeadTable({
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>Open web profile</p>
+                            <p>Open profile in new tab</p>
                           </TooltipContent>
                         </Tooltip>
                         <Tooltip>

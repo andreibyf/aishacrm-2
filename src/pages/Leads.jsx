@@ -51,14 +51,11 @@ import { useEmployeeScope } from '../components/shared/EmployeeScopeContext';
 import RefreshButton from '../components/shared/RefreshButton';
 import { useLoadingToast } from '@/hooks/useLoadingToast';
 import { useProgress } from '@/components/shared/ProgressOverlay';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import BulkActionsMenu from '../components/leads/BulkActionsMenu';
 import LeadStatsCards from '../components/leads/LeadStatsCards';
 import LeadTable from '../components/leads/LeadTable';
 import LeadFilters from '../components/leads/LeadFilters';
-import { Globe } from 'lucide-react';
 // Switch to internal profile page; stop using mintLeadLink
 import StatusHelper from '../components/shared/StatusHelper';
 import { useEntityLabel } from '@/components/shared/entityLabelsHooks';

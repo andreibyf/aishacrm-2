@@ -84,11 +84,24 @@ export function useLeadsData({
 
   // Helper function to calculate lead age
   const calculateLeadAge = useCallback((createdDate) => {
-    if (!createdDate) return 0;
-    const now = new Date();
+    // Return -1 for missing or invalid dates so they can be excluded from age buckets
+    if (!createdDate) return -1;
+
     const created = new Date(createdDate);
-    const diffTime = Math.abs(now - created);
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    if (Number.isNaN(created.getTime())) {
+      return -1;
+    }
+
+    const now = new Date();
+    const diffMs = now.getTime() - created.getTime();
+
+    // Treat future dates as invalid for age-bucket purposes
+    if (diffMs < 0) {
+      return -1;
+    }
+
+    const MS_PER_DAY = 1000 * 60 * 60 * 24;
+    return Math.floor(diffMs / MS_PER_DAY);
   }, []);
 
   // Build tenant/scope filter
@@ -205,7 +218,12 @@ export function useLeadsData({
     }
   }, [user, setDetailLead, setIsDetailOpen]);
 
-  // Load supporting data (accounts, users, employees) ONCE
+  // Reset supporting data loaded flag when tenant changes
+  useEffect(() => {
+    supportingDataLoaded.current = false;
+  }, [selectedTenantId]);
+
+  // Load supporting data (accounts, users, employees) ONCE per tenant
   useEffect(() => {
     if (supportingDataLoaded.current || !user) return;
 
@@ -225,7 +243,7 @@ export function useLeadsData({
           if (import.meta.env.DEV) {
             console.log('[Leads] Skipping data load - no tenant selected');
           }
-          supportingDataLoaded.current = true;
+          // Don't set loaded flag - allow retry when tenant is selected
           return;
         }
 
