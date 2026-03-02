@@ -1,0 +1,908 @@
+/* CRITICAL: Ensure proper viewport scaling */
+html {
+  font-size: 16px; /* Base font size */
+}
+
+@media (max-width: 640px) {
+  html {
+    font-size: 14px; /* Smaller base for mobile */
+  }
+}
+
+@media (min-width: 1920px) {
+  html {
+    font-size: 18px; /* Larger base for big screens */
+  }
+}
+
+/* RESPONSIVE: Ensure all containers can shrink/grow */
+* {
+  min-width: 0; /* Prevent flex items from overflowing */
+}
+
+/* ---------- CARD DEPTH ---------- */
+/* Add subtle depth to content cards for visual layering */
+.theme-dark main .bg-slate-800 {
+  box-shadow:
+    0 1px 3px 0 rgba(0, 0, 0, 0.25),
+    0 1px 2px -1px rgba(0, 0, 0, 0.2);
+}
+.theme-light main .bg-slate-800 {
+  box-shadow:
+    0 1px 3px 0 rgba(0, 0, 0, 0.06),
+    0 1px 2px -1px rgba(0, 0, 0, 0.04);
+}
+
+/* ---------- SPINNER COLOR STANDARDIZATION ---------- */
+/* Unify loading spinner color across all pages to match brand accent */
+.animate-spin[class*='text-blue-'] {
+  color: var(--primary-color, #06b6d4) !important;
+}
+.animate-spin[class*='text-purple-'] {
+  color: var(--primary-color, #06b6d4) !important;
+}
+
+/* ------------ WIDTH STANDARDIZATION (match Activities) ------------ */
+
+/* Enforce full-width content across pages (match Activities) */
+body [class*='max-w-'],
+body .mx-auto,
+body .container,
+main [class*='max-w-'],
+main .mx-auto,
+main .container,
+main .overflow-x-auto {
+  max-width: 100% !important;
+  width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* Primary cards/blank states should span full width */
+main .bg-slate-800.border-slate-700.rounded-lg,
+main .bg-slate-800.rounded-lg.border {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+@media (min-width: 1024px) {
+  main .bg-slate-800.border-slate-700.rounded-lg,
+  main .bg-slate-800.rounded-lg.border {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+}
+
+/* AGGRESSIVE EMPTY STATE FULL WIDTH FIX */
+/* Target all empty state cards specifically */
+main > div > div.space-y-6,
+main > div > div.space-y-6 > div {
+  max-width: 100% !important;
+  width: 100% !important;
+}
+
+/* Force empty state cards to full width */
+main .space-y-6 > .bg-slate-800.border-slate-700 {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* Specific override for cards with min-h-[600px] (empty states) */
+main [class*='min-h-'] {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+/* Remove any flexbox constraints that might shrink cards */
+main .space-y-6 {
+  display: block !important;
+}
+
+/* RESPONSIVE: Scale padding based on screen size */
+@media (max-width: 640px) {
+  main {
+    padding: 0.75rem !important; /* Reduce padding on mobile */
+  }
+
+  .bg-slate-800.rounded-lg {
+    padding: 0.75rem !important;
+  }
+}
+
+@media (min-width: 1920px) {
+  main {
+    padding: 2rem !important; /* More breathing room on large screens */
+  }
+}
+
+/* RESPONSIVE: Tables should scroll horizontally on small screens */
+@media (max-width: 1024px) {
+  table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+}
+
+/* RESPONSIVE: Grid layouts should stack on mobile */
+@media (max-width: 640px) {
+  .grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* RESPONSIVE: Font sizes scale with screen */
+@media (max-width: 640px) {
+  h1,
+  .text-3xl {
+    font-size: 1.5rem !important;
+  }
+  h2,
+  .text-2xl {
+    font-size: 1.25rem !important;
+  }
+  h3,
+  .text-xl {
+    font-size: 1.125rem !important;
+  }
+}
+
+@media (min-width: 1920px) {
+  h1,
+  .text-3xl {
+    font-size: 2.5rem !important;
+  }
+  h2,
+  .text-2xl {
+    font-size: 2rem !important;
+  }
+}
+
+/* Dark theme scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #475569 #1e293b;
+}
+
+/* Webkit scrollbars (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1e293b;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 4px;
+  border: 1px solid #334155;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: #94a3b8;
+}
+
+::-webkit-scrollbar-corner {
+  background: #1e293b;
+}
+
+/* Additional scrollbar styling for specific containers */
+.overflow-y-auto::-webkit-scrollbar,
+.overflow-x-auto::-webkit-scrollbar,
+.overflow-auto::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+/* Hover effects for scrollable areas */
+.overflow-y-auto:hover::-webkit-scrollbar-thumb,
+.overflow-x-auto:hover::-webkit-scrollbar-thumb,
+.overflow-auto:hover::-webkit-scrollbar-thumb {
+  background: #64748b;
+}
+
+/* Global override for documentation text color */
+.prose {
+  color: #cbd5e1;
+}
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4,
+.prose h5,
+.prose h6 {
+  color: #f1f5f9;
+}
+.prose p,
+.prose ul,
+.prose ol,
+.prose li,
+.prose blockquote {
+  color: #cbd5e1;
+}
+.prose strong {
+  color: #e2e8f0;
+}
+.prose a {
+  color: #60a5fa;
+}
+.prose code {
+  color: #f472b6;
+}
+.prose a:hover {
+  color: #93c5fd;
+}
+
+/* Translucent chatbox utility classes */
+.chatbox-translucent-bg {
+  background-color: var(--chatbox-bg) !important;
+  backdrop-filter: saturate(120%) blur(8px);
+}
+.chatbox-translucent-border {
+  border-color: var(--chatbox-border) !important;
+}
+/* Ensure translucency works in both themes by out-specifying theme-light bg overrides */
+.theme-light .chatbox-translucent-bg {
+  background-color: rgba(255, 255, 255, 0) !important; /* fully transparent in light theme */
+  backdrop-filter: saturate(120%) blur(8px);
+}
+.theme-light .chatbox-translucent-border {
+  border-color: var(--chatbox-border) !important;
+}
+
+/* User avatar white border in dark theme */
+.theme-dark header img[alt*='avatar' i],
+.theme-dark header img[src*='avatar' i],
+.theme-dark header .w-8.h-8.rounded-full,
+.theme-dark header button img {
+  border: 2px solid #ffffff !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Specifically target the user avatar div with initials in header */
+.theme-dark header button .w-8.h-8.bg-slate-200.rounded-full {
+  border: 2px solid #ffffff !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Sidebar avatar border - white in dark theme, dark in light theme */
+.theme-dark .sidebar-avatar-border {
+  border: 2px solid #ffffff !important;
+}
+
+.theme-light .sidebar-avatar-border {
+  border: 2px solid #0f172a !important;
+}
+
+/* THEME LIGHT OVERRIDES */
+.theme-light {
+  --chatbox-bg: rgba(255, 255, 255, 0) !important; /* fully transparent in light theme */
+  --chatbox-border: rgba(226, 232, 240, 0.75); /* slate-200 @ 75% */
+}
+
+/* BUTTONS - Make blue buttons MUCH more visible in light theme */
+.theme-light .bg-blue-600,
+.theme-light button.bg-blue-600,
+.theme-light a.bg-blue-600,
+.theme-light [role='button'].bg-blue-600,
+.theme-light [class*='bg-blue-600'] {
+  background-color: #1e40af !important; /* blue-800 - very dark */
+  color: #ffffff !important;
+  border: 1px solid #1e3a8a !important; /* blue-900 border */
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.2) !important;
+}
+.theme-light .bg-blue-600:hover,
+.theme-light button.bg-blue-600:hover,
+.theme-light a.bg-blue-600:hover,
+.theme-light [role='button'].bg-blue-600:hover,
+.theme-light [class*='bg-blue-600']:hover {
+  background-color: #1e3a8a !important; /* blue-900 - even darker on hover */
+  box-shadow: 0 2px 4px 0 rgb(0 0 0 / 0.3) !important;
+}
+.theme-light .hover\\:bg-blue-700:hover,
+.theme-light .bg-blue-700 {
+  background-color: #1e3a8a !important; /* blue-900 */
+}
+
+/* Action icon buttons - make them MUCH more visible in light theme */
+.theme-light .text-slate-400,
+.theme-light button.text-slate-400,
+.theme-light [class*='text-slate-400'] {
+  color: #64748b !important; /* slate-500 - darker gray */
+}
+.theme-light .hover\\:text-slate-300:hover,
+.theme-light button:hover.hover\\:text-slate-300,
+.theme-light [class*='hover:text-slate-300']:hover {
+  color: #1e40af !important; /* blue-800 - dark blue on hover */
+}
+.theme-light .hover\\:bg-slate-700:hover,
+.theme-light button:hover.hover\\:bg-slate-700,
+.theme-light [class*='hover:bg-slate-700']:hover {
+  background-color: #e2e8f0 !important; /* slate-200 - light gray background */
+}
+
+.theme-light .bg-slate-900 {
+  background-color: #ffffff !important;
+} /* page bg - pure white */
+.theme-light .bg-slate-800 {
+  background-color: #ffffff !important;
+} /* cards/dialogs */
+.theme-light .bg-slate-700 {
+  background-color: #f8fafc !important;
+} /* slate-50 - very light */
+.theme-light [class*='bg-slate-700/'] {
+  background-color: rgba(241, 245, 249, 0.6) !important;
+}
+.theme-light .border-slate-800 {
+  border-color: #e2e8f0 !important;
+}
+.theme-light .border-slate-700 {
+  border-color: #e5e7eb !important;
+}
+.theme-light .border-green-700 {
+  border-color: #86efac !important;
+} /* green-300 */
+.theme-light .border-blue-700 {
+  border-color: #93c5fd !important;
+} /* blue-300 */
+.theme-light .border-emerald-700 {
+  border-color: #6ee7b7 !important;
+} /* emerald-300 */
+
+/* Stat card backgrounds - keep semi-transparent appearance but adjust for light theme */
+.theme-light .bg-green-900\\/20 {
+  background-color: #d1fae5 !important;
+} /* green-200 */
+.theme-light .bg-blue-900\\/20 {
+  background-color: #dbeafe !important;
+} /* blue-200 */
+.theme-light .bg-emerald-900\\/20 {
+  background-color: #d1fae5 !important;
+} /* emerald-200 */
+.theme-light .bg-slate-900\\/20 {
+  background-color: #e2e8f0 !important;
+} /* slate-200 */
+
+/* Ensure strong contrast for text across themes */
+.theme-light .text-slate-100,
+.theme-light .text-slate-200,
+.theme-light .text-slate-300 {
+  color: #0f172a !important;
+}
+.theme-light .text-slate-400 {
+  color: #1f2937 !important;
+}
+.theme-light .text-slate-500 {
+  color: #374151 !important;
+}
+
+/* Active item contrast on primary/accent backgrounds */
+.theme-light .text-on-primary,
+.theme-dark .text-on-primary {
+  color: var(--on-primary-text) !important;
+}
+.theme-light .text-on-accent,
+.theme-dark .text-on-accent {
+  color: var(--on-accent-text) !important;
+}
+
+.theme-light .hover\\:bg-slate-800:hover {
+  background-color: #f1f5f9 !important;
+}
+.theme-light .hover\\:text-slate-300:hover {
+  color: #111827 !important;
+}
+.theme-light .shadow-lg {
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.08),
+    0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* GLOBAL: Improve light theme contrast */
+.theme-light .text-slate-100,
+.theme-light .text-slate-200,
+.theme-light .text-slate-300 {
+  color: #0f172a !important;
+} /* slate-900 */
+.theme-light .text-slate-400 {
+  color: #1f2937 !important;
+} /* slate-800 */
+.theme-light .text-slate-500 {
+  color: #374151 !important;
+} /* slate-700 */
+
+/* Lighten dark-tinted utility backgrounds app-wide in light theme */
+.theme-light .bg-slate-700\\/50,
+.theme-light .bg-slate-800\\/50,
+.theme-light .bg-slate-700 {
+  background-color: #f8fafc !important;
+} /* slate-50 */
+.theme-light .border-slate-700,
+.theme-light .border-slate-600 {
+  border-color: #e5e7eb !important;
+} /* slate-200 */
+
+/* NEW: Ensure any slate-900 and slate-800 tints are light in light theme (fixes Calendar dark squares) */
+.theme-light [class*='bg-slate-900/'] {
+  background-color: #f1f5f9 !important;
+} /* slate-100 */
+.theme-light [class*='bg-slate-800/'] {
+  background-color: #f1f5f9 !important;
+} /* slate-100 */
+
+/* Alerts: ensure readable text in light mode */
+.theme-light [role='alert'] {
+  color: #0f172a !important;
+}
+.theme-light [role='alert'] a {
+  color: #1d4ed8 !important;
+}
+
+/* CRITICAL FIX: Force all badge text to be visible in light theme */
+.theme-light .badge,
+.theme-light [class*='badge'],
+.theme-light [role='status'],
+.theme-light .contrast-badge {
+  font-weight: 900 !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* AGGRESSIVE: Force dark text on light-background badges ONLY (not stat cards) */
+.theme-light .badge.bg-blue-900\\/20,
+.theme-light .badge.bg-blue-300,
+.theme-light .badge.bg-indigo-900\\/20,
+.theme-light .badge.bg-indigo-300,
+.theme-light .badge.bg-purple-900\\/20,
+.theme-light .badge.bg-purple-300,
+.theme-light .badge[class*='bg-blue'],
+.theme-light .badge[class*='bg-indigo'],
+.theme-light .badge[class*='bg-purple'] {
+  color: #1e40af !important; /* blue-800 - dark enough to read on light backgrounds */
+}
+
+.theme-light .badge.bg-green-900\\/20,
+.theme-light .badge.bg-green-300,
+.theme-light .badge.bg-emerald-900\\/20,
+.theme-light .badge.bg-emerald-300,
+.theme-light .badge[class*='bg-green'],
+.theme-light .badge[class*='bg-emerald'] {
+  color: #065f46 !important; /* green-800 */
+}
+
+.theme-light .badge.bg-yellow-900\\/20,
+.theme-light .badge.bg-yellow-300,
+.theme-light .badge.bg-amber-900\\/20,
+.theme-light .badge.bg-amber-300,
+.theme-light .badge[class*='bg-yellow'],
+.theme-light .badge[class*='bg-amber'] {
+  color: #92400e !important; /* amber-800 */
+}
+
+.theme-light .badge.bg-red-900\\/20,
+.theme-light .badge.bg-red-300,
+.theme-light .badge[class*='bg-red'] {
+  color: #991b1b !important; /* red-800 */
+}
+
+.theme-light .badge.bg-slate-900\\/20,
+.theme-light .badge.bg-slate-300,
+.theme-light .badge[class*='bg-slate'] {
+  color: #1e293b !important; /* slate-800 */
+}
+
+/* Status badges - specific targeting with bright colors */
+.theme-light .contrast-badge[data-variant='status'][data-status='completed'] {
+  background-color: #a7f3d0 !important; /* green-300 */
+  color: #059669 !important; /* green-600 - bright green */
+  border-color: #34d399 !important; /* green-400 */
+}
+.theme-light .contrast-badge[data-variant='status'][data-status='scheduled'] {
+  background-color: #bfdbfe !important; /* blue-300 */
+  color: #2563eb !important; /* blue-600 - bright blue */
+  border-color: #60a5fa !important; /* blue-400 */
+}
+.theme-light .contrast-badge[data-variant='status'][data-status='overdue'] {
+  background-color: #fde68a !important; /* amber-300 */
+  color: #d97706 !important; /* amber-600 - bright amber */
+  border-color: #fbbf24 !important; /* amber-400 */
+}
+.theme-light .contrast-badge[data-variant='status'][data-status='in-progress'],
+.theme-light .contrast-badge[data-variant='status'][data-status='in_progress'] {
+  background-color: #fef08a !important; /* yellow-300 */
+  color: #ca8a04 !important; /* yellow-600 - bright yellow */
+  border-color: #facc15 !important; /* yellow-400 */
+}
+.theme-light .contrast-badge[data-variant='status'][data-status='cancelled'],
+.theme-light .contrast-badge[data-variant='status'][data-status='failed'] {
+  background-color: #fca5a5 !important; /* red-300 */
+  color: #dc2626 !important; /* red-600 - bright red */
+  border-color: #f87171 !important; /* red-400 */
+}
+
+/* Lead status badges - bright colors */
+.theme-light .contrast-badge[data-variant='status'][data-status='new'] {
+  background-color: #bfdbfe !important; /* blue-300 */
+  color: #2563eb !important; /* blue-600 - bright blue */
+  border-color: #60a5fa !important; /* blue-400 */
+}
+.theme-light .contrast-badge[data-variant='status'][data-status='contacted'] {
+  background-color: #c7d2fe !important; /* indigo-300 */
+  color: #4f46e5 !important; /* indigo-600 - bright indigo */
+  border-color: #818cf8 !important; /* indigo-400 */
+}
+.theme-light .contrast-badge[data-variant='status'][data-status='qualified'],
+.theme-light .contrast-badge[data-variant='status'][data-status='qualification'] {
+  background-color: #a7f3d0 !important; /* green-300 */
+  color: #059669 !important; /* green-600 - bright green */
+  border-color: #34d399 !important; /* green-400 */
+}
+.theme-light .contrast-badge[data-variant='status'][data-status='unqualified'] {
+  background-color: #fde68a !important; /* amber-300 */
+  color: #d97706 !important; /* amber-600 - bright amber */
+  border-color: #fbbf24 !important; /* amber-400 */
+}
+.theme-light .contrast-badge[data-variant='status'][data-status='converted'] {
+  background-color: #a7f3d0 !important; /* green-300 */
+  color: #059669 !important; /* green-600 - bright green */
+  border-color: #34d399 !important; /* green-400 */
+}
+.theme-light .contrast-badge[data-variant='status'][data-status='lost'] {
+  background-color: #fca5a5 !important; /* red-300 */
+  color: #dc2626 !important; /* red-600 - bright red */
+  border-color: #f87171 !important; /* red-400 */
+}
+
+/* Opportunity stages */
+.theme-light .contrast-badge[data-variant='status'][data-status='prospecting'] {
+  background-color: #bfdbfe !important; /* blue-300 */
+  color: #2563eb !important; /* blue-600 */
+  border-color: #60a5fa !important; /* blue-400 */
+}
+.theme-light .contrast-badge[data-variant='status'][data-status='proposal'] {
+  background-color: #c7d2fe !important; /* indigo-300 */
+  color: #4f46e5 !important; /* indigo-600 */
+  border-color: #818cf8 !important; /* indigo-400 */
+}
+.theme-light .contrast-badge[data-variant='status'][data-status='negotiation'] {
+  background-color: #fef08a !important; /* yellow-300 */
+  color: #ca8a04 !important; /* yellow-600 */
+  border-color: #facc15 !important; /* yellow-400 */
+}
+.theme-light .contrast-badge[data-variant='status'][data-status='closed_won'] {
+  background-color: #a7f3d0 !important; /* green-300 */
+  color: #059669 !important; /* green-600 */
+  border-color: #34d399 !important; /* green-400 */
+}
+.theme-light .contrast-badge[data-variant='status'][data-status='closed_lost'] {
+  background-color: #fca5a5 !important; /* red-300 */
+  color: #dc2626 !important; /* red-600 */
+  border-color: #f87171 !important; /* red-400 */
+}
+
+/* Priority badges - bright colors */
+.theme-light .contrast-badge[data-variant='priority'][data-priority='urgent'] {
+  background-color: #fda4af !important; /* rose-300 */
+  color: #f43f5e !important; /* rose-500 - bright rose */
+  border-color: #fb7185 !important; /* rose-400 */
+}
+.theme-light .contrast-badge[data-variant='priority'][data-priority='high'] {
+  background-color: #fca5a5 !important; /* red-300 */
+  color: #ef4444 !important; /* red-500 - bright red */
+  border-color: #f87171 !important; /* red-400 */
+}
+.theme-light .contrast-badge[data-variant='priority'][data-priority='medium'] {
+  background-color: #fdba74 !important; /* orange-300 */
+  color: #ea580c !important; /* orange-600 - bright orange */
+  border-color: #fb923c !important; /* orange-400 */
+}
+.theme-light .contrast-badge[data-variant='priority'][data-priority='low'],
+.theme-light .contrast-badge[data-variant='priority'][data-priority='normal'] {
+  background-color: #7dd3fc !important; /* sky-300 */
+  color: #0284c7 !important; /* sky-600 - bright sky */
+  border-color: #38bdf8 !important; /* sky-400 */
+}
+
+/* Account types - bright colors */
+.theme-light .contrast-badge[data-variant='status'][data-status='prospect'] {
+  background-color: #bfdbfe !important; /* blue-300 */
+  color: #2563eb !important; /* blue-600 */
+  border-color: #60a5fa !important; /* blue-400 */
+}
+.theme-light .contrast-badge[data-variant='status'][data-status='customer'] {
+  background-color: #a7f3d0 !important; /* green-300 */
+  color: #059669 !important; /* green-600 */
+  border-color: #34d399 !important; /* green-400 */
+}
+.theme-light .contrast-badge[data-variant='status'][data-status='partner'] {
+  background-color: #e9d5ff !important; /* purple-300 */
+  color: #9333ea !important; /* purple-600 */
+  border-color: #c084fc !important; /* purple-400 */
+}
+.theme-light .contrast-badge[data-variant='status'][data-status='competitor'] {
+  background-color: #fca5a5 !important; /* red-300 */
+  color: #dc2626 !important; /* red-600 */
+  border-color: #f87171 !important; /* red-400 */
+}
+.theme-light .contrast-badge[data-variant='status'][data-status='vendor'] {
+  background-color: #fde68a !important; /* amber-300 */
+  color: #d97706 !important; /* amber-600 */
+  border-color: #fbbf24 !important; /* amber-400 */
+}
+.theme-light .contrast-badge[data-variant='status'][data-status='inactive'] {
+  background-color: #e2e8f0 !important; /* slate-300 */
+  color: #475569 !important; /* slate-600 */
+  border-color: #cbd5e1 !important; /* slate-400 */
+}
+
+/* Contact statuses - bright colors */
+.theme-light .contrast-badge[data-variant='status'][data-status='active'] {
+  background-color: #a7f3d0 !important; /* green-300 */
+  color: #059669 !important; /* green-600 */
+  border-color: #34d399 !important; /* green-400 */
+}
+
+/* Activities Scheduled badge theme-specific colors */
+.theme-light .scheduled-badge {
+  color: white !important;
+}
+
+.theme-dark .scheduled-badge {
+  color: black !important;
+}
+
+/* Tabs active contrast already handled above */
+/* Prose in light mode */
+.theme-light .prose {
+  color: #1f2937;
+}
+.theme-light .prose h1,
+.theme-light .prose h2,
+.theme-light .prose h3,
+.theme-light .prose h4 {
+  color: #0f172a;
+}
+.theme-light .prose strong {
+  color: #111827;
+}
+.theme-light .prose a {
+  color: #2563eb;
+}
+.theme-light .prose code {
+  color: #db2777;
+}
+
+/* NEW: Force documentation to dark text in light theme even if 'prose-invert' is present */
+/* Exception: Skip user messages in AiSHA chat which need white text on indigo background */
+.theme-light .prose.prose-invert:not(.aisha-user-message *),
+.theme-light .prose.prose-invert p:not(.aisha-user-message *),
+.theme-light .prose.prose-invert li:not(.aisha-user-message *),
+.theme-light .prose.prose-invert ins:not(.aisha-user-message *),
+.theme-light .prose.prose-invert del:not(.aisha-user-message *),
+.theme-light .prose.prose-invert ol:not(.aisha-user-message *),
+.theme-light .prose.prose-invert ul:not(.aisha-user-message *),
+.theme-light .prose.prose-invert blockquote:not(.aisha-user-message *) {
+  color: #1f2937 !important; /* slate-800/700 */
+}
+/* AiSHA user messages MUST be white on indigo background */
+.theme-light .aisha-user-message .prose.prose-invert,
+.theme-light .aisha-user-message .prose.prose-invert p,
+.theme-light .aisha-user-message .prose.prose-invert li,
+.theme-light .aisha-user-message .prose.prose-invert ol,
+.theme-light .aisha-user-message .prose.prose-invert ul,
+.theme-light .aisha-user-message .prose.prose-invert strong {
+  color: #ffffff !important;
+}
+.theme-light .prose.prose-invert h1:not(.aisha-user-message *),
+.theme-light .prose.prose-invert h2:not(.aisha-user-message *),
+.theme-light .prose.prose-invert h3:not(.aisha-user-message *),
+.theme-light .prose.prose-invert h4:not(.aisha-user-message *),
+.theme-light .prose.prose-invert h5:not(.aisha-user-message *),
+.theme-light .prose.prose-invert h6:not(.aisha-user-message *) {
+  color: #0f172a !important; /* slate-900 */
+}
+.theme-light .prose.prose-invert a {
+  color: #2563eb !important;
+}
+.theme-light .prose.prose-invert code {
+  color: #db2777 !important;
+}
+
+/* Light theme scrollbars */
+.theme-light * {
+  scrollbar-color: #94a3b8 #e5e7eb;
+}
+.theme-light ::-webkit-scrollbar-track {
+  background: #e5e7eb;
+}
+.theme-light ::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border: 1px solid #cbd5e1;
+}
+.theme-light ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* NEW: High-contrast active filter/tab highlights in light theme using tenant branding */
+.theme-light [role='tab'][data-state='active'] {
+  background-color: var(--primary-color) !important;
+  color: var(--on-primary-text) !important;
+  border-color: var(--primary-color) !important;
+}
+.theme-light [role='tab'][data-state='active'] svg {
+  color: var(--on-primary-text) !important;
+  stroke: var(--on-primary-text) !important;
+}
+
+/* BRAND MAPPINGS — scope to the app root to avoid global button highlight issues */
+/* Previously these were applied globally to .brand-scope and bled into header chips.
+   Now we scope strictly to elements inside the main content area. */
+
+/* Focus rings on interactive controls inside main content */
+.brand-scope main :is(button, a, [role='button'], input, select, textarea):focus,
+.brand-scope main :is(button, a, [role='button'], input, select, textarea):focus-visible {
+  --tw-ring-color: var(--accent-color) !important;
+  outline-color: var(--accent-color) !important;
+}
+
+/* Active/pressed state (Radix data-state=on) — only in main content */
+.brand-scope main :is(button, [role='tab'], [role='switch'], [role='button'])[data-state='on'] {
+  background-color: var(--accent-color) !important;
+  color: var(--on-accent-text) !important;
+  border-color: color-mix(in srgb, var(--accent-color) 60%, transparent) !important;
+}
+.brand-scope
+  main
+  :is(button, [role='tab'], [role='switch'], [role='button'])[data-state='on']:hover {
+  background-color: color-mix(in srgb, var(--accent-color) 85%, black 15%) !important;
+}
+
+/* Map common primary button utility classes only within main content */
+.brand-scope main .bg-blue-600,
+.brand-scope main .bg-indigo-600 {
+  background-color: var(--accent-color) !important;
+  color: var(--on-accent-text) !important;
+}
+.brand-scope main .hover\\:bg-blue-700:hover,
+.brand-scope main .hover\\:bg-indigo-700:hover {
+  background-color: color-mix(in srgb, var(--accent-color) 85%, black 15%) !important;
+}
+
+/* Limit blue text/link remapping to body content (avoid header chips) */
+.brand-scope main .text-blue-400,
+.brand-scope main .text-blue-500,
+.brand-scope main .text-blue-600,
+.brand-scope main .text-blue-700 {
+  color: var(--primary-color) !important;
+}
+.brand-scope main .hover\\:text-blue-500:hover,
+.brand-scope main .hover\\:text-blue-600:hover,
+.brand-scope main .hover\\:text-blue-700:hover {
+  color: color-mix(in srgb, var(--primary-color) 85%, black 15%) !important;
+}
+.brand-scope main .border-blue-400,
+.brand-scope main .border-blue-500,
+.brand-scope main .border-blue-600,
+.brand-scope main .border-blue-700 {
+  border-color: var(--primary-color) !important;
+}
+
+/* Tabs active styling (filters etc.) — only in main content */
+.brand-scope main [role='tab'][data-state='active'],
+.brand-scope main [role='tab'][data-state='on'] {
+  background-color: var(--accent-color) !important;
+  color: var(--on-accent-text) !important;
+  border-color: var(--accent-color) !important;
+}
+.brand-scope main [role='tab'][data-state='active'] svg,
+.brand-scope main [role='tab'][data-state='on'] svg {
+  color: var(--on-accent-text) !important;
+  stroke: var(--on-accent-text) !important;
+}
+
+/* Keep phone/email link colorization (content only) */
+.brand-scope main a[href^='mailto:'],
+.brand-scope main a[href^='tel:'],
+.brand-scope main .crm-contact-link {
+  color: #2563eb !important; /* blue-600 */
+}
+.brand-scope main a[href^='mailto:']:hover,
+.brand-scope main a[href^='tel:']:hover,
+.brand-scope main .crm-contact-link:hover {
+  color: #1d4ed8 !important; /* blue-700 */
+  text-decoration: underline !important;
+}
+
+/* LIGHT THEME: AI Market Insights Card - Force light background and dark text */
+.theme-light [class*='AIMarketInsights'] .bg-slate-800,
+.theme-light .bg-slate-800.border-slate-700 {
+  background-color: #ffffff !important;
+}
+
+.theme-light .bg-slate-700\\/50 {
+  background-color: #f8fafc !important; /* slate-50 for header */
+}
+
+.theme-light .border-slate-700,
+.theme-light .border-slate-600 {
+  border-color: #e2e8f0 !important; /* slate-200 */
+}
+
+.theme-light .text-slate-100,
+.theme-light .text-slate-200,
+.theme-light .text-slate-300 {
+  color: #0f172a !important; /* slate-900 for dark text */
+}
+
+.theme-light .text-slate-400 {
+  color: #475569 !important; /* slate-600 */
+}
+/* Avatar launcher offset: move it away from the phone widget on the far right */
+#ai-avatar-launcher {
+  right: 96px !important; /* was 168px */
+  bottom: 16px !important;
+}
+
+/* On small screens, keep it near the edge to preserve space */
+@media (max-width: 640px) {
+  #ai-avatar-launcher {
+    right: 16px !important;
+  }
+}
+/* Lighten green alert backgrounds for better text readability - LIGHT THEME ONLY */
+.theme-light .bg-green-900\\/20,
+.theme-light .bg-green-900\\/30 {
+  background-color: rgb(240 253 244) !important; /* green-50 */
+}
+
+/* Lighten blue alert backgrounds for better text readability - LIGHT THEME ONLY */
+.theme-light .bg-blue-900\\/20,
+.theme-light .bg-blue-900\\/30 {
+  background-color: rgb(239 246 255) !important; /* blue-50 */
+}
+
+/* Lighten yellow/amber alert backgrounds - LIGHT THEME ONLY */
+.theme-light .bg-yellow-900\\/20,
+.theme-light .bg-yellow-900\\/30,
+.theme-light .bg-amber-900\\/20,
+.theme-light .bg-amber-900\\/30 {
+  background-color: rgb(254 252 232) !important; /* yellow-50 */
+}
+
+/* Lighten red alert backgrounds - LIGHT THEME ONLY */
+.theme-light .bg-red-900\\/20,
+.theme-light .bg-red-900\\/30 {
+  background-color: rgb(254 242 242) !important; /* red-50 */
+}
+
+/* Ensure text in these alerts is dark enough - LIGHT THEME ONLY */
+.theme-light [class*='bg-green-900'] .text-green-300,
+.theme-light [class*='bg-blue-900'] .text-blue-300,
+.theme-light [class*='bg-yellow-900'] .text-yellow-300,
+.theme-light [class*='bg-amber-900'] .text-amber-300,
+.theme-light [class*='bg-red-900'] .text-red-300 {
+  color: rgb(21 128 61) !important; /* green-700 for green alerts */
+}
+
+.theme-light [class*='bg-blue-900'] .text-blue-300 {
+  color: rgb(29 78 216) !important; /* blue-700 */
+}
+
+.theme-light [class*='bg-yellow-900'] .text-yellow-300,
+.theme-light [class*='bg-amber-900'] .text-amber-300 {
+  color: rgb(161 98 7) !important; /* yellow-700 */
+}
+
+.theme-light [class*='bg-red-900'] .text-red-300 {
+  color: rgb(185 28 28) !important; /* red-700 */
+}

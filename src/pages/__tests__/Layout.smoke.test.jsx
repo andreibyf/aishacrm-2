@@ -373,37 +373,43 @@ describe('Phase 2: Permissions', () => {
     });
   });
 
-  // ── Uncomment after Phase 2 extraction ──
-  // import { isSuperAdmin, isAdminOrSuperAdmin, hasPageAccess, getDefaultNavigationPermissions } from '@/utils/permissions';
-  //
-  // it('isSuperAdmin identifies superadmin correctly', () => {
-  //   expect(isSuperAdmin({ role: 'superadmin' })).toBe(true);
-  //   expect(isSuperAdmin({ is_superadmin: true, role: 'admin' })).toBe(true);
-  //   expect(isSuperAdmin({ role: 'admin' })).toBe(false);
-  //   expect(isSuperAdmin({ role: 'employee' })).toBe(false);
-  // });
-  //
-  // it('isAdminOrSuperAdmin identifies correctly', () => {
-  //   expect(isAdminOrSuperAdmin({ role: 'admin' })).toBe(true);
-  //   expect(isAdminOrSuperAdmin({ role: 'superadmin' })).toBe(true);
-  //   expect(isAdminOrSuperAdmin({ role: 'employee' })).toBe(false);
-  // });
-  //
-  // it('hasPageAccess blocks employee from admin pages', () => {
-  //   const emp = { role: 'employee', email: 'e@test.com', crm_access: true, navigation_permissions: null };
-  //   expect(hasPageAccess(emp, 'AdminSettings', 'tenant-1', [])).toBe(false);
-  //   expect(hasPageAccess(emp, 'Dashboard', 'tenant-1', [])).toBe(true);
-  // });
-  //
-  // it('getDefaultNavigationPermissions returns correct defaults', () => {
-  //   const adminPerms = getDefaultNavigationPermissions('admin');
-  //   expect(adminPerms.Dashboard).toBe(true);
-  //   expect(adminPerms.AdminSettings).toBe(true);
-  //
-  //   const empPerms = getDefaultNavigationPermissions('employee');
-  //   expect(empPerms.Dashboard).toBe(true);
-  //   expect(empPerms.AdminSettings).toBeUndefined();
-  // });
+  it('isSuperAdmin identifies superadmin correctly', async () => {
+    const { isSuperAdmin } = await import('@/utils/permissions');
+    expect(isSuperAdmin({ role: 'superadmin' })).toBe(true);
+    expect(isSuperAdmin({ is_superadmin: true, role: 'admin' })).toBe(true);
+    expect(isSuperAdmin({ role: 'admin' })).toBe(false);
+    expect(isSuperAdmin({ role: 'employee' })).toBe(false);
+  });
+
+  it('isAdminOrSuperAdmin identifies correctly', async () => {
+    const { isAdminOrSuperAdmin } = await import('@/utils/permissions');
+    expect(isAdminOrSuperAdmin({ role: 'admin' })).toBe(true);
+    expect(isAdminOrSuperAdmin({ role: 'superadmin' })).toBe(true);
+    expect(isAdminOrSuperAdmin({ role: 'employee' })).toBe(false);
+  });
+
+  it('hasPageAccess blocks employee from admin pages', async () => {
+    const { hasPageAccess } = await import('@/utils/permissions');
+    const emp = {
+      role: 'employee',
+      email: 'e@test.com',
+      crm_access: true,
+      navigation_permissions: null,
+    };
+    expect(hasPageAccess(emp, 'AdminSettings', 'tenant-1', [])).toBe(false);
+    expect(hasPageAccess(emp, 'Dashboard', 'tenant-1', [])).toBe(true);
+  });
+
+  it('getDefaultNavigationPermissions returns correct defaults', async () => {
+    const { getDefaultNavigationPermissions } = await import('@/utils/permissions');
+    const adminPerms = getDefaultNavigationPermissions('admin');
+    expect(adminPerms.Dashboard).toBe(true);
+    expect(adminPerms.Tenants).toBe(true);
+
+    const empPerms = getDefaultNavigationPermissions('employee');
+    expect(empPerms.Dashboard).toBe(true);
+    expect(empPerms.Tenants).toBe(false);
+  });
 });
 
 // ─── PHASE 3: SidebarContent renders ─────────────────────────────────────────
