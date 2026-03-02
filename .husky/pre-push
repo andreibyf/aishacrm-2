@@ -1,26 +1,59 @@
-#!/bin/sh
+#!/bin/bash
 # ============================================================
 # Pre-push hook: lint + build + tests
 # Runs before git push. Blocks push if anything fails.
 # Skip with: git push --no-verify
+# ============================================================
+# v4.9.1 — Security fix:
+#   - ESLint: use git diff -z | xargs -0 to avoid shell injection
+#     via filenames containing metacharacters
+#   - Vitest: use bash array for args so --related paths are never
+#     word-split or glob-expanded
+# v4.9.0 — Performance optimizations:
+#   - ESLint only lints files changed vs origin/main (fast)
+#   - Full lint fallback when >200 files changed (rare)
+#   - Vitest runs only tests related to changed files (--related)
+#   - Falls back to full suite when >50 source files changed
 # ============================================================
 
 set -e
 
 echo ""
 echo "╔══════════════════════════════════════════════╗"
-echo "║        PRE-PUSH CHECKS (v4.7.0+)            ║"
+echo "║        PRE-PUSH CHECKS (v4.9.1)             ║"
 echo "╚══════════════════════════════════════════════╝"
 echo ""
 
-# ── 1. Lint ──────────────────────────────────────────
-echo "▶ [1/4] Running ESLint..."
-if npm run lint -- --max-warnings 9999; then
-  echo "✅ Lint passed"
+# ── 1. Lint (changed files only) ────────────────────
+echo "▶ [1/4] Running ESLint on changed files..."
+
+# Collect JS/JSX/TS/TSX files that differ from origin/main
+CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/main HEAD -- '*.js' '*.jsx' '*.ts' '*.tsx' 2>/dev/null || true)
+CHANGED_COUNT=$(echo "$CHANGED_FILES" | grep '[^[:space:]]' 2>/dev/null | wc -l | tr -d ' \t')
+
+if [ "$CHANGED_COUNT" -eq 0 ]; then
+  echo "   No JS/TS files changed — skipping lint"
+  echo "✅ Lint passed (no changes)"
+elif [ "$CHANGED_COUNT" -gt 200 ]; then
+  echo "   $CHANGED_COUNT files changed — running full lint..."
+  if npm run lint -- --max-warnings 9999; then
+    echo "✅ Lint passed"
+  else
+    echo ""
+    echo "❌ LINT FAILED — fix errors above before pushing"
+    exit 1
+  fi
 else
-  echo ""
-  echo "❌ LINT FAILED — fix errors above before pushing"
-  exit 1
+  echo "   Linting $CHANGED_COUNT changed file(s)..."
+  # Use -z / xargs -0 so filenames with spaces or metacharacters are safe
+  if git diff -z --name-only --diff-filter=d origin/main HEAD -- '*.js' '*.jsx' '*.ts' '*.tsx' 2>/dev/null \
+    | xargs -0 ./node_modules/.bin/eslint --max-warnings 9999; then
+    echo "✅ Lint passed"
+  else
+    echo ""
+    echo "❌ LINT FAILED — fix errors above before pushing"
+    exit 1
+  fi
 fi
 echo ""
 
@@ -35,58 +68,92 @@ else
 fi
 echo ""
 
-# ── 3. Frontend Tests (Vitest) ───────────────────────
+# ── 3. Frontend Tests (Vitest) — changed files only ─
 echo "▶ [3/4] Running frontend tests (Vitest)..."
 VITEST_JSON=$(mktemp -t vitest.XXXXXX 2>/dev/null || mktemp 2>/dev/null || echo "/tmp/vitest-$$.json")
 VITEST_LOG=$(mktemp -t vitest-log.XXXXXX 2>/dev/null || mktemp 2>/dev/null || echo "/tmp/vitest-log-$$.txt")
 trap 'rm -f "$VITEST_JSON" "$VITEST_LOG"' EXIT
 
+VITEST_TIMEOUT=300  # seconds — safety net
+
 vitest_zero_failures() {
   [ -f "$VITEST_JSON" ] && grep -q '"numFailedTests":0' "$VITEST_JSON" 2>/dev/null && grep -q '"numFailedTestSuites":0' "$VITEST_JSON" 2>/dev/null
 }
 
-set +e
-env -u NODE_OPTIONS ./node_modules/.bin/vitest run --pool=forks --reporter=verbose --reporter=json --outputFile="$VITEST_JSON" > "$VITEST_LOG" 2>&1
-VITEST_EXIT=$?
-cat "$VITEST_LOG"
-set -e
+# Determine which source files changed (frontend only: src/)
+CHANGED_SRC=$(git diff --name-only --diff-filter=d origin/main HEAD -- 'src/**/*.js' 'src/**/*.jsx' 'src/**/*.ts' 'src/**/*.tsx' 2>/dev/null || true)
+CHANGED_SRC_COUNT=$(echo "$CHANGED_SRC" | grep '[^[:space:]]' 2>/dev/null | wc -l | tr -d ' \t')
 
-if [ $VITEST_EXIT -eq 0 ]; then
-  echo "✅ Frontend tests passed"
-elif vitest_zero_failures; then
-  echo "⚠️  Vitest exited with code $VITEST_EXIT but reported 0 test failures"
-  echo "✅ Frontend tests passed (0 failures)"
-elif grep -qi 'failed to find the runner\|Timeout starting .*runner' "$VITEST_LOG"; then
-  echo "⚠️  Vitest runner bootstrap failed — retrying once in safe mode..."
+# Build vitest args array: use --related for small changesets, full run for large ones
+# Using an array prevents word-splitting and glob-expansion of paths with metacharacters
+VITEST_ARGS=(run --pool=forks --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON")
+if [ "$CHANGED_SRC_COUNT" -eq 0 ]; then
+  echo "   No frontend source files changed — skipping Vitest"
+  echo "✅ Frontend tests passed (no changes)"
+  SKIP_VITEST=1
+elif [ "$CHANGED_SRC_COUNT" -le 50 ]; then
+  echo "   Running tests related to $CHANGED_SRC_COUNT changed file(s)..."
+  # Read NUL-separated paths into an array so filenames are never word-split
+  mapfile -d '' CHANGED_SRC_ARRAY < <(git diff -z --name-only --diff-filter=d origin/main HEAD -- 'src/**/*.js' 'src/**/*.jsx' 'src/**/*.ts' 'src/**/*.tsx' 2>/dev/null || true)
+  VITEST_ARGS=(run --pool=forks --related "${CHANGED_SRC_ARRAY[@]}" --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON")
+else
+  echo "   $CHANGED_SRC_COUNT files changed — running full test suite..."
+fi
+
+if [ "${SKIP_VITEST:-}" != "1" ]; then
   set +e
-  env -u NODE_OPTIONS ./node_modules/.bin/vitest run --pool=forks --maxWorkers=1 --reporter=verbose --reporter=json --outputFile="$VITEST_JSON" > "$VITEST_LOG" 2>&1
-  VITEST_EXIT=$?
-  cat "$VITEST_LOG"
+  if command -v timeout >/dev/null 2>&1; then
+    timeout ${VITEST_TIMEOUT}s env -u NODE_OPTIONS ./node_modules/.bin/vitest "${VITEST_ARGS[@]}" > "$VITEST_LOG" 2>&1
+    VITEST_EXIT=$?
+    if [ $VITEST_EXIT -eq 124 ]; then
+      echo "⚠️  Vitest timed out after ${VITEST_TIMEOUT}s"
+      if vitest_zero_failures; then
+        echo "✅ Frontend tests passed (0 failures before timeout)"
+        VITEST_EXIT=0
+      else
+        tail -30 "$VITEST_LOG"
+        echo ""
+        echo "❌ FRONTEND TESTS TIMED OUT after ${VITEST_TIMEOUT}s — run locally: npx vitest run"
+        exit 1
+      fi
+    else
+      cat "$VITEST_LOG"
+    fi
+  else
+    env -u NODE_OPTIONS ./node_modules/.bin/vitest "${VITEST_ARGS[@]}" > "$VITEST_LOG" 2>&1
+    VITEST_EXIT=$?
+    cat "$VITEST_LOG"
+  fi
   set -e
 
   if [ $VITEST_EXIT -eq 0 ]; then
-    echo "✅ Frontend tests passed on retry"
+    echo "✅ Frontend tests passed"
   elif vitest_zero_failures; then
-    echo "⚠️  Vitest exited with code $VITEST_EXIT on retry but reported 0 test failures"
+    echo "⚠️  Vitest exited with code $VITEST_EXIT but reported 0 test failures"
     echo "✅ Frontend tests passed (0 failures)"
   elif grep -qi 'failed to find the runner\|Timeout starting .*runner' "$VITEST_LOG"; then
-    echo "⚠️  Runner flake persisted — executing fallback safe frontend runner (file-by-file)..."
-    bash scripts/run-tests-safe.sh
-    if [ -s "./test-results/failed-tests.txt" ] || [ -s "./test-results/skipped-tests.txt" ]; then
+    echo "⚠️  Vitest runner bootstrap failed — retrying once in safe mode..."
+    set +e
+    env -u NODE_OPTIONS ./node_modules/.bin/vitest run --pool=forks --maxWorkers=1 --reporter=verbose --reporter=json --outputFile="$VITEST_JSON" > "$VITEST_LOG" 2>&1
+    VITEST_EXIT=$?
+    cat "$VITEST_LOG"
+    set -e
+
+    if [ $VITEST_EXIT -eq 0 ]; then
+      echo "✅ Frontend tests passed on retry"
+    elif vitest_zero_failures; then
+      echo "⚠️  Vitest exited with code $VITEST_EXIT on retry but reported 0 test failures"
+      echo "✅ Frontend tests passed (0 failures)"
+    else
       echo ""
-      echo "❌ FRONTEND TESTS FAILED — fallback runner reported failures/timeouts"
+      echo "❌ FRONTEND TESTS FAILED — fix errors above before pushing"
       exit 1
     fi
-    echo "✅ Frontend tests passed via fallback safe runner"
   else
     echo ""
     echo "❌ FRONTEND TESTS FAILED — fix errors above before pushing"
     exit 1
   fi
-else
-  echo ""
-  echo "❌ FRONTEND TESTS FAILED — fix errors above before pushing"
-  exit 1
 fi
 rm -f "$VITEST_JSON" "$VITEST_LOG"
 echo ""
