@@ -1754,7 +1754,7 @@ function Layout({ children, currentPageName }) {
           style={{ borderColor: primaryColor }}
         >
           <div className="text-center mb-6">
-            <img src="/assets/Ai-SHA-logo-2.png" alt="AI-SHA CRM" className="h-16 mx-auto mb-4" />
+            <img src="/assets/Ai-SHA-logo-2.png" alt="AI-SHA CRM" className="max-h-16 w-auto object-contain mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-slate-800 mb-2">Welcome to AI-SHA CRM</h2>
             <p className="text-slate-600">Sign in to access your account</p>
 
