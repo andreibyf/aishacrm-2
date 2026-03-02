@@ -25,6 +25,9 @@ dist-ssr
 *.sln
 *.sw?
 
+# Git worktrees (isolated workspaces)
+.worktrees/
+
 # Environment variables (security)
 .env
 .env.local
