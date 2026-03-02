@@ -57,6 +57,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import BulkActionsMenu from '../components/leads/BulkActionsMenu';
 import LeadStatsCards from '../components/leads/LeadStatsCards';
 import LeadTable from '../components/leads/LeadTable';
+import LeadFilters from '../components/leads/LeadFilters';
 import { Globe } from 'lucide-react';
 // Switch to internal profile page; stop using mintLeadLink
 import StatusHelper from '../components/shared/StatusHelper';
@@ -755,110 +756,25 @@ export default function LeadsPage() {
           getCardLabel={getCardLabel}
         />
 
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-3 w-5 h-5 text-slate-500" />
-            <Input
-              placeholder="Search leads by name, email, phone, company, or job title..."
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="pl-10 bg-slate-800 border-slate-700 text-slate-200"
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {/* Age Filter */}
-            <Select
-              value={ageFilter}
-              onValueChange={(value) => {
-                setAgeFilter(value);
-                setCurrentPage(1);
-              }}
-            >
-              <SelectTrigger className="w-40 bg-slate-800 border-slate-700 text-slate-200">
-                <SelectValue placeholder="Age filter" />
-              </SelectTrigger>
-              <SelectContent className="bg-slate-800 border-slate-700">
-                {ageBuckets.map((bucket) => (
-                  <SelectItem
-                    key={bucket.value}
-                    value={bucket.value}
-                    className="text-slate-200 hover:bg-slate-700"
-                  >
-                    <span className={bucket.color}>{bucket.label}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <TagFilter
-              allTags={allTags}
-              selectedTags={selectedTags}
-              onTagsChange={(newTags) => {
-                setSelectedTags(newTags);
-                setCurrentPage(1);
-              }}
-            />
-
-            {/* Sort Dropdown */}
-            <Select
-              value={`${sortField}:${sortDirection}`}
-              onValueChange={(value) => {
-                console.log('[Leads] Sort dropdown changed to:', value);
-                const option = sortOptions.find((o) => `${o.field}:${o.direction}` === value);
-                console.log('[Leads] Found option:', option);
-                if (option) {
-                  console.log(
-                    '[Leads] Setting sortField to:',
-                    option.field,
-                    'sortDirection to:',
-                    option.direction,
-                  );
-                  setSortField(option.field);
-                  setSortDirection(option.direction);
-                  setCurrentPage(1);
-                }
-              }}
-            >
-              <SelectTrigger className="w-44 bg-slate-800 border-slate-700 text-slate-200">
-                <SelectValue placeholder="Sort by..." />
-              </SelectTrigger>
-              <SelectContent className="bg-slate-800 border-slate-700">
-                {sortOptions.map((option) => (
-                  <SelectItem
-                    key={`${option.field}:${option.direction}`}
-                    value={`${option.field}:${option.direction}`}
-                    className="text-slate-200 hover:bg-slate-700"
-                  >
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {hasActiveFilters && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleClearFilters}
-                    className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
-                  >
-                    <X className="w-4 h-4 mr-1" />
-                    Clear
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Clear all filters</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
-          </div>
-        </div>
+        {/* Search and Filters */}
+        <LeadFilters
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          ageFilter={ageFilter}
+          setAgeFilter={setAgeFilter}
+          ageBuckets={ageBuckets}
+          allTags={allTags}
+          selectedTags={selectedTags}
+          setSelectedTags={setSelectedTags}
+          sortField={sortField}
+          sortDirection={sortDirection}
+          setSortField={setSortField}
+          setSortDirection={setSortDirection}
+          sortOptions={sortOptions}
+          hasActiveFilters={hasActiveFilters}
+          handleClearFilters={handleClearFilters}
+          setCurrentPage={setCurrentPage}
+        />
 
         {/* Select All Banner */}
         {selectedLeads.size === leads.length &&
