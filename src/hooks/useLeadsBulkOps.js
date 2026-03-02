@@ -209,7 +209,6 @@ export function useLeadsBulkOps({
         const selectedArray = [...selectedLeads];
         const CHUNK_SIZE = 500;
         let successCount = 0;
-        let notFoundCount = 0;
         let failedCount = 0;
 
         for (let i = 0; i < selectedArray.length; i += CHUNK_SIZE) {
@@ -240,8 +239,6 @@ export function useLeadsBulkOps({
 
         if (failedCount > 0) {
           toast.error(`${successCount} deleted, ${failedCount} failed`);
-        } else if (notFoundCount > 0) {
-          toast.success(`${successCount} lead(s) deleted (${notFoundCount} already deleted)`);
         } else {
           toast.success(`${successCount} lead(s) deleted`);
         }
