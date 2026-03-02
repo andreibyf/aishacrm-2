@@ -1,9 +1,14 @@
-#!/bin/sh
+#!/bin/bash
 # ============================================================
 # Pre-push hook: lint + build + tests
 # Runs before git push. Blocks push if anything fails.
 # Skip with: git push --no-verify
 # ============================================================
+# v4.9.1 — Security fix:
+#   - ESLint: use git diff -z | xargs -0 to avoid shell injection
+#     via filenames containing metacharacters
+#   - Vitest: use bash array for args so --related paths are never
+#     word-split or glob-expanded
 # v4.9.0 — Performance optimizations:
 #   - ESLint only lints files changed vs origin/main (fast)
 #   - Full lint fallback when >200 files changed (rare)
@@ -15,7 +20,7 @@ set -e
 
 echo ""
 echo "╔══════════════════════════════════════════════╗"
-echo "║        PRE-PUSH CHECKS (v4.9.0)             ║"
+echo "║        PRE-PUSH CHECKS (v4.9.1)             ║"
 echo "╚══════════════════════════════════════════════╝"
 echo ""
 
@@ -40,8 +45,9 @@ elif [ "$CHANGED_COUNT" -gt 200 ]; then
   fi
 else
   echo "   Linting $CHANGED_COUNT changed file(s)..."
-  # shellcheck disable=SC2086
-  if ./node_modules/.bin/eslint --max-warnings 9999 $CHANGED_FILES; then
+  # Use -z / xargs -0 so filenames with spaces or metacharacters are safe
+  if git diff -z --name-only --diff-filter=d origin/main HEAD -- '*.js' '*.jsx' '*.ts' '*.tsx' 2>/dev/null \
+    | xargs -0 ./node_modules/.bin/eslint --max-warnings 9999; then
     echo "✅ Lint passed"
   else
     echo ""
@@ -78,17 +84,18 @@ vitest_zero_failures() {
 CHANGED_SRC=$(git diff --name-only --diff-filter=d origin/main HEAD -- 'src/**/*.js' 'src/**/*.jsx' 'src/**/*.ts' 'src/**/*.tsx' 2>/dev/null || true)
 CHANGED_SRC_COUNT=$(echo "$CHANGED_SRC" | grep '[^[:space:]]' 2>/dev/null | wc -l | tr -d ' \t')
 
-# Build vitest args: use --related for small changesets, full run for large ones
-VITEST_ARGS="run --pool=forks --reporter=verbose --reporter=json --outputFile=$VITEST_JSON"
+# Build vitest args array: use --related for small changesets, full run for large ones
+# Using an array prevents word-splitting and glob-expansion of paths with metacharacters
+VITEST_ARGS=(run --pool=forks --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON")
 if [ "$CHANGED_SRC_COUNT" -eq 0 ]; then
   echo "   No frontend source files changed — skipping Vitest"
   echo "✅ Frontend tests passed (no changes)"
   SKIP_VITEST=1
 elif [ "$CHANGED_SRC_COUNT" -le 50 ]; then
   echo "   Running tests related to $CHANGED_SRC_COUNT changed file(s)..."
-  # --related runs only test files that import the changed source files
-  # shellcheck disable=SC2086
-  VITEST_ARGS="run --pool=forks --related $CHANGED_SRC --reporter=verbose --reporter=json --outputFile=$VITEST_JSON"
+  # Read NUL-separated paths into an array so filenames are never word-split
+  mapfile -d '' CHANGED_SRC_ARRAY < <(git diff -z --name-only --diff-filter=d origin/main HEAD -- 'src/**/*.js' 'src/**/*.jsx' 'src/**/*.ts' 'src/**/*.tsx' 2>/dev/null || true)
+  VITEST_ARGS=(run --pool=forks --related "${CHANGED_SRC_ARRAY[@]}" --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON")
 else
   echo "   $CHANGED_SRC_COUNT files changed — running full test suite..."
 fi
@@ -96,8 +103,7 @@ fi
 if [ "${SKIP_VITEST:-}" != "1" ]; then
   set +e
   if command -v timeout >/dev/null 2>&1; then
-    # shellcheck disable=SC2086
-    timeout ${VITEST_TIMEOUT}s env -u NODE_OPTIONS ./node_modules/.bin/vitest $VITEST_ARGS > "$VITEST_LOG" 2>&1
+    timeout ${VITEST_TIMEOUT}s env -u NODE_OPTIONS ./node_modules/.bin/vitest "${VITEST_ARGS[@]}" > "$VITEST_LOG" 2>&1
     VITEST_EXIT=$?
     if [ $VITEST_EXIT -eq 124 ]; then
       echo "⚠️  Vitest timed out after ${VITEST_TIMEOUT}s"
@@ -114,8 +120,7 @@ if [ "${SKIP_VITEST:-}" != "1" ]; then
       cat "$VITEST_LOG"
     fi
   else
-    # shellcheck disable=SC2086
-    env -u NODE_OPTIONS ./node_modules/.bin/vitest $VITEST_ARGS > "$VITEST_LOG" 2>&1
+    env -u NODE_OPTIONS ./node_modules/.bin/vitest "${VITEST_ARGS[@]}" > "$VITEST_LOG" 2>&1
     VITEST_EXIT=$?
     cat "$VITEST_LOG"
   fi
