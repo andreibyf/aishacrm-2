@@ -56,6 +56,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import BulkActionsMenu from '../components/leads/BulkActionsMenu';
 import LeadStatsCards from '../components/leads/LeadStatsCards';
+import LeadTable from '../components/leads/LeadTable';
 import { Globe } from 'lucide-react';
 // Switch to internal profile page; stop using mintLeadLink
 import StatusHelper from '../components/shared/StatusHelper';
@@ -936,296 +937,25 @@ export default function LeadsPage() {
         ) : viewMode === 'list' ? (
           <>
             {/* List/Table View */}
-            <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-slate-700/50">
-                    <tr>
-                      <th className="px-4 py-3 text-left">
-                        <Checkbox
-                          checked={
-                            selectedLeads.size === leads.length &&
-                            leads.length > 0 &&
-                            !selectAllMode
-                          }
-                          onCheckedChange={toggleSelectAll}
-                          className="border-slate-600"
-                        />
-                      </th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                        Name
-                      </th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                        Email
-                      </th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                        Phone
-                      </th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                        Company
-                      </th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                        Job Title
-                      </th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                        Age (Days)
-                      </th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                        Assigned To
-                      </th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                        Status
-                      </th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-700">
-                    {leads.map((lead) => {
-                      const age = calculateLeadAge(lead);
-                      const ageBucket = getLeadAgeBucket(lead);
-                      const isConverted = lead.status === 'converted';
-
-                      return (
-                        <tr
-                          key={lead.id}
-                          data-testid={`lead-row-${lead.email}`}
-                          className={`hover:bg-slate-700/30 transition-colors ${isConverted ? 'opacity-70' : ''}`}
-                        >
-                          <td className="px-4 py-3">
-                            <Checkbox
-                              checked={selectedLeads.has(lead.id) || selectAllMode}
-                              onCheckedChange={() => toggleSelection(lead.id)}
-                              className="border-slate-600"
-                            />
-                          </td>
-                          <td className="px-4 py-3 text-base text-slate-300">
-                            {(() => {
-                              const isB2B = lead.lead_type === 'b2b' || lead.lead_type === 'B2B';
-                              const personName =
-                                `${lead.first_name || ''} ${lead.last_name || ''}`.trim();
-                              const companyName = lead.company;
-
-                              if (isB2B && companyName) {
-                                // B2B: Show company name prominently, contact person below
-                                return (
-                                  <div className={isConverted ? 'line-through' : ''}>
-                                    <span className="font-medium text-slate-200">
-                                      {companyName}
-                                    </span>
-                                    {personName && (
-                                      <div className="text-xs text-slate-400">{personName}</div>
-                                    )}
-                                  </div>
-                                );
-                              }
-                              // B2C or no company: Show person name
-                              return (
-                                <span className={isConverted ? 'line-through' : ''}>
-                                  {personName || <span className="text-slate-500">—</span>}
-                                </span>
-                              );
-                            })()}
-                          </td>
-                          <td
-                            className="px-4 py-3 text-base text-slate-300"
-                            data-testid="lead-email"
-                          >
-                            {lead.email || <span className="text-slate-500">—</span>}
-                          </td>
-                          <td className="px-4 py-3 text-base">
-                            <div className="flex items-center gap-2">
-                              <span className="text-slate-300">
-                                {lead.phone || <span className="text-slate-500">—</span>}
-                              </span>
-                              {lead.do_not_call && (
-                                <Badge className="bg-red-900/30 text-red-400 border-red-700 text-xs px-1.5 py-0">
-                                  DNC
-                                </Badge>
-                              )}
-                              {lead.do_not_text && (
-                                <Badge className="bg-red-900/30 text-red-400 border-red-700 text-xs px-1.5 py-0">
-                                  DNT
-                                </Badge>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-base text-slate-300">
-                            {(() => {
-                              const associatedAccountName = getAssociatedAccountName(lead);
-                              const companyLabel = associatedAccountName || lead.company;
-
-                              if (!companyLabel) {
-                                return <span className="text-slate-500">—</span>;
-                              }
-
-                              return (
-                                <div className="space-y-1">
-                                  <span className="font-medium text-slate-200 flex items-center gap-2">
-                                    <Building2 className="w-3 h-3 text-slate-500" />
-                                    {companyLabel}
-                                  </span>
-                                  {associatedAccountName &&
-                                    lead.company &&
-                                    lead.company !== associatedAccountName && (
-                                      <span className="text-xs text-slate-500">
-                                        Company: {lead.company}
-                                      </span>
-                                    )}
-                                </div>
-                              );
-                            })()}
-                          </td>
-                          <td
-                            className="px-4 py-3 text-base text-slate-300"
-                            data-testid="lead-job-title"
-                          >
-                            {lead.job_title || <span className="text-slate-500">—</span>}
-                          </td>
-                          <td className="px-4 py-3 text-base">
-                            <span
-                              className={`font-semibold ${ageBucket?.color || 'text-slate-300'}`}
-                            >
-                              {age >= 0 ? (
-                                `${age} ${age === 1 ? 'day' : 'days'}`
-                              ) : (
-                                <span className="text-slate-500">—</span>
-                              )}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-slate-300">
-                            {lead.assigned_to_name ||
-                              employeesMap[lead.assigned_to] ||
-                              usersMap[lead.assigned_to] || (
-                                <span className="text-slate-500">Unassigned</span>
-                              )}
-                          </td>
-                          <td
-                            className="cursor-pointer p-3"
-                            onClick={() => handleViewDetails(lead)}
-                          >
-                            <Badge
-                              className={`${
-                                statusColors[lead.status]
-                              } contrast-badge capitalize text-xs font-semibold border`}
-                              data-variant="status"
-                              data-status={lead.status}
-                            >
-                              {lead.status}
-                            </Badge>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleViewDetails(lead);
-                                    }}
-                                    className="h-8 w-8 text-slate-400 hover:text-blue-400"
-                                  >
-                                    <Eye className="w-4 h-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>View details</p>
-                                </TooltipContent>
-                              </Tooltip>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      try {
-                                        const href = `/leads/${lead.id}`;
-                                        window.open(href, '_blank', 'noopener,noreferrer');
-                                      } catch (err) {
-                                        console.error('Failed to open lead:', err);
-                                      }
-                                    }}
-                                    className="h-8 w-8 text-slate-400 hover:text-blue-400"
-                                  >
-                                    <Globe className="w-4 h-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Open web profile</p>
-                                </TooltipContent>
-                              </Tooltip>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setEditingLead(lead);
-                                      setIsFormOpen(true);
-                                    }}
-                                    className="h-8 w-8 text-slate-400 hover:text-blue-400"
-                                    disabled={isConverted}
-                                  >
-                                    <Edit className="w-4 h-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Edit {leadLabel.toLowerCase()}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                              {lead.status !== 'converted' && (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleConvert(lead);
-                                      }}
-                                      className="h-8 w-8 text-green-400 hover:text-green-300 hover:bg-green-900/20"
-                                    >
-                                      <UserCheck className="w-4 h-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Convert to contact</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              )}
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDelete(lead.id);
-                                    }}
-                                    className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-900/20"
-                                    disabled={isConverted}
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Delete lead</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <LeadTable
+              leads={leads}
+              selectedLeads={selectedLeads}
+              selectAllMode={selectAllMode}
+              toggleSelectAll={toggleSelectAll}
+              toggleSelection={toggleSelection}
+              calculateLeadAge={calculateLeadAge}
+              getLeadAgeBucket={getLeadAgeBucket}
+              getAssociatedAccountName={getAssociatedAccountName}
+              employeesMap={employeesMap}
+              usersMap={usersMap}
+              setDetailLead={setDetailLead}
+              setIsDetailOpen={setIsDetailOpen}
+              setEditingLead={setEditingLead}
+              setIsFormOpen={setIsFormOpen}
+              handleConvert={handleConvert}
+              handleDelete={handleDelete}
+              leadLabel={leadLabel}
+            />
 
             <Pagination
               currentPage={currentPage}
