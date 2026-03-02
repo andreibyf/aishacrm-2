@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Contact, Account } from '@/api/entities';
 import { useUser } from '@/components/shared/useUser.js';
 import { useApiManager } from '../components/shared/ApiManager';
@@ -170,7 +170,6 @@ export default function ContactsPage() {
       setIsFormOpen(false);
       setEditingContact(null);
     }
-    loadTotalStats();
   };
 
   const handleUpdate = async (result) => {

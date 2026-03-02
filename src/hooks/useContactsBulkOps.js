@@ -39,27 +39,48 @@ export function useContactsBulkOps({
   user,
 }) {
   // Helper: fetch all matching contacts for select-all operations
+  // Uses the same server-side filtering semantics as loadContacts
   const fetchAllMatching = async () => {
     const scopedFilter = getTenantFilter();
+
+    // Apply server-side status filter
+    if (statusFilter !== 'all') {
+      scopedFilter.status = statusFilter;
+    }
+
+    // Merge scope $or and search $or into filter param (mirrors loadContacts)
+    if (scopedFilter.$or || searchTerm) {
+      let filterObj = {};
+      const clauses = [];
+      if (scopedFilter.$or) clauses.push({ $or: scopedFilter.$or });
+      if (searchTerm) {
+        const s = searchTerm.trim();
+        clauses.push({
+          $or: [
+            { first_name: { $icontains: s } },
+            { last_name: { $icontains: s } },
+            { email: { $icontains: s } },
+            { phone: { $icontains: s } },
+            { company: { $icontains: s } },
+            { job_title: { $icontains: s } },
+          ],
+        });
+      }
+      if (clauses.length === 1) {
+        filterObj.$or = clauses[0].$or;
+      } else {
+        filterObj.$and = clauses;
+      }
+      scopedFilter.filter = JSON.stringify(filterObj);
+      delete scopedFilter.$or;
+    }
+
     const filterWithLimit = { ...scopedFilter, limit: 10000 };
     const sortString = sortDirection === 'desc' ? `-${sortField}` : sortField;
     const allContacts = await Contact.filter(filterWithLimit, sortString);
 
     let filtered = allContacts || [];
-    if (searchTerm) {
-      const search = searchTerm.toLowerCase();
-      filtered = filtered.filter(
-        (c) =>
-          c.first_name?.toLowerCase().includes(search) ||
-          c.last_name?.toLowerCase().includes(search) ||
-          c.email?.toLowerCase().includes(search) ||
-          c.phone?.includes(searchTerm) ||
-          c.company?.toLowerCase().includes(search),
-      );
-    }
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter((c) => c.status === statusFilter);
-    }
+    // Tags require client-side filtering
     if (selectedTags.length > 0) {
       filtered = filtered.filter(
         (c) => Array.isArray(c.tags) && selectedTags.every((tag) => c.tags.includes(tag)),

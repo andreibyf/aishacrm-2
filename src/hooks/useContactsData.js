@@ -97,7 +97,7 @@ export function useContactsData({
     }
 
     if (!showTestData) {
-      filter.is_test_data = { $ne: true };
+      filter.is_test_data = false;
     }
 
     return filter;
@@ -145,7 +145,17 @@ export function useContactsData({
     if (user) loadContactFromUrl();
   }, [user]);
 
-  // Load supporting data once
+  // Reset supporting data when tenant changes so stale data from a previous tenant is cleared
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!user) return;
+    supportingDataLoaded.current = false;
+    setAccounts([]);
+    setUsers([]);
+    setEmployees([]);
+  }, [selectedTenantId, user]);
+
+  // Load supporting data once per tenant
   useEffect(() => {
     if (supportingDataLoaded.current || !user) return;
 
@@ -155,6 +165,11 @@ export function useContactsData({
         userId: user?.id || user?.email,
       });
       try {
+        // Clear stale cached supporting data before loading for the current tenant
+        clearCacheByKey('Account');
+        clearCacheByKey('Employee');
+        clearCacheByKey('User');
+
         const filterForSupportingData = getTenantFilter();
 
         const accountsData = await cachedRequest(
@@ -245,18 +260,14 @@ export function useContactsData({
     try {
       const scopedFilter = getTenantFilter();
 
-      // Use the v2 `search` param for server-side text search (ilike on first_name, last_name)
-      if (searchTerm) {
-        scopedFilter.search = searchTerm.trim();
-      }
-
       // Server-side status filter
       if (statusFilter !== 'all') {
         scopedFilter.status = statusFilter;
       }
 
-      // Merge $or from scope into filter param for backend handling
-      if (scopedFilter.$or) {
+      // Merge scope $or (unassigned/assigned) and search $or into filter param
+      // Search uses $icontains across name, email, phone, company, job_title
+      if (scopedFilter.$or || searchTerm) {
         let filterObj = {};
         if (scopedFilter.filter) {
           try {
@@ -265,11 +276,29 @@ export function useContactsData({
             /* ignore */
           }
         }
-        if (filterObj.$or) {
-          filterObj.$or = [...filterObj.$or, ...scopedFilter.$or];
-        } else {
-          filterObj.$or = scopedFilter.$or;
+
+        const clauses = [];
+        if (scopedFilter.$or) clauses.push({ $or: scopedFilter.$or });
+        if (searchTerm) {
+          const s = searchTerm.trim();
+          clauses.push({
+            $or: [
+              { first_name: { $icontains: s } },
+              { last_name: { $icontains: s } },
+              { email: { $icontains: s } },
+              { phone: { $icontains: s } },
+              { company: { $icontains: s } },
+              { job_title: { $icontains: s } },
+            ],
+          });
         }
+
+        if (clauses.length === 1) {
+          filterObj.$or = clauses[0].$or;
+        } else {
+          filterObj.$and = [...(filterObj.$and || []), ...clauses];
+        }
+
         scopedFilter.filter = JSON.stringify(filterObj);
         delete scopedFilter.$or;
       }
@@ -287,15 +316,18 @@ export function useContactsData({
       const totalCount = contactsResult._total ?? items.length ?? 0;
 
       // Client-side tag filtering (not supported server-side)
+      // When tags are active, totalItems reflects visible filtered results only
       if (selectedTags.length > 0) {
         items = items.filter(
           (contact) =>
             Array.isArray(contact.tags) && selectedTags.every((tag) => contact.tags.includes(tag)),
         );
+        setTotalItems(items.length);
+      } else {
+        setTotalItems(totalCount);
       }
 
       setContacts(items);
-      setTotalItems(totalCount);
 
       logger.info('Contacts loaded successfully.', 'ContactsPage', {
         loadedCount: items.length,
