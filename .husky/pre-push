@@ -24,7 +24,7 @@ echo "▶ [1/4] Running ESLint on changed files..."
 
 # Collect JS/JSX/TS/TSX files that differ from origin/main
 CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/main HEAD -- '*.js' '*.jsx' '*.ts' '*.tsx' 2>/dev/null || true)
-CHANGED_COUNT=$(echo "$CHANGED_FILES" | grep -c '[^[:space:]]' 2>/dev/null; true)
+CHANGED_COUNT=$(echo "$CHANGED_FILES" | grep '[^[:space:]]' 2>/dev/null | wc -l | tr -d ' \t')
 
 if [ "$CHANGED_COUNT" -eq 0 ]; then
   echo "   No JS/TS files changed — skipping lint"
@@ -76,7 +76,7 @@ vitest_zero_failures() {
 
 # Determine which source files changed (frontend only: src/)
 CHANGED_SRC=$(git diff --name-only --diff-filter=d origin/main HEAD -- 'src/**/*.js' 'src/**/*.jsx' 'src/**/*.ts' 'src/**/*.tsx' 2>/dev/null || true)
-CHANGED_SRC_COUNT=$(echo "$CHANGED_SRC" | grep -c '[^[:space:]]' 2>/dev/null; true)
+CHANGED_SRC_COUNT=$(echo "$CHANGED_SRC" | grep '[^[:space:]]' 2>/dev/null | wc -l | tr -d ' \t')
 
 # Build vitest args: use --related for small changesets, full run for large ones
 VITEST_ARGS="run --pool=forks --reporter=verbose --reporter=json --outputFile=$VITEST_JSON"
