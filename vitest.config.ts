@@ -21,10 +21,10 @@ export default defineConfig({
     outputFile: "./test-results/vitest-results.json",
     bail: 0,
     passWithNoTests: true,
-    pool: "threads",
+    pool: "forks",
     poolOptions: {
-      threads: {
-        singleThread: false,
+      forks: {
+        singleFork: false,
         isolate: true,
         execArgv: ["--no-warnings=ExperimentalWarning"]
       }
