@@ -4,8 +4,8 @@ on:
   push:
     paths:
       - 'backend/migrations/**'
-      - 'backend/verify-rls.js'
-      - 'backend/scripts/check-rls-ci.js'
+      - 'backend/scripts/checks/check-rls-ci.js'
+      - 'backend/scripts/checks/check-rls-simple.js'
   workflow_dispatch: {}
 
 # Explicit least-privilege permissions
@@ -32,4 +32,6 @@ jobs:
 
       - name: Run CI RLS check
         working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: npm run ci:check-rls

@@ -22,7 +22,7 @@
     "seed": "node scripts/run_seed.js",
     "worker:email": "node workers/emailWorker.js",
     "verify:rls": "node verify-rls.js",
-    "ci:check-rls": "node scripts/check-rls-ci.js"
+    "ci:check-rls": "node scripts/checks/check-rls-ci.js"
   },
   "keywords": [
     "crm",
