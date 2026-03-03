@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BizDevSource, Account, Tenant } from '@/api/entities';
+import { BizDevSource, Account, Tenant, Employee } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -75,6 +75,8 @@ export default function BizDevSourcesPage() {
   const [searchInput, setSearchInput] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [licenseStatusFilter, setLicenseStatusFilter] = useState('all');
+  const [assignedToFilter, setAssignedToFilter] = useState('all');
+  const [employees, setEmployees] = useState([]);
   const [batchFilter, setBatchFilter] = useState('all');
   const [sourceFilter, setSourceFilter] = useState('all');
   const [sortField, setSortField] = useState('created_at');
@@ -105,6 +107,15 @@ export default function BizDevSourcesPage() {
 
   const { selectedTenantId } = useTenant();
   const { selectedEmployeeId } = useEmployeeScope();
+
+  // Load employees for assigned-to filter dropdown
+  useEffect(() => {
+    const tenantId = selectedTenantId || user?.tenant_id;
+    if (!tenantId) return;
+    Employee.filter({ tenant_id: tenantId })
+      .then((list) => setEmployees(list || []))
+      .catch(() => {});
+  }, [selectedTenantId, user?.tenant_id]);
   const { cachedRequest, clearCache, clearCacheByKey } = useApiManager();
   const { logError } = useErrorLog();
   const loadingRef = useRef(false);
@@ -537,6 +548,13 @@ export default function BizDevSourcesPage() {
       selectedTags.length === 0 ||
       (Array.isArray(source.tags) && selectedTags.every((tag) => source.tags.includes(tag)));
 
+    // Local assigned-to filter (filter bar dropdown)
+    const matchesAssignedTo =
+      assignedToFilter === 'all' ||
+      (assignedToFilter === 'unassigned'
+        ? !source.assigned_to
+        : source.assigned_to === assignedToFilter);
+
     // Employee scope filter (global header dropdown)
     const matchesEmployee =
       !selectedEmployeeId ||
@@ -551,6 +569,7 @@ export default function BizDevSourcesPage() {
       matchesBatch &&
       matchesSource &&
       matchesTags &&
+      matchesAssignedTo &&
       matchesEmployee
     );
   });
@@ -635,6 +654,7 @@ export default function BizDevSourcesPage() {
     searchTerm,
     statusFilter,
     licenseStatusFilter,
+    assignedToFilter,
     batchFilter,
     sourceFilter,
     selectedTags,
@@ -814,6 +834,26 @@ export default function BizDevSourcesPage() {
               />
             </div>
             <Select
+              value={assignedToFilter}
+              onValueChange={(value) => {
+                setAssignedToFilter(value);
+                setCurrentPage(1);
+              }}
+            >
+              <SelectTrigger className="w-36 bg-slate-700 border-slate-600 text-slate-100 shrink-0">
+                <SelectValue placeholder="Assigned To" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Assignees</SelectItem>
+                <SelectItem value="unassigned">Unassigned</SelectItem>
+                {employees.map((emp) => (
+                  <SelectItem key={emp.id} value={emp.id}>
+                    {emp.first_name} {emp.last_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
               value={licenseStatusFilter}
               onValueChange={(value) => {
                 setLicenseStatusFilter(value);
@@ -906,6 +946,7 @@ export default function BizDevSourcesPage() {
             />
             {(searchTerm ||
               licenseStatusFilter !== 'all' ||
+              assignedToFilter !== 'all' ||
               batchFilter !== 'all' ||
               sourceFilter !== 'all' ||
               selectedTags.length > 0) && (
@@ -916,6 +957,7 @@ export default function BizDevSourcesPage() {
                   setSearchTerm('');
                   setSearchInput('');
                   setLicenseStatusFilter('all');
+                  setAssignedToFilter('all');
                   setBatchFilter('all');
                   setSourceFilter('all');
                   setSelectedTags([]);
