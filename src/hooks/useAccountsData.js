@@ -20,6 +20,7 @@ import { toast } from 'sonner';
 export function useAccountsData({
   selectedTenantId,
   employeeScope: selectedEmail,
+  assignedToFilter = 'all',
   typeFilter,
   searchTerm,
   sortField,
@@ -247,6 +248,26 @@ export function useAccountsData({
         return;
       }
 
+      // Apply explicit assignedToFilter from filter bar (overrides employee scope)
+      if (assignedToFilter !== 'all') {
+        delete currentTenantFilter.assigned_to;
+        let filterObj = {};
+        if (currentTenantFilter.filter) {
+          try { filterObj = JSON.parse(currentTenantFilter.filter); } catch {}
+        }
+        delete filterObj.$or;
+        if (assignedToFilter === 'unassigned') {
+          filterObj.$or = [{ assigned_to: null }];
+        } else {
+          currentTenantFilter.assigned_to = assignedToFilter;
+        }
+        if (Object.keys(filterObj).length > 0) {
+          currentTenantFilter.filter = JSON.stringify(filterObj);
+        } else {
+          delete currentTenantFilter.filter;
+        }
+      }
+
       // Server-side search (v2 route searches by name via ilike)
       if (searchTerm) {
         currentTenantFilter.search = searchTerm.trim();
@@ -312,6 +333,7 @@ export function useAccountsData({
     sortField,
     sortDirection,
     getTenantFilter,
+    assignedToFilter,
     accountsLabel,
     loadingToast,
   ]);
@@ -330,7 +352,7 @@ export function useAccountsData({
     if (initialLoadDone.current) {
       setCurrentPage(1);
     }
-  }, [searchTerm, typeFilter, selectedTags, selectedEmail, setCurrentPage]);
+  }, [searchTerm, typeFilter, selectedTags, selectedEmail, assignedToFilter, setCurrentPage]);
 
   // entity-modified event listener for instant refresh
   useEffect(() => {

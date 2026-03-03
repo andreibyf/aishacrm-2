@@ -95,6 +95,7 @@ export default function AccountsPage() {
     selectedTenantId,
     employeeScope: selectedEmail,
     typeFilter,
+    assignedToFilter,
     searchTerm,
     sortField,
     sortDirection,
@@ -245,13 +246,6 @@ export default function AccountsPage() {
       selectedTags.length > 0,
     [searchTerm, typeFilter, assignedToFilter, selectedTags],
   );
-
-  const filteredAccounts = useMemo(() => {
-    if (assignedToFilter === 'all') return accounts;
-    return accounts.filter((a) =>
-      assignedToFilter === 'unassigned' ? !a.assigned_to : a.assigned_to === assignedToFilter,
-    );
-  }, [accounts, assignedToFilter]);
 
   // Extract tags from current page for TagFilter
   const allTags = useMemo(() => {
@@ -484,15 +478,15 @@ export default function AccountsPage() {
           />
 
           {/* Select All Banners */}
-          {selectedAccounts.size === filteredAccounts.length &&
-            filteredAccounts.length > 0 &&
+          {selectedAccounts.size === accounts.length &&
+            accounts.length > 0 &&
             !selectAllMode &&
-            totalItems > filteredAccounts.length && (
+            totalItems > accounts.length && (
               <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <AlertCircle className="w-5 h-5 text-blue-400" />
                   <span className="text-blue-200">
-                    All {filteredAccounts.length} accounts on this page are selected.
+                    All {accounts.length} accounts on this page are selected.
                   </span>
                   <Button
                     variant="link"
@@ -540,7 +534,7 @@ export default function AccountsPage() {
                 <p className="text-slate-400">Loading accounts...</p>
               </div>
             </div>
-          ) : filteredAccounts.length === 0 ? (
+          ) : accounts.length === 0 ? (
             <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-12 text-center">
               <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-slate-300 mb-2">
@@ -564,7 +558,7 @@ export default function AccountsPage() {
           ) : viewMode === 'list' ? (
             <>
               <AccountTable
-                accounts={filteredAccounts}
+                accounts={accounts}
                 selectedAccounts={selectedAccounts}
                 selectAllMode={selectAllMode}
                 toggleSelectAll={toggleSelectAll}
@@ -591,7 +585,7 @@ export default function AccountsPage() {
           ) : (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredAccounts.map((account) => (
+                {accounts.map((account) => (
                   <AccountCard
                     key={account.id}
                     account={account}

@@ -21,6 +21,7 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 export function useContactsData({
   selectedTenantId,
   employeeScope: selectedEmail,
+  assignedToFilter = 'all',
   statusFilter,
   searchTerm,
   sortField,
@@ -260,6 +261,17 @@ export function useContactsData({
     try {
       const scopedFilter = getTenantFilter();
 
+      // Apply explicit assignedToFilter from filter bar (overrides employee scope)
+      if (assignedToFilter !== 'all') {
+        delete scopedFilter.assigned_to;
+        delete scopedFilter.$or;
+        if (assignedToFilter === 'unassigned') {
+          scopedFilter.$or = [{ assigned_to: null }];
+        } else {
+          scopedFilter.assigned_to = assignedToFilter;
+        }
+      }
+
       // Server-side status filter
       if (statusFilter !== 'all') {
         scopedFilter.status = statusFilter;
@@ -360,6 +372,7 @@ export function useContactsData({
     sortDirection,
     getTenantFilter,
     selectedEmail,
+    assignedToFilter,
     logger,
     loadingToast,
     contactsLabel,
@@ -379,7 +392,7 @@ export function useContactsData({
     if (initialLoadDone.current) {
       setCurrentPage(1);
     }
-  }, [searchTerm, statusFilter, selectedTags, selectedEmail, setCurrentPage]);
+  }, [searchTerm, statusFilter, selectedTags, selectedEmail, assignedToFilter, setCurrentPage]);
 
   // Pagination handlers
   const handlePageChange = useCallback(

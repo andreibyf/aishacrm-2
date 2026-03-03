@@ -114,6 +114,7 @@ export default function ActivitiesPage() {
     selectedTenantId,
     employeeScope: selectedEmail,
     statusFilter,
+    assignedToFilter,
     typeFilter,
     searchTerm,
     sortField,
@@ -280,13 +281,6 @@ export default function ActivitiesPage() {
     dateRange,
     showTestData,
   ]);
-
-  const filteredActivities = useMemo(() => {
-    if (assignedToFilter === 'all') return activities;
-    return activities.filter((a) =>
-      assignedToFilter === 'unassigned' ? !a.assigned_to : a.assigned_to === assignedToFilter,
-    );
-  }, [activities, assignedToFilter]);
 
   // Related entity link helper
   const getRelatedEntityLink = useCallback((activity) => {
@@ -607,15 +601,15 @@ export default function ActivitiesPage() {
         />
 
         {/* Select All Banners */}
-        {selectedActivities.size === filteredActivities.length &&
-          filteredActivities.length > 0 &&
+        {selectedActivities.size === activities.length &&
+          activities.length > 0 &&
           !selectAllMode &&
-          totalItems > filteredActivities.length && (
+          totalItems > activities.length && (
             <div className="mb-4 bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <AlertCircle className="w-5 h-5 text-blue-400" />
                 <span className="text-blue-200">
-                  All {filteredActivities.length} activities on this page are selected.
+                  All {activities.length} activities on this page are selected.
                 </span>
                 <Button
                   variant="link"
@@ -663,7 +657,7 @@ export default function ActivitiesPage() {
               <p className="text-slate-400">Loading activities...</p>
             </div>
           </div>
-        ) : filteredActivities.length === 0 ? (
+        ) : activities.length === 0 ? (
           <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-12 text-center">
             <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-slate-300 mb-2">
@@ -685,7 +679,7 @@ export default function ActivitiesPage() {
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <AnimatePresence>
-                {filteredActivities.map((activity) => (
+                {activities.map((activity) => (
                   <ActivityCard
                     key={activity.id}
                     activity={activity}
@@ -727,7 +721,7 @@ export default function ActivitiesPage() {
         ) : (
           <>
             <ActivityTable
-              activities={filteredActivities}
+              activities={activities}
               selectedActivities={selectedActivities}
               selectAllMode={selectAllMode}
               toggleSelectAll={toggleSelectAll}

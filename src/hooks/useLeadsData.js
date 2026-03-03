@@ -46,6 +46,7 @@ export function useLeadsData({
   sortField,
   sortDirection,
   ageFilter,
+  assignedToFilter = 'all',
   selectedTags,
   showTestData,
   currentPage,
@@ -351,6 +352,26 @@ export function useLeadsData({
           return;
         }
 
+        // Apply explicit assignedToFilter from filter bar (overrides employee scope)
+        if (assignedToFilter !== 'all') {
+          delete currentFilter.assigned_to;
+          let filterObj = {};
+          if (currentFilter.filter) {
+            try { filterObj = JSON.parse(currentFilter.filter); } catch {}
+          }
+          delete filterObj.$or;
+          if (assignedToFilter === 'unassigned') {
+            filterObj.$or = [{ assigned_to: null }];
+          } else {
+            currentFilter.assigned_to = assignedToFilter;
+          }
+          if (Object.keys(filterObj).length > 0) {
+            currentFilter.filter = JSON.stringify(filterObj);
+          } else {
+            delete currentFilter.filter;
+          }
+        }
+
         if (statusFilter !== 'all') {
           currentFilter = { ...currentFilter, status: statusFilter };
         }
@@ -499,6 +520,7 @@ export function useLeadsData({
       statusFilter,
       selectedTags,
       ageFilter,
+      assignedToFilter,
       sortField,
       sortDirection,
       leadsLabel,
@@ -527,6 +549,7 @@ export function useLeadsData({
     loadLeads,
     selectedEmail,
     selectedTenantId,
+    assignedToFilter,
   ]);
 
   // Clear cache when employee filter changes

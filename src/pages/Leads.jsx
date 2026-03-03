@@ -193,6 +193,7 @@ export default function LeadsPage() {
     selectedTenantId,
     employeeScope: selectedEmail,
     statusFilter,
+    assignedToFilter,
     searchTerm,
     sortField,
     sortDirection,
@@ -511,13 +512,6 @@ export default function LeadsPage() {
     sortDirection,
   ]);
 
-  const filteredLeads = useMemo(() => {
-    if (assignedToFilter === 'all') return leads;
-    return leads.filter((l) =>
-      assignedToFilter === 'unassigned' ? !l.assigned_to : l.assigned_to === assignedToFilter,
-    );
-  }, [leads, assignedToFilter]);
-
   // Matching the stat card colors - semi-transparent backgrounds
   const statusColors = {
     new: 'bg-blue-900/20 text-blue-300 border-blue-700',
@@ -771,15 +765,15 @@ export default function LeadsPage() {
         />
 
         {/* Select All Banner */}
-        {selectedLeads.size === filteredLeads.length &&
-          filteredLeads.length > 0 &&
+        {selectedLeads.size === leads.length &&
+          leads.length > 0 &&
           !selectAllMode &&
-          totalItems > filteredLeads.length && (
+          totalItems > leads.length && (
             <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <AlertCircle className="w-5 h-5 text-blue-400" />
                 <span className="text-blue-200">
-                  All {filteredLeads.length} leads on this page are selected.
+                  All {leads.length} leads on this page are selected.
                 </span>
                 <Button
                   variant="link"
@@ -826,7 +820,7 @@ export default function LeadsPage() {
               <p className="text-slate-400">Loading leads...</p>
             </div>
           </div>
-        ) : filteredLeads.length === 0 ? (
+        ) : leads.length === 0 ? (
           <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-12 text-center">
             <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-slate-300 mb-2">
@@ -848,7 +842,7 @@ export default function LeadsPage() {
           <>
             {/* List/Table View */}
             <LeadTable
-              leads={filteredLeads}
+              leads={leads}
               selectedLeads={selectedLeads}
               selectAllMode={selectAllMode}
               toggleSelectAll={toggleSelectAll}
@@ -882,7 +876,7 @@ export default function LeadsPage() {
             {/* Card View */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <AnimatePresence>
-                {filteredLeads.map((lead) => (
+                {leads.map((lead) => (
                   <LeadCard
                     key={lead.id}
                     lead={lead}

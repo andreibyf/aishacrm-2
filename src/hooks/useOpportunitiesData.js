@@ -22,6 +22,7 @@ import { logDev } from '@/utils/devLogger';
 export function useOpportunitiesData({
   selectedTenantId,
   employeeScope: selectedEmail,
+  assignedToFilter = 'all',
   stageFilter,
   searchTerm,
   sortField,
@@ -255,6 +256,17 @@ export function useOpportunitiesData({
           return;
         }
 
+        // Apply explicit assignedToFilter from filter bar (overrides employee scope)
+        if (assignedToFilter !== 'all') {
+          delete effectiveFilter.assigned_to;
+          delete effectiveFilter.$or;
+          if (assignedToFilter === 'unassigned') {
+            effectiveFilter.$or = [{ assigned_to: null }];
+          } else {
+            effectiveFilter.assigned_to = assignedToFilter;
+          }
+        }
+
         // Apply stage filter
         if (stageFilter !== 'all') {
           effectiveFilter = { ...effectiveFilter, stage: stageFilter };
@@ -354,6 +366,7 @@ export function useOpportunitiesData({
       stageFilter,
       selectedTags,
       getTenantFilter,
+      assignedToFilter,
       viewMode,
       loadingToast,
       opportunitiesLabel,
@@ -381,6 +394,7 @@ export function useOpportunitiesData({
     loadOpportunities,
     showTestData,
     supportingDataReady,
+    assignedToFilter,
   ]);
 
   // Clear cache when employee filter changes

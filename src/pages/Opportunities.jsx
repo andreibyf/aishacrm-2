@@ -108,6 +108,7 @@ export default function OpportunitiesPage() {
     selectedTenantId,
     employeeScope: selectedEmail,
     stageFilter,
+    assignedToFilter,
     searchTerm,
     sortField,
     sortDirection,
@@ -265,13 +266,6 @@ export default function OpportunitiesPage() {
       selectedTags.length > 0
     );
   }, [searchTerm, stageFilter, assignedToFilter, selectedTags]);
-
-  const filteredOpportunities = useMemo(() => {
-    if (assignedToFilter === 'all') return opportunities;
-    return opportunities.filter((o) =>
-      assignedToFilter === 'unassigned' ? !o.assigned_to : o.assigned_to === assignedToFilter,
-    );
-  }, [opportunities, assignedToFilter]);
 
   const handleStageChange = async (opportunityId, newStage) => {
     try {
@@ -522,15 +516,15 @@ export default function OpportunitiesPage() {
 
         {/* Select All Banners */}
         {viewMode !== 'kanban' &&
-          selectedOpportunities.size === filteredOpportunities.length &&
-          filteredOpportunities.length > 0 &&
+          selectedOpportunities.size === opportunities.length &&
+          opportunities.length > 0 &&
           !selectAllMode &&
-          totalItems > filteredOpportunities.length && (
+          totalItems > opportunities.length && (
             <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <AlertCircle className="w-5 h-5 text-blue-400" />
                 <span className="text-blue-200">
-                  All {filteredOpportunities.length} opportunities on this page are selected.
+                  All {opportunities.length} opportunities on this page are selected.
                 </span>
                 <Button
                   variant="link"
@@ -578,7 +572,7 @@ export default function OpportunitiesPage() {
               <p className="text-slate-400">Loading opportunities...</p>
             </div>
           </div>
-        ) : filteredOpportunities.length === 0 ? (
+        ) : opportunities.length === 0 ? (
           <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-12 text-center">
             <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-slate-300 mb-2">
@@ -621,7 +615,7 @@ export default function OpportunitiesPage() {
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <AnimatePresence>
-                {filteredOpportunities.map((opp) => {
+                {opportunities.map((opp) => {
                   const account = accounts.find((a) => a.id === opp.account_id);
                   const contact = contacts.find((c) => c.id === opp.contact_id);
 
@@ -669,7 +663,7 @@ export default function OpportunitiesPage() {
         ) : (
           <>
             <OpportunityTable
-              opportunities={filteredOpportunities}
+              opportunities={opportunities}
               selectedOpportunities={selectedOpportunities}
               selectAllMode={selectAllMode}
               toggleSelectAll={toggleSelectAll}

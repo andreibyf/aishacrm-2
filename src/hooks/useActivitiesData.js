@@ -18,6 +18,7 @@ import { format } from 'date-fns';
 export function useActivitiesData({
   selectedTenantId,
   employeeScope: selectedEmail,
+  assignedToFilter = 'all',
   statusFilter,
   typeFilter,
   searchTerm,
@@ -210,6 +211,17 @@ export function useActivitiesData({
       try {
         let currentFilter = { ...buildFilter(), include_stats: false };
 
+        // Apply explicit assignedToFilter from filter bar (overrides employee scope)
+        if (assignedToFilter !== 'all') {
+          delete currentFilter.assigned_to;
+          delete currentFilter.$or;
+          if (assignedToFilter === 'unassigned') {
+            currentFilter.$or = [{ assigned_to: null }, { assigned_to: '' }];
+          } else {
+            currentFilter.assigned_to = assignedToFilter;
+          }
+        }
+
         // Guard for superadmin with no tenant
         if ((user.role === 'superadmin' || user.role === 'admin') && !currentFilter.tenant_id) {
           setActivities([]);
@@ -305,7 +317,7 @@ export function useActivitiesData({
         setLoading(false);
       }
     },
-    [user, searchTerm, selectedTags, buildFilter, loadStats, loadingToast, activitiesLabel, selectedEmail, sortField, sortDirection, setCurrentPage],
+    [user, searchTerm, selectedTags, buildFilter, loadStats, loadingToast, activitiesLabel, selectedEmail, assignedToFilter, sortField, sortDirection, setCurrentPage],
   );
 
   // Load activities when dependencies change
