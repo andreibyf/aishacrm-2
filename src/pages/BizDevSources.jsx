@@ -797,40 +797,21 @@ export default function BizDevSourcesPage() {
         </div>
 
         <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex-1 min-w-48">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <Input
-                  placeholder="Search sources..."
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      setSearchTerm(searchInput);
-                      setCurrentPage(1);
-                    }
-                  }}
-                  className="pl-10 bg-slate-700 border-slate-600 text-slate-100"
-                />
-              </div>
-              {searchInput && !searchTerm && (
-                <p className="text-xs text-slate-500 mt-1">Press Enter to search</p>
-              )}
-              {searchTerm && (
-                <p className="text-xs text-slate-400 mt-1">
-                  {filteredSources.length} result{filteredSources.length !== 1 ? 's' : ''} found
-                  <button
-                    onClick={() => {
-                      setSearchTerm('');
-                      setSearchInput('');
-                    }}
-                    className="ml-2 text-blue-400 hover:text-blue-300"
-                  >
-                    Clear
-                  </button>
-                </p>
-              )}
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Input
+                placeholder="Search sources..."
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    setSearchTerm(searchInput);
+                    setCurrentPage(1);
+                  }
+                }}
+                className="pl-10 bg-slate-700 border-slate-600 text-slate-100"
+              />
             </div>
             <Select
               value={licenseStatusFilter}
@@ -839,7 +820,7 @@ export default function BizDevSourcesPage() {
                 setCurrentPage(1);
               }}
             >
-              <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-100">
+              <SelectTrigger className="w-36 bg-slate-700 border-slate-600 text-slate-100 shrink-0">
                 <SelectValue placeholder="License Status" />
               </SelectTrigger>
               <SelectContent>
@@ -859,7 +840,7 @@ export default function BizDevSourcesPage() {
                 setCurrentPage(1);
               }}
             >
-              <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-100">
+              <SelectTrigger className="w-36 bg-slate-700 border-slate-600 text-slate-100 shrink-0">
                 <SelectValue placeholder="Batch" />
               </SelectTrigger>
               <SelectContent>
@@ -878,7 +859,7 @@ export default function BizDevSourcesPage() {
                 setCurrentPage(1);
               }}
             >
-              <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-100">
+              <SelectTrigger className="w-36 bg-slate-700 border-slate-600 text-slate-100 shrink-0">
                 <SelectValue placeholder="Source" />
               </SelectTrigger>
               <SelectContent>
@@ -901,7 +882,7 @@ export default function BizDevSourcesPage() {
                 }
               }}
             >
-              <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-100 w-44">
+              <SelectTrigger className="w-40 bg-slate-700 border-slate-600 text-slate-100 shrink-0">
                 <SelectValue placeholder="Sort by..." />
               </SelectTrigger>
               <SelectContent>
