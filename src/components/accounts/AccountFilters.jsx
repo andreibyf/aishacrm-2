@@ -34,7 +34,7 @@ export default function AccountFilters({
       <div className="flex-1 relative">
         <Search className="absolute left-3 top-3 w-5 h-5 text-slate-500" />
         <Input
-          placeholder="Search accounts by name, website, email, phone, city or industry..."
+          placeholder="Search accounts by name..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="pl-10 bg-slate-800 border-slate-700 text-slate-200"

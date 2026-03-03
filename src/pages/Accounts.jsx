@@ -89,6 +89,7 @@ export default function AccountsPage() {
     setIsDetailOpen,
     handlePageChange,
     handlePageSizeChange,
+    reloadSupportingData,
   } = useAccountsData({
     selectedTenantId,
     employeeScope: selectedEmail,
@@ -110,7 +111,6 @@ export default function AccountsPage() {
 
   // Bulk ops hook
   const { handleBulkDelete, handleBulkTypeChange, handleBulkAssign } = useAccountsBulkOps({
-    accounts,
     selectedAccounts,
     setSelectedAccounts,
     selectAllMode,
@@ -128,7 +128,6 @@ export default function AccountsPage() {
     updateProgress,
     completeProgress,
     clearCacheByKey,
-    cachedRequest,
   });
 
   // --- Local handlers ---
@@ -218,6 +217,7 @@ export default function AccountsPage() {
     clearCacheByKey('Employee');
     clearCacheByKey('User');
     clearCacheByKey('Contact');
+    await reloadSupportingData();
     await Promise.all([loadAccounts(), loadTotalStats()]);
     toast.success('Accounts refreshed');
   };

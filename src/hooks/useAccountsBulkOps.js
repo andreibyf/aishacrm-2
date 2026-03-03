@@ -12,7 +12,6 @@ import { toast } from 'sonner';
  * Uses window.confirm for bulk destructive operations (preserved from original).
  */
 export function useAccountsBulkOps({
-  accounts,
   selectedAccounts,
   setSelectedAccounts,
   selectAllMode,
@@ -30,28 +29,23 @@ export function useAccountsBulkOps({
   updateProgress,
   completeProgress,
   clearCacheByKey,
-  cachedRequest,
 }) {
-  // Helper: fetch all matching accounts for select-all operations
+  // Helper: fetch all matching accounts for select-all operations.
+  // Uses the same server-side search/type params as loadAccounts so bulk ops
+  // always act on exactly the records the user sees on screen.
   const fetchAllMatching = async () => {
-    const currentTenantFilter = { ...getTenantFilter(), limit: 10000 };
-    const sortString = sortDirection === 'desc' ? `-${sortField}` : sortField;
-    const allAccounts = await Account.filter(currentTenantFilter, sortString);
-
-    let filtered = allAccounts || [];
+    const currentTenantFilter = { ...getTenantFilter() };
     if (searchTerm) {
-      const search = searchTerm.toLowerCase();
-      filtered = filtered.filter(
-        (a) =>
-          a.name?.toLowerCase().includes(search) ||
-          a.website?.toLowerCase().includes(search) ||
-          a.email?.toLowerCase().includes(search) ||
-          a.phone?.includes(searchTerm),
-      );
+      currentTenantFilter.search = searchTerm.trim();
     }
     if (typeFilter !== 'all') {
-      filtered = filtered.filter((a) => a.type === typeFilter);
+      currentTenantFilter.type = typeFilter;
     }
+    const sortString = sortDirection === 'desc' ? `-${sortField}` : sortField;
+    const allAccounts = await Account.filter(currentTenantFilter, sortString, 10000);
+
+    // Client-side tag filtering (not supported server-side)
+    let filtered = Array.isArray(allAccounts) ? allAccounts : [];
     if (selectedTags.length > 0) {
       filtered = filtered.filter(
         (a) => Array.isArray(a.tags) && selectedTags.every((tag) => a.tags.includes(tag)),

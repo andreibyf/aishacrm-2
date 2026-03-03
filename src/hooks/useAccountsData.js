@@ -1,20 +1,21 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { Account, Contact, Employee } from '@/api/entities';
+import { Account, Employee } from '@/api/entities';
 import { loadUsersSafely } from '@/components/shared/userLoader';
 import { toast } from 'sonner';
 
 /**
- * useAccountsData hook - Manages all data fetching for the Accounts page
+ * useAccountsData hook - Manages all data fetching for the Accounts page.
  *
- * REFACTORED: Now uses server-side pagination (limit/offset) instead of
- * loading all 10,000 records client-side. The v2 accounts route supports:
- * - `search` param (server-side ilike on name)
+ * Uses server-side pagination (limit/offset). The v2 accounts route supports:
+ * - `search` param (server-side ilike on `name`)
  * - `type` filter
  * - `limit`/`offset` pagination
  * - `sort` with -field for descending
- * - `count: 'exact'` returning total in _total
+ * - `_total` count in the response
  *
- * Tags filtering remains client-side as the backend doesn't support tag queries.
+ * Tag filtering is applied client-side (not supported server-side).
+ * When tags are active, `totalItems` is adjusted to reflect the visible page
+ * window rather than the raw server total.
  */
 export function useAccountsData({
   selectedTenantId,
@@ -144,46 +145,56 @@ export function useAccountsData({
   }, [user]);
 
   // Load supporting data once
-  useEffect(() => {
-    if (supportingDataLoaded.current || !user) return;
+  // Load supporting data — extracted as useCallback so Refresh can reset and reload it
+  const loadSupportingData = useCallback(async () => {
+    if (!user) return;
 
-    const loadSupportingData = async () => {
-      try {
-        let baseTenantFilter = {};
-        if (user.role === 'superadmin' || user.role === 'admin') {
-          if (selectedTenantId) baseTenantFilter.tenant_id = selectedTenantId;
-        } else if (user.tenant_id) {
-          baseTenantFilter.tenant_id = user.tenant_id;
-        }
+    try {
+      let baseTenantFilter = {};
+      if (user.role === 'superadmin' || user.role === 'admin') {
+        if (selectedTenantId) baseTenantFilter.tenant_id = selectedTenantId;
+      } else if (user.tenant_id) {
+        baseTenantFilter.tenant_id = user.tenant_id;
+      }
 
-        if ((user.role === 'superadmin' || user.role === 'admin') && !baseTenantFilter.tenant_id) {
-          supportingDataLoaded.current = true;
-          setSupportingDataReady(true);
-          return;
-        }
-
-        const [usersData, employeesData] = await Promise.all([
-          loadUsersSafely(user, selectedTenantId, cachedRequest, 1000),
-          cachedRequest(
-            'Employee',
-            'filter',
-            { filter: baseTenantFilter, limit: 1000 },
-            () => Employee.filter(baseTenantFilter, 'created_at', 1000),
-          ),
-        ]);
-
-        setUsers(usersData || []);
-        setEmployees(employeesData || []);
+      if ((user.role === 'superadmin' || user.role === 'admin') && !baseTenantFilter.tenant_id) {
         supportingDataLoaded.current = true;
         setSupportingDataReady(true);
-      } catch (error) {
-        console.error('[Accounts] Failed to load supporting data:', error);
-        setSupportingDataReady(true);
+        return;
       }
-    };
 
-    loadSupportingData();
+      const [usersData, employeesData] = await Promise.all([
+        loadUsersSafely(user, selectedTenantId, cachedRequest, 1000),
+        cachedRequest(
+          'Employee',
+          'filter',
+          { filter: baseTenantFilter, limit: 1000 },
+          () => Employee.filter(baseTenantFilter, 'created_at', 1000),
+        ),
+      ]);
+
+      setUsers(usersData || []);
+      setEmployees(employeesData || []);
+      supportingDataLoaded.current = true;
+      setSupportingDataReady(true);
+    } catch (error) {
+      console.error('[Accounts] Failed to load supporting data:', error);
+      setSupportingDataReady(true);
+    }
   }, [user, selectedTenantId, cachedRequest]);
+
+  // Initial load — run once when user/tenant become available
+  useEffect(() => {
+    if (supportingDataLoaded.current || !user) return;
+    loadSupportingData();
+  }, [user, selectedTenantId, loadSupportingData]);
+
+  // Exposed reload: resets the guard so Refresh reloads users/employees too
+  const reloadSupportingData = useCallback(async () => {
+    supportingDataLoaded.current = false;
+    setSupportingDataReady(false);
+    await loadSupportingData();
+  }, [loadSupportingData]);
 
   // Load total stats — parallel limit:1 queries for counts
   const loadTotalStats = useCallback(async () => {
@@ -271,8 +282,15 @@ export function useAccountsData({
         );
       }
 
+      // When tags reduce the result client-side, report the visible page window
+      // rather than the raw server total so pagination counts stay consistent.
+      const effectiveTotalItems =
+        selectedTags.length > 0
+          ? (currentPage - 1) * pageSize + items.length
+          : totalCount;
+
       setAccounts(items);
-      setTotalItems(totalCount);
+      setTotalItems(effectiveTotalItems);
       loadingToast.showSuccess(`${accountsLabel} loading! ✨`);
     } catch (error) {
       console.error('[Accounts] Failed to load accounts:', error);
@@ -374,6 +392,7 @@ export function useAccountsData({
     assignedToMap,
     initialLoadDone,
     supportingDataReady,
+    reloadSupportingData,
     detailAccount,
     setDetailAccount,
     isDetailOpen,
