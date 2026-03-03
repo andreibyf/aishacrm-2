@@ -56,6 +56,7 @@ export default function ContactsPage() {
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState([]);
+  const [assignedToFilter, setAssignedToFilter] = useState('all');
   const [showTestData] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -271,6 +272,25 @@ export default function ContactsPage() {
     setCurrentPage(1);
   };
 
+  const handleClearFilters = () => {
+    setSearchTerm('');
+    setSelectedTags([]);
+    setAssignedToFilter('all');
+    setCurrentPage(1);
+  };
+
+  const hasActiveFilters = useMemo(
+    () => searchTerm !== '' || selectedTags.length > 0 || assignedToFilter !== 'all',
+    [searchTerm, selectedTags, assignedToFilter],
+  );
+
+  const filteredContacts = useMemo(() => {
+    if (assignedToFilter === 'all') return contacts;
+    return contacts.filter((c) =>
+      assignedToFilter === 'unassigned' ? !c.assigned_to : c.assigned_to === assignedToFilter,
+    );
+  }, [contacts, assignedToFilter]);
+
   // AiSHA events
   useAiShaEvents({
     entityType: 'contacts',
@@ -389,24 +409,30 @@ export default function ContactsPage() {
         setSearchTerm={setSearchTerm}
         selectedTags={selectedTags}
         setSelectedTags={setSelectedTags}
+        employees={employees}
+        assignedToFilter={assignedToFilter}
+        setAssignedToFilter={setAssignedToFilter}
         sortField={sortField}
         sortDirection={sortDirection}
         setSortField={setSortField}
         setSortDirection={setSortDirection}
         sortOptions={sortOptions}
+        hasActiveFilters={hasActiveFilters}
+        handleClearFilters={handleClearFilters}
         setCurrentPage={setCurrentPage}
       />
 
       {/* Select All Banners */}
-      {selectedContacts.size === contacts.length &&
-        contacts.length > 0 &&
+      {selectedContacts.size === filteredContacts.length &&
+        filteredContacts.length > 0 &&
         !selectAllMode &&
-        totalItems > contacts.length && (
+        totalItems > filteredContacts.length && (
           <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-blue-400" />
               <span className="text-blue-200">
-                All {contacts.length} {contactsLabel.toLowerCase()} on this page are selected.
+                All {filteredContacts.length} {contactsLabel.toLowerCase()} on this page are
+                selected.
               </span>
               <Button
                 variant="link"
@@ -416,7 +442,12 @@ export default function ContactsPage() {
                 Select all {totalItems} {contactsLabel.toLowerCase()} matching current filters
               </Button>
             </div>
-            <Button variant="ghost" size="sm" onClick={handleClearSelection} className="text-slate-400 hover:text-slate-200">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleClearSelection}
+              className="text-slate-400 hover:text-slate-200"
+            >
               <X className="w-4 h-4" />
             </Button>
           </div>
@@ -430,7 +461,12 @@ export default function ContactsPage() {
               All {totalItems} {contactsLabel.toLowerCase()} matching current filters are selected.
             </span>
           </div>
-          <Button variant="ghost" size="sm" onClick={handleClearSelection} className="text-slate-400 hover:text-slate-200">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleClearSelection}
+            className="text-slate-400 hover:text-slate-200"
+          >
             Clear selection
           </Button>
         </div>
@@ -439,7 +475,7 @@ export default function ContactsPage() {
       {/* Main Content */}
       {viewMode === 'list' ? (
         <ContactTable
-          contacts={contacts}
+          contacts={filteredContacts}
           selectedContacts={selectedContacts}
           selectAllMode={selectAllMode}
           toggleSelectAll={toggleSelectAll}
@@ -456,7 +492,7 @@ export default function ContactsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <AnimatePresence>
-            {contacts.map((contact) => {
+            {filteredContacts.map((contact) => {
               const account = accountMap.get(contact.account_id);
               const assignedUser = userMap.get(contact.assigned_to);
               const assignedEmployee = employeeMap.get(contact.assigned_to);
@@ -501,7 +537,7 @@ export default function ContactsPage() {
       />
 
       {/* Empty State */}
-      {!loading && contacts.length === 0 && (
+      {!loading && filteredContacts.length === 0 && (
         <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-12 text-center">
           <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
           <h3 className="text-xl font-semibold text-slate-300 mb-2">

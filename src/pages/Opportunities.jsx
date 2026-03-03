@@ -11,16 +11,7 @@ import OpportunityStatsCards from '../components/opportunities/OpportunityStatsC
 import OpportunityFilters from '../components/opportunities/OpportunityFilters';
 import OpportunityTable from '../components/opportunities/OpportunityTable';
 import { Button } from '@/components/ui/button';
-import {
-  AlertCircle,
-  AppWindow,
-  Grid,
-  List,
-  Loader2,
-  Plus,
-  Upload,
-  X,
-} from 'lucide-react';
+import { AlertCircle, AppWindow, Grid, List, Loader2, Plus, Upload, X } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import CsvExportButton from '../components/shared/CsvExportButton';
 import CsvImportDialog from '../components/shared/CsvImportDialog';
@@ -67,6 +58,7 @@ export default function OpportunitiesPage() {
   const [detailOpportunity, setDetailOpportunity] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState([]);
+  const [assignedToFilter, setAssignedToFilter] = useState('all');
   const [showTestData] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -258,6 +250,7 @@ export default function OpportunitiesPage() {
   const handleClearFilters = () => {
     setSearchTerm('');
     setStageFilter('all');
+    setAssignedToFilter('all');
     setSelectedTags([]);
     setCurrentPage(1);
     resetPaginationCursors();
@@ -265,8 +258,20 @@ export default function OpportunitiesPage() {
   };
 
   const hasActiveFilters = useMemo(() => {
-    return searchTerm !== '' || stageFilter !== 'all' || selectedTags.length > 0;
-  }, [searchTerm, stageFilter, selectedTags]);
+    return (
+      searchTerm !== '' ||
+      stageFilter !== 'all' ||
+      assignedToFilter !== 'all' ||
+      selectedTags.length > 0
+    );
+  }, [searchTerm, stageFilter, assignedToFilter, selectedTags]);
+
+  const filteredOpportunities = useMemo(() => {
+    if (assignedToFilter === 'all') return opportunities;
+    return opportunities.filter((o) =>
+      assignedToFilter === 'unassigned' ? !o.assigned_to : o.assigned_to === assignedToFilter,
+    );
+  }, [opportunities, assignedToFilter]);
 
   const handleStageChange = async (opportunityId, newStage) => {
     try {
@@ -344,9 +349,7 @@ export default function OpportunitiesPage() {
             setIsFormOpen(open);
             if (!open) setEditingOpportunity(null);
           }}
-          title={
-            editingOpportunity ? `Edit ${opportunityLabel}` : `Add New ${opportunityLabel}`
-          }
+          title={editingOpportunity ? `Edit ${opportunityLabel}` : `Add New ${opportunityLabel}`}
           size="lg"
         >
           <OpportunityForm
@@ -503,6 +506,9 @@ export default function OpportunitiesPage() {
             allTags={allTags}
             selectedTags={selectedTags}
             setSelectedTags={setSelectedTags}
+            employees={employees}
+            assignedToFilter={assignedToFilter}
+            setAssignedToFilter={setAssignedToFilter}
             sortField={sortField}
             sortDirection={sortDirection}
             setSortField={setSortField}
@@ -516,15 +522,15 @@ export default function OpportunitiesPage() {
 
         {/* Select All Banners */}
         {viewMode !== 'kanban' &&
-          selectedOpportunities.size === opportunities.length &&
-          opportunities.length > 0 &&
+          selectedOpportunities.size === filteredOpportunities.length &&
+          filteredOpportunities.length > 0 &&
           !selectAllMode &&
-          totalItems > opportunities.length && (
+          totalItems > filteredOpportunities.length && (
             <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <AlertCircle className="w-5 h-5 text-blue-400" />
                 <span className="text-blue-200">
-                  All {opportunities.length} opportunities on this page are selected.
+                  All {filteredOpportunities.length} opportunities on this page are selected.
                 </span>
                 <Button
                   variant="link"
@@ -572,7 +578,7 @@ export default function OpportunitiesPage() {
               <p className="text-slate-400">Loading opportunities...</p>
             </div>
           </div>
-        ) : opportunities.length === 0 ? (
+        ) : filteredOpportunities.length === 0 ? (
           <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-12 text-center">
             <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-slate-300 mb-2">
@@ -584,10 +590,7 @@ export default function OpportunitiesPage() {
                 : `Get started by adding your first ${opportunityLabel.toLowerCase()}`}
             </p>
             {!hasActiveFilters && (
-              <Button
-                onClick={() => setIsFormOpen(true)}
-                className="bg-blue-600 hover:bg-blue-700"
-              >
+              <Button onClick={() => setIsFormOpen(true)} className="bg-blue-600 hover:bg-blue-700">
                 <Plus className="w-4 h-4 mr-2" />
                 Add Your First {opportunityLabel}
               </Button>
@@ -618,7 +621,7 @@ export default function OpportunitiesPage() {
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <AnimatePresence>
-                {opportunities.map((opp) => {
+                {filteredOpportunities.map((opp) => {
                   const account = accounts.find((a) => a.id === opp.account_id);
                   const contact = contacts.find((c) => c.id === opp.contact_id);
 
@@ -627,9 +630,7 @@ export default function OpportunitiesPage() {
                       key={opp.id}
                       opportunity={opp}
                       accountName={account?.name}
-                      contactName={
-                        contact ? `${contact.first_name} ${contact.last_name}` : ''
-                      }
+                      contactName={contact ? `${contact.first_name} ${contact.last_name}` : ''}
                       assignedUserName={(() => {
                         if (!opp.assigned_to) return undefined;
                         return (
@@ -668,7 +669,7 @@ export default function OpportunitiesPage() {
         ) : (
           <>
             <OpportunityTable
-              opportunities={opportunities}
+              opportunities={filteredOpportunities}
               selectedOpportunities={selectedOpportunities}
               selectAllMode={selectAllMode}
               toggleSelectAll={toggleSelectAll}

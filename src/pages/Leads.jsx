@@ -17,16 +17,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import {
-  AlertCircle,
-  Eye,
-  Grid,
-  List,
-  Loader2,
-  Plus,
-  Upload,
-  X,
-} from 'lucide-react';
+import { AlertCircle, Eye, Grid, List, Loader2, Plus, Upload, X } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import CsvExportButton from '../components/shared/CsvExportButton';
 const CsvImportDialog = lazy(() => import('../components/shared/CsvImportDialog'));
@@ -57,6 +48,7 @@ export default function LeadsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [ageFilter, setAgeFilter] = useState('all');
+  const [assignedToFilter, setAssignedToFilter] = useState('all');
   const [sortField, setSortField] = useState('created_date');
   const [sortDirection, setSortDirection] = useState('desc');
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -458,6 +450,7 @@ export default function LeadsPage() {
     setSearchTerm('');
     setStatusFilter('all');
     setAgeFilter('all');
+    setAssignedToFilter('all');
     setSelectedTags([]);
     setSortField('created_date');
     setSortDirection('desc');
@@ -503,11 +496,27 @@ export default function LeadsPage() {
       searchTerm !== '' ||
       statusFilter !== 'all' ||
       ageFilter !== 'all' ||
+      assignedToFilter !== 'all' ||
       selectedTags.length > 0 ||
       sortField !== 'created_date' ||
       sortDirection !== 'desc'
     );
-  }, [searchTerm, statusFilter, ageFilter, selectedTags, sortField, sortDirection]);
+  }, [
+    searchTerm,
+    statusFilter,
+    ageFilter,
+    assignedToFilter,
+    selectedTags,
+    sortField,
+    sortDirection,
+  ]);
+
+  const filteredLeads = useMemo(() => {
+    if (assignedToFilter === 'all') return leads;
+    return leads.filter((l) =>
+      assignedToFilter === 'unassigned' ? !l.assigned_to : l.assigned_to === assignedToFilter,
+    );
+  }, [leads, assignedToFilter]);
 
   // Matching the stat card colors - semi-transparent backgrounds
   const statusColors = {
@@ -748,6 +757,9 @@ export default function LeadsPage() {
           allTags={allTags}
           selectedTags={selectedTags}
           setSelectedTags={setSelectedTags}
+          employees={employees}
+          assignedToFilter={assignedToFilter}
+          setAssignedToFilter={setAssignedToFilter}
           sortField={sortField}
           sortDirection={sortDirection}
           setSortField={setSortField}
@@ -759,15 +771,15 @@ export default function LeadsPage() {
         />
 
         {/* Select All Banner */}
-        {selectedLeads.size === leads.length &&
-          leads.length > 0 &&
+        {selectedLeads.size === filteredLeads.length &&
+          filteredLeads.length > 0 &&
           !selectAllMode &&
-          totalItems > leads.length && (
+          totalItems > filteredLeads.length && (
             <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <AlertCircle className="w-5 h-5 text-blue-400" />
                 <span className="text-blue-200">
-                  All {leads.length} leads on this page are selected.
+                  All {filteredLeads.length} leads on this page are selected.
                 </span>
                 <Button
                   variant="link"
@@ -814,7 +826,7 @@ export default function LeadsPage() {
               <p className="text-slate-400">Loading leads...</p>
             </div>
           </div>
-        ) : leads.length === 0 ? (
+        ) : filteredLeads.length === 0 ? (
           <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-12 text-center">
             <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-slate-300 mb-2">
@@ -836,7 +848,7 @@ export default function LeadsPage() {
           <>
             {/* List/Table View */}
             <LeadTable
-              leads={leads}
+              leads={filteredLeads}
               selectedLeads={selectedLeads}
               selectAllMode={selectAllMode}
               toggleSelectAll={toggleSelectAll}
@@ -870,7 +882,7 @@ export default function LeadsPage() {
             {/* Card View */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <AnimatePresence>
-                {leads.map((lead) => (
+                {filteredLeads.map((lead) => (
                   <LeadCard
                     key={lead.id}
                     lead={lead}

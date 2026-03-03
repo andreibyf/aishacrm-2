@@ -26,6 +26,9 @@ export default function AccountFilters({
   setSortDirection,
   sortOptions,
   setCurrentPage,
+  employees,
+  assignedToFilter,
+  setAssignedToFilter,
   hasActiveFilters,
   onClearFilters,
 }) {
@@ -42,11 +45,33 @@ export default function AccountFilters({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <TagFilter
-          allTags={allTags}
-          selectedTags={selectedTags}
-          onTagsChange={setSelectedTags}
-        />
+        <TagFilter allTags={allTags} selectedTags={selectedTags} onTagsChange={setSelectedTags} />
+
+        {/* Assigned To Filter */}
+        <Select
+          value={assignedToFilter}
+          onValueChange={(value) => {
+            setAssignedToFilter(value);
+            setCurrentPage(1);
+          }}
+        >
+          <SelectTrigger className="w-36 shrink-0 bg-slate-800 border-slate-700 text-slate-200">
+            <SelectValue placeholder="All Assignees" />
+          </SelectTrigger>
+          <SelectContent className="bg-slate-800 border-slate-700">
+            <SelectItem value="all" className="text-slate-200 hover:bg-slate-700">
+              All Assignees
+            </SelectItem>
+            <SelectItem value="unassigned" className="text-slate-200 hover:bg-slate-700">
+              Unassigned
+            </SelectItem>
+            {employees.map((emp) => (
+              <SelectItem key={emp.id} value={emp.id} className="text-slate-200 hover:bg-slate-700">
+                {emp.first_name} {emp.last_name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         <Select
           value={`${sortField}:${sortDirection}`}
@@ -88,7 +113,9 @@ export default function AccountFilters({
                 Clear
               </Button>
             </TooltipTrigger>
-            <TooltipContent><p>Clear all filters</p></TooltipContent>
+            <TooltipContent>
+              <p>Clear all filters</p>
+            </TooltipContent>
           </Tooltip>
         )}
       </div>

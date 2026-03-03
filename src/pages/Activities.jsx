@@ -64,6 +64,7 @@ export default function ActivitiesPage() {
   const [detailActivity, setDetailActivity] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState([]);
+  const [assignedToFilter, setAssignedToFilter] = useState('all');
   const [dateRange, setDateRange] = useState({ start: null, end: null });
   const [showTestData, setShowTestData] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -252,6 +253,7 @@ export default function ActivitiesPage() {
     setStatusFilter('all');
     setTypeFilter('all');
     setSelectedTags([]);
+    setAssignedToFilter('all');
     setDateRange({ start: null, end: null });
     setShowTestData(false);
     setCurrentPage(1);
@@ -263,54 +265,67 @@ export default function ActivitiesPage() {
       searchTerm !== '' ||
       statusFilter !== 'all' ||
       typeFilter !== 'all' ||
+      assignedToFilter !== 'all' ||
       selectedTags.length > 0 ||
       dateRange.start !== null ||
       dateRange.end !== null ||
       showTestData
     );
-  }, [searchTerm, statusFilter, typeFilter, selectedTags, dateRange, showTestData]);
+  }, [
+    searchTerm,
+    statusFilter,
+    typeFilter,
+    assignedToFilter,
+    selectedTags,
+    dateRange,
+    showTestData,
+  ]);
+
+  const filteredActivities = useMemo(() => {
+    if (assignedToFilter === 'all') return activities;
+    return activities.filter((a) =>
+      assignedToFilter === 'unassigned' ? !a.assigned_to : a.assigned_to === assignedToFilter,
+    );
+  }, [activities, assignedToFilter]);
 
   // Related entity link helper
-  const getRelatedEntityLink = useCallback(
-    (activity) => {
-      if (!activity.related_to || !activity.related_id) return null;
+  const getRelatedEntityLink = useCallback((activity) => {
+    if (!activity.related_to || !activity.related_id) return null;
 
-      const entityMap = {
-        contact: { api: Contact, label: 'Contact' },
-        account: { api: Account, label: 'Account' },
-        lead: { api: Lead, label: 'Lead' },
-        opportunity: { api: Opportunity, label: 'Opportunity' },
-      };
+    const entityMap = {
+      contact: { api: Contact, label: 'Contact' },
+      account: { api: Account, label: 'Account' },
+      lead: { api: Lead, label: 'Lead' },
+      opportunity: { api: Opportunity, label: 'Opportunity' },
+    };
 
-      const entity = entityMap[activity.related_to];
-      if (!entity) return null;
+    const entity = entityMap[activity.related_to];
+    if (!entity) return null;
 
-      const handleClick = async (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        try {
-          const data = await entity.api.get(activity.related_id);
-          setViewingRelatedEntity(data);
-          setRelatedEntityType(activity.related_to);
-          setIsRelatedDetailOpen(true);
-        } catch (error) {
-          console.error(`Failed to load ${activity.related_to}:`, error);
-          toast.error(`Could not load ${entity.label} details`);
-        }
-      };
+    const handleClick = async (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      try {
+        const data = await entity.api.get(activity.related_id);
+        setViewingRelatedEntity(data);
+        setRelatedEntityType(activity.related_to);
+        setIsRelatedDetailOpen(true);
+      } catch (error) {
+        console.error(`Failed to load ${activity.related_to}:`, error);
+        toast.error(`Could not load ${entity.label} details`);
+      }
+    };
 
-      return (
-        <button
-          type="button"
-          className="text-blue-400 hover:text-blue-300 hover:underline text-left"
-          onClick={handleClick}
-        >
-          {activity.related_name || `View ${entity.label}`}
-        </button>
-      );
-    },
-    [],
-  );
+    return (
+      <button
+        type="button"
+        className="text-blue-400 hover:text-blue-300 hover:underline text-left"
+        onClick={handleClick}
+      >
+        {activity.related_name || `View ${entity.label}`}
+      </button>
+    );
+  }, []);
 
   // Date formatting with timezone support
   const formatDisplayDate = useCallback(
@@ -321,7 +336,9 @@ export default function ActivitiesPage() {
         // Full ISO datetime with timezone offset or UTC Z suffix
         if (
           activity.due_date.includes('T') &&
-          (activity.due_date.includes('+') || activity.due_date.includes('-', 10) || activity.due_date.endsWith('Z'))
+          (activity.due_date.includes('+') ||
+            activity.due_date.includes('-', 10) ||
+            activity.due_date.endsWith('Z'))
         ) {
           const parsedDate = new Date(activity.due_date);
           if (!isNaN(parsedDate.getTime())) {
@@ -343,7 +360,8 @@ export default function ActivitiesPage() {
           const localDate = utcToLocal(utcString, offsetMinutes);
 
           if (isNaN(localDate.getTime())) {
-            if (import.meta.env.DEV) console.warn('[Activities] Invalid Date from UTC conversion:', utcString);
+            if (import.meta.env.DEV)
+              console.warn('[Activities] Invalid Date from UTC conversion:', utcString);
             return activity.due_date;
           }
           return format(localDate, 'MMM d, yyyy, h:mm a');
@@ -501,10 +519,16 @@ export default function ActivitiesPage() {
                   onClick={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
                   className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
                 >
-                  {viewMode === 'list' ? <List className="w-4 h-4" /> : <Grid className="w-4 h-4" />}
+                  {viewMode === 'list' ? (
+                    <List className="w-4 h-4" />
+                  ) : (
+                    <Grid className="w-4 h-4" />
+                  )}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent><p>Switch view</p></TooltipContent>
+              <TooltipContent>
+                <p>Switch view</p>
+              </TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -517,7 +541,9 @@ export default function ActivitiesPage() {
                   Import
                 </Button>
               </TooltipTrigger>
-              <TooltipContent><p>Import activities from CSV</p></TooltipContent>
+              <TooltipContent>
+                <p>Import activities from CSV</p>
+              </TooltipContent>
             </Tooltip>
             <CsvExportButton entityName="Activity" data={activities} filename="activities_export" />
             {(selectedActivities.size > 0 || selectAllMode) && (
@@ -543,7 +569,9 @@ export default function ActivitiesPage() {
                   Add {activityLabel}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent><p>Create new {activityLabel.toLowerCase()}</p></TooltipContent>
+              <TooltipContent>
+                <p>Create new {activityLabel.toLowerCase()}</p>
+              </TooltipContent>
             </Tooltip>
           </div>
         </div>
@@ -565,6 +593,9 @@ export default function ActivitiesPage() {
           allTags={allTags}
           selectedTags={selectedTags}
           setSelectedTags={setSelectedTags}
+          employees={employees}
+          assignedToFilter={assignedToFilter}
+          setAssignedToFilter={setAssignedToFilter}
           sortField={sortField}
           sortDirection={sortDirection}
           setSortField={setSortField}
@@ -576,15 +607,15 @@ export default function ActivitiesPage() {
         />
 
         {/* Select All Banners */}
-        {selectedActivities.size === activities.length &&
-          activities.length > 0 &&
+        {selectedActivities.size === filteredActivities.length &&
+          filteredActivities.length > 0 &&
           !selectAllMode &&
-          totalItems > activities.length && (
+          totalItems > filteredActivities.length && (
             <div className="mb-4 bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <AlertCircle className="w-5 h-5 text-blue-400" />
                 <span className="text-blue-200">
-                  All {activities.length} activities on this page are selected.
+                  All {filteredActivities.length} activities on this page are selected.
                 </span>
                 <Button
                   variant="link"
@@ -594,7 +625,12 @@ export default function ActivitiesPage() {
                   Select all {totalItems} activities matching current filters
                 </Button>
               </div>
-              <Button variant="ghost" size="sm" onClick={handleClearSelection} className="text-slate-400 hover:text-slate-200">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleClearSelection}
+                className="text-slate-400 hover:text-slate-200"
+              >
                 <X className="w-4 h-4" />
               </Button>
             </div>
@@ -608,7 +644,12 @@ export default function ActivitiesPage() {
                 All {totalItems} activities matching current filters are selected.
               </span>
             </div>
-            <Button variant="ghost" size="sm" onClick={handleClearSelection} className="text-slate-400 hover:text-slate-200">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleClearSelection}
+              className="text-slate-400 hover:text-slate-200"
+            >
               Clear selection
             </Button>
           </div>
@@ -622,7 +663,7 @@ export default function ActivitiesPage() {
               <p className="text-slate-400">Loading activities...</p>
             </div>
           </div>
-        ) : activities.length === 0 ? (
+        ) : filteredActivities.length === 0 ? (
           <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-12 text-center">
             <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-slate-300 mb-2">
@@ -644,7 +685,7 @@ export default function ActivitiesPage() {
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <AnimatePresence>
-                {activities.map((activity) => (
+                {filteredActivities.map((activity) => (
                   <ActivityCard
                     key={activity.id}
                     activity={activity}
@@ -676,14 +717,17 @@ export default function ActivitiesPage() {
               totalItems={totalItems}
               pageSize={pageSize}
               onPageChange={handlePageChange}
-              onPageSizeChange={(newSize) => { setPageSize(newSize); handlePageSizeChange(newSize); }}
+              onPageSizeChange={(newSize) => {
+                setPageSize(newSize);
+                handlePageSizeChange(newSize);
+              }}
               loading={loading}
             />
           </>
         ) : (
           <>
             <ActivityTable
-              activities={activities}
+              activities={filteredActivities}
               selectedActivities={selectedActivities}
               selectAllMode={selectAllMode}
               toggleSelectAll={toggleSelectAll}
@@ -704,7 +748,10 @@ export default function ActivitiesPage() {
               totalItems={totalItems}
               pageSize={pageSize}
               onPageChange={handlePageChange}
-              onPageSizeChange={(newSize) => { setPageSize(newSize); handlePageSizeChange(newSize); }}
+              onPageSizeChange={(newSize) => {
+                setPageSize(newSize);
+                handlePageSizeChange(newSize);
+              }}
               loading={loading}
             />
           </>
@@ -718,7 +765,10 @@ export default function ActivitiesPage() {
           open={isRelatedDetailOpen}
           onOpenChange={(open) => {
             setIsRelatedDetailOpen(open);
-            if (!open) { setViewingRelatedEntity(null); setRelatedEntityType(null); }
+            if (!open) {
+              setViewingRelatedEntity(null);
+              setRelatedEntityType(null);
+            }
           }}
           user={user}
         />
@@ -729,7 +779,10 @@ export default function ActivitiesPage() {
           open={isRelatedDetailOpen}
           onOpenChange={(open) => {
             setIsRelatedDetailOpen(open);
-            if (!open) { setViewingRelatedEntity(null); setRelatedEntityType(null); }
+            if (!open) {
+              setViewingRelatedEntity(null);
+              setRelatedEntityType(null);
+            }
           }}
           user={user}
         />
@@ -740,7 +793,10 @@ export default function ActivitiesPage() {
           open={isRelatedDetailOpen}
           onOpenChange={(open) => {
             setIsRelatedDetailOpen(open);
-            if (!open) { setViewingRelatedEntity(null); setRelatedEntityType(null); }
+            if (!open) {
+              setViewingRelatedEntity(null);
+              setRelatedEntityType(null);
+            }
           }}
           user={user}
         />

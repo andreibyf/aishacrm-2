@@ -28,6 +28,9 @@ export default function OpportunityFilters({
   setSortField,
   setSortDirection,
   sortOptions,
+  employees,
+  assignedToFilter,
+  setAssignedToFilter,
   hasActiveFilters,
   handleClearFilters,
   setCurrentPage,
@@ -56,6 +59,32 @@ export default function OpportunityFilters({
             setCurrentPage(1);
           }}
         />
+
+        {/* Assigned To Filter */}
+        <Select
+          value={assignedToFilter}
+          onValueChange={(value) => {
+            setAssignedToFilter(value);
+            setCurrentPage(1);
+          }}
+        >
+          <SelectTrigger className="w-36 shrink-0 bg-slate-800 border-slate-700 text-slate-200">
+            <SelectValue placeholder="All Assignees" />
+          </SelectTrigger>
+          <SelectContent className="bg-slate-800 border-slate-700">
+            <SelectItem value="all" className="text-slate-200 hover:bg-slate-700">
+              All Assignees
+            </SelectItem>
+            <SelectItem value="unassigned" className="text-slate-200 hover:bg-slate-700">
+              Unassigned
+            </SelectItem>
+            {employees.map((emp) => (
+              <SelectItem key={emp.id} value={emp.id} className="text-slate-200 hover:bg-slate-700">
+                {emp.first_name} {emp.last_name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         {/* Sort Dropdown */}
         <Select

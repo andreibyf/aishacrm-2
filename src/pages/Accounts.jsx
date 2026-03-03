@@ -53,6 +53,7 @@ export default function AccountsPage() {
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState([]);
+  const [assignedToFilter, setAssignedToFilter] = useState('all');
   const [showTestData] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -167,7 +168,8 @@ export default function AccountsPage() {
       await Promise.all([loadAccounts(), loadTotalStats()]);
     } catch (error) {
       console.error('Failed to delete account:', error);
-      const errorMsg = error?.response?.status === 404 ? 'Account already deleted' : 'Failed to delete account';
+      const errorMsg =
+        error?.response?.status === 404 ? 'Account already deleted' : 'Failed to delete account';
       toast.error(errorMsg);
       await loadAccounts();
       await loadTotalStats();
@@ -230,14 +232,26 @@ export default function AccountsPage() {
   const handleClearFilters = () => {
     setSearchTerm('');
     setTypeFilter('all');
+    setAssignedToFilter('all');
     setSelectedTags([]);
     handleClearSelection();
   };
 
   const hasActiveFilters = useMemo(
-    () => searchTerm !== '' || typeFilter !== 'all' || selectedTags.length > 0,
-    [searchTerm, typeFilter, selectedTags],
+    () =>
+      searchTerm !== '' ||
+      typeFilter !== 'all' ||
+      assignedToFilter !== 'all' ||
+      selectedTags.length > 0,
+    [searchTerm, typeFilter, assignedToFilter, selectedTags],
   );
+
+  const filteredAccounts = useMemo(() => {
+    if (assignedToFilter === 'all') return accounts;
+    return accounts.filter((a) =>
+      assignedToFilter === 'unassigned' ? !a.assigned_to : a.assigned_to === assignedToFilter,
+    );
+  }, [accounts, assignedToFilter]);
 
   // Extract tags from current page for TagFilter
   const allTags = useMemo(() => {
@@ -336,7 +350,9 @@ export default function AccountsPage() {
 
           <AccountDetailPanel
             account={detailAccount}
-            assignedUserName={assignedToMap[detailAccount?.assigned_to] || detailAccount?.assigned_to}
+            assignedUserName={
+              assignedToMap[detailAccount?.assigned_to] || detailAccount?.assigned_to
+            }
             open={isDetailOpen}
             onOpenChange={() => {
               setIsDetailOpen(false);
@@ -379,10 +395,16 @@ export default function AccountsPage() {
                     onClick={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
                     className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
                   >
-                    {viewMode === 'list' ? <Grid className="w-4 h-4" /> : <List className="w-4 h-4" />}
+                    {viewMode === 'list' ? (
+                      <Grid className="w-4 h-4" />
+                    ) : (
+                      <List className="w-4 h-4" />
+                    )}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent><p>Switch to {viewMode === 'list' ? 'card' : 'list'} view</p></TooltipContent>
+                <TooltipContent>
+                  <p>Switch to {viewMode === 'list' ? 'card' : 'list'} view</p>
+                </TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -395,7 +417,9 @@ export default function AccountsPage() {
                     Import
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent><p>Import accounts from CSV</p></TooltipContent>
+                <TooltipContent>
+                  <p>Import accounts from CSV</p>
+                </TooltipContent>
               </Tooltip>
               <CsvExportButton entityName="Account" data={accounts} filename="accounts_export" />
               {(selectedAccounts.size > 0 || selectAllMode) && (
@@ -422,7 +446,9 @@ export default function AccountsPage() {
                     Add {accountLabel}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent><p>Create new {accountLabel.toLowerCase()}</p></TooltipContent>
+                <TooltipContent>
+                  <p>Create new {accountLabel.toLowerCase()}</p>
+                </TooltipContent>
               </Tooltip>
             </div>
           </div>
@@ -444,6 +470,9 @@ export default function AccountsPage() {
             selectedTags={selectedTags}
             setSelectedTags={setSelectedTags}
             allTags={allTags}
+            employees={employees}
+            assignedToFilter={assignedToFilter}
+            setAssignedToFilter={setAssignedToFilter}
             sortField={sortField}
             sortDirection={sortDirection}
             setSortField={setSortField}
@@ -455,15 +484,15 @@ export default function AccountsPage() {
           />
 
           {/* Select All Banners */}
-          {selectedAccounts.size === accounts.length &&
-            accounts.length > 0 &&
+          {selectedAccounts.size === filteredAccounts.length &&
+            filteredAccounts.length > 0 &&
             !selectAllMode &&
-            totalItems > accounts.length && (
+            totalItems > filteredAccounts.length && (
               <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <AlertCircle className="w-5 h-5 text-blue-400" />
                   <span className="text-blue-200">
-                    All {accounts.length} accounts on this page are selected.
+                    All {filteredAccounts.length} accounts on this page are selected.
                   </span>
                   <Button
                     variant="link"
@@ -473,7 +502,12 @@ export default function AccountsPage() {
                     Select all {totalItems} accounts matching current filters
                   </Button>
                 </div>
-                <Button variant="ghost" size="sm" onClick={handleClearSelection} className="text-slate-400 hover:text-slate-200">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleClearSelection}
+                  className="text-slate-400 hover:text-slate-200"
+                >
                   <X className="w-4 h-4" />
                 </Button>
               </div>
@@ -487,7 +521,12 @@ export default function AccountsPage() {
                   All {totalItems} accounts matching current filters are selected.
                 </span>
               </div>
-              <Button variant="ghost" size="sm" onClick={handleClearSelection} className="text-slate-400 hover:text-slate-200">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleClearSelection}
+                className="text-slate-400 hover:text-slate-200"
+              >
                 Clear selection
               </Button>
             </div>
@@ -501,7 +540,7 @@ export default function AccountsPage() {
                 <p className="text-slate-400">Loading accounts...</p>
               </div>
             </div>
-          ) : accounts.length === 0 ? (
+          ) : filteredAccounts.length === 0 ? (
             <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-12 text-center">
               <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-slate-300 mb-2">
@@ -513,7 +552,10 @@ export default function AccountsPage() {
                   : `Get started by adding your first ${accountLabel.toLowerCase()}`}
               </p>
               {!hasActiveFilters && (
-                <Button onClick={() => setIsFormOpen(true)} className="bg-blue-600 hover:bg-blue-700">
+                <Button
+                  onClick={() => setIsFormOpen(true)}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
                   <Plus className="w-4 h-4 mr-2" />
                   Add Your First {accountLabel}
                 </Button>
@@ -522,7 +564,7 @@ export default function AccountsPage() {
           ) : viewMode === 'list' ? (
             <>
               <AccountTable
-                accounts={accounts}
+                accounts={filteredAccounts}
                 selectedAccounts={selectedAccounts}
                 selectAllMode={selectAllMode}
                 toggleSelectAll={toggleSelectAll}
@@ -549,7 +591,7 @@ export default function AccountsPage() {
           ) : (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {accounts.map((account) => (
+                {filteredAccounts.map((account) => (
                   <AccountCard
                     key={account.id}
                     account={account}
