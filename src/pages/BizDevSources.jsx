@@ -797,8 +797,8 @@ export default function BizDevSourcesPage() {
         </div>
 
         <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-            <div className="md:col-span-2">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex-1 min-w-48">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <Input
@@ -832,23 +832,6 @@ export default function BizDevSourcesPage() {
                 </p>
               )}
             </div>
-            <Select
-              value={statusFilter}
-              onValueChange={(value) => {
-                setStatusFilter(value);
-                setCurrentPage(1);
-              }}
-            >
-              <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-100">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="Active">Active</SelectItem>
-                <SelectItem value="Promoted">Promoted</SelectItem>
-                <SelectItem value="Archived">Archived</SelectItem>
-              </SelectContent>
-            </Select>
             <Select
               value={licenseStatusFilter}
               onValueChange={(value) => {
@@ -932,8 +915,6 @@ export default function BizDevSourcesPage() {
                 ))}
               </SelectContent>
             </Select>
-          </div>
-          <div className="mt-3 flex items-center gap-3 flex-wrap">
             <TagFilter
               allTags={allTags}
               selectedTags={selectedTags}
@@ -943,7 +924,6 @@ export default function BizDevSourcesPage() {
               }}
             />
             {(searchTerm ||
-              statusFilter !== 'all' ||
               licenseStatusFilter !== 'all' ||
               batchFilter !== 'all' ||
               sourceFilter !== 'all' ||
@@ -954,7 +934,6 @@ export default function BizDevSourcesPage() {
                 onClick={() => {
                   setSearchTerm('');
                   setSearchInput('');
-                  setStatusFilter('all');
                   setLicenseStatusFilter('all');
                   setBatchFilter('all');
                   setSourceFilter('all');
