@@ -45,6 +45,7 @@ import CsvImportDialog from '../components/shared/CsvImportDialog';
 import CsvExportButton from '../components/shared/CsvExportButton';
 import Pagination from '../components/shared/Pagination';
 import RefreshButton from '../components/shared/RefreshButton';
+import TagFilter from '../components/shared/TagFilter';
 import BulkArchiveDialog from '../components/bizdev/BulkArchiveDialog';
 import ArchiveIndexViewer from '../components/bizdev/ArchiveIndexViewer';
 import BulkDeleteDialog from '../components/bizdev/BulkDeleteDialog';
@@ -78,6 +79,7 @@ export default function BizDevSourcesPage() {
   const [sourceFilter, setSourceFilter] = useState('all');
   const [sortField, setSortField] = useState('created_at');
   const [sortDirection, setSortDirection] = useState('desc');
+  const [selectedTags, setSelectedTags] = useState([]);
 
   const sortOptions = useMemo(
     () => [
@@ -531,6 +533,9 @@ export default function BizDevSourcesPage() {
       source.license_status?.toLowerCase() === licenseStatusFilter.toLowerCase();
     const matchesBatch = batchFilter === 'all' || source.batch_id === batchFilter;
     const matchesSource = sourceFilter === 'all' || source.source === sourceFilter;
+    const matchesTags =
+      selectedTags.length === 0 ||
+      (Array.isArray(source.tags) && selectedTags.every((tag) => source.tags.includes(tag)));
 
     // Employee scope filter (global header dropdown)
     const matchesEmployee =
@@ -545,12 +550,28 @@ export default function BizDevSourcesPage() {
       matchesLicenseStatus &&
       matchesBatch &&
       matchesSource &&
+      matchesTags &&
       matchesEmployee
     );
   });
 
   const uniqueBatches = [...new Set(sources.map((s) => s.batch_id).filter(Boolean))];
   const uniqueSources = [...new Set(sources.map((s) => s.source).filter(Boolean))];
+
+  // All tags across loaded sources — used by TagFilter
+  const allTags = useMemo(() => {
+    const tagCounts = {};
+    sources.forEach((s) => {
+      if (Array.isArray(s.tags)) {
+        s.tags.forEach((tag) => {
+          if (tag && typeof tag === 'string') tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+        });
+      }
+    });
+    return Object.entries(tagCounts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [sources]);
 
   // Sort filtered results client-side
   const sortedSources = useMemo(() => {
@@ -616,6 +637,7 @@ export default function BizDevSourcesPage() {
     licenseStatusFilter,
     batchFilter,
     sourceFilter,
+    selectedTags,
     sortField,
     sortDirection,
     selectedEmployeeId,
@@ -910,11 +932,22 @@ export default function BizDevSourcesPage() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div className="mt-3 flex items-center gap-3 flex-wrap">
+            <TagFilter
+              allTags={allTags}
+              selectedTags={selectedTags}
+              onTagsChange={(tags) => {
+                setSelectedTags(tags);
+                setCurrentPage(1);
+              }}
+            />
             {(searchTerm ||
               statusFilter !== 'all' ||
               licenseStatusFilter !== 'all' ||
               batchFilter !== 'all' ||
-              sourceFilter !== 'all') && (
+              sourceFilter !== 'all' ||
+              selectedTags.length > 0) && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -925,6 +958,7 @@ export default function BizDevSourcesPage() {
                   setLicenseStatusFilter('all');
                   setBatchFilter('all');
                   setSourceFilter('all');
+                  setSelectedTags([]);
                   setCurrentPage(1);
                 }}
                 className="text-slate-400 hover:text-slate-200 whitespace-nowrap"

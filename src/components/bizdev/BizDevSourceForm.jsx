@@ -17,6 +17,7 @@ import { useTenant } from '@/components/shared/tenantContext';
 import { useUser } from '@/components/shared/useUser.js';
 import LazyEmployeeSelector from '@/components/shared/LazyEmployeeSelector';
 import AssignmentField from '@/components/shared/AssignmentField';
+import TagInput from '@/components/shared/TagInput';
 import { toast } from 'sonner';
 
 /**
@@ -60,6 +61,7 @@ export default function BizDevSourceForm({
     postal_code: '',
     country: 'United States',
     notes: '',
+    tags: [],
     lead_ids: [], // Added lead_ids to form data
     industry_license: '',
     license_status: 'Not Required',
@@ -70,6 +72,35 @@ export default function BizDevSourceForm({
   });
 
   const [leads, setLeads] = useState([]);
+  const [allTags, setAllTags] = useState([]);
+
+  // Load existing tags from all BizDevSources for autocomplete
+  useEffect(() => {
+    const loadTags = async () => {
+      try {
+        const tenantId = selectedTenantId || user?.tenant_id;
+        if (!tenantId) return;
+        const all = await BizDevSource.filter({ tenant_id: tenantId }, '-created_date', 5000);
+        const tagCounts = {};
+        (all || []).forEach((s) => {
+          if (Array.isArray(s.tags)) {
+            s.tags.forEach((t) => {
+              if (t && typeof t === 'string') tagCounts[t] = (tagCounts[t] || 0) + 1;
+            });
+          }
+        });
+        setAllTags(
+          Object.entries(tagCounts)
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => b.count - a.count),
+        );
+      } catch (err) {
+        // Non-fatal — autocomplete just won't show suggestions
+        console.error('[BizDevSourceForm] Failed to load tags:', err);
+      }
+    };
+    loadTags();
+  }, [selectedTenantId, user?.tenant_id]);
 
   // Load tenant business model to determine form layout
   useEffect(() => {
@@ -139,6 +170,7 @@ export default function BizDevSourceForm({
         postal_code: source.postal_code || '',
         country: source.country || 'United States',
         notes: source.notes || '',
+        tags: Array.isArray(source.tags) ? source.tags : [],
         lead_ids: source.lead_ids || [], // Initialize lead_ids from source
         industry_license: source.industry_license || '',
         license_status: source.license_status || 'Not Required',
@@ -662,6 +694,16 @@ export default function BizDevSourceForm({
               placeholder="Additional notes..."
               rows={4}
               className="bg-slate-700 border-slate-600 text-slate-100"
+            />
+          </div>
+          <div>
+            <Label className="text-slate-300">Tags</Label>
+            <TagInput
+              selectedTags={formData.tags}
+              onTagsChange={(newTags) => handleChange('tags', newTags)}
+              allTags={allTags}
+              placeholder="Add or search for tags..."
+              darkMode={true}
             />
           </div>
         </div>

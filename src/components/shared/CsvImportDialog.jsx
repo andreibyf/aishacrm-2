@@ -123,6 +123,7 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
         'contact_email',
         'converted_contact_name',
         'converted_account_name',
+        'tags', // handled via __tags__ special mapping (comma-separated parsing)
       ];
 
       const fields = Object.keys(schema.properties)
@@ -282,6 +283,9 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
       ],
     };
 
+    // Auto-detect tags column
+    const tagsPatterns = ['tags', 'tag', 'labels', 'categories', 'keywords'];
+
     csvHeaders.forEach((header) => {
       // Skip account link column - don't map it to a field
       if (schema?.name === 'Contact' && header === accountLinkColumn) {
@@ -290,6 +294,13 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
       }
 
       const normalizedHeader = header.toLowerCase().trim();
+
+      // Auto-detect tags column
+      if (schema?.properties?.tags && tagsPatterns.includes(normalizedHeader)) {
+        newMapping[header] = '__tags__';
+        return;
+      }
+
       let matchedField = null;
 
       for (const [crmField, patterns] of Object.entries(mappingPatterns)) {
@@ -340,9 +351,23 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
       const records = dataRows.map((cols) => {
         const record = {};
 
+        const tagValues = [];
+
         headerRow.forEach((header, index) => {
           const crmField = mapping[header];
           if (!crmField) return; // If mapping is null (skip) or undefined, do not add to record
+
+          // Collect values from columns mapped as tags
+          if (crmField === '__tags__') {
+            const raw = (cols[index] || '').trim();
+            if (raw) {
+              raw.split(/[,;]+/).forEach((t) => {
+                const tag = t.trim();
+                if (tag) tagValues.push(tag);
+              });
+            }
+            return;
+          }
 
           let value = cols[index] || '';
 
@@ -358,6 +383,11 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
             record[crmField] = value;
           }
         });
+
+        // Apply collected tags (deduplicated)
+        if (tagValues.length > 0) {
+          record.tags = [...new Set(tagValues)];
+        }
 
         // Add assigned_to if specified (preserving original logic)
         if (assignedTo && assignedTo !== '__unassigned__') {
@@ -758,6 +788,11 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
                                 <SelectItem value="__skip__" className="hover:bg-slate-700">
                                   -- Skip this column --
                                 </SelectItem>
+                                {schema?.properties?.tags && (
+                                  <SelectItem value="__tags__" className="hover:bg-slate-700 text-purple-300">
+                                    🏷️ Tags (comma-separated)
+                                  </SelectItem>
+                                )}
                                 {crmFields.map((field) => (
                                   <SelectItem
                                     key={field.value}
