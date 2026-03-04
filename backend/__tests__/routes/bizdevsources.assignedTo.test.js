@@ -19,6 +19,7 @@ let server;
 const port = 3150;
 let supabaseInitialized = false;
 const TEST_TENANT_ID = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+const createdBizDevIds = [];
 
 async function req(method, path, body, headers = {}) {
   const defaultHeaders = {
@@ -57,6 +58,49 @@ describe('BizDev Sources — assigned_to field', () => {
   });
 
   after(async () => {
+    // Clean up created BizDevSources by tracked ID
+    for (const id of createdBizDevIds) {
+      try {
+        await req('DELETE', `/api/bizdevsources/${id}?tenant_id=${TEST_TENANT_ID}`);
+      } catch {
+        /* best-effort cleanup */
+      }
+    }
+    // Clean up imported BizDevSources by known test company names
+    const testCompanyNames = ['Import Test Corp', 'UUID Passthrough Corp', 'Blank Assignment Corp'];
+    for (const name of testCompanyNames) {
+      try {
+        const res = await req(
+          'GET',
+          `/api/bizdevsources?tenant_id=${TEST_TENANT_ID}&search=${encodeURIComponent(name)}`,
+        );
+        if (res.status === 200) {
+          const json = await res.json();
+          const sources = json.data?.bizdevsources || json.data || [];
+          for (const s of sources) {
+            if (s.id) await req('DELETE', `/api/bizdevsources/${s.id}?tenant_id=${TEST_TENANT_ID}`);
+          }
+        }
+      } catch {
+        /* best-effort cleanup */
+      }
+    }
+    // Clean up imported leads by test email
+    try {
+      const res = await req(
+        'GET',
+        `/api/leads?tenant_id=${TEST_TENANT_ID}&search=${encodeURIComponent('testlead@example.com')}`,
+      );
+      if (res.status === 200) {
+        const json = await res.json();
+        const leads = json.data?.leads || json.data || [];
+        for (const lead of leads) {
+          if (lead.id) await req('DELETE', `/api/leads/${lead.id}?tenant_id=${TEST_TENANT_ID}`);
+        }
+      }
+    } catch {
+      /* best-effort cleanup */
+    }
     if (server) await new Promise((r) => server.close(r));
   });
 
@@ -78,6 +122,8 @@ describe('BizDev Sources — assigned_to field', () => {
       const json = await res.json();
       if (res.status === 200 || res.status === 201) {
         assert.ok(json.data || json.status === 'success');
+        const id = json.data?.id;
+        if (id) createdBizDevIds.push(id);
       }
       // Not asserting strict success since we may lack a real employee UUID
     });
@@ -96,6 +142,7 @@ describe('BizDev Sources — assigned_to field', () => {
       const createJson = await createRes.json();
       const sourceId = createJson.data?.id;
       if (!sourceId) return;
+      createdBizDevIds.push(sourceId);
 
       // Update with assigned_to
       const updateRes = await req('PUT', `/api/bizdevsources/${sourceId}`, {
