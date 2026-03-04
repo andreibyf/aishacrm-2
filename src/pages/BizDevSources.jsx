@@ -663,16 +663,63 @@ export default function BizDevSourcesPage() {
     selectedEmployeeId,
   ]);
 
-  const stats = useMemo(
-    () => ({
-      total: sources.length,
-      active: sources.filter((s) => s.status?.toLowerCase() === 'active').length,
-      promoted: sources.filter((s) => ['promoted', 'converted'].includes(s.status?.toLowerCase()))
+  const stats = useMemo(() => {
+    // Compute stats from sources filtered by everything EXCEPT status,
+    // so the cards reflect how many items are in each status within the current filter context.
+    const base = sources.filter((source) => {
+      const matchesSearch =
+        !searchTerm ||
+        source.company_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        source.dba_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        source.contact_person?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        source.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        source.phone_number?.includes(searchTerm) ||
+        source.city?.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesLicenseStatus =
+        licenseStatusFilter === 'all' ||
+        source.license_status?.toLowerCase() === licenseStatusFilter.toLowerCase();
+      const matchesBatch = batchFilter === 'all' || source.batch_id === batchFilter;
+      const matchesSource = sourceFilter === 'all' || source.source === sourceFilter;
+      const matchesTags =
+        selectedTags.length === 0 ||
+        (Array.isArray(source.tags) && selectedTags.every((tag) => source.tags.includes(tag)));
+      const matchesAssignedTo =
+        assignedToFilter === 'all' ||
+        (assignedToFilter === 'unassigned'
+          ? !source.assigned_to
+          : source.assigned_to === assignedToFilter);
+      const matchesEmployee =
+        !selectedEmployeeId ||
+        (selectedEmployeeId === 'unassigned'
+          ? !source.assigned_to
+          : source.assigned_to === selectedEmployeeId);
+      return (
+        matchesSearch &&
+        matchesLicenseStatus &&
+        matchesBatch &&
+        matchesSource &&
+        matchesTags &&
+        matchesAssignedTo &&
+        matchesEmployee
+      );
+    });
+    return {
+      total: base.length,
+      active: base.filter((s) => s.status?.toLowerCase() === 'active').length,
+      promoted: base.filter((s) => ['promoted', 'converted'].includes(s.status?.toLowerCase()))
         .length,
-      archived: sources.filter((s) => s.status?.toLowerCase() === 'archived').length,
-    }),
-    [sources],
-  );
+      archived: base.filter((s) => s.status?.toLowerCase() === 'archived').length,
+    };
+  }, [
+    sources,
+    searchTerm,
+    licenseStatusFilter,
+    batchFilter,
+    sourceFilter,
+    selectedTags,
+    assignedToFilter,
+    selectedEmployeeId,
+  ]);
 
   if (loading && sources.length === 0) {
     return (
