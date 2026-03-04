@@ -21,12 +21,18 @@ import { useTenant } from '../shared/tenantContext';
 import { useUser } from '@/components/shared/useUser.js';
 
 /**
- * Validate URL is safe for use in img src (only http/https allowed)
+ * Validate URL is safe for use in img src.
+ * Allows http:, https:, and non-SVG data:image/ (SVG can contain scripts).
+ * In dev mode, data:image/svg+xml is also allowed for convenience.
  */
 function isSafeImageUrl(url) {
   if (!url || typeof url !== 'string') return false;
-  // Allow data: URLs for local dev inline previews
-  if (url.startsWith('data:image/')) return true;
+  // Allow data:image/ URLs — block SVG in production (can contain scripts)
+  if (url.startsWith('data:image/')) {
+    const isSvg = url.startsWith('data:image/svg');
+    if (isSvg && !import.meta.env.DEV) return false;
+    return true;
+  }
   try {
     const parsed = new URL(url);
     return parsed.protocol === 'http:' || parsed.protocol === 'https:';
@@ -313,14 +319,24 @@ export default function BrandingSettings() {
           logoUrl: brandingData.logoUrl,
         });
 
+        // Validate URL schemes before persisting
+        const safeLogoUrl =
+          brandingData.logoUrl && isSafeImageUrl(brandingData.logoUrl)
+            ? brandingData.logoUrl
+            : null;
+        const safeFooterLogo =
+          brandingData.footerLogoUrl && isSafeImageUrl(brandingData.footerLogoUrl)
+            ? brandingData.footerLogoUrl
+            : '';
+
         const nextBrandingSettings = {
           ...(tenant?.branding_settings || {}),
-          footerLogoUrl: brandingData.footerLogoUrl || '',
+          footerLogoUrl: safeFooterLogo,
         };
         await Tenant.update(tenantIdToUpdate, {
           // name is editable here only if they changed it; otherwise keep existing
           name: brandingData.companyName || tenant?.name,
-          logo_url: brandingData.logoUrl || null,
+          logo_url: safeLogoUrl,
           primary_color: brandingData.primaryColor,
           accent_color: brandingData.accentColor,
           branding_settings: nextBrandingSettings,
@@ -351,38 +367,13 @@ export default function BrandingSettings() {
   const handleGlobalFooterSave = async () => {
     setSavingFooter(true);
     try {
-      // Sanitize HTML to prevent script/style and event handlers
-      const sanitizeLegalHtml = (html) => {
-        try {
-          const div = document.createElement('div');
-          div.innerHTML = String(html || '');
-          // Remove script/style
-          div.querySelectorAll('script, style').forEach((el) => el.remove());
-          // Remove inline event handlers and javascript: URLs
-          div.querySelectorAll('*').forEach((el) => {
-            [...el.attributes].forEach((attr) => {
-              const name = attr.name.toLowerCase();
-              const val = String(attr.value || '').toLowerCase();
-              if (name.startsWith('on')) {
-                el.removeAttribute(attr.name);
-              }
-              if ((name === 'href' || name === 'src') && val.startsWith('javascript:')) {
-                el.removeAttribute(attr.name);
-              }
-              if (name === 'target' && val === '_blank') {
-                el.setAttribute('rel', 'noopener noreferrer');
-              }
-            });
-          });
-          return div.innerHTML;
-        } catch {
-          return String(html || '');
-        }
-      };
+      // Validate footer logo URL scheme before persisting
+      const safeFooterLogoUrl =
+        footerLogoUrl && isSafeImageUrl(footerLogoUrl) ? footerLogoUrl : null;
 
       const payload = {
-        footer_logo_url: footerLogoUrl || null,
-        footer_legal_html: sanitizeLegalHtml(footerLegalHtml) || null,
+        footer_logo_url: safeFooterLogoUrl,
+        footer_legal_html: sanitizeLegalHtmlForDisplay(footerLegalHtml) || null,
         is_active: true,
       };
       if (brandingId) {

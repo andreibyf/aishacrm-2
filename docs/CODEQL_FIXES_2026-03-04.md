@@ -46,7 +46,7 @@
 ### 9. #73 — DOM text reinterpreted as HTML in BrandingSettings.jsx (HIGH → FIXED)
 
 **File:** `src/components/settings/BrandingSettings.jsx:319`
-**Fix:** Added `sanitizeLegalHtmlForDisplay()` helper that strips `<script>`, `<style>`, `<iframe>`, `<object>`, `<embed>`, `<form>` tags and removes `on*` event handler attributes and `javascript:` URLs before rendering. This is used in the save handler (`handleGlobalFooterSave`) which already had inline sanitization — the new helper is also available for display-time sanitization.
+**Fix:** Added `sanitizeLegalHtmlForDisplay()` helper that strips `<script>`, `<style>`, `<iframe>`, `<object>`, `<embed>`, `<form>` tags and removes `on*` event handler attributes and `javascript:` URLs before rendering. The inline sanitizer in `handleGlobalFooterSave` was replaced with this centralized helper so save-time and display-time code use a single, consistent implementation.
 
 ---
 

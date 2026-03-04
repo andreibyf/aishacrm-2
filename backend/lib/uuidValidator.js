@@ -42,7 +42,8 @@ export function sanitizeUuidInput(value, options = {}) {
 
   // Validate UUID
   if (!isValidUUID(value)) {
-    console.warn(`[UUID Validator] Invalid UUID rejected (length=${String(value).length})`);
+    // Log only that rejection occurred — no value or length to avoid leaking env data
+    console.warn('[UUID Validator] Invalid UUID rejected');
     return null;
   }
 

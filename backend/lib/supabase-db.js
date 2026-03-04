@@ -197,7 +197,7 @@ async function handleSelectQuery(sql, params) {
         const idx = parseInt(g[2], 10) - 1;
         const val =
           typeof params[idx] === 'string'
-            ? params[idx].replace(/[%_]/g, '\\$&') // escape % and _ to prevent wildcards
+            ? params[idx].replace(/[%_\\]/g, '\\$&') // escape %, _ and backslash to prevent wildcards
             : params[idx];
         query = query.ilike(col, val);
         continue; // CRITICAL: prevent fall-through
@@ -210,7 +210,7 @@ async function handleSelectQuery(sql, params) {
           const idx = parseInt(mIlike[1], 10) - 1;
           const val =
             typeof params[idx] === 'string'
-              ? params[idx].replace(/[%_]/g, '\\$&') // escape % and _
+              ? params[idx].replace(/[%_\\]/g, '\\$&') // escape %, _ and backslash
               : params[idx];
           query = query.ilike('subject', val);
         }
@@ -644,10 +644,7 @@ async function handleUpdateQuery(sql, params) {
     });
   }
 
-  // UPDATE operation logged without sensitive data
-  if (typeof logger !== 'undefined') {
-    // Use structured logger if available
-  }
+  // UPDATE operation — sensitive data not logged
 
   // Build WHERE
   let query = supabaseClient.from(table).update(updateData);

@@ -17,6 +17,17 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import readline from 'readline';
 
+/**
+ * Safely redact an email for logging.
+ * Always returns a masked version; falls back to '***' for malformed input.
+ */
+function redactEmail(email) {
+  if (!email || typeof email !== 'string') return '***';
+  const atIdx = email.indexOf('@');
+  if (atIdx < 1) return email.slice(0, 2) + '***';
+  return email.slice(0, Math.min(2, atIdx)) + '***' + email.slice(atIdx);
+}
+
 // Load environment variables
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -84,14 +95,14 @@ async function createAdmin() {
 
   console.log('Configuration:');
   console.log(`  Supabase URL: ${SUPABASE_URL}`);
-  console.log(`  Admin Email:  ${ADMIN_EMAIL.replace(/(.{2}).*(@.*)/, '$1***$2')}`);
+  console.log(`  Admin Email:  ${redactEmail(ADMIN_EMAIL)}`);
   console.log(`  Password:     ${'*'.repeat(12)} (${ADMIN_PASSWORD.length} characters)\n`);
 
   if (dryRun) {
     console.log('⚠️  Dry-run mode enabled (`--dry-run`). No changes will be made.');
     console.log('\nPlan:');
     console.log(`  - Ensure Supabase project at: ${SUPABASE_URL}`);
-    console.log(`  - Would create or update auth user: ${ADMIN_EMAIL}`);
+    console.log(`  - Would create or update auth user: ${redactEmail(ADMIN_EMAIL)}`);
     console.log(`  - Would set role: superadmin and tenant: ${SUPERADMIN_TENANT_ID}`);
     console.log(
       '\nTo perform the actual changes, re-run without `--dry-run` and add `--yes` to skip confirmation.',
@@ -140,7 +151,7 @@ async function createAdmin() {
     const existingUser = existingUsers?.users?.find((u) => u.email === ADMIN_EMAIL);
 
     if (existingUser) {
-      console.log(`⚠️  User ${ADMIN_EMAIL} already exists!`);
+      console.log(`⚠️  User ${redactEmail(ADMIN_EMAIL)} already exists!`);
       console.log(`   User ID: ${existingUser.id}`);
       console.log(`   Created: ${existingUser.created_at}`);
 
@@ -159,7 +170,7 @@ async function createAdmin() {
       console.log('✅ Password updated successfully!');
       console.log('\n═══════════════════════════════════════════════');
       console.log('You can now sign in with:');
-      console.log(`  Email:    ${ADMIN_EMAIL.replace(/(.{2}).*(@.*)/, '$1***$2')}`);
+      console.log(`  Email:    ${redactEmail(ADMIN_EMAIL)}`);
       console.log(`  Password: ${'*'.repeat(12)} (updated)`);
       console.log('═══════════════════════════════════════════════\n');
       process.exit(0);
@@ -218,7 +229,7 @@ async function createAdmin() {
     console.log(
       `  URL:      ${SUPABASE_URL.replace(/https:\/\/(.+)\.supabase\.co/, 'https://app.aishacrm.com')}`,
     );
-    console.log(`  Email:    ${ADMIN_EMAIL.replace(/(.{2}).*(@.*)/, '$1***$2')}`);
+    console.log(`  Email:    ${redactEmail(ADMIN_EMAIL)}`);
     console.log(`  Password: ${'*'.repeat(12)} (see configuration)`);
     console.log(`  Role:     superadmin`);
     console.log(`  Tenant:   ${SUPERADMIN_TENANT_ID} (superadmin global access)`);
