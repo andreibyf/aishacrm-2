@@ -1,22 +1,29 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Loader2, Send, CheckCircle2, Circle, Clock } from "lucide-react";
-import { toast } from "sonner";
-import { getBackendUrl } from "@/api/backendUrl";
-import { useTenant } from "@/components/shared/tenantContext";
-import { useUser } from "@/components/shared/useUser";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Loader2, Send, CheckCircle2, Circle, Clock } from 'lucide-react';
+import { toast } from 'sonner';
+import { getBackendUrl } from '@/api/backendUrl';
+import { useTenant } from '@/components/shared/tenantContext';
+import { useUser } from '@/components/shared/useUser';
 
-export default function AishaEntityChatModal({ 
-  open, 
-  onClose, 
-  entityType, 
-  entityId, 
+export default function AishaEntityChatModal({
+  open,
+  onClose,
+  entityType,
+  entityId,
   entityLabel,
-  relatedData = {} // { profile, opportunities, activities, notes }
+  relatedData = {}, // { profile, opportunities, activities, notes }
+  tenantId: tenantIdProp = null, // Optional: explicit tenant ID when outside TenantProvider
 }) {
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState('');
   const [taskId, setTaskId] = useState(null);
   const [taskStatus, setTaskStatus] = useState(null); // PENDING, ASSIGNED, COMPLETED
   const [taskResult, setTaskResult] = useState(null);
@@ -24,13 +31,13 @@ export default function AishaEntityChatModal({
   const { selectedTenantId } = useTenant();
   const { user } = useUser();
   // Use selectedTenantId (for superadmins) or fallback to user's tenant_id (for tenant admins)
-  const tenantId = selectedTenantId || user?.tenant_id;
+  const tenantId = tenantIdProp || selectedTenantId || user?.tenant_id;
   const pollIntervalRef = useRef(null);
 
   // Reset state when modal opens
   useEffect(() => {
     if (open) {
-      setInput("");
+      setInput('');
       setTaskId(null);
       setTaskStatus(null);
       setTaskResult(null);
@@ -60,9 +67,9 @@ export default function AishaEntityChatModal({
             profile: relatedData.profile || null,
             opportunities: relatedData.opportunities || [],
             activities: relatedData.activities || [],
-            notes: relatedData.notes || []
-          }
-        })
+            notes: relatedData.notes || [],
+          },
+        }),
       });
 
       if (!response.ok) {
@@ -73,34 +80,33 @@ export default function AishaEntityChatModal({
       const data = await response.json();
       setTaskId(data.task_id);
       setTaskStatus('PENDING');
-      
+
       // Close modal immediately after task creation
-      toast.success("Task started successfully");
+      toast.success('Task started successfully');
       onClose();
-      
     } catch (error) {
       console.error('Task creation error:', error);
-      toast.error("Failed to start task");
+      toast.error('Failed to start task');
       setIsLoading(false);
     }
   };
 
   const _startPolling = (id) => {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-    
+
     pollIntervalRef.current = setInterval(async () => {
       try {
         const response = await fetch(`${getBackendUrl()}/api/tasks/${id}`);
         if (!response.ok) return;
-        
+
         const task = await response.json();
         setTaskStatus(task.status);
-        
+
         if (task.status === 'COMPLETED') {
-          setTaskResult(task.result || "Task completed successfully.");
+          setTaskResult(task.result || 'Task completed successfully.');
           setIsLoading(false);
           clearInterval(pollIntervalRef.current);
-          toast.success("Task completed!");
+          toast.success('Task completed!');
         }
       } catch (error) {
         console.error('Polling error:', error);
@@ -117,19 +123,27 @@ export default function AishaEntityChatModal({
 
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'PENDING': return <Clock className="w-5 h-5 text-yellow-500 animate-pulse" />;
-      case 'ASSIGNED': return <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />;
-      case 'COMPLETED': return <CheckCircle2 className="w-5 h-5 text-green-500" />;
-      default: return <Circle className="w-5 h-5 text-slate-500" />;
+      case 'PENDING':
+        return <Clock className="w-5 h-5 text-yellow-500 animate-pulse" />;
+      case 'ASSIGNED':
+        return <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />;
+      case 'COMPLETED':
+        return <CheckCircle2 className="w-5 h-5 text-green-500" />;
+      default:
+        return <Circle className="w-5 h-5 text-slate-500" />;
     }
   };
 
   const getStatusText = (status) => {
     switch (status) {
-      case 'PENDING': return "Queued...";
-      case 'ASSIGNED': return "Processing...";
-      case 'COMPLETED': return "Completed";
-      default: return "Ready";
+      case 'PENDING':
+        return 'Queued...';
+      case 'ASSIGNED':
+        return 'Processing...';
+      case 'COMPLETED':
+        return 'Completed';
+      default:
+        return 'Ready';
     }
   };
 
@@ -159,12 +173,16 @@ export default function AishaEntityChatModal({
                 />
               </div>
               <div className="flex justify-end">
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   disabled={isLoading || !input.trim()}
                   className="bg-blue-600 hover:bg-blue-500 text-white"
                 >
-                  {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+                  {isLoading ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4 mr-2" />
+                  )}
                   Start Task
                 </Button>
               </div>
@@ -180,7 +198,9 @@ export default function AishaEntityChatModal({
               {/* Result Display */}
               {taskResult && (
                 <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2">
-                  <h4 className="text-sm font-medium text-slate-400 uppercase tracking-wider">Result</h4>
+                  <h4 className="text-sm font-medium text-slate-400 uppercase tracking-wider">
+                    Result
+                  </h4>
                   <div className="p-4 bg-slate-800 rounded-lg border border-slate-700 text-sm leading-relaxed">
                     {taskResult}
                   </div>
@@ -192,7 +212,11 @@ export default function AishaEntityChatModal({
 
         <DialogFooter>
           {taskId && taskStatus === 'COMPLETED' && (
-            <Button onClick={onClose} variant="outline" className="border-slate-700 hover:bg-slate-800 text-slate-300">
+            <Button
+              onClick={onClose}
+              variant="outline"
+              className="border-slate-700 hover:bg-slate-800 text-slate-300"
+            >
               Close
             </Button>
           )}
