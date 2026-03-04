@@ -57,7 +57,13 @@ export function normalizeUser(raw) {
   // Consolidate names
   const firstName = raw.first_name || meta.first_name || undefined;
   const lastName = raw.last_name || meta.last_name || undefined;
-  const displayName = raw.display_name || meta.display_name || (raw.full_name || meta.full_name) || [firstName, lastName].filter(Boolean).join(' ') || undefined;
+  const displayName =
+    raw.display_name ||
+    meta.display_name ||
+    raw.full_name ||
+    meta.full_name ||
+    [firstName, lastName].filter(Boolean).join(' ') ||
+    undefined;
   const fullName = raw.full_name || meta.full_name || displayName || undefined;
 
   // Role normalization
@@ -65,7 +71,8 @@ export function normalizeUser(raw) {
   const isSuperadmin = role === 'superadmin';
 
   // Tenant ID precedence: explicit raw.tenant_id -> metadata.tenant_id -> null
-  const tenantId = raw.tenant_id != null ? raw.tenant_id : (meta.tenant_id != null ? meta.tenant_id : null);
+  const tenantId =
+    raw.tenant_id != null ? raw.tenant_id : meta.tenant_id != null ? meta.tenant_id : null;
 
   // Permissions may appear as array OR object in raw and/or meta. Normalize and deep-merge
   const toPermObject = (perm) => {
@@ -76,7 +83,9 @@ export function normalizeUser(raw) {
         WARN_ONCE_FLAGS.permissionsTypeMismatch = true;
       }
       const converted = {};
-      perm.forEach((p) => { converted[p] = true; });
+      perm.forEach((p) => {
+        converted[p] = true;
+      });
       return converted;
     }
     return { ...perm };
@@ -91,26 +100,39 @@ export function normalizeUser(raw) {
   const mergedPermissions = {
     ...basePermissions,
     access_level: raw.access_level || meta.access_level || basePermissions.access_level,
-    crm_access: (raw.crm_access !== undefined ? raw.crm_access : meta.crm_access) ?? basePermissions.crm_access ?? false,
+    crm_access:
+      (raw.crm_access !== undefined ? raw.crm_access : meta.crm_access) ??
+      basePermissions.crm_access ??
+      false,
     dashboard_scope: raw.dashboard_scope || meta.dashboard_scope || basePermissions.dashboard_scope,
     intended_role: raw.intended_role || meta.intended_role || basePermissions.intended_role,
-    can_use_softphone: (raw.can_use_softphone ?? meta.can_use_softphone ?? basePermissions.can_use_softphone) || false,
-    can_manage_users: (raw.can_manage_users ?? meta.can_manage_users ?? basePermissions.can_manage_users) || false,
-    can_manage_settings: (raw.can_manage_settings ?? meta.can_manage_settings ?? basePermissions.can_manage_settings) || false,
+    can_use_softphone:
+      (raw.can_use_softphone ?? meta.can_use_softphone ?? basePermissions.can_use_softphone) ||
+      false,
+    can_manage_users:
+      (raw.can_manage_users ?? meta.can_manage_users ?? basePermissions.can_manage_users) || false,
+    can_manage_settings:
+      (raw.can_manage_settings ??
+        meta.can_manage_settings ??
+        basePermissions.can_manage_settings) ||
+      false,
   };
 
   // Navigation permissions: ensure object. Support new backend shape where navigation_permissions
   // may only appear at top-level (slim metadata). Fallback order: raw -> meta -> empty.
-  const navigationPermissions = (raw.navigation_permissions || meta.navigation_permissions || {});
+  const navigationPermissions = raw.navigation_permissions || meta.navigation_permissions || {};
 
   // Branding settings
   const brandingSettings = raw.branding_settings || meta.branding_settings || undefined;
-  const systemOpenAISettings = raw.system_openai_settings || meta.system_openai_settings || undefined;
-  const systemStripeSettings = raw.system_stripe_settings || meta.system_stripe_settings || undefined;
+  const systemOpenAISettings =
+    raw.system_openai_settings || meta.system_openai_settings || undefined;
+  const systemStripeSettings =
+    raw.system_stripe_settings || meta.system_stripe_settings || undefined;
 
   // Live status / last seen
   // Live status / last seen fallback order updated for slim metadata: prefer raw then meta.
-  const live_status = (raw.live_status !== undefined ? raw.live_status : meta.live_status) || undefined;
+  const live_status =
+    (raw.live_status !== undefined ? raw.live_status : meta.live_status) || undefined;
   const last_seen = (raw.last_seen !== undefined ? raw.last_seen : meta.last_seen) || undefined;
 
   // Employee ID precedence
@@ -118,7 +140,9 @@ export function normalizeUser(raw) {
 
   // Warn once about duplicate top-level vs metadata usage (heuristic)
   if (!WARN_ONCE_FLAGS.duplicateMetadata && import.meta?.env?.DEV) {
-    const dupKeys = ['first_name','last_name','display_name','role','tenant_id'].filter(k => raw[k] && meta[k]);
+    const dupKeys = ['first_name', 'last_name', 'display_name', 'role', 'tenant_id'].filter(
+      (k) => raw[k] && meta[k],
+    );
     if (dupKeys.length) {
       console.warn('[normalizeUser] Duplicate keys in raw & user_metadata detected:', dupKeys);
       WARN_ONCE_FLAGS.duplicateMetadata = true;
@@ -132,13 +156,14 @@ export function normalizeUser(raw) {
     is_superadmin: isSuperadmin,
     tenant_id: tenantId,
     employee_id: employeeId,
+    employee_role: raw.employee_role || undefined,
     first_name: firstName,
     last_name: lastName,
     full_name: fullName,
     display_name: displayName,
     branding_settings: brandingSettings,
-  system_openai_settings: systemOpenAISettings,
-  system_stripe_settings: systemStripeSettings,
+    system_openai_settings: systemOpenAISettings,
+    system_stripe_settings: systemStripeSettings,
     navigation_permissions: navigationPermissions,
     permissions: mergedPermissions,
     status: raw.status || meta.status,
