@@ -979,14 +979,13 @@ export default function createAIRoutes(pgPool) {
         provider: modelConfig.provider,
       });
 
-      // BUGFIX: Log API key resolution for debugging production issues (no sensitive data)
+      // Log API key resolution for debugging (redacted — no key material)
       logger.debug('[AI generateAssistantResponse] API key resolution:', {
         conversationId,
         provider: modelConfig.provider,
         hasUserKey: !!requestDescriptor.userApiKey,
         resolvedKeyExists: !!apiKey,
         resolvedKeyLength: apiKey?.length || 0,
-        resolvedKeyPrefix: apiKey ? apiKey.substring(0, 7) : 'none',
       });
 
       if (!apiKey) {
@@ -3146,13 +3145,12 @@ ${toolContextSummary}`,
         provider: tenantModelConfig.provider,
       });
 
-      // BUGFIX: Log API key resolution for debugging production issues (no sensitive data)
+      // Log API key resolution for debugging (redacted — no key material)
       logger.debug('[AI Chat] API key resolution:', {
         provider: tenantModelConfig.provider,
         tenantHasConfig: !!tenantRecord,
         resolvedKeyExists: !!apiKey,
         resolvedKeyLength: apiKey?.length || 0,
-        resolvedKeyPrefix: apiKey ? apiKey.substring(0, 7) : 'none',
       });
 
       // Create provider-aware client (now supports anthropic via adapter)

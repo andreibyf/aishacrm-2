@@ -1,6 +1,6 @@
 /**
  * UUID Validation Utilities
- * 
+ *
  * Prevents "invalid input syntax for type uuid" errors by validating
  * UUID inputs at the application boundary before passing to database queries.
  */
@@ -20,7 +20,7 @@ export function isValidUUID(value) {
 /**
  * Sanitize UUID input for database queries
  * Converts invalid UUIDs to NULL to prevent SQL errors
- * 
+ *
  * @param {string|null|undefined} value - Input value
  * @param {object} options - Sanitization options
  * @param {boolean} options.allowNull - Allow NULL values (default: true)
@@ -42,7 +42,8 @@ export function sanitizeUuidInput(value, options = {}) {
 
   // Validate UUID
   if (!isValidUUID(value)) {
-    console.warn(`[UUID Validator] Invalid UUID rejected: "${value}"`);
+    // Log only that rejection occurred — no value or length to avoid leaking env data
+    console.warn('[UUID Validator] Invalid UUID rejected');
     return null;
   }
 
@@ -51,7 +52,7 @@ export function sanitizeUuidInput(value, options = {}) {
 
 /**
  * Sanitize filter object to ensure UUID columns only receive valid UUIDs
- * 
+ *
  * @param {object} filter - Filter object (e.g., { tenant_id: 'abc', user_id: 'system' })
  * @param {string[]} uuidColumns - Column names that should contain UUIDs
  * @returns {object} Sanitized filter
@@ -63,13 +64,13 @@ export function sanitizeUuidFilter(filter, uuidColumns = []) {
 
   // Handle $or/$and at top level - always process recursively
   if ('$or' in sanitized && Array.isArray(sanitized.$or)) {
-    sanitized.$or = sanitized.$or.map(cond => sanitizeUuidFilter(cond, uuidColumns));
+    sanitized.$or = sanitized.$or.map((cond) => sanitizeUuidFilter(cond, uuidColumns));
   }
   if ('$and' in sanitized && Array.isArray(sanitized.$and)) {
-    sanitized.$and = sanitized.$and.map(cond => sanitizeUuidFilter(cond, uuidColumns));
+    sanitized.$and = sanitized.$and.map((cond) => sanitizeUuidFilter(cond, uuidColumns));
   }
 
-  uuidColumns.forEach(column => {
+  uuidColumns.forEach((column) => {
     if (column in sanitized) {
       const value = sanitized[column];
 
@@ -88,7 +89,7 @@ export function sanitizeUuidFilter(filter, uuidColumns = []) {
 
 /**
  * Express middleware to validate UUID parameters
- * 
+ *
  * @param {string[]} paramNames - Parameter names to validate
  * @returns {Function} Express middleware
  */
@@ -96,7 +97,7 @@ export function validateUuidParams(...paramNames) {
   return (req, res, next) => {
     const invalid = [];
 
-    paramNames.forEach(param => {
+    paramNames.forEach((param) => {
       const value = req.params[param];
       if (value && !isValidUUID(value)) {
         invalid.push({ param, value });
@@ -106,9 +107,9 @@ export function validateUuidParams(...paramNames) {
     if (invalid.length > 0) {
       return res.status(400).json({
         error: 'Invalid UUID parameter',
-        details: invalid.map(({ param, value }) => 
-          `Parameter '${param}' has invalid UUID: "${value}"`
-        )
+        details: invalid.map(
+          ({ param, value }) => `Parameter '${param}' has invalid UUID: "${value}"`,
+        ),
       });
     }
 
@@ -118,7 +119,7 @@ export function validateUuidParams(...paramNames) {
 
 /**
  * Express middleware to validate UUID query parameters
- * 
+ *
  * @param {string[]} queryNames - Query parameter names to validate
  * @returns {Function} Express middleware
  */
@@ -126,7 +127,7 @@ export function validateUuidQuery(...queryNames) {
   return (req, res, next) => {
     const invalid = [];
 
-    queryNames.forEach(param => {
+    queryNames.forEach((param) => {
       const value = req.query[param];
       if (value && value !== 'null' && !isValidUUID(value)) {
         invalid.push({ param, value });
@@ -136,9 +137,9 @@ export function validateUuidQuery(...queryNames) {
     if (invalid.length > 0) {
       return res.status(400).json({
         error: 'Invalid UUID query parameter',
-        details: invalid.map(({ param, value }) => 
-          `Query parameter '${param}' has invalid UUID: "${value}"`
-        )
+        details: invalid.map(
+          ({ param, value }) => `Query parameter '${param}' has invalid UUID: "${value}"`,
+        ),
       });
     }
 

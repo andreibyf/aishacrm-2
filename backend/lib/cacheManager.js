@@ -69,7 +69,7 @@ class CacheManager {
    */
   generateKey(module, tenantId, operation, params = {}) {
     const paramsHash = crypto
-      .createHash('md5')
+      .createHash('sha256')
       .update(JSON.stringify(params))
       .digest('hex')
       .substring(0, 8);
