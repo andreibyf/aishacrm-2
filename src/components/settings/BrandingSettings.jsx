@@ -27,14 +27,9 @@ import { useUser } from '@/components/shared/useUser.js';
  */
 function isSafeImageUrl(url) {
   if (!url || typeof url !== 'string') return false;
-  // Allow data:image/ URLs — block SVG in production (can contain scripts)
-  if (url.startsWith('data:image/')) {
-    const isSvg = url.startsWith('data:image/svg');
-    if (isSvg && !import.meta.env.DEV) return false;
-    return true;
-  }
   try {
     const parsed = new URL(url);
+    // Strict allowlist: only http and https. No data:, javascript:, vbscript:, blob:, etc.
     return parsed.protocol === 'http:' || parsed.protocol === 'https:';
   } catch {
     return false;
@@ -48,30 +43,89 @@ function isSafeImageUrl(url) {
 function sanitizeLegalHtmlForDisplay(html) {
   if (!html || typeof html !== 'string') return '';
   try {
-    // Use DOMParser instead of innerHTML to avoid CodeQL "DOM text reinterpreted as HTML" alert.
-    // DOMParser creates an inert document — no scripts execute during parsing.
+    // Allowlist approach: only permit safe tags and safe attributes.
+    // This avoids innerHTML assignment entirely — we rebuild from scratch.
+    const ALLOWED_TAGS = new Set([
+      'p',
+      'br',
+      'b',
+      'i',
+      'u',
+      'em',
+      'strong',
+      'a',
+      'ul',
+      'ol',
+      'li',
+      'span',
+      'div',
+      'h1',
+      'h2',
+      'h3',
+      'h4',
+      'h5',
+      'h6',
+      'small',
+      'sub',
+      'sup',
+    ]);
+    const ALLOWED_ATTRS = new Set(['href', 'target', 'rel', 'class', 'style', 'title']);
+
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
-    const body = doc.body;
-    body
-      .querySelectorAll('script, style, iframe, object, embed, form')
-      .forEach((el) => el.remove());
-    body.querySelectorAll('*').forEach((el) => {
-      [...el.attributes].forEach((attr) => {
+
+    function sanitizeNode(node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        return document.createTextNode(node.textContent);
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return null;
+
+      const tag = node.tagName.toLowerCase();
+      if (!ALLOWED_TAGS.has(tag)) {
+        // Unwrap: keep children, drop the element itself
+        const frag = document.createDocumentFragment();
+        for (const child of Array.from(node.childNodes)) {
+          const sanitized = sanitizeNode(child);
+          if (sanitized) frag.appendChild(sanitized);
+        }
+        return frag;
+      }
+
+      const el = document.createElement(tag);
+      // Copy only allowed attributes, block dangerous values
+      for (const attr of Array.from(node.attributes)) {
         const name = attr.name.toLowerCase();
+        if (!ALLOWED_ATTRS.has(name)) continue;
         const val = String(attr.value || '')
           .trim()
           .toLowerCase();
-        if (name.startsWith('on')) el.removeAttribute(attr.name);
         if (
-          (name === 'href' || name === 'src' || name === 'action') &&
-          val.startsWith('javascript:')
-        ) {
-          el.removeAttribute(attr.name);
-        }
-      });
-    });
-    return body.innerHTML;
+          name === 'href' &&
+          (val.startsWith('javascript:') || val.startsWith('vbscript:') || val.startsWith('data:'))
+        )
+          continue;
+        el.setAttribute(attr.name, attr.value);
+      }
+      // Force safe link targets
+      if (tag === 'a') {
+        el.setAttribute('rel', 'noopener noreferrer');
+      }
+      for (const child of Array.from(node.childNodes)) {
+        const sanitized = sanitizeNode(child);
+        if (sanitized) el.appendChild(sanitized);
+      }
+      return el;
+    }
+
+    const result = document.createDocumentFragment();
+    for (const child of Array.from(doc.body.childNodes)) {
+      const sanitized = sanitizeNode(child);
+      if (sanitized) result.appendChild(sanitized);
+    }
+    // Serialize back to HTML string via a temporary container
+    const container = document.createElement('div');
+    container.appendChild(result);
+    return container.innerHTML;
   } catch {
     return '';
   }
