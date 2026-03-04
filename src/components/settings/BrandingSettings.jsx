@@ -48,10 +48,15 @@ function isSafeImageUrl(url) {
 function sanitizeLegalHtmlForDisplay(html) {
   if (!html || typeof html !== 'string') return '';
   try {
-    const div = document.createElement('div');
-    div.innerHTML = html;
-    div.querySelectorAll('script, style, iframe, object, embed, form').forEach((el) => el.remove());
-    div.querySelectorAll('*').forEach((el) => {
+    // Use DOMParser instead of innerHTML to avoid CodeQL "DOM text reinterpreted as HTML" alert.
+    // DOMParser creates an inert document — no scripts execute during parsing.
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const body = doc.body;
+    body
+      .querySelectorAll('script, style, iframe, object, embed, form')
+      .forEach((el) => el.remove());
+    body.querySelectorAll('*').forEach((el) => {
       [...el.attributes].forEach((attr) => {
         const name = attr.name.toLowerCase();
         const val = String(attr.value || '')
@@ -66,7 +71,7 @@ function sanitizeLegalHtmlForDisplay(html) {
         }
       });
     });
-    return div.innerHTML;
+    return body.innerHTML;
   } catch {
     return '';
   }
