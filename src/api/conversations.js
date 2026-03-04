@@ -38,7 +38,9 @@ async function getAuthHeaders() {
 export async function createConversation({ agent_name = 'crm_assistant', metadata = {} } = {}) {
   const tenantId = resolveTenantId();
   const authHeaders = await getAuthHeaders();
-  console.log(`[Conversations API] Creating conversation for tenant ${tenantId}`, {
+  // Tenant context logged without interpolating user-controlled values into format string
+  console.debug('[Conversations API] Creating conversation', {
+    tenantId,
     hasAuth: !!authHeaders.Authorization,
   });
 

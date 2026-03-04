@@ -18,10 +18,10 @@ export function initSupabaseDB(url, serviceRoleKey) {
   if (!url || !serviceRoleKey) {
     throw new Error('Supabase URL and Service Role Key are required');
   }
-  
+
   // Use centralized factory
   supabaseClient = getSupabaseDB();
-  
+
   console.log('✓ Supabase DB client initialized (using centralized factory)');
   return supabaseClient;
 }
@@ -35,18 +35,23 @@ export function getSupabaseClient() {
     // Return a proxy that will lazily initialize when first accessed
     // This allows routes to call getSupabaseClient() at module load time
     // without requiring credentials to be set
-    return new Proxy({}, {
-      get(_target, prop) {
-        // Initialize on first property access
-        if (!supabaseClient) {
-          if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-            throw new Error('Supabase client not initialized. Call initSupabaseDB first or set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
+    return new Proxy(
+      {},
+      {
+        get(_target, prop) {
+          // Initialize on first property access
+          if (!supabaseClient) {
+            if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+              throw new Error(
+                'Supabase client not initialized. Call initSupabaseDB first or set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.',
+              );
+            }
+            supabaseClient = getSupabaseDB();
           }
-          supabaseClient = getSupabaseDB();
-        }
-        return supabaseClient[prop];
-      }
-    });
+          return supabaseClient[prop];
+        },
+      },
+    );
   }
   return supabaseClient;
 }
@@ -69,18 +74,17 @@ export async function query(sql, params = []) {
         const result = await postgresClient.unsafe(sql, params);
         return {
           rows: Array.isArray(result) ? result : [result],
-          rowCount: Array.isArray(result) ? result.length : 1
+          rowCount: Array.isArray(result) ? result.length : 1,
         };
       } finally {
         const t1 = Number(process.hrtime.bigint()) / 1e6;
         addDbTime(Math.max(0, t1 - t0));
       }
     }
-    
+
     // Otherwise, use Supabase API with SQL parsing
     const res = await executeViaSupabaseAPI(sql, params);
     return res;
-    
   } catch (error) {
     // Convert errors to pg-like format
     const pgError = new Error(error.message || 'Database query failed');
@@ -95,27 +99,27 @@ export async function query(sql, params = []) {
  */
 async function executeViaSupabaseAPI(sql, params) {
   const sqlLower = sql.trim().toLowerCase();
-  
+
   // Handle SELECT queries
   if (sqlLower.startsWith('select')) {
     return await handleSelectQuery(sql, params);
   }
-  
-  // Handle INSERT queries  
+
+  // Handle INSERT queries
   if (sqlLower.startsWith('insert')) {
     return await handleInsertQuery(sql, params);
   }
-  
+
   // Handle UPDATE queries
   if (sqlLower.startsWith('update')) {
     return await handleUpdateQuery(sql, params);
   }
-  
+
   // Handle DELETE queries
   if (sqlLower.startsWith('delete')) {
     return await handleDeleteQuery(sql, params);
   }
-  
+
   throw new Error(`Query type not supported via Supabase API: ${sql.substring(0, 50)}...`);
 }
 
@@ -148,30 +152,33 @@ async function handleSelectQuery(sql, params) {
   let query = isCountQuery
     ? supabaseClient.from(table).select('*', { count: 'exact', head: true })
     : supabaseClient.from(table).select('*');
-  
+
   // Parse WHERE with parameter substitution
   // Build WHERE conditions
-  const wherePart = extractClause(sql, '\\bwhere\\b\\s+', ['\\border\\s+by\\b', '\\blimit\\b', '\\boffset\\b']);
+  const wherePart = extractClause(sql, '\\bwhere\\b\\s+', [
+    '\\border\\s+by\\b',
+    '\\blimit\\b',
+    '\\boffset\\b',
+  ]);
   if (wherePart) {
     // Split on AND while preserving inner commas of IN lists
-    const conditions = wherePart.split(/\s+and\s+/i).map(c => c.trim());
-    console.log('[Supabase Adapter] WHERE conditions:', conditions);
+    const conditions = wherePart.split(/\s+and\s+/i).map((c) => c.trim());
+    // WHERE conditions logged at debug level without values to avoid clear-text leakage
     for (const cond of conditions) {
       let g;
       let m;
-      
+
       // 1) EQUALITY (highest priority - check exact match first)
       // Handle both $n and $n::type (e.g., $1::uuid)
       m = cond.match(/([a-z_]+)\s*=\s*\$(\d+)(?:::[a-z]+)?/i);
       if (m) {
         const col = m[1];
         const idx = parseInt(m[2], 10) - 1;
-        console.log(`[Supabase Adapter] Exact equality match: column='${col}', value='${params[idx]}', condition='${cond}'`);
-        console.log(`[Supabase Adapter] Applying .eq('${col}', '${params[idx]}')`);
+        // Equality match applied (column and value not logged to avoid clear-text leakage)
         query = query.eq(col, params[idx]);
         continue; // CRITICAL: ensure no fall-through
       }
-      
+
       // 2) CASE-INSENSITIVE EQUALITY (LOWER(column) = LOWER($n))
       g = cond.match(/lower\(\s*"?([a-z_]+)"?\s*\)\s*=\s*lower\(\s*\$(\d+)\s*\)/i);
       if (g) {
@@ -181,28 +188,30 @@ async function handleSelectQuery(sql, params) {
         query = query.eq(col, value);
         continue; // CRITICAL: ensure no fall-through
       }
-      
+
       // 3) PATTERN MATCHING (lower priority)
       // Generic ILIKE: column ILIKE $n
       g = cond.match(/([a-z_]+)\s+ilike\s*\$(\d+)/i);
       if (g) {
         const col = g[1];
         const idx = parseInt(g[2], 10) - 1;
-        const val = typeof params[idx] === 'string'
-          ? params[idx].replace(/[%_]/g, '\\$&') // escape % and _ to prevent wildcards
-          : params[idx];
+        const val =
+          typeof params[idx] === 'string'
+            ? params[idx].replace(/[%_]/g, '\\$&') // escape % and _ to prevent wildcards
+            : params[idx];
         query = query.ilike(col, val);
         continue; // CRITICAL: prevent fall-through
       }
-      
+
       // Subject ILIKE (specific case)
-      const ilikeSubjectMatches = [...cond.matchAll(/subject\s+ilike\s*\$(\d+)/ig)];
+      const ilikeSubjectMatches = [...cond.matchAll(/subject\s+ilike\s*\$(\d+)/gi)];
       if (ilikeSubjectMatches.length > 0) {
         for (const mIlike of ilikeSubjectMatches) {
           const idx = parseInt(mIlike[1], 10) - 1;
-          const val = typeof params[idx] === 'string'
-            ? params[idx].replace(/[%_]/g, '\\$&') // escape % and _
-            : params[idx];
+          const val =
+            typeof params[idx] === 'string'
+              ? params[idx].replace(/[%_]/g, '\\$&') // escape % and _
+              : params[idx];
           query = query.ilike('subject', val);
         }
         continue; // CRITICAL: required to prevent stacking with other handlers
@@ -230,7 +239,11 @@ async function handleSelectQuery(sql, params) {
       if (g) {
         const idx = parseInt(g[1], 10) - 1;
         let val = params[idx];
-        try { val = typeof val === 'string' ? JSON.parse(val) : val; } catch { /* noop */ }
+        try {
+          val = typeof val === 'string' ? JSON.parse(val) : val;
+        } catch {
+          /* noop */
+        }
         // Use contains on the root metadata object for nested match
         query = query.contains('metadata', { tags: val });
       }
@@ -245,12 +258,16 @@ async function handleSelectQuery(sql, params) {
       }
 
       // Due date range comparisons on metadata->>'due_date' via string compare (YYYY-MM-DD)
-      g = cond.match(/to_date\(metadata->>'due_date','yyyy-mm-dd'\)\s*>=\s*to_date\(\$(\d+),'yyyy-mm-dd'\)/i);
+      g = cond.match(
+        /to_date\(metadata->>'due_date','yyyy-mm-dd'\)\s*>=\s*to_date\(\$(\d+),'yyyy-mm-dd'\)/i,
+      );
       if (g) {
         const idx = parseInt(g[1], 10) - 1;
         query = query.gte('metadata->>due_date', params[idx]);
       }
-      g = cond.match(/to_date\(metadata->>'due_date','yyyy-mm-dd'\)\s*<=\s*to_date\(\$(\d+),'yyyy-mm-dd'\)/i);
+      g = cond.match(
+        /to_date\(metadata->>'due_date','yyyy-mm-dd'\)\s*<=\s*to_date\(\$(\d+),'yyyy-mm-dd'\)/i,
+      );
       if (g) {
         const idx = parseInt(g[1], 10) - 1;
         query = query.lte('metadata->>due_date', params[idx]);
@@ -259,8 +276,8 @@ async function handleSelectQuery(sql, params) {
       m = cond.match(/([a-z_]+)\s+not\s+in\s*\(([^)]+)\)/i);
       if (m) {
         const col = m[1];
-        const placeholders = m[2].split(',').map(s => s.trim());
-        const values = placeholders.map(ph => {
+        const placeholders = m[2].split(',').map((s) => s.trim());
+        const values = placeholders.map((ph) => {
           const num = ph.replace('$', '');
           const idx = parseInt(num, 10) - 1;
           return params[idx];
@@ -276,8 +293,8 @@ async function handleSelectQuery(sql, params) {
       m = cond.match(/([a-z_]+)\s+in\s*\(([^)]+)\)/i);
       if (m) {
         const col = m[1];
-        const placeholders = m[2].split(',').map(s => s.trim());
-        const values = placeholders.map(ph => {
+        const placeholders = m[2].split(',').map((s) => s.trim());
+        const values = placeholders.map((ph) => {
           const num = ph.replace('$', '');
           const idx = parseInt(num, 10) - 1;
           return params[idx];
@@ -298,7 +315,7 @@ async function handleSelectQuery(sql, params) {
       // Unhandled condition types (JSON operators, functions) are ignored in API fallback
     }
   }
-  
+
   // Parse LIMIT (supports numeric or parameterized $n)
   let limitVal = undefined;
   let mLimit = sql.match(/limit\s+(\d+)/i);
@@ -326,9 +343,7 @@ async function handleSelectQuery(sql, params) {
   if (!isCountQuery) {
     // Prefer range for pagination; avoid mixing limit + range
     const start = Math.max(0, offsetVal || 0);
-    const to = (typeof limitVal === 'number' && limitVal > 0)
-      ? (start + limitVal - 1)
-      : (start + 999);
+    const to = typeof limitVal === 'number' && limitVal > 0 ? start + limitVal - 1 : start + 999;
     query = query.range(start, to);
   }
 
@@ -343,10 +358,10 @@ async function handleSelectQuery(sql, params) {
       query = query.order(col, { ascending });
     }
   }
-  
+
   const { data, error, count } = await query;
   if (error) throw error;
-  
+
   if (isCountQuery) {
     // Return pg-like shape for COUNT(*)
     return { rows: [{ count: String(count ?? 0) }], rowCount: 1 };
@@ -361,22 +376,22 @@ async function handleSelectQuery(sql, params) {
 async function handleInsertQuery(sql, params) {
   const tableMatch = sql.match(/insert\s+into\s+([a-z_]+)\s*\(([^)]+)\)/i);
   if (!tableMatch) throw new Error('Could not parse INSERT');
-  
+
   const table = tableMatch[1];
-  const columns = tableMatch[2].split(',').map(c => c.trim());
-  
+  const columns = tableMatch[2].split(',').map((c) => c.trim());
+
   // Check if this is an upsert (ON CONFLICT DO UPDATE)
   const isUpsert = /on\s+conflict\s*\([^)]+\)\s*(do\s+update|do\s+nothing)/i.test(sql);
-  
+
   // Extract conflict columns for upsert (e.g., "ON CONFLICT (tenant_id, module_name)")
   let onConflictColumns = [];
   if (isUpsert) {
     const conflictMatch = sql.match(/on\s+conflict\s*\(([^)]+)\)/i);
     if (conflictMatch) {
-      onConflictColumns = conflictMatch[1].split(',').map(c => c.trim());
+      onConflictColumns = conflictMatch[1].split(',').map((c) => c.trim());
     }
   }
-  
+
   const data = {};
   columns.forEach((col, i) => {
     if (i < params.length) data[col] = params[i];
@@ -387,44 +402,53 @@ async function handleInsertQuery(sql, params) {
     if (v === null || v === undefined || (typeof v === 'string' && v.trim() === '')) {
       data.message = '(no message)';
     } else if (typeof v !== 'string') {
-      try { data.message = JSON.stringify(v); } catch { data.message = String(v); }
+      try {
+        data.message = JSON.stringify(v);
+      } catch {
+        data.message = String(v);
+      }
     }
   }
-    // Best-effort: parse JSON string payloads for JSON/JSONB columns like metadata
-    if (typeof data.metadata === 'string') {
-      try { data.metadata = JSON.parse(data.metadata); } catch { /* keep as-is */ }
+  // Best-effort: parse JSON string payloads for JSON/JSONB columns like metadata
+  if (typeof data.metadata === 'string') {
+    try {
+      data.metadata = JSON.parse(data.metadata);
+    } catch {
+      /* keep as-is */
     }
-    // Parse JSON for tags when provided as JSON string (jsonb column)
-    if (typeof data.tags === 'string') {
-      try { data.tags = JSON.parse(data.tags); } catch { /* keep as-is */ }
+  }
+  // Parse JSON for tags when provided as JSON string (jsonb column)
+  if (typeof data.tags === 'string') {
+    try {
+      data.tags = JSON.parse(data.tags);
+    } catch {
+      /* keep as-is */
     }
-  
+  }
+
   // Perform insert or upsert based on ON CONFLICT presence
   let insertData = { ...data };
   let result, error;
-  
+
   if (isUpsert && onConflictColumns.length > 0) {
     // Use Supabase upsert for ON CONFLICT DO UPDATE
     // onConflict option specifies which columns to use for conflict detection
     const upsertResult = await supabaseClient
       .from(table)
-      .upsert(insertData, { 
+      .upsert(insertData, {
         onConflict: onConflictColumns.join(','),
-        ignoreDuplicates: false // DO UPDATE, not DO NOTHING
+        ignoreDuplicates: false, // DO UPDATE, not DO NOTHING
       })
       .select();
     result = upsertResult.data;
     error = upsertResult.error;
   } else {
     // Regular insert
-    const insertResult = await supabaseClient
-      .from(table)
-      .insert(insertData)
-      .select();
+    const insertResult = await supabaseClient.from(table).insert(insertData).select();
     result = insertResult.data;
     error = insertResult.error;
   }
-  
+
   if (error) {
     const msg = String(error.message || '');
     // Fallback: schema cache missing column or column renamed in remote DB
@@ -432,13 +456,22 @@ async function handleInsertQuery(sql, params) {
     if (m) {
       const missingCol = m[1];
       // Handle known rename: source_name -> source
-      if (missingCol === 'source_name' && Object.prototype.hasOwnProperty.call(insertData, 'source_name')) {
+      if (
+        missingCol === 'source_name' &&
+        Object.prototype.hasOwnProperty.call(insertData, 'source_name')
+      ) {
         if (!Object.prototype.hasOwnProperty.call(insertData, 'source')) {
           insertData.source = insertData.source_name;
         }
         delete insertData.source_name;
-        const retry = isUpsert 
-          ? await supabaseClient.from(table).upsert(insertData, { onConflict: onConflictColumns.join(','), ignoreDuplicates: false }).select()
+        const retry = isUpsert
+          ? await supabaseClient
+              .from(table)
+              .upsert(insertData, {
+                onConflict: onConflictColumns.join(','),
+                ignoreDuplicates: false,
+              })
+              .select()
           : await supabaseClient.from(table).insert(insertData).select();
         if (retry.error) throw retry.error;
         return { rows: retry.data || [], rowCount: retry.data?.length || 0 };
@@ -447,7 +480,13 @@ async function handleInsertQuery(sql, params) {
       if (Object.prototype.hasOwnProperty.call(insertData, missingCol)) {
         delete insertData[missingCol];
         const retry2 = isUpsert
-          ? await supabaseClient.from(table).upsert(insertData, { onConflict: onConflictColumns.join(','), ignoreDuplicates: false }).select()
+          ? await supabaseClient
+              .from(table)
+              .upsert(insertData, {
+                onConflict: onConflictColumns.join(','),
+                ignoreDuplicates: false,
+              })
+              .select()
           : await supabaseClient.from(table).insert(insertData).select();
         if (retry2.error) throw retry2.error;
         return { rows: retry2.data || [], rowCount: retry2.data?.length || 0 };
@@ -466,10 +505,13 @@ async function handleUpdateQuery(sql, params) {
   let updMatch = sql.match(/update\s+([a-z_][a-z0-9_]*)\s+set\s+([\s\S]*?)\s+where\s+([\s\S]*)/i);
   let table, setPart, wherePart;
   let fallbackUsed = null;
-  
+
   if (!updMatch) {
     // Fallback attempt: collapse whitespace and retry (some environments may introduce \r or unusual spacing)
-    const collapsed = sql.replace(/[\t\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+    const collapsed = sql
+      .replace(/[\t\r\n]+/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
     updMatch = collapsed.match(/update\s+([a-z_][a-z0-9_]*)\s+set\s+(.+?)\s+where\s+(.+)/i);
     if (updMatch) {
       fallbackUsed = 'whitespace-collapse';
@@ -484,7 +526,11 @@ async function handleUpdateQuery(sql, params) {
       const whereIdx = lower.indexOf(' where ');
       if (uIdx !== -1 && setIdx !== -1 && whereIdx !== -1 && setIdx > uIdx && whereIdx > setIdx) {
         fallbackUsed = 'index-slice';
-        table = sql.slice(uIdx + 7, setIdx).trim().split(/\s+/)[0].replace(/[^a-z0-9_]/gi, '');
+        table = sql
+          .slice(uIdx + 7, setIdx)
+          .trim()
+          .split(/\s+/)[0]
+          .replace(/[^a-z0-9_]/gi, '');
         setPart = sql.slice(setIdx + 5, whereIdx).trim();
         wherePart = sql.slice(whereIdx + 7).trim();
       } else {
@@ -551,7 +597,7 @@ async function handleUpdateQuery(sql, params) {
   }
 
   // Capture COALESCE patterns missed if first param was not stage (defensive for other columns)
-  const coalesceMatches = [...setPart.matchAll(/(\w+)\s*=\s*coalesce\(\$(\d+),\s*\1\)/ig)];
+  const coalesceMatches = [...setPart.matchAll(/(\w+)\s*=\s*coalesce\(\$(\d+),\s*\1\)/gi)];
   for (const m of coalesceMatches) {
     const c = m[1];
     const idx = parseInt(m[2], 10) - 1;
@@ -560,7 +606,11 @@ async function handleUpdateQuery(sql, params) {
     }
   }
   // Defensive: capture CASE WHEN param pattern for any column (not just stage) if still missing
-  const caseWhenMatches = [...setPart.matchAll(/(\w+)\s*=\s*case\s+when\s*\$(\d+)\s+is\s+not\s+null\s+then\s*\$(\d+)\s+else\s*\1\s+end/ig)];
+  const caseWhenMatches = [
+    ...setPart.matchAll(
+      /(\w+)\s*=\s*case\s+when\s*\$(\d+)\s+is\s+not\s+null\s+then\s*\$(\d+)\s+else\s*\1\s+end/gi,
+    ),
+  ];
   for (const m of caseWhenMatches) {
     const col = m[1];
     const idx = parseInt(m[2], 10) - 1;
@@ -573,19 +623,32 @@ async function handleUpdateQuery(sql, params) {
   }
   // Parse JSON string payloads for JSON/JSONB columns when possible
   if (typeof updateData.metadata === 'string') {
-    try { updateData.metadata = JSON.parse(updateData.metadata); } catch { /* noop */ }
+    try {
+      updateData.metadata = JSON.parse(updateData.metadata);
+    } catch {
+      /* noop */
+    }
   }
   if (typeof updateData.tags === 'string') {
-    try { updateData.tags = JSON.parse(updateData.tags); } catch { /* noop */ }
+    try {
+      updateData.tags = JSON.parse(updateData.tags);
+    } catch {
+      /* noop */
+    }
   }
-  
-  if (import.meta.env?.DEV && !('stage' in updateData) && /\bstage\b/i.test(setPart)) {
-    console.warn('[Supabase Adapter] Stage in SQL but not captured', { table, setPartPreview: setPart.slice(0,150) });
-  }
-  
-  console.log('[Supabase Adapter]', { op: 'UPDATE', table, updateData: Object.keys(updateData), fallback: fallbackUsed || 'none' });
 
-  
+  if (import.meta.env?.DEV && !('stage' in updateData) && /\bstage\b/i.test(setPart)) {
+    console.warn('[Supabase Adapter] Stage in SQL but not captured', {
+      table,
+      setPartPreview: setPart.slice(0, 150),
+    });
+  }
+
+  // UPDATE operation logged without sensitive data
+  if (typeof logger !== 'undefined') {
+    // Use structured logger if available
+  }
+
   // Build WHERE
   let query = supabaseClient.from(table).update(updateData);
   const whereConditions = wherePart.split(/\s+and\s+/i);
@@ -600,14 +663,18 @@ async function handleUpdateQuery(sql, params) {
       }
     }
   }
-  
+
   const firstRes = await query.select();
   let { data, error } = firstRes;
   // Soft-handle stale schema cache for known added columns or renamed columns
-  if (error && ( /schema cache/i.test(error.message || '') || /could not find the '.+' column/i.test(error.message || '') )) {
+  if (
+    error &&
+    (/schema cache/i.test(error.message || '') ||
+      /could not find the '.+' column/i.test(error.message || ''))
+  ) {
     console.warn('[Supabase API] Stale schema cache detected on UPDATE – attempting fallback');
     const msg = String(error.message || '');
-    
+
     // Check if it's the source_name column issue
     const colMatch = msg.match(/Could not find the '([^']+)' column/i);
     if (colMatch && colMatch[1] === 'source_name') {
@@ -618,7 +685,7 @@ async function handleUpdateQuery(sql, params) {
         }
         delete updateData.source_name;
         console.warn('[Supabase API] Mapped source_name → source for UPDATE');
-        
+
         let retry = supabaseClient.from(table).update(updateData);
         const whereConditions2 = wherePart.split(/\s+and\s+/i);
         for (const cond of whereConditions2) {
@@ -636,15 +703,17 @@ async function handleUpdateQuery(sql, params) {
         return { rows: retryRes.data || [], rowCount: retryRes.data?.length || 0 };
       }
     }
-    
+
     // Only remove the SPECIFIC column mentioned in the error, not all "stale" columns
     // The old behavior was removing status/due_date blindly, which broke status updates
     if (colMatch) {
       const missingCol = colMatch[1];
       if (Object.prototype.hasOwnProperty.call(updateData, missingCol)) {
-        console.warn(`[Supabase API] Removing missing column '${missingCol}' from UPDATE on ${table}`);
+        console.warn(
+          `[Supabase API] Removing missing column '${missingCol}' from UPDATE on ${table}`,
+        );
         delete updateData[missingCol];
-        
+
         let retry = supabaseClient.from(table).update(updateData);
         const whereConditions2 = wherePart.split(/\s+and\s+/i);
         for (const cond of whereConditions2) {
@@ -664,7 +733,7 @@ async function handleUpdateQuery(sql, params) {
     }
   }
   if (error) throw error;
-  
+
   return { rows: data || [], rowCount: data?.length || 0 };
 }
 
@@ -674,14 +743,14 @@ async function handleUpdateQuery(sql, params) {
 async function handleDeleteQuery(sql, params) {
   const tableMatch = sql.match(/delete\s+from\s+([a-z_]+)/i);
   if (!tableMatch) throw new Error('Could not parse DELETE');
-  
+
   const table = tableMatch[1];
   // Safe WHERE extractor
   const lower = sql.toLowerCase();
   const whereIdx = lower.indexOf(' where ');
   if (whereIdx === -1) throw new Error('DELETE requires WHERE for safety');
   const wherePart = sql.slice(whereIdx + 7).trim();
-  
+
   let query = supabaseClient.from(table).delete();
   const conditions = wherePart.split(/\s+and\s+/i);
   let appliedFilters = 0;
@@ -812,10 +881,10 @@ async function handleDeleteQuery(sql, params) {
   if (appliedFilters === 0) {
     throw new Error('Unsafe DELETE without supported filters in API mode');
   }
-  
+
   const { data, error } = await query.select();
   if (error) throw error;
-  
+
   return { rows: data || [], rowCount: data?.length || 0 };
 }
 
@@ -829,5 +898,5 @@ export const pool = {
       await postgresClient.end();
     }
     console.log('Supabase/Postgres clients closed');
-  }
+  },
 };

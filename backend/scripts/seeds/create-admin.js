@@ -84,7 +84,7 @@ async function createAdmin() {
 
   console.log('Configuration:');
   console.log(`  Supabase URL: ${SUPABASE_URL}`);
-  console.log(`  Admin Email:  ${ADMIN_EMAIL}`);
+  console.log(`  Admin Email:  ${ADMIN_EMAIL.replace(/(.{2}).*(@.*)/, '$1***$2')}`);
   console.log(`  Password:     ${'*'.repeat(12)} (${ADMIN_PASSWORD.length} characters)\n`);
 
   if (dryRun) {
@@ -159,7 +159,7 @@ async function createAdmin() {
       console.log('✅ Password updated successfully!');
       console.log('\n═══════════════════════════════════════════════');
       console.log('You can now sign in with:');
-      console.log(`  Email:    ${ADMIN_EMAIL}`);
+      console.log(`  Email:    ${ADMIN_EMAIL.replace(/(.{2}).*(@.*)/, '$1***$2')}`);
       console.log(`  Password: ${'*'.repeat(12)} (updated)`);
       console.log('═══════════════════════════════════════════════\n');
       process.exit(0);
@@ -218,7 +218,7 @@ async function createAdmin() {
     console.log(
       `  URL:      ${SUPABASE_URL.replace(/https:\/\/(.+)\.supabase\.co/, 'https://app.aishacrm.com')}`,
     );
-    console.log(`  Email:    ${ADMIN_EMAIL}`);
+    console.log(`  Email:    ${ADMIN_EMAIL.replace(/(.{2}).*(@.*)/, '$1***$2')}`);
     console.log(`  Password: ${'*'.repeat(12)} (see configuration)`);
     console.log(`  Role:     superadmin`);
     console.log(`  Tenant:   ${SUPERADMIN_TENANT_ID} (superadmin global access)`);
