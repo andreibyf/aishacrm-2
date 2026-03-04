@@ -84,7 +84,8 @@ export const User = {
               ? userData.tenant_id
               : (payload.tenant_id ?? null),
           ...(userData && {
-            employee_id: userData.id,
+            employee_id: userData.employee_id || userData.id,
+            employee_role: userData.employee_role,
             first_name: userData.first_name,
             last_name: userData.last_name,
             full_name:
@@ -318,7 +319,8 @@ export const User = {
               : (user.user_metadata?.tenant_id ?? null),
           // Finally, include database user data LAST so it overrides metadata
           ...(userData && {
-            employee_id: userData.id,
+            employee_id: userData.employee_id || userData.id,
+            employee_role: userData.employee_role,
             first_name: userData.first_name,
             last_name: userData.last_name,
             // Derive full/display names from DB when present

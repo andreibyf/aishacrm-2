@@ -640,6 +640,8 @@ const server = createServer(app);
 // worst-case qwen2.5-coder:3b CPU inference time seen in dev (~76s).
 server.timeout = 5 * 60 * 1000; // 5 minutes
 server.requestTimeout = 5 * 60 * 1000; // 5 minutes (Node 18+ request-level timeout)
+server.keepAliveTimeout = 65 * 1000; // 65s — must exceed browser/proxy keep-alive (typically 60s)
+server.headersTimeout = 66 * 1000; // Must be > keepAliveTimeout per Node.js docs
 
 // Supabase admin helpers for storage bucket provisioning
 import { getSupabaseAdmin, getBucketName } from './lib/supabaseFactory.js';
