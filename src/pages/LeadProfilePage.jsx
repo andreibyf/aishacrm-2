@@ -1,124 +1,526 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { useParams, useSearchParams, Link } from "react-router-dom";
-import { supabase } from "@/lib/supabase";
-import { setAiShaContext } from "@/utils/contextBridge";
-import EntityAiSummaryCard from "@/components/crm/EntityAiSummaryCard";
+import React, { useEffect, useMemo, useState } from 'react';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
+import { supabase } from '@/lib/supabase';
+import { setAiShaContext } from '@/utils/contextBridge';
+import EntityAiSummaryCard from '@/components/crm/EntityAiSummaryCard';
 
 function getRuntimeEnv(key) {
-  if (typeof window !== "undefined" && window._env_) return window._env_[key];
+  if (typeof window !== 'undefined' && window._env_) return window._env_[key];
   return import.meta.env[key];
 }
 
+// ─── Formatters ─────────────────────────────────────────────────────────────
 function formatDate(dt) {
-  if (!dt) return "—";
-  // If string contains both date and time (e.g., "2026-02-04 19:00:00"), treat as UTC
+  if (!dt) return '—';
   let dateStr = dt;
   if (typeof dt === 'string' && dt.includes(' ') && !dt.includes('T')) {
-    // Convert "YYYY-MM-DD HH:MM:SS" to UTC ISO string "YYYY-MM-DDTHH:MM:SS.000Z"
     const [datePart, timePart] = dt.split(' ');
     dateStr = `${datePart}T${timePart}.000Z`;
   }
   const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-function StatusPill({ status }) {
-  const s = (status || "unknown").toLowerCase();
-  const cls =
-    s.includes("new")
-      ? "bg-blue-50 text-blue-700 ring-blue-200"
-      : s.includes("qualified")
-      ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-      : s.includes("disqual")
-      ? "bg-rose-50 text-rose-700 ring-rose-200"
-      : s.includes("contacted")
-      ? "bg-amber-50 text-amber-800 ring-amber-200"
-      : "bg-zinc-50 text-zinc-700 ring-zinc-200";
+function formatDateTime(dt) {
+  if (!dt) return '—';
+  const d = new Date(dt);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 
+function daysSince(dt) {
+  if (!dt) return null;
+  return Math.floor((Date.now() - new Date(dt).getTime()) / (1000 * 60 * 60 * 24));
+}
+
+// ─── Design tokens ──────────────────────────────────────────────────────────
+const C = {
+  bg: '#F7F6F3',
+  card: '#FFFFFF',
+  cardAlt: '#FAFAF8',
+  ink: '#1A1A1A',
+  inkMuted: '#6B6B6B',
+  inkLight: '#9C9C9C',
+  accent: '#2563EB',
+  accentSoft: '#EFF4FF',
+  success: '#059669',
+  successSoft: '#ECFDF5',
+  warning: '#D97706',
+  warningSoft: '#FFFBEB',
+  danger: '#DC2626',
+  dangerSoft: '#FEF2F2',
+  border: '#E5E5E3',
+  borderLight: '#F0EFED',
+  purple: '#7C3AED',
+  purpleSoft: '#F5F3FF',
+};
+
+const CARE_COLORS = {
+  unaware: { bg: '#F3F4F6', text: '#6B7280', dot: '#9CA3AF' },
+  aware: { bg: '#EFF6FF', text: '#1D4ED8', dot: '#3B82F6' },
+  engaged: { bg: '#ECFDF5', text: '#047857', dot: '#10B981' },
+  evaluating: { bg: '#F5F3FF', text: '#6D28D9', dot: '#8B5CF6' },
+  committed: { bg: '#FFF7ED', text: '#C2410C', dot: '#F97316' },
+  active: { bg: '#ECFDF5', text: '#047857', dot: '#059669' },
+  at_risk: { bg: '#FEF2F2', text: '#DC2626', dot: '#EF4444' },
+  dormant: { bg: '#F3F4F6', text: '#6B7280', dot: '#9CA3AF' },
+  reactivated: { bg: '#FFFBEB', text: '#D97706', dot: '#F59E0B' },
+  lost: { bg: '#FEF2F2', text: '#991B1B', dot: '#DC2626' },
+};
+
+const ENTITY_ICONS = {
+  bizdev: { bg: '#FEF3C7', border: '#F59E0B', icon: '🌱' },
+  lead: { bg: '#DBEAFE', border: '#3B82F6', icon: '🎯' },
+  contact: { bg: '#D1FAE5', border: '#10B981', icon: '👤' },
+  account: { bg: '#FDE68A', border: '#F59E0B', icon: '🏢' },
+  opportunity: { bg: '#EDE9FE', border: '#8B5CF6', icon: '💰' },
+};
+
+const ACTIVITY_ICONS = { call: '📞', email: '✉️', meeting: '🤝', task: '☑️' };
+
+// ─── Sub-components ─────────────────────────────────────────────────────────
+
+function ScoreRing({ score }) {
+  if (score == null) return null;
+  const r = 28,
+    circ = 2 * Math.PI * r;
+  const offset = circ - (score / 100) * circ;
+  const color = score >= 70 ? C.success : score >= 40 ? C.warning : C.danger;
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${cls}`}>
-      {status || "Unknown"}
+    <div style={{ position: 'relative', width: 72, height: 72 }}>
+      <svg width="72" height="72" style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx="36" cy="36" r={r} fill="none" stroke={C.borderLight} strokeWidth="6" />
+        <circle
+          cx="36"
+          cy="36"
+          r={r}
+          fill="none"
+          stroke={color}
+          strokeWidth="6"
+          strokeDasharray={circ}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          style={{ transition: 'stroke-dashoffset 1s ease-out' }}
+        />
+      </svg>
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: 18,
+          fontWeight: 700,
+          color,
+        }}
+      >
+        {score}
+      </div>
+    </div>
+  );
+}
+
+function SectionHeader({ icon, title, count }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 16,
+        paddingBottom: 12,
+        borderBottom: `2px solid ${C.ink}`,
+      }}
+    >
+      <span style={{ fontSize: 18 }}>{icon}</span>
+      <h3 style={{ fontSize: 16, fontWeight: 700, color: C.ink, margin: 0 }}>{title}</h3>
+      {count != null && (
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            background: C.accentSoft,
+            color: C.accent,
+            padding: '2px 8px',
+            borderRadius: 10,
+            marginLeft: 'auto',
+          }}
+        >
+          {count}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function StatCard({ label, value, sub, color }) {
+  return (
+    <div
+      style={{
+        background: C.card,
+        borderRadius: 12,
+        padding: '16px 20px',
+        border: `1px solid ${C.border}`,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 600,
+          textTransform: 'uppercase',
+          letterSpacing: '0.04em',
+          color: C.inkLight,
+          marginBottom: 6,
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: 22,
+          fontWeight: 700,
+          color: color || C.ink,
+          fontFamily: "'JetBrains Mono', monospace",
+        }}
+      >
+        {value}
+      </div>
+      {sub && <div style={{ fontSize: 11, color: C.inkMuted, marginTop: 4 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function PipelineJourney({ journey }) {
+  if (!journey || journey.length === 0) {
+    return (
+      <p style={{ fontSize: 13, color: C.inkLight, fontStyle: 'italic' }}>
+        No journey history yet. Journey steps will appear as this record moves through the pipeline.
+      </p>
+    );
+  }
+  return (
+    <div>
+      {journey.map((step, i) => {
+        const isLast = i === journey.length - 1;
+        const ec = ENTITY_ICONS[step.entity] || ENTITY_ICONS.lead;
+        return (
+          <div
+            key={i}
+            style={{
+              display: 'flex',
+              gap: 16,
+              paddingBottom: isLast ? 0 : 24,
+              position: 'relative',
+            }}
+          >
+            {!isLast && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 19,
+                  top: 40,
+                  bottom: 0,
+                  width: 2,
+                  background: C.borderLight,
+                }}
+              />
+            )}
+            <div
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 10,
+                background: ec.bg,
+                border: `2px solid ${ec.border}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 18,
+                flexShrink: 0,
+                position: 'relative',
+                zIndex: 1,
+              }}
+            >
+              {ec.icon}
+            </div>
+            <div style={{ flex: 1, paddingTop: 2 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ fontSize: 14, fontWeight: 600, color: C.ink }}>{step.stage}</span>
+                <span style={{ fontSize: 11, color: C.inkLight }}>{formatDate(step.date)}</span>
+              </div>
+              <div style={{ fontSize: 12, color: C.inkMuted, marginTop: 2 }}>{step.via}</div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function CareStateTimeline({ timeline }) {
+  if (!timeline || timeline.length === 0) {
+    return (
+      <p style={{ fontSize: 13, color: C.inkLight, fontStyle: 'italic' }}>
+        No relationship state tracked yet. C.A.R.E. state will appear once signals are detected.
+      </p>
+    );
+  }
+  const current = timeline[timeline.length - 1];
+  const colors = CARE_COLORS[current.state] || CARE_COLORS.unaware;
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        <span
+          style={{
+            display: 'inline-block',
+            width: 10,
+            height: 10,
+            borderRadius: '50%',
+            background: colors.dot,
+            boxShadow: `0 0 0 3px ${colors.bg}`,
+          }}
+        />
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+            color: colors.text,
+            background: colors.bg,
+            padding: '3px 10px',
+            borderRadius: 4,
+          }}
+        >
+          {current.state.replace(/_/g, ' ')}
+        </span>
+        <span style={{ fontSize: 11, color: C.inkLight }}>{formatDate(current.date)}</span>
+      </div>
+      <div style={{ position: 'relative', paddingLeft: 20 }}>
+        <div
+          style={{
+            position: 'absolute',
+            left: 4,
+            top: 0,
+            bottom: 0,
+            width: 2,
+            background: `linear-gradient(to bottom, ${C.accent}, ${colors.dot})`,
+            borderRadius: 1,
+          }}
+        />
+        {timeline.map((s, i) => {
+          const sc = CARE_COLORS[s.state] || CARE_COLORS.unaware;
+          const isLast = i === timeline.length - 1;
+          return (
+            <div
+              key={i}
+              style={{ position: 'relative', paddingBottom: isLast ? 0 : 16, paddingLeft: 16 }}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  left: -3,
+                  top: 4,
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  background: isLast ? sc.dot : C.card,
+                  border: `2px solid ${sc.dot}`,
+                }}
+              />
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: isLast ? 600 : 400,
+                  color: isLast ? C.ink : C.inkMuted,
+                }}
+              >
+                {s.state.replace(/_/g, ' ')}
+                <span style={{ fontSize: 11, color: C.inkLight, marginLeft: 8 }}>
+                  {formatDate(s.date)}
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: C.inkLight, marginTop: 2 }}>{s.reason}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AssignmentHistory({ assignments }) {
+  if (!assignments || assignments.length === 0) {
+    return (
+      <p style={{ fontSize: 13, color: C.inkLight, fontStyle: 'italic' }}>
+        No assignment history yet. Changes will appear here as this record is assigned or
+        reassigned.
+      </p>
+    );
+  }
+  const styles = {
+    assign: { color: C.success, label: 'Assigned', icon: '→' },
+    reassign: { color: C.accent, label: 'Reassigned', icon: '⇄' },
+    unassign: { color: C.danger, label: 'Unassigned', icon: '✕' },
+  };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {assignments.map((a, i) => {
+        const s = styles[a.action] || styles.assign;
+        return (
+          <div
+            key={a.id || i}
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 12,
+              padding: '10px 14px',
+              borderRadius: 8,
+              background: C.cardAlt,
+              border: `1px solid ${C.borderLight}`,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 16,
+                width: 28,
+                height: 28,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 6,
+                background: `${s.color}14`,
+                color: s.color,
+                fontWeight: 700,
+                flexShrink: 0,
+              }}
+            >
+              {s.icon}
+            </span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, color: C.ink }}>
+                <span style={{ fontWeight: 600, color: s.color }}>{s.label}</span>
+                {a.assigned_from_name && (
+                  <span style={{ color: C.inkMuted }}> from {a.assigned_from_name}</span>
+                )}
+                {a.assigned_to_name && (
+                  <>
+                    <span style={{ color: C.inkMuted }}> to </span>
+                    <span style={{ fontWeight: 600 }}>{a.assigned_to_name}</span>
+                  </>
+                )}
+              </div>
+              {a.note && (
+                <div style={{ fontSize: 11, color: C.inkLight, marginTop: 2 }}>{a.note}</div>
+              )}
+              <div style={{ fontSize: 10, color: C.inkLight, marginTop: 3 }}>
+                {formatDateTime(a.created_at)}{' '}
+                {a.assigned_by_name ? `· by ${a.assigned_by_name}` : ''}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ActivityBadge({ status }) {
+  const s = (status || '').toLowerCase();
+  const conf = s.includes('overdue')
+    ? { bg: C.dangerSoft, color: C.danger }
+    : s.includes('completed')
+      ? { bg: C.successSoft, color: C.success }
+      : s.includes('scheduled')
+        ? { bg: C.accentSoft, color: C.accent }
+        : { bg: '#F3F4F6', color: '#6B7280' };
+  return (
+    <span
+      style={{
+        fontSize: 10,
+        fontWeight: 600,
+        textTransform: 'uppercase',
+        letterSpacing: '0.04em',
+        padding: '3px 8px',
+        borderRadius: 4,
+        background: conf.bg,
+        color: conf.color,
+      }}
+    >
+      {status || 'Normal'}
     </span>
   );
 }
 
-/**
- * Universal Profile Page (Direct Edge Function)
- * Routes: /leads/:leadId | /accounts/:accountId | /contacts/:contactId | /bizdev/:bizdevId
- * Fetches person-profile directly from Supabase Edge Function using Authorization.
- */
-export default function LeadProfilePage() {
+function StageBadge({ stage }) {
+  const s = (stage || '').toLowerCase();
+  const color = s.includes('won')
+    ? C.success
+    : s.includes('lost')
+      ? C.danger
+      : s.includes('proposal')
+        ? C.purple
+        : s.includes('negotiation')
+          ? C.warning
+          : s.includes('qualified')
+            ? C.accent
+            : '#6B7280';
   return (
-    <LeadProfilePageContent />
+    <span
+      style={{
+        fontSize: 10,
+        fontWeight: 600,
+        textTransform: 'uppercase',
+        padding: '3px 10px',
+        borderRadius: 4,
+        background: `${color}14`,
+        color,
+      }}
+    >
+      {stage?.replace(/_/g, ' ') || 'Unknown'}
+    </span>
   );
 }
 
-function LeadProfilePageContent() {
-  console.log("LeadProfilePageContent rendering (New Version)");
+// ─── Main component ─────────────────────────────────────────────────────────
+
+export default function LeadProfilePage() {
   const params = useParams();
   const [searchParams] = useSearchParams();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [data, setData] = useState(null);
+  const [activeTab, setActiveTab] = useState('overview');
 
-  // Detect entity type from URL path and get ID
   const entityType = useMemo(() => {
     if (params.leadId) return 'lead';
     if (params.accountId) return 'account';
     if (params.contactId) return 'contact';
     if (params.bizdevId) return 'bizdev';
-    return 'lead'; // default
+    return 'lead';
   }, [params]);
 
   const entityId = useMemo(() => {
     return params.leadId || params.accountId || params.contactId || params.bizdevId || '';
   }, [params]);
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [profile, setProfile] = useState(null);
-
   const tenantId = useMemo(() => {
     return (
-      searchParams.get("tenant") ||
-      searchParams.get("tenant_id") ||
-      (typeof window !== "undefined" ? window.localStorage.getItem("tenant_id") : null) ||
+      searchParams.get('tenant') ||
+      searchParams.get('tenant_id') ||
+      (typeof window !== 'undefined' ? window.localStorage.getItem('tenant_id') : null) ||
       null
     );
   }, [searchParams]);
-
-  // Check if AI summary should be refreshed (cache for 24 hours)
-  function shouldRefreshSummary(lastUpdatedAt) {
-    if (!lastUpdatedAt) return true; // No summary yet
-    const lastUpdate = new Date(lastUpdatedAt);
-    const now = new Date();
-    const hoursSinceUpdate = (now - lastUpdate) / (1000 * 60 * 60);
-    return hoursSinceUpdate > 24; // Refresh if older than 24 hours
-  }
-
-  // Helper to resolve UUID to employee name
-  async function resolveEmployeeName(uuid) {
-    if (!uuid) return null;
-    try {
-      const { data } = await supabase
-        .from('employees')
-        .select('first_name, last_name')
-        .eq('id', uuid)
-        .single();
-      if (data) return `${data.first_name} ${data.last_name}`.trim();
-    } catch {
-      // Try users table if employees not found
-      try {
-        const { data } = await supabase
-          .from('users')
-          .select('first_name, last_name, email')
-          .eq('id', uuid)
-          .single();
-        if (data) return `${data.first_name} ${data.last_name}`.trim() || data.email;
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  }
 
   useEffect(() => {
     let aborted = false;
@@ -127,249 +529,40 @@ function LeadProfilePageContent() {
       setLoading(true);
       setError(null);
       try {
-        // Use backend API instead of Edge Function to avoid CORS/404 issues
         const backendUrl = getRuntimeEnv('VITE_AISHACRM_BACKEND_URL') || 'http://localhost:4001';
-        const effectiveTenantId = tenantId || (typeof window !== 'undefined' ? window.localStorage.getItem('tenant_id') : null);
-        
-        if (!effectiveTenantId) {
-          throw new Error("Tenant ID not available");
-        }
-        
-        // Fetch entity data from backend
-        let url;
-        if (entityType === 'lead') {
-          url = `${backendUrl}/api/leads/${entityId}?tenant_id=${effectiveTenantId}`;
-        } else if (entityType === 'account') {
-          url = `${backendUrl}/api/v2/accounts/${entityId}?tenant_id=${effectiveTenantId}`;
-        } else if (entityType === 'contact') {
-          url = `${backendUrl}/api/v2/contacts/${entityId}?tenant_id=${effectiveTenantId}`;
-        } else if (entityType === 'bizdev') {
-          url = `${backendUrl}/api/bizdevsources/${entityId}?tenant_id=${effectiveTenantId}`;
-        } else {
-          throw new Error("Unknown entity type");
-        }
-        
-        const res = await fetch(url, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-        });
+        const tid =
+          tenantId ||
+          (typeof window !== 'undefined' ? window.localStorage.getItem('tenant_id') : null);
+        if (!tid) throw new Error('Tenant ID not available');
+
+        // Get auth token
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData?.session?.access_token;
+
+        const res = await fetch(
+          `${backendUrl}/api/profile/${entityType}/${entityId}?tenant_id=${tid}`,
+          {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+          },
+        );
         if (!res.ok) {
-          const msg = await res.text().catch(() => "");
+          const msg = await res.text().catch(() => '');
           throw new Error(`Failed to load (${res.status}). ${msg}`);
         }
-        let data = await res.json();
-        if (import.meta.env.DEV) console.log('[Profile] Raw API response:', data);
-        
-        // Normalize data structure for different entity types
-        // Leads returns: { status: 'success', data: { lead: {...} } }
-        // Accounts/Contacts return: { status: 'success', data: { account/contact: {...}, aiContext: {...} } }
-        // BizDev returns: { source: {...} }
-        if (data.data) {
-          if (data.data.lead) {
-            data = data.data.lead;
-          } else if (data.data.account) {
-            data = data.data.account;
-          } else if (data.data.contact) {
-            data = data.data.contact;
-          } else {
-            // Fallback - just use data.data if it's a direct object
-            data = data.data;
-          }
-        } else if (data.source) {
-          // BizDev API returns { source: { ... } }
-          data = data.source;
-        }
-        if (import.meta.env.DEV) console.log('[Profile] After normalization:', data);
-        
-        // Resolve assigned_to UUIDs to names
-        if (data.assigned_to) {
-          const name = await resolveEmployeeName(data.assigned_to);
-          if (name) data.assigned_to_name = name;
-        }
-        
-        // Fetch related activities - use related_to_type and related_to_id for proper filtering
-        try {
-          const activitiesUrl = `${backendUrl}/api/v2/activities?tenant_id=${effectiveTenantId}&related_to_type=${entityType}&related_to_id=${entityId}`;
-          const activitiesRes = await fetch(activitiesUrl, {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' },
-          });
-          if (activitiesRes.ok) {
-            const activitiesData = await activitiesRes.json();
-            if (import.meta.env.DEV) console.log('[Profile] Activities response:', activitiesData);
-            
-            // Extract activities array from nested response: { data: { activities: [...] } }
-            const rawActivities = activitiesData.data?.activities || activitiesData.activities || activitiesData.data || activitiesData;
-            data.activities = Array.isArray(rawActivities) ? rawActivities : [];
-            
-            // Resolve activity assigned_to fields
-            for (const activity of data.activities) {
-              if (activity.assigned_to) {
-                const name = await resolveEmployeeName(activity.assigned_to);
-                if (name) activity.assigned_to_name = name;
-              }
-            }
-          }
-        } catch (e) {
-          console.error('Failed to load activities:', e);
-          data.activities = [];
-        }
-        
-        // Fetch related notes
-        try {
-          const notesUrl = `${backendUrl}/api/notes?tenant_id=${effectiveTenantId}&related_type=${entityType}&related_id=${entityId}`;
-          const notesRes = await fetch(notesUrl, {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' },
-          });
-          if (notesRes.ok) {
-            const notesData = await notesRes.json();
-            if (import.meta.env.DEV) console.log('[Profile] Notes response:', notesData);
-            
-            // Extract notes array from response
-            const rawNotes = notesData.data?.notes || notesData.notes || notesData.data || notesData;
-            data.notes = Array.isArray(rawNotes) ? rawNotes : [];
-          }
-        } catch (e) {
-          console.error('Failed to load notes:', e);
-          data.notes = [];
-        }
-        
-        // Fetch related opportunities based on entity type
-        try {
-          let oppsUrl = `${backendUrl}/api/v2/opportunities?tenant_id=${effectiveTenantId}`;
-          if (entityType === 'lead') {
-            oppsUrl += `&lead_id=${entityId}`;
-          } else if (entityType === 'account') {
-            oppsUrl += `&account_id=${entityId}`;
-          } else if (entityType === 'contact') {
-            oppsUrl += `&contact_id=${entityId}`;
-          }
-          // Only fetch if we have a valid filter
-          if (oppsUrl.includes('_id=')) {
-            const oppsRes = await fetch(oppsUrl, {
-              method: 'GET',
-              headers: { 'Content-Type': 'application/json' },
-            });
-            if (oppsRes.ok) {
-              const oppsData = await oppsRes.json();
-              if (import.meta.env.DEV) console.log('[Profile] Opportunities response:', oppsData);
-              
-              // Extract opportunities array from nested response: { data: { opportunities: [...] } }
-              const rawOpps = oppsData.data?.opportunities || oppsData.opportunities || oppsData.data || oppsData;
-              data.opportunities = Array.isArray(rawOpps) ? rawOpps : [];
-            }
-          } else {
-            data.opportunities = [];
-          }
-        } catch (e) {
-          console.error('Failed to load opportunities:', e);
-          data.opportunities = [];
-        }
-        
-        // Fetch activities linked to this entity's opportunities
-        // This ensures activities created from opportunities appear in the profile
-        try {
-          if (data.opportunities && data.opportunities.length > 0) {
-            const oppIds = data.opportunities.map(o => o.id);
-            const oppActivitiesPromises = oppIds.map(async (oppId) => {
-              const oppActUrl = `${backendUrl}/api/v2/activities?tenant_id=${effectiveTenantId}&related_to_type=opportunity&related_to_id=${oppId}`;
-              const res = await fetch(oppActUrl, {
-                method: 'GET',
-                headers: { 'Content-Type': 'application/json' },
-              });
-              if (res.ok) {
-                const resData = await res.json();
-                return resData.data?.activities || resData.activities || [];
-              }
-              return [];
-            });
-            const oppActivitiesArrays = await Promise.all(oppActivitiesPromises);
-            const oppActivities = oppActivitiesArrays.flat();
-            
-            // Add opportunity activities that aren't already in the list
-            if (!data.activities) data.activities = [];
-            const existingIds = new Set(data.activities.map(a => a.id));
-            for (const activity of oppActivities) {
-              if (!existingIds.has(activity.id)) {
-                // Mark as opportunity-related for UI distinction
-                activity._fromOpportunity = true;
-                if (activity.assigned_to) {
-                  const name = await resolveEmployeeName(activity.assigned_to);
-                  if (name) activity.assigned_to_name = name;
-                }
-                data.activities.push(activity);
-              }
-            }
-            if (import.meta.env.DEV) console.log('[Profile] Added opportunity activities:', oppActivities.length);
-          }
-        } catch (e) {
-          console.error('Failed to load opportunity activities:', e);
-        }
-        
-        if (import.meta.env.DEV) console.log('[Profile] tenantId available:', !!effectiveTenantId);
-        
-        // Generate AI summary only if missing and not recently generated (cache for 24 hours)
-        if (effectiveTenantId && (!data.ai_summary || shouldRefreshSummary(data.ai_summary_updated_at))) {
-          try {
-            if (import.meta.env.DEV) console.log('[Profile] Calling AI summary endpoint...', { entityId, tenant_id: effectiveTenantId });
-            const summaryRes = await fetch(`${backendUrl}/api/ai/summarize-person-profile`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                person_id: entityId,
-                person_type: entityType,
-                profile_data: data,
-                tenant_id: effectiveTenantId,
-              }),
-            });
-            if (summaryRes.ok) {
-              const respData = await summaryRes.json();
-              if (import.meta.env.DEV) console.log('[Profile] AI summary response:', respData);
-              const { ai_summary } = respData;
-              if (ai_summary) {
-                data.ai_summary = ai_summary;
-                data.ai_summary_updated_at = new Date().toISOString();
-                if (import.meta.env.DEV) console.log('[Profile] AI summary stored:', ai_summary.substring(0, 100));
-              }
-            } else {
-              const errText = await summaryRes.text().catch(() => "");
-              if (import.meta.env.DEV) console.error('[Profile] AI summary endpoint error:', summaryRes.status, errText);
-            }
-          } catch (e) {
-            console.error('[Profile] Failed to generate AI summary:', e?.message);
-          }
-        } else {
-          if (import.meta.env.DEV) console.log('[Profile] Skipping AI summary:', { 
-            has_tenant: !!effectiveTenantId, 
-            has_summary: !!data.ai_summary, 
-            needs_refresh: data.ai_summary ? shouldRefreshSummary(data.ai_summary_updated_at) : 'N/A' 
-          });
-        }
-        
-        if (import.meta.env.DEV) console.log('[Profile] Final data before setProfile:', data);
-        // Set profile if we have any data object
+        const json = await res.json();
+        if (json.status !== 'success' || !json.data) throw new Error('Invalid response');
+
         if (!aborted) {
-          setProfile(data || {});
-          if (data && Object.keys(data).length > 0) {
-            // Determine title for context
-            let title = data.name || data.subject;
-            if (!title && (data.first_name || data.last_name)) {
-              title = [data.first_name, data.last_name].filter(Boolean).join(" ");
-            }
-            setAiShaContext({
-              entity_type: entityType,
-              entity_id: entityId,
-              title: title || entityType
-            });
-          }
-          if (!data || Object.keys(data).length === 0) {
-            console.warn('[Profile] Empty data received');
-          }
+          setData(json.data);
+          const title = json.data.display_name || entityType;
+          setAiShaContext({ entity_type: entityType, entity_id: entityId, title });
         }
       } catch (e) {
-        console.error('[Profile] Load error:', e);
-        if (!aborted) setError(e?.message || "Failed to load");
+        if (!aborted) setError(e?.message || 'Failed to load');
       } finally {
         if (!aborted) setLoading(false);
       }
@@ -381,363 +574,690 @@ function LeadProfilePageContent() {
     };
   }, [entityId, tenantId, entityType]);
 
+  // ── Loading state ──
   if (loading) {
     return (
-      <div className="min-h-screen bg-zinc-50">
-        <div className="mx-auto max-w-6xl px-4 py-8">
-          <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-            <div className="h-6 w-56 animate-pulse rounded bg-zinc-200" />
-            <div className="mt-3 h-4 w-80 animate-pulse rounded bg-zinc-200" />
-            <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-24 animate-pulse rounded-2xl bg-zinc-200" />
-              ))}
-            </div>
-            <div className="mt-6 h-64 animate-pulse rounded-2xl bg-zinc-200" />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !profile) {
-    const debugInfo = profile ? `Profile keys: ${Object.keys(profile).length}` : 'Profile is null/undefined';
-    return (
-      <div className="min-h-screen bg-zinc-50">
-        <div className="mx-auto max-w-3xl px-4 py-10">
-          <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-            <div className="text-lg font-semibold text-zinc-900">Could not load {entityType}</div>
-            <div className="mt-2 text-sm text-zinc-600">{error || "Missing profile data"}</div>
-            {import.meta.env.DEV && <div className="mt-2 text-xs text-gray-500">{debugInfo}</div>}
-            <div className="mt-6 flex gap-2">
-              <Link to={`/${entityType}s`} className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white">
-                Back to {entityType}s
-              </Link>
-              <button
-                type="button"
-                onClick={() => window.location.reload()}
-                className="rounded-xl bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-200"
-              >
-                Retry
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const lead = profile || {};
-  
-  // Build display name based on entity type
-  let name, companyName, subtitle;
-  if (entityType === 'account') {
-    name = lead.name || lead.account_name || "Account";
-    companyName = lead.industry || "—";
-    subtitle = lead.type || "Customer";
-  } else if (entityType === 'contact') {
-    name = [lead.first_name, lead.last_name].filter(Boolean).join(" ") || "Contact";
-    companyName = lead.account_name || lead.company || "—";
-    subtitle = lead.job_title || lead.title || "—";
-  } else if (entityType === 'bizdev') {
-    name = lead.contact_name || [lead.first_name, lead.last_name].filter(Boolean).join(" ") || "BizDev Source";
-    companyName = lead.company || lead.account_name || "—";
-    subtitle = lead.source || "—";
-  } else {
-    // lead
-    name = [lead.first_name, lead.last_name].filter(Boolean).join(" ") || "Lead";
-    companyName = lead.company || lead.account_name || "—";
-    subtitle = lead.job_title || lead.title || "—";
-  }
-
-  function ActivityBadge({ status }) {
-    const s = (status || "unknown").toLowerCase();
-    if (s.includes("overdue")) return <span className="inline-block px-2 py-1 text-xs font-bold text-white bg-red-600 rounded">Overdue</span>;
-    if (s.includes("completed")) return <span className="inline-block px-2 py-1 text-xs font-bold text-white bg-green-600 rounded">Completed</span>;
-    if (s.includes("scheduled")) return <span className="inline-block px-2 py-1 text-xs font-bold text-white bg-blue-600 rounded">Scheduled</span>;
-    return <span className="inline-block px-2 py-1 text-xs font-bold text-gray-700 bg-gray-200 rounded">Normal</span>;
-  }
-
-  function StageBadge({ stage }) {
-    const s = (stage || "").toLowerCase().replace(/_/g, " ");
-    const cls = s.includes("won") ? "bg-emerald-100 text-emerald-800" 
-      : s.includes("lost") ? "bg-red-100 text-red-800"
-      : s.includes("proposal") ? "bg-purple-100 text-purple-800"
-      : s.includes("negotiation") ? "bg-orange-100 text-orange-800"
-      : s.includes("qualified") ? "bg-blue-100 text-blue-800"
-      : "bg-gray-100 text-gray-800";
-    return <span className={`inline-block px-2 py-1 text-xs font-semibold rounded capitalize ${cls}`}>{stage?.replace(/_/g, " ") || "Unknown"}</span>;
-  }
-
-  // Scroll to section helper
-  const scrollToSection = (sectionId) => {
-    const element = document.getElementById(sectionId);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  };
-
-  // Navigate to list page with filter
-  const _navigateToFiltered = (entityListType) => {
-    // Build URL with filter for related records
-    const filterParam = encodeURIComponent(JSON.stringify({ related_id: entityId }));
-    window.location.href = `/${entityListType}?filter=${filterParam}`;
-  };
-
-  // Count helpers for sidebar badges
-  const notesCount = Array.isArray(lead.notes) ? lead.notes.length : 0;
-  const activitiesCount = Array.isArray(lead.activities) ? lead.activities.length : 0;
-  const opportunitiesCount = Array.isArray(lead.opportunities) ? lead.opportunities.length : 0;
-
-  return (
-    <div className="flex min-h-screen bg-gray-100">
-      {/* Sidebar */}
-
-      {/* Sidebar */}
-      <aside className="fixed top-0 left-0 bottom-0 w-64 bg-gray-900 text-white p-6 overflow-y-auto">
-        <h1 className="text-2xl font-bold mb-1">{name}</h1>
-        {subtitle && <p className="text-gray-400 text-sm mb-2">{subtitle}</p>}
-        <p className="text-gray-500 text-xs font-semibold uppercase tracking-widest mb-6">{companyName}</p>
-        <nav className="border-t border-gray-700 pt-4">
-          <a href="#overview" className="text-white block py-3 text-sm font-medium">Overview</a>
-          <button 
-            onClick={() => scrollToSection('notes')} 
-            className="text-gray-400 hover:text-white w-full text-left py-3 text-sm flex items-center justify-between group"
-          >
-            <span>+ Notes</span>
-            {notesCount > 0 && (
-              <span className="bg-gray-700 group-hover:bg-gray-600 text-gray-300 text-xs px-2 py-0.5 rounded-full">{notesCount}</span>
-            )}
-          </button>
-          <button 
-            onClick={() => scrollToSection('activities')} 
-            className="text-gray-400 hover:text-white w-full text-left py-3 text-sm flex items-center justify-between group"
-          >
-            <span>+ Activities</span>
-            {activitiesCount > 0 && (
-              <span className="bg-gray-700 group-hover:bg-gray-600 text-gray-300 text-xs px-2 py-0.5 rounded-full">{activitiesCount}</span>
-            )}
-          </button>
-          <button 
-            onClick={() => scrollToSection('opportunities')} 
-            className="text-gray-400 hover:text-white w-full text-left py-3 text-sm flex items-center justify-between group"
-          >
-            <span>+ Opportunities</span>
-            {opportunitiesCount > 0 && (
-              <span className="bg-gray-700 group-hover:bg-gray-600 text-gray-300 text-xs px-2 py-0.5 rounded-full">{opportunitiesCount}</span>
-            )}
-          </button>
-        </nav>
-      </aside>
-
-      {/* Main Content */}
-      <main className="ml-64 flex-1 p-8">
-        <div className="max-w-4xl">
-          <h2 className="text-3xl font-bold text-gray-900 mb-8">Profile</h2>
-
-          {/* AI Summary */}
-          <EntityAiSummaryCard
-            entityType={entityType}
-            entityId={entityId}
-            entityLabel={name}
-            aiSummary={lead.ai_summary}
-            lastUpdated={lead.updated_at}
-            profile={lead}
-            relatedData={{
-              opportunities: lead.opportunities || [],
-              activities: lead.activities || [],
-              notes: lead.notes || []
+      <div style={{ minHeight: '100vh', background: C.bg }}>
+        <div style={{ maxWidth: 1080, margin: '0 auto', padding: '48px 32px' }}>
+          <div
+            style={{
+              height: 24,
+              width: 280,
+              background: C.border,
+              borderRadius: 6,
+              marginBottom: 12,
             }}
           />
-
-          {/* Contact Information */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">📧 Contact Information</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <div className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">Email</div>
-                <div className="text-sm text-gray-900">
-                  {lead.email ? <a href={`mailto:${lead.email}`} className="text-indigo-600 hover:underline">{lead.email}</a> : "—"}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">Phone</div>
-                <div className="text-sm text-gray-900">
-                  {lead.phone ? <a href={`tel:${lead.phone}`} className="text-indigo-600 hover:underline">{lead.phone}</a> : "—"}
-                </div>
-              </div>
-              {entityType === 'account' && (
-                <>
-                  <div>
-                    <div className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">Website</div>
-                    <div className="text-sm text-gray-900">
-                      {lead.website ? <a href={lead.website} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">{lead.website}</a> : "—"}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">Type</div>
-                    <div className="text-sm text-gray-900">{lead.type || "—"}</div>
-                  </div>
-                  {lead.address_1 && (
-                    <div className="col-span-2">
-                      <div className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">Address</div>
-                      <div className="text-sm text-gray-900">
-                        {[lead.address_1, lead.address_2, lead.city, lead.state, lead.zip_code, lead.country].filter(Boolean).join(", ")}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-              {(entityType === 'contact' || entityType === 'lead') && lead.company && (
-                <div>
-                  <div className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">Company</div>
-                  <div className="text-sm text-gray-900">{lead.company}</div>
-                </div>
-              )}
-              {(entityType === 'bizdev') && (
-                <>
-                  <div>
-                    <div className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">Source</div>
-                    <div className="text-sm text-gray-900">{lead.source || "—"}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">License Status</div>
-                    <div className="text-sm text-gray-900">{lead.license_status || "—"}</div>
-                  </div>
-                </>
-              )}
-            </div>
+          <div
+            style={{
+              height: 16,
+              width: 400,
+              background: C.borderLight,
+              borderRadius: 6,
+              marginBottom: 32,
+            }}
+          />
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, 1fr)',
+              gap: 16,
+              marginBottom: 28,
+            }}
+          >
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} style={{ height: 90, background: C.borderLight, borderRadius: 12 }} />
+            ))}
           </div>
+          <div style={{ height: 200, background: C.borderLight, borderRadius: 14 }} />
+        </div>
+      </div>
+    );
+  }
 
-          {/* Timeline */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">📅 Timeline</h3>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Last Activity</span>
-                <span className="font-semibold text-gray-900">{formatDate(lead.last_activity_at)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Last Updated</span>
-                <span className="font-semibold text-gray-900">{formatDate(lead.updated_at)}</span>
-              </div>
-              {lead.assigned_to_name && (
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Assigned To</span>
-                  <span className="font-semibold text-gray-900">{lead.assigned_to_name}</span>
-                </div>
-              )}
-              {lead.status && (
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Status</span>
-                  <span className="font-semibold text-gray-900"><StatusPill status={lead.status} /></span>
-                </div>
-              )}
-            </div>
+  // ── Error state ──
+  if (error || !data) {
+    return (
+      <div style={{ minHeight: '100vh', background: C.bg }}>
+        <div style={{ maxWidth: 600, margin: '0 auto', padding: '80px 32px', textAlign: 'center' }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>😕</div>
+          <div style={{ fontSize: 18, fontWeight: 600, color: C.ink, marginBottom: 8 }}>
+            Could not load {entityType}
           </div>
-
-          {/* Notes */}
-          <div id="notes" className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-6">
-            <div className="mb-4">
-              <h3 className="text-lg font-bold text-gray-900">📝 Notes</h3>
-            </div>
-            {lead.notes && lead.notes.length > 0 ? (
-              <div className="space-y-3">
-                {lead.notes.map((note) => (
-                  <div key={note.id} className="pb-3 border-b border-gray-200 last:border-b-0">
-                    <h4 className="font-semibold text-gray-900">{note.title}</h4>
-                    <p className="text-sm text-gray-700 mt-1">{note.content}</p>
-                    <p className="text-xs text-gray-500 mt-2">{formatDate(note.updated_at)}</p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-500 italic">No notes yet</p>
-            )}
+          <div style={{ fontSize: 14, color: C.inkMuted, marginBottom: 24 }}>
+            {error || 'Missing profile data'}
           </div>
-
-          {/* Activities */}
-          <div id="activities" className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-6">
-            <div className="mb-4">
-              <h3 className="text-lg font-bold text-gray-900">⚡ Activities</h3>
-            </div>
-            {Array.isArray(lead.activities) && lead.activities.length > 0 ? (
-              <div className="space-y-4">
-                {lead.activities.map((activity) => (
-                  <div key={activity.id} className="pb-4 border-b border-gray-200 last:border-b-0">
-                    <div className="flex items-start justify-between mb-2">
-                      <h4 className="font-semibold text-gray-900">{activity.subject}</h4>
-                      <ActivityBadge status={activity.status} />
-                    </div>
-                    <p className="text-sm text-gray-700 mb-2">{activity.body}</p>
-                    <div className="text-xs text-gray-600 space-y-1">
-                      <p>Type: <span className="font-medium">{activity.type}</span> | Priority: <span className="font-medium">{activity.priority || "Normal"}</span></p>
-                      {activity.due_date && (
-                        <p>Due: <span className="font-medium">
-                          {activity.due_time 
-                            ? formatDate(`${activity.due_date} ${activity.due_time}`)
-                            : formatDate(activity.due_date)
-                          }
-                        </span></p>
-                      )}
-                      {activity.assigned_to_name && <p>Assigned to: <span className="font-medium">{activity.assigned_to_name}</span></p>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-500 italic">No activities yet</p>
-            )}
-          </div>
-
-          {/* Opportunities */}
-          <div id="opportunities" className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-6">
-            <div className="mb-4">
-              <h3 className="text-lg font-bold text-gray-900">🎯 Opportunities</h3>
-            </div>
-            {Array.isArray(lead.opportunities) && lead.opportunities.length > 0 ? (
-              <div className="space-y-4">
-                {lead.opportunities.map((opp) => (
-                  <Link
-                    key={opp.id}
-                    to={`/opportunities?id=${opp.id}`}
-                    className="block p-4 border border-gray-200 rounded-lg hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <h4 className="font-semibold text-gray-900">{opp.name}</h4>
-                      <StageBadge stage={opp.stage} />
-                    </div>
-                    <div className="flex items-center gap-4 text-sm text-gray-600">
-                      {opp.amount != null && (
-                        <span className="font-medium text-green-700">
-                          ${Number(opp.amount).toLocaleString()}
-                        </span>
-                      )}
-                      {opp.close_date && (
-                        <span>Close: {formatDate(opp.close_date)}</span>
-                      )}
-                      {opp.probability != null && (
-                        <span>{opp.probability}% probability</span>
-                      )}
-                    </div>
-                    {opp.next_step && (
-                      <p className="mt-2 text-xs text-gray-500">
-                        <span className="font-medium">Next step:</span> {opp.next_step}
-                      </p>
-                    )}
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-500 italic">No opportunities yet</p>
-            )}
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                background: C.ink,
+                color: 'white',
+                border: 'none',
+                borderRadius: 8,
+                padding: '10px 20px',
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Retry
+            </button>
+            <Link
+              to={`/${entityType}s`}
+              style={{
+                background: C.borderLight,
+                color: C.ink,
+                border: `1px solid ${C.border}`,
+                borderRadius: 8,
+                padding: '10px 20px',
+                fontSize: 14,
+                fontWeight: 600,
+                textDecoration: 'none',
+              }}
+            >
+              Back to list
+            </Link>
           </div>
         </div>
-      </main>
+      </div>
+    );
+  }
 
+  // ── Unpack data ──
+  const entity = data.entity || {};
+  const journey = data.journey || [];
+  const careTimeline = data.care?.timeline || [];
+  const assignments = data.assignments || [];
+  const activities = data.activities || [];
+  const notes = data.notes || [];
+  const opportunities = data.opportunities || [];
+  const summary = data.summary || {};
 
+  // Build display fields
+  let name, companyName, subtitle;
+  if (entityType === 'account') {
+    name = entity.name || entity.account_name || 'Account';
+    companyName = entity.industry || '—';
+    subtitle = entity.type || 'Customer';
+  } else if (entityType === 'contact') {
+    name = [entity.first_name, entity.last_name].filter(Boolean).join(' ') || 'Contact';
+    companyName = entity.account_name || entity.company || '—';
+    subtitle = entity.job_title || entity.title || '—';
+  } else if (entityType === 'bizdev') {
+    name =
+      entity.contact_person ||
+      entity.contact_name ||
+      [entity.first_name, entity.last_name].filter(Boolean).join(' ') ||
+      'Potential Lead';
+    companyName = entity.company_name || entity.company || '—';
+    subtitle = entity.source || '—';
+  } else {
+    name = [entity.first_name, entity.last_name].filter(Boolean).join(' ') || 'Lead';
+    companyName = entity.company || entity.account_name || '—';
+    subtitle = entity.job_title || entity.title || '—';
+  }
 
+  const tabs = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'journey', label: 'Journey' },
+    { id: 'activity', label: 'Activity' },
+    { id: 'notes', label: 'Notes' },
+    { id: 'deals', label: 'Deals' },
+  ];
 
+  return (
+    <div
+      style={{
+        minHeight: '100vh',
+        background: C.bg,
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+      }}
+    >
+      <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap"
+        rel="stylesheet"
+      />
+
+      {/* ─── Header ──────────────────────────────────────────────────── */}
+      <div style={{ background: '#0F172A', padding: '32px 0 0', color: 'white' }}>
+        <div style={{ maxWidth: 1080, margin: '0 auto', padding: '0 32px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 24, paddingBottom: 24 }}>
+            <div
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: 16,
+                background: 'linear-gradient(135deg, #3B82F6, #8B5CF6)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 24,
+                fontWeight: 700,
+                flexShrink: 0,
+              }}
+            >
+              {(name || '?')[0]}
+              {(name?.split(' ')[1] || '')[0] || ''}
+            </div>
+            <div style={{ flex: 1 }}>
+              <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, lineHeight: 1.2 }}>{name}</h1>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  marginTop: 6,
+                  flexWrap: 'wrap',
+                }}
+              >
+                {subtitle !== '—' && (
+                  <span style={{ fontSize: 14, color: '#94A3B8' }}>{subtitle}</span>
+                )}
+                {subtitle !== '—' && companyName !== '—' && (
+                  <span style={{ color: '#475569' }}>·</span>
+                )}
+                {companyName !== '—' && (
+                  <span style={{ fontSize: 14, color: '#94A3B8' }}>{companyName}</span>
+                )}
+                {entity.status && (
+                  <>
+                    <span style={{ color: '#475569' }}>·</span>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        padding: '3px 10px',
+                        borderRadius: 4,
+                        background: '#10B98120',
+                        color: '#34D399',
+                      }}
+                    >
+                      {entity.status}
+                    </span>
+                  </>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 16, marginTop: 10, flexWrap: 'wrap' }}>
+                {entity.email && (
+                  <a
+                    href={`mailto:${entity.email}`}
+                    style={{ fontSize: 13, color: '#60A5FA', textDecoration: 'none' }}
+                  >
+                    {entity.email}
+                  </a>
+                )}
+                {entity.phone && (
+                  <span style={{ fontSize: 13, color: '#94A3B8' }}>{entity.phone}</span>
+                )}
+                {(entity.city || entity.state) && (
+                  <span style={{ fontSize: 13, color: '#94A3B8' }}>
+                    📍 {[entity.city, entity.state].filter(Boolean).join(', ')}
+                  </span>
+                )}
+              </div>
+            </div>
+            {entity.score != null && (
+              <div style={{ textAlign: 'center', flexShrink: 0 }}>
+                <ScoreRing score={entity.score} />
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: '#94A3B8',
+                    marginTop: 4,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                  }}
+                >
+                  Lead Score
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Tabs */}
+          <div style={{ display: 'flex', gap: 0, borderTop: '1px solid #1E293B' }}>
+            {tabs.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setActiveTab(t.id)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '12px 20px',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: activeTab === t.id ? 'white' : '#64748B',
+                  borderBottom: activeTab === t.id ? '2px solid #3B82F6' : '2px solid transparent',
+                  transition: 'all 0.15s ease',
+                  fontFamily: 'inherit',
+                }}
+              >
+                {t.label}
+                {t.id === 'activity' && activities.length > 0 && (
+                  <span
+                    style={{
+                      marginLeft: 6,
+                      fontSize: 10,
+                      background: '#334155',
+                      padding: '1px 6px',
+                      borderRadius: 8,
+                    }}
+                  >
+                    {activities.length}
+                  </span>
+                )}
+                {t.id === 'deals' && opportunities.length > 0 && (
+                  <span
+                    style={{
+                      marginLeft: 6,
+                      fontSize: 10,
+                      background: '#334155',
+                      padding: '1px 6px',
+                      borderRadius: 8,
+                    }}
+                  >
+                    {opportunities.length}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Content ─────────────────────────────────────────────────── */}
+      <div style={{ maxWidth: 1080, margin: '0 auto', padding: '28px 32px 60px' }}>
+        {/* ── OVERVIEW ──────────────────────────────────────────────── */}
+        {activeTab === 'overview' && (
+          <div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, 1fr)',
+                gap: 16,
+                marginBottom: 28,
+              }}
+            >
+              <StatCard
+                label="Pipeline Value"
+                value={`$${(summary.total_pipeline_value || 0).toLocaleString()}`}
+                sub={`${opportunities.length} active deal${opportunities.length !== 1 ? 's' : ''}`}
+                color={C.success}
+              />
+              <StatCard
+                label="Days in Pipeline"
+                value={summary.days_in_pipeline ?? '—'}
+                sub={
+                  entity.created_date || entity.created_at
+                    ? `Since ${formatDate(entity.created_date || entity.created_at)}`
+                    : ''
+                }
+              />
+              <StatCard
+                label="Last Activity"
+                value={
+                  summary.days_since_activity != null ? `${summary.days_since_activity}d ago` : '—'
+                }
+                sub={formatDate(entity.last_activity_at)}
+                color={(summary.days_since_activity || 0) > 14 ? C.warning : C.ink}
+              />
+              <StatCard
+                label="Source"
+                value={entity.source || entity.lead_source || 'Direct'}
+                sub={entity.tags?.join?.(', ') || ''}
+              />
+            </div>
+
+            {/* AI Summary */}
+            <EntityAiSummaryCard
+              entityType={entityType}
+              entityId={entityId}
+              entityLabel={name}
+              aiSummary={entity.ai_summary}
+              lastUpdated={entity.updated_at}
+              profile={entity}
+              relatedData={{ opportunities, activities, notes }}
+            />
+
+            {/* Journey + CARE */}
+            <div
+              style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 28 }}
+            >
+              <div
+                style={{
+                  background: C.card,
+                  borderRadius: 14,
+                  padding: '20px 24px',
+                  border: `1px solid ${C.border}`,
+                }}
+              >
+                <SectionHeader icon="🗺️" title="Pipeline Journey" />
+                <PipelineJourney journey={journey} />
+              </div>
+              <div
+                style={{
+                  background: C.card,
+                  borderRadius: 14,
+                  padding: '20px 24px',
+                  border: `1px solid ${C.border}`,
+                }}
+              >
+                <SectionHeader icon="💚" title="Relationship State" />
+                <CareStateTimeline timeline={careTimeline} />
+                <div
+                  style={{ marginTop: 24, paddingTop: 20, borderTop: `1px solid ${C.borderLight}` }}
+                >
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.ink, marginBottom: 12 }}>
+                    🔄 Assignment History
+                  </div>
+                  <AssignmentHistory assignments={assignments} />
+                </div>
+              </div>
+            </div>
+
+            {/* Recent activities preview */}
+            <div
+              style={{
+                background: C.card,
+                borderRadius: 14,
+                padding: '20px 24px',
+                border: `1px solid ${C.border}`,
+              }}
+            >
+              <SectionHeader icon="⚡" title="Recent Activity" count={activities.length || null} />
+              {activities.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {activities.slice(0, 4).map((a) => (
+                    <div
+                      key={a.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 12,
+                        padding: '10px 14px',
+                        borderRadius: 8,
+                        background: C.cardAlt,
+                        border: `1px solid ${C.borderLight}`,
+                      }}
+                    >
+                      <span style={{ fontSize: 18 }}>{ACTIVITY_ICONS[a.type] || '📋'}</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>
+                          {a.subject}
+                        </div>
+                        <div style={{ fontSize: 11, color: C.inkLight }}>
+                          {formatDate(a.due_date || a.created_at)} ·{' '}
+                          {a.assigned_to_name || 'Unassigned'}
+                        </div>
+                      </div>
+                      <ActivityBadge status={a.status} />
+                    </div>
+                  ))}
+                  {activities.length > 4 && (
+                    <button
+                      onClick={() => setActiveTab('activity')}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: C.accent,
+                        marginTop: 8,
+                        padding: 0,
+                        fontFamily: 'inherit',
+                      }}
+                    >
+                      View all {activities.length} activities →
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <p style={{ fontSize: 13, color: C.inkLight, fontStyle: 'italic' }}>
+                  No activities yet
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── JOURNEY ──────────────────────────────────────────────── */}
+        {activeTab === 'journey' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24 }}>
+            <div
+              style={{
+                background: C.card,
+                borderRadius: 14,
+                padding: '24px 28px',
+                border: `1px solid ${C.border}`,
+              }}
+            >
+              <SectionHeader icon="🗺️" title="Full Pipeline Journey" />
+              <PipelineJourney journey={journey} />
+            </div>
+            <div>
+              <div
+                style={{
+                  background: C.card,
+                  borderRadius: 14,
+                  padding: '20px 24px',
+                  border: `1px solid ${C.border}`,
+                  marginBottom: 20,
+                }}
+              >
+                <SectionHeader icon="💚" title="CARE State" />
+                <CareStateTimeline timeline={careTimeline} />
+              </div>
+              <div
+                style={{
+                  background: C.card,
+                  borderRadius: 14,
+                  padding: '20px 24px',
+                  border: `1px solid ${C.border}`,
+                }}
+              >
+                <SectionHeader icon="🔄" title="Assignments" count={assignments.length || null} />
+                <AssignmentHistory assignments={assignments} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── ACTIVITY ─────────────────────────────────────────────── */}
+        {activeTab === 'activity' && (
+          <div
+            style={{
+              background: C.card,
+              borderRadius: 14,
+              padding: '24px 28px',
+              border: `1px solid ${C.border}`,
+            }}
+          >
+            <SectionHeader icon="⚡" title="All Activities" count={activities.length || null} />
+            {activities.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {activities.map((a) => (
+                  <div
+                    key={a.id}
+                    style={{
+                      padding: '16px 20px',
+                      borderRadius: 10,
+                      background: C.cardAlt,
+                      border: `1px solid ${C.borderLight}`,
+                    }}
+                  >
+                    <div
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}
+                    >
+                      <span style={{ fontSize: 20 }}>{ACTIVITY_ICONS[a.type] || '📋'}</span>
+                      <span style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>
+                        {a.subject}
+                      </span>
+                      <span style={{ marginLeft: 'auto' }}>
+                        <ActivityBadge status={a.status} />
+                      </span>
+                    </div>
+                    {a.body && (
+                      <p
+                        style={{
+                          fontSize: 13,
+                          color: C.inkMuted,
+                          margin: '0 0 8px',
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        {a.body}
+                      </p>
+                    )}
+                    <div style={{ fontSize: 11, color: C.inkLight }}>
+                      {a.type} · {formatDate(a.due_date || a.created_at)} ·{' '}
+                      {a.assigned_to_name || 'Unassigned'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p style={{ fontSize: 13, color: C.inkLight, fontStyle: 'italic' }}>
+                No activities yet
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* ── NOTES ────────────────────────────────────────────────── */}
+        {activeTab === 'notes' && (
+          <div
+            style={{
+              background: C.card,
+              borderRadius: 14,
+              padding: '24px 28px',
+              border: `1px solid ${C.border}`,
+            }}
+          >
+            <SectionHeader icon="📝" title="Notes" count={notes.length || null} />
+            {notes.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {notes.map((n) => (
+                  <div
+                    key={n.id}
+                    style={{
+                      padding: '16px 20px',
+                      borderRadius: 10,
+                      borderLeft: `3px solid ${C.accent}`,
+                      background: C.cardAlt,
+                    }}
+                  >
+                    <div style={{ fontSize: 14, fontWeight: 600, color: C.ink, marginBottom: 6 }}>
+                      {n.title}
+                    </div>
+                    <p style={{ fontSize: 13, color: C.inkMuted, margin: 0, lineHeight: 1.6 }}>
+                      {n.content}
+                    </p>
+                    <div style={{ fontSize: 10, color: C.inkLight, marginTop: 8 }}>
+                      {formatDateTime(n.updated_at)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p style={{ fontSize: 13, color: C.inkLight, fontStyle: 'italic' }}>No notes yet</p>
+            )}
+          </div>
+        )}
+
+        {/* ── DEALS ────────────────────────────────────────────────── */}
+        {activeTab === 'deals' && (
+          <div
+            style={{
+              background: C.card,
+              borderRadius: 14,
+              padding: '24px 28px',
+              border: `1px solid ${C.border}`,
+            }}
+          >
+            <SectionHeader icon="💰" title="Opportunities" count={opportunities.length || null} />
+            {opportunities.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {opportunities.map((o) => (
+                  <div
+                    key={o.id}
+                    style={{
+                      padding: '20px 24px',
+                      borderRadius: 12,
+                      border: `1px solid ${C.border}`,
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                    }}
+                  >
+                    <div
+                      style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}
+                    >
+                      <span style={{ fontSize: 16, fontWeight: 700, color: C.ink }}>{o.name}</span>
+                      <span style={{ marginLeft: 'auto' }}>
+                        <StageBadge stage={o.stage} />
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 32, fontSize: 13 }}>
+                      {o.amount != null && (
+                        <div>
+                          <span style={{ color: C.inkLight }}>Value </span>
+                          <span
+                            style={{
+                              fontWeight: 700,
+                              color: C.success,
+                              fontFamily: "'JetBrains Mono', monospace",
+                            }}
+                          >
+                            ${Number(o.amount).toLocaleString()}
+                          </span>
+                        </div>
+                      )}
+                      {o.probability != null && (
+                        <div>
+                          <span style={{ color: C.inkLight }}>Probability </span>
+                          <span
+                            style={{ fontWeight: 600, fontFamily: "'JetBrains Mono', monospace" }}
+                          >
+                            {o.probability}%
+                          </span>
+                        </div>
+                      )}
+                      {o.close_date && (
+                        <div>
+                          <span style={{ color: C.inkLight }}>Close </span>
+                          <span style={{ fontWeight: 500 }}>{formatDate(o.close_date)}</span>
+                        </div>
+                      )}
+                    </div>
+                    {o.next_step && (
+                      <div
+                        style={{
+                          marginTop: 12,
+                          padding: '8px 12px',
+                          borderRadius: 6,
+                          background: C.cardAlt,
+                          fontSize: 12,
+                          color: C.inkMuted,
+                        }}
+                      >
+                        <span style={{ fontWeight: 600, color: C.ink }}>Next: </span>
+                        {o.next_step}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p style={{ fontSize: 13, color: C.inkLight, fontStyle: 'italic' }}>
+                No opportunities yet
+              </p>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
-import { Button } from "@/components/ui/button";
-import { Sparkles, ExternalLink, Clock } from "lucide-react";
-import AishaEntityChatModal from "@/components/ai/AishaEntityChatModal";
+import { Button } from '@/components/ui/button';
+import { Sparkles, ExternalLink, Clock } from 'lucide-react';
+import AishaEntityChatModal from '@/components/ai/AishaEntityChatModal';
 import { formatDistanceToNow } from 'date-fns';
 
-export default function EntityAiSummaryCard({ 
-  entityType, 
-  entityId, 
-  entityLabel, 
-  aiSummary, 
+export default function EntityAiSummaryCard({
+  entityType,
+  entityId,
+  entityLabel,
+  aiSummary,
   lastUpdated,
   relatedData = {}, // { profile, opportunities, activities, notes }
-  profile = null // The full entity profile data
+  profile = null, // The full entity profile data
+  tenantId = null, // Optional: pass explicitly when outside TenantProvider (e.g. profile page)
 }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -39,17 +40,17 @@ export default function EntityAiSummaryCard({
             AI Summary
           </h3>
           <div className="flex items-center gap-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setIsModalOpen(true)}
               className="bg-white border-indigo-200 hover:bg-indigo-100 text-indigo-700 text-xs h-8"
             >
               Task AiSHA
             </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               onClick={handleBackOfficeClick}
               disabled
               className="bg-gray-100 border-gray-200 text-gray-400 text-xs h-8 cursor-not-allowed opacity-50"
@@ -62,13 +63,15 @@ export default function EntityAiSummaryCard({
         </div>
         <div className="space-y-4">
           <div className="prose prose-sm max-w-none text-indigo-800 leading-relaxed">
-            {aiSummary || "No summary available yet. Ask AiSHA to generate one."}
+            {aiSummary || 'No summary available yet. Ask AiSHA to generate one.'}
           </div>
-          
+
           {lastUpdated && (
             <div className="flex items-center gap-2 text-xs text-indigo-400 pt-2 border-t border-indigo-200/50">
               <Clock className="w-3 h-3" />
-              <span>Last updated {formatDistanceToNow(new Date(lastUpdated), { addSuffix: true })}</span>
+              <span>
+                Last updated {formatDistanceToNow(new Date(lastUpdated), { addSuffix: true })}
+              </span>
             </div>
           )}
         </div>
@@ -81,6 +84,7 @@ export default function EntityAiSummaryCard({
         entityId={entityId}
         entityLabel={entityLabel}
         relatedData={{ ...relatedData, profile }}
+        tenantId={tenantId}
       />
     </>
   );

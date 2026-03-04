@@ -911,8 +911,8 @@ export default function createMCPRoutes(_pgPool) {
         if (tool_name === 'crm.list_workflows') {
           const active_only = parameters?.active_only !== false;
           let query = supa
-            .from('workflows')
-            .select('id, name, description, trigger, is_active, created_at, updated_at')
+            .from('workflow')
+            .select('id, name, description, trigger_type, is_active, created_at, updated_at')
             .eq('tenant_id', tenant_id)
             .order('updated_at', { ascending: false });
 
@@ -937,8 +937,8 @@ export default function createMCPRoutes(_pgPool) {
 
           // Verify workflow exists and belongs to tenant
           const { data: workflow, error: wErr } = await supa
-            .from('workflows')
-            .select('id, name, is_active, trigger, nodes, connections')
+            .from('workflow')
+            .select('id, name, is_active, trigger_type, trigger_config, metadata')
             .eq('id', workflow_id)
             .eq('tenant_id', tenant_id)
             .maybeSingle();
@@ -964,13 +964,13 @@ export default function createMCPRoutes(_pgPool) {
 
           // Create execution record
           const { data: execution, error: exErr } = await supa
-            .from('workflow_executions')
+            .from('workflow_execution')
             .insert({
               workflow_id,
+              tenant_id: tenant_id,
               trigger_data: triggerPayload,
               status: 'running',
               execution_log: [],
-              created_at: new Date().toISOString(),
             })
             .select()
             .single();
@@ -984,8 +984,9 @@ export default function createMCPRoutes(_pgPool) {
               payload: triggerPayload,
             };
 
-            const nodes = workflow.nodes || [];
-            const connections = workflow.connections || [];
+            const meta = workflow.metadata || {};
+            const nodes = meta.nodes || [];
+            const connections = meta.connections || [];
             const executionLog = [];
 
             // Helper function to get next node
@@ -1051,7 +1052,7 @@ export default function createMCPRoutes(_pgPool) {
 
             // Update execution record with success
             await supa
-              .from('workflow_executions')
+              .from('workflow_execution')
               .update({
                 status: 'success',
                 execution_log: executionLog,
@@ -1072,11 +1073,11 @@ export default function createMCPRoutes(_pgPool) {
           } catch (execError) {
             // Update execution record with failure
             await supa
-              .from('workflow_executions')
+              .from('workflow_execution')
               .update({
                 status: 'failed',
                 execution_log: executionLog,
-                error_message: execError.message,
+                metadata: { error_message: execError.message },
                 completed_at: new Date().toISOString(),
               })
               .eq('id', execution.id);

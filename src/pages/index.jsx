@@ -5,6 +5,7 @@ import AuthResetPage from './AuthReset.jsx';
 import ForgotPasswordPage from './ForgotPassword.jsx';
 import AcceptInvitePage from './AcceptInvite.jsx';
 import Layout from './Layout.jsx';
+import { TenantProvider } from '@/components/shared/tenantContext';
 
 const PAGES = {
   Dashboard: lazy(() => import('./Dashboard')),
@@ -82,11 +83,40 @@ function PagesContent() {
         {/* Public route - accept invitation (no Layout wrapper) */}
         <Route path="/accept-invite" element={<AcceptInvitePage />} />
 
-        {/* Public routes - profile webpages (standalone, no Layout wrapper) */}
-        <Route path="/leads/:leadId" element={<PAGES.LeadProfilePage />} />
-        <Route path="/accounts/:accountId" element={<PAGES.LeadProfilePage />} />
-        <Route path="/contacts/:contactId" element={<PAGES.LeadProfilePage />} />
-        <Route path="/bizdev/:bizdevId" element={<PAGES.LeadProfilePage />} />
+        {/* Profile webpages — standalone (no Layout sidebar) but wrapped in TenantProvider
+            so hooks like useTenant() resolve correctly for Task AiSHA etc. */}
+        <Route
+          path="/leads/:leadId"
+          element={
+            <TenantProvider>
+              <PAGES.LeadProfilePage />
+            </TenantProvider>
+          }
+        />
+        <Route
+          path="/accounts/:accountId"
+          element={
+            <TenantProvider>
+              <PAGES.LeadProfilePage />
+            </TenantProvider>
+          }
+        />
+        <Route
+          path="/contacts/:contactId"
+          element={
+            <TenantProvider>
+              <PAGES.LeadProfilePage />
+            </TenantProvider>
+          }
+        />
+        <Route
+          path="/bizdev/:bizdevId"
+          element={
+            <TenantProvider>
+              <PAGES.LeadProfilePage />
+            </TenantProvider>
+          }
+        />
 
         {/* Public route - funnel demo (standalone, no Layout wrapper) */}
         <Route path="/funnel-demo" element={<PAGES.FunnelDemo />} />

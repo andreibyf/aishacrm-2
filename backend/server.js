@@ -238,6 +238,7 @@ import braidChainRoutes from './routes/braidChain.js';
 import braidMetricsRoutes from './routes/braidMetrics.js';
 import braidGraphRoutes from './routes/braidGraph.js';
 import createPepRoutes from './routes/pep.js';
+import createProfileRoutes from './routes/profile.js';
 import createTeamsV2Routes from './routes/teams.v2.js';
 import aiSettingsRoutes from './routes/aiSettings.js';
 import createBundleRoutes from './routes/bundles.js';
@@ -427,6 +428,9 @@ app.use('/api/braid/graph', defaultLimiter, braidGraphRoutes);
 // PEP Phase 3 — Natural language report queries
 logger.debug('Mounting /api/pep routes');
 app.use('/api/pep', defaultLimiter, createPepRoutes(measuredPgPool));
+// Profile aggregation endpoint (client dossier)
+logger.debug('Mounting /api/profile routes');
+app.use('/api/profile', defaultLimiter, authenticateRequest, createProfileRoutes(measuredPgPool));
 // Construction Projects module routes
 logger.debug('Mounting /api/construction/projects routes');
 app.use(

@@ -1,6 +1,6 @@
 // braid-adapter.js — Production adapter bridging Braid to backend routes
 // Transpiles .braid files, enforces policies, handles errors, caches results
-"use strict";
+'use strict';
 
 import fs from 'fs/promises';
 import fsSync from 'fs';
@@ -74,16 +74,23 @@ const resultCache = new LRUCache(500);
  * @param {Object} options - {cache: boolean, timeout: number}
  * @returns {Promise<Result>} Ok(value) or Err(error)
  */
-export async function executeBraid(braidFilePath, functionName, policy, deps, args = [], options = {}) {
+export async function executeBraid(
+  braidFilePath,
+  functionName,
+  policy,
+  deps,
+  args = [],
+  options = {},
+) {
   const { cache = true, timeout = policy?.max_execution_ms || 30000 } = options;
-  
+
   try {
     // 1. Generate cache key
     const cacheKey = `${braidFilePath}:${functionName}:${JSON.stringify(args)}`;
     if (cache && resultCache.has(cacheKey)) {
       return resultCache.get(cacheKey);
     }
-    
+
     // 2. Load and transpile (with mtime-aware caching)
     let compiledModule;
     const cached = compiledCache.get(braidFilePath);
@@ -109,17 +116,17 @@ export async function executeBraid(braidFilePath, functionName, policy, deps, ar
     } else {
       const braidSource = await fs.readFile(braidFilePath, 'utf8');
       const ast = parse(braidSource, braidFilePath);
-      
+
       // Resolve absolute path to braid-rt.js for data URL imports
       const runtimePath = path.resolve(path.dirname(braidFilePath), '../../tools/braid-rt.js');
       const runtimeUrl = `file:///${runtimePath.replace(/\\/g, '/')}`;
-      
-      const { code, diagnostics } = transpileToJS(ast, { 
-        policy, 
+
+      const { code, diagnostics } = transpileToJS(ast, {
+        policy,
         source: braidFilePath,
         typescript: false,
         sandbox: SANDBOX_MODE,
-        runtimeImport: runtimeUrl
+        runtimeImport: runtimeUrl,
       });
 
       // Log transpiler diagnostics in dev mode
@@ -130,7 +137,7 @@ export async function executeBraid(braidFilePath, functionName, policy, deps, ar
         }
       }
       // Removed debug-time compiled code preview logging
-      
+
       // Dynamic import using data URL (Node.js 18+)
       const dataUrl = `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
       compiledModule = await import(dataUrl);
@@ -139,52 +146,54 @@ export async function executeBraid(braidFilePath, functionName, policy, deps, ar
       const stat = fsSync.statSync(braidFilePath);
       compiledCache.set(braidFilePath, { module: compiledModule, mtimeMs: stat.mtimeMs });
     }
-    
+
     // 3. Execute with timeout
     const fn = compiledModule[functionName];
     if (!fn) {
       throw new Error(`Function '${functionName}' not found in ${braidFilePath}`);
     }
-    
+
     // Check if function is effectful (async) by inspecting its constructor name
     // Effectful functions are transpiled as async and expect (policy, deps, ...args)
     // Pure functions don't expect policy/deps in their signature
     const isEffectful = fn.constructor.name === 'AsyncFunction';
-    
+
     const result = await Promise.race([
       isEffectful ? fn(policy, deps, ...args) : fn(...args),
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error(`[BRAID_TIMEOUT] ${functionName} exceeded ${timeout}ms`)), timeout)
-      )
+      new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`[BRAID_TIMEOUT] ${functionName} exceeded ${timeout}ms`)),
+          timeout,
+        ),
+      ),
     ]);
-    
+
     // 4. Cache result if successful
     if (cache && result?.tag === 'Ok') {
       resultCache.set(cacheKey, result);
     }
-    
+
     return result;
-    
   } catch (error) {
     // 5. Error recovery with audit logging
     const audit = {
       file: braidFilePath,
       function: functionName,
       error: error.message,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
-    
+
     if (policy?.audit_log) {
       console.error(`[BRAID_ERROR] ${JSON.stringify(audit)}`);
     }
-    
+
     return {
       tag: 'Err',
       error: {
         type: 'BraidExecutionError',
         message: error.message,
-        stack: error.stack
-      }
+        stack: error.stack,
+      },
     };
   }
 }
@@ -198,48 +207,51 @@ export async function executeBraid(braidFilePath, functionName, policy, deps, ar
 export async function loadToolSchema(braidFilePath, functionName) {
   const braidSource = await fs.readFile(braidFilePath, 'utf8');
   const ast = parse(braidSource, braidFilePath);
-  
-  const fnDecl = ast.items.find(it => it.type === 'FnDecl' && it.name === functionName);
+
+  const fnDecl = ast.items.find((it) => it.type === 'FnDecl' && it.name === functionName);
   if (!fnDecl) {
     throw new Error(`Function '${functionName}' not found in ${braidFilePath}`);
   }
-  
+
   // Extract parameter schema from Braid function signature
   const parameters = {
     type: 'object',
     properties: {},
-    required: []
+    required: [],
   };
-  
+
   for (const param of fnDecl.params) {
     const paramName = param.name;
     const paramType = param.type?.base || 'String';
-    
+
     // Map Braid types to JSON Schema types
     const typeMap = {
-      'String': 'string',
-      'Number': 'number',
-      'Boolean': 'boolean',
-      'Array': 'array',
-      'Object': 'object'
+      String: 'string',
+      Number: 'number',
+      Boolean: 'boolean',
+      Array: 'array',
+      Object: 'object',
     };
-    
+
+    const jsonType = typeMap[paramType] || 'string';
     parameters.properties[paramName] = {
-      type: typeMap[paramType] || 'string',
-      description: `Parameter ${paramName} of type ${paramType}`
+      type: jsonType,
+      description: `Parameter ${paramName} of type ${paramType}`,
+      // OpenAI function calling requires 'items' on array types
+      ...(jsonType === 'array' ? { items: { type: 'string' } } : {}),
     };
-    
+
     parameters.required.push(paramName);
   }
-  
+
   // Build tool schema
   return {
     type: 'function',
     function: {
       name: functionName,
-      description: `Braid function from ${path.basename(braidFilePath)}. Effects: ${fnDecl.effects.map(e=>`!${e}`).join(', ')}. Returns: ${fnDecl.ret.text}`,
-      parameters
-    }
+      description: `Braid function from ${path.basename(braidFilePath)}. Effects: ${fnDecl.effects.map((e) => `!${e}`).join(', ')}. Returns: ${fnDecl.ret.text}`,
+      parameters,
+    },
   };
 }
 
@@ -261,17 +273,22 @@ export { getAuditLog } from './braid-rt.js';
  */
 export const CRM_TOOLS = {
   async fetchSnapshot(tenant, scope = 'all', limit = 5, deps) {
-    const braidFile = path.join(process.cwd(), 'braid-llm-kit', 'examples', '09_route_endpoint.braid');
+    const braidFile = path.join(
+      process.cwd(),
+      'braid-llm-kit',
+      'examples',
+      '09_route_endpoint.braid',
+    );
     return await executeBraid(
       braidFile,
       'fetchSnapshot',
       CRM_POLICIES.READ_ONLY,
       deps,
       [tenant, scope, limit],
-      { cache: true }
+      { cache: true },
     );
   },
-  
+
   async createLead(name, email, tenant, deps) {
     const braidFile = path.join(process.cwd(), 'braid-llm-kit', 'examples', '10_create_lead.braid');
     return await executeBraid(
@@ -280,19 +297,24 @@ export const CRM_TOOLS = {
       CRM_POLICIES.WRITE_OPERATIONS,
       deps,
       [name, email, tenant],
-      { cache: false }
+      { cache: false },
     );
   },
-  
+
   async updateAccountRevenue(accountId, newRevenue, tenant, deps) {
-    const braidFile = path.join(process.cwd(), 'braid-llm-kit', 'examples', '11_update_account.braid');
+    const braidFile = path.join(
+      process.cwd(),
+      'braid-llm-kit',
+      'examples',
+      '11_update_account.braid',
+    );
     return await executeBraid(
       braidFile,
       'updateAccountRevenue',
       CRM_POLICIES.WRITE_OPERATIONS,
       deps,
       [accountId, newRevenue, tenant],
-      { cache: false }
+      { cache: false },
     );
-  }
+  },
 };
