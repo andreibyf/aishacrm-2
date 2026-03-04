@@ -43,6 +43,9 @@ export default function BizDevSourceCard({
   const [leadIdsArray, setLeadIdsArray] = useState([]);
 
   // Resolve assigned_to UUID to employee name if not already provided
+  // Track failed lookups to avoid infinite retry loops on invalid/placeholder UUIDs
+  const [failedLookup, setFailedLookup] = useState(null);
+
   useEffect(() => {
     if (source.assigned_to_name) {
       setAssignedName(source.assigned_to_name);
@@ -50,6 +53,18 @@ export default function BizDevSourceCard({
     }
     if (!source.assigned_to) {
       setAssignedName(null);
+      return;
+    }
+    // Skip if we already failed for this exact UUID (prevents retry loop)
+    if (failedLookup === source.assigned_to) {
+      return;
+    }
+    // Skip obviously-invalid placeholder UUIDs
+    if (
+      source.assigned_to === '12345678-1234-1234-1234-123456789abc' ||
+      source.assigned_to === '00000000-0000-0000-0000-000000000000'
+    ) {
+      setAssignedName('Unassigned');
       return;
     }
     let cancelled = false;
@@ -62,12 +77,15 @@ export default function BizDevSourceCard({
         }
       })
       .catch(() => {
-        if (!cancelled) setAssignedName('Assigned');
+        if (!cancelled) {
+          setAssignedName('Assigned');
+          setFailedLookup(source.assigned_to);
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [source.assigned_to, source.assigned_to_name]);
+  }, [source.assigned_to, source.assigned_to_name, failedLookup]);
 
   // Parse lead_ids which may be stored as JSON string or array
   useEffect(() => {

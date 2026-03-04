@@ -49,177 +49,177 @@ export default function LeadTable({
 }) {
   return (
     <TooltipProvider>
-    <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-slate-700/50">
-            <tr>
-              <th className="px-4 py-3 text-left">
-                <Checkbox
-                  checked={
-                    selectedLeads.size === leads.length && leads.length > 0 && !selectAllMode
-                  }
-                  onCheckedChange={toggleSelectAll}
-                  className="border-slate-600"
-                />
-              </th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Name</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Email</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Phone</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Company</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Job Title</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Age (Days)</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                Assigned To
-              </th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Status</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-700">
-            {leads.map((lead) => {
-              const age = calculateLeadAge(lead);
-              const ageBucket = getLeadAgeBucket(lead);
-              const isConverted = lead.status === 'converted';
+      <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-slate-700/50">
+              <tr>
+                <th className="px-4 py-3 text-left">
+                  <Checkbox
+                    checked={
+                      selectedLeads.size === leads.length && leads.length > 0 && !selectAllMode
+                    }
+                    onCheckedChange={toggleSelectAll}
+                    className="border-slate-600"
+                  />
+                </th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Name</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Email</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Phone</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Company</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                  Job Title
+                </th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                  Age (Days)
+                </th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                  Assigned To
+                </th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Status</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-700">
+              {leads.map((lead) => {
+                const age = calculateLeadAge(lead);
+                const ageBucket = getLeadAgeBucket(lead);
+                const isConverted = lead.status === 'converted';
 
-              return (
-                <tr
-                  key={lead.id}
-                  data-testid={`lead-row-${lead.email}`}
-                  className={`hover:bg-slate-700/30 transition-colors ${isConverted ? 'opacity-70' : ''}`}
-                >
-                  <td className="px-4 py-3">
-                    <Checkbox
-                      checked={selectedLeads.has(lead.id) || selectAllMode}
-                      onCheckedChange={() => toggleSelection(lead.id)}
-                      className="border-slate-600"
-                    />
-                  </td>
-                  <td className="px-4 py-3 text-base text-slate-300">
-                    {(() => {
-                      const isB2B = lead.lead_type === 'b2b' || lead.lead_type === 'B2B';
-                      const personName = `${lead.first_name || ''} ${lead.last_name || ''}`.trim();
-                      const companyName = lead.company;
+                return (
+                  <tr
+                    key={lead.id}
+                    data-testid={`lead-row-${lead.email}`}
+                    className={`hover:bg-slate-700/30 transition-colors ${isConverted ? 'opacity-70' : ''}`}
+                  >
+                    <td className="px-4 py-3">
+                      <Checkbox
+                        checked={selectedLeads.has(lead.id) || selectAllMode}
+                        onCheckedChange={() => toggleSelection(lead.id)}
+                        className="border-slate-600"
+                      />
+                    </td>
+                    <td className="px-4 py-3 text-base text-slate-300">
+                      {(() => {
+                        const isB2B = lead.lead_type === 'b2b' || lead.lead_type === 'B2B';
+                        const personName =
+                          `${lead.first_name || ''} ${lead.last_name || ''}`.trim();
+                        const companyName = lead.company;
 
-                      if (isB2B && companyName) {
+                        if (isB2B && companyName) {
+                          return (
+                            <div className={isConverted ? 'line-through' : ''}>
+                              <span className="font-medium text-slate-200">{companyName}</span>
+                              {personName && (
+                                <div className="text-xs text-slate-400">{personName}</div>
+                              )}
+                            </div>
+                          );
+                        }
                         return (
-                          <div className={isConverted ? 'line-through' : ''}>
-                            <span className="font-medium text-slate-200">{companyName}</span>
-                            {personName && (
-                              <div className="text-xs text-slate-400">{personName}</div>
+                          <span className={isConverted ? 'line-through' : ''}>
+                            {personName || <span className="text-slate-500">—</span>}
+                          </span>
+                        );
+                      })()}
+                    </td>
+                    <td className="px-4 py-3 text-base text-slate-300" data-testid="lead-email">
+                      {lead.email || <span className="text-slate-500">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-base">
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-300">
+                          {lead.phone || <span className="text-slate-500">—</span>}
+                        </span>
+                        {lead.do_not_call && (
+                          <Badge className="bg-red-900/30 text-red-400 border-red-700 text-xs px-1.5 py-0">
+                            DNC
+                          </Badge>
+                        )}
+                        {lead.do_not_text && (
+                          <Badge className="bg-red-900/30 text-red-400 border-red-700 text-xs px-1.5 py-0">
+                            DNT
+                          </Badge>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-base text-slate-300">
+                      {(() => {
+                        const associatedAccountName = getAssociatedAccountName(lead);
+                        const companyLabel = associatedAccountName || lead.company;
+
+                        if (!companyLabel) {
+                          return <span className="text-slate-500">—</span>;
+                        }
+
+                        return (
+                          <div className="flex items-center gap-1">
+                            <span>{companyLabel}</span>
+                            {associatedAccountName && (
+                              <Badge className="bg-blue-900/30 text-blue-400 border-blue-700 text-xs px-1.5 py-0">
+                                Account
+                              </Badge>
                             )}
                           </div>
                         );
-                      }
-                      return (
-                        <span className={isConverted ? 'line-through' : ''}>
-                          {personName || <span className="text-slate-500">—</span>}
-                        </span>
-                      );
-                    })()}
-                  </td>
-                  <td className="px-4 py-3 text-base text-slate-300" data-testid="lead-email">
-                    {lead.email || <span className="text-slate-500">—</span>}
-                  </td>
-                  <td className="px-4 py-3 text-base">
-                    <div className="flex items-center gap-2">
-                      <span className="text-slate-300">
-                        {lead.phone || <span className="text-slate-500">—</span>}
-                      </span>
-                      {lead.do_not_call && (
-                        <Badge className="bg-red-900/30 text-red-400 border-red-700 text-xs px-1.5 py-0">
-                          DNC
-                        </Badge>
-                      )}
-                      {lead.do_not_text && (
-                        <Badge className="bg-red-900/30 text-red-400 border-red-700 text-xs px-1.5 py-0">
-                          DNT
-                        </Badge>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-base text-slate-300">
-                    {(() => {
-                      const associatedAccountName = getAssociatedAccountName(lead);
-                      const companyLabel = associatedAccountName || lead.company;
-
-                      if (!companyLabel) {
-                        return <span className="text-slate-500">—</span>;
-                      }
-
-                      return (
-                        <div className="flex items-center gap-1">
-                          <span>{companyLabel}</span>
-                          {associatedAccountName && (
-                            <Badge className="bg-blue-900/30 text-blue-400 border-blue-700 text-xs px-1.5 py-0">
-                              Account
-                            </Badge>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </td>
-                  <td className="px-4 py-3 text-base text-slate-300">
-                    {lead.job_title || <span className="text-slate-500">—</span>}
-                  </td>
-                  <td className="px-4 py-3 text-base">
-                    <div className="flex items-center gap-2">
+                      })()}
+                    </td>
+                    <td className="px-4 py-3 text-base text-slate-300">
+                      {lead.job_title || <span className="text-slate-500">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-base">
                       {age < 0 ? (
                         <span className="text-slate-500">—</span>
                       ) : (
-                        <>
-                          <span className="text-slate-300">{age}</span>
-                          {ageBucket && (
-                            <Badge
-                              className={`text-xs px-1.5 py-0 ${
-                                ageBucket.value === '0-7'
-                                  ? 'bg-green-900/30 text-green-400 border-green-700'
-                                  : ['8-14', '15-21', '22-30'].includes(ageBucket.value)
-                                    ? 'bg-yellow-900/30 text-yellow-400 border-yellow-700'
-                                    : 'bg-red-900/30 text-red-400 border-red-700'
-                              }`}
-                            >
-                              {ageBucket.label}
-                            </Badge>
-                          )}
-                        </>
+                        <span
+                          className={`font-medium ${
+                            ageBucket
+                              ? ageBucket.value === '0-7'
+                                ? 'text-green-400'
+                                : ['8-14', '15-21', '22-30'].includes(ageBucket.value)
+                                  ? 'text-yellow-400'
+                                  : 'text-red-400'
+                              : 'text-slate-300'
+                          }`}
+                        >
+                          {age}
+                        </span>
                       )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-base text-slate-300">
-                    {(() => {
-                      const assignedToName = lead.assigned_to_name;
-                      const assignedTo = lead.assigned_to || lead.metadata?.assigned_to;
+                    </td>
+                    <td className="px-4 py-3 text-base text-slate-300">
+                      {(() => {
+                        const assignedToName = lead.assigned_to_name;
+                        const assignedTo = lead.assigned_to || lead.metadata?.assigned_to;
 
-                      if (!assignedToName && !assignedTo) {
-                        return <span className="text-slate-500">Unassigned</span>;
-                      }
+                        if (!assignedToName && !assignedTo) {
+                          return <span className="text-slate-500">Unassigned</span>;
+                        }
 
-                      const displayName =
-                        assignedToName ||
-                        employeesMap[assignedTo] ||
-                        usersMap[assignedTo] ||
-                        assignedTo;
-                      return displayName;
-                    })()}
-                  </td>
-                  <td
-                    className="px-4 py-3 cursor-pointer"
-                    onClick={() => {
-                      setDetailLead(lead);
-                      setIsDetailOpen(true);
-                    }}
-                  >
-                    <Badge
-                      className={`${statusColors[lead.status] ?? 'bg-slate-900/30 text-slate-400 border-slate-700'} contrast-badge capitalize text-xs font-semibold border`}
-                      data-variant="status"
-                      data-status={lead.status}
+                        const displayName =
+                          assignedToName ||
+                          employeesMap[assignedTo] ||
+                          usersMap[assignedTo] ||
+                          assignedTo;
+                        return displayName;
+                      })()}
+                    </td>
+                    <td
+                      className="px-4 py-3 cursor-pointer"
+                      onClick={() => {
+                        setDetailLead(lead);
+                        setIsDetailOpen(true);
+                      }}
                     >
-                      {lead.status}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1">
+                      <Badge
+                        className={`${statusColors[lead.status] ?? 'bg-slate-900/30 text-slate-400 border-slate-700'} contrast-badge capitalize text-xs font-semibold border`}
+                        data-variant="status"
+                        data-status={lead.status}
+                      >
+                        {lead.status}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
@@ -316,15 +316,15 @@ export default function LeadTable({
                             <p>Delete lead</p>
                           </TooltipContent>
                         </Tooltip>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
     </TooltipProvider>
   );
 }

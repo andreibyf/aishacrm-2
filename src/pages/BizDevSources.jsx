@@ -106,7 +106,7 @@ export default function BizDevSourcesPage() {
   const [businessModel, setBusinessModel] = useState('b2b');
 
   const { selectedTenantId } = useTenant();
-  const { selectedEmployeeId } = useEmployeeScope();
+  const { selectedEmployeeId, visibleEmployees } = useEmployeeScope();
 
   // Load employees for assigned-to filter dropdown
   useEffect(() => {
@@ -846,7 +846,7 @@ export default function BizDevSourcesPage() {
               <SelectContent>
                 <SelectItem value="all">All Assignees</SelectItem>
                 <SelectItem value="unassigned">Unassigned</SelectItem>
-                {employees.map((emp) => (
+                {visibleEmployees.map((emp) => (
                   <SelectItem key={emp.id} value={emp.id}>
                     {emp.first_name} {emp.last_name}
                   </SelectItem>

@@ -63,7 +63,8 @@ export default function ReportsPage() {
   const [loadingStats, setLoadingStats] = useState(false);
   const [stats, setStats] = useState(null);
   const { selectedTenantId } = useTenant();
-  const { getFilter, canViewAllRecords } = useEmployeeScope();
+  const { getFilter, canViewAllRecords, selectedTeamId, selectedEmail, membersByTeam } =
+    useEmployeeScope();
   const [isExporting, setIsExporting] = useState(false);
   const { cachedRequest } = useApiManager();
   const [currentTenantData, setCurrentTenantData] = useState(null);
@@ -133,8 +134,16 @@ export default function ReportsPage() {
     if (!('is_test_data' in filter)) {
       filter.is_test_data = false;
     }
+
+    // Add team/employee scope for server-side API params
+    if (selectedTeamId) {
+      filter.team_id = selectedTeamId;
+    } else if (selectedEmail) {
+      filter.assigned_to_scalar = selectedEmail;
+    }
+
     return filter;
-  }, [currentUser, selectedTenantId, canViewAllRecords, getFilter]);
+  }, [currentUser, selectedTenantId, canViewAllRecords, getFilter, selectedTeamId, selectedEmail]);
 
   useEffect(() => {
     const loadStats = async () => {

@@ -59,7 +59,30 @@ vi.mock('@/components/shared/ApiManager', () => ({
 }));
 
 vi.mock('@/components/shared/EmployeeScopeContext', () => ({
-  useEmployeeScope: () => ({ employeeScope: null, selectedEmail: null }),
+  useEmployeeScope: () => ({
+    employeeScope: null,
+    selectedEmail: null,
+    selectedEmployeeId: null,
+    selectedTeamId: null,
+    setEmployeeScope: vi.fn(),
+    setTeamScope: vi.fn(),
+    clearEmployeeScope: vi.fn(),
+    clearTeamScope: vi.fn(),
+    clearAllScopes: vi.fn(),
+    canViewAllRecords: () => false,
+    isEmployee: () => false,
+    getFilter: (f = {}) => ({ ...f }),
+    employees: [],
+    visibleEmployees: [],
+    employeesLoading: false,
+    loadEmployees: vi.fn().mockResolvedValue([]),
+    teams: [],
+    teamsLoading: false,
+    membersByTeam: {},
+    teamEmployees: [],
+    loadTeams: vi.fn(),
+    visibilityMode: 'hierarchical',
+  }),
 }));
 
 vi.mock('@/components/shared/entityLabelsHooks', () => ({
@@ -68,12 +91,19 @@ vi.mock('@/components/shared/entityLabelsHooks', () => ({
 
 vi.mock('@/hooks/useLoadingToast', () => ({
   useLoadingToast: () => ({
-    showLoading: vi.fn(), dismiss: vi.fn(), showSuccess: vi.fn(), showError: vi.fn(),
+    showLoading: vi.fn(),
+    dismiss: vi.fn(),
+    showSuccess: vi.fn(),
+    showError: vi.fn(),
   }),
 }));
 
 vi.mock('@/components/shared/ProgressOverlay', () => ({
-  useProgress: () => ({ startProgress: vi.fn(), updateProgress: vi.fn(), completeProgress: vi.fn() }),
+  useProgress: () => ({
+    startProgress: vi.fn(),
+    updateProgress: vi.fn(),
+    completeProgress: vi.fn(),
+  }),
 }));
 
 vi.mock('@/components/shared/ConfirmDialog', () => ({
@@ -87,8 +117,10 @@ vi.mock('@/hooks/useAiShaEvents', () => ({ useAiShaEvents: () => {} }));
 
 vi.mock('@/hooks/useStatusCardPreferences', () => ({
   useStatusCardPreferences: () => ({
-    hiddenStatusKeys: [], toggleStatusVisibility: vi.fn(),
-    getCardLabel: (label) => label, isCardVisible: () => true,
+    hiddenStatusKeys: [],
+    toggleStatusVisibility: vi.fn(),
+    getCardLabel: (label) => label,
+    isCardVisible: () => true,
   }),
 }));
 
@@ -104,22 +136,52 @@ vi.mock('framer-motion', () => ({
 }));
 
 // Mock heavy components
-vi.mock('@/components/accounts/AccountForm', () => ({ default: () => <div data-testid="account-form">AccountForm</div> }));
-vi.mock('@/components/accounts/AccountDetailPanel', () => ({ default: () => <div data-testid="account-detail-panel">AccountDetailPanel</div> }));
-vi.mock('@/components/accounts/AccountCard', () => ({ default: () => <div data-testid="account-card">AccountCard</div> }));
-vi.mock('@/components/shared/CsvExportButton', () => ({ default: () => <button data-testid="csv-export-button">Export CSV</button> }));
-vi.mock('@/components/shared/CsvImportDialog', () => ({ default: () => <div data-testid="csv-import-dialog">CsvImportDialog</div> }));
-vi.mock('@/components/shared/Pagination', () => ({ default: () => <div data-testid="pagination">Pagination</div> }));
-vi.mock('@/components/shared/TagFilter', () => ({ default: () => <div data-testid="tag-filter">TagFilter</div> }));
-vi.mock('@/components/shared/RefreshButton', () => ({ default: () => <button data-testid="refresh-button">Refresh</button> }));
-vi.mock('@/components/shared/StatusHelper', () => ({ default: () => <div data-testid="status-helper">StatusHelper</div> }));
-vi.mock('@/components/shared/ComponentHelp', () => ({ ComponentHelp: () => <div data-testid="component-help">Help</div> }));
-vi.mock('@/components/accounts/BulkActionsMenu', () => ({ default: () => <div data-testid="bulk-actions-menu">BulkActionsMenu</div> }));
+vi.mock('@/components/accounts/AccountForm', () => ({
+  default: () => <div data-testid="account-form">AccountForm</div>,
+}));
+vi.mock('@/components/accounts/AccountDetailPanel', () => ({
+  default: () => <div data-testid="account-detail-panel">AccountDetailPanel</div>,
+}));
+vi.mock('@/components/accounts/AccountCard', () => ({
+  default: () => <div data-testid="account-card">AccountCard</div>,
+}));
+vi.mock('@/components/shared/CsvExportButton', () => ({
+  default: () => <button data-testid="csv-export-button">Export CSV</button>,
+}));
+vi.mock('@/components/shared/CsvImportDialog', () => ({
+  default: () => <div data-testid="csv-import-dialog">CsvImportDialog</div>,
+}));
+vi.mock('@/components/shared/Pagination', () => ({
+  default: () => <div data-testid="pagination">Pagination</div>,
+}));
+vi.mock('@/components/shared/TagFilter', () => ({
+  default: () => <div data-testid="tag-filter">TagFilter</div>,
+}));
+vi.mock('@/components/shared/RefreshButton', () => ({
+  default: () => <button data-testid="refresh-button">Refresh</button>,
+}));
+vi.mock('@/components/shared/StatusHelper', () => ({
+  default: () => <div data-testid="status-helper">StatusHelper</div>,
+}));
+vi.mock('@/components/shared/ComponentHelp', () => ({
+  ComponentHelp: () => <div data-testid="component-help">Help</div>,
+}));
+vi.mock('@/components/accounts/BulkActionsMenu', () => ({
+  default: () => <div data-testid="bulk-actions-menu">BulkActionsMenu</div>,
+}));
 vi.mock('@/utils/industryUtils', () => ({ formatIndustry: (v) => v }));
 
 /* eslint-disable react/display-name */
-vi.mock('@/components/ui/button', () => ({ Button: React.forwardRef(({ children, ...props }, ref) => <button ref={ref} {...props}>{children}</button>) }));
-vi.mock('@/components/ui/input', () => ({ Input: React.forwardRef((props, ref) => <input ref={ref} {...props} />) }));
+vi.mock('@/components/ui/button', () => ({
+  Button: React.forwardRef(({ children, ...props }, ref) => (
+    <button ref={ref} {...props}>
+      {children}
+    </button>
+  )),
+}));
+vi.mock('@/components/ui/input', () => ({
+  Input: React.forwardRef((props, ref) => <input ref={ref} {...props} />),
+}));
 vi.mock('@/components/ui/dialog', () => ({
   Dialog: ({ children }) => <div>{children}</div>,
   DialogContent: ({ children }) => <div>{children}</div>,
@@ -130,16 +192,28 @@ vi.mock('@/components/ui/select', () => ({
   Select: ({ children }) => <div>{children}</div>,
   SelectContent: ({ children }) => <div>{children}</div>,
   SelectItem: ({ children, ...props }) => <div {...props}>{children}</div>,
-  SelectTrigger: React.forwardRef(({ children, ...props }, ref) => <div ref={ref} {...props}>{children}</div>),
+  SelectTrigger: React.forwardRef(({ children, ...props }, ref) => (
+    <div ref={ref} {...props}>
+      {children}
+    </div>
+  )),
   SelectValue: ({ children, ...props }) => <div {...props}>{children}</div>,
 }));
-vi.mock('@/components/ui/checkbox', () => ({ Checkbox: React.forwardRef((props, ref) => <input type="checkbox" ref={ref} {...props} />) }));
-vi.mock('@/components/ui/badge', () => ({ Badge: ({ children, ...props }) => <span {...props}>{children}</span> }));
+vi.mock('@/components/ui/checkbox', () => ({
+  Checkbox: React.forwardRef((props, ref) => <input type="checkbox" ref={ref} {...props} />),
+}));
+vi.mock('@/components/ui/badge', () => ({
+  Badge: ({ children, ...props }) => <span {...props}>{children}</span>,
+}));
 vi.mock('@/components/ui/tooltip', () => ({
   Tooltip: ({ children }) => <div>{children}</div>,
   TooltipContent: ({ children }) => <div>{children}</div>,
   TooltipProvider: ({ children }) => <div>{children}</div>,
-  TooltipTrigger: React.forwardRef(({ children, ...props }, ref) => <div ref={ref} {...props}>{children}</div>),
+  TooltipTrigger: React.forwardRef(({ children, ...props }, ref) => (
+    <div ref={ref} {...props}>
+      {children}
+    </div>
+  )),
 }));
 /* eslint-enable react/display-name */
 
@@ -165,17 +239,28 @@ vi.mock('lucide-react', () => {
 
 beforeAll(() => {
   if (!globalThis.ResizeObserver) {
-    globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
+    globalThis.ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    };
   }
   if (!window.matchMedia) {
     window.matchMedia = vi.fn().mockImplementation((query) => ({
-      matches: false, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+      matches: false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
     }));
   }
 });
 
-beforeEach(() => { vi.clearAllMocks(); });
-afterEach(() => { vi.restoreAllMocks(); });
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 // ─── Import AccountsPage (AFTER all mocks) ──────────────────────────────────
 
@@ -184,11 +269,19 @@ const { Account } = await import('@/api/entities');
 
 // Minimal fake account for tests that need non-empty data
 const FAKE_ACCOUNTS = (() => {
-  const arr = [{
-    id: 'acct-1', name: 'Acme Corp', type: 'customer', industry: 'Technology',
-    website: 'https://acme.com', phone: '555-1234', assigned_to: 'user-1',
-    tenant_id: 'tenant-1', created_at: '2025-01-01T00:00:00Z',
-  }];
+  const arr = [
+    {
+      id: 'acct-1',
+      name: 'Acme Corp',
+      type: 'customer',
+      industry: 'Technology',
+      website: 'https://acme.com',
+      phone: '555-1234',
+      assigned_to: 'user-1',
+      tenant_id: 'tenant-1',
+      created_at: '2025-01-01T00:00:00Z',
+    },
+  ];
   arr._total = 1;
   return arr;
 })();
@@ -203,23 +296,33 @@ describe('Phase 0: Baseline render', () => {
 
   it('renders header with Accounts title', async () => {
     render(<AccountsPage />);
-    await waitFor(() => {
-      expect(screen.getByText('Accounts')).toBeTruthy();
-    }, { timeout: 3000 });
+    await waitFor(
+      () => {
+        expect(screen.getByText('Accounts')).toBeTruthy();
+      },
+      { timeout: 3000 },
+    );
   });
 });
 
 describe('Phase 1: Data hook', () => {
   it('page renders after data hook extraction', async () => {
     const { container } = render(<AccountsPage />);
-    await waitFor(() => { expect(container).toBeTruthy(); });
+    await waitFor(() => {
+      expect(container).toBeTruthy();
+    });
   });
 });
 
 describe('Phase 2: Bulk operations', () => {
   it('page renders with bulk ops extracted', async () => {
     const { container } = render(<AccountsPage />);
-    await waitFor(() => { expect(container).toBeTruthy(); }, { timeout: 3000 });
+    await waitFor(
+      () => {
+        expect(container).toBeTruthy();
+      },
+      { timeout: 3000 },
+    );
   });
 });
 
@@ -235,9 +338,12 @@ describe('Phase 3: Stats cards', () => {
 describe('Phase 4: Table view', () => {
   it('empty state renders when no accounts', async () => {
     render(<AccountsPage />);
-    await waitFor(() => {
-      expect(screen.getByText(/No accounts found/i)).toBeTruthy();
-    }, { timeout: 3000 });
+    await waitFor(
+      () => {
+        expect(screen.getByText(/No accounts found/i)).toBeTruthy();
+      },
+      { timeout: 3000 },
+    );
   });
 });
 
@@ -254,35 +360,48 @@ describe('Phase 5: Filters', () => {
 describe('Full regression', () => {
   it('AccountsPage renders with all child areas', async () => {
     const { container } = render(<AccountsPage />);
-    await waitFor(() => {
-      expect(container.firstChild).toBeTruthy();
-      expect(screen.getByText('Accounts')).toBeTruthy();
-    }, { timeout: 3000 });
+    await waitFor(
+      () => {
+        expect(container.firstChild).toBeTruthy();
+        expect(screen.getByText('Accounts')).toBeTruthy();
+      },
+      { timeout: 3000 },
+    );
   });
 
   it('Add Account button is present', async () => {
     render(<AccountsPage />);
-    await waitFor(() => { expect(screen.getByText(/Add Account/i)).toBeTruthy(); });
+    await waitFor(() => {
+      expect(screen.getByText(/Add Account/i)).toBeTruthy();
+    });
   });
 
   it('Refresh button is present', async () => {
     render(<AccountsPage />);
-    await waitFor(() => { expect(screen.getByTestId('refresh-button')).toBeTruthy(); });
+    await waitFor(() => {
+      expect(screen.getByTestId('refresh-button')).toBeTruthy();
+    });
   });
 
   it('CSV export button is present', async () => {
     render(<AccountsPage />);
-    await waitFor(() => { expect(screen.getByTestId('csv-export-button')).toBeTruthy(); });
+    await waitFor(() => {
+      expect(screen.getByTestId('csv-export-button')).toBeTruthy();
+    });
   });
 
   it('ComponentHelp is present', async () => {
     render(<AccountsPage />);
-    await waitFor(() => { expect(screen.getByTestId('component-help')).toBeTruthy(); });
+    await waitFor(() => {
+      expect(screen.getByTestId('component-help')).toBeTruthy();
+    });
   });
 
   it('Pagination is present', async () => {
     Account.filter.mockResolvedValue(FAKE_ACCOUNTS);
     render(<AccountsPage />);
-    await waitFor(() => { expect(screen.getByTestId('pagination')).toBeTruthy(); });
+    await waitFor(() => {
+      expect(screen.getByTestId('pagination')).toBeTruthy();
+    });
   });
 });

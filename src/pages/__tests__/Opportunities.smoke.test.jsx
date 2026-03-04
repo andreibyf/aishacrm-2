@@ -96,6 +96,26 @@ vi.mock('@/components/shared/EmployeeScopeContext', () => ({
   useEmployeeScope: () => ({
     employeeScope: null,
     selectedEmail: null,
+    selectedEmployeeId: null,
+    selectedTeamId: null,
+    setEmployeeScope: vi.fn(),
+    setTeamScope: vi.fn(),
+    clearEmployeeScope: vi.fn(),
+    clearTeamScope: vi.fn(),
+    clearAllScopes: vi.fn(),
+    canViewAllRecords: () => false,
+    isEmployee: () => false,
+    getFilter: (f = {}) => ({ ...f }),
+    employees: [],
+    visibleEmployees: [],
+    employeesLoading: false,
+    loadEmployees: vi.fn().mockResolvedValue([]),
+    teams: [],
+    teamsLoading: false,
+    membersByTeam: {},
+    teamEmployees: [],
+    loadTeams: vi.fn(),
+    visibilityMode: 'hierarchical',
   }),
 }));
 
@@ -222,7 +242,9 @@ vi.mock('@/components/opportunities/BulkActionsMenu', () => ({
 /* eslint-disable react/display-name */
 vi.mock('@/components/ui/button', () => ({
   Button: React.forwardRef(({ children, ...props }, ref) => (
-    <button ref={ref} {...props}>{children}</button>
+    <button ref={ref} {...props}>
+      {children}
+    </button>
   )),
 }));
 
@@ -235,7 +257,9 @@ vi.mock('@/components/ui/select', () => ({
   SelectContent: ({ children }) => <div>{children}</div>,
   SelectItem: ({ children, ...props }) => <div {...props}>{children}</div>,
   SelectTrigger: React.forwardRef(({ children, ...props }, ref) => (
-    <div ref={ref} {...props}>{children}</div>
+    <div ref={ref} {...props}>
+      {children}
+    </div>
   )),
   SelectValue: ({ children, ...props }) => <div {...props}>{children}</div>,
 }));
@@ -253,7 +277,9 @@ vi.mock('@/components/ui/tooltip', () => ({
   TooltipContent: ({ children }) => <div>{children}</div>,
   TooltipProvider: ({ children }) => <div>{children}</div>,
   TooltipTrigger: React.forwardRef(({ children, ...props }, ref) => (
-    <div ref={ref} {...props}>{children}</div>
+    <div ref={ref} {...props}>
+      {children}
+    </div>
   )),
 }));
 
@@ -327,9 +353,12 @@ describe('Phase 0: Baseline render', () => {
 
   it('renders header with Opportunities title', async () => {
     render(<OpportunitiesPage />);
-    await waitFor(() => {
-      expect(screen.getByText('Opportunities')).toBeTruthy();
-    }, { timeout: 3000 });
+    await waitFor(
+      () => {
+        expect(screen.getByText('Opportunities')).toBeTruthy();
+      },
+      { timeout: 3000 },
+    );
   });
 
   it('renders stats cards section', async () => {
@@ -349,16 +378,22 @@ describe('Phase 0: Baseline render', () => {
 
   it('renders view container', async () => {
     const { container } = render(<OpportunitiesPage />);
-    await waitFor(() => {
-      expect(container.firstChild).toBeTruthy();
-    }, { timeout: 3000 });
+    await waitFor(
+      () => {
+        expect(container.firstChild).toBeTruthy();
+      },
+      { timeout: 3000 },
+    );
   });
 
   it('renders pagination', async () => {
     const { container } = render(<OpportunitiesPage />);
-    await waitFor(() => {
-      expect(container).toBeTruthy();
-    }, { timeout: 3000 });
+    await waitFor(
+      () => {
+        expect(container).toBeTruthy();
+      },
+      { timeout: 3000 },
+    );
   });
 });
 
@@ -383,9 +418,12 @@ describe('Phase 1: Data hook', () => {
 describe('Phase 2: Bulk operations', () => {
   it('page renders with bulk ops extracted', async () => {
     const { container } = render(<OpportunitiesPage />);
-    await waitFor(() => {
-      expect(container).toBeTruthy();
-    }, { timeout: 3000 });
+    await waitFor(
+      () => {
+        expect(container).toBeTruthy();
+      },
+      { timeout: 3000 },
+    );
   });
 });
 
@@ -416,10 +454,13 @@ describe('Phase 3: Stats cards', () => {
 describe('Phase 4: Table view', () => {
   it('table view renders when in table mode (default)', async () => {
     const { container } = render(<OpportunitiesPage />);
-    await waitFor(() => {
-      // Default view is table, which should render
-      expect(container).toBeTruthy();
-    }, { timeout: 3000 });
+    await waitFor(
+      () => {
+        // Default view is table, which should render
+        expect(container).toBeTruthy();
+      },
+      { timeout: 3000 },
+    );
   });
 });
 
@@ -448,20 +489,23 @@ describe('Full regression', () => {
   it('OpportunitiesPage renders with all child areas', async () => {
     const { container } = render(<OpportunitiesPage />);
 
-    await waitFor(() => {
-      // Main container renders
-      expect(container.firstChild).toBeTruthy();
+    await waitFor(
+      () => {
+        // Main container renders
+        expect(container.firstChild).toBeTruthy();
 
-      // Stats cards grid
-      expect(container.querySelector('[class*="grid"]')).toBeTruthy();
+        // Stats cards grid
+        expect(container.querySelector('[class*="grid"]')).toBeTruthy();
 
-      // Search inputs
-      const inputs = screen.getAllByRole('textbox');
-      expect(inputs.length).toBeGreaterThan(0);
+        // Search inputs
+        const inputs = screen.getAllByRole('textbox');
+        expect(inputs.length).toBeGreaterThan(0);
 
-      // Header text
-      expect(screen.getByText('Opportunities')).toBeTruthy();
-    }, { timeout: 3000 });
+        // Header text
+        expect(screen.getByText('Opportunities')).toBeTruthy();
+      },
+      { timeout: 3000 },
+    );
   });
 
   it('Add Opportunity button is present', async () => {

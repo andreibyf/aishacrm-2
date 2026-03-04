@@ -15,9 +15,12 @@
  *
  * Role behaviour:
  *   superadmin / admin → bypass (see all tenant data, full R/W)
- *   director           → own teams + child teams: full R/W; other teams: R + notes
- *   manager            → own teams: full R/W; other teams: R + notes
- *   employee (member)  → shared: team R/W | hierarchical: own R/W only; other teams: R + notes
+ *   director  (shared) → full R/W across entire organization
+ *   director  (hier.)  → own teams + child teams: full R/W; no other team access
+ *   manager   (shared) → own teams: full R/W; other teams: read + add notes
+ *   manager   (hier.)  → own teams: full R/W; no other team access
+ *   member    (shared) → own teams: full R/W; other teams: read + add notes
+ *   member    (hier.)  → own teams: full R/W; no other team access
  *   no team membership → own records only
  *
  * Unassigned records (assigned_to_team IS NULL) are always visible to everyone.
@@ -219,31 +222,21 @@ export async function getVisibilityScope(user, supabase) {
     const highestRole = isDirector ? 'director' : isManager ? 'manager' : 'member';
 
     // ── Determine which teams the user has FULL R/W access to ──
-    // In hierarchical mode, plain members only have R/W on their OWN records
-    //   (their team is still their "home" team for visibility, but write access is own-only)
-    // In shared mode, ALL memberships grant team-wide R/W
+    // In BOTH modes, all team members have full R/W on their own team's records.
+    // The difference between modes is what happens with OTHER teams' records:
+    //   Shared:       other teams → read + add notes
+    //   Hierarchical: other teams → no access
 
     let fullAccessTeamIds; // Teams where user has full R/W
-    let memberTeamIds; // All teams user belongs to (for org-wide read)
+    let memberTeamIds; // All teams user belongs to
 
     memberTeamIds = memberships.map((m) => m.team_id);
 
-    if (mode === 'shared') {
-      // Shared: all memberships grant full team R/W
-      fullAccessTeamIds = [...memberTeamIds];
-    } else {
-      // Hierarchical: only manager/director get full team R/W
-      // Members get R/W only on own records (enforced at route level, not filter level)
-      fullAccessTeamIds = memberships
-        .filter((m) => m.role === 'manager' || m.role === 'director')
-        .map((m) => m.team_id);
-
-      // In hierarchical mode, members still see their team's records for read access
-      // but write access is limited to own records (handled by getAccessLevel)
-    }
+    // All members get full R/W on their own teams in both modes
+    fullAccessTeamIds = [...memberTeamIds];
 
     // For directors, also include child teams (one level of hierarchy)
-    let allTeamIds = [...new Set([...fullAccessTeamIds, ...memberTeamIds])];
+    let allTeamIds = [...new Set([...memberTeamIds])];
     if (isDirector) {
       const { data: childTeams, error: childErr } = await supabase
         .from('teams')
@@ -259,7 +252,28 @@ export async function getVisibilityScope(user, supabase) {
       }
     }
 
-    // Get all employees in accessible teams (for employee dropdown scoping)
+    // ── Shared mode: expand visibility to entire organization ──
+    if (mode === 'shared') {
+      const { data: allTenantTeams, error: atErr } = await supabase
+        .from('teams')
+        .select('id')
+        .eq('tenant_id', tenantId)
+        .eq('is_active', true);
+
+      if (!atErr && allTenantTeams?.length > 0) {
+        const allTenantIds = allTenantTeams.map((t) => t.id);
+        // Everyone sees all teams' records (org-wide read)
+        allTeamIds = [...new Set(allTenantIds)];
+        if (isDirector) {
+          // Directors in shared mode: full R/W across entire org
+          fullAccessTeamIds = [...new Set(allTenantIds)];
+        }
+        // Members & managers keep fullAccessTeamIds = own teams only
+        // (other teams = read + notes, enforced by getAccessLevel)
+      }
+    }
+
+    // Get all employees in visible teams (for employee dropdown scoping)
     const { data: teamMembers, error: tmErr } = await supabase
       .from('team_members')
       .select('employee_id')
@@ -329,16 +343,20 @@ export async function applyVisibilityFilter(query, user, supabase, options = {})
     return query; // Admin/superadmin — no filter
   }
 
-  // Two-tier model (handoff spec §3):
-  // Users WITH team membership → org-wide read (see ALL tenant records).
+  // Shared mode with team membership → org-wide read (see ALL tenant records).
   // Write access is enforced per-record at the route level via getAccessLevel().
-  // The tenant_id filter (already applied by the caller) is sufficient.
-  if (scope.teamIds.length > 0) {
+  if (scope.mode === 'shared' && scope.teamIds.length > 0) {
     return query;
   }
 
-  // Fallback: user has NO team membership → own records + unassigned only.
-  // Backward-compatible for tenants that haven't set up teams.
+  // Hierarchical mode with team membership → restrict to team employees + unassigned.
+  // No-team users → own records + unassigned only.
+  if (scope.employeeIds.length > 0) {
+    const idList = scope.employeeIds.join(',');
+    return query.or(`${assignedColumn}.in.(${idList}),${assignedColumn}.is.null`);
+  }
+
+  // Ultimate fallback
   return query.or(`${assignedColumn}.eq.${user.id},${assignedColumn}.is.null`);
 }
 
@@ -377,8 +395,9 @@ export function getAccessLevel(scope, recordTeamId, recordAssignedTo, userId) {
   if (scope.teamIds && scope.teamIds.includes(recordTeamId)) return 'read_notes';
 
   // Record is outside user's teams entirely
-  // With org-wide read, they can still see it but only add notes
-  // (The list filter should prevent 'none' from happening, but safety net)
+  // Shared mode: org-wide read access → read + add notes
+  if (scope.mode === 'shared') return 'read_notes';
+  // Hierarchical mode: no access to other teams' records
   return 'none';
 }
 

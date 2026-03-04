@@ -152,11 +152,11 @@ export default function createAccountV2Routes(_pgPool) {
         .order(sortField, { ascending: sortAscending })
         .range(offset, offset + limit - 1);
 
-      // Apply team visibility filter (two-tier: org-wide read for team members)
+      // Apply team visibility filter (mode-aware)
       if (visibilityScope && !visibilityScope.bypass) {
-        if (visibilityScope.teamIds && visibilityScope.teamIds.length > 0) {
-          // org-wide read
-        } else if (visibilityScope.employeeIds.length > 0) {
+        if (visibilityScope.mode === 'shared' && visibilityScope.teamIds?.length > 0) {
+          // Shared mode: org-wide read — no additional filter
+        } else if (visibilityScope.employeeIds?.length > 0) {
           const idList = visibilityScope.employeeIds.join(',');
           query = query.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
         }
@@ -186,18 +186,33 @@ export default function createAccountV2Routes(_pgPool) {
             }
           }
 
-          // assigned_to via $or including NULL
+          // assigned_to via $or including NULL and $in operator
           if (parsed.$or && Array.isArray(parsed.$or)) {
             const normalizedOr = parsed.$or.filter((c) => c && typeof c === 'object');
             const hasUnassigned = normalizedOr.some((c) => c.assigned_to === null);
-            const assignedVals = normalizedOr
-              .map((c) => c.assigned_to)
-              .filter((v) => v !== undefined && v !== null && String(v).trim() !== '');
 
-            if (hasUnassigned && assignedVals.length === 0) {
-              query = query.is('assigned_to', null);
-            } else if (assignedVals.length > 0) {
-              const orParts = assignedVals.map((v) => `assigned_to.eq.${v}`);
+            // Collect assigned_to values: direct UUIDs and $in arrays
+            const orParts = [];
+            for (const condition of normalizedOr) {
+              const val = condition.assigned_to;
+              if (val === null || val === undefined) continue;
+              // Handle $in operator: { assigned_to: { $in: [...] } }
+              if (typeof val === 'object' && val.$in && Array.isArray(val.$in)) {
+                const ids = val.$in.filter((id) => typeof id === 'string' && id.trim());
+                if (ids.length > 0) {
+                  orParts.push(`assigned_to.in.(${ids.join(',')})`);
+                }
+              } else if (typeof val === 'string' && val.trim()) {
+                // Direct UUID value
+                orParts.push(`assigned_to.eq.${val}`);
+              }
+            }
+
+            if (hasUnassigned) {
+              orParts.push('assigned_to.is.null');
+            }
+
+            if (orParts.length > 0) {
               query = query.or(orParts.join(','));
             }
 

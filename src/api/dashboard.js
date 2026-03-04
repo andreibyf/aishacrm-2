@@ -26,10 +26,16 @@ const RESULT_CACHE_TTL = 5000; // 5 seconds - prevents duplicate calls during in
  * @returns {Promise<Object>} Dashboard data bundle
  */
 export async function getDashboardBundleFast(options = {}) {
-  const { tenant_id, include_test_data = true, widgets = [] } = options;
+  const { tenant_id, include_test_data = true, widgets = [], team_id, assigned_to } = options;
 
-  // Create cache key for deduplication (include widgets to separate cache per widget set)
-  const cacheKey = JSON.stringify({ tenant_id, include_test_data, widgets: widgets.sort() });
+  // Create cache key for deduplication (include widgets + scope to separate cache per dataset)
+  const cacheKey = JSON.stringify({
+    tenant_id,
+    include_test_data,
+    widgets: widgets.sort(),
+    team_id: team_id || null,
+    assigned_to: assigned_to || null,
+  });
 
   // Check short-term result cache first (prevents Layout + Dashboard double-fetch)
   const cached = recentResults.get(cacheKey);
@@ -49,13 +55,14 @@ export async function getDashboardBundleFast(options = {}) {
   }
 
   // Create the fetch promise
-  const fetchPromise = _fetchDashboardBundle(tenant_id, include_test_data, widgets).then(
-    (result) => {
-      // Cache the successful result
-      recentResults.set(cacheKey, { data: result, timestamp: Date.now() });
-      return result;
-    },
-  );
+  const fetchPromise = _fetchDashboardBundle(tenant_id, include_test_data, widgets, {
+    team_id,
+    assigned_to,
+  }).then((result) => {
+    // Cache the successful result
+    recentResults.set(cacheKey, { data: result, timestamp: Date.now() });
+    return result;
+  });
 
   // Store it for deduplication
   pendingRequests.set(cacheKey, fetchPromise);
@@ -80,7 +87,7 @@ export function clearDashboardResultsCache() {
 /**
  * Internal fetch implementation
  */
-async function _fetchDashboardBundle(tenant_id, include_test_data, widgets = []) {
+async function _fetchDashboardBundle(tenant_id, include_test_data, widgets = [], scopeOpts = {}) {
   try {
     // Call backend /api/reports/dashboard-bundle directly (in-memory cached on server)
     const queryParams = new URLSearchParams();
@@ -93,6 +100,13 @@ async function _fetchDashboardBundle(tenant_id, include_test_data, widgets = [])
     // Pass visible widget IDs so backend can skip fetching unused data
     if (widgets && widgets.length > 0) {
       queryParams.append('widgets', widgets.join(','));
+    }
+    // Pass team/employee scope for team-based stats filtering
+    if (scopeOpts.team_id) {
+      queryParams.append('team_id', scopeOpts.team_id);
+    }
+    if (scopeOpts.assigned_to) {
+      queryParams.append('assigned_to', scopeOpts.assigned_to);
     }
 
     const url = `${BACKEND_URL}/api/reports/dashboard-bundle?${queryParams}`;

@@ -1,26 +1,23 @@
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { GripVertical } from "lucide-react";
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { GripVertical } from 'lucide-react';
 
 /**
  * SortableWidget - Wrapper that makes dashboard widgets draggable
  */
 export default function SortableWidget({ id, children }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+  });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
-    zIndex: isDragging ? 1000 : "auto",
-    height: "600px", // CLS Optimization: Uniform widget height
+    zIndex: isDragging ? 1000 : 'auto',
+    height: '600px', // CLS Optimization: Uniform widget height
+    minHeight: '0', // Recharts fix: prevent ResponsiveContainer from computing -1
+    minWidth: '0', // Recharts fix: prevent ResponsiveContainer from computing -1
   };
 
   return (

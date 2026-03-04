@@ -10,6 +10,7 @@ import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
 import {
   getVisibilityScope,
+  getAccessLevel,
   clearVisibilityCache,
   clearSettingsCache,
 } from '../../lib/teamVisibility.js';
@@ -150,7 +151,75 @@ describe('teamVisibility — getVisibilityScope', () => {
           data: { settings: { visibility_mode: 'shared' } },
           error: null,
         },
-        // First call: user's memberships; second call: all team members
+        // First call: user's memberships; second call: all tenant teams; third call: all team members
+        team_members: [
+          { data: [{ team_id: 'team1', role: 'member', employee_id: 'u1' }], error: null },
+          {
+            data: [{ employee_id: 'u1' }, { employee_id: 'u2' }, { employee_id: 'u3' }],
+            error: null,
+          },
+        ],
+        teams: [{ data: [{ id: 'team1' }, { id: 'team2' }], error: null }],
+      });
+
+      const scope = await getVisibilityScope(user, sb);
+      assert.strictEqual(scope.bypass, false);
+      assert.strictEqual(scope.mode, 'shared');
+      // Should include self + all team members
+      assert.ok(scope.employeeIds.includes('u1'));
+      assert.ok(scope.employeeIds.includes('u2'));
+      assert.ok(scope.employeeIds.includes('u3'));
+      // fullAccessTeamIds should be only own teams (not all org teams for members)
+      assert.ok(scope.fullAccessTeamIds.includes('team1'));
+      // teamIds (visible) should include ALL tenant teams
+      assert.ok(scope.teamIds.includes('team1'));
+      assert.ok(scope.teamIds.includes('team2'));
+    });
+
+    it('director in shared mode gets full R/W across entire org', async () => {
+      const user = { id: 'dir1', role: 'employee', tenant_id: 't1' };
+
+      const sb = mockSupabase({
+        modulesettings: {
+          data: { settings: { visibility_mode: 'shared' } },
+          error: null,
+        },
+        team_members: [
+          { data: [{ team_id: 'team1', role: 'director', employee_id: 'dir1' }], error: null },
+          {
+            data: [{ employee_id: 'dir1' }, { employee_id: 'u2' }, { employee_id: 'u3' }],
+            error: null,
+          },
+        ],
+        teams: [
+          // child teams query returns empty
+          { data: [], error: null },
+          // all tenant teams query
+          { data: [{ id: 'team1' }, { id: 'team2' }, { id: 'team3' }], error: null },
+        ],
+      });
+
+      const scope = await getVisibilityScope(user, sb);
+      assert.strictEqual(scope.mode, 'shared');
+      assert.strictEqual(scope.highestRole, 'director');
+      // Director in shared: fullAccessTeamIds should include ALL tenant teams
+      assert.ok(scope.fullAccessTeamIds.includes('team1'));
+      assert.ok(scope.fullAccessTeamIds.includes('team2'));
+      assert.ok(scope.fullAccessTeamIds.includes('team3'));
+    });
+  });
+
+  // ── Hierarchical mode ──────────────────────────────────────────────────
+
+  describe('hierarchical visibility mode', () => {
+    it('member sees team members in hierarchical mode (full R/W on own team)', async () => {
+      const user = { id: 'u1', role: 'employee', tenant_id: 't1' };
+
+      const sb = mockSupabase({
+        modulesettings: {
+          data: { settings: { visibility_mode: 'hierarchical' } },
+          error: null,
+        },
         team_members: [
           { data: [{ team_id: 'team1', role: 'member', employee_id: 'u1' }], error: null },
           {
@@ -162,34 +231,15 @@ describe('teamVisibility — getVisibilityScope', () => {
 
       const scope = await getVisibilityScope(user, sb);
       assert.strictEqual(scope.bypass, false);
-      assert.strictEqual(scope.mode, 'shared');
-      // Should include self + all team members
+      assert.strictEqual(scope.mode, 'hierarchical');
+      // Members see their team members (for dropdown scoping)
       assert.ok(scope.employeeIds.includes('u1'));
       assert.ok(scope.employeeIds.includes('u2'));
       assert.ok(scope.employeeIds.includes('u3'));
-    });
-  });
-
-  // ── Hierarchical mode ──────────────────────────────────────────────────
-
-  describe('hierarchical visibility mode', () => {
-    it('plain member sees only own records in hierarchical mode', async () => {
-      const user = { id: 'u1', role: 'employee', tenant_id: 't1' };
-
-      const sb = mockSupabase({
-        modulesettings: {
-          data: { settings: { visibility_mode: 'hierarchical' } },
-          error: null,
-        },
-        team_members: [
-          { data: [{ team_id: 'team1', role: 'member', employee_id: 'u1' }], error: null },
-        ],
-      });
-
-      const scope = await getVisibilityScope(user, sb);
-      assert.strictEqual(scope.bypass, false);
-      assert.strictEqual(scope.mode, 'hierarchical');
-      assert.deepStrictEqual(scope.employeeIds, ['u1']);
+      // fullAccessTeamIds should include own team
+      assert.ok(scope.fullAccessTeamIds.includes('team1'));
+      // teamIds only includes own team (not all org)
+      assert.deepStrictEqual(scope.teamIds, ['team1']);
     });
 
     it('manager sees team members in hierarchical mode', async () => {
@@ -303,5 +353,91 @@ describe('teamVisibility — getVisibilityScope', () => {
       const scope = await getVisibilityScope(user, sb);
       assert.strictEqual(scope.mode, 'hierarchical');
     });
+  });
+});
+
+// ─── getAccessLevel tests ────────────────────────────────────────────────────
+
+describe('teamVisibility — getAccessLevel', () => {
+  it('admin bypass always returns full', () => {
+    const scope = { bypass: true, mode: 'bypass', teamIds: [], fullAccessTeamIds: [] };
+    assert.strictEqual(getAccessLevel(scope, 'team1', 'u2', 'u1'), 'full');
+    assert.strictEqual(getAccessLevel(scope, null, null, 'u1'), 'full');
+  });
+
+  it('own record always returns full', () => {
+    const scope = {
+      bypass: false,
+      mode: 'hierarchical',
+      teamIds: ['t1'],
+      fullAccessTeamIds: ['t1'],
+    };
+    assert.strictEqual(getAccessLevel(scope, 'other-team', 'u1', 'u1'), 'full');
+  });
+
+  it('full-access team record returns full', () => {
+    const scope = {
+      bypass: false,
+      mode: 'hierarchical',
+      teamIds: ['team1'],
+      fullAccessTeamIds: ['team1'],
+      highestRole: 'member',
+    };
+    assert.strictEqual(getAccessLevel(scope, 'team1', 'u2', 'u1'), 'full');
+  });
+
+  it('visible-but-not-full-access team returns read_notes', () => {
+    const scope = {
+      bypass: false,
+      mode: 'shared',
+      teamIds: ['team1', 'team2'],
+      fullAccessTeamIds: ['team1'],
+      highestRole: 'member',
+    };
+    assert.strictEqual(getAccessLevel(scope, 'team2', 'u2', 'u1'), 'read_notes');
+  });
+
+  it('shared mode: other-team record returns read_notes', () => {
+    const scope = {
+      bypass: false,
+      mode: 'shared',
+      teamIds: ['team1'],
+      fullAccessTeamIds: ['team1'],
+      highestRole: 'member',
+    };
+    assert.strictEqual(getAccessLevel(scope, 'team99', 'u99', 'u1'), 'read_notes');
+  });
+
+  it('hierarchical mode: other-team record returns none', () => {
+    const scope = {
+      bypass: false,
+      mode: 'hierarchical',
+      teamIds: ['team1'],
+      fullAccessTeamIds: ['team1'],
+      highestRole: 'member',
+    };
+    assert.strictEqual(getAccessLevel(scope, 'team99', 'u99', 'u1'), 'none');
+  });
+
+  it('unassigned record: managers/directors get full', () => {
+    const scope = {
+      bypass: false,
+      mode: 'hierarchical',
+      teamIds: ['team1'],
+      fullAccessTeamIds: ['team1'],
+      highestRole: 'manager',
+    };
+    assert.strictEqual(getAccessLevel(scope, null, null, 'u1'), 'full');
+  });
+
+  it('unassigned record: members get read_notes', () => {
+    const scope = {
+      bypass: false,
+      mode: 'hierarchical',
+      teamIds: ['team1'],
+      fullAccessTeamIds: ['team1'],
+      highestRole: 'member',
+    };
+    assert.strictEqual(getAccessLevel(scope, null, null, 'u1'), 'read_notes');
   });
 });

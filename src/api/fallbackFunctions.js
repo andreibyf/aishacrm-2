@@ -158,10 +158,18 @@ export async function getDashboardFunnelCounts({
   tenant_id,
   include_test_data = true,
   bust_cache = false,
+  team_id = null,
+  assigned_to = null,
 } = {}) {
   const params = new URLSearchParams({ include_test_data: String(include_test_data) });
   if (tenant_id) {
     params.append('tenant_id', tenant_id);
+  }
+  if (team_id) {
+    params.append('team_id', team_id);
+  }
+  if (assigned_to) {
+    params.append('assigned_to', assigned_to);
   }
   if (bust_cache) {
     params.append('_t', Date.now()); // Cache busting timestamp

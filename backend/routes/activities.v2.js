@@ -7,6 +7,8 @@ import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.
 import logger from '../lib/logger.js';
 import { setCorsHeaders, isAllowedOrigin } from '../lib/cors.js';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Look up the name and email for a related entity (lead, contact, account, opportunity)
  * @param {object} supabase - Supabase client
@@ -335,11 +337,11 @@ export default function createActivityV2Routes(_pgPool) {
         .order(sortField, { ascending: sortAscending })
         .range(offset, offset + limit - 1);
 
-      // Apply team visibility filter (two-tier: org-wide read for team members)
+      // Apply team visibility filter (mode-aware)
       if (visibilityScope && !visibilityScope.bypass) {
-        if (visibilityScope.teamIds && visibilityScope.teamIds.length > 0) {
-          // User has team membership → org-wide read, no additional filter
-        } else if (visibilityScope.employeeIds.length > 0) {
+        if (visibilityScope.mode === 'shared' && visibilityScope.teamIds?.length > 0) {
+          // Shared mode: org-wide read — no additional filter
+        } else if (visibilityScope.employeeIds?.length > 0) {
           const idList = visibilityScope.employeeIds.join(',');
           q = q.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
         }
@@ -468,53 +470,62 @@ export default function createActivityV2Routes(_pgPool) {
             }
           }
 
-          // Handle $or filters (unassigned, search with $regex, etc.)
+          // Handle $or filters (assigned_to with $in, unassigned, search with $regex, etc.)
           if (parsed.$or && Array.isArray(parsed.$or)) {
-            // Check if this is an unassigned filter
-            const isUnassignedFilter = parsed.$or.some(
-              (cond) => cond.assigned_to === null || cond.assigned_to === '',
-            );
+            const normalizedOr = parsed.$or.filter((c) => c && typeof c === 'object');
 
-            if (isUnassignedFilter) {
-              logger.debug('[Activities V2] Applying unassigned filter');
-              q = q.or('assigned_to.is.null,assigned_to.eq.');
+            // ── assigned_to scoping ($in, direct UUID, null) ──
+            const hasUnassigned = normalizedOr.some(
+              (c) => c.assigned_to === null || c.assigned_to === '',
+            );
+            const assignedOrParts = [];
+            for (const condition of normalizedOr) {
+              const val = condition.assigned_to;
+              if (val === null || val === undefined || val === '') continue;
+              if (typeof val === 'object' && val.$in && Array.isArray(val.$in)) {
+                const ids = val.$in.filter((id) => typeof id === 'string' && id.trim());
+                if (ids.length > 0) {
+                  assignedOrParts.push(`assigned_to.in.(${ids.join(',')})`);
+                }
+              } else if (typeof val === 'string' && val.trim()) {
+                assignedOrParts.push(`assigned_to.eq.${val}`);
+              }
+            }
+            if (hasUnassigned) {
+              assignedOrParts.push('assigned_to.is.null');
+            }
+            if (assignedOrParts.length > 0) {
+              logger.debug(
+                '[Activities V2] Applying assigned_to OR filter:',
+                assignedOrParts.join(','),
+              );
+              q = q.or(assignedOrParts.join(','));
             }
 
-            // Check if this is a search filter with $regex (MongoDB-style from frontend)
-            // Convert MongoDB $regex to Supabase ILIKE for PostgreSQL compatibility
-            const hasRegexConditions = parsed.$or.some((cond) => {
+            // ── Search filters with $regex (MongoDB-style from frontend) ──
+            const hasRegexConditions = normalizedOr.some((cond) => {
               return Object.values(cond).some(
                 (val) => val && typeof val === 'object' && val.$regex,
               );
             });
 
-            if (hasRegexConditions && !isUnassignedFilter) {
+            if (hasRegexConditions) {
               logger.debug('[Activities V2] Applying search filter with $regex translation');
-
-              // Build OR conditions for Supabase
               const orConditions = [];
-
-              for (const condition of parsed.$or) {
+              for (const condition of normalizedOr) {
                 for (const [field, value] of Object.entries(condition)) {
                   if (value && typeof value === 'object' && value.$regex) {
-                    // Extract regex pattern and convert to ILIKE pattern
                     const pattern = value.$regex;
                     const likePattern = `%${pattern}%`;
-
-                    // Map frontend field names to database columns
                     let dbField = field;
                     if (field === 'description') {
-                      dbField = 'body'; // 'description' is stored as 'body' in DB
+                      dbField = 'body';
                     }
-
-                    // Build Supabase ILIKE condition
                     orConditions.push(`${dbField}.ilike.${likePattern}`);
                   }
                 }
               }
-
               if (orConditions.length > 0) {
-                // Apply all OR conditions at once using Supabase's .or() method
                 const orQuery = orConditions.join(',');
                 logger.debug('[Activities V2] Applying OR search:', orQuery);
                 q = q.or(orQuery);

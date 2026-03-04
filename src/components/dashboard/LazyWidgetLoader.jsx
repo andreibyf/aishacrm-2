@@ -33,7 +33,7 @@ function LazyWidgetLoader({ component: Component, delay = 0, skeletonHeight = 60
           observer.disconnect();
         }
       },
-      { rootMargin: '800px' } // Start loading 800px before entering viewport (preload aggressively)
+      { rootMargin: '800px' }, // Start loading 800px before entering viewport (preload aggressively)
     );
 
     if (ref.current) {
@@ -47,8 +47,8 @@ function LazyWidgetLoader({ component: Component, delay = 0, skeletonHeight = 60
     return (
       <div ref={ref} style={{ minHeight: `${skeletonHeight}px` }}>
         <Card className="bg-slate-800 border-slate-700">
-          <CardContent 
-            className="flex items-center justify-center" 
+          <CardContent
+            className="flex items-center justify-center"
             style={{ height: `${skeletonHeight}px` }}
           >
             <Loader2 className="w-8 h-8 animate-spin text-slate-600" />
@@ -58,7 +58,11 @@ function LazyWidgetLoader({ component: Component, delay = 0, skeletonHeight = 60
     );
   }
 
-  return <Component {...props} />;
+  return (
+    <div style={{ minHeight: '0', minWidth: '0', height: '100%' }}>
+      <Component {...props} />
+    </div>
+  );
 }
 
 export default memo(LazyWidgetLoader);

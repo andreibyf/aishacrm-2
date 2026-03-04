@@ -12,6 +12,7 @@
 import { Router } from 'express';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import logger from '../lib/logger.js';
+import { getVisibilityScope } from '../lib/teamVisibility.js';
 import {
   calculatePipelineHealth,
   calculateLeadHealth,
@@ -94,8 +95,17 @@ export default function createReportsV2Router(_pgPool) {
       // Can be fetched separately with ?include_ai=true if needed
       const includeAi = req.query.include_ai === 'true';
 
+      // ─── Team/Employee Scope Resolution ──────────────────────────────────
+      const teamIdParam = req.query.team_id || null;
+      const assignedToParam = req.query.assigned_to || null;
+
       const effectiveTenantKey = tenant_id || 'SUPERADMIN_GLOBAL';
-      const cacheKey = `v2::${effectiveTenantKey}::include=${includeTestData ? 'true' : 'false'}::ai=${includeAi ? 'true' : 'false'}`;
+      const scopeCacheKey = teamIdParam
+        ? `::team=${teamIdParam}`
+        : assignedToParam
+          ? `::emp=${assignedToParam}`
+          : '';
+      const cacheKey = `v2::${effectiveTenantKey}::include=${includeTestData ? 'true' : 'false'}::ai=${includeAi ? 'true' : 'false'}${scopeCacheKey}`;
       const now = Date.now();
 
       // Check cache
@@ -105,6 +115,35 @@ export default function createReportsV2Router(_pgPool) {
       }
 
       const supabase = getSupabaseClient();
+
+      // ─── Resolve team visibility scope ────────────────────────────────────
+      let scopeEmployeeIds = null;
+      try {
+        const scope = await getVisibilityScope(req.user, supabase);
+        if (assignedToParam) {
+          scopeEmployeeIds = [assignedToParam];
+        } else if (teamIdParam) {
+          const { data: teamMembers } = await supabase
+            .from('team_members')
+            .select('employee_id')
+            .eq('team_id', teamIdParam);
+          scopeEmployeeIds = (teamMembers || []).map((m) => m.employee_id);
+          if (scopeEmployeeIds.length === 0) scopeEmployeeIds = ['__NO_MATCH__'];
+        } else if (!scope.bypass && scope.teamIds.length === 0) {
+          scopeEmployeeIds = [req.user.id];
+        }
+      } catch (scopeErr) {
+        logger.warn(`[reports.v2 dashboard-bundle] Scope resolution error: ${scopeErr.message}`);
+      }
+
+      const withScope = (q) => {
+        if (!scopeEmployeeIds) return q;
+        if (scopeEmployeeIds.length === 1 && scopeEmployeeIds[0] === req.user?.id) {
+          return q.or(`assigned_to.eq.${scopeEmployeeIds[0]},assigned_to.is.null`);
+        }
+        return q.in('assigned_to', scopeEmployeeIds);
+      };
+
       const commonOpts = { includeTestData, countMode: 'exact', confirmSmallCounts: false };
 
       // Fetch all counts in parallel
@@ -127,29 +166,29 @@ export default function createReportsV2Router(_pgPool) {
         recentLeads,
         recentOpportunities,
       ] = await Promise.all([
-        safeCount(null, 'contacts', tenant_id, undefined, commonOpts),
-        safeCount(null, 'accounts', tenant_id, undefined, commonOpts),
-        safeCount(null, 'leads', tenant_id, undefined, commonOpts),
-        safeCount(null, 'opportunities', tenant_id, undefined, commonOpts),
+        safeCount(null, 'contacts', tenant_id, withScope, commonOpts),
+        safeCount(null, 'accounts', tenant_id, withScope, commonOpts),
+        safeCount(null, 'leads', tenant_id, withScope, commonOpts),
+        safeCount(null, 'opportunities', tenant_id, withScope, commonOpts),
         safeCount(
           null,
           'leads',
           tenant_id,
-          (q) => q.not('status', 'in', '("converted","lost")'),
+          (q) => withScope(q.not('status', 'in', '("converted","lost")')),
           commonOpts,
         ),
         safeCount(
           null,
           'opportunities',
           tenant_id,
-          (q) => q.in('stage', ['won', 'closed_won']),
+          (q) => withScope(q.in('stage', ['won', 'closed_won'])),
           commonOpts,
         ),
         safeCount(
           null,
           'opportunities',
           tenant_id,
-          (q) => q.not('stage', 'in', '("won","closed_won","lost","closed_lost")'),
+          (q) => withScope(q.not('stage', 'in', '("won","closed_won","lost","closed_lost")')),
           commonOpts,
         ),
         // Fetch ALL opportunities for pipeline calculation
@@ -157,6 +196,7 @@ export default function createReportsV2Router(_pgPool) {
           try {
             let q = supabase.from('opportunities').select('id,name,amount,stage,created_date');
             if (tenant_id) q = q.eq('tenant_id', tenant_id);
+            q = withScope(q);
             if (!includeTestData) {
               try {
                 q = q.or('is_test_data.is.false,is_test_data.is.null');
@@ -175,6 +215,7 @@ export default function createReportsV2Router(_pgPool) {
           try {
             let q = supabase.from('leads').select('*', { count: 'exact', head: true });
             if (tenant_id) q = q.eq('tenant_id', tenant_id);
+            q = withScope(q);
             // COALESCE logic: match leads where created_date >= since OR (created_date is NULL AND created_at >= since)
             q = q.or(
               `created_date.gte.${sinceISO},and(created_date.is.null,created_at.gte.${sinceISO})`,
@@ -198,6 +239,7 @@ export default function createReportsV2Router(_pgPool) {
           try {
             let q = supabase.from('activities').select('*', { count: 'exact', head: true });
             if (tenant_id) q = q.eq('tenant_id', tenant_id);
+            q = withScope(q);
             q = q.or(
               `created_date.gte.${sinceISO},and(created_date.is.null,created_at.gte.${sinceISO})`,
             );
@@ -223,6 +265,7 @@ export default function createReportsV2Router(_pgPool) {
               .order('created_at', { ascending: false })
               .limit(10);
             if (tenant_id) q = q.eq('tenant_id', tenant_id);
+            q = withScope(q);
             if (!includeTestData) {
               try {
                 q = q.or('is_test_data.is.false,is_test_data.is.null');
@@ -245,6 +288,7 @@ export default function createReportsV2Router(_pgPool) {
               .order('created_at', { ascending: false })
               .limit(5);
             if (tenant_id) q = q.eq('tenant_id', tenant_id);
+            q = withScope(q);
             if (!includeTestData) {
               try {
                 q = q.or('is_test_data.is.false,is_test_data.is.null');
@@ -267,6 +311,7 @@ export default function createReportsV2Router(_pgPool) {
               .order('updated_at', { ascending: false })
               .limit(5);
             if (tenant_id) q = q.eq('tenant_id', tenant_id);
+            q = withScope(q);
             if (!includeTestData) {
               try {
                 q = q.or('is_test_data.is.false,is_test_data.is.null');
@@ -285,6 +330,7 @@ export default function createReportsV2Router(_pgPool) {
           try {
             let q = supabase.from('opportunities').select('amount,stage');
             if (tenant_id) q = q.eq('tenant_id', tenant_id);
+            q = withScope(q);
             if (!includeTestData) {
               try {
                 q = q.or('is_test_data.is.false,is_test_data.is.null');

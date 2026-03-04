@@ -98,6 +98,27 @@ vi.mock('@/api/dashboardCache', () => ({
 vi.mock('@/components/shared/EmployeeScopeContext', () => ({
   useEmployeeScope: () => ({
     employeeScope: null,
+    selectedEmail: null,
+    selectedEmployeeId: null,
+    selectedTeamId: null,
+    setEmployeeScope: vi.fn(),
+    setTeamScope: vi.fn(),
+    clearEmployeeScope: vi.fn(),
+    clearTeamScope: vi.fn(),
+    clearAllScopes: vi.fn(),
+    canViewAllRecords: () => false,
+    isEmployee: () => false,
+    getFilter: (f = {}) => ({ ...f }),
+    employees: [],
+    visibleEmployees: [],
+    employeesLoading: false,
+    loadEmployees: vi.fn().mockResolvedValue([]),
+    teams: [],
+    teamsLoading: false,
+    membersByTeam: {},
+    teamEmployees: [],
+    loadTeams: vi.fn(),
+    visibilityMode: 'hierarchical',
   }),
 }));
 

@@ -10,7 +10,7 @@ import { getDashboardFunnelCounts } from '@/api/fallbackFunctions';
 /**
  * Sales Funnel Widget - Displays 3D cone funnel with real counts.
  * Shows: Sources → Leads → Contacts → Accounts
- * 
+ *
  * Props (passed from Dashboard):
  *   tenantFilter: object with tenant_id for filtering
  *   showTestData: boolean to include/exclude test data
@@ -59,9 +59,12 @@ export default function SalesFunnelWidget({ tenantFilter = {}, showTestData = tr
       setLoading(true);
       try {
         // Use the new pre-computed dashboard funnel counts (90%+ faster)
-        const data = await getDashboardFunnelCounts({ 
+        // When team/employee scope is active, live queries are used instead of materialized view
+        const data = await getDashboardFunnelCounts({
           tenant_id: tenantFilter.tenant_id,
-          include_test_data: showTestData 
+          include_test_data: showTestData,
+          team_id: tenantFilter.team_id || null,
+          assigned_to: tenantFilter.assigned_to || null,
         });
 
         if (data?.funnel) {
@@ -82,15 +85,25 @@ export default function SalesFunnelWidget({ tenantFilter = {}, showTestData = tr
     };
 
     loadCounts();
-  }, [tenantFilter?.tenant_id, showTestData, userLoading, authCookiesReady]);
+  }, [
+    tenantFilter?.tenant_id,
+    tenantFilter?.team_id,
+    tenantFilter?.assigned_to,
+    showTestData,
+    userLoading,
+    authCookiesReady,
+  ]);
 
   // Build funnel data using entity labels
-  const funnelData = useMemo(() => [
-    { label: sourcesLabel || 'Sources', count: counts.sources },
-    { label: leadsLabel || 'Leads', count: counts.leads },
-    { label: contactsLabel || 'Contacts', count: counts.contacts },
-    { label: accountsLabel || 'Accounts', count: counts.accounts },
-  ], [sourcesLabel, leadsLabel, contactsLabel, accountsLabel, counts]);
+  const funnelData = useMemo(
+    () => [
+      { label: sourcesLabel || 'Sources', count: counts.sources },
+      { label: leadsLabel || 'Leads', count: counts.leads },
+      { label: contactsLabel || 'Contacts', count: counts.contacts },
+      { label: accountsLabel || 'Accounts', count: counts.accounts },
+    ],
+    [sourcesLabel, leadsLabel, contactsLabel, accountsLabel, counts],
+  );
 
   const totalRecords = counts.sources + counts.leads + counts.contacts + counts.accounts;
 
@@ -117,9 +130,9 @@ export default function SalesFunnelWidget({ tenantFilter = {}, showTestData = tr
           </div>
         ) : (
           <div className="flex justify-center items-center h-full">
-            <FunnelChart3D 
-              data={funnelData} 
-              width={550} 
+            <FunnelChart3D
+              data={funnelData}
+              width={550}
               height={450}
               minRadius={50}
               maxRadius={160}

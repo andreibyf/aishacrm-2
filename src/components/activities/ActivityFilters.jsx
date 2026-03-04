@@ -7,9 +7,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Search, X } from 'lucide-react';
 import TagFilter from '../shared/TagFilter';
+import AssignedToSelect from '../shared/AssignedToSelect';
 
 /**
  * ActivityFilters - Search, tag, and sort filter controls for activities
@@ -58,30 +59,13 @@ export default function ActivityFilters({
         />
 
         {/* Assigned To Filter */}
-        <Select
+        <AssignedToSelect
           value={assignedToFilter}
-          onValueChange={(value) => {
+          onChange={(value) => {
             setAssignedToFilter(value);
             setCurrentPage(1);
           }}
-        >
-          <SelectTrigger className="w-36 shrink-0 bg-slate-800 border-slate-700 text-slate-200">
-            <SelectValue placeholder="All Assignees" />
-          </SelectTrigger>
-          <SelectContent className="bg-slate-800 border-slate-700">
-            <SelectItem value="all" className="text-slate-200 hover:bg-slate-700">
-              All Assignees
-            </SelectItem>
-            <SelectItem value="unassigned" className="text-slate-200 hover:bg-slate-700">
-              Unassigned
-            </SelectItem>
-            {employees.map((emp) => (
-              <SelectItem key={emp.id} value={emp.id} className="text-slate-200 hover:bg-slate-700">
-                {emp.first_name} {emp.last_name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        />
 
         {/* Sort Dropdown */}
         <Select
@@ -112,22 +96,24 @@ export default function ActivityFilters({
         </Select>
 
         {hasActiveFilters && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleClearFilters}
-                className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
-              >
-                <X className="w-4 h-4 mr-1" />
-                Clear
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Clear all filters</p>
-            </TooltipContent>
-          </Tooltip>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleClearFilters}
+                  className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
+                >
+                  <X className="w-4 h-4 mr-1" />
+                  Clear
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Clear all filters</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )}
       </div>
     </div>

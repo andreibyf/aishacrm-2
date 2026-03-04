@@ -152,11 +152,11 @@ export default function createBizDevSourceRoutes(pgPool) {
         ) {
           q = q.eq('assigned_to_team', assigned_to_team);
         }
-        // Apply team visibility filter (two-tier: org-wide read for team members)
+        // Apply team visibility filter (shared: org-wide read, hierarchical: own teams)
         if (visibilityScope && !visibilityScope.bypass) {
-          if (visibilityScope.teamIds && visibilityScope.teamIds.length > 0) {
-            // User has team membership → org-wide read, no additional filter
-          } else if (visibilityScope.employeeIds.length > 0) {
+          if (visibilityScope.mode === 'shared' && visibilityScope.teamIds?.length > 0) {
+            // Shared: org-wide read, no additional filter
+          } else if (visibilityScope.employeeIds?.length > 0) {
             const idList = visibilityScope.employeeIds.join(',');
             q = q.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
           }

@@ -16,7 +16,12 @@ import { useEmployeeScope } from '@/components/shared/EmployeeScopeContext';
 
 const AGE_BUCKETS = [
   { label: '0-7 days', min: 0, max: 7, color: 'bg-green-900/30 text-green-400 border-green-700' },
-  { label: '8-14 days', min: 8, max: 14, color: 'bg-yellow-900/30 text-yellow-400 border-yellow-700' },
+  {
+    label: '8-14 days',
+    min: 8,
+    max: 14,
+    color: 'bg-yellow-900/30 text-yellow-400 border-yellow-700',
+  },
   {
     label: '15-21 days',
     min: 15,
@@ -83,35 +88,39 @@ function LeadAgeReport(props) {
           // Employees come from centralized context, no fetch needed
           setLoading(false);
           // Background refresh to hydrate from full dataset quietly
-          (async () => {
-            try {
-              let effectiveFilter = {
-                ...tenantFilter,
-                status: { $nin: ['converted', 'lost'] },
-                limit: 500, // Fetch enough for age distribution, not entire table
-              };
-              const activeLeadsFull = await cachedRequest(
-                'Lead',
-                'filter',
-                { filter: effectiveFilter },
-                function () {
-                  return Lead.filter(effectiveFilter);
-                },
-              );
+          // Skip when team/employee scope is active — bundle data is already scoped
+          // and entity routes don't resolve team_id to employee IDs
+          if (!tenantFilter?.team_id && !tenantFilter?.assigned_to) {
+            (async () => {
+              try {
+                let effectiveFilter = {
+                  ...tenantFilter,
+                  status: { $nin: ['converted', 'lost'] },
+                  limit: 500, // Fetch enough for age distribution, not entire table
+                };
+                const activeLeadsFull = await cachedRequest(
+                  'Lead',
+                  'filter',
+                  { filter: effectiveFilter },
+                  function () {
+                    return Lead.filter(effectiveFilter);
+                  },
+                );
 
-              const hydrated = (activeLeadsFull || []).map((lead) => {
-                const createdDate = new Date(lead.created_date || lead.created_at);
-                const today = new Date();
-                const ageInDays = Math.floor((today - createdDate) / (1000 * 60 * 60 * 24));
-                return { ...lead, ageInDays: isNaN(ageInDays) || ageInDays < 0 ? 0 : ageInDays };
-              });
-              if (mounted) {
-                setLeads(hydrated);
+                const hydrated = (activeLeadsFull || []).map((lead) => {
+                  const createdDate = new Date(lead.created_date || lead.created_at);
+                  const today = new Date();
+                  const ageInDays = Math.floor((today - createdDate) / (1000 * 60 * 60 * 24));
+                  return { ...lead, ageInDays: isNaN(ageInDays) || ageInDays < 0 ? 0 : ageInDays };
+                });
+                if (mounted) {
+                  setLeads(hydrated);
+                }
+              } catch {
+                /* ignore background errors */
               }
-            } catch {
-              /* ignore background errors */
-            }
-          })();
+            })();
+          }
           return;
         }
 

@@ -126,32 +126,36 @@ function SalesPipeline(props) {
             setLoading(false);
           }
           // Background refresh to hydrate with full data silently
-          (async () => {
-            try {
-              const tenantFilter = props?.tenantFilter || {};
-              if (!tenantFilter.tenant_id) return;
-              const showTestData = props?.showTestData;
-              const effectiveFilter = showTestData
-                ? { ...tenantFilter }
-                : { ...tenantFilter, is_test_data: false };
-              const hasFilter = Object.keys(effectiveFilter).length > 0;
-              const methodName = hasFilter ? 'filter' : 'list';
-              const methodParams = hasFilter ? { filter: effectiveFilter } : {};
-              const dataFetcher = () =>
-                hasFilter ? Opportunity.filter(effectiveFilter) : Opportunity.list();
-              const oppsFull = await cachedRequest(
-                'Opportunity',
-                methodName,
-                methodParams,
-                dataFetcher,
-              );
-              if (mounted) {
-                setPipelineData(computeFromOpps(oppsFull));
+          // Skip when team/employee scope is active — bundle data is already scoped
+          // and entity routes don't resolve team_id to employee IDs
+          const tenantFilter2 = props?.tenantFilter || {};
+          if (!tenantFilter2?.team_id && !tenantFilter2?.assigned_to) {
+            (async () => {
+              try {
+                if (!tenantFilter2.tenant_id) return;
+                const showTestData = props?.showTestData;
+                const effectiveFilter = showTestData
+                  ? { ...tenantFilter2 }
+                  : { ...tenantFilter2, is_test_data: false };
+                const hasFilter = Object.keys(effectiveFilter).length > 0;
+                const methodName = hasFilter ? 'filter' : 'list';
+                const methodParams = hasFilter ? { filter: effectiveFilter } : {};
+                const dataFetcher = () =>
+                  hasFilter ? Opportunity.filter(effectiveFilter) : Opportunity.list();
+                const oppsFull = await cachedRequest(
+                  'Opportunity',
+                  methodName,
+                  methodParams,
+                  dataFetcher,
+                );
+                if (mounted) {
+                  setPipelineData(computeFromOpps(oppsFull));
+                }
+              } catch {
+                /* ignore background errors */
               }
-            } catch {
-              /* ignore background errors */
-            }
-          })();
+            })();
+          }
           return; // Exit if preloaded data is used
         }
 
@@ -177,15 +181,17 @@ function SalesPipeline(props) {
         const hasFilter = Object.keys(effectiveFilter).length > 0;
 
         // Use pre-computed pipeline counts (90%+ faster) if no special filtering
-        if (
-          !hasFilter ||
-          (Object.keys(effectiveFilter).length === 1 && effectiveFilter.tenant_id)
-        ) {
+        // Use pre-computed counts when no complex filters (team_id/assigned_to are handled by backend)
+        const simpleFilterKeys = new Set(['tenant_id', 'is_test_data', 'team_id', 'assigned_to']);
+        const isSimpleFilter = Object.keys(effectiveFilter).every((k) => simpleFilterKeys.has(k));
+        if (isSimpleFilter) {
           try {
             const dashboardData = await getDashboardFunnelCounts({
               tenant_id: tenantFilter?.tenant_id,
               include_test_data: showTestData,
               bust_cache: props?.bustCache || false, // Allow parent to force cache refresh
+              team_id: tenantFilter?.team_id || null,
+              assigned_to: tenantFilter?.assigned_to || null,
             });
 
             if (mounted && dashboardData?.pipeline) {

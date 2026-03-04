@@ -42,10 +42,13 @@ export default function useTeams(tenantId) {
           }
         }
 
-        const res = await fetch(`${BACKEND_URL}/api/v2/leads/teams-with-members`, {
-          credentials: 'include',
-          headers,
-        });
+        const res = await fetch(
+          `${BACKEND_URL}/api/v2/leads/teams-with-members?tenant_id=${tenantId}`,
+          {
+            credentials: 'include',
+            headers,
+          },
+        );
 
         if (res.ok) {
           const json = await res.json();

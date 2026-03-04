@@ -6,6 +6,7 @@ import express from 'express';
 import { cacheList } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 import { validateInternalUrl } from '../lib/urlValidator.js';
+import { getVisibilityScope } from '../lib/teamVisibility.js';
 
 // Helper: attempt to count rows from a table safely (optionally by tenant)
 // options:
@@ -425,6 +426,14 @@ export default function createReportRoutes(_pgPool) {
         : [];
       const widgetSet = new Set(visibleWidgets);
 
+      // ─── Team/Employee Scope Resolution ──────────────────────────────────
+      // Optional query params for drill-down:
+      //   team_id    — filter to a specific team's members
+      //   assigned_to — filter to a specific employee
+      // Auto-scope: non-team users only see their own data
+      const teamIdParam = req.query.team_id || null;
+      const assignedToParam = req.query.assigned_to || null;
+
       // Profiling: track individual query times when profile=true
       const enableProfiling = req.query.profile === 'true';
       const queryTimes = {};
@@ -445,10 +454,15 @@ export default function createReportRoutes(_pgPool) {
       // Use redis cache for distributed, persistent caching
       const includeTestData = (req.query.include_test_data ?? 'true') !== 'false';
       const bustCache = req.query.bust_cache === 'true'; // Allow cache bypass for testing
-      // Include widgets in cache key to avoid serving wrong dataset
+      // Include widgets + scope in cache key to avoid serving wrong dataset
       const widgetsCacheKey =
         visibleWidgets.length > 0 ? `:widgets=${visibleWidgets.sort().join('_')}` : '';
-      const cacheKey = `dashboard:bundle:${tenant_id}:include=${includeTestData ? 'true' : 'false'}${widgetsCacheKey}`;
+      const scopeCacheKey = teamIdParam
+        ? `:team=${teamIdParam}`
+        : assignedToParam
+          ? `:emp=${assignedToParam}`
+          : '';
+      const cacheKey = `dashboard:bundle:${tenant_id}:include=${includeTestData ? 'true' : 'false'}${widgetsCacheKey}${scopeCacheKey}`;
 
       // Try redis cache first (distributed across instances)
       const cacheManager = req.app?.locals?.cacheManager;
@@ -467,6 +481,48 @@ export default function createReportRoutes(_pgPool) {
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
+
+      // ─── Resolve team visibility scope ────────────────────────────────────
+      // Determines which employee IDs (assigned_to) the current user can see,
+      // then respects optional team_id or assigned_to drill-down params.
+      let scopeEmployeeIds = null; // null = no filtering (admin/team member with org-wide read)
+      try {
+        const scope = await getVisibilityScope(req.user, supabase);
+        if (assignedToParam) {
+          // Drill down to specific employee
+          scopeEmployeeIds = [assignedToParam];
+        } else if (teamIdParam) {
+          // Drill down to specific team: resolve team → member employee IDs
+          const { data: teamMembers } = await supabase
+            .from('team_members')
+            .select('employee_id')
+            .eq('team_id', teamIdParam);
+          scopeEmployeeIds = (teamMembers || []).map((m) => m.employee_id);
+          if (scopeEmployeeIds.length === 0) scopeEmployeeIds = ['__NO_MATCH__'];
+        } else if (!scope.bypass && scope.teamIds.length === 0) {
+          // Non-team user without admin: restrict to own records + unassigned
+          scopeEmployeeIds = [req.user.id];
+        }
+        // else: admin/superadmin or team member with org-wide read → no extra filter
+      } catch (scopeErr) {
+        logger.warn(`[dashboard-bundle] Scope resolution error: ${scopeErr.message}`);
+        // Fall back to tenant-only scope (safe default)
+      }
+
+      /**
+       * Apply scope filter to a Supabase query builder.
+       * Adds assigned_to filtering when scopeEmployeeIds is resolved.
+       * @param {Object} q - Supabase query builder
+       * @returns {Object} Modified query builder
+       */
+      const withScope = (q) => {
+        if (!scopeEmployeeIds) return q;
+        if (scopeEmployeeIds.length === 1 && scopeEmployeeIds[0] === req.user?.id) {
+          // Non-team user: own records + unassigned
+          return q.or(`assigned_to.eq.${scopeEmployeeIds[0]},assigned_to.is.null`);
+        }
+        return q.in('assigned_to', scopeEmployeeIds);
+      };
 
       /**
        * DASHBOARD BUNDLE OPTIMIZATION (v3.6.18+)
@@ -697,23 +753,23 @@ export default function createReportRoutes(_pgPool) {
       logger.debug(`[dashboard-bundle] Falling back to individual queries`);
       const commonOpts = { includeTestData, countMode: 'exact', confirmSmallCounts: false };
       const totalContactsP = profileQuery('totalContacts', () =>
-        safeCount(null, 'contacts', tenant_id, undefined, commonOpts),
+        safeCount(null, 'contacts', tenant_id, withScope, commonOpts),
       );
       const totalAccountsP = profileQuery('totalAccounts', () =>
-        safeCount(null, 'accounts', tenant_id, undefined, commonOpts),
+        safeCount(null, 'accounts', tenant_id, withScope, commonOpts),
       );
       const totalLeadsP = profileQuery('totalLeads', () =>
-        safeCount(null, 'leads', tenant_id, undefined, commonOpts),
+        safeCount(null, 'leads', tenant_id, withScope, commonOpts),
       );
       const totalOpportunitiesP = profileQuery('totalOpportunities', () =>
-        safeCount(null, 'opportunities', tenant_id, undefined, commonOpts),
+        safeCount(null, 'opportunities', tenant_id, withScope, commonOpts),
       );
       const openLeadsP = profileQuery('openLeads', () =>
         safeCount(
           null,
           'leads',
           tenant_id,
-          (q) => q.not('status', 'in', '("converted","lost")'),
+          (q) => withScope(q.not('status', 'in', '("converted","lost")')),
           commonOpts,
         ),
       );
@@ -722,7 +778,7 @@ export default function createReportRoutes(_pgPool) {
           null,
           'opportunities',
           tenant_id,
-          (q) => q.in('stage', ['won', 'closed_won']),
+          (q) => withScope(q.in('stage', ['won', 'closed_won'])),
           commonOpts,
         ),
       );
@@ -731,7 +787,7 @@ export default function createReportRoutes(_pgPool) {
           null,
           'opportunities',
           tenant_id,
-          (q) => q.not('stage', 'in', '("won","closed_won","lost","closed_lost")'),
+          (q) => withScope(q.not('stage', 'in', '("won","closed_won","lost","closed_lost")')),
           commonOpts,
         ),
       );
@@ -746,6 +802,7 @@ export default function createReportRoutes(_pgPool) {
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
           q = q.gte('created_date', sinceISO);
           q = q.not('status', 'in', '("converted","lost")'); // Exclude converted/lost leads
+          q = withScope(q);
           if (!includeTestData) {
             try {
               q = q.or('is_test_data.is.false,is_test_data.is.null');
@@ -766,6 +823,7 @@ export default function createReportRoutes(_pgPool) {
           let q = supabase.from('activities').select('*', { count: 'exact', head: true });
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
           q = q.gte('created_date', sinceISO);
+          q = withScope(q);
           if (!includeTestData) {
             try {
               q = q.or('is_test_data.is.false,is_test_data.is.null');
@@ -788,10 +846,11 @@ export default function createReportRoutes(_pgPool) {
             try {
               let q = supabase
                 .from('activities')
-                .select('id,type,subject,status,created_at,created_date,assigned_to')
+                .select('id,type,subject,status,created_at,created_date,assigned_to,tenant_id')
                 .order('created_at', { ascending: false })
                 .limit(10);
               if (tenant_id) q = q.eq('tenant_id', tenant_id);
+              q = withScope(q);
               if (!includeTestData) {
                 try {
                   q = q.or('is_test_data.is.false,is_test_data.is.null');
@@ -825,11 +884,12 @@ export default function createReportRoutes(_pgPool) {
               let q = supabase
                 .from('leads')
                 .select(
-                  'id,first_name,last_name,company,email,phone,created_date,created_at,status,source,is_test_data',
+                  'id,first_name,last_name,company,email,phone,created_date,created_at,status,source,is_test_data,tenant_id,assigned_to',
                 )
                 .order('created_at', { ascending: false })
                 .limit(50);
               if (tenant_id) q = q.eq('tenant_id', tenant_id);
+              q = withScope(q);
               if (!includeTestData) {
                 try {
                   q = q.or('is_test_data.is.false,is_test_data.is.null');
@@ -857,10 +917,13 @@ export default function createReportRoutes(_pgPool) {
             try {
               let q = supabase
                 .from('opportunities')
-                .select('id,name,amount,stage,probability,updated_at,is_test_data')
+                .select(
+                  'id,name,amount,stage,probability,updated_at,is_test_data,tenant_id,assigned_to',
+                )
                 .order('updated_at', { ascending: false })
                 .limit(50);
               if (tenant_id) q = q.eq('tenant_id', tenant_id);
+              q = withScope(q);
               if (!includeTestData) {
                 try {
                   q = q.or('is_test_data.is.false,is_test_data.is.null');
@@ -913,6 +976,7 @@ export default function createReportRoutes(_pgPool) {
               logger.debug('[dashboard-bundle] Fetching lead sources for tenant:', tenant_id);
               let q = supabase.from('leads').select('source');
               if (tenant_id) q = q.eq('tenant_id', tenant_id);
+              q = withScope(q);
               if (!includeTestData) {
                 try {
                   q = q.or('is_test_data.is.false,is_test_data.is.null');
@@ -951,6 +1015,7 @@ export default function createReportRoutes(_pgPool) {
             .select('amount')
             .not('stage', 'in', '(won,closed_won,lost,closed_lost)');
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
+          q = withScope(q);
           if (!includeTestData) {
             try {
               q = q.or('is_test_data.is.false,is_test_data.is.null');
@@ -973,6 +1038,7 @@ export default function createReportRoutes(_pgPool) {
             .select('amount')
             .in('stage', ['won', 'closed_won']);
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
+          q = withScope(q);
           if (!includeTestData) {
             try {
               q = q.or('is_test_data.is.false,is_test_data.is.null');
@@ -1057,6 +1123,13 @@ export default function createReportRoutes(_pgPool) {
           tenant_id: tenant_id || null,
           generated_at: new Date().toISOString(),
           ttl_seconds: BUNDLE_TTL_SECONDS,
+          scope: teamIdParam
+            ? 'team'
+            : assignedToParam
+              ? 'employee'
+              : scopeEmployeeIds
+                ? 'auto'
+                : 'tenant',
         },
       };
 

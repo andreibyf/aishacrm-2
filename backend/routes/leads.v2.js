@@ -74,11 +74,12 @@ export default function createLeadsV2Routes() {
       const supabase = getSupabaseClient();
       const tenant_id = req.query.tenant_id || req.user.tenant_id;
 
-      // Fetch teams for this tenant
+      // Fetch active teams for this tenant
       const { data: teams, error: tErr } = await supabase
         .from('teams')
-        .select('id, name')
+        .select('id, name, parent_team_id')
         .eq('tenant_id', tenant_id)
+        .eq('is_active', true)
         .order('name');
 
       if (tErr) throw tErr;
@@ -147,14 +148,14 @@ export default function createLeadsV2Routes() {
       }
 
       // Build SQL fragments for visibility + test data filtering
-      // Two-tier: team members see all tenant records (org-wide read)
-      // Only users with NO team membership get filtered to own + unassigned
+      // Shared mode: team members see all tenant records (org-wide read)
+      // Hierarchical mode: team members see only own teams' records
       let visibilityFilter = '';
       if (visibilityScope && !visibilityScope.bypass) {
-        if (visibilityScope.teamIds && visibilityScope.teamIds.length > 0) {
-          // User has team membership → org-wide read, no filter needed
-        } else if (visibilityScope.employeeIds.length > 0) {
-          // No team membership → own records + unassigned only
+        if (visibilityScope.mode === 'shared' && visibilityScope.teamIds?.length > 0) {
+          // Shared: org-wide read, no filter needed
+        } else if (visibilityScope.employeeIds?.length > 0) {
+          // Hierarchical teams or no team membership → restrict to visible employees
           const ids = visibilityScope.employeeIds.map((id) => `'${id}'`).join(',');
           visibilityFilter = `AND (assigned_to IN (${ids}) OR assigned_to IS NULL)`;
         }
@@ -179,13 +180,13 @@ export default function createLeadsV2Routes() {
       });
 
       // Helper: apply visibility filter to a Supabase query builder
-      // Two-tier: team members see all tenant records, no filter needed
+      // Shared mode: org-wide read, Hierarchical: restrict to team employees
       const applyVisibility = (query) => {
         if (visibilityScope && !visibilityScope.bypass) {
-          if (visibilityScope.teamIds && visibilityScope.teamIds.length > 0) {
-            return query; // org-wide read
+          if (visibilityScope.mode === 'shared' && visibilityScope.teamIds?.length > 0) {
+            return query; // Shared: org-wide read
           }
-          if (visibilityScope.employeeIds.length > 0) {
+          if (visibilityScope.employeeIds?.length > 0) {
             const idList = visibilityScope.employeeIds.join(',');
             return query.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
           }
@@ -370,12 +371,12 @@ export default function createLeadsV2Routes() {
           .eq('tenant_id', tenant_id);
 
         // Apply team visibility filter (pre-computed above)
-        // Two-tier: team members see all tenant records (org-wide read)
+        // Shared mode: org-wide read; Hierarchical: restrict to team employees
         if (visibilityScope && !visibilityScope.bypass) {
-          if (visibilityScope.teamIds && visibilityScope.teamIds.length > 0) {
-            // User has team membership → org-wide read, no additional filter
-          } else if (visibilityScope.employeeIds.length > 0) {
-            // No team membership → own records + unassigned only
+          if (visibilityScope.mode === 'shared' && visibilityScope.teamIds?.length > 0) {
+            // Shared: org-wide read, no additional filter
+          } else if (visibilityScope.employeeIds?.length > 0) {
+            // Hierarchical teams or no team membership → restrict
             const idList = visibilityScope.employeeIds.join(',');
             query = query.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
           }
@@ -458,23 +459,31 @@ export default function createLeadsV2Routes() {
                 query = query.or(orConditions.join(','));
               }
             } else {
-              // Handle $or for assigned_to filtering
+              // Handle $or for assigned_to filtering (including $in operator)
               const normalizedOr = parsedFilter.$or.filter(
                 (cond) => cond && typeof cond === 'object',
               );
 
-              // Detect unassigned explicitly and apply a safe null check
               const hasUnassigned = normalizedOr.some((cond) => cond.assigned_to === null);
-              const nonEmptyAssignedTo = normalizedOr
-                .map((cond) => cond.assigned_to)
-                .filter((val) => val !== undefined && val !== null && String(val).trim() !== '');
-
-              if (hasUnassigned && nonEmptyAssignedTo.length === 0) {
-                logger.debug('[V2 Leads] Applying unassigned-only filter');
-                query = query.is('assigned_to', null);
-              } else if (nonEmptyAssignedTo.length > 0) {
-                logger.debug('[V2 Leads] Applying assigned_to $or filter:', nonEmptyAssignedTo);
-                const orParts = nonEmptyAssignedTo.map((val) => `assigned_to.eq.${val}`);
+              const orParts = [];
+              for (const condition of normalizedOr) {
+                const val = condition.assigned_to;
+                if (val === null || val === undefined) continue;
+                // Handle $in operator: { assigned_to: { $in: [...] } }
+                if (typeof val === 'object' && val.$in && Array.isArray(val.$in)) {
+                  const ids = val.$in.filter((id) => typeof id === 'string' && id.trim());
+                  if (ids.length > 0) {
+                    orParts.push(`assigned_to.in.(${ids.join(',')})`);
+                  }
+                } else if (typeof val === 'string' && val.trim()) {
+                  orParts.push(`assigned_to.eq.${val}`);
+                }
+              }
+              if (hasUnassigned) {
+                orParts.push('assigned_to.is.null');
+              }
+              if (orParts.length > 0) {
+                logger.debug('[V2 Leads] Applying assigned_to $or filter:', orParts.join(','));
                 query = query.or(orParts.join(','));
               }
             }

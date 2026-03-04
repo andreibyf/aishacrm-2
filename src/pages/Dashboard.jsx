@@ -143,7 +143,15 @@ export default function DashboardPage() {
   const [showTestData, setShowTestData] = useState(true); // Default to showing all data
 
   const { cachedRequest, clearCacheByKey } = useApiManager();
-  const { selectedEmail } = useEmployeeScope();
+  const { selectedEmail, selectedTeamId } = useEmployeeScope();
+
+  // Build a stable scope key for browser-side dashboard cache
+  // This ensures switching teams/employees gets its own cached dataset
+  const scopeKey = useMemo(() => {
+    if (selectedTeamId) return `team:${selectedTeamId}`;
+    if (selectedEmail && selectedEmail !== 'all') return `emp:${selectedEmail}`;
+    return '';
+  }, [selectedTeamId, selectedEmail]);
   const logger = useLogger();
   const loadingToast = useLoadingToast();
 
@@ -254,8 +262,11 @@ export default function DashboardPage() {
       }
     }
 
-    // Employee scope filtering from context
-    if (selectedEmail && selectedEmail !== 'all') {
+    // Team scope filtering (takes priority over individual employee)
+    if (selectedTeamId) {
+      filter.team_id = selectedTeamId;
+    } else if (selectedEmail && selectedEmail !== 'all') {
+      // Employee scope filtering from context
       if (selectedEmail === 'unassigned') {
         // Unassigned should strictly check for NULL UUID
         filter.$or = [{ assigned_to: null }];
@@ -278,7 +289,7 @@ export default function DashboardPage() {
     }
 
     return filter;
-  }, [user, selectedTenantId, showTestData, selectedEmail]);
+  }, [user, selectedTenantId, showTestData, selectedEmail, selectedTeamId]);
 
   // Load dashboard stats (only after user AND tenant are ready)
   useEffect(() => {
@@ -330,7 +341,11 @@ export default function DashboardPage() {
 
         // OPTIMIZATION: Try browser cache first (unless forcing refresh)
         if (!forceRefresh) {
-          const cached = getCachedDashboardData(tenantFilter.tenant_id || null, !!showTestData);
+          const cached = getCachedDashboardData(
+            tenantFilter.tenant_id || null,
+            !!showTestData,
+            scopeKey,
+          );
           if (cached?.data) {
             logger.info('Dashboard loaded from browser cache', 'Dashboard', {
               userId: user.email,
@@ -370,17 +385,26 @@ export default function DashboardPage() {
                     tenant_id: tenantFilter.tenant_id || null,
                     include_test_data: !!showTestData,
                     widgets: visibleWidgetIds,
+                    team_id: tenantFilter.team_id || null,
+                    assigned_to: tenantFilter.assigned_to || null,
                   },
                   () =>
                     getDashboardBundleFast({
                       tenant_id: tenantFilter.tenant_id || null,
                       include_test_data: !!showTestData,
                       widgets: visibleWidgetIds,
+                      team_id: tenantFilter.team_id || null,
+                      assigned_to: tenantFilter.assigned_to || null,
                     }),
                 );
                 const bundle = bundleResp?.data || bundleResp;
                 if (bundle?.stats || bundle?.lists) {
-                  cacheDashboardData(tenantFilter.tenant_id || null, !!showTestData, bundle);
+                  cacheDashboardData(
+                    tenantFilter.tenant_id || null,
+                    !!showTestData,
+                    bundle,
+                    scopeKey,
+                  );
                   setStats((prev) => ({
                     ...prev,
                     ...bundle.stats,
@@ -424,19 +448,23 @@ export default function DashboardPage() {
               tenant_id: tenantFilter.tenant_id || null,
               include_test_data: !!showTestData,
               widgets: visibleWidgetIds,
+              team_id: tenantFilter.team_id || null,
+              assigned_to: tenantFilter.assigned_to || null,
             },
             () =>
               getDashboardBundleFast({
                 tenant_id: tenantFilter.tenant_id || null,
                 include_test_data: !!showTestData,
                 widgets: visibleWidgetIds,
+                team_id: tenantFilter.team_id || null,
+                assigned_to: tenantFilter.assigned_to || null,
               }),
           );
           // Unwrap common shapes: either { data: {...} } or raw {...}
           bundle = bundleResp?.data || bundleResp;
 
           // Cache the data for next load
-          cacheDashboardData(tenantFilter.tenant_id || null, !!showTestData, bundle);
+          cacheDashboardData(tenantFilter.tenant_id || null, !!showTestData, bundle, scopeKey);
           setLastUpdated(Date.now());
 
           if (bundle?.lists) {
@@ -549,17 +577,21 @@ export default function DashboardPage() {
           tenant_id: tenantFilter.tenant_id || null,
           include_test_data: !!showTestData,
           bust_cache: true,
+          team_id: tenantFilter.team_id || null,
+          assigned_to: tenantFilter.assigned_to || null,
         },
         () =>
           getDashboardBundleFast({
             tenant_id: tenantFilter.tenant_id || null,
             include_test_data: !!showTestData,
+            team_id: tenantFilter.team_id || null,
+            assigned_to: tenantFilter.assigned_to || null,
           }),
       );
       const bundle = bundleResp?.data || bundleResp;
 
       // Cache the fresh data
-      cacheDashboardData(tenantFilter.tenant_id || null, !!showTestData, bundle);
+      cacheDashboardData(tenantFilter.tenant_id || null, !!showTestData, bundle, scopeKey);
 
       if (bundle?.lists) setBundleLists(bundle.lists);
       if (bundle?.stats) {
@@ -583,7 +615,15 @@ export default function DashboardPage() {
     } finally {
       setRefreshing(false);
     }
-  }, [user, authCookiesReady, getTenantFilter, showTestData, cachedRequest, clearCacheByKey]);
+  }, [
+    user,
+    authCookiesReady,
+    getTenantFilter,
+    showTestData,
+    cachedRequest,
+    clearCacheByKey,
+    scopeKey,
+  ]);
 
   const handleSaveWidgetPreferences = async (newPreferences) => {
     try {

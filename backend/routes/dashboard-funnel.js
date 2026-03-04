@@ -4,6 +4,7 @@ import { validateTenantAccess } from '../middleware/validateTenant.js';
 import { cacheList } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 import cacheManager from '../lib/cacheManager.js';
+import { getVisibilityScope } from '../lib/teamVisibility.js';
 
 export default function createDashboardFunnelRoutes(_pgPool) {
   const router = express.Router();
@@ -62,6 +63,8 @@ export default function createDashboardFunnelRoutes(_pgPool) {
         const supabase = getSupabase();
         const tenantId = req.tenant?.id || req.query.tenant_id;
         const includeTestData = req.query.include_test_data !== 'false';
+        const teamIdParam = req.query.team_id || null;
+        const assignedToParam = req.query.assigned_to || null;
 
         if (!tenantId) {
           return res.status(400).json({
@@ -70,6 +73,140 @@ export default function createDashboardFunnelRoutes(_pgPool) {
           });
         }
 
+        // ─── Scoped live queries (when team/employee filter is active) ────────
+        // The materialized view is tenant-wide; when scope params are present,
+        // run live counts filtered by assigned_to for accurate team stats.
+        if (teamIdParam || assignedToParam) {
+          let scopeEmployeeIds = null;
+          try {
+            if (assignedToParam) {
+              scopeEmployeeIds = [assignedToParam];
+            } else if (teamIdParam) {
+              const { data: teamMembers } = await supabase
+                .from('team_members')
+                .select('employee_id')
+                .eq('team_id', teamIdParam);
+              scopeEmployeeIds = (teamMembers || []).map((m) => m.employee_id);
+              if (scopeEmployeeIds.length === 0) scopeEmployeeIds = ['__NO_MATCH__'];
+            }
+          } catch (scopeErr) {
+            logger.warn('[Dashboard Funnel] Scope resolution error:', scopeErr.message);
+          }
+
+          const withScope = (q) => {
+            if (!scopeEmployeeIds) return q;
+            return q.in('assigned_to', scopeEmployeeIds);
+          };
+
+          const testFilter = (q) => {
+            if (!includeTestData) {
+              return q.or('is_test_data.is.false,is_test_data.is.null');
+            }
+            return q;
+          };
+
+          // Count each entity with scope (returns total/real/test breakdown)
+          const countTable = async (table) => {
+            try {
+              let q = supabase
+                .from(table)
+                .select('*', { count: 'exact', head: true })
+                .eq('tenant_id', tenantId);
+              q = withScope(q);
+              const { count: total } = await q;
+
+              let qReal = supabase
+                .from(table)
+                .select('*', { count: 'exact', head: true })
+                .eq('tenant_id', tenantId);
+              qReal = withScope(qReal);
+              qReal = qReal.or('is_test_data.is.false,is_test_data.is.null');
+              const { count: real } = await qReal;
+
+              return { total: total ?? 0, real: real ?? 0, test: (total ?? 0) - (real ?? 0) };
+            } catch {
+              return { total: 0, real: 0, test: 0 };
+            }
+          };
+
+          // Pipeline stages with scope
+          const pipelineQuery = async () => {
+            try {
+              let q = supabase
+                .from('opportunities')
+                .select('stage,amount,is_test_data')
+                .eq('tenant_id', tenantId);
+              q = withScope(q);
+              const { data: opps } = await q;
+              if (!Array.isArray(opps)) return [];
+
+              const stages = [
+                'prospecting',
+                'qualification',
+                'proposal',
+                'negotiation',
+                'closed_won',
+                'closed_lost',
+              ];
+              const stageAliases = { won: 'closed_won', lost: 'closed_lost' };
+              return stages.map((stage) => {
+                const matching = opps.filter((o) => {
+                  const s = stageAliases[o.stage] || o.stage;
+                  return s === stage;
+                });
+                const total = matching.length;
+                const real = matching.filter((o) => !o.is_test_data).length;
+                const test = total - real;
+                const valTotal = matching.reduce((sum, o) => sum + (parseFloat(o.amount) || 0), 0);
+                const valReal = matching
+                  .filter((o) => !o.is_test_data)
+                  .reduce((sum, o) => sum + (parseFloat(o.amount) || 0), 0);
+                return {
+                  stage,
+                  count_total: total,
+                  count_real: real,
+                  count_test: test,
+                  value_total: valTotal,
+                  value_real: valReal,
+                  value_test: valTotal - valReal,
+                };
+              });
+            } catch {
+              return [];
+            }
+          };
+
+          const [sources, leads, contacts, accounts, pipeline] = await Promise.all([
+            countTable('bizdev_sources'),
+            countTable('leads'),
+            countTable('contacts'),
+            countTable('accounts'),
+            pipelineQuery(),
+          ]);
+
+          return res.json({
+            funnel: {
+              sources_total: sources.total,
+              sources_real: sources.real,
+              sources_test: sources.test,
+              leads_total: leads.total,
+              leads_real: leads.real,
+              leads_test: leads.test,
+              contacts_total: contacts.total,
+              contacts_real: contacts.real,
+              contacts_test: contacts.test,
+              accounts_total: accounts.total,
+              accounts_real: accounts.real,
+              accounts_test: accounts.test,
+            },
+            pipeline,
+            last_refreshed: new Date().toISOString(),
+            cached: false,
+            scoped: true,
+          });
+        }
+
+        // ─── Unscoped: use materialized view (fast path) ─────────────────────
         // Query all-time aggregated view (no period filtering)
         const { data, error } = await supabase
           .from('dashboard_funnel_counts')

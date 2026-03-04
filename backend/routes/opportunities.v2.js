@@ -77,11 +77,11 @@ export default function createOpportunityV2Routes(_pgPool) {
         .select('stage', { count: 'exact' })
         .eq('tenant_id', tenant_id);
 
-      // Apply team visibility filter (two-tier: org-wide read for team members)
+      // Apply team visibility filter (shared: org-wide read, hierarchical: own teams)
       if (visibilityScope && !visibilityScope.bypass) {
-        if (visibilityScope.teamIds && visibilityScope.teamIds.length > 0) {
+        if (visibilityScope.mode === 'shared' && visibilityScope.teamIds?.length > 0) {
           // org-wide read
-        } else if (visibilityScope.employeeIds.length > 0) {
+        } else if (visibilityScope.employeeIds?.length > 0) {
           const idList = visibilityScope.employeeIds.join(',');
           q = q.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
         }
@@ -171,11 +171,11 @@ export default function createOpportunityV2Routes(_pgPool) {
         .select('id', { count: 'exact', head: true })
         .eq('tenant_id', tenant_id);
 
-      // Apply team visibility filter (two-tier: org-wide read for team members)
+      // Apply team visibility filter (shared: org-wide read, hierarchical: own teams)
       if (visibilityScope && !visibilityScope.bypass) {
-        if (visibilityScope.teamIds && visibilityScope.teamIds.length > 0) {
+        if (visibilityScope.mode === 'shared' && visibilityScope.teamIds?.length > 0) {
           // org-wide read
-        } else if (visibilityScope.employeeIds.length > 0) {
+        } else if (visibilityScope.employeeIds?.length > 0) {
           const idList = visibilityScope.employeeIds.join(',');
           q = q.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
         }
@@ -306,11 +306,11 @@ export default function createOpportunityV2Routes(_pgPool) {
         )
         .eq('tenant_id', tenant_id);
 
-      // Apply team visibility filter (two-tier: org-wide read for team members)
+      // Apply team visibility filter (shared: org-wide read, hierarchical: own teams)
       if (visibilityScope && !visibilityScope.bypass) {
-        if (visibilityScope.teamIds && visibilityScope.teamIds.length > 0) {
-          // User has team membership → org-wide read, no additional filter
-        } else if (visibilityScope.employeeIds.length > 0) {
+        if (visibilityScope.mode === 'shared' && visibilityScope.teamIds?.length > 0) {
+          // Shared: org-wide read, no additional filter
+        } else if (visibilityScope.employeeIds?.length > 0) {
           const idList = visibilityScope.employeeIds.join(',');
           q = q.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
         }
@@ -431,34 +431,52 @@ export default function createOpportunityV2Routes(_pgPool) {
           q = q.eq('is_test_data', parsedFilter.is_test_data);
         }
 
-        // Handle $or for unassigned (null)
+        // Handle $or for assigned_to ($in, unassigned, search)
         if (
           typeof parsedFilter === 'object' &&
           parsedFilter.$or &&
           Array.isArray(parsedFilter.$or)
         ) {
-          // Check if this is an "unassigned" filter
-          const isUnassignedFilter = parsedFilter.$or.some((cond) => cond.assigned_to === null);
+          const normalizedOr = parsedFilter.$or.filter((c) => c && typeof c === 'object');
+          const hasUnassigned = normalizedOr.some((c) => c.assigned_to === null);
 
-          if (isUnassignedFilter) {
-            logger.debug('[V2 Opportunities] Applying unassigned filter');
-            // For unassigned, only match NULL (empty string is invalid for UUID)
-            q = q.is('assigned_to', null);
-          } else {
-            // Handle other $or conditions (like search)
-            const orConditions = parsedFilter.$or
-              .map((condition) => {
-                const [field, opObj] = Object.entries(condition)[0];
-                if (opObj && opObj.$icontains) {
-                  return `${field}.ilike.%${opObj.$icontains}%`;
-                }
-                return null;
-              })
-              .filter(Boolean);
-
-            if (orConditions.length > 0) {
-              q = q.or(orConditions.join(','));
+          // Collect assigned_to values: direct UUIDs and $in arrays
+          const assignedOrParts = [];
+          for (const condition of normalizedOr) {
+            const val = condition.assigned_to;
+            if (val === null || val === undefined) continue;
+            if (typeof val === 'object' && val.$in && Array.isArray(val.$in)) {
+              const ids = val.$in.filter((id) => typeof id === 'string' && id.trim());
+              if (ids.length > 0) {
+                assignedOrParts.push(`assigned_to.in.(${ids.join(',')})`);
+              }
+            } else if (typeof val === 'string' && val.trim()) {
+              assignedOrParts.push(`assigned_to.eq.${val}`);
             }
+          }
+          if (hasUnassigned) {
+            assignedOrParts.push('assigned_to.is.null');
+          }
+          if (assignedOrParts.length > 0) {
+            logger.debug(
+              '[V2 Opportunities] Applying assigned_to OR filter:',
+              assignedOrParts.join(','),
+            );
+            q = q.or(assignedOrParts.join(','));
+          }
+
+          // Handle other $or conditions (like search with $icontains)
+          const searchOrs = normalizedOr
+            .map((condition) => {
+              const [field, opObj] = Object.entries(condition)[0] || [];
+              if (opObj && opObj.$icontains) {
+                return `${field}.ilike.%${opObj.$icontains}%`;
+              }
+              return null;
+            })
+            .filter(Boolean);
+          if (searchOrs.length > 0) {
+            q = q.or(searchOrs.join(','));
           }
         }
       }

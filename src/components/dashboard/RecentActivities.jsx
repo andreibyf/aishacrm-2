@@ -126,7 +126,14 @@ function RecentActivities(props) {
         setActivities(pref.map((a) => ({ ...a })));
         setLastUpdated(Date.now());
         setLoading(false);
-        if (!backgroundScheduledRef.current) {
+        // Background refresh to hydrate with full data
+        // Skip when team/employee scope is active — bundle data is already scoped
+        // and entity routes don't resolve team_id to employee IDs
+        if (
+          !backgroundScheduledRef.current &&
+          !memoTenantFilter?.team_id &&
+          !memoTenantFilter?.assigned_to
+        ) {
           backgroundScheduledRef.current = true;
           // Clear any existing timeout before scheduling a new one
           if (backgroundTimeoutRef.current) {
@@ -372,7 +379,9 @@ function RecentActivities(props) {
             <ActivityIcon className="w-5 h-5 text-indigo-400" />
             Recent {activitiesLabel}
           </CardTitle>
-          <CardDescription className="text-slate-400">Loading recent {activitiesLabel.toLowerCase()}...</CardDescription>
+          <CardDescription className="text-slate-400">
+            Loading recent {activitiesLabel.toLowerCase()}...
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {Array.from({ length: 5 }).map((_, i) => (
