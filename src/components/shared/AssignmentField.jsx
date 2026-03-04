@@ -15,7 +15,14 @@ import useTeams from '@/hooks/useTeams';
 
 /**
  * AssignmentField — reusable "Assigned To" field with team→person cascade,
- * claim/unassign buttons for non-managers, and optional assignment history.
+ * claim/unassign buttons for non-team users, and optional assignment history.
+ *
+ * Assignment rules:
+ *   - Any team member can assign to anyone on their own team(s)
+ *   - Managers can also change the team selector (own teams)
+ *   - Directors can change team selector (own + child teams)
+ *   - Admins/superadmins bypass all restrictions
+ *   - Users without team membership: claim/unassign only
  *
  * Props:
  *   value           - current assigned_to value (employee UUID or '')
@@ -23,7 +30,7 @@ import useTeams from '@/hooks/useTeams';
  *   onChange         - (newValue) => void — for assigned_to
  *   onTeamChange    - (newTeamId) => void — for assigned_to_team
  *   user            - current user object from auth context
- *   isManager       - boolean (true = show dropdown, false = claim/unassign)
+ *   isManager       - boolean (legacy hint, now derived from team role)
  *   entityId        - UUID of the entity (for assignment history, optional)
  *   entityType      - 'lead' | 'contact' | 'account' | 'opportunity' | 'activity' | 'bizdev_source'
  *   tenantId        - tenant UUID (for fetching teams + assignment history)
@@ -53,10 +60,15 @@ export default function AssignmentField({
   const { teams, membersByTeam, loading: teamsLoading } = useTeams(tenantId);
 
   const role = (user?.role || '').toLowerCase();
-  const canUseDropdown = isManager || role === 'admin' || role === 'superadmin';
+  // Any team member can assign to teammates; non-team users get claim/unassign only
+  const hasTeamMembership = userTeamIds.length > 0;
+  const canUseDropdown =
+    bypass || hasTeamMembership || isManager || role === 'admin' || role === 'superadmin';
+  // Managers+ can change the team selector; regular members see their team read-only
   const canChangeTeam =
     bypass ||
     highestRole === 'director' ||
+    highestRole === 'manager' ||
     highestRole === 'admin' ||
     role === 'admin' ||
     role === 'superadmin';
@@ -122,7 +134,7 @@ export default function AssignmentField({
           <Label htmlFor="assigned_to_team" className="text-slate-200">
             Team
           </Label>
-          {canChangeTeam || (canUseDropdown && highestRole === 'manager') ? (
+          {canChangeTeam ? (
             <Select value={teamValue || 'unassigned'} onValueChange={handleTeamChange}>
               <SelectTrigger className="mt-1 bg-slate-700 border-slate-600 text-slate-200">
                 <SelectValue placeholder="Select team..." />
@@ -163,7 +175,7 @@ export default function AssignmentField({
       </Label>
 
       {canUseDropdown ? (
-        // Managers/admins: team-scoped employee dropdown
+        // Team members: scoped employee dropdown (filtered to allowed teammates)
         <LazyEmployeeSelector
           value={value || 'unassigned'}
           onValueChange={(v) => handlePersonChange(v === 'unassigned' ? '' : v)}
@@ -173,7 +185,7 @@ export default function AssignmentField({
           className="mt-1 bg-slate-700 border-slate-600 text-slate-200"
         />
       ) : !value || value === 'unassigned' ? (
-        // Non-managers viewing unassigned record: show claim button
+        // Non-team users viewing unassigned record: show claim button
         <div className="flex gap-2 mt-1">
           <Input
             value="Unassigned"

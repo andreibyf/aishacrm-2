@@ -6,13 +6,14 @@
  *  2. Person auto-assigns team when single-team employee selected
  *  3. Team change clears person if not on new team
  *  4. Admin bypass — no team filtering on employee list
- *  5. Manager scoping — only own teams visible
- *  6. Member view — read-only team, claim/unassign buttons
- *  7. No teams — team selector hidden
- *  8. Multi-team employee — no auto-set (ambiguous)
- *  9. Team label rendered
- * 10. Unassign clears person
- * 11. Claim button calls onChange with current user
+ *  5. Manager scoping — only own teams visible, can change team selector
+ *  6. Member WITH team — gets employee dropdown scoped to teammates, read-only team
+ *  7. Member WITHOUT team — gets claim/unassign buttons only
+ *  8. No teams — team selector hidden
+ *  9. Multi-team employee — no auto-set (ambiguous)
+ * 10. Team label rendered
+ * 11. Unassign clears person
+ * 12. Claim button calls onChange with current user
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -421,10 +422,54 @@ describe('AssignmentField — manager scoping', () => {
   });
 });
 
-// 6. Member view — claim/unassign
-describe('AssignmentField — member (non-manager) view', () => {
+// 6. Member WITH team — gets employee dropdown (scoped to teammates)
+describe('AssignmentField — member with team membership', () => {
+  it('shows employee dropdown (not claim/unassign) for team members', () => {
+    setupHooks({ highestRole: 'member', teamIds: [TEAM_A_ID], allowedIds: [EMP_MIKE, EMP_SARAH] });
+    render(
+      <AssignmentField
+        value=""
+        teamValue=""
+        onChange={vi.fn()}
+        onTeamChange={vi.fn()}
+        user={MEMBER_USER}
+        isManager={false}
+        tenantId="t1"
+      />,
+    );
+
+    // Team member should see the employee selector dropdown
+    expect(screen.getByTestId('employee-selector')).toBeInTheDocument();
+    // Should NOT see claim/unassign buttons
+    expect(screen.queryByText('Assign to me')).not.toBeInTheDocument();
+  });
+
+  it('shows read-only team display (not dropdown) for members', () => {
+    setupHooks({ highestRole: 'member', teamIds: [TEAM_A_ID], bypass: false });
+    render(
+      <AssignmentField
+        value=""
+        teamValue={TEAM_A_ID}
+        onChange={vi.fn()}
+        onTeamChange={vi.fn()}
+        user={MEMBER_USER}
+        isManager={false}
+        tenantId="t1"
+      />,
+    );
+
+    // Member should not have a team dropdown — should see a disabled input instead
+    const disabledInputs = screen.getAllByRole('textbox');
+    const teamInput = disabledInputs.find((i) => i.value === 'Sales Team A');
+    expect(teamInput).toBeTruthy();
+    expect(teamInput.disabled).toBe(true);
+  });
+});
+
+// 7. Member WITHOUT team — claim/unassign only
+describe('AssignmentField — member without team (no membership)', () => {
   it('shows "Assign to me" button when unassigned', () => {
-    setupHooks({ highestRole: 'member' });
+    setupHooks({ highestRole: 'member', teamIds: [], allowedIds: [] });
     render(
       <AssignmentField
         value=""
@@ -441,7 +486,7 @@ describe('AssignmentField — member (non-manager) view', () => {
   });
 
   it('calls onChange with user employee_id on claim', () => {
-    setupHooks({ highestRole: 'member' });
+    setupHooks({ highestRole: 'member', teamIds: [], allowedIds: [] });
     const onChange = vi.fn();
 
     render(
@@ -461,7 +506,7 @@ describe('AssignmentField — member (non-manager) view', () => {
   });
 
   it('shows "Unassign" button when record is assigned', () => {
-    setupHooks({ highestRole: 'member' });
+    setupHooks({ highestRole: 'member', teamIds: [], allowedIds: [] });
     render(
       <AssignmentField
         value={MEMBER_USER.employee_id}
@@ -478,7 +523,7 @@ describe('AssignmentField — member (non-manager) view', () => {
   });
 
   it('clears assignment on unassign click', () => {
-    setupHooks({ highestRole: 'member' });
+    setupHooks({ highestRole: 'member', teamIds: [], allowedIds: [] });
     const onChange = vi.fn();
 
     render(
@@ -495,29 +540,6 @@ describe('AssignmentField — member (non-manager) view', () => {
 
     fireEvent.click(screen.getByText('Unassign'));
     expect(onChange).toHaveBeenCalledWith('');
-  });
-
-  it('shows read-only team display (not dropdown) for members', () => {
-    setupHooks({ highestRole: 'member', bypass: false });
-    render(
-      <AssignmentField
-        value=""
-        teamValue={TEAM_A_ID}
-        onChange={vi.fn()}
-        onTeamChange={vi.fn()}
-        user={MEMBER_USER}
-        isManager={false}
-        tenantId="t1"
-      />,
-    );
-
-    // Member should not have a team dropdown — should see a disabled input instead
-    // The select is only rendered when canChangeTeam || (canUseDropdown && highestRole === 'manager')
-    // For a plain member with isManager=false, neither condition is true
-    const disabledInputs = screen.getAllByRole('textbox');
-    const teamInput = disabledInputs.find((i) => i.value === 'Sales Team A');
-    expect(teamInput).toBeTruthy();
-    expect(teamInput.disabled).toBe(true);
   });
 });
 

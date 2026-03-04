@@ -357,7 +357,11 @@ export function useLeadsData({
           delete currentFilter.assigned_to;
           let filterObj = {};
           if (currentFilter.filter) {
-            try { filterObj = JSON.parse(currentFilter.filter); } catch {}
+            try {
+              filterObj = JSON.parse(currentFilter.filter);
+            } catch {
+              /* ignore parse error */
+            }
           }
           delete filterObj.$or;
           if (assignedToFilter === 'unassigned') {
@@ -393,9 +397,7 @@ export function useLeadsData({
           if (existingFilter) {
             try {
               const parsed =
-                typeof existingFilter === 'string'
-                  ? JSON.parse(existingFilter)
-                  : existingFilter;
+                typeof existingFilter === 'string' ? JSON.parse(existingFilter) : existingFilter;
               if (parsed && typeof parsed === 'object') {
                 mergedFilter = { $and: [parsed, searchFilter] };
               }
@@ -623,7 +625,7 @@ export function useLeadsData({
   // Allow parent to reset the supporting data loaded flag (e.g. on refresh)
   const resetSupportingData = useCallback(() => {
     supportingDataLoaded.current = false;
-    setSupportingDataReloadKey(k => k + 1);
+    setSupportingDataReloadKey((k) => k + 1);
   }, []);
 
   return {
