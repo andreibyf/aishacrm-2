@@ -393,9 +393,42 @@ export default function createEmployeeRoutes(_pgPool) {
       let invitation_error = null;
       const hasCrmAccess =
         combinedMetadata.has_crm_access === true || req.body.has_crm_access === true;
+      const linkedUserId = req.body.linked_user_id || combinedMetadata.linked_user_id || null;
       const crmRole = combinedMetadata.crm_user_employee_role || role || 'employee';
 
-      if (hasCrmAccess && email) {
+      // LINK-EXISTING: If linking to an existing CRM user, just update employee metadata
+      // and skip auth invite + user creation entirely.
+      if (linkedUserId && email) {
+        try {
+          const { data: linkedUser } = await supabase
+            .from('users')
+            .select('id, email, role')
+            .eq('id', linkedUserId)
+            .maybeSingle();
+
+          if (linkedUser) {
+            const linkMeta = {
+              ...combinedMetadata,
+              user_email: linkedUser.email,
+              user_id: linkedUser.id,
+              has_crm_access: true,
+              linked_at: new Date().toISOString(),
+            };
+            await supabase
+              .from('employees')
+              .update({ metadata: linkMeta })
+              .eq('id', data.id)
+              .eq('tenant_id', tenant_id);
+            logger.info(`[EmployeeRoutes] Linked employee ${data.id} to existing user ${linkedUser.id} (${linkedUser.email})`);
+            invitation_sent = true; // Already has auth access via linked user
+          } else {
+            logger.warn(`[EmployeeRoutes] linked_user_id ${linkedUserId} not found, falling through`);
+          }
+        } catch (linkErr) {
+          logger.error('[EmployeeRoutes] Link-existing-user error:', linkErr);
+          invitation_error = linkErr.message;
+        }
+      } else if (hasCrmAccess && email) {
         try {
           // Check if auth user already exists
           const { user: existingAuth } = await getAuthUserByEmail(email);
