@@ -926,7 +926,7 @@ export default function EnhancedUserManagement() {
   };
 
   const refreshUsers = () => {
-    loadData();
+    loadData({ cacheBust: true });
   };
 
   const copyToClipboard = (text, label) => {

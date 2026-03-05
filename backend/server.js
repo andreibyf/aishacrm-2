@@ -192,6 +192,7 @@ import createMetricsRoutes from './routes/metrics.js';
 import createEdgeFunctionRoutes from './routes/edgeFunctions.js';
 import createAISummaryRoutes from './routes/aiSummary.js';
 import createUtilsRoutes from './routes/utils.js';
+import createCacheRoutes from './routes/cache.js';
 import createClientRoutes from './routes/clients.js';
 import createWorkflowRoutes from './routes/workflows.js';
 import createWorkflowExecutionRoutes from './routes/workflowexecutions.js';
@@ -303,6 +304,13 @@ app.use('/api/cron', defaultLimiter, createCronRoutes(measuredPgPool));
 // Metrics routes read from performance_logs; use resilient wrapper to avoid ended pool errors
 app.use('/api/metrics', defaultLimiter, createMetricsRoutes(resilientPerfDb));
 app.use('/api/utils', defaultLimiter, createUtilsRoutes(measuredPgPool));
+app.use(
+  '/api/cache',
+  defaultLimiter,
+  authenticateRequest,
+  validateTenantAccess,
+  createCacheRoutes(),
+);
 app.use('/api/bizdevsources', defaultLimiter, createBizDevSourceRoutes(measuredPgPool));
 app.use('/api/clients', defaultLimiter, createClientRoutes(measuredPgPool));
 // Workflow routes with conditional auth: webhooks bypass auth, all other routes require auth
@@ -392,7 +400,12 @@ app.use(
 );
 app.use('/api/modulesettings', defaultLimiter, createModuleSettingsRoutes(measuredPgPool));
 app.use('/api/entity-labels', defaultLimiter, createEntityLabelsRoutes(measuredPgPool));
-app.use('/api/tenantintegrations', defaultLimiter, authenticateRequest, createTenantIntegrationRoutes(measuredPgPool));
+app.use(
+  '/api/tenantintegrations',
+  defaultLimiter,
+  authenticateRequest,
+  createTenantIntegrationRoutes(measuredPgPool),
+);
 app.use('/api/tenants', defaultLimiter, createTenantRoutes(measuredPgPool));
 app.use('/api/tenantresolve', defaultLimiter, createTenantResolveRoutes(measuredPgPool));
 app.use('/api/announcements', defaultLimiter, createAnnouncementRoutes(measuredPgPool));
