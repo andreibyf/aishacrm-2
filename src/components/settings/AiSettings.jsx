@@ -373,7 +373,14 @@ export default function AiSettings() {
           <TabsTrigger value="developer">Developer AI</TabsTrigger>
         </TabsList>
 
-        <TabsContent value={selectedRole} className="mt-4">
+        <TabsContent value="aisha" className="mt-4">
+          {Object.keys(CATEGORY_CONFIG).map(category => {
+            const categorySettings = grouped[category] || [];
+            if (categorySettings.length === 0) return null;
+            return renderCategory(category, categorySettings);
+          })}
+        </TabsContent>
+        <TabsContent value="developer" className="mt-4">
           {Object.keys(CATEGORY_CONFIG).map(category => {
             const categorySettings = grouped[category] || [];
             if (categorySettings.length === 0) return null;

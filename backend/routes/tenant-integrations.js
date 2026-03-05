@@ -11,14 +11,15 @@ export default function createTenantIntegrationRoutes() {
     try {
       const { tenant_id, integration_type, is_active } = req.query;
 
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
       let query = supabase
         .from('tenant_integrations')
         .select('*')
+        .eq('tenant_id', tenant_id)
         .order('created_at', { ascending: false });
-
-      if (tenant_id) {
-        query = query.eq('tenant_id', tenant_id);
-      }
 
       if (integration_type) {
         query = query.eq('integration_type', integration_type);
@@ -83,6 +84,14 @@ export default function createTenantIntegrationRoutes() {
         config,
         metadata,
       } = req.body;
+
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      if (!integration_type) {
+        return res.status(400).json({ status: 'error', message: 'integration_type is required' });
+      }
 
       const { data, error } = await supabase
         .from('tenant_integrations')
