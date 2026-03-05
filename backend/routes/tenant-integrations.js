@@ -2,23 +2,52 @@ import express from 'express';
 import { validateTenantScopedId } from '../lib/validation.js';
 import logger from '../lib/logger.js';
 import { supabase } from '../services/supabaseClient.js';
+import { validateTenantAccess } from '../middleware/validateTenant.js';
+
+/**
+ * Resolve the effective tenant_id from authenticated context.
+ * Priority: req.tenant.id (from validateTenantAccess) > query/body fallback.
+ * Rejects mismatches when both are provided.
+ */
+function resolveTenantId(req) {
+  const fromMiddleware = req.tenant?.id;
+  const fromRequest = req.query?.tenant_id || req.body?.tenant_id;
+
+  // If middleware resolved a tenant, use it (authoritative)
+  if (fromMiddleware) {
+    // Reject if caller explicitly passed a different tenant_id
+    if (fromRequest && fromRequest !== fromMiddleware) {
+      return { error: 'tenant_id mismatch: you do not have access to the requested tenant' };
+    }
+    return { tenant_id: fromMiddleware };
+  }
+
+  // Fallback for service-role or dev-mode calls
+  if (fromRequest) return { tenant_id: fromRequest };
+
+  return { error: 'tenant_id is required' };
+}
 
 export default function createTenantIntegrationRoutes() {
   const router = express.Router();
 
+  // Apply tenant validation to all routes
+  router.use(validateTenantAccess);
+
   // GET /api/tenantintegrations - List tenant integrations with filters
   router.get('/', async (req, res) => {
     try {
-      const { tenant_id, integration_type, is_active } = req.query;
+      const { integration_type, is_active } = req.query;
+      const { tenant_id, error: tenantError } = resolveTenantId(req);
+      if (tenantError) {
+        return res.status(400).json({ status: 'error', message: tenantError });
+      }
 
       let query = supabase
         .from('tenant_integrations')
         .select('*')
+        .eq('tenant_id', tenant_id)
         .order('created_at', { ascending: false });
-
-      if (tenant_id) {
-        query = query.eq('tenant_id', tenant_id);
-      }
 
       if (integration_type) {
         query = query.eq('integration_type', integration_type);
@@ -43,7 +72,10 @@ export default function createTenantIntegrationRoutes() {
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id } = req.query;
+      const { tenant_id, error: tenantError } = resolveTenantId(req);
+      if (tenantError) {
+        return res.status(400).json({ status: 'error', message: tenantError });
+      }
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
 
@@ -59,11 +91,6 @@ export default function createTenantIntegrationRoutes() {
         return res.status(404).json({ status: 'error', message: 'Integration not found' });
       }
 
-      // Safety check
-      if (data.tenant_id !== tenant_id) {
-        return res.status(404).json({ status: 'error', message: 'Integration not found' });
-      }
-
       res.json({ status: 'success', data });
     } catch (error) {
       logger.error('Error fetching tenant integration:', error);
@@ -75,7 +102,6 @@ export default function createTenantIntegrationRoutes() {
   router.post('/', async (req, res) => {
     try {
       const {
-        tenant_id,
         integration_type,
         integration_name,
         is_active,
@@ -83,6 +109,15 @@ export default function createTenantIntegrationRoutes() {
         config,
         metadata,
       } = req.body;
+
+      const { tenant_id, error: tenantError } = resolveTenantId(req);
+      if (tenantError) {
+        return res.status(400).json({ status: 'error', message: tenantError });
+      }
+
+      if (!integration_type) {
+        return res.status(400).json({ status: 'error', message: 'integration_type is required' });
+      }
 
       const { data, error } = await supabase
         .from('tenant_integrations')
@@ -111,8 +146,10 @@ export default function createTenantIntegrationRoutes() {
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      // Resolve tenant_id consistently: query → body → middleware-resolved tenant
-      const tenant_id = req.query?.tenant_id || req.body?.tenant_id || req.tenant?.id;
+      const { tenant_id, error: tenantError } = resolveTenantId(req);
+      if (tenantError) {
+        return res.status(400).json({ status: 'error', message: tenantError });
+      }
       const {
         integration_type,
         integration_name,
@@ -168,7 +205,10 @@ export default function createTenantIntegrationRoutes() {
   router.delete('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id } = req.query;
+      const { tenant_id, error: tenantError } = resolveTenantId(req);
+      if (tenantError) {
+        return res.status(400).json({ status: 'error', message: tenantError });
+      }
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
 

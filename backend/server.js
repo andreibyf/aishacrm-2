@@ -392,7 +392,7 @@ app.use(
 );
 app.use('/api/modulesettings', defaultLimiter, createModuleSettingsRoutes(measuredPgPool));
 app.use('/api/entity-labels', defaultLimiter, createEntityLabelsRoutes(measuredPgPool));
-app.use('/api/tenantintegrations', defaultLimiter, createTenantIntegrationRoutes(measuredPgPool));
+app.use('/api/tenantintegrations', defaultLimiter, authenticateRequest, createTenantIntegrationRoutes(measuredPgPool));
 app.use('/api/tenants', defaultLimiter, createTenantRoutes(measuredPgPool));
 app.use('/api/tenantresolve', defaultLimiter, createTenantResolveRoutes(measuredPgPool));
 app.use('/api/announcements', defaultLimiter, createAnnouncementRoutes(measuredPgPool));
