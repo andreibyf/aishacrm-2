@@ -191,7 +191,24 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         const u2 = (employeesByEmail || []).map((u) =>
           expandUserMetadata({ ...u, user_type: 'employee' }),
         );
-        allUsers = [...u1, ...u2];
+
+        // DEDUP: If same email exists in both users and employees, keep user record
+        // and enrich it with employee linkage, suppressing the employee duplicate.
+        const u1EmailSet = new Set(
+          u1.map((u) => (u.email || '').toLowerCase()).filter(Boolean),
+        );
+        const dedupedU2 = u2.filter(
+          (e) => !u1EmailSet.has((e.email || '').toLowerCase()),
+        );
+        const empByEmailLookup = new Map();
+        u2.forEach((e) => {
+          if (e.email) empByEmailLookup.set(e.email.toLowerCase(), e);
+        });
+        const enrichedU1 = u1.map((u) => {
+          const linked = u.email ? empByEmailLookup.get(u.email.toLowerCase()) : null;
+          return linked ? { ...u, employee_id: linked.id, has_employee_record: true } : u;
+        });
+        allUsers = [...enrichedU1, ...dedupedU2];
 
         // Post-filter safeguard: ensure only exact matches remain (defensive)
         const beforeFilterCount = allUsers.length;
@@ -301,7 +318,36 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         const employees = (employeesRes.data || []).map((r) =>
           expandUserMetadata({ ...r, user_type: 'employee' }),
         );
-        allUsers = [...admins, ...employees].sort(
+
+        // DEDUP: If an employee has the same email as a user record, keep only the
+        // user record (the login account) and attach employee linkage info to it.
+        // This prevents the same person appearing twice in User Management when they
+        // exist in both public.users (as admin) and public.employees (as employee).
+        const userEmailSet = new Set(
+          admins.map((u) => (u.email || '').toLowerCase()).filter(Boolean),
+        );
+        const dedupedEmployees = employees.filter(
+          (e) => !userEmailSet.has((e.email || '').toLowerCase()),
+        );
+
+        // Enrich user records with employee linkage where email matches
+        const employeeByEmail = new Map();
+        employees.forEach((e) => {
+          if (e.email) employeeByEmail.set(e.email.toLowerCase(), e);
+        });
+        const enrichedAdmins = admins.map((u) => {
+          const linkedEmp = u.email ? employeeByEmail.get(u.email.toLowerCase()) : null;
+          if (linkedEmp) {
+            return {
+              ...u,
+              employee_id: linkedEmp.id,
+              has_employee_record: true,
+            };
+          }
+          return u;
+        });
+
+        allUsers = [...enrichedAdmins, ...dedupedEmployees].sort(
           (a, b) => new Date(b.created_at) - new Date(a.created_at),
         );
 
@@ -309,7 +355,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           status: 'success',
           data: {
             users: allUsers,
-            total: (adminsRes.count || 0) + (employeesRes.count || 0),
+            total: allUsers.length,
             limit: parseInt(limit),
             offset: parseInt(offset),
           },
@@ -349,7 +395,30 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         const employeesWithType = (employeesRows || []).map((r) =>
           expandUserMetadata({ ...r, user_type: 'employee' }),
         );
-        allUsers = [...adminsWithType, ...employeesWithType];
+
+        // DEDUP: Same logic as tenant-filtered path — prevent employees with
+        // matching email in users table from appearing as separate entries.
+        const globalUserEmailSet = new Set(
+          adminsWithType.map((u) => (u.email || '').toLowerCase()).filter(Boolean),
+        );
+        const dedupedEmployeesGlobal = employeesWithType.filter(
+          (e) => !globalUserEmailSet.has((e.email || '').toLowerCase()),
+        );
+
+        // Enrich user records with employee linkage
+        const empByEmailGlobal = new Map();
+        employeesWithType.forEach((e) => {
+          if (e.email) empByEmailGlobal.set(e.email.toLowerCase(), e);
+        });
+        const enrichedGlobalAdmins = adminsWithType.map((u) => {
+          const linkedEmp = u.email ? empByEmailGlobal.get(u.email.toLowerCase()) : null;
+          if (linkedEmp) {
+            return { ...u, employee_id: linkedEmp.id, has_employee_record: true };
+          }
+          return u;
+        });
+
+        allUsers = [...enrichedGlobalAdmins, ...dedupedEmployeesGlobal];
 
         // Sort by created_at desc
         allUsers.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -358,7 +427,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           status: 'success',
           data: {
             users: allUsers,
-            total: (globalUsers?.length || 0) + (employeesRows?.length || 0),
+            total: allUsers.length,
             limit: parseInt(limit),
             offset: parseInt(offset),
           },

@@ -17,7 +17,7 @@ import { Card, CardContent } from '@/components/ui/card';
 
 import { useTenant } from '../shared/tenantContext';
 
-import { Employee } from '@/api/entities';
+import { Employee, User } from '@/api/entities';
 import { toast } from 'sonner';
 // Removed: ResendInviteButton is removed from this form's outline
 // import ResendInviteButton from "./ResendInviteButton"; // This import is no longer needed
@@ -63,14 +63,34 @@ export default function EmployeeForm({
     tags: employee?.tags || [],
     is_active: employee?.is_active !== false, // Default to true unless explicitly false
 
-    // Retained CRM-related fields from original as UI exists and functionality should be preserved
+    // CRM access: 'none' | 'link_existing' | 'new_access'
+    crm_access_mode: employee?.user_id ? 'link_existing' : employee?.has_crm_access ? 'new_access' : 'none',
     has_crm_access: employee?.has_crm_access || false,
+    linked_user_id: employee?.user_id || '',
     crm_user_employee_role: employee?.crm_user_employee_role || 'employee',
 
     // [2026-02-24 Claude] WhatsApp AiSHA access
     whatsapp_number: employee?.whatsapp_number || '',
     whatsapp_enabled: employee?.whatsapp_enabled || false,
   }));
+
+  // Fetch existing CRM users for the "Link Existing" dropdown
+  const [crmUsers, setCrmUsers] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+
+  const loadCrmUsers = async () => {
+    if (!tenantId) return;
+    setLoadingUsers(true);
+    try {
+      const users = await User.listProfiles({ tenant_id: tenantId });
+      setCrmUsers(Array.isArray(users) ? users : []);
+    } catch (err) {
+      console.warn('[EmployeeForm] Failed to load CRM users:', err);
+      setCrmUsers([]);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
 
   const [saving, setSaving] = useState(false);
   // Removed message state as toast is used for notifications
@@ -99,13 +119,27 @@ export default function EmployeeForm({
       return;
     }
 
-    // Validation for CRM access - email is required only if enabling CRM access
-    if (formData.has_crm_access && !formData.email?.trim()) {
-      console.log('[EmployeeForm] Validation failed: CRM access requires email');
-      toast.error('Email is required for CRM access requests.');
+    // Validation for CRM access modes
+    if (formData.crm_access_mode === 'new_access' && !formData.email?.trim()) {
+      console.log('[EmployeeForm] Validation failed: new CRM access requires email');
+      toast.error('Email is required when creating new CRM access.');
       return;
     }
-    // WhatsApp access requires a valid E.164 phone number
+    if (formData.crm_access_mode === 'link_existing' && !formData.linked_user_id) {
+      console.log('[EmployeeForm] Validation failed: link existing requires user selection');
+      toast.error('Please select an existing CRM user to link to.');
+      return;
+    }
+    if (formData.crm_access_mode === 'link_existing' && !formData.email?.trim()) {
+      console.log('[EmployeeForm] Validation failed: link existing requires email');
+      toast.error('Email is required when linking to an existing CRM user.');
+      return;
+    }
+    // WhatsApp access requires CRM access + a valid E.164 phone number
+    if (formData.whatsapp_enabled && formData.crm_access_mode === 'none') {
+      toast.error('WhatsApp access requires CRM access. Please enable CRM access first.');
+      return;
+    }
     if (formData.whatsapp_enabled) {
       const wa = formData.whatsapp_number?.trim();
       if (!wa) {
@@ -152,11 +186,13 @@ export default function EmployeeForm({
         notes: formData.notes || null,
         tags: formData.tags,
         is_active: formData.is_active,
-        has_crm_access: formData.has_crm_access,
-        crm_user_employee_role: formData.has_crm_access ? formData.crm_user_employee_role : null,
-        // [2026-02-24 Claude] WhatsApp AiSHA access fields
-        whatsapp_number: formData.whatsapp_enabled ? formData.whatsapp_number || null : null,
-        whatsapp_enabled: formData.whatsapp_enabled,
+        // CRM access: derive has_crm_access and linked_user_id from the radio mode
+        has_crm_access: formData.crm_access_mode !== 'none',
+        linked_user_id: formData.crm_access_mode === 'link_existing' ? formData.linked_user_id || null : null,
+        crm_user_employee_role: formData.crm_access_mode === 'new_access' ? formData.crm_user_employee_role : null,
+        // [2026-02-24 Claude] WhatsApp AiSHA access — requires CRM access
+        whatsapp_number: formData.whatsapp_enabled && formData.crm_access_mode !== 'none' ? formData.whatsapp_number || null : null,
+        whatsapp_enabled: formData.whatsapp_enabled && formData.crm_access_mode !== 'none',
         tenant_id: tenantId || null,
       };
 
@@ -173,11 +209,17 @@ export default function EmployeeForm({
         }
         console.log('[EmployeeForm] API call successful:', result);
         const isEdit = !!employee?.id;
-        if (formData.has_crm_access && formData.email) {
+        if (formData.crm_access_mode === 'new_access') {
           toast.success(
             isEdit
               ? 'Employee updated – CRM invitation sent'
               : 'Employee created – CRM invitation sent',
+          );
+        } else if (formData.crm_access_mode === 'link_existing') {
+          toast.success(
+            isEdit
+              ? 'Employee updated – linked to existing CRM user'
+              : 'Employee created – linked to existing CRM user',
           );
         } else {
           toast.success(isEdit ? 'Employee updated successfully' : 'Employee created successfully');
@@ -248,17 +290,17 @@ export default function EmployeeForm({
           </div>
           <div>
             <Label className="text-slate-200">
-              Email {formData.has_crm_access && <span className="text-red-400">*</span>}
+              Email {formData.crm_access_mode !== 'none' && <span className="text-red-400">*</span>}
             </Label>
             <Input
               type="email"
-              required={formData.has_crm_access}
+              required={formData.crm_access_mode !== 'none'}
               value={formData.email}
               onChange={(e) => onChange('email', e.target.value)}
               className="bg-slate-900 border-slate-700 text-slate-100"
               placeholder="work@example.com"
             />
-            {formData.has_crm_access && (
+            {formData.crm_access_mode !== 'none' && (
               <p className="text-xs text-amber-400 mt-1">Email is required for CRM access</p>
             )}
           </div>
@@ -305,76 +347,162 @@ export default function EmployeeForm({
         </CardContent>
       </Card>
 
-      {/* CRM Access Section */}
+      {/* CRM Access Section — Three-way radio: None / Link Existing / New Access */}
       <div className="border-t border-slate-700 pt-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-lg font-medium text-slate-100">CRM Access</h3>
-            <p className="text-sm text-slate-400">Grant this employee access to the CRM system</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <label htmlFor="has-crm-access" className="text-sm text-slate-300">
-              Enable CRM access
-            </label>
-            <input
-              id="has-crm-access"
-              type="checkbox"
-              checked={formData.has_crm_access}
-              onChange={(e) => onChange('has_crm_access', e.target.checked)}
-              className="rounded border-slate-600 bg-slate-700"
-            />
-          </div>
+        <div className="mb-4">
+          <h3 className="text-lg font-medium text-slate-100">CRM Access</h3>
+          <p className="text-sm text-slate-400">Grant this employee access to the CRM system</p>
         </div>
 
-        {formData.has_crm_access && (
-          <div className="space-y-4 pl-4 border-l-2 border-slate-700">
+        <div className="space-y-3">
+          {/* Option: None */}
+          <label className="flex items-center gap-3 p-3 rounded-lg border border-slate-700 cursor-pointer hover:bg-slate-700/30 transition-colors">
+            <input
+              type="radio"
+              name="crm_access_mode"
+              value="none"
+              checked={formData.crm_access_mode === 'none'}
+              onChange={() => {
+                onChange('crm_access_mode', 'none');
+                onChange('has_crm_access', false);
+                onChange('linked_user_id', '');
+                // Also disable WhatsApp if CRM access removed
+                onChange('whatsapp_enabled', false);
+              }}
+              className="text-blue-500"
+            />
             <div>
-              <Label className="text-slate-300">CRM Role</Label>
-              <Select
-                value={formData.crm_user_employee_role || 'employee'}
-                onValueChange={(value) => onChange('crm_user_employee_role', value)}
-              >
-                <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-200">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-700">
-                  <SelectItem value="employee" className="text-slate-200">
-                    Employee (Own records only)
-                  </SelectItem>
-                  <SelectItem value="manager" className="text-slate-200">
-                    Manager (All tenant records)
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-slate-400 mt-1">
-                {formData.crm_user_employee_role === 'manager'
-                  ? '✓ Can view all records in their tenant'
-                  : '✓ Can only view records assigned to them'}
-              </p>
+              <span className="text-slate-200 font-medium">No CRM Access</span>
+              <p className="text-xs text-slate-400">Employee record only — no system login</p>
             </div>
+          </label>
 
-            {employee && employee.crm_invite_status && (
-              <div className="text-sm text-slate-400">
-                <span className="font-medium">Status:</span>{' '}
-                {employee.crm_invite_status.replace(/_/g, ' ')}
-                {employee.crm_invite_last_sent && (
-                  <span className="ml-2">
-                    (Last sent: {new Date(employee.crm_invite_last_sent).toLocaleDateString()})
-                  </span>
+          {/* Option: Link Existing */}
+          <label className="flex items-center gap-3 p-3 rounded-lg border border-slate-700 cursor-pointer hover:bg-slate-700/30 transition-colors">
+            <input
+              type="radio"
+              name="crm_access_mode"
+              value="link_existing"
+              checked={formData.crm_access_mode === 'link_existing'}
+              onChange={() => {
+                onChange('crm_access_mode', 'link_existing');
+                onChange('has_crm_access', true);
+                loadCrmUsers();
+              }}
+              className="text-blue-500"
+            />
+            <div>
+              <span className="text-slate-200 font-medium">Link to Existing CRM User</span>
+              <p className="text-xs text-slate-400">Connect to an existing login account — no invite sent</p>
+            </div>
+          </label>
+
+          {/* Link Existing sub-form */}
+          {formData.crm_access_mode === 'link_existing' && (
+            <div className="space-y-3 pl-4 ml-4 border-l-2 border-blue-700">
+              <div>
+                <Label className="text-slate-300">Select CRM User</Label>
+                <Select
+                  value={formData.linked_user_id || 'none'}
+                  onValueChange={(val) => onChange('linked_user_id', val === 'none' ? '' : val)}
+                >
+                  <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-200">
+                    <SelectValue placeholder={loadingUsers ? 'Loading users...' : 'Select a user...'} />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-slate-700">
+                    <SelectItem value="none" className="text-slate-400">— Select —</SelectItem>
+                    {crmUsers.map((u) => (
+                      <SelectItem key={u.id || u.user_id} value={u.id || u.user_id} className="text-slate-200">
+                        {u.full_name || u.display_name || u.email} ({u.email})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {crmUsers.length === 0 && !loadingUsers && (
+                  <p className="text-xs text-amber-400 mt-1">No CRM users found for this tenant</p>
                 )}
               </div>
-            )}
-          </div>
-        )}
+            </div>
+          )}
+
+          {/* Option: New CRM Access */}
+          <label className="flex items-center gap-3 p-3 rounded-lg border border-slate-700 cursor-pointer hover:bg-slate-700/30 transition-colors">
+            <input
+              type="radio"
+              name="crm_access_mode"
+              value="new_access"
+              checked={formData.crm_access_mode === 'new_access'}
+              onChange={() => {
+                onChange('crm_access_mode', 'new_access');
+                onChange('has_crm_access', true);
+                onChange('linked_user_id', '');
+              }}
+              className="text-blue-500"
+            />
+            <div>
+              <span className="text-slate-200 font-medium">Create New CRM Access</span>
+              <p className="text-xs text-slate-400">Send an invitation to create a new login account</p>
+            </div>
+          </label>
+
+          {/* New Access sub-form */}
+          {formData.crm_access_mode === 'new_access' && (
+            <div className="space-y-3 pl-4 ml-4 border-l-2 border-blue-700">
+              <div>
+                <Label className="text-slate-300">CRM Role</Label>
+                <Select
+                  value={formData.crm_user_employee_role || 'employee'}
+                  onValueChange={(value) => onChange('crm_user_employee_role', value)}
+                >
+                  <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-200">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-slate-700">
+                    <SelectItem value="employee" className="text-slate-200">
+                      Employee (Own records only)
+                    </SelectItem>
+                    <SelectItem value="manager" className="text-slate-200">
+                      Manager (All tenant records)
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-slate-400 mt-1">
+                  {formData.crm_user_employee_role === 'manager'
+                    ? '✓ Can view all records in their tenant'
+                    : '✓ Can only view records assigned to them'}
+                </p>
+              </div>
+              <p className="text-xs text-amber-400">
+                An invitation email will be sent to {formData.email || 'the employee email'}
+              </p>
+
+              {employee && employee.crm_invite_status && (
+                <div className="text-sm text-slate-400">
+                  <span className="font-medium">Status:</span>{' '}
+                  {employee.crm_invite_status.replace(/_/g, ' ')}
+                  {employee.crm_invite_last_sent && (
+                    <span className="ml-2">
+                      (Last sent: {new Date(employee.crm_invite_last_sent).toLocaleDateString()})
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* WhatsApp AiSHA Access Section */}
+      {/* WhatsApp AiSHA Access Section — requires CRM access */}
       {/* [2026-02-24 Claude] Employee WhatsApp authorization */}
-      <div className="border-t border-slate-700 pt-6">
+      <div className={`border-t border-slate-700 pt-6 ${formData.crm_access_mode === 'none' ? 'opacity-50 pointer-events-none' : ''}`}>
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-lg font-medium text-slate-100">WhatsApp Access</h3>
-            <p className="text-sm text-slate-400">Allow this employee to use AiSHA via WhatsApp</p>
+            <p className="text-sm text-slate-400">
+              {formData.crm_access_mode === 'none'
+                ? 'Requires CRM access to be enabled'
+                : 'Allow this employee to use AiSHA via WhatsApp'}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <label htmlFor="whatsapp-enabled" className="text-sm text-slate-300">
@@ -383,8 +511,9 @@ export default function EmployeeForm({
             <input
               id="whatsapp-enabled"
               type="checkbox"
-              checked={formData.whatsapp_enabled}
+              checked={formData.whatsapp_enabled && formData.crm_access_mode !== 'none'}
               onChange={(e) => onChange('whatsapp_enabled', e.target.checked)}
+              disabled={formData.crm_access_mode === 'none'}
               className="rounded border-slate-600 bg-slate-700"
             />
           </div>

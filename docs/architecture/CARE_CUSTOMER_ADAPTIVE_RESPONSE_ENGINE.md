@@ -641,13 +641,27 @@ export function detectCustomEscalation(signals) {
 
 ---
 
+## Autonomy Playbook (Planned)
+
+C.A.R.E. currently detects signals, proposes state transitions, persists state, and fires webhooks — but all autonomous **actions** remain in `ACTION_SKIPPED` mode. The system observes but doesn't act.
+
+The **Autonomy Playbook** system is fully designed and ready to build when prioritized. It introduces per-tenant configurable playbooks that define what happens when C.A.R.E. detects a trigger — including native action sequences (email → task → escalate) and external webhook routing to Pabbly/n8n/BRAID.
+
+**Full design spec:** [CARE_AUTONOMY_PLAYBOOK_PLAN.md](../build/CARE_AUTONOMY_PLAYBOOK_PLAN.md)
+
+---
+
 ## Version History
 
-| Version | Date    | Changes                                      |
-| ------- | ------- | -------------------------------------------- |
-| 1.0     | 2024-Q4 | Initial C.A.R.E. implementation              |
-| 2.0     | 2025-Q1 | State persistence, webhook integration       |
-| 3.0     | 2025-Q4 | Enhanced escalation detection, audit logging |
+| Version | Date    | Changes                                                                         |
+| ------- | ------- | ------------------------------------------------------------------------------- |
+| 1.0     | 2024-Q4 | Initial C.A.R.E. implementation                                                 |
+| 2.0     | 2025-Q1 | State persistence, webhook integration                                          |
+| 3.0     | 2025-Q4 | Enhanced escalation detection, audit logging                                    |
+| 3.1     | 2026-01 | PR0–PR3: Kill switch, shadow mode, state engine, signal adapter, audit emitter  |
+| 3.2     | 2026-01 | PR4–PR6: Policy gate, workflow trigger client, CareSettings UI                  |
+| 3.3     | 2026-02 | PR7–PR8: Action origin contract, trigger-signal adapter, full integration tests |
+| —       | 2026-03 | Autonomy Playbook designed and parked (pending 5 open questions)                |
 
 ---
 
@@ -660,8 +674,12 @@ export function detectCustomEscalation(signals) {
 - **Webhook Client:** `backend/lib/care/careWorkflowTriggerClient.js`
 - **Related Docs:**
   - [AI Architecture - AiSHA AI](./AI_ARCHITECTURE_AISHA_AI.md)
-  - [Database Guide](./DATABASE_GUIDE.md)
-  - [Developer Manual](./DEVELOPER_MANUAL.md)
+  - [Database Guide](../developer-docs/DATABASE_GUIDE.md)
+  - [Developer Manual](../developer-docs/DEVELOPER_MANUAL.md)
+  - [C.A.R.E. Setup Guide](../user-guides/CARE_SETUP_GUIDE.md)
+  - [C.A.R.E. Autonomy Playbook Plan](../build/CARE_AUTONOMY_PLAYBOOK_PLAN.md)
+  - [C.A.R.E. Event Contract](../references/CARE_EVENT_CONTRACT.md)
+  - [Action Origin Contract](../product/customer-care-action-origin.md)
 
 ---
 
