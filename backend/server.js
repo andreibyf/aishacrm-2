@@ -304,7 +304,13 @@ app.use('/api/cron', defaultLimiter, createCronRoutes(measuredPgPool));
 // Metrics routes read from performance_logs; use resilient wrapper to avoid ended pool errors
 app.use('/api/metrics', defaultLimiter, createMetricsRoutes(resilientPerfDb));
 app.use('/api/utils', defaultLimiter, createUtilsRoutes(measuredPgPool));
-app.use('/api/cache', defaultLimiter, createCacheRoutes());
+app.use(
+  '/api/cache',
+  defaultLimiter,
+  authenticateRequest,
+  validateTenantAccess,
+  createCacheRoutes(),
+);
 app.use('/api/bizdevsources', defaultLimiter, createBizDevSourceRoutes(measuredPgPool));
 app.use('/api/clients', defaultLimiter, createClientRoutes(measuredPgPool));
 // Workflow routes with conditional auth: webhooks bypass auth, all other routes require auth

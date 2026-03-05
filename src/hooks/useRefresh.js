@@ -11,7 +11,7 @@
  *   const { refresh, refreshing } = useRefresh({
  *     modules: ['leads', 'employees', 'users'],  // backend cache modules to bust
  *     onReload: async () => { await loadLeads(); await loadStats(); },
- *     toast: 'Leads refreshed',
+ *     toastMessage: 'Leads refreshed',
  *   });
  *
  *   <RefreshButton onClick={refresh} loading={refreshing} />
@@ -25,18 +25,52 @@ import { getBackendUrl } from '@/api/backendUrl';
 const BACKEND_URL = getBackendUrl();
 
 /**
+ * Explicit mapping from backend cache module names to ApiManager entity keys.
+ * ApiManager uses singular PascalCase entity names (e.g. 'Lead', 'BizDevSource').
+ */
+const MODULE_TO_ENTITY_KEY = {
+  leads: 'Lead',
+  contacts: 'Contact',
+  accounts: 'Account',
+  opportunities: 'Opportunity',
+  activities: 'Activity',
+  bizdevsources: 'BizDevSource',
+  users: 'User',
+  employees: 'Employee',
+  notes: 'Note',
+  documents: 'Document',
+  workflows: 'Workflow',
+  reports: 'Report',
+};
+
+/**
  * Invalidate backend Redis cache for specific modules + tenant.
  * Falls back silently on failure (non-blocking — data will just be up to 30s stale).
  */
 async function invalidateBackendCache(tenantId, modules = []) {
   if (!tenantId || modules.length === 0) return;
   try {
-    await fetch(`${BACKEND_URL}/api/cache/invalidate`, {
+    const response = await fetch(`${BACKEND_URL}/api/cache/invalidate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify({ tenant_id: tenantId, modules }),
     });
+
+    // Treat non-OK HTTP responses as a (non-fatal) invalidation failure.
+    if (!response.ok && import.meta.env.DEV) {
+      let errorBody = '';
+      try {
+        errorBody = await response.text();
+      } catch {
+        // Ignore body read errors; we still have status info.
+      }
+      console.warn('[useRefresh] Backend cache invalidation rejected (non-fatal):', {
+        status: response.status,
+        statusText: response.statusText,
+        body: errorBody,
+      });
+    }
   } catch (err) {
     // Non-fatal — worst case the data is 30s stale
     if (import.meta.env.DEV) {
@@ -53,17 +87,17 @@ export function useRefresh({
   tenantId,
 } = {}) {
   const [refreshing, setRefreshing] = useState(false);
-  const { clearCache, clearCacheByKey } = useApiManager();
+  const { clearCacheByKey } = useApiManager();
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
       // 1. Clear client-side ApiManager cache
-      // If specific keys provided, clear those; otherwise clear by module names
+      // If specific keys provided, use those; otherwise derive from module→entity mapping
       const keysToClean =
         clientCacheKeys.length > 0
           ? clientCacheKeys
-          : modules.map((m) => m.charAt(0).toUpperCase() + m.slice(1)); // 'leads' → 'Lead' (ApiManager uses entity name casing)
+          : modules.map((m) => MODULE_TO_ENTITY_KEY[m] || m).filter(Boolean);
 
       for (const key of keysToClean) {
         clearCacheByKey(key);
@@ -89,7 +123,7 @@ export function useRefresh({
     } finally {
       setRefreshing(false);
     }
-  }, [modules, clientCacheKeys, onReload, toastMessage, tenantId, clearCache, clearCacheByKey]);
+  }, [modules, clientCacheKeys, onReload, toastMessage, tenantId, clearCacheByKey]);
 
   return { refresh, refreshing };
 }

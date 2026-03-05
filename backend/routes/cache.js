@@ -7,6 +7,24 @@ import express from 'express';
 import cacheManager from '../lib/cacheManager.js';
 import logger from '../lib/logger.js';
 
+/** Allowlist of valid cache module names — prevents arbitrary keyspace scans. */
+const VALID_MODULES = new Set([
+  'leads',
+  'contacts',
+  'accounts',
+  'opportunities',
+  'activities',
+  'bizdevsources',
+  'users',
+  'employees',
+  'notes',
+  'documents',
+  'workflows',
+  'reports',
+]);
+
+const MAX_MODULES = 20;
+
 export default function createCacheRoutes() {
   const router = express.Router();
 
@@ -14,27 +32,46 @@ export default function createCacheRoutes() {
    * POST /api/cache/invalidate
    * Invalidate backend Redis cache for specific modules within a tenant.
    *
-   * Body: { tenant_id: string, modules: string[] }
-   * modules: array of module names matching cacheList keys
+   * Uses req.tenant.id from validateTenantAccess middleware (body tenant_id is ignored).
+   * Body: { modules: string[] }
+   * modules: array of module names matching VALID_MODULES allowlist
    *   e.g. ['leads', 'contacts', 'accounts', 'opportunities', 'activities', 'bizdevsources', 'users', 'employees']
    *
    * If modules is empty or ['*'], invalidates ALL cache for the tenant.
    */
   router.post('/invalidate', async (req, res) => {
     try {
-      const { tenant_id, modules = [] } = req.body;
+      // Use validated tenant from middleware — never trust body tenant_id
+      const tenant_id = req.tenant?.id;
+      const { modules: rawModules = [] } = req.body;
 
       if (!tenant_id) {
-        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+        return res
+          .status(400)
+          .json({ status: 'error', message: 'tenant_id is required (must be authenticated)' });
       }
+
+      // Validate and de-duplicate modules against allowlist
+      const isWildcard =
+        rawModules.length === 0 || (rawModules.length === 1 && rawModules[0] === '*');
+      const modules = isWildcard
+        ? []
+        : [
+            ...new Set(rawModules.filter((m) => typeof m === 'string' && VALID_MODULES.has(m))),
+          ].slice(0, MAX_MODULES);
 
       let invalidated = 0;
 
-      if (modules.length === 0 || (modules.length === 1 && modules[0] === '*')) {
+      if (isWildcard) {
         // Invalidate ALL cache for this tenant
         await cacheManager.invalidateAllTenant(tenant_id);
         invalidated = -1; // -1 means "all"
         logger.info(`[Cache API] Invalidated ALL cache for tenant ${tenant_id}`);
+      } else if (modules.length === 0) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'No valid modules provided. Valid modules: ' + [...VALID_MODULES].join(', '),
+        });
       } else {
         // Invalidate specific modules
         for (const mod of modules) {
