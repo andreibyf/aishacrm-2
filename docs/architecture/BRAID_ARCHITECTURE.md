@@ -1,7 +1,7 @@
 # Braid Language, SDK & Integration Architecture
 
 > **Version:** 2.1  
-> **Last Updated:** February 2026  
+> **Last Updated:** March 2026  
 > **Purpose:** Comprehensive reference for Braid DSL in AiSHA CRM
 
 ---
@@ -990,6 +990,60 @@ fn getAccountFullDetails(tenant: String, account_id: String) -> Result<Object, C
 
 ---
 
+## PEP Integration
+
+PEP (Plain English Programming) is a compiler layer that sits **above** Braid. It compiles natural language queries and business rules into Braid IR (Intermediate Representation), which then executes through the standard Braid runtime.
+
+### How PEP Uses Braid
+
+```
+English source → PEP Compiler (parse → resolve → emit) → Braid IR → Braid Runtime → Supabase
+```
+
+PEP does not fork or modify Braid. The compiled `braid_ir.json` is the stable contract between the PEP compiler and the Braid execution engine.
+
+### PEP Query Execution (Phase 3+)
+
+PEP's natural language report queries compile to a `query_entity` Braid IR instruction:
+
+```javascript
+// POST /api/pep/compile
+// Input: "Show me all qualified leads from last week"
+// Output: Braid IR with query_entity instruction
+{
+  "op": "query_entity",
+  "target": "Lead",
+  "filters": [
+    { "field": "status", "op": "eq", "value": "qualified" },
+    { "field": "created_date", "op": "gte", "value": "{{date: start_of_last_week}}" }
+  ]
+}
+```
+
+The PEP runtime (`pep/runtime/pepRuntime.js`) executes this IR through the existing Braid execution engine with full tenant isolation.
+
+### PEP Query Node in Workflow Builder (Phase 5b)
+
+The `pep_query` node type in the Workflow Builder allows workflows to include PEP queries as steps:
+
+- English query is compiled to IR at workflow save time
+- Variables (`{{entity_id}}`, `{{date: last_30_days}}`) resolve at execution time via two-stage resolution
+- Results stored in `context.variables.pep_results` for downstream nodes
+- No new API endpoints or database tables required
+
+### Key Files
+
+| Component         | Path                                                                                              |
+| ----------------- | ------------------------------------------------------------------------------------------------- |
+| PEP compiler      | `pep/compiler/` (index.js, parser.js, llmParser.js, resolver.js, emitter.js)                      |
+| PEP catalogs      | `pep/catalogs/` (entity-catalog.yaml, capability-catalog.yaml)                                    |
+| PEP runtime       | `pep/runtime/pepRuntime.js`                                                                       |
+| PEP API endpoints | `backend/routes/pep.js`                                                                           |
+| Workflow executor | `backend/routes/workflows.js` → `execNode()` (pep_query case)                                     |
+| Full reference    | [Braid & PEP Reference](../references/AiSHA_Project_-_Braid___Plain_English_Programming__PEP_.md) |
+
+---
+
 ## C.A.R.E. Integration
 
 Braid tools power the C.A.R.E. (Cognitive Adaptive Response Engine) system, supporting the customer-facing C.A.R.E. framework (Communication, Acquisition, Retention, Engagement).
@@ -1568,23 +1622,14 @@ braid codegen --output src/types/braid.d.ts
 
 #### 2. IDE Integration
 
-**VS Code Extension (Planned):**
+**VS Code Extension (v0.5.0 — Complete):**
 
 - Syntax highlighting for `.braid` files
-- IntelliSense for tool parameters
-- Inline SQL validation
-- Jump to definition for tool calls
+- Hover documentation for tool definitions
+- Diagnostics (error detection and reporting)
+- Code snippets for common patterns
 
-**Current Workaround:** Use SQL syntax highlighting
-
-```json
-// .vscode/settings.json
-{
-  "files.associations": {
-    "*.braid": "sql"
-  }
-}
-```
+The extension is installed from the local `.vsix` package. See `braid-llm-kit/vscode-braid/` for source.
 
 #### 3. Tool Testing Framework
 

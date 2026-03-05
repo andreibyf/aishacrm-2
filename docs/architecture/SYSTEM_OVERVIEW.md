@@ -1,13 +1,13 @@
 # AiSHA CRM — System Overview
 
-> **Version:** 3.0.x | **Updated:** 2026-02-15 | **Audience:** Developers, AI assistants, onboarding engineers
+> **Version:** 3.0.x | **Updated:** 2026-03-04 | **Audience:** Developers, AI assistants, onboarding engineers
 
 > This document is an index, not a duplication of logic.
 > Always defer to the referenced files for canonical behavior.
 
 ## System Identity
 
-AiSHA CRM is a **multi-tenant, AI-native Executive Assistant CRM**. It combines traditional CRM entity management with an AI chat interface powered by **Braid** — a custom DSL for secure AI-database interactions. The system supports multiple LLM providers with automatic failover.
+AiSHA CRM is a **multi-tenant, AI-native Executive Assistant CRM**. It combines traditional CRM entity management with an AI chat interface powered by **Braid** — a custom DSL for secure AI-database interactions — and **PEP** (Plain English Programming), which compiles natural language business rules and queries into Braid IR for deterministic execution. The system supports multiple LLM providers with automatic failover.
 
 ## Runtime Topology
 
@@ -58,6 +58,10 @@ Chat request → intentRouter → intentClassifier
              → Braid tool execution (braidIntegration-v2.js)
              → Supabase query (tenant-scoped)
              → response
+
+PEP query   → POST /api/pep/compile (English → Braid IR)
+            → POST /api/pep/query (IR → Supabase query)
+            → response
 ```
 
 ### Execution Modes
@@ -72,9 +76,11 @@ Chat request → intentRouter → intentClassifier
 | Provider  | Models                              | Capabilities                            |
 | --------- | ----------------------------------- | --------------------------------------- |
 | OpenAI    | gpt-4o, gpt-4o-mini                 | `chat_tools`, `json_strict`             |
-| Anthropic | claude-3-5-sonnet, claude-3-5-haiku | `chat_tools`, `json_strict`             |
+| Anthropic | claude-sonnet-4-5, claude-haiku-4-5 | `chat_tools`, `json_strict`             |
 | Groq      | llama-3.3-70b                       | `brain_read_only`, `brain_plan_actions` |
 | Local     | ollama, lmstudio                    | Development/testing                     |
+
+> **Note:** Model strings are configurable per-tenant. Check Doppler/env for current defaults.
 
 ## Multi-Tenancy Model
 
@@ -111,13 +117,16 @@ All workers are initialized in `backend/server.js` during startup.
 | `backend/startup/initMiddleware.js`  | Middleware stack registration                       |
 | `backend/startup/initServices.js`    | Redis, cache, services init                         |
 | `backend/middleware/`                | Auth, tenant, rate limiting, IDR (11 files)         |
-| `backend/routes/`                    | Express route handlers (88 files, 210+ endpoints)   |
+| `backend/routes/`                    | Express route handlers (90+ files, 220+ endpoints)  |
 | `backend/lib/aiEngine/`              | Multi-provider LLM engine (8 files)                 |
 | `backend/lib/braidIntegration-v2.js` | Braid tool registry, system prompt, execution       |
 | `backend/lib/braid/`                 | Braid core: registry, execution, policies, metrics  |
 | `src/main.jsx`                       | React 18 app entry, router setup                    |
 | `src/api/`                           | Frontend API client with circuit breaker failover   |
 | `braid-llm-kit/examples/assistant/`  | Braid tool definitions (20 `.braid` files)          |
+| `pep/compiler/`                      | PEP compiler (parser, resolver, emitter)            |
+| `pep/runtime/pepRuntime.js`          | PEP runtime (Braid IR execution)                    |
+| `pep/catalogs/`                      | PEP entity + capability catalogs (YAML)             |
 
 ## CRM Lifecycle (v3.0.0)
 
@@ -133,24 +142,27 @@ BizDev Source → promote → Lead → qualify → Lead (qualified) → convert 
 
 ## Documentation Index
 
-| Document                                                                               | Description                                            |
-| -------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| [COPILOT_PLAYBOOK.md](../COPILOT_PLAYBOOK.md)                                          | Operations guide, testing, migrations — **start here** |
-| [DEVELOPER_MANUAL.md](DEVELOPER_MANUAL.md)                                             | Development setup, full architecture                   |
-| [DATABASE_GUIDE.md](DATABASE_GUIDE.md)                                                 | Schema, migrations, trigger patterns                   |
-| [SECURITY_GUIDE.md](SECURITY_GUIDE.md)                                                 | RLS, authentication, security hardening                |
-| [AI_ASSISTANT_GUIDE.md](AI_ASSISTANT_GUIDE.md)                                         | AiSHA AI assistant features                            |
-| [AI_ARCHITECTURE_AISHA_AI.md](AI_ARCHITECTURE_AISHA_AI.md)                             | AI architecture deep-dive                              |
-| [BRAID_ARCHITECTURE.md](BRAID_ARCHITECTURE.md)                                         | Braid DSL architecture                                 |
-| [CARE_SETUP_GUIDE.md](CARE_SETUP_GUIDE.md)                                             | C.A.R.E. engine configuration                          |
-| [CARE_CUSTOMER_ADAPTIVE_RESPONSE_ENGINE.md](CARE_CUSTOMER_ADAPTIVE_RESPONSE_ENGINE.md) | C.A.R.E. engine overview                               |
-| [ADMIN_GUIDE.md](ADMIN_GUIDE.md)                                                       | System administration, deployment                      |
-| [USER_GUIDE.md](USER_GUIDE.md)                                                         | End-user CRM operations                                |
-| [BRANDING_GUIDE.md](BRANDING_GUIDE.md)                                                 | Brand assets, colors                                   |
-| [CIRCUIT_BREAKER.md](CIRCUIT_BREAKER.md)                                               | Frontend failover patterns                             |
-| [R2_ARTIFACT_STORAGE.md](R2_ARTIFACT_STORAGE.md)                                       | Cloudflare R2 integration                              |
-| [WORKFLOW_FEATURES_IMPLEMENTATION.md](WORKFLOW_FEATURES_IMPLEMENTATION.md)             | Workflow implementation details                        |
-| [Intel-iGPU-Local-AI-Development-Guide.md](Intel-iGPU-Local-AI-Development-Guide.md)   | Local AI setup with Intel GPU                          |
+| Document                                                                                               | Description                                            |
+| ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------ |
+| [COPILOT_PLAYBOOK.md](../developer-docs/COPILOT_PLAYBOOK.md)                                           | Operations guide, testing, migrations — **start here** |
+| [DEVELOPER_MANUAL.md](../developer-docs/DEVELOPER_MANUAL.md)                                           | Development setup, full architecture                   |
+| [DATABASE_GUIDE.md](../developer-docs/DATABASE_GUIDE.md)                                               | Schema, migrations, trigger patterns                   |
+| [SECURITY_GUIDE.md](../admin-guides/SECURITY_GUIDE.md)                                                 | RLS, authentication, security hardening                |
+| [AI_ASSISTANT_GUIDE.md](../user-guides/AI_ASSISTANT_GUIDE.md)                                          | AiSHA AI assistant features                            |
+| [AI_ARCHITECTURE_AISHA_AI.md](./AI_ARCHITECTURE_AISHA_AI.md)                                           | AI architecture deep-dive                              |
+| [BRAID_ARCHITECTURE.md](./BRAID_ARCHITECTURE.md)                                                       | Braid DSL architecture                                 |
+| [Braid & PEP Reference](../references/AiSHA_Project_-_Braid___Plain_English_Programming__PEP_.md)      | Braid + PEP milestones, file locations, status         |
+| [CARE_SETUP_GUIDE.md](../user-guides/CARE_SETUP_GUIDE.md)                                              | C.A.R.E. engine configuration                          |
+| [CARE_CUSTOMER_ADAPTIVE_RESPONSE_ENGINE.md](./CARE_CUSTOMER_ADAPTIVE_RESPONSE_ENGINE.md)               | C.A.R.E. engine overview                               |
+| [CARE_AUTONOMY_PLAYBOOK_PLAN.md](../build/CARE_AUTONOMY_PLAYBOOK_PLAN.md)                              | C.A.R.E. Playbook design spec (parked)                 |
+| [TEAM_VISIBILITY_SYSTEM.md](./TEAM_VISIBILITY_SYSTEM.md)                                               | Two-tier team access model                             |
+| [ADMIN_GUIDE.md](../admin-guides/ADMIN_GUIDE.md)                                                       | System administration, deployment                      |
+| [USER_GUIDE.md](../user-guides/USER_GUIDE.md)                                                          | End-user CRM operations                                |
+| [BRANDING_GUIDE.md](../references/BRANDING_GUIDE.md)                                                   | Brand assets, colors                                   |
+| [CIRCUIT_BREAKER.md](./CIRCUIT_BREAKER.md)                                                             | Frontend failover patterns                             |
+| [R2_ARTIFACT_STORAGE.md](./R2_ARTIFACT_STORAGE.md)                                                     | Cloudflare R2 integration                              |
+| [WORKFLOW_FEATURES_IMPLEMENTATION.md](../WORKFLOW_FEATURES_IMPLEMENTATION.md)                          | Workflow implementation details                        |
+| [Intel-iGPU-Local-AI-Development-Guide.md](../developer-docs/Intel-iGPU-Local-AI-Development-Guide.md) | Local AI setup with Intel GPU                          |
 
 **Subdirectories:** `docs/archive/` (legacy), `docs/audits/`, `docs/backend/`, `docs/product/`, `docs/reports/`.
 
