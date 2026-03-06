@@ -267,7 +267,13 @@ app.use(
   authenticateRequest,
   createAgentOfficeRoutes(measuredPgPool),
 );
-app.use('/api/ai-settings', defaultLimiter, authenticateRequest, aiSettingsRoutes); // AI configuration settings
+app.use(
+  '/api/ai-settings',
+  defaultLimiter,
+  authenticateRequest,
+  validateTenantAccess,
+  aiSettingsRoutes,
+); // AI configuration settings
 app.use('/api/mcp', defaultLimiter, createMcpRoutes(measuredPgPool));
 app.use('/api/devai', defaultLimiter, devaiRoutes); // Phase 6: Developer AI approvals (superadmin only)
 app.use('/api/devai', defaultLimiter, devaiHealthAlertsRoutes); // Health monitoring alerts (superadmin only)
