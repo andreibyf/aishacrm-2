@@ -500,6 +500,9 @@ export default function LeadProfilePage() {
   const [error, setError] = useState(null);
   const [data, setData] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
+  const [aiSummary, setAiSummary] = useState(null);
+  const [aiSummaryUpdatedAt, setAiSummaryUpdatedAt] = useState(null);
+  const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
 
   const entityType = useMemo(() => {
     if (params.leadId) return 'lead';
@@ -560,6 +563,67 @@ export default function LeadProfilePage() {
           setData(json.data);
           const title = json.data.display_name || entityType;
           setAiShaContext({ entity_type: entityType, entity_id: entityId, title });
+
+          // Seed AI summary state from profile route response
+          const existingSummary = json.data.entity?.ai_summary || null;
+          const existingUpdatedAt = json.data.entity?.ai_summary_updated_at || null;
+          setAiSummary(existingSummary);
+          setAiSummaryUpdatedAt(existingUpdatedAt);
+
+          // Auto-generate summary in background if none exists yet
+          if (!existingSummary) {
+            setAiSummaryLoading(true);
+            const backendUrl2 =
+              getRuntimeEnv('VITE_AISHACRM_BACKEND_URL') || 'http://localhost:4001';
+            // BUGFIX: Use selected_tenant_id (UUID) instead of deprecated tenant_id (text slug)
+            const tid2 = tenantId || window.localStorage.getItem('selected_tenant_id');
+            const { data: sess2 } = await supabase.auth.getSession();
+            const tok2 = sess2?.session?.access_token;
+            fetch(`${backendUrl2}/api/ai/summarize-person-profile`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(tok2 ? { Authorization: `Bearer ${tok2}` } : {}),
+              },
+              body: JSON.stringify({
+                person_id: entityId,
+                person_type: entityType,
+                tenant_id: tid2,
+                profile_data: json.data.entity,
+              }),
+            })
+              .then((r) => r.json())
+              .then((summaryJson) => {
+                if (!aborted && summaryJson?.ai_summary) {
+                  const s = Array.isArray(summaryJson.ai_summary)
+                    ? summaryJson.ai_summary.join(' ')
+                    : summaryJson.ai_summary;
+                  setAiSummary(s);
+                  setAiSummaryUpdatedAt(new Date().toISOString());
+                }
+              })
+              .catch(() => {
+                // Ollama/LLM failed — generate a deterministic fallback summary from profile data
+                if (!aborted) {
+                  const e = json.data.entity;
+                  const n =
+                    [e.first_name, e.last_name].filter(Boolean).join(' ') || e.name || entityType;
+                  const company = e.company || e.account_name || e.company_name || '';
+                  const title = e.job_title || e.title || '';
+                  const source = e.source || e.lead_source || '';
+                  const status = e.status || '';
+                  const parts = [
+                    `${n}${title ? `, ${title}` : ''}${company ? ` at ${company}` : ''} is a ${status || 'new'} ${entityType}${source ? ` from ${source}` : ''}.`,
+                    'No AI-generated summary is available right now — the local model is still loading.',
+                  ];
+                  setAiSummary(parts.join(' '));
+                  setAiSummaryUpdatedAt(null);
+                }
+              })
+              .finally(() => {
+                if (!aborted) setAiSummaryLoading(false);
+              });
+          }
         }
       } catch (e) {
         if (!aborted) setError(e?.message || 'Failed to load');
@@ -917,8 +981,9 @@ export default function LeadProfilePage() {
               entityType={entityType}
               entityId={entityId}
               entityLabel={name}
-              aiSummary={entity.ai_summary}
-              lastUpdated={entity.updated_at}
+              aiSummary={aiSummary}
+              aiSummaryLoading={aiSummaryLoading}
+              lastUpdated={aiSummaryUpdatedAt || entity.updated_at}
               profile={entity}
               relatedData={{ opportunities, activities, notes }}
             />

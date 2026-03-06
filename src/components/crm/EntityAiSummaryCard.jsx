@@ -9,6 +9,7 @@ export default function EntityAiSummaryCard({
   entityId,
   entityLabel,
   aiSummary,
+  aiSummaryLoading = false,
   lastUpdated,
   relatedData = {}, // { profile, opportunities, activities, notes }
   profile = null, // The full entity profile data
@@ -63,10 +64,18 @@ export default function EntityAiSummaryCard({
         </div>
         <div className="space-y-4">
           <div className="prose prose-sm max-w-none text-indigo-800 leading-relaxed">
-            {aiSummary || 'No summary available yet. Ask AiSHA to generate one.'}
+            {aiSummaryLoading ? (
+              <div className="space-y-2 animate-pulse">
+                <div className="h-3 bg-indigo-200 rounded w-full" />
+                <div className="h-3 bg-indigo-200 rounded w-5/6" />
+                <div className="h-3 bg-indigo-200 rounded w-4/6" />
+              </div>
+            ) : (
+              aiSummary || 'No summary available yet. Ask AiSHA to generate one.'
+            )}
           </div>
 
-          {lastUpdated && (
+          {lastUpdated && !aiSummaryLoading && (
             <div className="flex items-center gap-2 text-xs text-indigo-400 pt-2 border-t border-indigo-200/50">
               <Clock className="w-3 h-3" />
               <span>

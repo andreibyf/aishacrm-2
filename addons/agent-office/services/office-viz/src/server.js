@@ -342,14 +342,39 @@ app.get('/', requireVizAuth, (req, res) => {
       border: 4px solid transparent; border-top-color: var(--accent);
     }
 
-    /* Ghost (carried task) */
-    .ghost-carry {
-      position: absolute; top: -28px; right: -8px; font-size: 1.2rem; z-index: 35;
-      animation: float-ghost 0.6s infinite alternate ease-in-out; display: none;
+    /* Ghost (carried task) — REMOVED, ghosts now float freely */
+    .ghost-carry { display: none !important; }
+
+    /* ── Floating aisle ghosts ── */
+    .aisle-ghost {
+      position: absolute;
+      font-size: 1.6rem;
+      z-index: 30;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      transition: left 0.05s linear;
+      filter: drop-shadow(0 0 6px rgba(255,255,255,0.7));
+      animation: ghost-bob 0.7s infinite alternate ease-in-out;
     }
-    .ghost-carry.visible { display: block; }
-    @keyframes float-ghost {
-      from { transform: translateY(0); } to { transform: translateY(-5px); }
+    @keyframes ghost-bob {
+      from { margin-top: 0px; }  to { margin-top: -6px; }
+    }
+    .aisle-ghost.eaten {
+      animation: ghost-eat 0.35s ease-out forwards;
+    }
+    @keyframes ghost-eat {
+      0%   { transform: translate(-50%,-50%) scale(1);   opacity: 1; }
+      50%  { transform: translate(-50%,-50%) scale(1.8); opacity: 0.7; }
+      100% { transform: translate(-50%,-50%) scale(0);   opacity: 0; }
+    }
+    .aisle-ghost.done {
+      filter: drop-shadow(0 0 10px #3fb950);
+      animation: ghost-bob 0.5s infinite alternate ease-in-out, ghost-done-fade 2.5s ease-out forwards;
+    }
+    @keyframes ghost-done-fade {
+      0%   { opacity:1; }
+      70%  { opacity:1; }
+      100% { opacity:0; }
     }
 
     /* ── Task dependency arrow (canvas overlay) ── */
@@ -516,23 +541,50 @@ function resolveDelivery(taskId) {
   if (deliveryMap[taskId]) { deliveryMap[taskId].resolve(); delete deliveryMap[taskId]; }
 }
 
-// ── Dispatcher queue (Ops Manager) ───────────────────────────────────────
-// Ensures Ops handles deliveries one at a time (sequential) so he doesn't
-// teleport. But all OTHER agents work fully in parallel across deliveries.
-let dispatchBusy   = false;
-const dispatchQueue = [];   // Array of () => Promise<void>
-function scheduleDispatch(fn) {
-  dispatchQueue.push(fn);
-  pumpDispatch();
+// ── Floating ghost registry ───────────────────────────────────────────────
+// Each entry: { el, x, dir, targetX, taskId, eaten }
+const floatingGhosts = {}; // taskId → ghost state
+const GHOST_SPEED = 0.8;   // px per tick
+const AISLE_GHOST_Y = AISLE_Y;
+
+function spawnAisleGhost(taskId, spawnX, targetX, emoji, cssClass) {
+  const floor = document.getElementById('office-floor');
+  const el = document.createElement('div');
+  el.className = 'aisle-ghost' + (cssClass ? ' ' + cssClass : '');
+  el.textContent = emoji || '👻';
+  el.style.left = spawnX + 'px';
+  el.style.top  = AISLE_GHOST_Y + 'px';
+  floor.appendChild(el);
+
+  const dir = targetX >= spawnX ? 1 : -1;
+  const state = { el, x: spawnX, dir, targetX, taskId, eaten: false };
+  floatingGhosts[taskId] = state;
+  return state;
 }
-async function pumpDispatch() {
-  if (dispatchBusy || dispatchQueue.length === 0) return;
-  dispatchBusy = true;
-  const fn = dispatchQueue.shift();
-  try { await fn(); } catch(e) { console.error('dispatch error', e); }
-  dispatchBusy = false;
-  pumpDispatch();
+
+function removeAisleGhost(taskId, animate) {
+  const g = floatingGhosts[taskId];
+  if (!g || g.eaten) return;
+  g.eaten = true;
+  if (animate) {
+    g.el.classList.add('eaten');
+    setTimeout(() => { g.el.remove(); delete floatingGhosts[taskId]; }, 400);
+  } else {
+    g.el.remove();
+    delete floatingGhosts[taskId];
+  }
 }
+
+// Ghost float loop — runs every 40ms, moves all active non-eaten ghosts
+setInterval(() => {
+  for (const [taskId, g] of Object.entries(floatingGhosts)) {
+    if (g.eaten) continue;
+    g.x += GHOST_SPEED * g.dir;
+    if (g.x > 960) { g.dir = -1; }
+    if (g.x < 40)  { g.dir =  1; }
+    g.el.style.left = g.x + 'px';
+  }
+}, 40);
 
 // ── Dependency tracking for "wait for N tasks before firing" ─────────────
 // dependencyMap[triggerTaskId] = { needed: Set<taskId>, ready: fn }
@@ -882,51 +934,58 @@ function ensureInInbox(evt) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  DISPATCH ANIMATION (Ops Manager walk)
-//  Returns a promise that resolves when the ghost has been physically
-//  dropped at the assignee's desk.
+//  GHOST DISPATCH  — spawn ghost at inbox, assigned agent walks out & eats it
 // ═══════════════════════════════════════════════════════════════════════════
-function dispatchTask(taskId, assigneeRole, label) {
-  return new Promise(resolveDispatch => {
-    const DISPATCHER = 'ops_manager';
-    ensureAgent(DISPATCHER);
-    ensureAgent(assigneeRole);
+function dispatchGhost(taskId, assigneeRole) {
+  ensureAgent(assigneeRole);
 
-    const tgt = DESK[assigneeRole] || DESK[DISPATCHER];
+  // Spawn ghost at inbox drifting toward assignee's door x
+  const door = DOOR[assigneeRole] || { x: OUTBOX_POS.x };
+  spawnAisleGhost(taskId, INBOX_POS.x, door.x, '👻', null);
 
-    queueMove(DISPATCHER, INBOX_POS.x, INBOX_POS.y);
-    queueAction(DISPATCHER, ['exec', async () => {
-      inboxTasks = inboxTasks.filter(t => t.id !== taskId);
-      renderPanes();
-    }]);
-    queueAction(DISPATCHER, ['set', 'carrying', true]);
-    queueAction(DISPATCHER, ['bubble', 'DISPATCHING!']);
-    queueAction(DISPATCHER, ['wait', 100]);
+  // Remove from inbox pane
+  inboxTasks = inboxTasks.filter(t => t.id !== taskId);
+  renderPanes();
 
-    if (assigneeRole !== DISPATCHER) {
-      queueMove(DISPATCHER, tgt.x, tgt.y);
-      queueAction(DISPATCHER, ['wait', 150]);
-      queueAction(DISPATCHER, ['exec', async () => {
-        agents[DISPATCHER].carrying = false;
-        updateAgentEl(DISPATCHER);
-        if (agents[assigneeRole]) {
-          agents[assigneeRole].carrying = true;
-          updateAgentEl(assigneeRole);
-          showBubble(assigneeRole, 'GOT IT!');
-        }
-        resolveDelivery(taskId);  // unblock run_started
-        resolveDispatch();        // unblock next dispatch
-      }]);
-      queueMove(DISPATCHER, agents[DISPATCHER].homeX, agents[DISPATCHER].homeY);
-    } else {
-      queueAction(DISPATCHER, ['exec', async () => {
-        resolveDelivery(taskId);
-        resolveDispatch();
-      }]);
-      queueAction(DISPATCHER, ['bubble', "I'LL DO IT"]);
-      queueAction(DISPATCHER, ['set', 'status', 'working']);
-    }
-  });
+  // Resolve delivery immediately — run_started should not block on the walk animation
+  resolveDelivery(taskId);
+
+  // Tag agent so the proximity check knows which ghost it's hunting
+  agents[assigneeRole]._huntingGhost = taskId;
+
+  // Agent walks out to aisle, eats ghost (cosmetic), returns home
+  queueMove(assigneeRole, door.x, AISLE_GHOST_Y);
+  queueAction(assigneeRole, ['exec', async () => {
+    removeAisleGhost(taskId, true);
+    agents[assigneeRole]._huntingGhost = null;
+    showBubble(assigneeRole, 'WAKA!');
+  }]);
+  queueMove(assigneeRole, DESK[assigneeRole].x, DESK[assigneeRole].y);
+}
+
+// ── Peer ghost: agent spawns ghost from their door toward a target ──────────
+function spawnPeerGhost(fromRole, toRole, taskId, emoji) {
+  const fromDoor = DOOR[fromRole] || { x: agents[fromRole]?.x || 500 };
+  const toDoor   = DOOR[toRole]   || { x: OUTBOX_POS.x };
+  spawnAisleGhost(taskId, fromDoor.x, toDoor.x, emoji || '👻', null);
+
+  ensureAgent(toRole);
+
+  // Resolve delivery immediately so run_started doesn’t deadlock
+  resolveDelivery(taskId);
+
+  agents[toRole]._huntingGhost = taskId;
+
+  // Target agent walks out to eat ghost (cosmetic), returns home
+  queueMove(toRole, toDoor.x, AISLE_GHOST_Y);
+  queueAction(toRole, ['exec', async () => {
+    removeAisleGhost(taskId, true);
+    agents[toRole]._huntingGhost = null;
+    showBubble(toRole, 'GOT IT!');
+    agents[toRole].status = 'working';
+    updateAgentEl(toRole);
+  }]);
+  queueMove(toRole, DESK[toRole].x, DESK[toRole].y);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -943,7 +1002,9 @@ function handleEvent(evt) {
   // ── Reset ──
   if (evt.type === 'system_reset') {
     inboxTasks = []; outboxTasks = []; completedTaskIds.clear();
-    dispatchQueue.length = 0; dispatchBusy = false;
+    // Kill all floating ghosts
+    Object.values(floatingGhosts).forEach(g => { try { g.el.remove(); } catch(_){} });
+    Object.keys(floatingGhosts).forEach(k => delete floatingGhosts[k]);
     Object.keys(deliveryMap).forEach(k => { deliveryMap[k].resolve(); delete deliveryMap[k]; });
     Object.keys(dependencyMap).forEach(k => delete dependencyMap[k]);
     depArrows.length = 0; depCtx.clearRect(0,0,1000,600);
@@ -970,18 +1031,19 @@ function handleEvent(evt) {
   }
 
   // ──────────────────────────────────────────────────────────────────────
-  //  TASK_ASSIGNED  — Ops Manager delivers sequentially; others run in parallel
+  //  TASK_ASSIGNED  — ghost spawns at inbox, assigned agent walks out to eat it
   // ──────────────────────────────────────────────────────────────────────
   if (evt.type === 'task_assigned') {
-    const taskId      = evt.task_id || evt.run_id;
+    const taskId       = evt.task_id || evt.run_id;
     const assigneeRole = roleOf(evt.to_agent_id || evt.agent_id);
+    // Skip if no assignee, or task already completed/in-outbox (out-of-order replay)
     if (!taskId || !assigneeRole) return;
+    if (completedTaskIds.has(taskId)) return;
+    if (outboxTasks.some(t => t.id === taskId)) return;
 
-    awaitDelivery(taskId);   // register promise now, resolve later in dispatchTask
+    awaitDelivery(taskId);
     ensureInInbox(evt); renderPanes();
-
-    // Queue delivery through the dispatcher FIFO
-    scheduleDispatch(() => dispatchTask(taskId, assigneeRole, evt.reason));
+    dispatchGhost(taskId, assigneeRole);
     return;
   }
 
@@ -993,34 +1055,25 @@ function handleEvent(evt) {
   //  the to_agent receives a new ghost immediately.
   // ──────────────────────────────────────────────────────────────────────
   if (evt.type === 'subtask_assigned') {
-    const taskId     = evt.task_id || evt.run_id;
-    const fromRole   = roleOf(evt.agent_id || evt.from_agent_id);
-    const toRole     = roleOf(evt.to_agent_id);
+    const taskId   = evt.task_id || evt.run_id;
+    const fromRole = roleOf(evt.agent_id || evt.from_agent_id);
+    const toRole   = roleOf(evt.to_agent_id);
     if (!taskId || !toRole) return;
 
     ensureAgent(fromRole); ensureAgent(toRole);
     awaitDelivery(taskId);
 
-    const tgt = DESK[toRole];
-    const fromHome = { x: agents[fromRole].homeX, y: agents[fromRole].homeY };
-
-    // Show dependency arrow while walking
     addDepArrow(fromRole, toRole, evt.reason || 'SUB');
 
-    // from_agent briefly walks to toAgent, hands ghost, returns
-    queueAction(fromRole, ['bubble', '📋 DELEGATING…']);
-    queueMove(fromRole, tgt.x, tgt.y);
-    queueAction(fromRole, ['wait', 200]);
+    // fromRole walks to their door, spawns ghost toward toRole's door
+    const fromDoor = DOOR[fromRole];
+    queueAction(fromRole, ['bubble', '📋 SPAWNING SUB-TASK…']);
+    queueMove(fromRole, fromDoor.x, fromDoor.y);
     queueAction(fromRole, ['exec', async () => {
-      if (agents[toRole]) {
-        agents[toRole].carrying = true;
-        updateAgentEl(toRole);
-        showBubble(toRole, 'SUB-TASK!');
-      }
-      resolveDelivery(taskId);
+      spawnPeerGhost(fromRole, toRole, taskId, '👻');
     }]);
-    queueMove(fromRole, fromHome.x, fromHome.y);
-    queueAction(fromRole, ['set', 'status', 'working']);   // back to working on parent
+    queueMove(fromRole, agents[fromRole].homeX, agents[fromRole].homeY);
+    queueAction(fromRole, ['set', 'status', 'working']);
     return;
   }
 
@@ -1051,22 +1104,17 @@ function handleEvent(evt) {
     if (!fromRole || !toRole) return;
     ensureAgent(fromRole); ensureAgent(toRole);
     const taskId = evt.task_id || evt.run_id;
-    const tgt    = DESK[toRole];
 
     addDepArrow(fromRole, toRole, evt.reason || 'HANDOFF');
-    queueAction(fromRole, ['bubble', 'HANDING OFF…']);
-    queueMove(fromRole, tgt.x, tgt.y);
-    queueAction(fromRole, ['wait', 200]);
+
+    // fromRole walks to their door, spawns ghost toward toRole's door
+    const fromDoor = DOOR[fromRole];
+    queueAction(fromRole, ['bubble', '🔀 HANDING OFF…']);
+    queueMove(fromRole, fromDoor.x, fromDoor.y);
     queueAction(fromRole, ['exec', async () => {
-      agents[fromRole].carrying = false;
+      agents[fromRole].status = 'idle';
       updateAgentEl(fromRole);
-      if (agents[toRole]) {
-        agents[toRole].carrying = true;
-        agents[toRole].status   = 'working';
-        updateAgentEl(toRole);
-        showBubble(toRole, 'GOT IT!');
-      }
-      if (taskId) resolveDelivery(taskId);
+      if (taskId) spawnPeerGhost(fromRole, toRole, taskId, '👻');
     }]);
     queueMove(fromRole, agents[fromRole].homeX, agents[fromRole].homeY);
     return;
@@ -1096,18 +1144,24 @@ function handleEvent(evt) {
 
     queueAction(role, ['bubble', status==='failed' ? '✗ BLOCKED' : '✓ WAKA!']);
     queueAction(role, ['set', 'status', 'idle']);
-    queueMove(role, OUTBOX_POS.x, OUTBOX_POS.y);
-    queueAction(role, ['wait', 300]);
+
+    // Update outbox immediately — don't wait for walk animation
+    if (taskId && !outboxTasks.some(t => t.id === taskId)) {
+      inboxTasks = inboxTasks.filter(t => t.id !== taskId);
+      completedTaskIds.add(taskId);
+      notifyCompletion(taskId);
+      outboxTasks.unshift({ id: taskId, summary: evt.output_summary||evt.summary||'Done', status, ts: evt.ts });
+      if (outboxTasks.length > 50) outboxTasks.pop();
+      renderPanes();
+    }
+
+    // Walk to door, spawn done-ghost drifting east toward outbox, go home
+    const completeDoor = DOOR[role];
+    queueMove(role, completeDoor.x, completeDoor.y);
     queueAction(role, ['exec', async () => {
-      agents[role].carrying = false; updateAgentEl(role);
-      if (taskId && !outboxTasks.some(t=>t.id===taskId)) {
-        inboxTasks = inboxTasks.filter(t=>t.id!==taskId);
-        completedTaskIds.add(taskId);
-        notifyCompletion(taskId);  // fire any waiting sequential tasks
-        outboxTasks.unshift({ id:taskId, summary:evt.output_summary||evt.summary||'Done', status, ts:evt.ts });
-        if (outboxTasks.length > 50) outboxTasks.pop();
-        renderPanes();
-      }
+      const doneId = (taskId||role) + ':done:' + Date.now();
+      spawnAisleGhost(doneId, completeDoor.x, OUTBOX_POS.x, status==='failed' ? '💀' : '✨', 'done');
+      setTimeout(() => { if (floatingGhosts[doneId]) removeAisleGhost(doneId, false); }, 3000);
     }]);
     queueMove(role, agents[role]?.homeX, agents[role]?.homeY);
     return;

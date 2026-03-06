@@ -6,19 +6,107 @@
  */
 
 import express from 'express';
+import { execSync } from 'child_process';
+import { readFileSync, writeFileSync } from 'fs';
+import { resolve } from 'path';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { clearAiSettingsCache } from '../lib/aiSettingsLoader.js';
+import { requireSuperAdminRole } from '../middleware/validateTenant.js';
 import logger from '../lib/logger.js';
+
+// Path to docker-compose.yml
+// Priority: explicit env var > mounted path inside container > repo-root for local dev
+function resolveComposePath() {
+  if (process.env.COMPOSE_FILE_PATH) return process.env.COMPOSE_FILE_PATH;
+  const mounted = '/app/docker-compose.yml';
+  try {
+    readFileSync(mounted);
+    return mounted;
+  } catch {
+    /* not mounted */
+  }
+  return resolve(process.cwd(), '..', 'docker-compose.yml');
+}
+const COMPOSE_PATH = resolveComposePath();
+
+// Ollama env vars that live in docker-compose.yml (require container restart)
+const OLLAMA_ENV_KEYS = [
+  'OLLAMA_NUM_CTX',
+  'OLLAMA_MAX_LOADED_MODELS',
+  'OLLAMA_KEEP_ALIVE',
+  'OLLAMA_NUM_PARALLEL',
+];
+
+/**
+ * Read current Ollama env vars from docker-compose.yml
+ */
+function readOllamaEnvFromCompose() {
+  try {
+    const raw = readFileSync(COMPOSE_PATH, 'utf8');
+    const result = {};
+    for (const key of OLLAMA_ENV_KEYS) {
+      const match = raw.match(new RegExp('- ' + key + '=(.+)'));
+      result[key] = match ? match[1].trim() : null;
+    }
+    return result;
+  } catch (err) {
+    logger.warn('[ollama-settings] Could not read compose file:', err.message);
+    return {};
+  }
+}
+
+/**
+ * Sanitize environment value to prevent YAML injection
+ * @param {string} value - The value to sanitize
+ * @returns {string} - Sanitized value safe for YAML
+ */
+function sanitizeEnvValue(value) {
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    throw new Error('Invalid value type: must be string or number');
+  }
+
+  const strValue = String(value);
+
+  // Reject values with newlines, carriage returns, or YAML comment characters
+  if (/[\r\n#]/.test(strValue)) {
+    throw new Error('Invalid characters in value (newlines and # not allowed)');
+  }
+
+  // Limit length to prevent abuse
+  if (strValue.length > 500) {
+    throw new Error('Value too long (max 500 characters)');
+  }
+
+  return strValue;
+}
+
+/**
+ * Write updated Ollama env vars into docker-compose.yml
+ * SECURITY: Values are sanitized to prevent YAML injection
+ */
+function writeOllamaEnvToCompose(updates) {
+  let raw = readFileSync(COMPOSE_PATH, 'utf8');
+  for (const [key, value] of Object.entries(updates)) {
+    // SECURITY: Sanitize value to prevent YAML injection
+    const safeValue = sanitizeEnvValue(value);
+
+    const existing = new RegExp('(- ' + key + '=).+');
+    if (existing.test(raw)) {
+      raw = raw.replace(existing, '$1' + safeValue);
+    } else {
+      raw = raw.replace(/(- OLLAMA_[A-Z_]+=.+)/, '$1\n      - ' + key + '=' + safeValue);
+    }
+  }
+  writeFileSync(COMPOSE_PATH, raw, 'utf8');
+}
 
 const router = express.Router();
 
 /**
  * Default seed settings for bootstrapping a new tenant.
- * These are the same defaults from migration 106_ai_settings.sql.
  */
 const DEFAULT_SETTINGS = {
   aisha: [
-    // Context Management
     {
       category: 'context',
       setting_key: 'max_messages',
@@ -35,7 +123,6 @@ const DEFAULT_SETTINGS = {
       description:
         'Truncates long messages to reduce token usage. Very long messages get cut off at this limit.',
     },
-    // Tool Execution
     {
       category: 'tools',
       setting_key: 'max_iterations',
@@ -52,7 +139,6 @@ const DEFAULT_SETTINGS = {
       description:
         'Limits tool schemas sent to AI. More tools = more capabilities but higher token cost per request.',
     },
-    // Memory/RAG
     {
       category: 'memory',
       setting_key: 'top_k',
@@ -69,7 +155,6 @@ const DEFAULT_SETTINGS = {
       description:
         'Truncates each memory chunk. Longer chunks provide more context but use more tokens.',
     },
-    // Model Behavior
     {
       category: 'model',
       setting_key: 'temperature',
@@ -86,7 +171,6 @@ const DEFAULT_SETTINGS = {
       description:
         'Alternative to temperature. 1.0 = consider all tokens, lower = focus on most likely tokens.',
     },
-    // Behavior
     {
       category: 'behavior',
       setting_key: 'intent_confidence_threshold',
@@ -137,10 +221,6 @@ const DEFAULT_SETTINGS = {
   ],
 };
 
-/**
- * Bootstrap settings for a tenant + agent_role if none exist.
- * Copies the defaults into the ai_settings table scoped to this tenant.
- */
 async function bootstrapTenantSettings(tenantId, agentRole) {
   const supa = getSupabaseClient();
   const defaults = DEFAULT_SETTINGS[agentRole];
@@ -170,7 +250,6 @@ async function bootstrapTenantSettings(tenantId, agentRole) {
 
 /**
  * GET /api/ai-settings
- * List all AI settings for the current tenant, optionally filtered by agent_role
  */
 router.get('/', async (req, res) => {
   try {
@@ -184,33 +263,25 @@ router.get('/', async (req, res) => {
     }
 
     const supa = getSupabaseClient();
-
     let query = supa
       .from('ai_settings')
       .select('*')
       .eq('tenant_id', tenantId)
       .order('category')
       .order('setting_key');
-
-    if (agent_role) {
-      query = query.eq('agent_role', agent_role);
-    }
+    if (agent_role) query = query.eq('agent_role', agent_role);
 
     let { data, error } = await query;
-
     if (error) {
       logger.error('[ai-settings] List error:', error);
       return res.status(500).json({ success: false, error: error.message });
     }
 
-    // If no settings exist for this tenant + role, bootstrap from defaults
     if ((!data || data.length === 0) && agent_role) {
       logger.info(
         `[ai-settings] No settings for tenant ${tenantId}/${agent_role} — bootstrapping defaults`,
       );
       await bootstrapTenantSettings(tenantId, agent_role);
-
-      // Re-fetch after bootstrap
       const retry = await supa
         .from('ai_settings')
         .select('*')
@@ -218,27 +289,19 @@ router.get('/', async (req, res) => {
         .eq('agent_role', agent_role)
         .order('category')
         .order('setting_key');
-
       data = retry.data || [];
-      if (retry.error) {
-        logger.error('[ai-settings] Re-fetch after bootstrap error:', retry.error);
-      }
     } else if ((!data || data.length === 0) && !agent_role) {
-      // Bootstrap both roles
       await bootstrapTenantSettings(tenantId, 'aisha');
       await bootstrapTenantSettings(tenantId, 'developer');
-
       const retry = await supa
         .from('ai_settings')
         .select('*')
         .eq('tenant_id', tenantId)
         .order('category')
         .order('setting_key');
-
       data = retry.data || [];
     }
 
-    // Group by category for easier UI rendering
     const grouped = {};
     for (const setting of data || []) {
       const cat = setting.category || 'other';
@@ -260,7 +323,6 @@ router.get('/', async (req, res) => {
 
 /**
  * GET /api/ai-settings/categories
- * Get available categories and their display info
  */
 router.get('/categories', async (_req, res) => {
   res.json({
@@ -297,7 +359,6 @@ router.get('/categories', async (_req, res) => {
 
 /**
  * PUT /api/ai-settings/:id
- * Update a single setting (must belong to current tenant)
  */
 router.put('/:id', async (req, res) => {
   try {
@@ -305,19 +366,14 @@ router.put('/:id', async (req, res) => {
     const { value } = req.body;
     const tenantId = req.tenant?.id;
 
-    if (value === undefined) {
+    if (value === undefined)
       return res.status(400).json({ success: false, error: 'value is required' });
-    }
-
-    if (!tenantId) {
+    if (!tenantId)
       return res
         .status(400)
         .json({ success: false, error: 'tenant_id is required — select a tenant first' });
-    }
 
     const supa = getSupabaseClient();
-
-    // Get existing setting — must belong to this tenant
     const { data: existing, error: fetchError } = await supa
       .from('ai_settings')
       .select('*')
@@ -325,26 +381,20 @@ router.put('/:id', async (req, res) => {
       .eq('tenant_id', tenantId)
       .single();
 
-    if (fetchError || !existing) {
+    if (fetchError || !existing)
       return res.status(404).json({ success: false, error: 'Setting not found for this tenant' });
-    }
 
-    // Validate value against min/max if present
     const meta = existing.setting_value || {};
     if (meta.type === 'number') {
       const numVal = Number(value);
-      if (isNaN(numVal)) {
+      if (isNaN(numVal))
         return res.status(400).json({ success: false, error: 'Value must be a number' });
-      }
-      if (meta.min !== undefined && numVal < meta.min) {
+      if (meta.min !== undefined && numVal < meta.min)
         return res.status(400).json({ success: false, error: `Value must be >= ${meta.min}` });
-      }
-      if (meta.max !== undefined && numVal > meta.max) {
+      if (meta.max !== undefined && numVal > meta.max)
         return res.status(400).json({ success: false, error: `Value must be <= ${meta.max}` });
-      }
     }
 
-    // Update the value while preserving other metadata
     const newSettingValue = {
       ...meta,
       value:
@@ -367,9 +417,7 @@ router.put('/:id', async (req, res) => {
       return res.status(500).json({ success: false, error: error.message });
     }
 
-    // Clear cache for this tenant so new value takes effect immediately
     clearAiSettingsCache(tenantId);
-
     res.json({
       success: true,
       data,
@@ -383,36 +431,27 @@ router.put('/:id', async (req, res) => {
 
 /**
  * POST /api/ai-settings/reset
- * Reset all settings to defaults for the current tenant
  */
 router.post('/reset', async (req, res) => {
   try {
     const { agent_role } = req.body;
     const tenantId = req.tenant?.id;
 
-    if (!tenantId) {
+    if (!tenantId)
       return res
         .status(400)
         .json({ success: false, error: 'tenant_id is required — select a tenant first' });
-    }
 
     const supa = getSupabaseClient();
-
-    // Delete current tenant settings
     let deleteQuery = supa.from('ai_settings').delete().eq('tenant_id', tenantId);
-
-    if (agent_role) {
-      deleteQuery = deleteQuery.eq('agent_role', agent_role);
-    }
+    if (agent_role) deleteQuery = deleteQuery.eq('agent_role', agent_role);
 
     const { error: deleteError } = await deleteQuery;
-
     if (deleteError) {
       logger.error('[ai-settings] Reset delete error:', deleteError);
       return res.status(500).json({ success: false, error: deleteError.message });
     }
 
-    // Re-seed defaults for this tenant
     if (agent_role) {
       await bootstrapTenantSettings(tenantId, agent_role);
     } else {
@@ -421,11 +460,7 @@ router.post('/reset', async (req, res) => {
     }
 
     clearAiSettingsCache(tenantId);
-
-    res.json({
-      success: true,
-      message: `Settings reset to defaults for tenant ${tenantId}`,
-    });
+    res.json({ success: true, message: `Settings reset to defaults for tenant ${tenantId}` });
   } catch (err) {
     logger.error('[ai-settings] Reset error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -434,11 +469,198 @@ router.post('/reset', async (req, res) => {
 
 /**
  * POST /api/ai-settings/clear-cache
- * Clear the settings cache
  */
 router.post('/clear-cache', async (_req, res) => {
   clearAiSettingsCache();
   res.json({ success: true, message: 'AI settings cache cleared' });
+});
+
+/**
+ * GET /api/ai-settings/ollama
+ * Returns Ollama container settings + live status + summary temperature
+ *
+ * SECURITY: Superadmin only - exposes container configuration
+ *
+ * NOTE: Ollama settings are container-global (not tenant-specific), but this route
+ * is mounted behind validateTenantAccess middleware via server.js. Superadmins must
+ * select a tenant to access these endpoints, even though the settings apply globally.
+ * Consider mounting /ollama endpoints separately for cleaner architecture.
+ */
+router.get('/ollama', requireSuperAdminRole, async (_req, res) => {
+  const current = readOllamaEnvFromCompose();
+
+  let liveStatus = null;
+  try {
+    const ollamaUrl = process.env.LOCAL_LLM_BASE_URL?.replace('/v1', '') || 'http://ollama:11434';
+    const r = await fetch(ollamaUrl + '/api/tags', { signal: AbortSignal.timeout(3000) });
+    if (r.ok) {
+      const json = await r.json();
+      liveStatus = { online: true, models: (json.models || []).map((m) => m.name) };
+    }
+  } catch {
+    liveStatus = { online: false, models: [] };
+  }
+
+  res.json({
+    success: true,
+    settings: [
+      {
+        key: 'OLLAMA_NUM_CTX',
+        label: 'Context Window (tokens)',
+        description:
+          'Max tokens Ollama allocates for context + response. Lower = less RAM. 1024 is plenty for CRM summaries; use 4096 for complex tasks.',
+        type: 'number',
+        value: Number(current.OLLAMA_NUM_CTX) || 1024,
+        min: 512,
+        max: 8192,
+        step: 512,
+        requiresRestart: true,
+      },
+      {
+        key: 'OLLAMA_NUM_PARALLEL',
+        label: 'Parallel Requests',
+        description:
+          'How many inference requests Ollama handles simultaneously. 1 is safest on CPU-only; increase if you have headroom.',
+        type: 'number',
+        value: Number(current.OLLAMA_NUM_PARALLEL) || 1,
+        min: 1,
+        max: 4,
+        step: 1,
+        requiresRestart: true,
+      },
+      {
+        key: 'OLLAMA_MAX_LOADED_MODELS',
+        label: 'Max Models in Memory',
+        description:
+          'How many models stay loaded simultaneously. Keep at 1 on CPU to avoid OOM — models swap on demand.',
+        type: 'number',
+        value: Number(current.OLLAMA_MAX_LOADED_MODELS) || 1,
+        min: 1,
+        max: 3,
+        step: 1,
+        requiresRestart: true,
+      },
+      {
+        key: 'OLLAMA_KEEP_ALIVE',
+        label: 'Keep Alive Duration',
+        description:
+          'How long a model stays loaded after last use. Use "-1" to keep forever (fastest), "5m" for default, "0" to unload immediately.',
+        type: 'text',
+        value: current.OLLAMA_KEEP_ALIVE || '-1',
+        options: ['-1', '0', '5m', '10m', '30m', '1h'],
+        requiresRestart: false,
+      },
+      {
+        key: 'SUMMARY_TEMPERATURE',
+        label: 'Summary Temperature',
+        description:
+          'How inventive Ollama is when writing profile summaries. Keep at 0.0-0.2 to prevent invented details. Takes effect immediately. Also set SUMMARY_TEMPERATURE in Doppler to persist across restarts.',
+        type: 'number',
+        value: parseFloat(process.env.SUMMARY_TEMPERATURE ?? '0.1'),
+        min: 0,
+        max: 1,
+        step: 0.1,
+        requiresRestart: false,
+      },
+    ],
+    liveStatus,
+    composePath: COMPOSE_PATH,
+  });
+});
+
+/**
+ * POST /api/ai-settings/ollama
+ * Save Ollama settings. Compose vars written to docker-compose.yml.
+ * SUMMARY_TEMPERATURE mutated in process.env (takes effect immediately).
+ *
+ * SECURITY: Superadmin only - modifies host docker-compose and container config
+ *
+ * NOTE: Ollama settings are container-global (not tenant-specific), but this route
+ * is mounted behind validateTenantAccess middleware via server.js. Superadmins must
+ * select a tenant to access these endpoints, even though the settings apply globally.
+ * Frontend should include tenant_id in request body/query to satisfy middleware.
+ */
+router.post('/ollama', requireSuperAdminRole, async (req, res) => {
+  const { settings: updates, restart = false } = req.body;
+
+  if (!updates || typeof updates !== 'object') {
+    return res.status(400).json({ success: false, error: 'settings object required' });
+  }
+
+  const composeUpdates = {};
+  for (const key of OLLAMA_ENV_KEYS) {
+    if (updates[key] !== undefined) composeUpdates[key] = String(updates[key]);
+  }
+
+  try {
+    if (Object.keys(composeUpdates).length > 0) {
+      writeOllamaEnvToCompose(composeUpdates);
+      logger.info('[ollama-settings] Wrote to compose:', composeUpdates);
+    }
+
+    if (updates.SUMMARY_TEMPERATURE !== undefined) {
+      const val = String(updates.SUMMARY_TEMPERATURE);
+      process.env.SUMMARY_TEMPERATURE = val;
+      logger.info('[ollama-settings] Set process.env.SUMMARY_TEMPERATURE =', val);
+    }
+
+    const allUpdated = {
+      ...composeUpdates,
+      ...(updates.SUMMARY_TEMPERATURE !== undefined
+        ? { SUMMARY_TEMPERATURE: updates.SUMMARY_TEMPERATURE }
+        : {}),
+    };
+
+    let restartResult = null;
+    if (restart) {
+      try {
+        const composeDir = resolve(COMPOSE_PATH, '..');
+        // WARNING: This requires Docker CLI in container + socket mount
+        // Current backend Dockerfile doesn't include Docker tooling
+        // This will fail with ENOENT unless docker is installed in the container
+        execSync('docker compose up -d --force-recreate ollama', {
+          cwd: composeDir,
+          timeout: 60000,
+          stdio: 'pipe',
+        });
+        restartResult = { success: true, message: 'Ollama container restarted' };
+        logger.info('[ollama-settings] Restarted ollama container');
+      } catch (restartErr) {
+        restartResult = { success: false, message: restartErr.message };
+        logger.warn('[ollama-settings] Restart failed:', restartErr.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      updated: allUpdated,
+      restart: restartResult,
+      message: restart
+        ? 'Settings saved and Ollama restarted'
+        : 'Settings saved — restart Ollama to apply compose changes',
+    });
+  } catch (err) {
+    logger.error('[ollama-settings] Write error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/ai-settings/ollama/restart
+ */
+router.post('/ollama/restart', async (_req, res) => {
+  try {
+    const composeDir = resolve(COMPOSE_PATH, '..');
+    execSync('docker compose up -d --force-recreate ollama', {
+      cwd: composeDir,
+      timeout: 60000,
+      stdio: 'pipe',
+    });
+    res.json({ success: true, message: 'Ollama container restarted successfully' });
+  } catch (err) {
+    logger.error('[ollama-settings] Restart error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 export default router;
