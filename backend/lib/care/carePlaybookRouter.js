@@ -22,7 +22,7 @@ import { getSupabaseClient } from '../supabase-db.js';
 import { emitCareAudit } from './careAuditEmitter.js';
 import { CareAuditEventType, CarePolicyGateResult } from './careAuditTypes.js';
 import { triggerCareWorkflow } from './careWorkflowTriggerClient.js';
-import { queuePlaybookExecution } from '../../services/carePlaybookExecutor.js';
+import { queuePlaybookExecution } from './carePlaybookExecutor.js';
 import logger from '../logger.js';
 
 // In-memory cache for playbook lookups (tenant_id:trigger_type → playbook | null)

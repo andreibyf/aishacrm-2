@@ -16,7 +16,7 @@ import { initDatabase } from './startup/initDatabase.js';
 import { initServices } from './startup/initServices.js';
 import { initMiddleware } from './startup/initMiddleware.js';
 import workflowQueue from './services/workflowQueue.js';
-import { initPlaybookQueueProcessor } from './services/carePlaybookExecutor.js';
+import { initPlaybookQueueProcessor } from './lib/care/carePlaybookExecutor.js';
 
 // Import background workers
 import { startCampaignWorker } from './lib/campaignWorker.js';
@@ -583,7 +583,7 @@ process.on('SIGTERM', async () => {
 
   // Close playbook queue
   try {
-    const { playbookQueue } = await import('./services/carePlaybookQueue.js');
+    const { playbookQueue } = await import('./lib/care/carePlaybookQueue.js');
     if (playbookQueue) {
       await playbookQueue.close();
       logger.info('Playbook queue closed');

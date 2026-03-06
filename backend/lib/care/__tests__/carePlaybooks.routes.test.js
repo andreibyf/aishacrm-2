@@ -39,7 +39,7 @@ describe('CARE Playbook Data Layer (route-equivalent tests)', () => {
 
     // Close Bull queue Redis connection so Node can exit cleanly
     try {
-      const { playbookQueue } = await import('../../../services/carePlaybookQueue.js');
+      const { playbookQueue } = await import('../carePlaybookQueue.js');
       await playbookQueue.close();
     } catch (_) {
       /* queue may not be initialized */
