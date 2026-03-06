@@ -29,12 +29,12 @@
  * @module carePlaybookExecutor
  */
 
-import { getSupabaseClient } from '../lib/supabase-db.js';
-import { emitCareAudit } from '../lib/care/careAuditEmitter.js';
-import { CareAuditEventType, CarePolicyGateResult } from '../lib/care/careAuditTypes.js';
-import { triggerCareWorkflow } from '../lib/care/careWorkflowTriggerClient.js';
-import { runTask as runAiBrainTask } from '../lib/aiBrain.js';
-import logger from '../lib/logger.js';
+import { getSupabaseClient } from '../supabase-db.js';
+import { emitCareAudit } from './careAuditEmitter.js';
+import { CareAuditEventType, CarePolicyGateResult } from './careAuditTypes.js';
+import { triggerCareWorkflow } from './careWorkflowTriggerClient.js';
+import { runTask as runAiBrainTask } from '../aiBrain.js';
+import logger from '../logger.js';
 import { playbookQueue } from './carePlaybookQueue.js';
 
 // ============================================================

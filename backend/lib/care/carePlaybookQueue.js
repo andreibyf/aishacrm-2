@@ -12,7 +12,7 @@
  */
 
 import Bull from 'bull';
-import logger from '../lib/logger.js';
+import logger from '../logger.js';
 
 const REDIS_URL =
   process.env.REDIS_MEMORY_URL || process.env.REDIS_URL || 'redis://redis-memory:6379';
