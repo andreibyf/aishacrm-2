@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, Send, CheckCircle2, Circle, Clock } from 'lucide-react';
+import { Loader2, Send, CheckCircle2, Circle, Clock, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { getBackendUrl } from '@/api/backendUrl';
 import { useTenant } from '@/components/shared/tenantContext';
@@ -33,6 +33,16 @@ export default function AishaEntityChatModal({
   // Use selectedTenantId (for superadmins) or fallback to user's tenant_id (for tenant admins)
   const tenantId = tenantIdProp || selectedTenantId || user?.tenant_id;
   const pollIntervalRef = useRef(null);
+
+  const getOfficeVizUrl = () => {
+    const base =
+      window.location.hostname === 'app.aishacrm.com'
+        ? 'https://backoffice.aishacrm.com'
+        : `${window.location.protocol}//${window.location.hostname}:4010`;
+    return base;
+  };
+
+  const openOffice = () => window.open(getOfficeVizUrl(), '_blank', 'noopener');
 
   // Reset state when modal opens
   useEffect(() => {
@@ -80,10 +90,10 @@ export default function AishaEntityChatModal({
       const data = await response.json();
       setTaskId(data.task_id);
       setTaskStatus('PENDING');
+      setIsLoading(false);
 
-      // Close modal immediately after task creation
-      toast.success('Task started successfully');
-      onClose();
+      // Keep modal open and start polling for the result
+      startPolling(data.task_id);
     } catch (error) {
       console.error('Task creation error:', error);
       toast.error('Failed to start task');
@@ -91,7 +101,7 @@ export default function AishaEntityChatModal({
     }
   };
 
-  const _startPolling = (id) => {
+  const startPolling = (id) => {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
 
     pollIntervalRef.current = setInterval(async () => {
@@ -149,7 +159,7 @@ export default function AishaEntityChatModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px] bg-slate-900 border-slate-700 text-slate-100">
+      <DialogContent className="sm:max-w-[580px] bg-slate-900 border-slate-700 text-slate-100 max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span className="text-xl">✨</span>
@@ -172,7 +182,34 @@ export default function AishaEntityChatModal({
                   autoFocus
                 />
               </div>
-              <div className="flex justify-end">
+
+              {/* Quick suggestion chips */}
+              <div className="flex flex-wrap gap-2">
+                {[
+                  'Create a note and set up a meeting for tomorrow',
+                  'Draft a follow-up email',
+                  'Summarise this record and suggest next steps',
+                ].map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    type="button"
+                    onClick={() => setInput(suggestion)}
+                    className="text-xs px-3 py-1.5 rounded-full bg-slate-800 border border-slate-600 text-slate-300 hover:border-blue-500 hover:text-blue-300 transition-colors"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={openOffice}
+                  className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Watch in Office
+                </button>
                 <Button
                   type="submit"
                   disabled={isLoading || !input.trim()}
@@ -188,11 +225,21 @@ export default function AishaEntityChatModal({
               </div>
             </form>
           ) : (
-            <div className="space-y-6">
-              {/* Status Display */}
-              <div className="flex items-center justify-center gap-3 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
-                {getStatusIcon(taskStatus)}
-                <span className="font-medium text-lg">{getStatusText(taskStatus)}</span>
+            <div className="space-y-4">
+              {/* Status + Watch in Office */}
+              <div className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+                <div className="flex items-center gap-3">
+                  {getStatusIcon(taskStatus)}
+                  <span className="font-medium text-lg">{getStatusText(taskStatus)}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={openOffice}
+                  className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 border border-blue-800 hover:border-blue-600 bg-blue-950/40 px-3 py-1.5 rounded-full transition-colors"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  Watch in Office
+                </button>
               </div>
 
               {/* Result Display */}
@@ -201,8 +248,31 @@ export default function AishaEntityChatModal({
                   <h4 className="text-sm font-medium text-slate-400 uppercase tracking-wider">
                     Result
                   </h4>
-                  <div className="p-4 bg-slate-800 rounded-lg border border-slate-700 text-sm leading-relaxed">
-                    {taskResult}
+                  <div className="p-4 bg-slate-800 rounded-lg border border-slate-700 text-sm leading-relaxed whitespace-pre-wrap">
+                    {taskResult.split('\n').map((line, i) => {
+                      // Bold: **text**
+                      const parts = line.split(/\*\*(.*?)\*\*/g);
+                      return (
+                        <p
+                          key={i}
+                          className={
+                            line.startsWith('- ') || line.startsWith('* ')
+                              ? 'ml-3 before:content-["•"] before:mr-2'
+                              : 'mb-1'
+                          }
+                        >
+                          {parts.map((part, j) =>
+                            j % 2 === 1 ? (
+                              <strong key={j} className="text-slate-100 font-semibold">
+                                {part}
+                              </strong>
+                            ) : (
+                              part
+                            ),
+                          )}
+                        </p>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -210,14 +280,29 @@ export default function AishaEntityChatModal({
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex gap-2 sm:justify-between">
+          {taskId && (
+            <Button
+              onClick={() => {
+                if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+                setTaskId(null);
+                setTaskStatus(null);
+                setTaskResult(null);
+                setInput('');
+              }}
+              variant="outline"
+              className="border-slate-700 hover:bg-slate-800 text-slate-400"
+            >
+              ← New Task
+            </Button>
+          )}
           {taskId && taskStatus === 'COMPLETED' && (
             <Button
               onClick={onClose}
               variant="outline"
               className="border-slate-700 hover:bg-slate-800 text-slate-300"
             >
-              Close
+              Done
             </Button>
           )}
         </DialogFooter>

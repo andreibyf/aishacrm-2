@@ -12,11 +12,12 @@
  */
 
 import express from 'express';
-import { 
+import {
   createCorrelationContext,
   createChildSpan,
-  emitRunStarted, 
-  emitTaskAssigned, 
+  emitRunStarted,
+  emitTaskAssigned,
+  emitTaskEnqueued,
   emitAgentSpawned,
 } from '../lib/telemetry/index.js';
 import { routeRequest, listRoles } from '../lib/agents/agentRouter.js';
@@ -43,18 +44,21 @@ export function createAgentOfficeRoutes(measuredPgPool) {
   router.get('/agents/:role', async (req, res) => {
     const { role } = req.params;
     const tenant_id = req.query?.tenant_id || null;
-    
+
     if (!Object.values(AgentRoles).includes(role)) {
-      return res.status(404).json({ error: 'Agent role not found', valid_roles: Object.values(AgentRoles) });
+      return res
+        .status(404)
+        .json({ error: 'Agent role not found', valid_roles: Object.values(AgentRoles) });
     }
-    
+
     const agent = await getAgentProfile({ tenant_id, role });
     res.json({ agent });
   });
 
   router.post('/run', async (req, res) => {
     // Resolve tenant_id from header, body, or query (header takes precedence for consistency with other routes)
-    const tenant_id = req.headers['x-tenant-id'] || req.body?.tenant_id || req.query?.tenant_id || null;
+    const tenant_id =
+      req.headers['x-tenant-id'] || req.body?.tenant_id || req.query?.tenant_id || null;
     const input = req.body?.input || req.body?.message || req.body?.task || '';
     const force_role = req.query?.force_role || req.body?.force_role || null;
 
@@ -64,7 +68,7 @@ export function createAgentOfficeRoutes(measuredPgPool) {
 
     // Get ops_manager agent (orchestrator)
     const opsAgent = await getAgentProfile({ tenant_id, role: AgentRoles.OPS_MANAGER });
-    
+
     // Emit run_started from ops_manager (orchestrator)
     emitRunStarted({
       ...ctx,
@@ -80,7 +84,7 @@ export function createAgentOfficeRoutes(measuredPgPool) {
 
     // Create child span for agent spawn
     const spawnCtx = createChildSpan(ctx);
-    
+
     // Emit agent_spawned event
     emitAgentSpawned({
       ...spawnCtx,
@@ -93,6 +97,15 @@ export function createAgentOfficeRoutes(measuredPgPool) {
 
     // Create child span for task assignment
     const taskCtx = createChildSpan(ctx);
+
+    // Emit task_enqueued first — inbox panel shows the task before Ops picks it up
+    emitTaskEnqueued({
+      ...taskCtx,
+      tenant_id,
+      task_id: primary_task_id,
+      input_summary: input?.slice(0, 200) || 'No input',
+      agent_name: routed.agent.display_name,
+    });
 
     // Emit task_assigned to routed agent
     emitTaskAssigned({
@@ -115,7 +128,7 @@ export function createAgentOfficeRoutes(measuredPgPool) {
       context: {
         source: 'agent-office',
         routed_from: 'ops_manager',
-      }
+      },
     });
 
     console.log(`[AgentOffice] Task ${primary_task_id} enqueued for agent ${routed.agent.role}`);
@@ -138,7 +151,9 @@ export function createAgentOfficeRoutes(measuredPgPool) {
         metadata: routed.agent.metadata,
       },
       next: {
-        office_viz: process.env.OFFICE_VIZ_BASE_URL ? `${process.env.OFFICE_VIZ_BASE_URL}/runs/${ctx.run_id}` : null,
+        office_viz: process.env.OFFICE_VIZ_BASE_URL
+          ? `${process.env.OFFICE_VIZ_BASE_URL}/runs/${ctx.run_id}`
+          : null,
       },
     });
   });

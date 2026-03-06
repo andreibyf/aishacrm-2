@@ -26,7 +26,8 @@ export default function EntityAiSummaryCard({
     } else if (window.location.hostname === 'localhost') {
       officeVizUrl = `http://localhost:4010?entity_type=${entityType}&entity_id=${entityId}`;
     } else {
-      officeVizUrl = `http://${window.location.hostname}:4010?entity_type=${entityType}&entity_id=${entityId}`;
+      // Use same protocol as current page to avoid mixed content warnings
+      officeVizUrl = `${window.location.protocol}//${window.location.hostname}:4010?entity_type=${entityType}&entity_id=${entityId}`;
     }
     window.open(officeVizUrl, '_blank');
   };
@@ -52,9 +53,8 @@ export default function EntityAiSummaryCard({
               variant="outline"
               size="sm"
               onClick={handleBackOfficeClick}
-              disabled
-              className="bg-gray-100 border-gray-200 text-gray-400 text-xs h-8 cursor-not-allowed opacity-50"
-              title="Office visualization temporarily disabled"
+              className="bg-white border-indigo-200 hover:bg-indigo-100 text-indigo-700 text-xs h-8"
+              title="Open AiSHA Office Viz"
             >
               <ExternalLink className="w-4 h-4 mr-1" />
               Visit Office
