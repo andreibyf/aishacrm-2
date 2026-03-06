@@ -260,6 +260,8 @@ app.use('/api/database', defaultLimiter, createDatabaseRoutes(measuredPgPool));
 app.use('/api/integrations', defaultLimiter, createIntegrationRoutes(measuredPgPool));
 app.use('/api/telephony', defaultLimiter, createTelephonyRoutes(measuredPgPool));
 app.use('/api/whatsapp', defaultLimiter, createWhatsAppRoutes(measuredPgPool)); // WhatsApp webhook (no auth - Twilio signature validation)
+// AI Summary must be mounted BEFORE the main /api/ai router to avoid being shadowed
+app.use('/api/ai', defaultLimiter, authenticateRequest, createAISummaryRoutes);
 app.use('/api/ai', defaultLimiter, authenticateRequest, createAiRoutes(measuredPgPool));
 app.use(
   '/api/agent-office',
@@ -476,8 +478,7 @@ app.use('/api/github-issues', defaultLimiter, createGitHubIssuesRoutes);
 // Proxy selected Supabase Edge Functions to avoid CORS issues in browsers
 app.use('/api/edge', defaultLimiter, createEdgeFunctionRoutes());
 
-// AI summary generation
-app.use('/api/ai', defaultLimiter, createAISummaryRoutes);
+// AI summary generation is mounted before /api/ai main router (see above)
 // Supabase Auth proxy (CORS-controlled access to /auth/v1/user)
 app.use('/api/supabase-proxy', defaultLimiter, createSupabaseProxyRoutes());
 // AI Suggestions routes (Phase 3 Autonomous Operations)

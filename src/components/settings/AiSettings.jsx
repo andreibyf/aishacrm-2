@@ -16,6 +16,11 @@ import {
   Save,
   AlertCircle,
   Info,
+  Server,
+  Zap,
+  RotateCw,
+  CheckCircle,
+  XCircle,
 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 
@@ -63,6 +68,89 @@ export default function AiSettings({ tenantId }) {
   const [saving, setSaving] = useState({});
   const [pendingChanges, setPendingChanges] = useState({});
 
+  // Ollama state
+  const [ollamaSettings, setOllamaSettings] = useState([]);
+  const [ollamaStatus, setOllamaStatus] = useState(null);
+  const [ollamaPending, setOllamaPending] = useState({});
+  const [ollamaLoading, setOllamaLoading] = useState(false);
+  const [ollamaSaving, setOllamaSaving] = useState(false);
+  const [ollamaRestarting, setOllamaRestarting] = useState(false);
+
+  const fetchOllamaSettings = useCallback(async () => {
+    setOllamaLoading(true);
+    try {
+      const r = await fetch(`${BACKEND_URL}/api/ai-settings/ollama`, { credentials: 'include' });
+      const data = await r.json();
+      if (data.success) {
+        setOllamaSettings(data.settings || []);
+        setOllamaStatus(data.liveStatus);
+      }
+    } catch (err) {
+      toast({
+        title: 'Could not load Ollama settings',
+        description: err.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setOllamaLoading(false);
+    }
+  }, []);
+
+  const saveOllamaSettings = async (withRestart = false) => {
+    if (Object.keys(ollamaPending).length === 0 && !withRestart) return;
+    setOllamaSaving(true);
+    if (withRestart) setOllamaRestarting(true);
+    try {
+      const r = await fetch(`${BACKEND_URL}/api/ai-settings/ollama`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ settings: ollamaPending, restart: withRestart }),
+      });
+      const data = await r.json();
+      if (data.success) {
+        toast({
+          title: withRestart ? '✅ Saved & restarting Ollama' : '✅ Settings saved',
+          description: data.message,
+        });
+        setOllamaPending({});
+        setTimeout(fetchOllamaSettings, withRestart ? 8000 : 500);
+      } else {
+        toast({ title: 'Error', description: data.error, variant: 'destructive' });
+      }
+    } catch (err) {
+      toast({
+        title: 'Error saving Ollama settings',
+        description: err.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setOllamaSaving(false);
+      if (withRestart) setOllamaRestarting(false);
+    }
+  };
+
+  const restartOllama = async () => {
+    setOllamaRestarting(true);
+    try {
+      const r = await fetch(`${BACKEND_URL}/api/ai-settings/ollama/restart`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await r.json();
+      toast({
+        title: data.success ? '✅ Ollama restarted' : '⚠️ Restart failed',
+        description: data.message || data.error,
+        variant: data.success ? 'default' : 'destructive',
+      });
+      setTimeout(fetchOllamaSettings, 6000);
+    } catch (err) {
+      toast({ title: 'Restart failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setOllamaRestarting(false);
+    }
+  };
+
   const fetchSettings = useCallback(async () => {
     if (!tenantId) return;
     try {
@@ -100,6 +188,10 @@ export default function AiSettings({ tenantId }) {
   useEffect(() => {
     if (tenantId) fetchSettings();
   }, [fetchSettings, tenantId]);
+
+  useEffect(() => {
+    fetchOllamaSettings();
+  }, [fetchOllamaSettings]);
 
   const handleValueChange = (settingId, newValue) => {
     setPendingChanges((prev) => ({
@@ -382,6 +474,186 @@ export default function AiSettings({ tenantId }) {
               and factual - recommended for CRM data queries.
             </p>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Ollama / Local LLM ─────────────────────────────────────── */}
+      <Card className="border-2 border-orange-200 dark:border-orange-800">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-orange-500 text-white">
+                <Server className="h-5 w-5" />
+              </div>
+              <div>
+                <CardTitle className="text-lg">Local LLM (Ollama)</CardTitle>
+                <CardDescription>
+                  Container-level settings — apply to all agents. Restart required for most changes.
+                </CardDescription>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {ollamaStatus && (
+                <div
+                  className={`flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full ${
+                    ollamaStatus.online
+                      ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                      : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                  }`}
+                >
+                  {ollamaStatus.online ? (
+                    <>
+                      <CheckCircle className="h-3 w-3" /> Online &bull; {ollamaStatus.models.length}{' '}
+                      model{ollamaStatus.models.length !== 1 ? 's' : ''} loaded
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="h-3 w-3" /> Offline
+                    </>
+                  )}
+                </div>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchOllamaSettings}
+                disabled={ollamaLoading}
+              >
+                <RefreshCw className={`h-4 w-4 ${ollamaLoading ? 'animate-spin' : ''}`} />
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {ollamaLoading ? (
+            <div className="flex items-center justify-center py-6">
+              <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <>
+              {ollamaSettings.map((s) => {
+                const val = ollamaPending[s.key] ?? s.value;
+                const isDirty = ollamaPending[s.key] !== undefined;
+                return (
+                  <div key={s.key} className="border-b pb-4 last:border-0 last:pb-0">
+                    <div className="flex items-start gap-2 mb-2">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-medium text-sm">{s.label}</h4>
+                          {s.requiresRestart && (
+                            <span className="text-xs bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300 px-1.5 py-0.5 rounded">
+                              requires restart
+                            </span>
+                          )}
+                          {isDirty && (
+                            <Badge variant="outline" className="text-xs">
+                              <AlertCircle className="h-3 w-3 mr-1" />
+                              Unsaved
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">{s.description}</p>
+                      </div>
+                    </div>
+                    {s.type === 'number' ? (
+                      <Input
+                        type="number"
+                        value={val}
+                        min={s.min}
+                        max={s.max}
+                        step={s.step || 1}
+                        className="w-32"
+                        onChange={(e) =>
+                          setOllamaPending((p) => ({ ...p, [s.key]: Number(e.target.value) }))
+                        }
+                      />
+                    ) : s.options ? (
+                      <div className="flex gap-2 flex-wrap">
+                        {s.options.map((opt) => (
+                          <button
+                            key={opt}
+                            onClick={() => setOllamaPending((p) => ({ ...p, [s.key]: opt }))}
+                            className={`px-3 py-1 rounded-md text-sm border transition-colors ${
+                              val === opt
+                                ? 'bg-primary text-primary-foreground border-primary'
+                                : 'bg-background hover:bg-muted border-border'
+                            }`}
+                          >
+                            {opt === '-1' ? '∞ forever' : opt === '0' ? 'unload now' : opt}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <Input
+                        value={val}
+                        className="w-32"
+                        onChange={(e) =>
+                          setOllamaPending((p) => ({ ...p, [s.key]: e.target.value }))
+                        }
+                      />
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Loaded models */}
+              {ollamaStatus?.models?.length > 0 && (
+                <div className="pt-2">
+                  <p className="text-xs font-medium text-muted-foreground mb-2">LOADED MODELS</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {ollamaStatus.models.map((m) => (
+                      <span key={m} className="text-xs bg-muted px-2 py-1 rounded font-mono">
+                        {m}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div className="flex gap-2 pt-2 border-t">
+                <Button
+                  size="sm"
+                  disabled={ollamaSaving || Object.keys(ollamaPending).length === 0}
+                  onClick={() => saveOllamaSettings(false)}
+                >
+                  {ollamaSaving && !ollamaRestarting ? (
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-2" />
+                  )}
+                  Save
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={ollamaSaving || Object.keys(ollamaPending).length === 0}
+                  onClick={() => saveOllamaSettings(true)}
+                >
+                  {ollamaRestarting && ollamaSaving ? (
+                    <RotateCw className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Zap className="h-4 w-4 mr-2" />
+                  )}
+                  Save & Restart Ollama
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={ollamaRestarting}
+                  onClick={restartOllama}
+                  className="ml-auto"
+                >
+                  {ollamaRestarting && !ollamaSaving ? (
+                    <RotateCw className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <RotateCw className="h-4 w-4 mr-2" />
+                  )}
+                  Restart Only
+                </Button>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 

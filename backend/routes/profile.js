@@ -466,23 +466,48 @@ export default function createProfileRoutes(_pgPool) {
       // ── 8. Pipeline journey ──
       const journeyPromise = buildPipelineJourney(entityType, entityId, entity, tenant_id);
 
+      // ── 9. Person profile (ai_summary) ──
+      const personProfilePromise = supabase
+        .from('person_profile')
+        .select('ai_summary, ai_summary_updated_at')
+        .eq('person_id', entityId)
+        .maybeSingle()
+        .then((r) => r.data || null);
+
       // ── Execute all in parallel ──
-      const [careState, careHistory, assignmentHistory, activities, notes, opportunities, journey] =
-        await Promise.all([
-          careStatePromise,
-          careHistoryPromise,
-          assignmentHistoryPromise,
-          activitiesPromise,
-          notesPromise,
-          oppsPromise,
-          journeyPromise,
-        ]);
+      const [
+        careState,
+        careHistory,
+        assignmentHistory,
+        activities,
+        notes,
+        opportunities,
+        journey,
+        personProfile,
+      ] = await Promise.all([
+        careStatePromise,
+        careHistoryPromise,
+        assignmentHistoryPromise,
+        activitiesPromise,
+        notesPromise,
+        oppsPromise,
+        journeyPromise,
+        personProfilePromise,
+      ]);
 
       // ── Resolve all employee names in one batch ──
       const empMap = await resolveEmployeeNames(empUuids);
 
       // Enrich entity
       entity.assigned_to_name = empMap[entity.assigned_to] || null;
+
+      // Merge ai_summary from person_profile
+      if (personProfile) {
+        const raw = personProfile.ai_summary;
+        // ai_summary is stored as text[] — join to a single string for the frontend
+        entity.ai_summary = Array.isArray(raw) ? raw.join(' ') : raw || null;
+        entity.ai_summary_updated_at = personProfile.ai_summary_updated_at || null;
+      }
 
       // Enrich activities
       activities.forEach((a) => {

@@ -74,7 +74,12 @@ services:
     container_name: aishacrm-ollama
     restart: unless-stopped
     entrypoint: >
-      sh -c "ollama serve & sleep 5 && ollama pull qwen2.5-coder:3b; wait"
+      sh -c "ollama serve & sleep 5 && ollama pull llama3.2:3b && ollama pull qwen2.5-coder:3b && ollama run llama3.2:3b 'ready' && wait"
+    environment:
+      - OLLAMA_NUM_CTX=1024
+      - OLLAMA_MAX_LOADED_MODELS=1
+      - OLLAMA_KEEP_ALIVE=-1
+      - OLLAMA_NUM_PARALLEL=2
     ports:
       - "11436:11434"
     volumes:
@@ -153,6 +158,7 @@ services:
       - GROQ_API_KEY=${GROQ_API_KEY}
       - PEP_LLM_PROVIDER=groq
       - PEP_LLM_MODEL=llama-3.3-70b-versatile
+      - SUMMARY_LLM_MODEL=llama3.2:3b
       # Telemetry
       - TELEMETRY_ENABLED=true
       - TELEMETRY_LOG_PATH=/telemetry/telemetry.ndjson
@@ -174,6 +180,8 @@ services:
         tag: "{{.Name}}"
     volumes:
       - aisha_telemetry:/telemetry
+      - /var/run/docker.sock:/var/run/docker.sock  # enables Ollama restart from AI Settings UI
+      - ./docker-compose.yml:/app/docker-compose.yml  # mounts compose file for Ollama settings edits
     networks:
       - aishanet
 
