@@ -7,7 +7,7 @@ echo "========================================"
 echo ""
 
 # Step 1: lint-staged (ESLint + Prettier on staged files only)
-echo "Step 1/2: Running lint-staged..."
+echo "Step 1/3: Running lint-staged..."
 npx lint-staged
 if [ $? -ne 0 ]; then
   echo ""
@@ -18,7 +18,7 @@ echo "OK: lint-staged passed"
 echo ""
 
 # Step 2: Braid core tests
-echo "Step 2/2: Running Braid core tests..."
+echo "Step 2/3: Running Braid core tests..."
 BRAID_CORE="braid-llm-kit/core"
 if [ -d "$BRAID_CORE" ] && ls "$BRAID_CORE"/*.test.js >/dev/null 2>&1; then
   node --test "$BRAID_CORE"/*.test.js
@@ -30,6 +30,40 @@ if [ -d "$BRAID_CORE" ] && ls "$BRAID_CORE"/*.test.js >/dev/null 2>&1; then
   echo "OK: Braid core tests passed"
 else
   echo "SKIP: No Braid core test files found"
+fi
+echo ""
+
+# Step 3: CARE Playbook tests
+echo "Step 3/3: Running CARE Playbook tests..."
+CARE_TESTS=(
+  "lib/care/__tests__/carePlaybookRouter.test.js"
+  "lib/care/__tests__/carePlaybookExecutor.test.js"
+  "lib/care/__tests__/carePlaybooks.routes.test.js"
+)
+
+# Check if backend container is running
+if docker compose ps backend | grep -q "Up"; then
+  CARE_TEST_FAILED=0
+  for test in "${CARE_TESTS[@]}"; do
+    if [ -f "backend/$test" ]; then
+      echo "  Running $test..."
+      docker compose exec -T backend node --test "$test"
+      if [ $? -ne 0 ]; then
+        echo ""
+        echo "FAIL: $test failed"
+        CARE_TEST_FAILED=1
+      fi
+    fi
+  done
+  
+  if [ $CARE_TEST_FAILED -eq 1 ]; then
+    echo ""
+    echo "FAIL: One or more CARE Playbook tests failed - fix errors above before committing"
+    exit 1
+  fi
+  echo "OK: CARE Playbook tests passed"
+else
+  echo "SKIP: Backend container not running (run 'docker compose up -d backend' to enable CARE tests)"
 fi
 echo ""
 

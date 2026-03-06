@@ -36,6 +36,8 @@ import { isCareAutonomyEnabled } from './care/isCareAutonomyEnabled.js';
 import { triggerCareWorkflow } from './care/careWorkflowTriggerClient.js';
 // Per-tenant CARE config (Phase 3: replaces hardcoded env vars)
 import { getCareConfigForTenant } from './care/careTenantConfig.js';
+// PR-Playbook: Playbook router for autonomous action sequences
+import { routeTriggerToPlaybook } from './care/carePlaybookRouter.js';
 
 let workerInterval = null;
 let supabase = null;
@@ -231,7 +233,7 @@ async function processTriggersForTenant(tenant) {
     }
 
     for (const lead of stagnantLeads) {
-      await createSuggestionIfNew(tenantUuid, {
+      await processTriggeredAction(tenantUuid, {
         triggerId: TRIGGER_TYPES.LEAD_STAGNANT,
         recordType: 'lead',
         recordId: lead.id,
@@ -493,7 +495,7 @@ async function processTriggersForTenant(tenant) {
     }
 
     for (const deal of decayingDeals) {
-      await createSuggestionIfNew(tenantUuid, {
+      await processTriggeredAction(tenantUuid, {
         triggerId: TRIGGER_TYPES.DEAL_DECAY,
         recordType: 'opportunity',
         recordId: deal.id,
@@ -741,7 +743,7 @@ async function processTriggersForTenant(tenant) {
     }
 
     for (const activity of overdueActivities) {
-      await createSuggestionIfNew(tenantUuid, {
+      await processTriggeredAction(tenantUuid, {
         triggerId: TRIGGER_TYPES.ACTIVITY_OVERDUE,
         recordType: 'activity',
         recordId: activity.id,
@@ -1023,7 +1025,7 @@ async function processTriggersForTenant(tenant) {
     }
 
     for (const opp of hotOpportunities) {
-      await createSuggestionIfNew(tenantUuid, {
+      await processTriggeredAction(tenantUuid, {
         triggerId: TRIGGER_TYPES.OPPORTUNITY_HOT,
         recordType: 'opportunity',
         recordId: opp.id,
@@ -1510,6 +1512,47 @@ async function detectHotOpportunities(tenantUuid) {
  * @param {object} triggerData
  * @param {object} [_deps] — optional dependency overrides for testing
  */
+/**
+ * Route trigger through playbook if configured, otherwise create suggestion.
+ * This is the single entry point for all trigger processing — replaces direct
+ * calls to createSuggestionIfNew in the trigger loops.
+ *
+ * @param {string} tenantUuid - Tenant UUID
+ * @param {object} triggerData - Same shape as createSuggestionIfNew expects
+ * @returns {string|null} Suggestion ID if created, or null
+ */
+async function processTriggeredAction(tenantUuid, triggerData) {
+  try {
+    // Try playbook first
+    const playbookResult = await routeTriggerToPlaybook(tenantUuid, triggerData);
+
+    if (playbookResult) {
+      // Playbook handled it — log and skip suggestion creation
+      logger.info(
+        {
+          tenantId: tenantUuid,
+          triggerId: triggerData.triggerId,
+          recordId: triggerData.recordId,
+          playbookStatus: playbookResult.status,
+          executionId: playbookResult.executionId,
+        },
+        '[AiTriggersWorker] Trigger routed to playbook',
+      );
+      return null;
+    }
+
+    // No playbook → fall through to existing suggestion creation
+    return await createSuggestionIfNew(tenantUuid, triggerData);
+  } catch (err) {
+    // If playbook router throws, fall through to suggestions as safety net
+    logger.warn(
+      { err, triggerId: triggerData.triggerId },
+      '[AiTriggersWorker] Playbook router error — falling back to suggestion',
+    );
+    return await createSuggestionIfNew(tenantUuid, triggerData);
+  }
+}
+
 export async function createSuggestionIfNew(tenantUuid, triggerData, _deps = {}) {
   const _supabase = _deps.supabase || supabase;
   const _generate = _deps.generateAiSuggestion || generateAiSuggestion;
