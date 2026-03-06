@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTenant } from '@/components/shared/tenantContext';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -74,6 +75,7 @@ export default function UniversalDetailPanel({
   showNotes = true, // Kept default to true as per existing code
   customSections = [],
 }) {
+  const { selectedTenantId } = useTenant();
   const [notes, setNotes] = useState([]);
   const [activities, setActivities] = useState([]);
   const [newNoteTitle, setNewNoteTitle] = useState('');
@@ -90,7 +92,7 @@ export default function UniversalDetailPanel({
     if (!entity) return;
     try {
       const relatedType = entityType.toLowerCase();
-      const tenantId = user?.tenant_id || entity.tenant_id;
+      const tenantId = selectedTenantId || user?.tenant_id || entity.tenant_id;
 
       // Use consistent backend URL pattern (same as loadActivities)
       const backendUrl =
@@ -155,7 +157,7 @@ export default function UniversalDetailPanel({
     if (!entity) return;
     try {
       const relatedTo = entityType.toLowerCase();
-      const tenantId = user?.tenant_id || entity.tenant_id;
+      const tenantId = selectedTenantId || user?.tenant_id || entity.tenant_id;
 
       // Use v2 API with proper filtering
       const backendUrl =
@@ -231,7 +233,7 @@ export default function UniversalDetailPanel({
       console.error('Failed to load activities:', error);
       toast.error('Failed to load activities');
     }
-  }, [entity, entityType, user?.tenant_id]);
+  }, [entity, entityType, selectedTenantId, user?.tenant_id]);
 
   // Load notes and activities when panel opens or entity changes
   useEffect(() => {

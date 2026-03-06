@@ -6,7 +6,7 @@
  *
  * Enable: TELEMETRY_ENABLED=true
  * Path:   TELEMETRY_LOG_PATH=/var/log/aisha/telemetry.ndjson
- * 
+ *
  * Event Contract v1.1: See addons/agent-office/contracts/telemetry-events.js
  */
 
@@ -39,6 +39,7 @@ export const EventTypes = Object.freeze({
   TASK_FAILED: 'task_failed',
   // Interaction
   HANDOFF: 'handoff',
+  SUBTASK_ASSIGNED: 'subtask_assigned',
   MESSAGE_SENT: 'message_sent',
   MESSAGE_RECEIVED: 'message_received',
   // Tooling
@@ -164,7 +165,8 @@ function sanitize(obj) {
     if (typeof v === 'string') out[k] = capString(v);
     else if (typeof v === 'number' || typeof v === 'boolean' || v === null) out[k] = v;
     else if (Array.isArray(v)) out[k] = v.slice(0, 50);
-    else if (typeof v === 'object') out[k] = v; // should remain small (ids/refs)
+    else if (typeof v === 'object')
+      out[k] = v; // should remain small (ids/refs)
     else out[k] = String(v);
   }
   return out;
@@ -200,199 +202,640 @@ export function buildTelemetryEvent(fields) {
 // --- Run Lifecycle ---
 
 /** Emit: run_started */
-export function emitRunStarted({ run_id, task_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, entrypoint, input_summary, force_role }) {
+export function emitRunStarted({
+  run_id,
+  task_id,
+  trace_id,
+  span_id,
+  parent_span_id,
+  tenant_id,
+  agent_id,
+  entrypoint,
+  input_summary,
+  force_role,
+}) {
   telemetryLog({
     type: EventTypes.RUN_STARTED,
-    run_id, task_id, trace_id, span_id, parent_span_id, tenant_id, agent_id,
-    entrypoint, input_summary, force_role,
+    run_id,
+    task_id,
+    trace_id,
+    span_id,
+    parent_span_id,
+    tenant_id,
+    agent_id,
+    entrypoint,
+    input_summary,
+    force_role,
   });
 }
 
 /** Emit: run_finished */
-export function emitRunFinished({ run_id, task_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, status, duration_ms, output_summary, error }) {
+export function emitRunFinished({
+  run_id,
+  task_id,
+  trace_id,
+  span_id,
+  parent_span_id,
+  tenant_id,
+  agent_id,
+  status,
+  duration_ms,
+  output_summary,
+  error,
+}) {
   telemetryLog({
     type: EventTypes.RUN_FINISHED,
-    run_id, task_id, trace_id, span_id, parent_span_id, tenant_id, agent_id,
-    status, duration_ms, output_summary, error,
+    run_id,
+    task_id,
+    trace_id,
+    span_id,
+    parent_span_id,
+    tenant_id,
+    agent_id,
+    status,
+    duration_ms,
+    output_summary,
+    error,
   });
 }
 
 // --- Agent Lifecycle ---
 
 /** Emit: agent_registered */
-export function emitAgentRegistered({ run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, agent_name, role, model, tools }) {
+export function emitAgentRegistered({
+  run_id,
+  trace_id,
+  span_id,
+  parent_span_id,
+  tenant_id,
+  agent_id,
+  agent_name,
+  role,
+  model,
+  tools,
+}) {
   telemetryLog({
     type: EventTypes.AGENT_REGISTERED,
-    run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id,
-    agent_name, role, model, tools,
+    run_id,
+    trace_id,
+    span_id,
+    parent_span_id,
+    tenant_id,
+    agent_id,
+    agent_name,
+    role,
+    model,
+    tools,
   });
 }
 
 /** Emit: agent_spawned */
-export function emitAgentSpawned({ run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, agent_name, model, tools }) {
+export function emitAgentSpawned({
+  run_id,
+  trace_id,
+  span_id,
+  parent_span_id,
+  tenant_id,
+  agent_id,
+  agent_name,
+  model,
+  tools,
+}) {
   telemetryLog({
     type: EventTypes.AGENT_SPAWNED,
-    run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id,
-    agent_name, model, tools,
+    run_id,
+    trace_id,
+    span_id,
+    parent_span_id,
+    tenant_id,
+    agent_id,
+    agent_name,
+    model,
+    tools,
   });
 }
 
 /** Emit: agent_retired */
-export function emitAgentRetired({ run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, reason, duration_ms }) {
+export function emitAgentRetired({
+  run_id,
+  trace_id,
+  span_id,
+  parent_span_id,
+  tenant_id,
+  agent_id,
+  reason,
+  duration_ms,
+}) {
   telemetryLog({
     type: EventTypes.AGENT_RETIRED,
-    run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id,
-    reason, duration_ms,
+    run_id,
+    trace_id,
+    span_id,
+    parent_span_id,
+    tenant_id,
+    agent_id,
+    reason,
+    duration_ms,
   });
 }
 
 /** Emit: agent_status */
-export function emitAgentStatus({ run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, status, task_id, blocked_reason }) {
+export function emitAgentStatus({
+  run_id,
+  trace_id,
+  span_id,
+  parent_span_id,
+  tenant_id,
+  agent_id,
+  status,
+  task_id,
+  blocked_reason,
+}) {
   telemetryLog({
     type: EventTypes.AGENT_STATUS,
-    run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id,
-    status, task_id, blocked_reason,
+    run_id,
+    trace_id,
+    span_id,
+    parent_span_id,
+    tenant_id,
+    agent_id,
+    status,
+    task_id,
+    blocked_reason,
   });
 }
 
 // --- Task Lifecycle ---
 
 /** Emit: task_created */
-export function emitTaskCreated({ run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, task_id, task_type, title, priority, payload_ref, due_ts }) {
+export function emitTaskCreated({
+  run_id,
+  trace_id,
+  span_id,
+  parent_span_id,
+  tenant_id,
+  agent_id,
+  task_id,
+  task_type,
+  title,
+  priority,
+  payload_ref,
+  due_ts,
+}) {
   telemetryLog({
     type: EventTypes.TASK_CREATED,
-    run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, task_id,
-    task_type, title, priority, payload_ref, due_ts,
+    run_id,
+    trace_id,
+    span_id,
+    parent_span_id,
+    tenant_id,
+    agent_id,
+    task_id,
+    task_type,
+    title,
+    priority,
+    payload_ref,
+    due_ts,
   });
 }
 
 /** Emit: task_enqueued (System level, no agent_id required) */
-export function emitTaskEnqueued({ run_id, trace_id, span_id, parent_span_id, tenant_id, task_id, input_summary, agent_name }) {
+export function emitTaskEnqueued({
+  run_id,
+  trace_id,
+  span_id,
+  parent_span_id,
+  tenant_id,
+  task_id,
+  input_summary,
+  agent_name,
+}) {
   telemetryLog({
     type: 'task_enqueued', // Explicit string as it might not be in EventTypes enum yet
-    run_id, trace_id, span_id, parent_span_id, tenant_id, task_id,
-    input_summary, agent_name
+    run_id,
+    trace_id,
+    span_id,
+    parent_span_id,
+    tenant_id,
+    task_id,
+    input_summary,
+    agent_name,
   });
 }
 
 /** Emit: task_assigned */
-export function emitTaskAssigned({ run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, task_id, to_agent_id, queue, reason }) {
+export function emitTaskAssigned({
+  run_id,
+  trace_id,
+  span_id,
+  parent_span_id,
+  tenant_id,
+  agent_id,
+  task_id,
+  to_agent_id,
+  queue,
+  reason,
+}) {
   telemetryLog({
     type: EventTypes.TASK_ASSIGNED,
-    run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, task_id,
-    to_agent_id, queue, reason,
+    run_id,
+    trace_id,
+    span_id,
+    parent_span_id,
+    tenant_id,
+    agent_id,
+    task_id,
+    to_agent_id,
+    queue,
+    reason,
   });
 }
 
 /** Emit: task_started */
-export function emitTaskStarted({ run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, task_id }) {
+export function emitTaskStarted({
+  run_id,
+  trace_id,
+  span_id,
+  parent_span_id,
+  tenant_id,
+  agent_id,
+  task_id,
+}) {
   telemetryLog({
     type: EventTypes.TASK_STARTED,
-    run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, task_id,
+    run_id,
+    trace_id,
+    span_id,
+    parent_span_id,
+    tenant_id,
+    agent_id,
+    task_id,
   });
 }
 
 /** Emit: task_blocked */
-export function emitTaskBlocked({ run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, task_id, blocked_by, reason, unblock_condition }) {
+export function emitTaskBlocked({
+  run_id,
+  trace_id,
+  span_id,
+  parent_span_id,
+  tenant_id,
+  agent_id,
+  task_id,
+  blocked_by,
+  reason,
+  unblock_condition,
+}) {
   telemetryLog({
     type: EventTypes.TASK_BLOCKED,
-    run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, task_id,
-    blocked_by, reason, unblock_condition,
+    run_id,
+    trace_id,
+    span_id,
+    parent_span_id,
+    tenant_id,
+    agent_id,
+    task_id,
+    blocked_by,
+    reason,
+    unblock_condition,
   });
 }
 
 /** Emit: task_completed */
-export function emitTaskCompleted({ run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, task_id, result_ref, summary, metrics }) {
+export function emitTaskCompleted({
+  run_id,
+  trace_id,
+  span_id,
+  parent_span_id,
+  tenant_id,
+  agent_id,
+  task_id,
+  result_ref,
+  summary,
+  metrics,
+}) {
   telemetryLog({
     type: EventTypes.TASK_COMPLETED,
-    run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, task_id,
-    result_ref, summary, metrics,
+    run_id,
+    trace_id,
+    span_id,
+    parent_span_id,
+    tenant_id,
+    agent_id,
+    task_id,
+    result_ref,
+    summary,
+    metrics,
   });
 }
 
 /** Emit: task_failed */
-export function emitTaskFailed({ run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, task_id, error, error_code, retryable, metrics }) {
+export function emitTaskFailed({
+  run_id,
+  trace_id,
+  span_id,
+  parent_span_id,
+  tenant_id,
+  agent_id,
+  task_id,
+  error,
+  error_code,
+  retryable,
+  metrics,
+}) {
   telemetryLog({
     type: EventTypes.TASK_FAILED,
-    run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, task_id,
-    error, error_code, retryable, metrics,
+    run_id,
+    trace_id,
+    span_id,
+    parent_span_id,
+    tenant_id,
+    agent_id,
+    task_id,
+    error,
+    error_code,
+    retryable,
+    metrics,
   });
 }
 
 // --- Interaction ---
 
 /** Emit: handoff */
-export function emitHandoff({ run_id, trace_id, span_id, parent_span_id, tenant_id, from_agent_id, to_agent_id, handoff_type, payload_ref, summary }) {
+export function emitHandoff({
+  run_id,
+  trace_id,
+  span_id,
+  parent_span_id,
+  tenant_id,
+  from_agent_id,
+  to_agent_id,
+  handoff_type,
+  payload_ref,
+  summary,
+}) {
   telemetryLog({
     type: EventTypes.HANDOFF,
-    run_id, trace_id, span_id, parent_span_id, tenant_id,
-    from_agent_id, to_agent_id, handoff_type, payload_ref, summary,
+    run_id,
+    trace_id,
+    span_id,
+    parent_span_id,
+    tenant_id,
+    from_agent_id,
+    to_agent_id,
+    handoff_type,
+    payload_ref,
+    summary,
+  });
+}
+
+/**
+ * Emit: subtask_assigned
+ * Peer-to-peer delegation from a working agent directly to another agent,
+ * bypassing Ops Manager dispatch. Used for parallel sub-work spawned mid-task.
+ * @param {Object} params
+ * @param {string} params.from_agent_id - Delegating agent (already working, keeps its own task)
+ * @param {string} params.to_agent_id   - Receiving agent
+ * @param {string} params.task_id       - New sub-task ID
+ * @param {string} [params.reason]      - Short label shown in viz arrow (e.g. 'EMAIL', 'COLLATERAL')
+ * @param {string} [params.input_summary] - Description of the sub-task
+ */
+export function emitSubtaskAssigned({
+  run_id,
+  trace_id,
+  span_id,
+  parent_span_id,
+  tenant_id,
+  from_agent_id,
+  to_agent_id,
+  task_id,
+  reason,
+  input_summary,
+  agent_id,
+}) {
+  telemetryLog({
+    type: EventTypes.SUBTASK_ASSIGNED,
+    run_id,
+    trace_id,
+    span_id,
+    parent_span_id,
+    tenant_id,
+    // agent_id is the from_agent for event routing; also set explicit from/to fields
+    agent_id: agent_id || from_agent_id,
+    from_agent_id,
+    to_agent_id,
+    task_id,
+    reason,
+    input_summary,
   });
 }
 
 /** Emit: message_sent */
-export function emitMessageSent({ run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, to_agent_id, message_type, content_ref, summary }) {
+export function emitMessageSent({
+  run_id,
+  trace_id,
+  span_id,
+  parent_span_id,
+  tenant_id,
+  agent_id,
+  to_agent_id,
+  message_type,
+  content_ref,
+  summary,
+}) {
   telemetryLog({
     type: EventTypes.MESSAGE_SENT,
-    run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id,
-    to_agent_id, message_type, content_ref, summary,
+    run_id,
+    trace_id,
+    span_id,
+    parent_span_id,
+    tenant_id,
+    agent_id,
+    to_agent_id,
+    message_type,
+    content_ref,
+    summary,
   });
 }
 
 /** Emit: message_received */
-export function emitMessageReceived({ run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, from_agent_id, message_type, content_ref, summary }) {
+export function emitMessageReceived({
+  run_id,
+  trace_id,
+  span_id,
+  parent_span_id,
+  tenant_id,
+  agent_id,
+  from_agent_id,
+  message_type,
+  content_ref,
+  summary,
+}) {
   telemetryLog({
     type: EventTypes.MESSAGE_RECEIVED,
-    run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id,
-    from_agent_id, message_type, content_ref, summary,
+    run_id,
+    trace_id,
+    span_id,
+    parent_span_id,
+    tenant_id,
+    agent_id,
+    from_agent_id,
+    message_type,
+    content_ref,
+    summary,
   });
 }
 
 // --- Tooling ---
 
 /** Emit: tool_call_started */
-export function emitToolCallStarted({ run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, tool_name, tool_call_id, args_ref, timeout_ms }) {
+export function emitToolCallStarted({
+  run_id,
+  trace_id,
+  span_id,
+  parent_span_id,
+  tenant_id,
+  agent_id,
+  tool_name,
+  tool_call_id,
+  args_ref,
+  timeout_ms,
+}) {
   telemetryLog({
     type: EventTypes.TOOL_CALL_STARTED,
-    run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id,
-    tool_name, tool_call_id, args_ref, timeout_ms,
+    run_id,
+    trace_id,
+    span_id,
+    parent_span_id,
+    tenant_id,
+    agent_id,
+    tool_name,
+    tool_call_id,
+    args_ref,
+    timeout_ms,
   });
 }
 
 /** Emit: tool_call_finished */
-export function emitToolCallFinished({ run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, tool_name, tool_call_id, result_ref, summary, metrics }) {
+export function emitToolCallFinished({
+  run_id,
+  trace_id,
+  span_id,
+  parent_span_id,
+  tenant_id,
+  agent_id,
+  tool_name,
+  tool_call_id,
+  result_ref,
+  summary,
+  metrics,
+}) {
   telemetryLog({
     type: EventTypes.TOOL_CALL_FINISHED,
-    run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id,
-    tool_name, tool_call_id, result_ref, summary, metrics,
+    run_id,
+    trace_id,
+    span_id,
+    parent_span_id,
+    tenant_id,
+    agent_id,
+    tool_name,
+    tool_call_id,
+    result_ref,
+    summary,
+    metrics,
   });
 }
 
 /** Emit: tool_call_failed */
-export function emitToolCallFailed({ run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, tool_name, tool_call_id, error, error_code, retryable, duration_ms }) {
+export function emitToolCallFailed({
+  run_id,
+  trace_id,
+  span_id,
+  parent_span_id,
+  tenant_id,
+  agent_id,
+  tool_name,
+  tool_call_id,
+  error,
+  error_code,
+  retryable,
+  duration_ms,
+}) {
   telemetryLog({
     type: EventTypes.TOOL_CALL_FAILED,
-    run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id,
-    tool_name, tool_call_id, error, error_code, retryable, duration_ms,
+    run_id,
+    trace_id,
+    span_id,
+    parent_span_id,
+    tenant_id,
+    agent_id,
+    tool_name,
+    tool_call_id,
+    error,
+    error_code,
+    retryable,
+    duration_ms,
   });
 }
 
 // --- Artifacts ---
 
 /** Emit: artifact_created */
-export function emitArtifactCreated({ run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, artifact_id, artifact_type, title, content_ref, mime_type, size_bytes }) {
+export function emitArtifactCreated({
+  run_id,
+  trace_id,
+  span_id,
+  parent_span_id,
+  tenant_id,
+  agent_id,
+  artifact_id,
+  artifact_type,
+  title,
+  content_ref,
+  mime_type,
+  size_bytes,
+}) {
   telemetryLog({
     type: EventTypes.ARTIFACT_CREATED,
-    run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id,
-    artifact_id, artifact_type, title, content_ref, mime_type, size_bytes,
+    run_id,
+    trace_id,
+    span_id,
+    parent_span_id,
+    tenant_id,
+    agent_id,
+    artifact_id,
+    artifact_type,
+    title,
+    content_ref,
+    mime_type,
+    size_bytes,
   });
 }
 
 /** Emit: artifact_updated */
-export function emitArtifactUpdated({ run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id, artifact_id, version, changes_summary, content_ref }) {
+export function emitArtifactUpdated({
+  run_id,
+  trace_id,
+  span_id,
+  parent_span_id,
+  tenant_id,
+  agent_id,
+  artifact_id,
+  version,
+  changes_summary,
+  content_ref,
+}) {
   telemetryLog({
     type: EventTypes.ARTIFACT_UPDATED,
-    run_id, trace_id, span_id, parent_span_id, tenant_id, agent_id,
-    artifact_id, version, changes_summary, content_ref,
+    run_id,
+    trace_id,
+    span_id,
+    parent_span_id,
+    tenant_id,
+    agent_id,
+    artifact_id,
+    version,
+    changes_summary,
+    content_ref,
   });
 }

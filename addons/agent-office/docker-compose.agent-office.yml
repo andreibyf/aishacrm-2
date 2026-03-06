@@ -79,7 +79,7 @@ services:
       - KAFKA_TOPIC=aisha.events.v1
       - MAX_EVENTS_IN_MEMORY=5000
       - OFFICE_VIZ_TOKEN=${OFFICE_VIZ_TOKEN}
-      - ENABLE_DEMO_ENDPOINTS=false
+      - ENABLE_DEMO_ENDPOINTS=true
     ports:
       - "4010:4010"
     depends_on:
