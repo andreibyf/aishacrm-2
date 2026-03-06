@@ -1150,7 +1150,7 @@ export default function SettingsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <AiSettings />
+                  <AiSettings tenantId={selectedTenantId} />
                 </CardContent>
               </Card>
             )}
