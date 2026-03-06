@@ -306,11 +306,13 @@ router.put('/:id', async (req, res) => {
     const tenantId = req.tenant?.id;
 
     if (value === undefined) {
-      return res.status(400).json({ error: 'value is required' });
+      return res.status(400).json({ success: false, error: 'value is required' });
     }
 
     if (!tenantId) {
-      return res.status(400).json({ error: 'tenant_id is required — select a tenant first' });
+      return res
+        .status(400)
+        .json({ success: false, error: 'tenant_id is required — select a tenant first' });
     }
 
     const supa = getSupabaseClient();
@@ -324,7 +326,7 @@ router.put('/:id', async (req, res) => {
       .single();
 
     if (fetchError || !existing) {
-      return res.status(404).json({ error: 'Setting not found for this tenant' });
+      return res.status(404).json({ success: false, error: 'Setting not found for this tenant' });
     }
 
     // Validate value against min/max if present
@@ -332,13 +334,13 @@ router.put('/:id', async (req, res) => {
     if (meta.type === 'number') {
       const numVal = Number(value);
       if (isNaN(numVal)) {
-        return res.status(400).json({ error: 'Value must be a number' });
+        return res.status(400).json({ success: false, error: 'Value must be a number' });
       }
       if (meta.min !== undefined && numVal < meta.min) {
-        return res.status(400).json({ error: `Value must be >= ${meta.min}` });
+        return res.status(400).json({ success: false, error: `Value must be >= ${meta.min}` });
       }
       if (meta.max !== undefined && numVal > meta.max) {
-        return res.status(400).json({ error: `Value must be <= ${meta.max}` });
+        return res.status(400).json({ success: false, error: `Value must be <= ${meta.max}` });
       }
     }
 
@@ -362,11 +364,11 @@ router.put('/:id', async (req, res) => {
 
     if (error) {
       logger.error('[ai-settings] Update error:', error);
-      return res.status(500).json({ error: error.message });
+      return res.status(500).json({ success: false, error: error.message });
     }
 
-    // Clear cache so new value takes effect immediately
-    clearAiSettingsCache();
+    // Clear cache for this tenant so new value takes effect immediately
+    clearAiSettingsCache(tenantId);
 
     res.json({
       success: true,
@@ -375,7 +377,7 @@ router.put('/:id', async (req, res) => {
     });
   } catch (err) {
     logger.error('[ai-settings] Update error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -389,7 +391,9 @@ router.post('/reset', async (req, res) => {
     const tenantId = req.tenant?.id;
 
     if (!tenantId) {
-      return res.status(400).json({ error: 'tenant_id is required — select a tenant first' });
+      return res
+        .status(400)
+        .json({ success: false, error: 'tenant_id is required — select a tenant first' });
     }
 
     const supa = getSupabaseClient();
@@ -405,7 +409,7 @@ router.post('/reset', async (req, res) => {
 
     if (deleteError) {
       logger.error('[ai-settings] Reset delete error:', deleteError);
-      return res.status(500).json({ error: deleteError.message });
+      return res.status(500).json({ success: false, error: deleteError.message });
     }
 
     // Re-seed defaults for this tenant
@@ -416,7 +420,7 @@ router.post('/reset', async (req, res) => {
       await bootstrapTenantSettings(tenantId, 'developer');
     }
 
-    clearAiSettingsCache();
+    clearAiSettingsCache(tenantId);
 
     res.json({
       success: true,
@@ -424,7 +428,7 @@ router.post('/reset', async (req, res) => {
     });
   } catch (err) {
     logger.error('[ai-settings] Reset error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
