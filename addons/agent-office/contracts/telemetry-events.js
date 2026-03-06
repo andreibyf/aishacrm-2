@@ -20,6 +20,7 @@ export const EventTypes = Object.freeze({
   // === Task Lifecycle ===
   TASK_CREATED: 'task_created',
   TASK_ASSIGNED: 'task_assigned',
+  TASK_ENQUEUED: 'task_enqueued',
   TASK_STARTED: 'task_started',
   TASK_BLOCKED: 'task_blocked',
   TASK_COMPLETED: 'task_completed',
@@ -133,6 +134,12 @@ export const EventPayloads = Object.freeze({
     to_agent_id: 'string',
     queue: 'string', // Agent's work queue
     reason: 'string', // Why this agent
+  },
+
+  // task_enqueued
+  task_enqueued: {
+    input_summary: 'string', // Safe, short description of task
+    priority: 'string|null', // low | normal | high | urgent
   },
 
   // task_started

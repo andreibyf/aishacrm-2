@@ -38,7 +38,7 @@ export default function AishaEntityChatModal({
     const base =
       window.location.hostname === 'app.aishacrm.com'
         ? 'https://backoffice.aishacrm.com'
-        : `http://${window.location.hostname}:4010`;
+        : `${window.location.protocol}//${window.location.hostname}:4010`;
     return base;
   };
 

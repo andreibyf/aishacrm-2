@@ -411,7 +411,7 @@ export function emitTaskEnqueued({
   agent_name,
 }) {
   telemetryLog({
-    type: 'task_enqueued', // Explicit string as it might not be in EventTypes enum yet
+    type: EventTypes.TASK_ENQUEUED,
     run_id,
     trace_id,
     span_id,

@@ -1670,8 +1670,12 @@ function clearAll(res) {
   }
   res.json({ status: 'ok', cleared: old });
 }
-app.post('/clear', (req, res) => clearAll(res));
-app.get('/clear', (req, res) => clearAll(res));
+
+// Clear endpoint - only available when ENABLE_DEMO_ENDPOINTS=true
+if (ENABLE_DEMO_ENDPOINTS) {
+  app.post('/clear', requireVizAuth, (req, res) => clearAll(res));
+  app.get('/clear', requireVizAuth, (req, res) => clearAll(res));
+}
 
 process.on('unhandledRejection', (reason) => {
   console.error('[office-viz] Unhandled Rejection:', reason?.message || reason);

@@ -26,7 +26,8 @@ export default function EntityAiSummaryCard({
     } else if (window.location.hostname === 'localhost') {
       officeVizUrl = `http://localhost:4010?entity_type=${entityType}&entity_id=${entityId}`;
     } else {
-      officeVizUrl = `http://${window.location.hostname}:4010?entity_type=${entityType}&entity_id=${entityId}`;
+      // Use same protocol as current page to avoid mixed content warnings
+      officeVizUrl = `${window.location.protocol}//${window.location.hostname}:4010?entity_type=${entityType}&entity_id=${entityId}`;
     }
     window.open(officeVizUrl, '_blank');
   };

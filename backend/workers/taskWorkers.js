@@ -841,6 +841,18 @@ Provide a clear summary of what you did.`;
       logger.error(`[ExecuteTask] Error: ${err.message}`, err);
 
       // Emit error telemetry
+      emitTaskFailed({
+        run_id,
+        task_id,
+        trace_id: run_id,
+        span_id: randomUUID(),
+        tenant_id,
+        agent_id: assignee,
+        error: err.message,
+        error_code: err.code || null,
+        retryable: false,
+      });
+
       emitRunFinished({
         run_id,
         task_id,
