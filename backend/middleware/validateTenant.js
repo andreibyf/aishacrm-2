@@ -22,9 +22,11 @@ import logger from '../lib/logger.js';
  */
 export async function validateTenantAccess(req, res, next) {
   // This middleware assumes req.user is populated by authentication middleware
-  const { user } = req;
+  let { user } = req;
 
   // In local dev mode without auth, create a mock superadmin user
+  // but do NOT return early — fall through to tenant resolution so
+  // req.tenant is populated from query/body/params.
   if (!user && process.env.NODE_ENV === 'development') {
     req.user = {
       id: 'local-dev-superadmin',
@@ -32,7 +34,7 @@ export async function validateTenantAccess(req, res, next) {
       role: 'superadmin',
       tenant_id: null,
     };
-    return next();
+    user = req.user;
   }
 
   if (!user) {

@@ -6,16 +6,16 @@ import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  Settings, 
-  MessageSquare, 
-  Wrench, 
-  Brain, 
-  Cpu, 
+import {
+  Settings,
+  MessageSquare,
+  Wrench,
+  Brain,
+  Cpu,
   RefreshCw,
   Save,
   AlertCircle,
-  Info
+  Info,
 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 
@@ -54,7 +54,7 @@ const CATEGORY_CONFIG = {
   },
 };
 
-export default function AiSettings() {
+export default function AiSettings({ tenantId }) {
   const [_settings, setSettings] = useState([]);
   const [grouped, setGrouped] = useState({});
   const [_agentRoles, setAgentRoles] = useState([]);
@@ -64,13 +64,17 @@ export default function AiSettings() {
   const [pendingChanges, setPendingChanges] = useState({});
 
   const fetchSettings = useCallback(async () => {
+    if (!tenantId) return;
     try {
       setLoading(true);
-      const response = await fetch(`${BACKEND_URL}/api/ai-settings?agent_role=${selectedRole}`, {
-        credentials: 'include',
-      });
+      const response = await fetch(
+        `${BACKEND_URL}/api/ai-settings?agent_role=${selectedRole}&tenant_id=${tenantId}`,
+        {
+          credentials: 'include',
+        },
+      );
       const data = await response.json();
-      
+
       if (data.success) {
         setSettings(data.data || []);
         setGrouped(data.grouped || {});
@@ -91,14 +95,14 @@ export default function AiSettings() {
     } finally {
       setLoading(false);
     }
-  }, [selectedRole]);
+  }, [selectedRole, tenantId]);
 
   useEffect(() => {
-    fetchSettings();
-  }, [fetchSettings]);
+    if (tenantId) fetchSettings();
+  }, [fetchSettings, tenantId]);
 
   const handleValueChange = (settingId, newValue) => {
-    setPendingChanges(prev => ({
+    setPendingChanges((prev) => ({
       ...prev,
       [settingId]: newValue,
     }));
@@ -108,25 +112,28 @@ export default function AiSettings() {
     const newValue = pendingChanges[setting.id];
     if (newValue === undefined) return;
 
-    setSaving(prev => ({ ...prev, [setting.id]: true }));
-    
+    setSaving((prev) => ({ ...prev, [setting.id]: true }));
+
     try {
-      const response = await fetch(`${BACKEND_URL}/api/ai-settings/${setting.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ value: newValue }),
-      });
-      
+      const response = await fetch(
+        `${BACKEND_URL}/api/ai-settings/${setting.id}?tenant_id=${tenantId}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ value: newValue }),
+        },
+      );
+
       const data = await response.json();
-      
+
       if (data.success) {
         toast({
           title: 'Setting updated',
           description: data.message || `Updated ${setting.display_name}`,
         });
         // Remove from pending changes
-        setPendingChanges(prev => {
+        setPendingChanges((prev) => {
           const next = { ...prev };
           delete next[setting.id];
           return next;
@@ -147,22 +154,26 @@ export default function AiSettings() {
         variant: 'destructive',
       });
     } finally {
-      setSaving(prev => ({ ...prev, [setting.id]: false }));
+      setSaving((prev) => ({ ...prev, [setting.id]: false }));
     }
   };
 
   const clearCache = async () => {
     try {
-      const response = await fetch(`${BACKEND_URL}/api/ai-settings/clear-cache`, {
-        method: 'POST',
-        credentials: 'include',
-      });
+      const response = await fetch(
+        `${BACKEND_URL}/api/ai-settings/clear-cache?tenant_id=${tenantId}`,
+        {
+          method: 'POST',
+          credentials: 'include',
+        },
+      );
       const data = await response.json();
-      
+
       if (data.success) {
         toast({
           title: 'Cache cleared',
-          description: 'AI settings cache has been cleared. New values will take effect immediately.',
+          description:
+            'AI settings cache has been cleared. New values will take effect immediately.',
         });
       }
     } catch (err) {
@@ -190,12 +201,12 @@ export default function AiSettings() {
             {currentValue ? 'Enabled' : 'Disabled'}
           </span>
           {hasChange && (
-            <Button 
-              size="sm" 
-              onClick={() => saveSetting(setting)}
-              disabled={saving[setting.id]}
-            >
-              {saving[setting.id] ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            <Button size="sm" onClick={() => saveSetting(setting)} disabled={saving[setting.id]}>
+              {saving[setting.id] ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
             </Button>
           )}
         </div>
@@ -219,7 +230,9 @@ export default function AiSettings() {
                   step={step}
                   className="flex-1"
                 />
-                <span className="w-12 text-right font-mono text-sm">{currentValue?.toFixed?.(1) || currentValue}</span>
+                <span className="w-12 text-right font-mono text-sm">
+                  {currentValue?.toFixed?.(1) || currentValue}
+                </span>
               </div>
             ) : (
               <Input
@@ -233,12 +246,12 @@ export default function AiSettings() {
               />
             )}
             {hasChange && (
-              <Button 
-                size="sm" 
-                onClick={() => saveSetting(setting)}
-                disabled={saving[setting.id]}
-              >
-                {saving[setting.id] ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              <Button size="sm" onClick={() => saveSetting(setting)} disabled={saving[setting.id]}>
+                {saving[setting.id] ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
               </Button>
             )}
           </div>
@@ -260,12 +273,12 @@ export default function AiSettings() {
           className="flex-1"
         />
         {hasChange && (
-          <Button 
-            size="sm" 
-            onClick={() => saveSetting(setting)}
-            disabled={saving[setting.id]}
-          >
-            {saving[setting.id] ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          <Button size="sm" onClick={() => saveSetting(setting)} disabled={saving[setting.id]}>
+            {saving[setting.id] ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
           </Button>
         )}
       </div>
@@ -295,7 +308,7 @@ export default function AiSettings() {
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          {categorySettings.map(setting => (
+          {categorySettings.map((setting) => (
             <div key={setting.id} className="border-b pb-4 last:border-0 last:pb-0">
               <div className="flex items-start justify-between mb-2">
                 <div className="flex-1">
@@ -308,20 +321,25 @@ export default function AiSettings() {
                       </Badge>
                     )}
                   </div>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {setting.description}
-                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">{setting.description}</p>
                 </div>
               </div>
-              <div className="mt-3">
-                {renderSettingInput(setting)}
-              </div>
+              <div className="mt-3">{renderSettingInput(setting)}</div>
             </div>
           ))}
         </CardContent>
       </Card>
     );
   };
+
+  if (!tenantId) {
+    return (
+      <div className="flex items-center justify-center p-8 text-muted-foreground">
+        <AlertCircle className="h-5 w-5 mr-2" />
+        Select a tenant to manage AI settings.
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -359,8 +377,9 @@ export default function AiSettings() {
           <div className="text-sm">
             <p className="font-medium text-blue-700 dark:text-blue-300">About AI Settings</p>
             <p className="text-blue-600 dark:text-blue-400 mt-1">
-              These settings control how AiSHA and other AI agents behave. Changes take effect immediately after saving.
-              Lower temperature values make responses more deterministic and factual - recommended for CRM data queries.
+              These settings control how AiSHA and other AI agents behave. Changes take effect
+              immediately after saving. Lower temperature values make responses more deterministic
+              and factual - recommended for CRM data queries.
             </p>
           </div>
         </CardContent>
@@ -374,14 +393,14 @@ export default function AiSettings() {
         </TabsList>
 
         <TabsContent value="aisha" className="mt-4">
-          {Object.keys(CATEGORY_CONFIG).map(category => {
+          {Object.keys(CATEGORY_CONFIG).map((category) => {
             const categorySettings = grouped[category] || [];
             if (categorySettings.length === 0) return null;
             return renderCategory(category, categorySettings);
           })}
         </TabsContent>
         <TabsContent value="developer" className="mt-4">
-          {Object.keys(CATEGORY_CONFIG).map(category => {
+          {Object.keys(CATEGORY_CONFIG).map((category) => {
             const categorySettings = grouped[category] || [];
             if (categorySettings.length === 0) return null;
             return renderCategory(category, categorySettings);
