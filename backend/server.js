@@ -16,6 +16,7 @@ import { initDatabase } from './startup/initDatabase.js';
 import { initServices } from './startup/initServices.js';
 import { initMiddleware } from './startup/initMiddleware.js';
 import workflowQueue from './services/workflowQueue.js';
+import { initPlaybookQueueProcessor } from './services/carePlaybookExecutor.js';
 
 // Import background workers
 import { startCampaignWorker } from './lib/campaignWorker.js';
@@ -234,6 +235,7 @@ import createWorkersRoutes from './routes/workers.js';
 import { createTasksRoutes } from './routes/tasks.js';
 import createDashboardFunnelRoutes from './routes/dashboard-funnel.js';
 import createCareConfigRoutes from './routes/careConfig.js';
+import createCarePlaybookRoutes from './routes/carePlaybooks.js';
 import braidAuditRoutes from './routes/braidAudit.js';
 import braidChainRoutes from './routes/braidChain.js';
 import braidMetricsRoutes from './routes/braidMetrics.js';
@@ -447,6 +449,14 @@ app.use(
   authenticateRequest,
   createCareConfigRoutes(measuredPgPool),
 );
+// CARE Playbook CRUD + execution history
+logger.debug('Mounting /api/care-playbooks routes');
+app.use(
+  '/api/care-playbooks',
+  defaultLimiter,
+  authenticateRequest,
+  createCarePlaybookRoutes(measuredPgPool),
+);
 // Braid SDK Audit Log routes
 logger.debug('Mounting /api/braid/audit routes');
 app.use('/api/braid/audit', defaultLimiter, braidAuditRoutes);
@@ -569,6 +579,17 @@ process.on('SIGTERM', async () => {
   if (workflowQueue) {
     await workflowQueue.close();
     logger.info('Workflow queue closed');
+  }
+
+  // Close playbook queue
+  try {
+    const { playbookQueue } = await import('./services/carePlaybookQueue.js');
+    if (playbookQueue) {
+      await playbookQueue.close();
+      logger.info('Playbook queue closed');
+    }
+  } catch (_) {
+    /* queue may not be initialized */
   }
 
   if (pgPool) {
@@ -808,6 +829,9 @@ server.listen(PORT, async () => {
   if (process.env.AI_TRIGGERS_WORKER_ENABLED === 'true' && pgPool) {
     const triggersInterval = parseInt(process.env.AI_TRIGGERS_WORKER_INTERVAL_MS || '60000', 10);
     startAiTriggersWorker(pgPool, triggersInterval);
+    // Initialize CARE Playbook executor queue processor
+    initPlaybookQueueProcessor();
+    logger.info('[PlaybookExecutor] Queue processor initialized alongside AI triggers worker');
   } else {
     logger.debug('[AiTriggersWorker] Disabled (set AI_TRIGGERS_WORKER_ENABLED=true to enable)');
   }

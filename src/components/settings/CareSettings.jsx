@@ -1,14 +1,15 @@
 /**
  * CareSettings.jsx
- * 
- * Read-only overview of CARE workflows.
- * Shows which workflows have CARE Start nodes and what tenant they're configured for.
- * 
+ *
+ * CARE configuration hub with two sections:
+ *   1. Workflow Overview — read-only view of workflows with CARE Start nodes
+ *   2. Autonomy Playbooks — admin-configurable automated response sequences
+ *
  * Tenant configuration is done directly in each workflow's CARE Start node,
  * not in a separate configuration table.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -24,6 +25,8 @@ import {
 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { useTenant } from '@/components/shared/tenantContext';
+
+const CarePlaybooks = lazy(() => import('./CarePlaybooks'));
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4001';
 
@@ -42,37 +45,39 @@ export default function CareSettings({ isSuperadmin }) {
       if (selectedTenantId) {
         params.append('tenant_id', selectedTenantId);
       }
-      
+
       const response = await fetch(`${BACKEND_URL}/api/workflows?${params}`, {
         credentials: 'include',
       });
       const data = await response.json();
-      
+
       if (data.status === 'success' || Array.isArray(data.data)) {
         const workflows = data.data?.workflows || data.data || data || [];
-        
+
         // Ensure workflows is an array
         if (!Array.isArray(workflows)) {
           console.warn('[CareSettings] Expected workflows array, got:', typeof workflows);
           setCareWorkflows([]);
           return;
         }
-        
+
         // Filter to workflows with care_trigger nodes
-        const careWorkflowsList = workflows.filter(wf => {
-          const nodes = Array.isArray(wf.nodes) ? wf.nodes : [];
-          return nodes.some(n => n.type === 'care_trigger');
-        }).map(wf => {
-          // Extract care_trigger node config
-          const nodes = Array.isArray(wf.nodes) ? wf.nodes : [];
-          const careTriggerNode = nodes.find(n => n.type === 'care_trigger');
-          return {
-            ...wf,
-            careTriggerConfig: careTriggerNode?.config || {},
-            configuredTenantId: careTriggerNode?.config?.tenant_id || null,
-          };
-        });
-        
+        const careWorkflowsList = workflows
+          .filter((wf) => {
+            const nodes = Array.isArray(wf.nodes) ? wf.nodes : [];
+            return nodes.some((n) => n.type === 'care_trigger');
+          })
+          .map((wf) => {
+            // Extract care_trigger node config
+            const nodes = Array.isArray(wf.nodes) ? wf.nodes : [];
+            const careTriggerNode = nodes.find((n) => n.type === 'care_trigger');
+            return {
+              ...wf,
+              careTriggerConfig: careTriggerNode?.config || {},
+              configuredTenantId: careTriggerNode?.config?.tenant_id || null,
+            };
+          });
+
         setCareWorkflows(careWorkflowsList);
       }
     } catch (err) {
@@ -92,7 +97,7 @@ export default function CareSettings({ isSuperadmin }) {
         credentials: 'include',
       });
       const data = await response.json();
-      
+
       if (data.status === 'success' || Array.isArray(data.data)) {
         setTenants(data.data || data || []);
       }
@@ -115,7 +120,7 @@ export default function CareSettings({ isSuperadmin }) {
   const getTenantName = (tenantId) => {
     if (!tenantId) return null;
     if (!Array.isArray(tenants)) return tenantId.substring(0, 8) + '...';
-    const tenant = tenants.find(t => t.id === tenantId);
+    const tenant = tenants.find((t) => t.id === tenantId);
     return tenant?.name || tenant?.tenant_id || tenantId.substring(0, 8) + '...';
   };
 
@@ -152,9 +157,9 @@ export default function CareSettings({ isSuperadmin }) {
               <div className="text-sm">
                 <p className="text-blue-200 font-medium">Tenant Isolation</p>
                 <p className="text-blue-300 mt-1">
-                  Each CARE workflow has a tenant_id configured in its CARE Start node. 
-                  The webhook endpoint will only accept events from that specific tenant, 
-                  rejecting any payloads with mismatched tenant_id.
+                  Each CARE workflow has a tenant_id configured in its CARE Start node. The webhook
+                  endpoint will only accept events from that specific tenant, rejecting any payloads
+                  with mismatched tenant_id.
                 </p>
               </div>
             </div>
@@ -183,10 +188,9 @@ export default function CareSettings({ isSuperadmin }) {
             </Button>
           </div>
           <CardDescription>
-            {careWorkflows.length === 0 
+            {careWorkflows.length === 0
               ? 'No CARE workflows found'
-              : `${careWorkflows.length} workflow${careWorkflows.length === 1 ? '' : 's'} with CARE Start nodes`
-            }
+              : `${careWorkflows.length} workflow${careWorkflows.length === 1 ? '' : 's'} with CARE Start nodes`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -200,7 +204,7 @@ export default function CareSettings({ isSuperadmin }) {
               <Button
                 variant="outline"
                 className="mt-4"
-                onClick={() => window.location.href = '/workflows'}
+                onClick={() => (window.location.href = '/workflows')}
               >
                 <ExternalLink className="w-4 h-4 mr-2" />
                 Go to Workflows
@@ -209,7 +213,7 @@ export default function CareSettings({ isSuperadmin }) {
           ) : (
             <div className="space-y-4">
               {careWorkflows.map((wf) => (
-                <div 
+                <div
                   key={wf.id}
                   className="border border-slate-700 rounded-lg p-4 hover:border-slate-600 transition-colors"
                 >
@@ -218,15 +222,19 @@ export default function CareSettings({ isSuperadmin }) {
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-slate-200">{wf.name}</span>
                         {wf.is_active ? (
-                          <Badge variant="default" className="bg-green-600 text-xs">Active</Badge>
+                          <Badge variant="default" className="bg-green-600 text-xs">
+                            Active
+                          </Badge>
                         ) : (
-                          <Badge variant="secondary" className="text-xs">Inactive</Badge>
+                          <Badge variant="secondary" className="text-xs">
+                            Inactive
+                          </Badge>
                         )}
                       </div>
                       {wf.description && (
                         <p className="text-sm text-muted-foreground mt-1">{wf.description}</p>
                       )}
-                      
+
                       {/* Tenant Configuration */}
                       <div className="flex items-center gap-2 mt-3">
                         <Building2 className="w-4 h-4 text-slate-500" />
@@ -249,17 +257,17 @@ export default function CareSettings({ isSuperadmin }) {
                           </div>
                         )}
                       </div>
-                      
+
                       {/* Webhook URL */}
                       <div className="mt-2 text-xs text-slate-500 font-mono">
                         /api/workflows/{wf.id}/webhook
                       </div>
                     </div>
-                    
+
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => window.location.href = `/workflows?id=${wf.id}`}
+                      onClick={() => (window.location.href = `/workflows?id=${wf.id}`)}
                     >
                       <ExternalLink className="w-4 h-4 mr-2" />
                       Edit
@@ -272,10 +280,32 @@ export default function CareSettings({ isSuperadmin }) {
         </CardContent>
       </Card>
 
+      {/* Autonomy Playbooks */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Zap className="w-4 h-4 text-orange-400" />
+            Autonomy Playbooks
+          </CardTitle>
+          <CardDescription>
+            Define automated response sequences for CARE trigger events
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Suspense
+            fallback={<div className="text-sm text-muted-foreground">Loading playbooks...</div>}
+          >
+            <CarePlaybooks />
+          </Suspense>
+        </CardContent>
+      </Card>
+
       {/* How it works */}
       <Card className="border-dashed">
         <CardHeader>
-          <CardTitle className="text-sm text-muted-foreground">How CARE Tenant Isolation Works</CardTitle>
+          <CardTitle className="text-sm text-muted-foreground">
+            How CARE Tenant Isolation Works
+          </CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground space-y-3">
           <div className="flex items-start gap-2">

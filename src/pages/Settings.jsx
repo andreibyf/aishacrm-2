@@ -386,10 +386,10 @@ export default function SettingsPage() {
         {
           id: 'care-settings',
           label: 'CARE Workflows',
-          description: 'Configure AI-driven customer care triggers',
+          description: 'Configure AI-driven customer care triggers and playbooks',
           icon: Zap,
           category: 'integrations',
-          roles: ['superadmin'],
+          roles: ['superadmin', 'admin'],
         },
 
         // System
@@ -865,7 +865,7 @@ export default function SettingsPage() {
                 </Card>
               )}
 
-            {activeTab === 'care-settings' && isSuperadmin && (
+            {activeTab === 'care-settings' && (isSuperadmin || isAdmin) && (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
