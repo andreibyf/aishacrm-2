@@ -180,6 +180,11 @@ services:
         tag: "{{.Name}}"
     volumes:
       - aisha_telemetry:/telemetry
+      # SECURITY WARNING: Docker socket mount is a privilege escalation risk
+      # Grants backend API control over host Docker daemon. Only use in trusted environments.
+      # Required for: Ollama container restart from AI Settings UI (superadmin only)
+      # NOTE: Current backend Dockerfile doesn't include Docker CLI - restart will fail with ENOENT
+      # TODO: Consider moving restart functionality to a separate locked-down admin service
       - /var/run/docker.sock:/var/run/docker.sock  # enables Ollama restart from AI Settings UI
       - ./docker-compose.yml:/app/docker-compose.yml  # mounts compose file for Ollama settings edits
     networks:

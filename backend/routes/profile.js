@@ -467,10 +467,12 @@ export default function createProfileRoutes(_pgPool) {
       const journeyPromise = buildPipelineJourney(entityType, entityId, entity, tenant_id);
 
       // ── 9. Person profile (ai_summary) ──
+      // SECURITY: Must scope by tenant_id to prevent cross-tenant data leaks
       const personProfilePromise = supabase
         .from('person_profile')
         .select('ai_summary, ai_summary_updated_at')
         .eq('person_id', entityId)
+        .eq('tenant_id', tenant_id)
         .maybeSingle()
         .then((r) => r.data || null);
 

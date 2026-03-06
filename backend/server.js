@@ -261,8 +261,21 @@ app.use('/api/integrations', defaultLimiter, createIntegrationRoutes(measuredPgP
 app.use('/api/telephony', defaultLimiter, createTelephonyRoutes(measuredPgPool));
 app.use('/api/whatsapp', defaultLimiter, createWhatsAppRoutes(measuredPgPool)); // WhatsApp webhook (no auth - Twilio signature validation)
 // AI Summary must be mounted BEFORE the main /api/ai router to avoid being shadowed
-app.use('/api/ai', defaultLimiter, authenticateRequest, createAISummaryRoutes);
-app.use('/api/ai', defaultLimiter, authenticateRequest, createAiRoutes(measuredPgPool));
+// SECURITY: AI routes must use validateTenantAccess for proper tenant isolation
+app.use(
+  '/api/ai',
+  defaultLimiter,
+  authenticateRequest,
+  validateTenantAccess,
+  createAISummaryRoutes,
+);
+app.use(
+  '/api/ai',
+  defaultLimiter,
+  authenticateRequest,
+  validateTenantAccess,
+  createAiRoutes(measuredPgPool),
+);
 app.use(
   '/api/agent-office',
   defaultLimiter,

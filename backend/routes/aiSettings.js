@@ -11,6 +11,7 @@ import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { clearAiSettingsCache } from '../lib/aiSettingsLoader.js';
+import { requireSuperAdminRole } from '../middleware/validateTenant.js';
 import logger from '../lib/logger.js';
 
 // Path to docker-compose.yml
@@ -55,16 +56,45 @@ function readOllamaEnvFromCompose() {
 }
 
 /**
+ * Sanitize environment value to prevent YAML injection
+ * @param {string} value - The value to sanitize
+ * @returns {string} - Sanitized value safe for YAML
+ */
+function sanitizeEnvValue(value) {
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    throw new Error('Invalid value type: must be string or number');
+  }
+
+  const strValue = String(value);
+
+  // Reject values with newlines, carriage returns, or YAML comment characters
+  if (/[\r\n#]/.test(strValue)) {
+    throw new Error('Invalid characters in value (newlines and # not allowed)');
+  }
+
+  // Limit length to prevent abuse
+  if (strValue.length > 500) {
+    throw new Error('Value too long (max 500 characters)');
+  }
+
+  return strValue;
+}
+
+/**
  * Write updated Ollama env vars into docker-compose.yml
+ * SECURITY: Values are sanitized to prevent YAML injection
  */
 function writeOllamaEnvToCompose(updates) {
   let raw = readFileSync(COMPOSE_PATH, 'utf8');
   for (const [key, value] of Object.entries(updates)) {
+    // SECURITY: Sanitize value to prevent YAML injection
+    const safeValue = sanitizeEnvValue(value);
+
     const existing = new RegExp('(- ' + key + '=).+');
     if (existing.test(raw)) {
-      raw = raw.replace(existing, '$1' + value);
+      raw = raw.replace(existing, '$1' + safeValue);
     } else {
-      raw = raw.replace(/(- OLLAMA_[A-Z_]+=.+)/, '$1\n      - ' + key + '=' + value);
+      raw = raw.replace(/(- OLLAMA_[A-Z_]+=.+)/, '$1\n      - ' + key + '=' + safeValue);
     }
   }
   writeFileSync(COMPOSE_PATH, raw, 'utf8');
@@ -448,8 +478,15 @@ router.post('/clear-cache', async (_req, res) => {
 /**
  * GET /api/ai-settings/ollama
  * Returns Ollama container settings + live status + summary temperature
+ *
+ * SECURITY: Superadmin only - exposes container configuration
+ *
+ * NOTE: Ollama settings are container-global (not tenant-specific), but this route
+ * is mounted behind validateTenantAccess middleware via server.js. Superadmins must
+ * select a tenant to access these endpoints, even though the settings apply globally.
+ * Consider mounting /ollama endpoints separately for cleaner architecture.
  */
-router.get('/ollama', async (_req, res) => {
+router.get('/ollama', requireSuperAdminRole, async (_req, res) => {
   const current = readOllamaEnvFromCompose();
 
   let liveStatus = null;
@@ -535,8 +572,15 @@ router.get('/ollama', async (_req, res) => {
  * POST /api/ai-settings/ollama
  * Save Ollama settings. Compose vars written to docker-compose.yml.
  * SUMMARY_TEMPERATURE mutated in process.env (takes effect immediately).
+ *
+ * SECURITY: Superadmin only - modifies host docker-compose and container config
+ *
+ * NOTE: Ollama settings are container-global (not tenant-specific), but this route
+ * is mounted behind validateTenantAccess middleware via server.js. Superadmins must
+ * select a tenant to access these endpoints, even though the settings apply globally.
+ * Frontend should include tenant_id in request body/query to satisfy middleware.
  */
-router.post('/ollama', async (req, res) => {
+router.post('/ollama', requireSuperAdminRole, async (req, res) => {
   const { settings: updates, restart = false } = req.body;
 
   if (!updates || typeof updates !== 'object') {
@@ -571,6 +615,9 @@ router.post('/ollama', async (req, res) => {
     if (restart) {
       try {
         const composeDir = resolve(COMPOSE_PATH, '..');
+        // WARNING: This requires Docker CLI in container + socket mount
+        // Current backend Dockerfile doesn't include Docker tooling
+        // This will fail with ENOENT unless docker is installed in the container
         execSync('docker compose up -d --force-recreate ollama', {
           cwd: composeDir,
           timeout: 60000,

@@ -575,7 +575,8 @@ export default function LeadProfilePage() {
             setAiSummaryLoading(true);
             const backendUrl2 =
               getRuntimeEnv('VITE_AISHACRM_BACKEND_URL') || 'http://localhost:4001';
-            const tid2 = tenantId || window.localStorage.getItem('tenant_id');
+            // BUGFIX: Use selected_tenant_id (UUID) instead of deprecated tenant_id (text slug)
+            const tid2 = tenantId || window.localStorage.getItem('selected_tenant_id');
             const { data: sess2 } = await supabase.auth.getSession();
             const tok2 = sess2?.session?.access_token;
             fetch(`${backendUrl2}/api/ai/summarize-person-profile`, {

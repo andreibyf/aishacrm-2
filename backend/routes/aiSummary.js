@@ -52,10 +52,12 @@ router.post('/summarize-person-profile', async (req, res) => {
     const supabase = getSupabaseClient();
 
     // ── Cache check: return existing summary if < 24h old ──────────────────
+    // SECURITY: Must scope by tenant_id to prevent cross-tenant data leaks
     const { data: existing } = await supabase
       .from('person_profile')
       .select('ai_summary, ai_summary_updated_at')
       .eq('person_id', person_id)
+      .eq('tenant_id', req.tenant?.id || tenant_id)
       .maybeSingle();
 
     if (existing?.ai_summary && existing?.ai_summary_updated_at) {
@@ -129,8 +131,22 @@ router.post('/summarize-person-profile', async (req, res) => {
 
     // ── Persist to person_profile (upsert) ─────────────────────────────────
     const summaryValue = Array.isArray(ai_summary) ? ai_summary : [ai_summary];
-    if (!tenant_id) {
+
+    // SECURITY: Always use req.tenant.id if available (from middleware), fall back to body tenant_id
+    const safeTenantId = req.tenant?.id || tenant_id;
+    if (!safeTenantId) {
       return res.status(400).json({ error: 'Missing required field: tenant_id' });
+    }
+
+    // SECURITY: Verify existing row belongs to the same tenant before updating
+    const { data: existingRow } = await supabase
+      .from('person_profile')
+      .select('tenant_id')
+      .eq('person_id', person_id)
+      .maybeSingle();
+
+    if (existingRow && existingRow.tenant_id !== safeTenantId) {
+      return res.status(403).json({ error: "Cannot modify another tenant's data" });
     }
 
     await supabase
@@ -139,7 +155,7 @@ router.post('/summarize-person-profile', async (req, res) => {
         {
           person_id,
           person_type,
-          tenant_id,
+          tenant_id: safeTenantId,
           ai_summary: summaryValue,
           ai_summary_updated_at: new Date().toISOString(),
         },
