@@ -147,7 +147,7 @@ export function useContactsData({
   }, [user]);
 
   // Reset supporting data when tenant changes so stale data from a previous tenant is cleared
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!user) return;
     supportingDataLoaded.current = false;
@@ -319,7 +319,16 @@ export function useContactsData({
       const skip = (currentPage - 1) * pageSize;
 
       if (import.meta.env.DEV) {
-        console.log('[Contacts] Loading page:', currentPage, 'size:', pageSize, 'skip:', skip, 'filter:', scopedFilter);
+        console.log(
+          '[Contacts] Loading page:',
+          currentPage,
+          'size:',
+          pageSize,
+          'skip:',
+          skip,
+          'filter:',
+          scopedFilter,
+        );
       }
 
       const contactsResult = await Contact.filter(scopedFilter, sortString, pageSize, skip);
