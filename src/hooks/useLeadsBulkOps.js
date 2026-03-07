@@ -82,14 +82,14 @@ export function useLeadsBulkOps({
   }, []);
 
   const toggleSelectAll = useCallback(() => {
-    if (selectedLeads.size === leads.length && leads.length > 0) {
-      setSelectedLeads(new Set());
-      setSelectAllMode(false);
-    } else {
-      setSelectedLeads(new Set(leads.map((l) => l.id)));
-      setSelectAllMode(false);
-    }
-  }, [leads, selectedLeads.size]);
+    setSelectedLeads((prev) => {
+      if (prev.size === leads.length && leads.length > 0) {
+        return new Set();
+      }
+      return new Set(leads.map((l) => l.id));
+    });
+    setSelectAllMode(false);
+  }, [leads]);
 
   const clearSelection = useCallback(() => {
     setSelectedLeads(new Set());
