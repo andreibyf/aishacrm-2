@@ -3,6 +3,8 @@ import { Lead, Account, Employee } from '@/api/entities';
 import { loadUsersSafely } from '@/components/shared/userLoader';
 import { toast } from 'sonner';
 
+// Extracted from Leads.jsx into dedicated hook for leads data management (PR #330)
+
 /**
  * useLeadsData hook - Manages all data fetching for the Leads page
  *
@@ -24,8 +26,6 @@ import { toast } from 'sonner';
  * @param {string} params.ageFilter - Age bucket filter
  * @param {Array} params.selectedTags - Selected tag filters
  * @param {boolean} params.showTestData - Include test data
- * @param {number} params.currentPage - Current page number
- * @param {number} params.pageSize - Page size
  * @param {Array} params.ageBuckets - Age bucket definitions
  * @param {Object} params.user - Current user
  * @param {Function} params.loadingToast - Loading toast manager
@@ -35,7 +35,6 @@ import { toast } from 'sonner';
  * @param {Function} params.clearCache - Clear all cache
  * @param {Function} params.setDetailLead - Set detail panel lead
  * @param {Function} params.setIsDetailOpen - Open detail panel
- * @param {Function} params.setCurrentPage - Update current page
  * @returns {Object} Data and functions for Leads page
  */
 export function useLeadsData({
@@ -49,8 +48,6 @@ export function useLeadsData({
   assignedToFilter = 'all',
   selectedTags,
   showTestData,
-  currentPage,
-  pageSize,
   ageBuckets,
   user,
   loadingToast,
@@ -60,9 +57,10 @@ export function useLeadsData({
   clearCache,
   setDetailLead,
   setIsDetailOpen,
-  setCurrentPage,
 }) {
   // State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [leads, setLeads] = useState([]);
   const [users, setUsers] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -84,8 +82,8 @@ export function useLeadsData({
   const initialLoadDone = useRef(false);
   const supportingDataLoaded = useRef(false);
 
-  // Helper function to calculate lead age
-  const calculateLeadAge = useCallback((createdDate) => {
+  // Helper function to calculate lead age from a date value (used internally and for loadLeads)
+  const calculateLeadAgeFromDate = useCallback((createdDate) => {
     // Return -1 for missing or invalid dates so they can be excluded from age buckets
     if (!createdDate) return -1;
 
@@ -105,6 +103,23 @@ export function useLeadsData({
     const MS_PER_DAY = 1000 * 60 * 60 * 24;
     return Math.floor(diffMs / MS_PER_DAY);
   }, []);
+
+  // Lead-based signature for page/table (accepts lead object or date)
+  const calculateLeadAge = useCallback(
+    (lead) => {
+      const dateValue = lead?.created_date ?? lead?.created_at ?? lead;
+      return calculateLeadAgeFromDate(dateValue);
+    },
+    [calculateLeadAgeFromDate],
+  );
+
+  const getLeadAgeBucket = useCallback(
+    (lead) => {
+      const age = calculateLeadAge(lead);
+      return ageBuckets.find((b) => b.value !== 'all' && age >= 0 && age >= b.min && age <= b.max);
+    },
+    [ageBuckets, calculateLeadAge],
+  );
 
   // Build tenant/scope filter
   const getTenantFilter = useCallback(() => {
@@ -443,7 +458,7 @@ export function useLeadsData({
           const selectedBucket = ageBuckets.find((b) => b.value === ageFilter);
           if (selectedBucket) {
             allFilteredLeads = allFilteredLeads.filter((lead) => {
-              const age = calculateLeadAge(lead.created_date || lead.created_at);
+              const age = calculateLeadAgeFromDate(lead.created_date || lead.created_at);
               return age >= 0 && age >= selectedBucket.min && age <= selectedBucket.max;
             });
           }
@@ -528,8 +543,7 @@ export function useLeadsData({
       leadsLabel,
       loadingToast,
       ageBuckets,
-      calculateLeadAge,
-      setCurrentPage,
+      calculateLeadAgeFromDate,
     ],
   );
 
@@ -628,6 +642,20 @@ export function useLeadsData({
     setSupportingDataReloadKey((k) => k + 1);
   }, []);
 
+  const handlePageChange = useCallback((newPage) => {
+    setCurrentPage(newPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  const handlePageSizeChange = useCallback((newSize) => {
+    setPageSize(newSize);
+    setCurrentPage(1);
+  }, []);
+
+  const refreshLeads = useCallback(() => {
+    return loadLeads(currentPage, pageSize);
+  }, [loadLeads, currentPage, pageSize]);
+
   return {
     leads,
     setLeads,
@@ -638,6 +666,12 @@ export function useLeadsData({
     totalStats,
     totalItems,
     setTotalItems,
+    currentPage,
+    pageSize,
+    setCurrentPage,
+    handlePageChange,
+    handlePageSizeChange,
+    refreshLeads,
     loadLeads,
     loadTotalStats,
     refreshAccounts,
@@ -647,6 +681,8 @@ export function useLeadsData({
     employeesMap,
     accountsMap,
     getAssociatedAccountName,
+    calculateLeadAge,
+    getLeadAgeBucket,
     initialLoadDone,
     resetSupportingData,
   };
