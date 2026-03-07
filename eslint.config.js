@@ -374,6 +374,13 @@ export default [
       '@typescript-eslint/no-explicit-any': 'warn',
     },
   },
+  // Braid adapter override: allow dynamic typing for tool bridges
+  {
+    files: ['braid-mcp-node-server/src/braid/adapters/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
   // TypeScript backend/Node files - allow Node.js globals
   {
     files: ['braid-mcp-node-server/**/*.ts', 'backend/**/*.ts', 'orchestra/**/*.ts'],
