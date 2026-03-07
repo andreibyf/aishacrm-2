@@ -17,14 +17,14 @@ async function makeRequest(method, path, body = null, headers = {}) {
   const url = `http://localhost:${testPort}${path}`;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout
-  
+
   try {
     const options = {
       method,
       headers: {
         'Content-Type': 'application/json',
         'X-Forwarded-For': '127.0.0.1', // Simulate IP for rate limiting
-        ...headers
+        ...headers,
       },
       signal: controller.signal,
     };
@@ -60,9 +60,9 @@ before(async () => {
             user_metadata: {
               first_name: 'Existing',
               last_name: 'User',
-              display_name: 'Existing User'
-            }
-          }
+              display_name: 'Existing User',
+            },
+          },
         };
       }
       if (email === 'employee@test.com') {
@@ -73,14 +73,14 @@ before(async () => {
             user_metadata: {
               first_name: 'Employee',
               last_name: 'Test',
-              display_name: 'Employee Test'
-            }
-          }
+              display_name: 'Employee Test',
+            },
+          },
         };
       }
       return { user: null };
     },
-    updateAuthUserPassword: async (userId, newPassword) => {
+    updateAuthUserPassword: async (userId, _newPassword) => {
       // Mock password update - succeed for valid user IDs
       if (userId === 'auth-user-123' || userId === 'auth-employee-456') {
         return { error: null };
@@ -117,7 +117,7 @@ describe('users.js - Section 2.5: User Profile Management', { timeout: 30000 }, 
   describe('PUT /api/users/:id - Update user profile', () => {
     it('should require valid user ID', async () => {
       const response = await makeRequest('PUT', '/api/users/invalid-id', {
-        first_name: 'Updated'
+        first_name: 'Updated',
       });
       // May return 404 for not found or 500 for Supabase init error
       assert([404, 500].includes(response.status));
@@ -132,7 +132,7 @@ describe('users.js - Section 2.5: User Profile Management', { timeout: 30000 }, 
       const response = await makeRequest('PUT', '/api/users/test-user-123', {
         first_name: 'Updated',
         last_name: 'Name',
-        role: 'admin'
+        role: 'admin',
       });
 
       // May succeed or fail depending on mock data
@@ -150,7 +150,7 @@ describe('users.js - Section 2.5: User Profile Management', { timeout: 30000 }, 
         first_name: 'Updated',
         last_name: 'Employee',
         status: 'inactive',
-        employee_role: 'manager'
+        employee_role: 'manager',
       });
 
       // May succeed or fail depending on mock data
@@ -167,10 +167,10 @@ describe('users.js - Section 2.5: User Profile Management', { timeout: 30000 }, 
       const response = await makeRequest('PUT', '/api/users/test-user-123', {
         metadata: {
           department: 'Engineering',
-          phone: '555-0123'
+          phone: '555-0123',
         },
         tags: ['developer', 'senior'],
-        is_active: true
+        is_active: true,
       });
 
       // May succeed or fail depending on mock data
@@ -184,7 +184,7 @@ describe('users.js - Section 2.5: User Profile Management', { timeout: 30000 }, 
 
     it('should update password when provided', async () => {
       const response = await makeRequest('PUT', '/api/users/test-user-123', {
-        new_password: 'newSecurePassword123!'
+        new_password: 'newSecurePassword123!',
       });
 
       // May succeed or fail depending on mock data
@@ -198,7 +198,7 @@ describe('users.js - Section 2.5: User Profile Management', { timeout: 30000 }, 
 
     it('should handle tenant_id updates', async () => {
       const response = await makeRequest('PUT', '/api/users/test-user-123', {
-        tenant_id: 'new-tenant-789'
+        tenant_id: 'new-tenant-789',
       });
 
       // May succeed or fail depending on mock data
@@ -216,13 +216,13 @@ describe('users.js - Section 2.5: User Profile Management', { timeout: 30000 }, 
         { tenant_id: 'none', expected: null },
         { tenant_id: 'null', expected: null },
         { tenant_id: 'no-client', expected: null },
-        { tenant_id: 'valid-tenant-123', expected: 'valid-tenant-123' }
+        { tenant_id: 'valid-tenant-123', expected: 'valid-tenant-123' },
       ];
 
       for (const testCase of testCases) {
         const response = await makeRequest('PUT', '/api/users/test-user-123', {
           tenant_id: testCase.tenant_id,
-          first_name: 'Test'
+          first_name: 'Test',
         });
 
         // May succeed or fail depending on mock data
@@ -233,7 +233,7 @@ describe('users.js - Section 2.5: User Profile Management', { timeout: 30000 }, 
     it('should auto-generate display_name from first/last name', async () => {
       const response = await makeRequest('PUT', '/api/users/test-user-123', {
         first_name: 'John',
-        last_name: 'Doe'
+        last_name: 'Doe',
       });
 
       // May succeed or fail depending on mock data
@@ -248,9 +248,9 @@ describe('users.js - Section 2.5: User Profile Management', { timeout: 30000 }, 
     it('should preserve existing metadata when updating', async () => {
       const response = await makeRequest('PUT', '/api/users/test-user-123', {
         metadata: {
-          new_field: 'new_value'
+          new_field: 'new_value',
           // existing metadata should be preserved
-        }
+        },
       });
 
       // May succeed or fail depending on mock data
@@ -265,12 +265,12 @@ describe('users.js - Section 2.5: User Profile Management', { timeout: 30000 }, 
       const response = await makeRequest('PUT', '/api/users/test-user-123', {
         permissions: {
           can_edit_users: true,
-          can_delete_records: false
+          can_delete_records: false,
         },
         navigation_permissions: {
           dashboard: true,
-          reports: false
-        }
+          reports: false,
+        },
       });
 
       // May succeed or fail depending on mock data
@@ -284,7 +284,7 @@ describe('users.js - Section 2.5: User Profile Management', { timeout: 30000 }, 
     it('should create audit log for updates', async () => {
       const response = await makeRequest('PUT', '/api/users/test-user-123', {
         first_name: 'Audited',
-        last_name: 'Update'
+        last_name: 'Update',
       });
 
       // May succeed or fail depending on mock data
@@ -299,7 +299,7 @@ describe('users.js - Section 2.5: User Profile Management', { timeout: 30000 }, 
     it('should sync auth metadata for name changes', async () => {
       const response = await makeRequest('PUT', '/api/users/test-user-123', {
         first_name: 'Synced',
-        last_name: 'Name'
+        last_name: 'Name',
       });
 
       // May succeed or fail depending on mock data
@@ -316,7 +316,7 @@ describe('users.js - Section 2.5: User Profile Management', { timeout: 30000 }, 
       const response = await makeRequest('PUT', '/api/users/test-user-123', {
         // Invalid data that might cause errors
         role: 'invalid-role',
-        status: 'invalid-status'
+        status: 'invalid-status',
       });
 
       // Should handle errors gracefully
@@ -329,8 +329,8 @@ describe('users.js - Section 2.5: User Profile Management', { timeout: 30000 }, 
       const response = await makeRequest('PUT', '/api/users/test-user-123', {
         metadata: {
           phone: '555-0199',
-          address: '123 Main St'
-        }
+          address: '123 Main St',
+        },
       });
 
       // May succeed or fail depending on mock data
@@ -348,7 +348,7 @@ describe('users.js - Section 2.5: User Profile Management', { timeout: 30000 }, 
       // This test would require mocking the IMMUTABLE_SUPERADMINS list
       // Since we can't modify the route code, we'll test the general case
       const response = await makeRequest('PUT', '/api/users/test-superadmin', {
-        first_name: 'Hacked'
+        first_name: 'Hacked',
       });
 
       // May succeed or fail depending on whether the user is immutable
@@ -364,7 +364,7 @@ describe('users.js - Section 2.5: User Profile Management', { timeout: 30000 }, 
   describe('Password update functionality', () => {
     it('should handle password update failures', async () => {
       const response = await makeRequest('PUT', '/api/users/invalid-user', {
-        new_password: 'newpass123'
+        new_password: 'newpass123',
       });
 
       // May fail due to user not found or other issues
@@ -373,7 +373,7 @@ describe('users.js - Section 2.5: User Profile Management', { timeout: 30000 }, 
 
     it('should confirm email after password change', async () => {
       const response = await makeRequest('PUT', '/api/users/test-user-123', {
-        new_password: 'newpass123'
+        new_password: 'newpass123',
       });
 
       // May succeed or fail depending on mock data
@@ -387,8 +387,8 @@ describe('users.js - Section 2.5: User Profile Management', { timeout: 30000 }, 
       const response = await makeRequest('PUT', '/api/users/test-user-123', {
         new_password: 'newpass123',
         metadata: {
-          password: 'should-be-removed' // This should be cleared
-        }
+          password: 'should-be-removed', // This should be cleared
+        },
       });
 
       // May succeed or fail depending on mock data
@@ -406,14 +406,16 @@ describe('users.js - Section 2.5: User Profile Management', { timeout: 30000 }, 
       const requests = [];
       // Make multiple requests to trigger rate limiting
       for (let i = 0; i < 6; i++) {
-        requests.push(makeRequest('PUT', '/api/users/test-user-123', {
-          first_name: `Test${i}`
-        }));
+        requests.push(
+          makeRequest('PUT', '/api/users/test-user-123', {
+            first_name: `Test${i}`,
+          }),
+        );
       }
 
       const results = await Promise.all(requests);
-      const rateLimitedCount = results.filter(r => r.status === 429).length;
-      const successCount = results.filter(r => r.status === 200).length;
+      const rateLimitedCount = results.filter((r) => r.status === 429).length;
+      const successCount = results.filter((r) => r.status === 200).length;
 
       // Should have some rate limiting
       assert(rateLimitedCount > 0 || successCount > 0);
@@ -424,7 +426,7 @@ describe('users.js - Section 2.5: User Profile Management', { timeout: 30000 }, 
     it('should update users in users table', async () => {
       const response = await makeRequest('PUT', '/api/users/test-user-123', {
         role: 'admin',
-        tenant_id: 'tenant-123'
+        tenant_id: 'tenant-123',
       });
 
       // May succeed or fail depending on mock data
@@ -439,7 +441,7 @@ describe('users.js - Section 2.5: User Profile Management', { timeout: 30000 }, 
     it('should update users in employees table', async () => {
       const response = await makeRequest('PUT', '/api/users/test-employee-456', {
         status: 'active',
-        employee_role: 'supervisor'
+        employee_role: 'supervisor',
       });
 
       // May succeed or fail depending on mock data

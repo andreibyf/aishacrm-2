@@ -150,7 +150,7 @@ describe('BizDev Sources — assigned_to field', () => {
         assigned_to: null, // clearing assignment
       });
 
-      const updateJson = await updateRes.json();
+      const _updateJson = await updateRes.json();
       assert.ok([200, 201].includes(updateRes.status), `Update status: ${updateRes.status}`);
     });
   });

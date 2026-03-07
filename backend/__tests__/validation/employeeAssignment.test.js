@@ -218,7 +218,7 @@ describe('resolveEmployeeAssignment — full name matching', () => {
   });
 
   it('resolves full name with extra whitespace', () => {
-    const result = resolveEmployeeAssignment('  Mike  Chen  ', lookup);
+    const _result = resolveEmployeeAssignment('  Mike  Chen  ', lookup);
     // Note: the resolver trims outer whitespace but inner double space won't match
     // because "mike  chen" !== "mike chen". This is expected — CSV data is usually clean.
     // The trim handles leading/trailing, and single space is fine.

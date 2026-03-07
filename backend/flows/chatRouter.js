@@ -1,12 +1,11 @@
 /**
  * Chat Router - Central routing for AI chat messages
- * 
+ *
  * Integrates the router guard with flow handlers to provide
  * goal-based conversation management.
  */
 
 import { routerGuard } from '../middleware/routerGuard.js';
-import { initializeNewGoalFlow } from './initializeNewGoalFlow.js';
 import { continueGoalFlow } from './continueGoalFlow.js';
 import logger from '../lib/logger.js';
 
@@ -20,11 +19,11 @@ import logger from '../lib/logger.js';
 
 /**
  * Route an incoming chat message
- * 
+ *
  * This function should be called before the standard AI chat processing.
  * If it returns { handled: true }, the caller should use the provided message
  * and skip the normal AI chat flow.
- * 
+ *
  * @param {Object} params
  * @param {string} params.conversationId - Conversation UUID
  * @param {string} params.tenantId - Tenant UUID
@@ -42,7 +41,7 @@ export async function routeChat({ conversationId, tenantId, userText }) {
       message: null,
       goal: null,
     };
-    
+
     /* COMMENTED OUT - Unreachable due to bypass above
     // Step 1: Determine routing mode
     const guardResult = await routerGuard({ conversationId, userText });
@@ -100,9 +99,9 @@ export async function routeChat({ conversationId, tenantId, userText }) {
     logger.error('[ChatRouter] Error routing message:', {
       error: error.message,
       stack: error.stack,
-      type: error.constructor.name
+      type: error.constructor.name,
     });
-    
+
     // On error, fall through to normal chat
     return {
       type: 'normal_chat',

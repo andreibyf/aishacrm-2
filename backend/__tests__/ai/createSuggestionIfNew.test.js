@@ -59,22 +59,37 @@ function noopLogger() {
  * @param {object|null} opts.insertData   — row returned after INSERT
  * @param {object|null} opts.insertError  — error returned by INSERT
  */
-function createMockSupabase({ selectData = [], selectError = null, insertData = null, insertError = null } = {}) {
+function createMockSupabase({
+  selectData = [],
+  selectError = null,
+  insertData = null,
+  insertError = null,
+} = {}) {
   const calls = { from: [], select: [], insert: [] };
 
   // --- SELECT chain (cooldown/duplicate check) ---
   const selectChain = {
-    eq() { return selectChain; },
-    or() { return selectChain; },
-    limit() { return Promise.resolve({ data: selectData, error: selectError }); },
+    eq() {
+      return selectChain;
+    },
+    or() {
+      return selectChain;
+    },
+    limit() {
+      return Promise.resolve({ data: selectData, error: selectError });
+    },
   };
 
   // --- INSERT chain ---
   const insertSingleChain = {
-    single() { return Promise.resolve({ data: insertData, error: insertError }); },
+    single() {
+      return Promise.resolve({ data: insertData, error: insertError });
+    },
   };
   const insertSelectChain = {
-    select() { return insertSingleChain; },
+    select() {
+      return insertSingleChain;
+    },
   };
 
   const fromHandler = (table) => {
@@ -97,7 +112,10 @@ function createMockSupabase({ selectData = [], selectError = null, insertData = 
 /** Mock generateAiSuggestion — returns what you tell it to. */
 function mockGenerate(returnValue) {
   let callCount = 0;
-  const fn = async () => { callCount++; return returnValue; };
+  const fn = async () => {
+    callCount++;
+    return returnValue;
+  };
   fn.callCount = () => callCount;
   return fn;
 }
@@ -105,7 +123,9 @@ function mockGenerate(returnValue) {
 /** Mock emitTenantWebhooks — resolved promise, records calls. */
 function mockWebhooks() {
   const calls = [];
-  const fn = async (...args) => { calls.push(args); };
+  const fn = async (...args) => {
+    calls.push(args);
+  };
   fn.calls = calls;
   return fn;
 }
@@ -113,7 +133,9 @@ function mockWebhooks() {
 /** Mock emitCareAudit — records calls synchronously. */
 function mockAudit() {
   const calls = [];
-  const fn = (event) => { calls.push(event); };
+  const fn = (event) => {
+    calls.push(event);
+  };
   fn.calls = calls;
   return fn;
 }
@@ -158,7 +180,9 @@ describe('createSuggestionIfNew', () => {
 
     test('returns null when a recently rejected suggestion exists', async () => {
       const supabase = createMockSupabase({
-        selectData: [{ id: 'existing-2', status: 'rejected', updated_at: new Date().toISOString() }],
+        selectData: [
+          { id: 'existing-2', status: 'rejected', updated_at: new Date().toISOString() },
+        ],
       });
       const generate = mockGenerate(VALID_SUGGESTION);
 
@@ -599,9 +623,15 @@ describe('createSuggestionIfNew', () => {
           return {
             select() {
               return {
-                eq() { return this; },
-                or() { return this; },
-                limit() { throw new Error('Network failure'); },
+                eq() {
+                  return this;
+                },
+                or() {
+                  return this;
+                },
+                limit() {
+                  throw new Error('Network failure');
+                },
               };
             },
           };
@@ -621,7 +651,9 @@ describe('createSuggestionIfNew', () => {
 
     test('returns null when generateAiSuggestion throws', async () => {
       const supabase = createMockSupabase({ selectData: [] });
-      const throwingGenerate = async () => { throw new Error('AI engine crash'); };
+      const throwingGenerate = async () => {
+        throw new Error('AI engine crash');
+      };
 
       const result = await createSuggestionIfNew(TENANT_UUID, TRIGGER_DATA, {
         supabase,
@@ -637,15 +669,21 @@ describe('createSuggestionIfNew', () => {
     test('returns null when insert chain throws', async () => {
       // Build a supabase mock where SELECT succeeds but INSERT throws
       const throwingInsertSupabase = {
-        from(table) {
-          let isFirstCall = true;
+        from(_table) {
+          let _isFirstCall = true;
           return {
             select() {
               // Cooldown check chain
               return {
-                eq() { return this; },
-                or() { return this; },
-                limit() { return Promise.resolve({ data: [], error: null }); },
+                eq() {
+                  return this;
+                },
+                or() {
+                  return this;
+                },
+                limit() {
+                  return Promise.resolve({ data: [], error: null });
+                },
               };
             },
             insert() {
@@ -672,9 +710,15 @@ describe('createSuggestionIfNew', () => {
           return {
             select() {
               return {
-                eq() { return this; },
-                or() { return this; },
-                limit() { throw new Error('boom'); },
+                eq() {
+                  return this;
+                },
+                or() {
+                  return this;
+                },
+                limit() {
+                  throw new Error('boom');
+                },
               };
             },
           };
@@ -706,7 +750,14 @@ describe('createSuggestionIfNew', () => {
         // generation_failed
         { selectData: [], generateReturn: null },
         // low_confidence
-        { selectData: [], generateReturn: { action: { tool_name: 'x', tool_args: {} }, confidence: 0.2, reasoning: 'test' } },
+        {
+          selectData: [],
+          generateReturn: {
+            action: { tool_name: 'x', tool_args: {} },
+            confidence: 0.2,
+            reasoning: 'test',
+          },
+        },
         // suggestion_created
         { selectData: [], insertData: { id: INSERTED_ID } },
         // constraint_violation
@@ -718,7 +769,9 @@ describe('createSuggestionIfNew', () => {
       for (const cfg of paths) {
         const a = mockAudit();
         const supabase = createMockSupabase(cfg);
-        const gen = mockGenerate(cfg.generateReturn !== undefined ? cfg.generateReturn : VALID_SUGGESTION);
+        const gen = mockGenerate(
+          cfg.generateReturn !== undefined ? cfg.generateReturn : VALID_SUGGESTION,
+        );
 
         await createSuggestionIfNew(TENANT_UUID, TRIGGER_DATA, {
           supabase,
@@ -743,7 +796,14 @@ describe('createSuggestionIfNew', () => {
       const configs = [
         { selectData: [{ id: 'x', status: 'pending', updated_at: new Date().toISOString() }] },
         { selectData: [], generateReturn: null },
-        { selectData: [], generateReturn: { action: { tool_name: 'x', tool_args: {} }, confidence: 0.2, reasoning: 'test' } },
+        {
+          selectData: [],
+          generateReturn: {
+            action: { tool_name: 'x', tool_args: {} },
+            confidence: 0.2,
+            reasoning: 'test',
+          },
+        },
         { selectData: [], insertData: { id: INSERTED_ID } },
         { selectData: [], insertError: { code: '23505', message: 'dup' } },
         { selectData: [], insertError: { code: '42P01', message: 'fail' } },
@@ -752,7 +812,9 @@ describe('createSuggestionIfNew', () => {
       for (const cfg of configs) {
         const a = mockAudit();
         const supabase = createMockSupabase(cfg);
-        const gen = mockGenerate(cfg.generateReturn !== undefined ? cfg.generateReturn : VALID_SUGGESTION);
+        const gen = mockGenerate(
+          cfg.generateReturn !== undefined ? cfg.generateReturn : VALID_SUGGESTION,
+        );
 
         await createSuggestionIfNew(TENANT_UUID, TRIGGER_DATA, {
           supabase,
@@ -772,7 +834,9 @@ describe('createSuggestionIfNew', () => {
         selectData: [],
         insertData: { id: INSERTED_ID },
       });
-      const failingWebhooks = async () => { throw new Error('webhook down'); };
+      const failingWebhooks = async () => {
+        throw new Error('webhook down');
+      };
 
       const result = await createSuggestionIfNew(TENANT_UUID, TRIGGER_DATA, {
         supabase,
@@ -790,7 +854,9 @@ describe('createSuggestionIfNew', () => {
         selectData: [],
         insertData: { id: INSERTED_ID },
       });
-      const throwingAudit = () => { throw new Error('audit boom'); };
+      const throwingAudit = () => {
+        throw new Error('audit boom');
+      };
 
       // Should not throw
       const result = await createSuggestionIfNew(TENANT_UUID, TRIGGER_DATA, {
@@ -811,7 +877,9 @@ describe('createSuggestionIfNew', () => {
         debug() {},
         info() {},
         warn() {},
-        error(...args) { errorCalls.push(args); },
+        error(...args) {
+          errorCalls.push(args);
+        },
       };
       const supabase = createMockSupabase({
         selectData: [],
