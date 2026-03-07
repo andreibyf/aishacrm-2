@@ -1,10 +1,14 @@
+import { useState, useCallback } from 'react';
 import { Lead } from '@/api/entities';
 import { toast } from 'sonner';
+
+// [2026-03-07 Cursor] — extracted from Leads.jsx (PR #331)
 
 /**
  * useLeadsBulkOps hook - Manages bulk operations for leads
  *
  * Handles:
+ * - Selection state (selectedLeads, selectAllMode) and toggle/clear
  * - Bulk delete (with select-all mode support)
  * - Bulk status change
  * - Bulk assign
@@ -13,10 +17,6 @@ import { toast } from 'sonner';
  *
  * @param {Object} params - Hook parameters
  * @param {Array} params.leads - Current leads array
- * @param {Set} params.selectedLeads - Set of selected lead IDs
- * @param {Function} params.setSelectedLeads - Update selected leads
- * @param {boolean} params.selectAllMode - Whether all leads are selected
- * @param {Function} params.setSelectAllMode - Update select-all mode
  * @param {number} params.totalItems - Total number of leads matching filters
  * @param {Function} params.getTenantFilter - Build tenant/scope filter
  * @param {string} params.statusFilter - Current status filter
@@ -40,14 +40,10 @@ import { toast } from 'sonner';
  * @param {number} params.currentPage - Current page number
  * @param {number} params.pageSize - Page size
  * @param {Object} params.user - Current user
- * @returns {Object} Bulk operation handlers
+ * @returns {Object} selectedLeads, selectAllMode, toggleSelection, toggleSelectAll, clearSelection, handleSelectAllRecords, handleBulkDelete, handleBulkStatusChange, handleBulkAssign
  */
 export function useLeadsBulkOps({
-  leads: _leads,
-  selectedLeads,
-  setSelectedLeads,
-  selectAllMode,
-  setSelectAllMode,
+  leads,
   totalItems,
   getTenantFilter,
   statusFilter,
@@ -72,6 +68,39 @@ export function useLeadsBulkOps({
   pageSize,
   user,
 }) {
+  const [selectedLeads, setSelectedLeads] = useState(() => new Set());
+  const [selectAllMode, setSelectAllMode] = useState(false);
+
+  const toggleSelection = useCallback((id) => {
+    setSelectedLeads((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    setSelectAllMode(false);
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    setSelectedLeads((prev) => {
+      if (prev.size === leads.length && leads.length > 0) {
+        return new Set();
+      }
+      return new Set(leads.map((l) => l.id));
+    });
+    setSelectAllMode(false);
+  }, [leads]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedLeads(new Set());
+    setSelectAllMode(false);
+  }, []);
+
+  const handleSelectAllRecords = useCallback(() => {
+    setSelectAllMode(true);
+    setSelectedLeads(new Set(leads.map((l) => l.id)));
+  }, [leads]);
+
   const handleBulkDelete = async () => {
     if (selectAllMode) {
       const confirmed = await confirm({
@@ -499,6 +528,12 @@ export function useLeadsBulkOps({
   };
 
   return {
+    selectedLeads,
+    selectAllMode,
+    toggleSelection,
+    toggleSelectAll,
+    clearSelection,
+    handleSelectAllRecords,
     handleBulkDelete,
     handleBulkStatusChange,
     handleBulkAssign,

@@ -54,8 +54,6 @@ export default function LeadsPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingLead, setEditingLead] = useState(null);
   const [viewMode, setViewMode] = useState('list');
-  const [selectedLeads, setSelectedLeads] = useState(() => new Set());
-  const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   // Removed local user state; using global context
   const { selectedTenantId } = useTenant();
@@ -197,12 +195,18 @@ export default function LeadsPage() {
   });
 
   // Extract bulk operations to custom hook
-  const { handleBulkDelete, handleBulkStatusChange, handleBulkAssign } = useLeadsBulkOps({
-    leads,
+  const {
     selectedLeads,
-    setSelectedLeads,
     selectAllMode,
-    setSelectAllMode,
+    toggleSelection,
+    toggleSelectAll,
+    clearSelection,
+    handleSelectAllRecords,
+    handleBulkDelete,
+    handleBulkStatusChange,
+    handleBulkAssign,
+  } = useLeadsBulkOps({
+    leads,
     totalItems,
     getTenantFilter,
     statusFilter,
@@ -327,37 +331,6 @@ export default function LeadsPage() {
     }
   };
 
-  const toggleSelection = (id) => {
-    const newSet = new Set(selectedLeads);
-    if (newSet.has(id)) {
-      newSet.delete(id);
-    } else {
-      newSet.add(id);
-    }
-    setSelectedLeads(newSet);
-    setSelectAllMode(false);
-  };
-
-  const toggleSelectAll = () => {
-    if (selectedLeads.size === leads.length && leads.length > 0) {
-      setSelectedLeads(new Set());
-      setSelectAllMode(false);
-    } else {
-      setSelectedLeads(new Set(leads.map((l) => l.id)));
-      setSelectAllMode(false);
-    }
-  };
-
-  const handleSelectAllRecords = () => {
-    setSelectAllMode(true);
-    setSelectedLeads(new Set(leads.map((l) => l.id))); // This will still select only current page for display, but logic marks all
-  };
-
-  const handleClearSelection = () => {
-    setSelectedLeads(new Set());
-    setSelectAllMode(false);
-  };
-
   const handleViewDetails = (lead) => {
     setDetailLead(lead);
     setIsDetailOpen(true);
@@ -426,7 +399,7 @@ export default function LeadsPage() {
     setSortField('created_date');
     setSortDirection('desc');
     setCurrentPage(1);
-    handleClearSelection();
+    clearSelection();
   };
 
   // AiSHA events listener - allows AI to trigger page actions
@@ -756,7 +729,7 @@ export default function LeadsPage() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={handleClearSelection}
+                onClick={clearSelection}
                 className="text-slate-400 hover:text-slate-200"
               >
                 <X className="w-4 h-4" />
@@ -775,7 +748,7 @@ export default function LeadsPage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={handleClearSelection}
+              onClick={clearSelection}
               className="text-slate-400 hover:text-slate-200"
             >
               Clear selection
