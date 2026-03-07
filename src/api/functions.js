@@ -161,6 +161,7 @@ const createFunctionProxy = (functionName) => {
           conversation_id: opts.conversation_id || opts.conversationId, // Support both naming conventions
           sessionEntities: opts.sessionEntities || opts.entityContext, // Session context for follow-up questions
           timezone: opts.timezone || 'America/New_York', // User's timezone for activity scheduling
+          tenant_id: tenantId || undefined, // Include tenant_id in body for validateTenant middleware
         };
 
         const headers = { 'Content-Type': 'application/json' };

@@ -284,52 +284,8 @@ export function useLeadsData({
     loadSupportingData();
   }, [user, selectedTenantId, cachedRequest, supportingDataReloadKey]);
 
-  // Load total stats for ALL leads
-  const loadTotalStats = useCallback(async () => {
-    if (!user) return;
-
-    try {
-      let filter = getTenantFilter();
-
-      // Guard: Don't load stats if no tenant_id for superadmin
-      if ((user.role === 'superadmin' || user.role === 'admin') && !filter.tenant_id) {
-        setTotalStats({
-          total: 0,
-          new: 0,
-          contacted: 0,
-          qualified: 0,
-          unqualified: 0,
-          converted: 0,
-          lost: 0,
-        });
-        return;
-      }
-
-      const stats = await Lead.getStats({
-        tenant_id: filter.tenant_id,
-        is_test_data: showTestData ? undefined : false,
-      });
-
-      setTotalStats({
-        total: stats?.total || 0,
-        new: stats?.new || 0,
-        contacted: stats?.contacted || 0,
-        qualified: stats?.qualified || 0,
-        unqualified: stats?.unqualified || 0,
-        converted: stats?.converted || 0,
-        lost: stats?.lost || 0,
-      });
-    } catch (error) {
-      console.error('Failed to load total stats:', error);
-    }
-  }, [user, getTenantFilter, showTestData]);
-
-  // Load total stats when dependencies change
-  useEffect(() => {
-    if (user) {
-      loadTotalStats();
-    }
-  }, [user, selectedTenantId, selectedEmail, loadTotalStats, showTestData]);
+  // Note: Stats are now loaded alongside leads data (returned from GET /api/v2/leads)
+  // This eliminates a separate API call and ensures stats always match the current filter scope
 
   // Main data loading function with pagination and age filtering
   const loadLeads = useCallback(
@@ -357,7 +313,11 @@ export function useLeadsData({
           delete currentFilter.assigned_to;
           let filterObj = {};
           if (currentFilter.filter) {
-            try { filterObj = JSON.parse(currentFilter.filter); } catch {}
+            try {
+              filterObj = JSON.parse(currentFilter.filter);
+            } catch {
+              /* ignore parse error */
+            }
           }
           delete filterObj.$or;
           if (assignedToFilter === 'unassigned') {
@@ -393,9 +353,7 @@ export function useLeadsData({
           if (existingFilter) {
             try {
               const parsed =
-                typeof existingFilter === 'string'
-                  ? JSON.parse(existingFilter)
-                  : existingFilter;
+                typeof existingFilter === 'string' ? JSON.parse(existingFilter) : existingFilter;
               if (parsed && typeof parsed === 'object') {
                 mergedFilter = { $and: [parsed, searchFilter] };
               }
@@ -501,6 +459,28 @@ export function useLeadsData({
         setTotalItems(estimatedTotal);
         setCurrentPage(page);
         initialLoadDone.current = true;
+
+        // Update stats from response (stats now returned alongside leads data)
+        // ALWAYS log for debugging (remove after fix)
+        console.log('[Leads] Response stats check:', {
+          hasStats: !!response._stats,
+          stats: response._stats,
+          responseKeys: Object.keys(response),
+          responseType: typeof response,
+          isArray: Array.isArray(response),
+        });
+        if (response._stats) {
+          setTotalStats({
+            total: response._stats.total || 0,
+            new: response._stats.new || 0,
+            contacted: response._stats.contacted || 0,
+            qualified: response._stats.qualified || 0,
+            unqualified: response._stats.unqualified || 0,
+            converted: response._stats.converted || 0,
+            lost: response._stats.lost || 0,
+          });
+        }
+
         loadingToast.showSuccess(`${leadsLabel} loading! ✨`);
       } catch (error) {
         console.error('Failed to load leads:', error);
@@ -623,7 +603,7 @@ export function useLeadsData({
   // Allow parent to reset the supporting data loaded flag (e.g. on refresh)
   const resetSupportingData = useCallback(() => {
     supportingDataLoaded.current = false;
-    setSupportingDataReloadKey(k => k + 1);
+    setSupportingDataReloadKey((k) => k + 1);
   }, []);
 
   return {
@@ -637,7 +617,6 @@ export function useLeadsData({
     totalItems,
     setTotalItems,
     loadLeads,
-    loadTotalStats,
     refreshAccounts,
     getTenantFilter,
     allTags,

@@ -114,7 +114,16 @@ export function useActivitiesData({
 
       return filter;
     },
-    [user, selectedTenantId, statusFilter, typeFilter, selectedEmail, showTestData, dateRange.start, dateRange.end],
+    [
+      user,
+      selectedTenantId,
+      statusFilter,
+      typeFilter,
+      selectedEmail,
+      showTestData,
+      dateRange.start,
+      dateRange.end,
+    ],
   );
 
   // Load supporting data once per tenant
@@ -278,8 +287,16 @@ export function useActivitiesData({
           if (dueDateTime) {
             isPastDue = dueDateTime.getTime() < nowLocal.getTime();
           } else if (dueDate) {
-            const todayDateOnly = new Date(nowLocal.getFullYear(), nowLocal.getMonth(), nowLocal.getDate());
-            const dueDateOnly = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+            const todayDateOnly = new Date(
+              nowLocal.getFullYear(),
+              nowLocal.getMonth(),
+              nowLocal.getDate(),
+            );
+            const dueDateOnly = new Date(
+              dueDate.getFullYear(),
+              dueDate.getMonth(),
+              dueDate.getDate(),
+            );
             isPastDue = dueDateOnly.getTime() < todayDateOnly.getTime();
           }
 
@@ -301,8 +318,17 @@ export function useActivitiesData({
         setActivities(items || []);
         setTotalItems(totalCount);
 
-        // Load stats independently
-        loadStats();
+        // Update stats from response (stats now returned alongside activities data)
+        if (!Array.isArray(activitiesResult) && activitiesResult.stats) {
+          setTotalStats({
+            total: activitiesResult.stats.total || 0,
+            scheduled: activitiesResult.stats.scheduled || 0,
+            in_progress: activitiesResult.stats.in_progress || 0,
+            overdue: activitiesResult.stats.overdue || 0,
+            completed: activitiesResult.stats.completed || 0,
+            cancelled: activitiesResult.stats.cancelled || 0,
+          });
+        }
 
         setCurrentPage(page);
         initialLoadDone.current = true;
@@ -317,7 +343,20 @@ export function useActivitiesData({
         setLoading(false);
       }
     },
-    [user, searchTerm, selectedTags, buildFilter, loadStats, loadingToast, activitiesLabel, selectedEmail, assignedToFilter, sortField, sortDirection, setCurrentPage],
+    [
+      user,
+      searchTerm,
+      selectedTags,
+      buildFilter,
+      loadStats,
+      loadingToast,
+      activitiesLabel,
+      selectedEmail,
+      assignedToFilter,
+      sortField,
+      sortDirection,
+      setCurrentPage,
+    ],
   );
 
   // Load activities when dependencies change
@@ -335,14 +374,20 @@ export function useActivitiesData({
   }, [selectedEmail, clearCache]);
 
   // Pagination handlers
-  const handlePageChange = useCallback((newPage) => {
-    setCurrentPage(newPage);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [setCurrentPage]);
+  const handlePageChange = useCallback(
+    (newPage) => {
+      setCurrentPage(newPage);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    [setCurrentPage],
+  );
 
-  const handlePageSizeChange = useCallback((newSize) => {
-    setCurrentPage(1);
-  }, [setCurrentPage]);
+  const handlePageSizeChange = useCallback(
+    (_newSize) => {
+      setCurrentPage(1);
+    },
+    [setCurrentPage],
+  );
 
   // Lookup maps
   const usersMap = useMemo(() => {

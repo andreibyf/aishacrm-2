@@ -166,11 +166,8 @@ export function useAccountsData({
 
       const [usersData, employeesData] = await Promise.all([
         loadUsersSafely(user, selectedTenantId, cachedRequest, 1000),
-        cachedRequest(
-          'Employee',
-          'filter',
-          { filter: baseTenantFilter, limit: 1000 },
-          () => Employee.filter(baseTenantFilter, 'created_at', 1000),
+        cachedRequest('Employee', 'filter', { filter: baseTenantFilter, limit: 1000 }, () =>
+          Employee.filter(baseTenantFilter, 'created_at', 1000),
         ),
       ]);
 
@@ -205,19 +202,32 @@ export function useAccountsData({
       const currentTenantFilter = getTenantFilter();
 
       if ((user.role === 'superadmin' || user.role === 'admin') && !currentTenantFilter.tenant_id) {
-        setTotalStats({ total: 0, customer: 0, prospect: 0, partner: 0, competitor: 0, inactive: 0 });
+        setTotalStats({
+          total: 0,
+          customer: 0,
+          prospect: 0,
+          partner: 0,
+          competitor: 0,
+          inactive: 0,
+        });
         return;
       }
 
-      const [allResult, customerResult, prospectResult, partnerResult, competitorResult, inactiveResult] =
-        await Promise.all([
-          Account.filter({ ...currentTenantFilter }, '-created_at', 1, 0),
-          Account.filter({ ...currentTenantFilter, type: 'customer' }, '-created_at', 1, 0),
-          Account.filter({ ...currentTenantFilter, type: 'prospect' }, '-created_at', 1, 0),
-          Account.filter({ ...currentTenantFilter, type: 'partner' }, '-created_at', 1, 0),
-          Account.filter({ ...currentTenantFilter, type: 'competitor' }, '-created_at', 1, 0),
-          Account.filter({ ...currentTenantFilter, type: 'inactive' }, '-created_at', 1, 0),
-        ]);
+      const [
+        allResult,
+        customerResult,
+        prospectResult,
+        partnerResult,
+        competitorResult,
+        inactiveResult,
+      ] = await Promise.all([
+        Account.filter({ ...currentTenantFilter }, '-created_at', 1, 0),
+        Account.filter({ ...currentTenantFilter, type: 'customer' }, '-created_at', 1, 0),
+        Account.filter({ ...currentTenantFilter, type: 'prospect' }, '-created_at', 1, 0),
+        Account.filter({ ...currentTenantFilter, type: 'partner' }, '-created_at', 1, 0),
+        Account.filter({ ...currentTenantFilter, type: 'competitor' }, '-created_at', 1, 0),
+        Account.filter({ ...currentTenantFilter, type: 'inactive' }, '-created_at', 1, 0),
+      ]);
 
       setTotalStats({
         total: allResult._total ?? allResult.length ?? 0,
@@ -253,7 +263,11 @@ export function useAccountsData({
         delete currentTenantFilter.assigned_to;
         let filterObj = {};
         if (currentTenantFilter.filter) {
-          try { filterObj = JSON.parse(currentTenantFilter.filter); } catch {}
+          try {
+            filterObj = JSON.parse(currentTenantFilter.filter);
+          } catch {
+            /* ignore parse error */
+          }
         }
         delete filterObj.$or;
         if (assignedToFilter === 'unassigned') {
@@ -281,7 +295,11 @@ export function useAccountsData({
       // Merge $or from filter obj into the filter param
       if (currentTenantFilter.filter) {
         let filterObj = {};
-        try { filterObj = JSON.parse(currentTenantFilter.filter); } catch { /* ignore */ }
+        try {
+          filterObj = JSON.parse(currentTenantFilter.filter);
+        } catch {
+          /* ignore */
+        }
         if (filterObj.$or) {
           // Already packaged, leave as is
         }
@@ -306,12 +324,23 @@ export function useAccountsData({
       // When tags reduce the result client-side, report the visible page window
       // rather than the raw server total so pagination counts stay consistent.
       const effectiveTotalItems =
-        selectedTags.length > 0
-          ? (currentPage - 1) * pageSize + items.length
-          : totalCount;
+        selectedTags.length > 0 ? (currentPage - 1) * pageSize + items.length : totalCount;
 
       setAccounts(items);
       setTotalItems(effectiveTotalItems);
+
+      // Update stats from response (stats now returned alongside accounts data)
+      if (accountsResult._stats) {
+        setTotalStats({
+          total: accountsResult._stats.total || 0,
+          customer: accountsResult._stats.customer || 0,
+          prospect: accountsResult._stats.prospect || 0,
+          partner: accountsResult._stats.partner || 0,
+          competitor: accountsResult._stats.competitor || 0,
+          inactive: accountsResult._stats.inactive || 0,
+        });
+      }
+
       loadingToast.showSuccess(`${accountsLabel} loading! ✨`);
     } catch (error) {
       console.error('[Accounts] Failed to load accounts:', error);
@@ -343,9 +372,8 @@ export function useAccountsData({
     if (supportingDataReady) loadAccounts();
   }, [loadAccounts, supportingDataReady]);
 
-  useEffect(() => {
-    if (user) loadTotalStats();
-  }, [user, selectedTenantId, selectedEmail, loadTotalStats]);
+  // Note: Stats effect removed - stats are now loaded inline with loadAccounts
+  // This reduces API calls and ensures stats always reflect the current filter state
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -376,7 +404,7 @@ export function useAccountsData({
   );
 
   const handlePageSizeChange = useCallback(
-    (newSize) => {
+    (_newSize) => {
       setCurrentPage(1);
     },
     [setCurrentPage],

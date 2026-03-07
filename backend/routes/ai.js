@@ -49,7 +49,7 @@ import {
 } from '../lib/intentClassifier.js';
 import {
   routeIntentToTool,
-  getToolsForIntent,
+  getToolsForIntent as _getToolsForIntent,
   shouldForceToolChoice,
   getRelevantToolsForIntent,
 } from '../lib/intentRouter.js';
@@ -69,13 +69,13 @@ import {
 // Token Budget Manager
 import {
   applyBudgetCaps,
-  buildBudgetReport,
+  buildBudgetReport as _buildBudgetReport,
   enforceToolSchemaCap,
   logBudgetSummary,
-  estimateTokens,
+  estimateTokens as _estimateTokens,
 } from '../lib/tokenBudget.js';
 // AI Settings (configurable via Settings UI)
-import { loadAiSettings, getAiSetting } from '../lib/aiSettingsLoader.js';
+import { loadAiSettings, getAiSetting as _getAiSetting } from '../lib/aiSettingsLoader.js';
 // Anthropic adapter for Claude tool calling
 import { createAnthropicClientWrapper } from '../lib/aiEngine/anthropicAdapter.js';
 import { fetchUserTeamContext as _fetchUserTeamContext } from '../lib/aiTeamContext.js';
@@ -695,7 +695,7 @@ export default function createAIRoutes(pgPool) {
               }
             }
           }
-        } catch (err) {
+        } catch (_err) {
           // Ignore parsing errors - not all results will be JSON
         }
       }
@@ -1652,11 +1652,13 @@ ${toolContextSummary}`,
   };
 
   // Middleware to get tenant_id from request
+  // Priority: header > query > body > user's assigned tenant
   const getTenantId = (req) => {
     return (
       req.headers['x-tenant-id'] ||
       req.query?.tenant_id ||
       req.query?.tenantId ||
+      req.body?.tenant_id ||
       req.user?.tenant_id
     );
   };
@@ -3052,7 +3054,7 @@ ${toolContextSummary}`,
                 insertedUserMsg?.id,
               );
             }
-          } catch (insertErr) {
+          } catch (_insertErr) {
             logger.warn('[AI Chat] Failed to persist user message (catch)');
           }
         }
@@ -3897,7 +3899,9 @@ ${conversationSummary}`;
       }
 
       // Remove internal-only fields from tool interactions before returning to client
-      const safeToolInteractions = toolInteractions.map(({ full_result, ...rest }) => rest);
+      const safeToolInteractions = toolInteractions.map(
+        ({ full_result: _full_result, ...rest }) => rest,
+      );
 
       // CRITICAL: Extract UI actions from tool results for frontend event dispatch
       // This enables navigation, form opening, and other UI side effects
@@ -4759,7 +4763,7 @@ ${conversationSummary}`;
       const heartbeat = setInterval(() => {
         try {
           res.write(`: heartbeat\n\n`);
-        } catch (err) {
+        } catch (_err) {
           clearInterval(heartbeat);
         }
       }, 10000);

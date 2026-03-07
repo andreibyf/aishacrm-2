@@ -92,7 +92,11 @@ export function useOpportunitiesData({
       } else {
         filter.assigned_to = selectedEmail;
       }
-    } else if (user.employee_role === 'employee' && user.role !== 'admin' && user.role !== 'superadmin') {
+    } else if (
+      user.employee_role === 'employee' &&
+      user.role !== 'admin' &&
+      user.role !== 'superadmin'
+    ) {
       filter.assigned_to = user.email;
     }
 
@@ -153,8 +157,8 @@ export function useOpportunitiesData({
           logDev('[Opportunities] Loading supporting data with tenant filter:', tenantFilter);
         }
 
-        const [accountsData, contactsData, leadsData, usersData, employeesData] =
-          await Promise.all([
+        const [accountsData, contactsData, leadsData, usersData, employeesData] = await Promise.all(
+          [
             cachedRequest('Account', 'filter', { filter: tenantFilter }, () =>
               Account.filter(tenantFilter),
             ),
@@ -165,13 +169,11 @@ export function useOpportunitiesData({
               Lead.filter(tenantFilter),
             ),
             loadUsersSafely(user, selectedTenantId, cachedRequest, 1000),
-            cachedRequest(
-              'Employee',
-              'filter',
-              { filter: tenantFilter, limit: 1000 },
-              () => Employee.filter(tenantFilter, 'created_at', 1000),
+            cachedRequest('Employee', 'filter', { filter: tenantFilter, limit: 1000 }, () =>
+              Employee.filter(tenantFilter, 'created_at', 1000),
             ),
-          ]);
+          ],
+        );
 
         setAccounts(accountsData || []);
         setContacts(contactsData || []);
@@ -199,10 +201,22 @@ export function useOpportunitiesData({
     };
 
     loadSupportingData();
-  }, [user, selectedTenantId, selectedEmail, showTestData, getTenantFilter, cachedRequest, supportingDataReloadKey]);
+  }, [
+    user,
+    selectedTenantId,
+    selectedEmail,
+    showTestData,
+    getTenantFilter,
+    cachedRequest,
+    supportingDataReloadKey,
+  ]);
 
-  // Load total stats for ALL opportunities
+  // Note: Stats are now loaded alongside opportunities data (returned from GET /api/v2/opportunities)
+  // This eliminates a separate API call and ensures stats always match the current filter scope
+  // The loadTotalStats function is kept for backward compatibility but stats are now updated in loadOpportunities
   const loadTotalStats = useCallback(async () => {
+    // Stats are now loaded inline with opportunities data - this function is kept for backward compatibility
+    // and for cases where a manual refresh of just stats might be needed
     if (!user) return;
 
     try {
@@ -231,12 +245,8 @@ export function useOpportunitiesData({
     }
   }, [user, getTenantFilter]);
 
-  // Load total stats when dependencies change
-  useEffect(() => {
-    if (user && supportingDataReady) {
-      loadTotalStats();
-    }
-  }, [user, selectedTenantId, selectedEmail, loadTotalStats, showTestData, supportingDataReady]);
+  // Note: Stats effect removed - stats are now loaded inline with loadOpportunities
+  // This reduces API calls and ensures stats always reflect the current filter state
 
   // Main data loading function with proper pagination
   const loadOpportunities = useCallback(
@@ -319,8 +329,7 @@ export function useOpportunitiesData({
           }
         }
 
-        const sortString =
-          sortDirection === 'desc' ? `-${sortField},-id` : `${sortField},-id`;
+        const sortString = sortDirection === 'desc' ? `-${sortField},-id` : `${sortField},-id`;
 
         const opportunitiesData = await Opportunity.filter(
           apiFilter,
@@ -339,14 +348,26 @@ export function useOpportunitiesData({
           });
         }
 
-        // Use optimized count endpoint with the exact same filter as the data query
-        const countFilter = { ...effectiveFilter };
-        const totalCount = await Opportunity.getCount(countFilter);
+        // Use total from response metadata (attached by httpClient)
+        const totalCount = opportunitiesData._total || opportunitiesData.length;
 
         logDev('[Opportunities] Loaded:', opportunitiesData?.length, 'Total:', totalCount);
 
         setOpportunities(opportunitiesData || []);
         setTotalItems(totalCount);
+
+        // Update stats from response (stats now returned alongside opportunities data)
+        if (opportunitiesData._stats) {
+          setTotalStats({
+            total: opportunitiesData._stats.total || 0,
+            prospecting: opportunitiesData._stats.prospecting || 0,
+            qualification: opportunitiesData._stats.qualification || 0,
+            proposal: opportunitiesData._stats.proposal || 0,
+            negotiation: opportunitiesData._stats.negotiation || 0,
+            closed_won: opportunitiesData._stats.closed_won || 0,
+            closed_lost: opportunitiesData._stats.closed_lost || 0,
+          });
+        }
         setCurrentPage(page);
         initialLoadDone.current = true;
         loadingToast.showSuccess(`${opportunitiesLabel} loading! ✨`);
@@ -423,12 +444,9 @@ export function useOpportunitiesData({
   );
 
   // Handle page size change — resets to page 1 (pageSize is managed by parent)
-  const handlePageSizeChange = useCallback(
-    () => {
-      setCurrentPage(1);
-    },
-    [setCurrentPage],
-  );
+  const handlePageSizeChange = useCallback(() => {
+    setCurrentPage(1);
+  }, [setCurrentPage]);
 
   // Extract all tags from opportunities
   const allTags = useMemo(() => {

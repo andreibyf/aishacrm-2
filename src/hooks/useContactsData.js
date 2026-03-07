@@ -147,7 +147,7 @@ export function useContactsData({
   }, [user]);
 
   // Reset supporting data when tenant changes so stale data from a previous tenant is cleared
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   useEffect(() => {
     if (!user) return;
     supportingDataLoaded.current = false;
@@ -319,7 +319,16 @@ export function useContactsData({
       const skip = (currentPage - 1) * pageSize;
 
       if (import.meta.env.DEV) {
-        console.log('[Contacts] Loading page:', currentPage, 'size:', pageSize, 'skip:', skip, 'filter:', scopedFilter);
+        console.log(
+          '[Contacts] Loading page:',
+          currentPage,
+          'size:',
+          pageSize,
+          'skip:',
+          skip,
+          'filter:',
+          scopedFilter,
+        );
       }
 
       const contactsResult = await Contact.filter(scopedFilter, sortString, pageSize, skip);
@@ -340,6 +349,17 @@ export function useContactsData({
       }
 
       setContacts(items);
+
+      // Update stats from response (stats now returned alongside contacts data)
+      if (contactsResult._stats) {
+        setTotalStats({
+          total: contactsResult._stats.total || 0,
+          active: contactsResult._stats.active || 0,
+          prospect: contactsResult._stats.prospect || 0,
+          customer: contactsResult._stats.customer || 0,
+          inactive: contactsResult._stats.inactive || 0,
+        });
+      }
 
       logger.info('Contacts loaded successfully.', 'ContactsPage', {
         loadedCount: items.length,
@@ -383,9 +403,8 @@ export function useContactsData({
     loadContacts();
   }, [loadContacts]);
 
-  useEffect(() => {
-    if (user) loadTotalStats();
-  }, [user, selectedTenantId, selectedEmail, loadTotalStats]);
+  // Note: Stats effect removed - stats are now loaded inline with loadContacts
+  // This reduces API calls and ensures stats always reflect the current filter state
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -404,7 +423,7 @@ export function useContactsData({
   );
 
   const handlePageSizeChange = useCallback(
-    (newSize) => {
+    (_newSize) => {
       setCurrentPage(1);
     },
     [setCurrentPage],

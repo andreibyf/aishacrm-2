@@ -132,7 +132,15 @@ export default function createLeadsV2Routes() {
    */
   router.get('/stats', async (req, res) => {
     try {
-      const { tenant_id, is_test_data } = req.query;
+      const {
+        tenant_id,
+        is_test_data,
+        assigned_to: _assigned_to,
+        assigned_to_team: _assigned_to_team,
+        query: _searchQuery,
+        exclude_status: _exclude_status,
+        tags: _tags,
+      } = req.query;
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -622,9 +630,115 @@ export default function createLeadsV2Routes() {
         return expanded;
       });
 
+      // ── Aggregate stats from ALL filtered leads (not just current page) ──
+      // Stats must reflect the complete filtered dataset so stat cards are accurate
+      // We run a parallel query with the same filters but only selecting status (no pagination)
+      let stats = {
+        total: count || 0,
+        new: 0,
+        contacted: 0,
+        qualified: 0,
+        unqualified: 0,
+        converted: 0,
+        lost: 0,
+      };
+      try {
+        // Build stats query with same filters as main query (but no pagination/sorting)
+        let statsQuery = supabase.from('leads').select('status').eq('tenant_id', tenant_id);
+
+        // Apply same visibility filter
+        if (visibilityScope && !visibilityScope.bypass) {
+          if (visibilityScope.mode === 'shared' && visibilityScope.teamIds?.length > 0) {
+            // Shared: org-wide read, no additional filter
+          } else if (visibilityScope.employeeIds?.length > 0) {
+            const idList = visibilityScope.employeeIds.join(',');
+            statsQuery = statsQuery.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+          }
+        }
+
+        // Apply test data filter
+        if (is_test_data !== undefined) {
+          const flag = String(is_test_data).toLowerCase();
+          if (flag === 'false') {
+            statsQuery = statsQuery.or('is_test_data.is.false,is_test_data.is.null');
+          } else if (flag === 'true') {
+            statsQuery = statsQuery.eq('is_test_data', true);
+          }
+        }
+
+        // Apply assigned_to filter (same as main query)
+        if (assigned_to !== undefined && assigned_to !== null && assigned_to !== '') {
+          if (assigned_to === 'unassigned' || assigned_to === 'null') {
+            statsQuery = statsQuery.is('assigned_to', null);
+          } else {
+            const safeAssignedTo = sanitizeUuidInput(assigned_to);
+            if (safeAssignedTo) {
+              statsQuery = statsQuery.eq('assigned_to', safeAssignedTo);
+            }
+          }
+        }
+
+        // Apply assigned_to_team filter
+        if (
+          assigned_to_team !== undefined &&
+          assigned_to_team !== null &&
+          assigned_to_team !== ''
+        ) {
+          const safeTeamId = sanitizeUuidInput(assigned_to_team);
+          if (safeTeamId) {
+            statsQuery = statsQuery.eq('assigned_to_team', safeTeamId);
+          }
+        }
+
+        // Apply source filter
+        if (source) {
+          statsQuery = statsQuery.eq('source', source);
+        }
+
+        // Apply account_id filter
+        const safeAccountIdForStats = sanitizeUuidInput(account_id);
+        if (safeAccountIdForStats) {
+          statsQuery = statsQuery.eq('account_id', safeAccountIdForStats);
+        }
+
+        // Apply exclude_status filter
+        if (exclude_status && typeof exclude_status === 'string') {
+          const excludeList = exclude_status
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
+          if (excludeList.length > 0) {
+            statsQuery = statsQuery.not('status', 'in', `(${excludeList.join(',')})`);
+          }
+        }
+
+        // Note: We do NOT apply status filter here - we want counts for ALL statuses
+        // Note: We do NOT apply search filter - stats show totals regardless of search
+
+        const { data: statusRows, error: statsErr } = await statsQuery;
+        if (!statsErr && statusRows) {
+          const statusCounts = { total: statusRows.length };
+          statusRows.forEach((row) => {
+            const s = row.status || 'unknown';
+            statusCounts[s] = (statusCounts[s] || 0) + 1;
+          });
+          stats = {
+            total: statusCounts.total || 0,
+            new: statusCounts.new || 0,
+            contacted: statusCounts.contacted || 0,
+            qualified: statusCounts.qualified || 0,
+            unqualified: statusCounts.unqualified || 0,
+            converted: statusCounts.converted || 0,
+            lost: statusCounts.lost || 0,
+          };
+        }
+      } catch (statsErr) {
+        logger.warn('[V2 Leads GET] Stats aggregation failed, using defaults:', statsErr.message);
+      }
+
       res.json({
         status: 'success',
-        data: { leads, total: count || leads.length },
+        data: { leads, total: count || leads.length, stats },
       });
     } catch (err) {
       logger.error('[Leads v2 GET] Error:', err.message);
@@ -1053,7 +1167,7 @@ export default function createLeadsV2Routes() {
 
       // ── Two-tier write access check ──
       // Fetch current record to check access level before allowing update
-      let currentRecord = null;
+      let _currentRecord = null;
       let previousAssignedTo = undefined;
 
       if (req.user) {
@@ -1063,7 +1177,7 @@ export default function createLeadsV2Routes() {
           .eq('id', id)
           .eq('tenant_id', tenant_id)
           .single();
-        currentRecord = current;
+        _currentRecord = current;
         previousAssignedTo = current?.assigned_to || null;
 
         const scope = await getVisibilityScope(req.user, supabase);

@@ -273,11 +273,93 @@ export default function createContactV2Routes(_pgPool) {
         return expanded;
       });
 
+      // ── Aggregate stats from ALL filtered contacts (not just current page) ──
+      // Stats must reflect the complete filtered dataset so stat cards are accurate
+      // We run a parallel query with the same filters but only selecting status (no pagination)
+      let stats = {
+        total: count || 0,
+        active: 0,
+        inactive: 0,
+        prospect: 0,
+        customer: 0,
+        churned: 0,
+      };
+      try {
+        // Build stats query with same filters as main query (but no pagination/sorting/status filter)
+        let statsQuery = supabase.from('contacts').select('status').eq('tenant_id', tenant_id);
+
+        // Apply same visibility filter
+        if (visibilityScope && !visibilityScope.bypass) {
+          if (visibilityScope.mode === 'shared' && visibilityScope.teamIds?.length > 0) {
+            // Shared: org-wide read, no additional filter
+          } else if (visibilityScope.employeeIds?.length > 0) {
+            const idList = visibilityScope.employeeIds.join(',');
+            statsQuery = statsQuery.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+          }
+        }
+
+        // Apply assigned_to filter (same as main query)
+        if (assigned_to !== undefined && assigned_to !== null && assigned_to !== '') {
+          if (assigned_to === 'unassigned' || assigned_to === 'null') {
+            statsQuery = statsQuery.is('assigned_to', null);
+          } else {
+            const safeAssignedTo = sanitizeUuidInput(assigned_to);
+            if (safeAssignedTo) {
+              statsQuery = statsQuery.eq('assigned_to', safeAssignedTo);
+            }
+          }
+        }
+
+        // Apply assigned_to_team filter
+        if (
+          assigned_to_team !== undefined &&
+          assigned_to_team !== null &&
+          assigned_to_team !== ''
+        ) {
+          const safeTeamId = sanitizeUuidInput(assigned_to_team);
+          if (safeTeamId) {
+            statsQuery = statsQuery.eq('assigned_to_team', safeTeamId);
+          }
+        }
+
+        // Apply account_id filter
+        const safeAccountIdForStats = sanitizeUuidInput(account_id);
+        if (safeAccountIdForStats) {
+          statsQuery = statsQuery.eq('account_id', safeAccountIdForStats);
+        }
+
+        // Note: We do NOT apply status filter here - we want counts for ALL statuses
+        // Note: We do NOT apply search filter - stats show totals regardless of search
+
+        const { data: statusRows, error: statsErr } = await statsQuery;
+        if (!statsErr && statusRows) {
+          const statusCounts = { total: statusRows.length };
+          statusRows.forEach((row) => {
+            const s = row.status || 'unknown';
+            statusCounts[s] = (statusCounts[s] || 0) + 1;
+          });
+          stats = {
+            total: statusCounts.total || 0,
+            active: statusCounts.active || 0,
+            inactive: statusCounts.inactive || 0,
+            prospect: statusCounts.prospect || 0,
+            customer: statusCounts.customer || 0,
+            churned: statusCounts.churned || 0,
+          };
+        }
+      } catch (statsErr) {
+        logger.warn(
+          '[V2 Contacts GET] Stats aggregation failed, using defaults:',
+          statsErr.message,
+        );
+      }
+
       res.json({
         status: 'success',
         data: {
           contacts,
           total: count || 0,
+          stats,
           limit,
           offset,
         },

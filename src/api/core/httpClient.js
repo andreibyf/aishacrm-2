@@ -657,6 +657,10 @@ export const callBackendAPI = async (entityName, method, data = null, id = null)
         arr._limit = result.data.limit;
         arr._offset = result.data.offset;
       }
+      // Attach stats if present (leads endpoint returns aggregated counts by status)
+      if (result.data.stats && typeof result.data.stats === 'object') {
+        arr._stats = result.data.stats;
+      }
       return arr;
     }
     // For single item operations without id (edge case handling)

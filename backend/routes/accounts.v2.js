@@ -260,9 +260,90 @@ export default function createAccountV2Routes(_pgPool) {
         delete expanded.team;
         return expanded;
       });
+
+      // ── Aggregate stats from ALL filtered accounts (not just current page) ──
+      // Stats must reflect the complete filtered dataset so stat cards are accurate
+      // We run a parallel query with the same filters but only selecting type (no pagination)
+      let stats = {
+        total: count ?? accounts.length,
+        customer: 0,
+        prospect: 0,
+        partner: 0,
+        vendor: 0,
+        competitor: 0,
+      };
+      try {
+        // Build stats query with same filters as main query (but no pagination/sorting/type filter)
+        let statsQuery = supabase.from('accounts').select('type').eq('tenant_id', tenant_id);
+
+        // Apply same visibility filter
+        if (visibilityScope && !visibilityScope.bypass) {
+          if (visibilityScope.mode === 'shared' && visibilityScope.teamIds?.length > 0) {
+            // Shared: org-wide read, no additional filter
+          } else if (visibilityScope.employeeIds?.length > 0) {
+            const idList = visibilityScope.employeeIds.join(',');
+            statsQuery = statsQuery.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+          }
+        }
+
+        // Apply assigned_to filter (same as main query)
+        if (assigned_to !== undefined && assigned_to !== null && assigned_to !== '') {
+          if (assigned_to === 'unassigned' || assigned_to === 'null') {
+            statsQuery = statsQuery.is('assigned_to', null);
+          } else {
+            const safeAssignedTo = sanitizeUuidInput(assigned_to);
+            if (safeAssignedTo) {
+              statsQuery = statsQuery.eq('assigned_to', safeAssignedTo);
+            }
+          }
+        }
+
+        // Apply assigned_to_team filter
+        if (
+          assigned_to_team !== undefined &&
+          assigned_to_team !== null &&
+          assigned_to_team !== ''
+        ) {
+          const safeTeamId = sanitizeUuidInput(assigned_to_team);
+          if (safeTeamId) {
+            statsQuery = statsQuery.eq('assigned_to_team', safeTeamId);
+          }
+        }
+
+        // Apply industry filter
+        if (industry) {
+          statsQuery = statsQuery.eq('industry', industry);
+        }
+
+        // Note: We do NOT apply type filter here - we want counts for ALL types
+        // Note: We do NOT apply search filter - stats show totals regardless of search
+
+        const { data: typeRows, error: statsErr } = await statsQuery;
+        if (!statsErr && typeRows) {
+          const typeCounts = { total: typeRows.length };
+          typeRows.forEach((row) => {
+            const t = row.type || 'unknown';
+            typeCounts[t] = (typeCounts[t] || 0) + 1;
+          });
+          stats = {
+            total: typeCounts.total || 0,
+            customer: typeCounts.customer || 0,
+            prospect: typeCounts.prospect || 0,
+            partner: typeCounts.partner || 0,
+            vendor: typeCounts.vendor || 0,
+            competitor: typeCounts.competitor || 0,
+          };
+        }
+      } catch (statsErr) {
+        logger.warn(
+          '[V2 Accounts GET] Stats aggregation failed, using defaults:',
+          statsErr.message,
+        );
+      }
+
       return res.json({
         status: 'success',
-        data: { accounts, total: count ?? accounts.length, limit, offset },
+        data: { accounts, total: count ?? accounts.length, stats, limit, offset },
       });
     } catch (err) {
       logger.error('[accounts.v2] List exception:', err);

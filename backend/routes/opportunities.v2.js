@@ -604,11 +604,108 @@ export default function createOpportunityV2Routes(_pgPool) {
         return expanded;
       });
 
+      // ── Aggregate stats from ALL filtered opportunities (not just current page) ──
+      // Stats must reflect the complete filtered dataset so stat cards are accurate
+      // We run a parallel query with the same filters but only selecting stage (no pagination)
+      let stats = {
+        total: count || 0,
+        prospecting: 0,
+        qualification: 0,
+        proposal: 0,
+        negotiation: 0,
+        closed_won: 0,
+        closed_lost: 0,
+      };
+      try {
+        // Build stats query with same filters as main query (but no pagination/sorting/stage filter)
+        let statsQuery = supabase.from('opportunities').select('stage').eq('tenant_id', tenant_id);
+
+        // Apply same visibility filter
+        if (visibilityScope && !visibilityScope.bypass) {
+          if (visibilityScope.mode === 'shared' && visibilityScope.teamIds?.length > 0) {
+            // Shared: org-wide read, no additional filter
+          } else if (visibilityScope.employeeIds?.length > 0) {
+            const idList = visibilityScope.employeeIds.join(',');
+            statsQuery = statsQuery.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+          }
+        }
+
+        // Apply test data filter
+        if (is_test_data !== undefined) {
+          const flag = String(is_test_data).toLowerCase();
+          if (flag === 'false') {
+            statsQuery = statsQuery.or('is_test_data.is.false,is_test_data.is.null');
+          } else if (flag === 'true') {
+            statsQuery = statsQuery.eq('is_test_data', true);
+          }
+        }
+
+        // Apply assigned_to filter (same as main query)
+        if (assigned_to !== undefined && assigned_to !== null && assigned_to !== '') {
+          if (assigned_to === 'unassigned' || assigned_to === 'null') {
+            statsQuery = statsQuery.is('assigned_to', null);
+          } else {
+            statsQuery = statsQuery.eq('assigned_to', assigned_to);
+          }
+        }
+
+        // Apply assigned_to_team filter
+        if (
+          assigned_to_team !== undefined &&
+          assigned_to_team !== null &&
+          assigned_to_team !== ''
+        ) {
+          statsQuery = statsQuery.eq('assigned_to_team', assigned_to_team);
+        }
+
+        // Apply account_id filter
+        if (account_id) {
+          statsQuery = statsQuery.eq('account_id', account_id);
+        }
+
+        // Apply contact_id filter
+        if (contact_id) {
+          statsQuery = statsQuery.eq('contact_id', contact_id);
+        }
+
+        // Apply lead_id filter
+        if (lead_id) {
+          statsQuery = statsQuery.eq('lead_id', lead_id);
+        }
+
+        // Note: We do NOT apply stage filter here - we want counts for ALL stages
+        // Note: We do NOT apply search filter - stats show totals regardless of search
+
+        const { data: stageRows, error: statsErr } = await statsQuery;
+        if (!statsErr && stageRows) {
+          const stageCounts = { total: stageRows.length };
+          stageRows.forEach((row) => {
+            const s = row.stage || 'unknown';
+            stageCounts[s] = (stageCounts[s] || 0) + 1;
+          });
+          stats = {
+            total: stageCounts.total || 0,
+            prospecting: stageCounts.prospecting || 0,
+            qualification: stageCounts.qualification || 0,
+            proposal: stageCounts.proposal || 0,
+            negotiation: stageCounts.negotiation || 0,
+            closed_won: stageCounts.closed_won || 0,
+            closed_lost: stageCounts.closed_lost || 0,
+          };
+        }
+      } catch (statsErr) {
+        logger.warn(
+          '[V2 Opportunities GET] Stats aggregation failed, using defaults:',
+          statsErr.message,
+        );
+      }
+
       res.json({
         status: 'success',
         data: {
           opportunities,
           total: count || 0,
+          stats,
           limit,
           offset,
         },

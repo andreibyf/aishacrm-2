@@ -50,7 +50,7 @@ export async function createConversation({ agent_name = 'crm_assistant', metadat
       ...authHeaders,
     },
     credentials: 'include',
-    body: JSON.stringify({ agent_name, metadata }),
+    body: JSON.stringify({ agent_name, metadata, tenant_id: tenantId || undefined }),
   });
 
   if (!response.ok) {
@@ -175,7 +175,7 @@ export async function updateConversation(conversationId, { title, topic }) {
       ...authHeaders,
     },
     credentials: 'include',
-    body: JSON.stringify({ title, topic }),
+    body: JSON.stringify({ title, topic, tenant_id: tenantId || undefined }),
   });
 
   if (!response.ok) {
@@ -254,7 +254,7 @@ export async function addMessage(conversation, { role, content, file_urls = [] }
     method: 'POST',
     headers,
     credentials: 'include',
-    body: JSON.stringify({ role, content, metadata }),
+    body: JSON.stringify({ role, content, metadata, tenant_id: tenantId || undefined }),
   });
 
   if (!response.ok) {
@@ -350,7 +350,7 @@ export async function submitFeedback(conversationId, messageId, rating) {
         ...authHeaders,
       },
       credentials: 'include',
-      body: JSON.stringify({ rating }),
+      body: JSON.stringify({ rating, tenant_id: tenantId || undefined }),
     },
   );
 
