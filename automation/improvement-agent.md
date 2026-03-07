@@ -10,9 +10,9 @@ architectural consistency over time.
 Architecture Authority
 All improvements must follow rules defined in:
 
-.cursorrules
+CLAUDE.md
 
-If a change conflicts with .cursorrules, the rules take priority.
+If a change conflicts with CLAUDE.md, the rules take priority.
 
 Subsystem Awareness
 

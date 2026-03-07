@@ -1,7 +1,7 @@
-# Repository Audit vs .cursorrules
+# Repository Audit vs AI Rules Documentation
 
 **Audit date:** 2025-03-06  
-**Reference:** `.cursorrules` (API layer, service layer, data layer, AI/Braid, utilities, drift detection)
+**Reference:** `CLAUDE.md` and `docs/developer-docs/COPILOT_PLAYBOOK.md` (API layer, service layer, data layer, AI/Braid, utilities, drift detection)
 
 ---
 
@@ -14,8 +14,8 @@
 ### Production code with raw SQL (pgPool.query / client.query)
 
 | File path                                     | Notes                                                                            |
-| --------------------------------------------- | -------------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------- |
-| `backend/routes/bizdevsources.js`             | `client.query('BEGIN'                                                            | 'ROLLBACK' | 'COMMIT')`, parameterized SQL for promote flow, `pgPool.query` for assignment updates |
+| --------------------------------------------- | -------------------------------------------------------------------------------- |
+| `backend/routes/bizdevsources.js`             | `client.query('BEGIN' \| 'ROLLBACK' \| 'COMMIT')`, parameterized SQL for promote flow, `pgPool.query` for assignment updates |
 | `backend/routes/workflows.js`                 | Many `pgPool.query()` calls (workflow CRUD, metadata, execution state)           |
 | `backend/routes/suggestions.js`               | Multiple `pgPool.query()` for list, get, metrics, summary, apply, status updates |
 | `backend/routes/users.js`                     | `pgPool.query()` for user/tenant lookups                                         |

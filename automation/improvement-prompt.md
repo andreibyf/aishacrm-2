@@ -1,6 +1,6 @@
 Perform an incremental improvement pass on the repository.
 
-Follow rules defined in .cursorrules.
+Follow rules defined in CLAUDE.md.
 
 Focus on:
 
