@@ -29,7 +29,7 @@ jobs:
         run: node automation/run-improvement.js
 
       - name: Run validation
-        run: npm run validate
+        run: npm run validate:ci
 
       - name: Check for changes
         id: changes

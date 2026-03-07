@@ -1,4 +1,3 @@
-// @ts-expect-error -- JS module without type declarations
 import { processChatCommand as callChatApi } from '@/api/functions';
 import type { IntentClassification } from '@/ai/nlu/intentClassifier';
 import type { PromptPayload, PromptContext } from './promptBuilder';
