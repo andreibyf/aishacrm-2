@@ -52,6 +52,7 @@ import BulkDeleteDialog from '../components/bizdev/BulkDeleteDialog';
 import StatusHelper from '../components/shared/StatusHelper';
 import { useUser } from '../components/shared/useUser.js';
 import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
+import { useConfirmDialog } from '../components/shared/ConfirmDialog';
 import { useEmployeeScope } from '../components/shared/EmployeeScopeContext';
 
 export default function BizDevSourcesPage() {
@@ -68,6 +69,8 @@ export default function BizDevSourcesPage() {
   const [selectedSources, setSelectedSources] = useState([]);
   const [showBulkArchive, setShowBulkArchive] = useState(false);
   const [showBulkDelete, setShowBulkDelete] = useState(false);
+  const [showBulkAssign, setShowBulkAssign] = useState(false);
+  const [bulkAssignee, setBulkAssignee] = useState('');
   const [showArchiveIndex, setShowArchiveIndex] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null); // { type, source, title, description }
 
@@ -76,7 +79,7 @@ export default function BizDevSourcesPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [licenseStatusFilter, setLicenseStatusFilter] = useState('all');
   const [assignedToFilter, setAssignedToFilter] = useState('all');
-  const [_employees, setEmployees] = useState([]);
+  const [, setEmployees] = useState([]);
   const [batchFilter, setBatchFilter] = useState('all');
   const [sourceFilter, setSourceFilter] = useState('all');
   const [sortField, setSortField] = useState('created_at');
@@ -102,6 +105,7 @@ export default function BizDevSourcesPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const { user } = useUser();
+  const { ConfirmDialog: BulkConfirmDialog, confirm } = useConfirmDialog();
   const [bizdevSchema, setBizdevSchema] = useState(null);
   const [businessModel, setBusinessModel] = useState('b2b');
 
@@ -442,6 +446,53 @@ export default function BizDevSourcesPage() {
 
     if (result && result.archived_count > 0) {
       toast.success(`Archived ${result.archived_count} source(s) to R2`);
+    }
+  };
+
+  const handleBulkAssign = async () => {
+    if (selectedSources.length === 0) {
+      toast.error('No sources selected');
+      return;
+    }
+    const tenantId = selectedTenantId || user?.tenant_id;
+    try {
+      const assignTo = bulkAssignee === '__unassign__' ? null : bulkAssignee;
+
+      // Check for team mismatch
+      let overrideTeam = false;
+      if (assignTo) {
+        const selectedRecords = (sources || []).filter((s) => selectedSources.includes(s.id));
+        const withTeam = selectedRecords.filter((s) => s.assigned_to_team);
+        if (withTeam.length > 0) {
+          const teamNames = [
+            ...new Set(withTeam.map((s) => s.assigned_to_team_name).filter(Boolean)),
+          ];
+          const choice = await confirm({
+            title: 'Team assignment conflict',
+            description: `${withTeam.length} of ${selectedSources.length} selected source(s) are currently assigned to ${teamNames.join(', ') || 'a team'}. The selected employee may be on a different team.`,
+            confirmText: 'Continue',
+            cancelText: 'Cancel',
+            variant: 'default',
+            extraActions: [{ label: 'Override team', value: 'override' }],
+          });
+          if (!choice) return;
+          if (choice === 'override') overrideTeam = true;
+        }
+      }
+
+      const result = await BizDevSource.bulkAssign(selectedSources, assignTo, tenantId, {
+        overrideTeam,
+      });
+      if (result.updated > 0) toast.success(`${result.updated} source(s) assigned`);
+      if (result.skipped > 0)
+        toast.warning(`${result.skipped} source(s) skipped (no write access)`);
+      setSelectedSources([]);
+      setShowBulkAssign(false);
+      setBulkAssignee('');
+      loadSources();
+    } catch (err) {
+      console.error('Failed to bulk assign:', err);
+      toast.error('Failed to assign sources');
     }
   };
 
@@ -1062,6 +1113,14 @@ export default function BizDevSourcesPage() {
                     <Button
                       variant="outline"
                       size="sm"
+                      onClick={() => setShowBulkAssign(true)}
+                      className="border-green-600 text-green-400 hover:bg-green-900/30"
+                    >
+                      Assign Selected
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={handleBulkDelete}
                       className="border-red-600 text-red-400 hover:bg-red-900/30"
                     >
@@ -1203,6 +1262,63 @@ export default function BizDevSourcesPage() {
             entityLabel={bizdevSourceLabel}
             entityLabelPlural={bizdevLabel}
           />
+        )}
+
+        <BulkConfirmDialog />
+
+        {showBulkAssign && (
+          <AlertDialog open={showBulkAssign} onOpenChange={setShowBulkAssign}>
+            <AlertDialogContent className="bg-slate-800 border-slate-700">
+              <AlertDialogHeader>
+                <AlertDialogTitle className="text-white">
+                  Assign {selectedSources.length} Source(s)
+                </AlertDialogTitle>
+                <AlertDialogDescription className="text-slate-400">
+                  Select an employee to assign the selected sources to, or choose
+                  &quot;Unassign&quot; to remove assignment.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <div className="py-4">
+                <Select value={bulkAssignee} onValueChange={setBulkAssignee}>
+                  <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
+                    <SelectValue placeholder="Select employee..." />
+                  </SelectTrigger>
+                  <SelectContent
+                    className="bg-slate-800 border-slate-700 z-[9999]"
+                    position="popper"
+                    sideOffset={4}
+                  >
+                    <SelectItem value="__unassign__" className="text-slate-300 hover:bg-slate-700">
+                      Unassign
+                    </SelectItem>
+                    {visibleEmployees.map((emp) => (
+                      <SelectItem
+                        key={emp.id}
+                        value={emp.id}
+                        className="text-white hover:bg-slate-700"
+                      >
+                        {emp.first_name} {emp.last_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    handleBulkAssign();
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700"
+                  disabled={!bulkAssignee}
+                >
+                  Assign
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         )}
 
         {showArchiveIndex && (

@@ -13,7 +13,7 @@ import { toast } from 'sonner';
  * For select-all mode, fetches all matching contacts server-side before operating.
  */
 export function useContactsBulkOps({
-  contacts: _contacts,
+  contacts,
   selectedContacts,
   setSelectedContacts,
   selectAllMode,
@@ -105,7 +105,11 @@ export function useContactsBulkOps({
         const filtered = await fetchAllMatching();
         const deleteCount = filtered.length;
 
-        updateProgress({ message: `Deleting ${deleteCount} contacts...`, total: deleteCount, current: 0 });
+        updateProgress({
+          message: `Deleting ${deleteCount} contacts...`,
+          total: deleteCount,
+          current: 0,
+        });
 
         const BATCH_SIZE = 50;
         let successCount = 0;
@@ -117,7 +121,10 @@ export function useContactsBulkOps({
             if (r.status === 'fulfilled') successCount++;
             else failCount++;
           });
-          updateProgress({ current: successCount + failCount, message: `Deleted ${successCount} of ${deleteCount} contacts...` });
+          updateProgress({
+            current: successCount + failCount,
+            message: `Deleted ${successCount} of ${deleteCount} contacts...`,
+          });
         }
 
         completeProgress();
@@ -147,7 +154,10 @@ export function useContactsBulkOps({
     if (!confirmed) return;
 
     const contactIds = Array.from(selectedContacts);
-    startProgress({ message: `Deleting ${contactIds.length} contacts...`, total: contactIds.length });
+    startProgress({
+      message: `Deleting ${contactIds.length} contacts...`,
+      total: contactIds.length,
+    });
 
     try {
       let successCount = 0;
@@ -164,7 +174,10 @@ export function useContactsBulkOps({
             if (!is404) failCount++;
           }
         });
-        updateProgress({ current: Math.min(i + BATCH_SIZE, contactIds.length), message: `Deleted ${successCount} of ${contactIds.length} contacts...` });
+        updateProgress({
+          current: Math.min(i + BATCH_SIZE, contactIds.length),
+          message: `Deleted ${successCount} of ${contactIds.length} contacts...`,
+        });
       }
 
       completeProgress();
@@ -172,8 +185,12 @@ export function useContactsBulkOps({
       clearCacheByKey('Contact');
       await Promise.all([loadContacts(), loadTotalStats()]);
 
-      if (successCount > 0) toast.success(`Successfully deleted ${successCount} contact${successCount !== 1 ? 's' : ''}`);
-      if (failCount > 0) toast.error(`Failed to delete ${failCount} contact${failCount !== 1 ? 's' : ''}`);
+      if (successCount > 0)
+        toast.success(
+          `Successfully deleted ${successCount} contact${successCount !== 1 ? 's' : ''}`,
+        );
+      if (failCount > 0)
+        toast.error(`Failed to delete ${failCount} contact${failCount !== 1 ? 's' : ''}`);
     } catch (error) {
       completeProgress();
       console.error('Failed to bulk delete contacts:', error);
@@ -210,8 +227,10 @@ export function useContactsBulkOps({
       }
     }
 
-    if (successCount > 0) toast.success(`Successfully updated ${successCount} contact${successCount !== 1 ? 's' : ''}`);
-    if (failCount > 0) toast.error(`Failed to update ${failCount} contact${failCount !== 1 ? 's' : ''}`);
+    if (successCount > 0)
+      toast.success(`Successfully updated ${successCount} contact${successCount !== 1 ? 's' : ''}`);
+    if (failCount > 0)
+      toast.error(`Failed to update ${failCount} contact${failCount !== 1 ? 's' : ''}`);
 
     setSelectedContacts(new Set());
     setSelectAllMode(false);
@@ -221,13 +240,13 @@ export function useContactsBulkOps({
   };
 
   const handleBulkAssign = async (assigneeId) => {
-    let contactIds;
+    let contactRecords;
     if (selectAllMode) {
-      const filtered = await fetchAllMatching();
-      contactIds = filtered.map((c) => c.id);
+      contactRecords = await fetchAllMatching();
     } else {
-      contactIds = Array.from(selectedContacts);
+      contactRecords = (contacts || []).filter((c) => selectedContacts.has(c.id));
     }
+    const contactIds = contactRecords.map((c) => c.id);
 
     const count = contactIds.length;
     logger.info('Attempting to bulk assign contacts', 'ContactsPage', {
@@ -236,21 +255,50 @@ export function useContactsBulkOps({
       userId: user?.id || user?.email,
     });
 
-    let successCount = 0;
-    let failCount = 0;
+    try {
+      const tenantId = user?.tenant_id;
 
-    for (const id of contactIds) {
-      try {
-        await Contact.update(id, { assigned_to: assigneeId || null });
-        successCount++;
-      } catch (error) {
-        console.error(`Error assigning contact ${id}:`, error);
-        failCount++;
+      // Check for team mismatch
+      let overrideTeam = false;
+      if (assigneeId) {
+        const withTeam = contactRecords.filter((c) => c.assigned_to_team);
+        if (withTeam.length > 0) {
+          const teamNames = [
+            ...new Set(withTeam.map((c) => c.assigned_to_team_name).filter(Boolean)),
+          ];
+          const choice = await confirm({
+            title: 'Team assignment conflict',
+            description: `${withTeam.length} of ${contactIds.length} selected contact(s) are currently assigned to ${teamNames.join(', ') || 'a team'}. The selected employee may be on a different team.`,
+            confirmText: 'Continue',
+            cancelText: 'Cancel',
+            variant: 'default',
+            extraActions: [{ label: 'Override team', value: 'override' }],
+          });
+          if (!choice) return;
+          if (choice === 'override') overrideTeam = true;
+        }
       }
-    }
 
-    if (successCount > 0) toast.success(`Successfully assigned ${successCount} contact${successCount !== 1 ? 's' : ''}`);
-    if (failCount > 0) toast.error(`Failed to assign ${failCount} contact${failCount !== 1 ? 's' : ''}`);
+      const CHUNK_SIZE = 500;
+      let successCount = 0;
+      let skipCount = 0;
+      for (let i = 0; i < contactIds.length; i += CHUNK_SIZE) {
+        const chunk = contactIds.slice(i, i + CHUNK_SIZE);
+        const result = await Contact.bulkAssign(chunk, assigneeId || null, tenantId, {
+          overrideTeam,
+        });
+        successCount += result.updated;
+        skipCount += result.skipped;
+      }
+      if (successCount > 0)
+        toast.success(
+          `Successfully assigned ${successCount} contact${successCount !== 1 ? 's' : ''}`,
+        );
+      if (skipCount > 0) toast.warning(`${skipCount} contact(s) skipped (no write access)`);
+    } catch (error) {
+      console.error('Failed to bulk assign contacts:', error);
+      toast.error('Failed to assign contacts');
+    }
 
     setSelectedContacts(new Set());
     setSelectAllMode(false);

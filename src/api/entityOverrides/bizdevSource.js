@@ -161,4 +161,27 @@ export const BizDevSource = {
       throw error;
     }
   },
+
+  // Bulk assign bizdev sources to an employee (or unassign)
+  bulkAssign: async (ids, assignedTo, tenantId, { overrideTeam = false } = {}) => {
+    if (!Array.isArray(ids) || ids.length === 0) return { updated: 0, skipped: 0, errors: [] };
+    if (!tenantId) throw new Error('tenantId is required for BizDevSource.bulkAssign');
+    const authOpts = await getAuthFetchOptions();
+    const response = await fetch(`${BACKEND_URL}/api/bizdevsources/bulk-assign`, {
+      method: 'POST',
+      ...authOpts,
+      body: JSON.stringify({
+        ids,
+        assigned_to: assignedTo,
+        tenant_id: tenantId,
+        override_team: overrideTeam,
+      }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.message || `Bulk assign failed: ${response.status}`);
+    }
+    const result = await response.json();
+    return result.data || { updated: 0, skipped: 0, errors: [] };
+  },
 };

@@ -113,6 +113,7 @@ export default function AccountsPage() {
 
   // Bulk ops hook
   const { handleBulkDelete, handleBulkTypeChange, handleBulkAssign } = useAccountsBulkOps({
+    accounts,
     selectedAccounts,
     setSelectedAccounts,
     selectAllMode,
@@ -130,6 +131,8 @@ export default function AccountsPage() {
     updateProgress,
     completeProgress,
     clearCacheByKey,
+    confirm,
+    user,
   });
 
   // --- Local handlers ---
