@@ -151,6 +151,9 @@ backend/scripts/debug/test-parameter-descriptions.js
 # Continue.dev local config
 .continue/
 
+# Cursor local config
+.cursorrules
+
 # Generated reports
 playwright-report/
 
