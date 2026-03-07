@@ -273,7 +273,7 @@ describe('teamVisibility — getVisibilityScope', () => {
     it('second call returns cached result without hitting Supabase again', async () => {
       let callCount = 0;
       const sb = {
-        from: (table) => {
+        from: (_table) => {
           callCount++;
           const chain = {
             select: () => chain,

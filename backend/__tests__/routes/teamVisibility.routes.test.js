@@ -10,9 +10,9 @@
  * Requires Supabase credentials (skips gracefully if unavailable).
  */
 
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
-import { initSupabaseForTests, hasSupabaseCredentials } from '../setup.js';
+import { initSupabaseForTests } from '../setup.js';
 import { getSupabaseClient } from '../../lib/supabase-db.js';
 
 let supabaseReady = false;
@@ -20,7 +20,6 @@ const TEST_TENANT_ID = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 
 // We'll look up a real employee from the test tenant for assignment tests
 let testEmployeeId = null;
-let testEmployeeName = null;
 
 before(async () => {
   supabaseReady = await initSupabaseForTests();
@@ -36,7 +35,7 @@ before(async () => {
 
   if (employees?.length > 0) {
     testEmployeeId = employees[0].id;
-    testEmployeeName = `${employees[0].first_name || ''} ${employees[0].last_name || ''}`.trim();
+    // Employee name available for debugging: `${employees[0].first_name || ''} ${employees[0].last_name || ''}`.trim()
   }
 });
 

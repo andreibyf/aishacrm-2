@@ -9,12 +9,15 @@ import type { IntentClassification } from '@/ai/nlu/intentClassifier';
 describe('promptBuilder.ts', () => {
   test('buildPrompt creates valid PromptPayload structure', () => {
     const classification: IntentClassification = {
+      rawText: 'Show me new leads from today',
+      normalized: 'show me new leads from today',
       intent: 'list_records',
       entity: 'leads',
       confidence: 0.95,
+      matchedKeywords: ['show', 'leads', 'today'],
       filters: {
         timeframe: 'today',
-        status: 'new',
+        status: 'open',
       },
     };
 

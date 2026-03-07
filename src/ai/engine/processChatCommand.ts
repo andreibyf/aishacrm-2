@@ -185,11 +185,12 @@ const buildClarificationMessage = (
   const examples = getContextualExamples(entity);
 
   // Build action buttons from clarification options
-  const actions = clarification.options.map((opt) => ({
-    label: opt.label,
-    type: 'clarification_option',
-    prompt: opt.prompt
-  }));
+  const actions: Array<{ label: string; type: string; prompt?: string }> =
+    clarification.options.map((opt) => ({
+      label: opt.label,
+      type: 'clarification_option',
+      prompt: opt.prompt,
+    }));
 
   // Add recovery actions
   if (clarification.canRetry) {

@@ -42,8 +42,13 @@ const brainIntentSet = new Set<IntentClassification['intent']>([]); // Was: ['su
 const defaultBrainCaller = async (_payload: BrainRequestPayload) => {
   // brain-test endpoint requires X-Internal-AI-Key header (server-side only)
   // For user-facing requests, use callChatApi instead which routes to /api/ai/chat
-  console.warn('[commandRouter] brain-test endpoint requires internal API key - use chat endpoint instead');
-  return { status: 401, data: { status: 'error', message: 'Brain endpoint requires internal API key' } };
+  console.warn(
+    '[commandRouter] brain-test endpoint requires internal API key - use chat endpoint instead',
+  );
+  return {
+    status: 401,
+    data: { status: 'error', message: 'Brain endpoint requires internal API key' },
+  };
 };
 
 const buildLocalActionDescription = (classification: IntentClassification) => {
@@ -59,12 +64,13 @@ export async function routeCommand({
   classification,
   prompt,
   context,
-  adapters
+  adapters,
 }: RouteCommandOptions): Promise<CommandRouterResult> {
   const callChat = adapters?.callChatApi ?? callChatApi;
   const callBrain = adapters?.callBrainTest ?? defaultBrainCaller;
 
-  const shouldUseLocalAction = localIntentSet.has(classification.intent) && classification.confidence >= 0.55;
+  const shouldUseLocalAction =
+    localIntentSet.has(classification.intent) && classification.confidence >= 0.55;
   if (shouldUseLocalAction) {
     return {
       type: 'local_action',
@@ -72,12 +78,13 @@ export async function routeCommand({
         entity: classification.entity,
         intent: classification.intent,
         filters: classification.filters,
-        description: buildLocalActionDescription(classification)
-      }
+        description: buildLocalActionDescription(classification),
+      },
     };
   }
 
-  const shouldUseBrain = brainIntentSet.has(classification.intent) || text.toLowerCase().includes('brain');
+  const shouldUseBrain =
+    brainIntentSet.has(classification.intent) || text.toLowerCase().includes('brain');
   if (shouldUseBrain) {
     const response = await callBrain({
       taskType: classification.intent,
@@ -87,8 +94,8 @@ export async function routeCommand({
         entity: classification.entity,
         filters: classification.filters,
         summary: prompt.summary,
-        rawText: text
-      }
+        rawText: text,
+      },
     });
     return { type: 'ai_brain', response };
   }
@@ -99,7 +106,7 @@ export async function routeCommand({
     messages: prompt.messages,
     temperature: 0.2,
     tenantId: context?.tenantId,
-    entityContext: prompt.entityContext // Session context for follow-up questions
+    entityContext: prompt.entityContext, // Session context for follow-up questions
   });
   return { type: 'ai_chat', response };
 }
