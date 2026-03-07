@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from 'react';
+import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import { Lead } from '@/api/entities';
 // User entity no longer needed here; user comes from context
 import { useUser } from '@/components/shared/useUser.js';
@@ -126,24 +126,6 @@ export default function LeadsPage() {
     [],
   );
 
-  // Helper function to calculate lead age
-  const calculateLeadAge = (lead) => {
-    // Use created_date if available, otherwise fall back to created_at
-    const dateValue = lead?.created_date || lead?.created_at || lead;
-    const today = new Date();
-    const created = new Date(dateValue);
-    if (isNaN(created.getTime())) return -1; // Return -1 or handle as error for invalid dates
-    return Math.floor((today - created) / (1000 * 60 * 60 * 24));
-  };
-
-  // Helper function to get age bucket for a lead
-  const getLeadAgeBucket = (lead) => {
-    const age = calculateLeadAge(lead);
-    return ageBuckets.find(
-      (bucket) => bucket.value !== 'all' && age >= bucket.min && age <= bucket.max,
-    );
-  };
-
   // Derived state for manager role
   const isManager = useMemo(() => {
     if (!user) return false;
@@ -162,10 +144,6 @@ export default function LeadsPage() {
     return user.role === 'superadmin';
   }, [user]);
 
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-
   const { cachedRequest, clearCache, clearCacheByKey } = useApiManager();
   const { selectedEmail } = useEmployeeScope();
 
@@ -179,6 +157,11 @@ export default function LeadsPage() {
     totalStats,
     totalItems,
     setTotalItems,
+    currentPage,
+    pageSize,
+    setCurrentPage,
+    handlePageChange,
+    handlePageSizeChange,
     loadLeads,
     loadTotalStats,
     refreshAccounts,
@@ -187,6 +170,8 @@ export default function LeadsPage() {
     usersMap,
     employeesMap,
     getAssociatedAccountName,
+    calculateLeadAge,
+    getLeadAgeBucket,
     initialLoadDone,
     resetSupportingData,
   } = useLeadsData({
@@ -200,8 +185,6 @@ export default function LeadsPage() {
     ageFilter,
     selectedTags,
     showTestData,
-    currentPage,
-    pageSize,
     ageBuckets,
     user,
     loadingToast,
@@ -211,7 +194,6 @@ export default function LeadsPage() {
     clearCache,
     setDetailLead,
     setIsDetailOpen,
-    setCurrentPage,
   });
 
   // Extract bulk operations to custom hook
@@ -278,18 +260,6 @@ export default function LeadsPage() {
     window.addEventListener('aisha:open-details', handleAiShaOpenDetails);
     return () => window.removeEventListener('aisha:open-details', handleAiShaOpenDetails);
   }, [leads]);
-
-  // Handle page change
-  const handlePageChange = useCallback((newPage) => {
-    setCurrentPage(newPage);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
-
-  // Handle page size change
-  const handlePageSizeChange = useCallback((newSize) => {
-    setPageSize(newSize);
-    setCurrentPage(1);
-  }, []);
 
   const handleSave = async (result) => {
     try {
