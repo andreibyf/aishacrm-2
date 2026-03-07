@@ -25,7 +25,7 @@ async function clearAllData() {
 
   for (const table of tables) {
     try {
-      const { data, error, count } = await supabase
+      const { data, error, count: _count } = await supabase
         .from(table)
         .delete()
         .neq('id', '00000000-0000-0000-0000-000000000000')

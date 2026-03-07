@@ -1,11 +1,11 @@
 // braid-core.test.js — Comprehensive test suite for Braid DSL core v0.4.0
 // Covers: parser, transpiler, runtime, sandbox, new language features
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { Ok, Err, Some, None, checkType, CRMError, cap, IO, POLICIES, createPolicy } from './braid-rt.js';
 import { safeGet, safeSet, guardGlobal } from './braid-sandbox.js';
 import { parse } from './braid-parse.js';
-import { transpileToJS, detectUsedEffects, extractPolicies, extractParamTypes, VALID_POLICIES } from './braid-transpile.js';
+import { transpileToJS, extractPolicies, extractParamTypes } from './braid-transpile.js';
 
 // ============================================================================
 // RUNTIME: ADTs

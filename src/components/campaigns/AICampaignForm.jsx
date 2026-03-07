@@ -22,7 +22,6 @@ import {
   Save,
   Zap,
   Calendar,
-  Mail,
   Phone,
   MessageSquare,
   Linkedin,

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import {
@@ -53,11 +53,11 @@ export default function AssignmentField({
   const {
     allowedIds,
     teamIds: userTeamIds,
-    fullAccessTeamIds,
+    fullAccessTeamIds: _fullAccessTeamIds,
     highestRole,
     bypass,
   } = useTeamScope(user);
-  const { teams, membersByTeam, loading: teamsLoading } = useTeams(tenantId);
+  const { teams, membersByTeam, loading: _teamsLoading } = useTeams(tenantId);
 
   const role = (user?.role || '').toLowerCase();
   // Any team member can assign to teammates; non-team users get claim/unassign only

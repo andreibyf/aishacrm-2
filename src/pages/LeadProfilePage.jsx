@@ -35,11 +35,6 @@ function formatDateTime(dt) {
   });
 }
 
-function daysSince(dt) {
-  if (!dt) return null;
-  return Math.floor((Date.now() - new Date(dt).getTime()) / (1000 * 60 * 60 * 24));
-}
-
 // ─── Design tokens ──────────────────────────────────────────────────────────
 const C = {
   bg: '#F7F6F3',

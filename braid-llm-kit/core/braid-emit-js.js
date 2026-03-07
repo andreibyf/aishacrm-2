@@ -3,7 +3,6 @@
 // This is one backend. Others (Python, Rust, etc.) consume the same IR.
 "use strict";
 
-import { walkIR } from './braid-ir.js';
 
 // ============================================================================
 // JS-SPECIFIC CONFIGURATION
@@ -135,7 +134,7 @@ function emitFnDecl(decl, ctx) {
   return `export ${asyncKw}function ${decl.name}(${params.join(', ')}) {\n${prolog}${body}\n}`;
 }
 
-function emitTypeDecl(decl, ctx) {
+function emitTypeDecl(decl, _ctx) {
   const variants = decl.variants.map(v => {
     if (v.tag && v.fields.length) return `@typedef {{tag: '${v.tag}', ${v.fields.map(f => `${f.name}: ${f.type.base}`).join(', ')}}} ${decl.name}_${v.tag}`;
     if (v.tag) return `@typedef {'${v.tag}'} ${decl.name}_${v.tag}`;
@@ -144,7 +143,7 @@ function emitTypeDecl(decl, ctx) {
   return `/**\n * ${variants}\n */`;
 }
 
-function emitImportDecl(decl, ctx) {
+function emitImportDecl(decl, _ctx) {
   if (decl.path && decl.path.endsWith('.braid')) {
     return `// Type-only import from ${decl.path} (skipped in JS)`;
   }

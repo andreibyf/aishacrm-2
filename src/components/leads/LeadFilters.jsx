@@ -31,7 +31,7 @@ export default function LeadFilters({
   allTags,
   selectedTags,
   setSelectedTags,
-  employees,
+  employees: _employees,
   assignedToFilter,
   setAssignedToFilter,
   sortField,

@@ -75,7 +75,7 @@ async function checkTypes() {
   console.log('\n');
 
   // Check compatibility
-  const employeesIdType = typeMap['employees.id'];
+  const _employeesIdType = typeMap['employees.id'];
   const issues = [];
 
   const checkPairs = [

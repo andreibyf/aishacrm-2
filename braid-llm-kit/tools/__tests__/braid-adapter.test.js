@@ -19,10 +19,10 @@ const TEST_BRAID = path.join(TEST_DIR, 'test_tool.braid');
 function makeMockDeps(responseData = { data: [{ id: 1, name: 'Test Lead' }] }) {
   return {
     http: {
-      get: async (url, opts) => ({ tag: 'Ok', value: responseData, status: 200 }),
-      post: async (url, opts) => ({ tag: 'Ok', value: responseData, status: 201 }),
-      put: async (url, opts) => ({ tag: 'Ok', value: responseData, status: 200 }),
-      delete: async (url, opts) => ({ tag: 'Ok', value: { deleted: true }, status: 200 }),
+      get: async (_url, _opts) => ({ tag: 'Ok', value: responseData, status: 200 }),
+      post: async (_url, _opts) => ({ tag: 'Ok', value: responseData, status: 201 }),
+      put: async (_url, _opts) => ({ tag: 'Ok', value: responseData, status: 200 }),
+      delete: async (_url, _opts) => ({ tag: 'Ok', value: { deleted: true }, status: 200 }),
     },
     clock: {
       now: () => '2026-02-13T00:00:00Z',

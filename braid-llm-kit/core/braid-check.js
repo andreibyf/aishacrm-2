@@ -8,7 +8,7 @@
 import fs from 'fs';
 import path from 'path';
 import { parse } from './braid-parse.js';
-import { transpileToJS, extractPolicies, detectUsedEffects, IO_EFFECT_MAP, VALID_POLICIES, BRAID_TYPE_MAP } from './braid-transpile.js';
+import { transpileToJS, detectUsedEffects, IO_EFFECT_MAP, VALID_POLICIES } from './braid-transpile.js';
 import { typeCheck } from './braid-types.js';
 
 // ============================================================================

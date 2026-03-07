@@ -13,7 +13,7 @@ import { getSupabaseClient } from '../../../lib/supabase-db.js';
 
 // Use a known test tenant — adjust to match your test data
 const TEST_TENANT_ID = process.env.TEST_TENANT_ID || 'b62b764d-4f27-4e20-a8ad-8eb9b2e1055c';
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:4001';
+const _BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:4001';
 
 // We'll test via Supabase directly since API routes need auth cookies.
 // This validates the data layer that the routes operate on.

@@ -10,10 +10,9 @@ import assert from 'node:assert';
 import fs from 'fs';
 import path from 'path';
 import { parse } from './braid-parse.js';
-import { transpileToJS, detectUsedEffects, extractPolicies, VALID_POLICIES } from './braid-transpile.js';
-import { typeCheck, formatType, T_STRING, T_NUMBER, T_BOOLEAN, T_UNKNOWN } from './braid-types.js';
-import { lower, extractSignatures } from './braid-ir.js';
-import { emitJS } from './braid-emit-js.js';
+import { detectUsedEffects } from './braid-transpile.js';
+import { typeCheck } from './braid-types.js';
+import { lower } from './braid-ir.js';
 import { emitPython } from './braid-emit-py.js';
 import { execSync } from 'child_process';
 

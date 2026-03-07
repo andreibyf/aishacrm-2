@@ -15,7 +15,6 @@ import { Lead, BizDevSource, Tenant } from '@/api/entities';
 import { useEntityForm } from '@/hooks/useEntityForm';
 import { useTenant } from '@/components/shared/tenantContext';
 import { useUser } from '@/components/shared/useUser.js';
-import LazyEmployeeSelector from '@/components/shared/LazyEmployeeSelector';
 import AssignmentField from '@/components/shared/AssignmentField';
 import TagInput from '@/components/shared/TagInput';
 import { toast } from 'sonner';

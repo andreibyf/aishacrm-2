@@ -12,7 +12,7 @@ console.log('Row count:', count);
 console.log('Sample data:', JSON.stringify(data, null, 2));
 
 // Also check if view needs refresh
-const { data: refreshData, error: refreshError } = await supabase.rpc(
+const { data: _refreshData, error: refreshError } = await supabase.rpc(
   'refresh_dashboard_funnel_counts',
 );
 console.log('\nRefresh called:', refreshError ? 'Error: ' + refreshError.message : 'Success');

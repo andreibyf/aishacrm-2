@@ -76,7 +76,7 @@ export default function HistoricalTrends({ tenantFilter }) {
 
       // Filter data by date range for the trend
       const filterByDateRange = (items, dateField = 'created_date') => {
-        return items.filter((item, index) => {
+        return items.filter((item, _index) => {
           if (!item[dateField]) return false;
           const itemDate = new Date(item[dateField]);
           // Adjust itemDate to its specific day's start for comparison with startDate, and end for endDate
@@ -176,7 +176,7 @@ export default function HistoricalTrends({ tenantFilter }) {
       }));
 
       setTrendsData(formattedTrends);
-    } catch (error) {
+    } catch {
       setTrendsData([]);
     } finally {
       setLoading(false);

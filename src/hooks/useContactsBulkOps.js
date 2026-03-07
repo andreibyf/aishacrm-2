@@ -13,7 +13,7 @@ import { toast } from 'sonner';
  * For select-all mode, fetches all matching contacts server-side before operating.
  */
 export function useContactsBulkOps({
-  contacts,
+  contacts: _contacts,
   selectedContacts,
   setSelectedContacts,
   selectAllMode,
@@ -31,8 +31,8 @@ export function useContactsBulkOps({
   updateProgress,
   completeProgress,
   clearCacheByKey,
-  setContacts,
-  setTotalItems,
+  setContacts: _setContacts,
+  setTotalItems: _setTotalItems,
   confirm,
   contactsLabel,
   logger,

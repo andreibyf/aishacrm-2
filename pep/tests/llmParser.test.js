@@ -26,7 +26,7 @@ mock.module('../../backend/lib/aiEngine/llmClient.js', {
 });
 
 // Dynamic import AFTER mocking so llmParser picks up the mock
-const { parseLLM, buildCatalogSummaries, buildSystemPrompt } = await import(
+const { parseLLM } = await import(
   '../compiler/llmParser.js'
 );
 

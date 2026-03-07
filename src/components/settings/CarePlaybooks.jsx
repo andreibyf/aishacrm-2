@@ -10,7 +10,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
@@ -49,15 +49,8 @@ import {
   Eye,
   RefreshCw,
   Zap,
-  Mail,
-  Phone,
   Bell,
-  UserPlus,
-  Globe,
   AlertTriangle,
-  MessageSquare,
-  CheckCircle,
-  XCircle,
   Clock,
   Loader2,
 } from 'lucide-react';
@@ -110,7 +103,7 @@ const EMPTY_PLAYBOOK = {
 };
 
 export default function CarePlaybooks() {
-  const { selectedTenantId } = useTenant();
+  const { selectedTenantId: _selectedTenantId } = useTenant();
   const [playbooks, setPlaybooks] = useState([]);
   const [executions, setExecutions] = useState([]);
   const [executionTotal, setExecutionTotal] = useState(0);
@@ -242,7 +235,7 @@ export default function CarePlaybooks() {
         toast({ title: `Playbook ${data.data.is_enabled ? 'enabled' : 'disabled'}` });
         await fetchPlaybooks();
       }
-    } catch (err) {
+    } catch {
       toast({ title: 'Error toggling playbook', variant: 'destructive' });
     }
   };
@@ -261,7 +254,7 @@ export default function CarePlaybooks() {
         toast({ title: 'Playbook deleted' });
         await fetchPlaybooks();
       }
-    } catch (err) {
+    } catch {
       toast({ title: 'Error deleting playbook', variant: 'destructive' });
     }
   };

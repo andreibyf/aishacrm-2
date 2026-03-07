@@ -27,7 +27,7 @@ export default function AccountFilters({
   setSortDirection,
   sortOptions,
   setCurrentPage,
-  employees,
+  employees: _employees,
   assignedToFilter,
   setAssignedToFilter,
   hasActiveFilters,

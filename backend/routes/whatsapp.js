@@ -57,10 +57,10 @@ const TOOL_SCHEMA_CACHE_TTL = 600_000; // 10 minutes
  */
 async function callAiSHA({
   tenantId,
-  conversationId,
+  conversationId: _conversationId,
   messages,
-  entityContext,
-  channel,
+  entityContext: _entityContext,
+  channel: _channel,
   senderPhone,
   employee = null,
 }) {

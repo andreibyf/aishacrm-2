@@ -16,7 +16,7 @@
  * 12. Claim button calls onChange with current user
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 
 // ─── Test Data ───────────────────────────────────────────────────────────────
 
@@ -52,7 +52,7 @@ vi.mock('@/hooks/useTeams', () => ({
 
 // Mock LazyEmployeeSelector as a simple select for testability
 vi.mock('@/components/shared/LazyEmployeeSelector', () => ({
-  default: ({ value, onValueChange, allowedIds, ...props }) => (
+  default: ({ value, onValueChange, allowedIds, ..._props }) => (
     <select
       data-testid="employee-selector"
       value={value}
@@ -88,7 +88,7 @@ vi.mock('@/components/ui/select', () => ({
       </select>
     </div>
   ),
-  SelectTrigger: ({ children, ...props }) => <>{children}</>,
+  SelectTrigger: ({ children, ..._props }) => <>{children}</>,
   SelectContent: ({ children }) => <>{children}</>,
   SelectItem: ({ value, children }) => <option value={value}>{children}</option>,
   SelectValue: ({ placeholder }) => (

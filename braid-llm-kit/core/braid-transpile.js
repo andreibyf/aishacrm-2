@@ -368,7 +368,7 @@ function emitIdent(node, ctx) {
   return node.name;
 }
 
-function emitTemplate(node, ctx) {
+function emitTemplate(node, _ctx) {
   // Emit as JS template literal
   const parts = node.parts || [];
   let s = '`';

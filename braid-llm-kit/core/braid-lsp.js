@@ -16,7 +16,7 @@ import {
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { parse } from './braid-parse.js';
-import { transpileToJS, detectUsedEffects, extractPolicies, VALID_POLICIES, IO_EFFECT_MAP, BRAID_TYPE_MAP } from './braid-transpile.js';
+import { detectUsedEffects, VALID_POLICIES } from './braid-transpile.js';
 import { typeCheck } from './braid-types.js';
 import { buildFileIndex, resolveImportPath } from './braid-scope.js';
 import fs from 'fs';
@@ -37,7 +37,7 @@ const scopeCache = new Map();
 // Debounce timers: uri → timeout ID
 const debounceTimers = new Map();
 
-connection.onInitialize((params) => {
+connection.onInitialize((_params) => {
   return {
     capabilities: {
       textDocumentSync: TextDocumentSyncKind.Incremental,
@@ -115,7 +115,7 @@ function validateDocument(doc) {
   // Build scope index for go-to-definition, find-all-references, rename
   try {
     buildScopeForDocument(uri, ast);
-  } catch (_e) {
+  } catch {
     // Scope indexer should never crash the LSP
   }
 
@@ -234,7 +234,7 @@ function validateDocument(doc) {
         code: d.code,
       });
     }
-  } catch (e) {
+  } catch {
     // Type checker should not crash the LSP
   }
 
@@ -430,7 +430,7 @@ function getKeywordHover(word) {
   return null;
 }
 
-function getIOHover(word, lineText, col) {
+function getIOHover(word, _lineText, _col) {
   const ioDocs = {
     http: '**IO namespace: http** (!net)\n\n- `http.get(url, opts)` — GET request\n- `http.post(url, opts)` — POST request\n- `http.put(url, opts)` — PUT request\n- `http.delete(url, opts)` — DELETE request\n\nRequires `!net` effect declaration.',
     clock: '**IO namespace: clock** (!clock)\n\n- `clock.now()` — Current timestamp\n- `clock.sleep(ms)` — Async delay\n\nRequires `!clock` effect declaration.',
@@ -987,7 +987,7 @@ function makeImportResolver(originUri, resolvingSet) {
       const importedIndex = buildFileIndex(importedAst, targetPath, null);
       scopeCache.set(targetPath, importedIndex);
       return importedIndex;
-    } catch (_e) {
+    } catch {
       return null; // file not found or parse error
     }
   };

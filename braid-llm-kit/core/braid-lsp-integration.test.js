@@ -2,10 +2,10 @@
 // Tests the actual LSP protocol handlers using a simulated client/server pair.
 "use strict";
 
-import { describe, it, before } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { parse } from './braid-parse.js';
-import { buildFileIndex, resolveImportPath } from './braid-scope.js';
+import { buildFileIndex } from './braid-scope.js';
 
 // ============================================================================
 // We can't easily spin up the full LSP server in a test (it needs stdin/stdout
@@ -236,7 +236,7 @@ describe('LSP Integration: cross-file', () => {
 type CRMError = { code: Number, message: String }`);
 
     // Index the consumer with import resolution
-    const resolver = (path, _uri) => lsp.scopeCache.get(URI_TYPES) || null;
+    const resolver = (_path, _uri) => lsp.scopeCache.get(URI_TYPES) || null;
     lsp.indexFile(URI_A, `import { Result, CRMError } from "../../spec/types.braid"
 fn test() -> Result { return Ok(1); }`, resolver);
 

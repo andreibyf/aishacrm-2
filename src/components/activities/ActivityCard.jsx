@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Calendar, Clock, MoreHorizontal, Edit, Trash2, Eye, CheckCircle, Phone, Mail, Users, FileText } from "lucide-react";
-import { format, isPast, isToday } from "date-fns";
+import { isPast, isToday } from "date-fns";
 import { formatActivityDateTime, getCurrentTimezoneOffset } from '../shared/timezoneUtils';
 import { useTimezone } from '../shared/TimezoneContext';
 

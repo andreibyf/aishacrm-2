@@ -93,7 +93,7 @@ export default function DeveloperAI() {
               } else if (event.type === 'done') {
                 // Stream complete
               }
-            } catch (parseErr) {
+            } catch {
               console.warn('Failed to parse SSE event:', line);
             }
           }

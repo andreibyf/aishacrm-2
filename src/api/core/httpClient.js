@@ -84,7 +84,7 @@ export const getAuthFetchOptions = async (extraHeaders = {}) => {
       if (session?.access_token) {
         options.headers['Authorization'] = `Bearer ${session.access_token}`;
       }
-    } catch (_err) {
+    } catch {
       // Continue without token — cookie auth as fallback
     }
   }

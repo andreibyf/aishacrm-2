@@ -4,7 +4,6 @@ import { validateTenantAccess } from '../middleware/validateTenant.js';
 import { cacheList } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 import cacheManager from '../lib/cacheManager.js';
-import { getVisibilityScope } from '../lib/teamVisibility.js';
 
 export default function createDashboardFunnelRoutes(_pgPool) {
   const router = express.Router();
@@ -98,7 +97,7 @@ export default function createDashboardFunnelRoutes(_pgPool) {
             return q.in('assigned_to', scopeEmployeeIds);
           };
 
-          const testFilter = (q) => {
+          const _testFilter = (q) => {
             if (!includeTestData) {
               return q.or('is_test_data.is.false,is_test_data.is.null');
             }

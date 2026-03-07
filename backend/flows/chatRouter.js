@@ -6,7 +6,6 @@
  */
 
 import { routerGuard } from '../middleware/routerGuard.js';
-import { continueGoalFlow } from './continueGoalFlow.js';
 import logger from '../lib/logger.js';
 
 /**
@@ -30,7 +29,7 @@ import logger from '../lib/logger.js';
  * @param {string} params.userText - User's message text
  * @returns {Promise<ChatRouterResult>}
  */
-export async function routeChat({ conversationId, tenantId, userText }) {
+export async function routeChat({ conversationId: _conversationId, tenantId: _tenantId, userText: _userText }) {
   try {
     // TEMP BYPASS: Disable goal routing for deployment - it's causing timeouts
     // TODO: Debug and re-enable goal flow routing after v4.2.1

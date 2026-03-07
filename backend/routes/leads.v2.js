@@ -1062,7 +1062,7 @@ export default function createLeadsV2Routes() {
 
       // ── Two-tier write access check ──
       // Fetch current record to check access level before allowing update
-      let currentRecord = null;
+      let _currentRecord = null;
       let previousAssignedTo = undefined;
 
       if (req.user) {
@@ -1072,7 +1072,7 @@ export default function createLeadsV2Routes() {
           .eq('id', id)
           .eq('tenant_id', tenant_id)
           .single();
-        currentRecord = current;
+        _currentRecord = current;
         previousAssignedTo = current?.assigned_to || null;
 
         const scope = await getVisibilityScope(req.user, supabase);

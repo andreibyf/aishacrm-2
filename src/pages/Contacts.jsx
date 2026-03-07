@@ -244,7 +244,7 @@ export default function ContactsPage() {
     setIsDetailOpen(true);
   };
 
-  const handleViewAccount = async (accountId, accountName) => {
+  const handleViewAccount = async (accountId, _accountName) => {
     try {
       const accountData = await Account.get(accountId);
       setViewingAccount(accountData);

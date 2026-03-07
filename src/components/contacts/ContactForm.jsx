@@ -28,7 +28,6 @@ import { logDev } from '@/utils/devLogger';
 // New imports for duplicate detection
 import { checkDuplicateBeforeCreate } from '@/api/functions';
 import { useApiManager } from '../shared/ApiManager';
-import LazyEmployeeSelector from '../shared/LazyEmployeeSelector';
 import AssignmentField from '../shared/AssignmentField';
 import { DenormalizationHelper } from '../shared/DenormalizationHelper';
 import { useStatusCardPreferences } from '@/hooks/useStatusCardPreferences';

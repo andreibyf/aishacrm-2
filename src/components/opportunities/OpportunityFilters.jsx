@@ -29,7 +29,7 @@ export default function OpportunityFilters({
   setSortField,
   setSortDirection,
   sortOptions,
-  employees,
+  employees: _employees,
   assignedToFilter,
   setAssignedToFilter,
   hasActiveFilters,

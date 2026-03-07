@@ -67,7 +67,7 @@ function extractParamOrders() {
 
 function generateJSBlock(paramOrder) {
   const lines = [];
-  let currentFile = null;
+  let _currentFile = null;
 
   // Group by file
   const byFile = {};

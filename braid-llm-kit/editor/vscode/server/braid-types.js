@@ -573,7 +573,7 @@ function inferUnary(node, env, diagnostics) {
 }
 
 function inferPipe(node, env, diagnostics) {
-  const inputType = inferExpr(node.left, env, diagnostics);
+  const _inputType = inferExpr(node.left, env, diagnostics);
   const fnType = inferExpr(node.right, env, diagnostics);
   if (fnType.kind === 'function') return fnType.ret;
   return T_UNKNOWN;

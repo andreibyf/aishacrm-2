@@ -232,7 +232,6 @@ describe('CustomQuery — Phase 4 Saved Reports', () => {
     });
 
     // Confirm POST body includes the right fields
-    const callArgs = JSON.parse(postSpy.mock.calls[0][1]?.body || '{}');
     // Note: postSpy is called as fetch(url, opts), so body is in opts
     const fetchCall = globalThis.fetch.mock.calls.find(
       ([url, opts]) => url.includes('saved-reports') && opts?.method === 'POST',

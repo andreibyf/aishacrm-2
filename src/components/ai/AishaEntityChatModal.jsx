@@ -19,7 +19,7 @@ export default function AishaEntityChatModal({
   onClose,
   entityType,
   entityId,
-  entityLabel,
+  entityLabel: _entityLabel,
   relatedData = {}, // { profile, opportunities, activities, notes }
   tenantId: tenantIdProp = null, // Optional: explicit tenant ID when outside TenantProvider
 }) {

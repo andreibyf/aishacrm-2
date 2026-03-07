@@ -109,7 +109,7 @@ export default function WebhookSettings() {
     }
   };
 
-  const getAppId = () => {
+  const _getAppId = () => {
     return import.meta.env.VITE_APP_ID || 'YOUR_APP_ID';
   };
 

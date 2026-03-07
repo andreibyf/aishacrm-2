@@ -1,7 +1,7 @@
 // braid-rt.test.js - Runtime tests (cap, IO, tenant isolation, policies)
 // Run with: node --test braid-llm-kit/tools/__tests__/braid-rt.test.js
 
-import { Ok, Err, cap, IO, CRM_POLICIES, canAccessField, filterSensitiveFields, getAuditLog, clearAuditLog, checkType, CRMError } from '../braid-rt.js';
+import { Ok, Err, cap, IO, CRM_POLICIES, canAccessField, getAuditLog, clearAuditLog, checkType, CRMError } from '../braid-rt.js';
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
 

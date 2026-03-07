@@ -49,7 +49,6 @@ import {
 } from '../lib/intentClassifier.js';
 import {
   routeIntentToTool,
-  getToolsForIntent,
   shouldForceToolChoice,
   getRelevantToolsForIntent,
 } from '../lib/intentRouter.js';
@@ -69,13 +68,11 @@ import {
 // Token Budget Manager
 import {
   applyBudgetCaps,
-  buildBudgetReport,
   enforceToolSchemaCap,
   logBudgetSummary,
-  estimateTokens,
 } from '../lib/tokenBudget.js';
 // AI Settings (configurable via Settings UI)
-import { loadAiSettings, getAiSetting } from '../lib/aiSettingsLoader.js';
+import { loadAiSettings } from '../lib/aiSettingsLoader.js';
 // Anthropic adapter for Claude tool calling
 import { createAnthropicClientWrapper } from '../lib/aiEngine/anthropicAdapter.js';
 import { fetchUserTeamContext as _fetchUserTeamContext } from '../lib/aiTeamContext.js';
@@ -695,7 +692,7 @@ export default function createAIRoutes(pgPool) {
               }
             }
           }
-        } catch (err) {
+        } catch (_err) {
           // Ignore parsing errors - not all results will be JSON
         }
       }
@@ -3051,7 +3048,7 @@ ${toolContextSummary}`,
                 insertedUserMsg?.id,
               );
             }
-          } catch (insertErr) {
+          } catch (_err) {
             logger.warn('[AI Chat] Failed to persist user message (catch)');
           }
         }
@@ -3895,7 +3892,7 @@ ${conversationSummary}`;
       }
 
       // Remove internal-only fields from tool interactions before returning to client
-      const safeToolInteractions = toolInteractions.map(({ full_result, ...rest }) => rest);
+      const safeToolInteractions = toolInteractions.map(({ full_result: _full_result, ...rest }) => rest);
 
       // CRITICAL: Extract UI actions from tool results for frontend event dispatch
       // This enables navigation, form opening, and other UI side effects
@@ -4757,7 +4754,7 @@ ${conversationSummary}`;
       const heartbeat = setInterval(() => {
         try {
           res.write(`: heartbeat\n\n`);
-        } catch (err) {
+        } catch (_err) {
           clearInterval(heartbeat);
         }
       }, 10000);

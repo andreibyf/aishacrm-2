@@ -161,7 +161,7 @@ function emitFnDecl(decl, ctx) {
   return `${annotations ? annotations + '\n' : ''}${asyncKw}def ${decl.name}(${params.join(', ')})${retType}:\n${prolog}${body}\n`;
 }
 
-function emitTypeDecl(decl, ctx) {
+function emitTypeDecl(decl, _ctx) {
   // Emit as Python dataclass
   const lines = [];
   for (const v of decl.variants) {
@@ -183,7 +183,7 @@ function emitTypeDecl(decl, ctx) {
   return lines.join('\n');
 }
 
-function emitImportDecl(decl, ctx) {
+function emitImportDecl(decl, _ctx) {
   if (decl.path.endsWith('.braid')) {
     return `# Type-only import from ${decl.path} (skipped in Python)`;
   }
@@ -340,7 +340,7 @@ function emitIfInstr(instr, ctx, depth) {
 // REFERENCES
 // ============================================================================
 
-function emitRef(ref, ctx) {
+function emitRef(ref, _ctx) {
   if (!ref) return 'None';
   switch (ref.ref) {
     case 'literal': {

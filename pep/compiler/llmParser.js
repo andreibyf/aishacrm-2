@@ -140,7 +140,7 @@ export async function parseLLM(englishSource, catalogs, systemPrompt = null) {
     let parsed;
     try {
       parsed = JSON.parse(content);
-    } catch (_jsonErr) {
+    } catch {
       return {
         match: false,
         reason: `LLM returned invalid JSON: ${content.slice(0, 100)}`,

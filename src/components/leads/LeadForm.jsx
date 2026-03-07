@@ -79,7 +79,7 @@ export default function LeadForm({
   onSubmit,
   onCancel,
   user,
-  employees = [], // Legacy prop — kept for backward compat, no longer used directly
+  employees: _employees = [], // Legacy prop — kept for backward compat, no longer used directly
   isManager,
 }) {
   // Unified contract: support both new and legacy prop names

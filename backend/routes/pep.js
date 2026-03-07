@@ -168,7 +168,7 @@ function resolveDateToken(token) {
   return null; // unresolvable token
 }
 
-function resolveFilterValue(value, tenantId, supabase) {
+function resolveFilterValue(value, _tenantId, _supabase) {
   if (typeof value !== 'string') return { resolved: true, value };
 
   // Date token — use indexOf instead of regex with \s* to avoid ReDoS on user input
@@ -450,7 +450,7 @@ export default function createPepRoutes(_pgPool, _supabaseOverride = null) {
       const limit = Math.min(Math.max(1, Number(ir.limit) || 100), 500);
       query = query.limit(limit);
 
-      const { data, error, count } = await query;
+      const { data, error, count: _count } = await query;
 
       if (error) {
         logger.warn({ err: error, target: ir.target }, '[PEP] Query execution error');

@@ -19,13 +19,13 @@ const __dirname = path.dirname(__filename);
 async function checkTablesExist(supabase) {
   try {
     // Check if ai_memory_chunks table exists
-    const { data: memoryChunks, error: memoryErr } = await supabase
+    const { data: _memoryChunks, error: memoryErr } = await supabase
       .from('ai_memory_chunks')
       .select('id')
       .limit(1);
 
     // Check if ai_conversation_summaries table exists
-    const { data: summaries, error: summaryErr } = await supabase
+    const { data: _summaries, error: summaryErr } = await supabase
       .from('ai_conversation_summaries')
       .select('id')
       .limit(1);

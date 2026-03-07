@@ -64,7 +64,7 @@ export default function OpportunityForm({
   const [filteredContacts, setFilteredContacts] = useState([]);
   const [leads, setLeads] = useState(Array.isArray(propLeads) ? propLeads : []);
   const [filteredLeads, setFilteredLeads] = useState([]);
-  const [employees, setEmployees] = useState([]);
+  const [_employees, setEmployees] = useState([]);
 
   const [showCreateAccount, setShowCreateAccount] = useState(false);
   const [showLinkContact, setShowLinkContact] = useState(false);

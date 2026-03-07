@@ -63,7 +63,7 @@ export default function ReportsPage() {
   const [loadingStats, setLoadingStats] = useState(false);
   const [stats, setStats] = useState(null);
   const { selectedTenantId } = useTenant();
-  const { getFilter, canViewAllRecords, selectedTeamId, selectedEmail, membersByTeam } =
+  const { getFilter, canViewAllRecords, selectedTeamId, selectedEmail, membersByTeam: _membersByTeam } =
     useEmployeeScope();
   const [isExporting, setIsExporting] = useState(false);
   const { cachedRequest } = useApiManager();

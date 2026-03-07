@@ -412,7 +412,7 @@ const VALID_OPERATORS = new Set([
   'is_not_null',
 ]);
 
-const DATE_TOKENS = new Set([
+const _DATE_TOKENS = new Set([
   'today',
   'start_of_month',
   'end_of_month',
@@ -420,14 +420,6 @@ const DATE_TOKENS = new Set([
   'end_of_quarter',
   'start_of_year',
 ]);
-
-// last_N_days is a pattern token, checked separately
-function isValidDateToken(value) {
-  if (typeof value !== 'string') return false;
-  if (DATE_TOKENS.has(value)) return true;
-  if (/^last_\d+_days$/.test(value)) return true;
-  return false;
-}
 
 /**
  * Find a queryable entity or view by name (case-insensitive).

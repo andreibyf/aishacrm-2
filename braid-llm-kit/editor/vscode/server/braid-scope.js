@@ -123,13 +123,13 @@ export function buildFileIndex(ast, uri, resolveImportFn = null) {
 // PASS 1: REGISTRATION
 // ============================================================================
 
-function registerFn(fn, scope, index, uri) {
+function registerFn(fn, scope, index, _uri) {
   const range = posToRange(fn.namePos || fn.pos, fn.name);
   const sym = scope.define(fn.name, 'function', range);
   index.definitions.push(sym);
 }
 
-function registerType(td, scope, index, uri) {
+function registerType(td, scope, index, _uri) {
   const range = posToRange(td.namePos || td.pos, td.name);
   const sym = scope.define(td.name, 'type', range);
   index.definitions.push(sym);
@@ -138,7 +138,7 @@ function registerType(td, scope, index, uri) {
 function registerImport(imp, scope, index, uri, resolveImportFn) {
   let importedIndex = null;
   if (resolveImportFn) {
-    try { importedIndex = resolveImportFn(imp.path, uri); } catch (_e) { /* degrade gracefully */ }
+    try { importedIndex = resolveImportFn(imp.path, uri); } catch { /* degrade gracefully */ }
   }
 
   const resolved = !!importedIndex;

@@ -14,7 +14,7 @@ import { toast } from 'sonner';
  * This is preserved from the original to maintain existing behavior.
  */
 export function useActivitiesBulkOps({
-  activities,
+  activities: _activities,
   selectedActivities,
   setSelectedActivities,
   selectAllMode,

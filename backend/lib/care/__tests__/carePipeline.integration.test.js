@@ -14,11 +14,11 @@ import { describe, test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 // ---- Pure modules (no external deps) ----
-import { proposeTransition, validateCareState, validateEntityType } from '../careStateEngine.js';
+import { proposeTransition } from '../careStateEngine.js';
 import { detectEscalation } from '../careEscalationDetector.js';
 import { evaluateCarePolicy, CarePolicyGateResult } from '../carePolicyGate.js';
-import { enrichSignals, calculateSilenceDays, SIGNAL_THRESHOLDS } from '../careSignals.js';
-import { VALID_CARE_STATES, VALID_ENTITY_TYPES, VALID_SIGNAL_ENTITY_TYPES } from '../careTypes.js';
+import { enrichSignals } from '../careSignals.js';
+import { VALID_ENTITY_TYPES, VALID_SIGNAL_ENTITY_TYPES } from '../careTypes.js';
 import { ESCALATION_REASONS, CONFIDENCE_LEVELS } from '../careEscalationTypes.js';
 import { createAuditEvent, CareAuditEventType, CarePolicyGateResult as AuditGateResult } from '../careAuditTypes.js';
 

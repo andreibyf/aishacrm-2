@@ -1,11 +1,10 @@
 // braid-scope.test.js — Tests for the Braid scope indexer
-/* global process */
 "use strict";
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { parse } from './braid-parse.js';
-import { buildFileIndex, resolveImportPath, Symbol, Scope, FileIndex, containsPosition, posToRange, BUILTINS } from './braid-scope.js';
+import { buildFileIndex, resolveImportPath, containsPosition, BUILTINS } from './braid-scope.js';
 
 console.log('Braid scope indexer tests loaded');
 
@@ -276,7 +275,7 @@ describe('Import resolution', () => {
 
   it('import with resolver links to origin symbol', () => {
     const depSrc = 'type MyType = Foo | Bar';
-    const resolver = (path, _uri) => {
+    const resolver = (_path, _uri) => {
       const depAst = parse(depSrc, 'dep.braid');
       return buildFileIndex(depAst, 'dep.braid');
     };

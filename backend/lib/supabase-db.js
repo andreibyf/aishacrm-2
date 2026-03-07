@@ -504,7 +504,7 @@ async function handleUpdateQuery(sql, params) {
   // Robust extraction of table, SET, WHERE allowing newlines
   let updMatch = sql.match(/update\s+([a-z_][a-z0-9_]*)\s+set\s+([\s\S]*?)\s+where\s+([\s\S]*)/i);
   let table, setPart, wherePart;
-  let fallbackUsed = null;
+  let _fallbackUsed = null;
 
   if (!updMatch) {
     // Fallback attempt: collapse whitespace and retry (some environments may introduce \r or unusual spacing)
@@ -514,7 +514,7 @@ async function handleUpdateQuery(sql, params) {
       .trim();
     updMatch = collapsed.match(/update\s+([a-z_][a-z0-9_]*)\s+set\s+(.+?)\s+where\s+(.+)/i);
     if (updMatch) {
-      fallbackUsed = 'whitespace-collapse';
+      _fallbackUsed = 'whitespace-collapse';
       table = updMatch[1];
       setPart = updMatch[2].trim();
       wherePart = updMatch[3].trim();
@@ -525,7 +525,7 @@ async function handleUpdateQuery(sql, params) {
       const setIdx = lower.indexOf(' set ');
       const whereIdx = lower.indexOf(' where ');
       if (uIdx !== -1 && setIdx !== -1 && whereIdx !== -1 && setIdx > uIdx && whereIdx > setIdx) {
-        fallbackUsed = 'index-slice';
+        _fallbackUsed = 'index-slice';
         table = sql
           .slice(uIdx + 7, setIdx)
           .trim()

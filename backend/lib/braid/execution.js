@@ -13,7 +13,6 @@ import {
   createBackendDeps,
   filterSensitiveFields,
   validateToolArgs,
-  isValidUUID,
 } from './utils.js';
 import { objectToPositionalArgs, normalizeToolArgs } from './analysis.js';
 import cacheManager from '../cacheManager.js';
@@ -182,7 +181,7 @@ export async function executeBraidTool(
 
       // Increment the counter (TTL of 60 seconds for per-minute limiting)
       await cacheManager.set(rateLimitKey, currentCount + 1, 60);
-    } catch (rateLimitErr) {
+    } catch (_err) {
       // Don't block on rate limit errors, just log (redacted per CodeQL #330)
       console.warn('[Braid Security] Rate limit check failed');
     }

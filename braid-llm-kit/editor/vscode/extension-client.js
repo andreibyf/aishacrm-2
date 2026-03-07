@@ -3,7 +3,7 @@
 "use strict";
 
 const path = require('path');
-const { workspace, ExtensionContext } = require('vscode');
+const { workspace } = require('vscode');
 const { LanguageClient, TransportKind } = require('vscode-languageclient/node');
 
 let client;

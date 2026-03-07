@@ -93,7 +93,7 @@ export default function OverviewStats({ tenantFilter }) {
             Opportunity.filter(effectiveFilter),
             Account.filter(effectiveFilter),
           ]);
-        } catch (err) {
+        } catch {
           leadsResult = [];
           opportunitiesResult = [];
           accountsResult = [];

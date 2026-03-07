@@ -34,7 +34,7 @@ export function useActivitiesData({
   activitiesLabel,
   cachedRequest,
   clearCache,
-  clearCacheByKey,
+  clearCacheByKey: _clearCacheByKey,
   setCurrentPage,
 }) {
   // State
@@ -340,7 +340,7 @@ export function useActivitiesData({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [setCurrentPage]);
 
-  const handlePageSizeChange = useCallback((newSize) => {
+  const handlePageSizeChange = useCallback((_newSize) => {
     setCurrentPage(1);
   }, [setCurrentPage]);
 

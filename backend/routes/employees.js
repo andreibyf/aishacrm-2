@@ -436,7 +436,7 @@ export default function createEmployeeRoutes(_pgPool) {
             logger.debug(`[EmployeeRoutes] Auth user already exists for ${email}, skipping invite`);
             invitation_sent = true; // Already has auth access
           } else {
-            const { user: authUser, error: authError } = await inviteUserByEmail(email, {
+            const { user: _authUser, error: authError } = await inviteUserByEmail(email, {
               first_name,
               last_name,
               role: crmRole,
@@ -707,7 +707,7 @@ export default function createEmployeeRoutes(_pgPool) {
             );
             invitation_sent = true;
           } else {
-            const { user: authUser, error: authError } = await inviteUserByEmail(employeeEmail, {
+            const { user: _authUser, error: authError } = await inviteUserByEmail(employeeEmail, {
               first_name: data.first_name,
               last_name: data.last_name,
               role: crmRole,

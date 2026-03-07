@@ -26,7 +26,7 @@ export default function ActivityFilters({
   setSortField,
   setSortDirection,
   sortOptions,
-  employees,
+  employees: _employees,
   assignedToFilter,
   setAssignedToFilter,
   hasActiveFilters,

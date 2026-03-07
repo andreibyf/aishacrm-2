@@ -392,7 +392,7 @@ export function useAccountsData({
   );
 
   const handlePageSizeChange = useCallback(
-    (newSize) => {
+    (_newSize) => {
       setCurrentPage(1);
     },
     [setCurrentPage],

@@ -33,7 +33,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   process.exit(1);
 }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+const _supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
@@ -72,7 +72,7 @@ async function run() {
     console.log(`⏳ ${stmt.desc}...`);
 
     // Try via /rest/v1/ raw SQL endpoint (some Supabase versions support this)
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/`, {
+    const _response = await fetch(`${SUPABASE_URL}/rest/v1/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -1,5 +1,5 @@
 import { logDev } from '@/utils/devLogger';
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Opportunity } from '@/api/entities';
 import { useApiManager } from '../components/shared/ApiManager';
 import OpportunityCard from '../components/opportunities/OpportunityCard';

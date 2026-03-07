@@ -20,7 +20,7 @@ export default function ContactFilters({
   setSearchTerm,
   selectedTags,
   setSelectedTags,
-  employees,
+  employees: _employees,
   assignedToFilter,
   setAssignedToFilter,
   sortField,

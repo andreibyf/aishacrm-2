@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button'; // Button is no longer used in the Alert but might be elsewhere or kept for future expansion. Let's remove it if not used.
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { TrendingUp, Loader2, ExternalLink } from 'lucide-react'; // ExternalLink is no longer used, Info replaced by TrendingUp.
+import { TrendingUp, Loader2 } from 'lucide-react';
 
 export default function IntegrationUsageMonitor() {
   const [loading, setLoading] = useState(true);

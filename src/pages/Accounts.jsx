@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Account } from '@/api/entities';
 import { useUser } from '@/components/shared/useUser.js';
 import { useApiManager } from '../components/shared/ApiManager';
@@ -320,7 +320,7 @@ export default function AccountsPage() {
               </DialogHeader>
               <AccountForm
                 account={editingAccount}
-                onSubmit={async (result) => {
+                onSubmit={async (_result) => {
                   await handleSave();
                 }}
                 onCancel={() => {

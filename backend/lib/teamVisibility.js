@@ -218,7 +218,7 @@ export async function getVisibilityScope(user, supabase) {
     const teamRoles = memberships.map((m) => m.role);
     const isDirector = teamRoles.includes('director');
     const isManager = teamRoles.includes('manager');
-    const isMemberOnly = !isDirector && !isManager;
+    const _isMemberOnly = !isDirector && !isManager;
     const highestRole = isDirector ? 'director' : isManager ? 'manager' : 'member';
 
     // ── Determine which teams the user has FULL R/W access to ──

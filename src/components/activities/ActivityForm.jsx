@@ -6,7 +6,6 @@ import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
 import { Note } from '@/api/entities'; // NEW: Import Note entity
 import { useTimezone } from '../shared/TimezoneContext';
 import { localToUtc, utcToLocal, getCurrentTimezoneOffset } from '../shared/timezoneUtils';
-import EmployeeSelector from '../shared/EmployeeSelector';
 import AssignmentField from '../shared/AssignmentField';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

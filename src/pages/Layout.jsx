@@ -4,7 +4,6 @@ import {
   isSuperAdmin,
   isAdminOrSuperAdmin,
   hasPageAccess,
-  getDefaultNavigationPermissions,
 } from '@/utils/permissions';
 import SidebarContent from '@/components/layout/SidebarContent';
 import { useBranding } from '@/hooks/useBranding';
@@ -17,20 +16,14 @@ import PasswordChangeModal from '@/components/auth/PasswordChangeModal';
 import EnvironmentBanner from '@/components/shared/EnvironmentBanner';
 import { getBackendUrl } from '@/api/backendUrl';
 import {
-  DndContext,
-  closestCenter,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
 import {
-  arrayMove,
-  SortableContext,
   sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { SortableNavItem } from '@/components/shared/SortableNavItem';
 import { usePrimaryNavOrder, useSecondaryNavOrder } from '@/hooks/useNavOrder';
 import { EntityLabelsProvider } from '@/components/shared/EntityLabelsContext';
 import { useEntityLabels } from '@/components/shared/entityLabelsHooks';
@@ -47,7 +40,6 @@ import {
   DollarSign,
   FileText,
   FolderOpen,
-  GripVertical,
   Kanban, // Project Management
   LayoutDashboard,
   Loader2,
@@ -56,7 +48,6 @@ import {
   Menu,
   Moon,
   Plug, // NEW: Added for Integrations
-  RotateCcw,
   Settings,
   Sun,
   Target, // Changed Leads icon to Target
@@ -90,7 +81,6 @@ import { ApiProvider, useApiManager } from '../components/shared/ApiManager';
 import { TimezoneProvider } from '../components/shared/TimezoneContext';
 import TenantSwitcher from '../components/shared/TenantSwitcher';
 import SystemStatusIndicator from '../components/shared/SystemStatusIndicator';
-import Clock from '../components/shared/Clock';
 import { useUser } from '@/components/shared/useUser.js';
 import RouteGuard from '../components/shared/RouteGuard';
 import { getOrCreateUserApiKey } from '@/api/functions';

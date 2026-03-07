@@ -36,12 +36,12 @@ async function applyMigration() {
 
     // Check if tables already exist
     console.log('\n🔍 Checking if tables exist...');
-    const { data: existingProjects, error: checkProjectsErr } = await supabase
+    const { data: _existingProjects, error: checkProjectsErr } = await supabase
       .from('construction_projects')
       .select('id')
       .limit(1);
 
-    const { data: existingAssignments, error: checkAssignmentsErr } = await supabase
+    const { data: _existingAssignments, error: checkAssignmentsErr } = await supabase
       .from('construction_assignments')
       .select('id')
       .limit(1);
@@ -123,12 +123,12 @@ async function applyMigration() {
 
     // Verify tables exist
     console.log('\n🔍 Verifying tables...');
-    const { data: verifyProjects, error: verifyProjErr } = await supabase
+    const { data: _verifyProjects, error: verifyProjErr } = await supabase
       .from('construction_projects')
       .select('count')
       .limit(1);
 
-    const { data: verifyAssignments, error: verifyAssignErr } = await supabase
+    const { data: _verifyAssignments, error: verifyAssignErr } = await supabase
       .from('construction_assignments')
       .select('count')
       .limit(1);

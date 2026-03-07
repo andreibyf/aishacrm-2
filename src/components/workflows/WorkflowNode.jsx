@@ -68,7 +68,7 @@ const nodeColors = {
 };
 
 // Reusable connection point component with larger hit area and hover visibility
-function ConnectionPoint({ position, onStartConnect, connectMode, direction }) {
+function ConnectionPoint({ position, onStartConnect, connectMode, direction: _direction }) {
   const positionClasses = {
     top: 'top-0 left-1/2 -translate-x-1/2 -translate-y-1/2',
     bottom: 'bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2',

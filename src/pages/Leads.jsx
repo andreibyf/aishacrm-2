@@ -512,8 +512,8 @@ export default function LeadsPage() {
     sortDirection,
   ]);
 
-  // Matching the stat card colors - semi-transparent backgrounds
-  const statusColors = {
+  // Matching the stat card colors - semi-transparent backgrounds (reserved for future use)
+  const _statusColors = {
     new: 'bg-blue-900/20 text-blue-300 border-blue-700',
     contacted: 'bg-indigo-900/20 text-indigo-300 border-indigo-700',
     qualified: 'bg-emerald-900/20 text-emerald-300 border-emerald-700',

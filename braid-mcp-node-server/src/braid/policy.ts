@@ -1,4 +1,4 @@
-import { BraidAction, BraidActionResult, BraidVerb } from "./types";
+import { BraidAction, BraidActionResult } from "./types";
 import { BraidAdapterContext } from "./index";
 
 export interface BraidPolicy {
@@ -70,7 +70,7 @@ const POLICY_REQUIRED_ROLES: Record<string, string[]> = {
 };
 
 /** Rate limits per policy (requests per minute). */
-const POLICY_RATE_LIMITS: Record<string, number> = {
+const _POLICY_RATE_LIMITS: Record<string, number> = {
   READ_ONLY:         120,
   WRITE_OPERATIONS:  30,
   DELETE_OPERATIONS: 10,

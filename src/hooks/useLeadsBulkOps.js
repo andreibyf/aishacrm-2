@@ -43,7 +43,7 @@ import { toast } from 'sonner';
  * @returns {Object} Bulk operation handlers
  */
 export function useLeadsBulkOps({
-  leads,
+  leads: _leads,
   selectedLeads,
   setSelectedLeads,
   selectAllMode,
