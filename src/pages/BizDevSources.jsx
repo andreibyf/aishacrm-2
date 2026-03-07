@@ -79,7 +79,7 @@ export default function BizDevSourcesPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [licenseStatusFilter, setLicenseStatusFilter] = useState('all');
   const [assignedToFilter, setAssignedToFilter] = useState('all');
-  const [employeesList, setEmployees] = useState([]);
+  const [, setEmployees] = useState([]);
   const [batchFilter, setBatchFilter] = useState('all');
   const [sourceFilter, setSourceFilter] = useState('all');
   const [sortField, setSortField] = useState('created_at');
@@ -1274,7 +1274,8 @@ export default function BizDevSourcesPage() {
                   Assign {selectedSources.length} Source(s)
                 </AlertDialogTitle>
                 <AlertDialogDescription className="text-slate-400">
-                  Select an employee to assign the selected sources to, or leave empty to unassign.
+                  Select an employee to assign the selected sources to, or choose
+                  &quot;Unassign&quot; to remove assignment.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <div className="py-4">

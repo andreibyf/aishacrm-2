@@ -60,17 +60,21 @@ export async function bulkAssign({
     }
   }
 
+  // Require authenticated user — fail closed
+  if (!user || !user.id) {
+    result.errors.push('Authenticated user is required for bulk assignment');
+    return result;
+  }
+
   // Visibility scope for write checks
   let scope = null;
-  if (user) {
-    try {
-      scope = await getVisibilityScope(user, supabase);
-    } catch (err) {
-      logger.warn(`[Bulk Assign ${entityLabel}] Visibility scope error:`, err.message);
-      if (user.user_role !== 'admin' && user.user_role !== 'superadmin') {
-        result.errors.push('Unable to verify write access');
-        return result;
-      }
+  try {
+    scope = await getVisibilityScope(user, supabase);
+  } catch (err) {
+    logger.warn(`[Bulk Assign ${entityLabel}] Visibility scope error:`, err.message);
+    if (user.role !== 'admin' && user.role !== 'superadmin') {
+      result.errors.push('Unable to verify write access');
+      return result;
     }
   }
 
@@ -154,19 +158,25 @@ export async function bulkAssign({
   }
   result.updated = updated?.length || 0;
 
-  // Assignment history (best-effort)
+  // Assignment history (best-effort) — match existing schema columns
+  const TABLE_TO_ENTITY = {
+    leads: 'lead',
+    contacts: 'contact',
+    accounts: 'account',
+    bizdev_sources: 'bizdevsource',
+  };
   try {
     const historyRows = writableIds.map((recordId) => {
       const prev = records.find((r) => r.id === recordId);
+      const action = !assigned_to ? 'unassign' : !prev?.assigned_to ? 'assign' : 'reassign';
       return {
         tenant_id,
-        entity_type: table,
+        entity_type: TABLE_TO_ENTITY[table] || table,
         entity_id: recordId,
-        previous_assigned_to: prev?.assigned_to || null,
-        new_assigned_to: assigned_to || null,
-        changed_by: user?.id || user?.employee_id || null,
-        changed_at: new Date().toISOString(),
-        change_source: 'bulk_assign',
+        assigned_from: prev?.assigned_to || null,
+        assigned_to: assigned_to || null,
+        assigned_by: user?.id || null,
+        action,
       };
     });
     const { error: histErr } = await supabase.from('assignment_history').insert(historyRows);
@@ -176,7 +186,13 @@ export async function bulkAssign({
     logger.warn(`[Bulk Assign ${entityLabel}] History error:`, e.message);
   }
 
-  invalidateTenantCache(tenant_id, table).catch(() => {});
+  const CACHE_MODULE = {
+    leads: 'leads',
+    contacts: 'contacts',
+    accounts: 'accounts',
+    bizdev_sources: 'bizdevsources',
+  };
+  invalidateTenantCache(tenant_id, CACHE_MODULE[table] || table).catch(() => {});
   logger.info(`[Bulk Assign ${entityLabel}] Updated ${result.updated}, skipped ${result.skipped}`);
   return result;
 }

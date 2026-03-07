@@ -478,7 +478,11 @@ export function useLeadsBulkOps({
           }
         }
         // Bulk assign via single endpoint per chunk
-        const tenantId = getTenantFilter().tenant_id || user.tenant_id;
+        const tenantId = getTenantFilter().tenant_id || user?.tenant_id;
+        if (!tenantId) {
+          toast.error('Unable to determine your workspace. Please reload the page and try again.');
+          return;
+        }
 
         // Check for team mismatch on select-all records
         let overrideTeam = false;
@@ -536,7 +540,11 @@ export function useLeadsBulkOps({
       }
 
       try {
-        const tenantId = getTenantFilter().tenant_id || user.tenant_id;
+        const tenantId = getTenantFilter().tenant_id || user?.tenant_id;
+        if (!tenantId) {
+          toast.error('Unable to determine your workspace. Please reload the page and try again.');
+          return;
+        }
         const ids = [...selectedLeads];
 
         // Check for team mismatch — do any selected leads belong to a different team?

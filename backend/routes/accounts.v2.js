@@ -836,14 +836,27 @@ export default function createAccountV2Routes(_pgPool) {
   // POST /bulk-assign - Bulk assign accounts to an employee
   router.post('/bulk-assign', invalidateCache('accounts'), async (req, res) => {
     try {
+      if (!req.user) {
+        return res.status(401).json({ status: 'error', message: 'Authentication required' });
+      }
+      const requestTenantId = req.tenant?.id;
+      if (!requestTenantId) {
+        return res.status(400).json({ status: 'error', message: 'Tenant context is missing' });
+      }
       const { ids, assigned_to, tenant_id, override_team } = req.body || {};
+      if (tenant_id && tenant_id !== requestTenantId) {
+        return res
+          .status(403)
+          .json({ status: 'error', message: 'tenant_id does not match authenticated tenant' });
+      }
+      const effectiveTenantId = tenant_id || requestTenantId;
       const result = await bulkAssign({
         table: 'accounts',
         entityLabel: 'Account',
         ids,
         assigned_to: assigned_to ?? null,
         override_team: !!override_team,
-        tenant_id,
+        tenant_id: effectiveTenantId,
         user: req.user,
       });
       if (result.errors.length > 0 && result.updated === 0)

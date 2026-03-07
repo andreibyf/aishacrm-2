@@ -13,7 +13,7 @@
 
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { getAuthHeaders, authPost, authGet, authDelete } from '../helpers/auth.js';
+import { authPost, authGet, authDelete } from '../helpers/auth.js';
 import { TestFactory } from '../helpers/test-entity-factory.js';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
