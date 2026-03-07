@@ -622,6 +622,23 @@ export default function createOpportunityV2Routes(_pgPool) {
         return expanded;
       });
 
+      // Compute inline stats from the full result set (count comes from Supabase exact count)
+      const stats = {
+        total: count || 0,
+        prospecting: 0,
+        qualification: 0,
+        proposal: 0,
+        negotiation: 0,
+        closed_won: 0,
+        closed_lost: 0,
+      };
+      for (const opp of opportunities) {
+        const stageKey = opp.stage;
+        if (stageKey && Object.prototype.hasOwnProperty.call(stats, stageKey)) {
+          stats[stageKey]++;
+        }
+      }
+
       res.json({
         status: 'success',
         data: {
@@ -629,6 +646,7 @@ export default function createOpportunityV2Routes(_pgPool) {
           total: count || 0,
           limit,
           offset,
+          stats,
         },
       });
     } catch (error) {
