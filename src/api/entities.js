@@ -23,8 +23,7 @@ export { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { createEntity } from './core/createEntity';
 
 // --- Simple entities (one-liner createEntity calls) ---
-export const Contact = createEntity('Contact');
-export const Account = createEntity('Account');
+// Contact and Account moved to entityOverrides for bulkAssign support
 export const Customer = createEntity('Customer');
 export const Note = createEntity('Note');
 export const Notification = createEntity('Notification');
@@ -85,6 +84,8 @@ CronJob.runNow = async (id) => {
 
 // --- Complex entity overrides ---
 export { Lead } from './entityOverrides/lead';
+export { Contact } from './entityOverrides/contact';
+export { Account } from './entityOverrides/account';
 export { Opportunity } from './entityOverrides/opportunity';
 export { Activity } from './entityOverrides/activity';
 export { Tenant } from './entityOverrides/tenant';

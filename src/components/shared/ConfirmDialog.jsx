@@ -14,10 +14,10 @@ import { AlertTriangle } from 'lucide-react';
 
 /**
  * Reusable confirmation dialog component
- * 
+ *
  * Usage:
  * const [confirmDialog, setConfirmDialog] = useState(null);
- * 
+ *
  * <ConfirmDialog
  *   open={confirmDialog !== null}
  *   onConfirm={() => { confirmDialog?.onConfirm(); setConfirmDialog(null); }}
@@ -26,7 +26,7 @@ import { AlertTriangle } from 'lucide-react';
  *   description={confirmDialog?.description}
  *   variant={confirmDialog?.variant}
  * />
- * 
+ *
  * // To show dialog:
  * setConfirmDialog({
  *   title: "Delete Item?",
@@ -39,33 +39,38 @@ export default function ConfirmDialog({
   open,
   onConfirm,
   onCancel,
-  title = "Are you sure?",
-  description = "This action cannot be undone.",
-  variant = "default", // "default" | "destructive"
-  confirmText = "Confirm",
-  cancelText = "Cancel"
+  onExtra,
+  title = 'Are you sure?',
+  description = 'This action cannot be undone.',
+  variant = 'default', // "default" | "destructive"
+  confirmText = 'Confirm',
+  cancelText = 'Cancel',
+  extraActions = [], // [{ label: string, value: string }]
 }) {
   return (
     <AlertDialog open={open} onOpenChange={(isOpen) => !isOpen && onCancel()}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
-            {variant === "destructive" && (
-              <AlertTriangle className="h-5 w-5 text-destructive" />
-            )}
+            {variant === 'destructive' && <AlertTriangle className="h-5 w-5 text-destructive" />}
             {title}
           </AlertDialogTitle>
-          <AlertDialogDescription>
-            {description}
-          </AlertDialogDescription>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel onClick={onCancel}>
-            {cancelText}
-          </AlertDialogCancel>
+          <AlertDialogCancel onClick={onCancel}>{cancelText}</AlertDialogCancel>
+          {extraActions.map((action) => (
+            <AlertDialogAction
+              key={action.value}
+              onClick={() => onExtra?.(action.value)}
+              className="bg-amber-600 hover:bg-amber-700"
+            >
+              {action.label}
+            </AlertDialogAction>
+          ))}
           <AlertDialogAction
             onClick={onConfirm}
-            className={variant === "destructive" ? "bg-destructive hover:bg-destructive/90" : ""}
+            className={variant === 'destructive' ? 'bg-destructive hover:bg-destructive/90' : ''}
           >
             {confirmText}
           </AlertDialogAction>
@@ -77,22 +82,22 @@ export default function ConfirmDialog({
 
 /**
  * Hook for easier confirmation dialog management
- * 
+ *
  * Usage:
  * const { ConfirmDialog, confirm } = useConfirmDialog();
- * 
+ *
  * const handleDelete = async () => {
  *   const confirmed = await confirm({
  *     title: "Delete Item?",
  *     description: "This action cannot be undone.",
  *     variant: "destructive"
  *   });
- *   
+ *
  *   if (confirmed) {
  *     // perform delete
  *   }
  * };
- * 
+ *
  * return (
  *   <>
  *     <ConfirmDialog />
@@ -114,7 +119,11 @@ export function useConfirmDialog() {
         onCancel: () => {
           setDialogState(null);
           resolve(false);
-        }
+        },
+        onExtra: (value) => {
+          setDialogState(null);
+          resolve(value);
+        },
       });
     });
   }, []);
@@ -127,11 +136,13 @@ export function useConfirmDialog() {
         open={true}
         onConfirm={dialogState.onConfirm}
         onCancel={dialogState.onCancel}
+        onExtra={dialogState.onExtra}
         title={dialogState.title}
         description={dialogState.description}
         variant={dialogState.variant}
         confirmText={dialogState.confirmText}
         cancelText={dialogState.cancelText}
+        extraActions={dialogState.extraActions || []}
       />
     );
   }, [dialogState]);

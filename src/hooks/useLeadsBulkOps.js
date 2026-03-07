@@ -477,19 +477,45 @@ export function useLeadsBulkOps({
             });
           }
         }
-        // Update in batches
-        const BATCH_SIZE = 50;
+        // Bulk assign via single endpoint per chunk
+        const tenantId = getTenantFilter().tenant_id || user.tenant_id;
+
+        // Check for team mismatch on select-all records
+        let overrideTeam = false;
+        if (assignedTo) {
+          const withTeam = allLeadsToAssign.filter((l) => l.assigned_to_team);
+          if (withTeam.length > 0) {
+            const teamNames = [
+              ...new Set(withTeam.map((l) => l.assigned_to_team_name).filter(Boolean)),
+            ];
+            const choice = await confirm({
+              title: 'Team assignment conflict',
+              description: `${withTeam.length} of ${allLeadsToAssign.length} lead(s) are currently assigned to ${teamNames.join(', ') || 'a team'}. The selected employee may be on a different team.`,
+              confirmText: 'Continue',
+              cancelText: 'Cancel',
+              variant: 'default',
+              extraActions: [{ label: 'Override team', value: 'override' }],
+            });
+            if (!choice) return;
+            if (choice === 'override') overrideTeam = true;
+          }
+        }
+
+        const CHUNK_SIZE = 500;
+        const ids = allLeadsToAssign.map((l) => l.id);
         let successCount = 0;
-        let failCount = 0;
-        for (let i = 0; i < allLeadsToAssign.length; i += BATCH_SIZE) {
-          const batch = allLeadsToAssign.slice(i, i + BATCH_SIZE);
-          const results = await Promise.allSettled(
-            batch.map((l) => Lead.update(l.id, { assigned_to: assignedTo || null })),
-          );
-          results.forEach((r) => {
-            if (r.status === 'fulfilled') successCount++;
-            else failCount++;
-          });
+        let skipCount = 0;
+        for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+          const chunk = ids.slice(i, i + CHUNK_SIZE);
+          try {
+            const result = await Lead.bulkAssign(chunk, assignedTo || null, tenantId, {
+              overrideTeam,
+            });
+            successCount += result.updated;
+            skipCount += result.skipped;
+          } catch (err) {
+            console.error('[Leads] Bulk assign chunk failed:', err);
+          }
         }
 
         setSelectedLeads(new Set());
@@ -498,7 +524,7 @@ export function useLeadsBulkOps({
         clearCacheByKey('Lead');
         await Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]);
         if (successCount > 0) toast.success(`Assigned ${successCount} lead(s)`);
-        if (failCount > 0) toast.error(`${failCount} lead(s) failed to assign`);
+        if (skipCount > 0) toast.warning(`${skipCount} lead(s) skipped (no write access)`);
       } catch (error) {
         console.error('Failed to assign leads:', error);
         toast.error('Failed to assign leads');
@@ -510,16 +536,46 @@ export function useLeadsBulkOps({
       }
 
       try {
-        const promises = [...selectedLeads].map((id) =>
-          Lead.update(id, { assigned_to: assignedTo || null }),
-        );
+        const tenantId = getTenantFilter().tenant_id || user.tenant_id;
+        const ids = [...selectedLeads];
 
-        await Promise.all(promises);
+        // Check for team mismatch — do any selected leads belong to a different team?
+        let overrideTeam = false;
+        if (assignedTo) {
+          const selectedRecords = (leads || []).filter((l) => selectedLeads.has(l.id));
+          const teamsOnRecords = [
+            ...new Set(selectedRecords.map((l) => l.assigned_to_team).filter(Boolean)),
+          ];
+          if (teamsOnRecords.length > 0) {
+            // Check if employee is on any of those teams (approximate — we check via team-scope)
+            const teamNames = [
+              ...new Set(selectedRecords.map((l) => l.assigned_to_team_name).filter(Boolean)),
+            ];
+            const mismatchCount = selectedRecords.filter((l) => l.assigned_to_team).length;
+            if (mismatchCount > 0) {
+              const choice = await confirm({
+                title: 'Team assignment conflict',
+                description: `${mismatchCount} of ${ids.length} selected lead(s) are currently assigned to ${teamNames.join(', ') || 'another team'}. The selected employee may be on a different team.`,
+                confirmText: 'Continue',
+                cancelText: 'Cancel',
+                variant: 'default',
+                extraActions: [{ label: 'Override team', value: 'override' }],
+              });
+              if (!choice) return; // Cancel
+              if (choice === 'override') overrideTeam = true;
+              // choice === true means "Continue" (keep existing teams)
+            }
+          }
+        }
+
+        const result = await Lead.bulkAssign(ids, assignedTo || null, tenantId, { overrideTeam });
         setSelectedLeads(new Set());
         clearCache('Lead');
         clearCacheByKey('Lead');
         await Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]);
-        toast.success(`Assigned ${promises.length} lead(s)`);
+        if (result.updated > 0) toast.success(`Assigned ${result.updated} lead(s)`);
+        if (result.skipped > 0)
+          toast.warning(`${result.skipped} lead(s) skipped (no write access)`);
       } catch (error) {
         console.error('Failed to assign leads:', error);
         toast.error('Failed to assign leads');

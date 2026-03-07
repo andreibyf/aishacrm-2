@@ -16,6 +16,7 @@ import {
   invalidateTenantAndDashboardCache,
 } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
+import { bulkAssign } from '../lib/bulkAssign.js';
 
 export default function createLeadsV2Routes() {
   const router = express.Router();
@@ -1305,6 +1306,28 @@ export default function createLeadsV2Routes() {
       });
     } catch (err) {
       logger.error('[Leads v2 DELETE] Error:', err.message);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
+  // POST /bulk-assign - Bulk assign leads to an employee
+  router.post('/bulk-assign', invalidateCache('leads'), async (req, res) => {
+    try {
+      const { ids, assigned_to, tenant_id, override_team } = req.body || {};
+      const result = await bulkAssign({
+        table: 'leads',
+        entityLabel: 'Lead',
+        ids,
+        assigned_to: assigned_to ?? null,
+        override_team: !!override_team,
+        tenant_id,
+        user: req.user,
+      });
+      if (result.errors.length > 0 && result.updated === 0)
+        return res.status(400).json({ status: 'error', message: result.errors[0], data: result });
+      res.json({ status: 'success', message: `${result.updated} lead(s) assigned`, data: result });
+    } catch (err) {
+      logger.error('[Leads v2 Bulk Assign] Error:', err.message);
       res.status(500).json({ status: 'error', message: err.message });
     }
   });

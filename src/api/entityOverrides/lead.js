@@ -1,7 +1,7 @@
 // Lead entity with bulkDelete and getStats extensions
 // Extracted from src/api/entities.js
 import { createEntity } from '../core/createEntity';
-import { BACKEND_URL } from '../core/httpClient';
+import { BACKEND_URL, getAuthFetchOptions } from '../core/httpClient';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 
 export const Lead = {
@@ -39,6 +39,29 @@ export const Lead = {
 
     const result = await response.json();
     return result.data || { deleted: ids.length };
+  },
+
+  // Bulk assign leads to an employee (or unassign) — single DB round-trip
+  async bulkAssign(ids, assignedTo, tenantId, { overrideTeam = false } = {}) {
+    if (!Array.isArray(ids) || ids.length === 0) return { updated: 0, skipped: 0, errors: [] };
+    if (!tenantId) throw new Error('tenantId is required for Lead.bulkAssign');
+    const authOpts = await getAuthFetchOptions();
+    const response = await fetch(`${BACKEND_URL}/api/v2/leads/bulk-assign`, {
+      method: 'POST',
+      ...authOpts,
+      body: JSON.stringify({
+        ids,
+        assigned_to: assignedTo,
+        tenant_id: tenantId,
+        override_team: overrideTeam,
+      }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.message || `Bulk assign failed: ${response.status}`);
+    }
+    const result = await response.json();
+    return result.data || { updated: 0, skipped: 0, errors: [] };
   },
 
   // Optimized stats endpoint - returns aggregated counts by status

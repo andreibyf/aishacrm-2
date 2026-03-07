@@ -16,6 +16,7 @@ import { getVisibilityScope, getAccessLevel, isNotesOnlyUpdate } from '../lib/te
 import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 import { sanitizeUuidInput } from '../lib/uuidValidator.js';
 import logger from '../lib/logger.js';
+import { bulkAssign } from '../lib/bulkAssign.js';
 
 export default function createAccountV2Routes(_pgPool) {
   const router = express.Router();
@@ -829,6 +830,32 @@ export default function createAccountV2Routes(_pgPool) {
     } catch (err) {
       logger.error('[accounts.v2] Delete exception:', err);
       return res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
+  // POST /bulk-assign - Bulk assign accounts to an employee
+  router.post('/bulk-assign', invalidateCache('accounts'), async (req, res) => {
+    try {
+      const { ids, assigned_to, tenant_id, override_team } = req.body || {};
+      const result = await bulkAssign({
+        table: 'accounts',
+        entityLabel: 'Account',
+        ids,
+        assigned_to: assigned_to ?? null,
+        override_team: !!override_team,
+        tenant_id,
+        user: req.user,
+      });
+      if (result.errors.length > 0 && result.updated === 0)
+        return res.status(400).json({ status: 'error', message: result.errors[0], data: result });
+      res.json({
+        status: 'success',
+        message: `${result.updated} account(s) assigned`,
+        data: result,
+      });
+    } catch (err) {
+      logger.error('[Accounts v2 Bulk Assign] Error:', err.message);
+      res.status(500).json({ status: 'error', message: err.message });
     }
   });
 
