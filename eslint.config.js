@@ -376,11 +376,7 @@ export default [
   },
   // Braid adapter override: allow dynamic typing for tool bridges
   {
-    files: [
-      'backend/**/*.ts',
-      'orchestra/**/*.ts',
-      'braid-mcp-node-server/src/braid/adapters/**/*.ts',
-    ],
+    files: ['braid-mcp-node-server/**/*.ts', 'braid-mcp-node-server/src/braid/adapters/**/*.ts'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
     },
