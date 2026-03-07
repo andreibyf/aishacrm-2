@@ -505,7 +505,12 @@ app.use('/api/edge', defaultLimiter, createEdgeFunctionRoutes());
 // Supabase Auth proxy (CORS-controlled access to /auth/v1/user)
 app.use('/api/supabase-proxy', defaultLimiter, createSupabaseProxyRoutes());
 // AI Suggestions routes (Phase 3 Autonomous Operations)
-app.use('/api/ai/suggestions', defaultLimiter, createSuggestionsRoutes(measuredPgPool));
+app.use(
+  '/api/ai/suggestions',
+  defaultLimiter,
+  authenticateRequest,
+  createSuggestionsRoutes(measuredPgPool),
+);
 
 // 404 handler - Ensure CORS headers so browser shows real error, not "CORS error"
 app.use((req, res, next) => {

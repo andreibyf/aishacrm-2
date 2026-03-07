@@ -146,3 +146,52 @@ export function validateUuidQuery(...queryNames) {
     next();
   };
 }
+
+// ─── Route helpers (response-based validation for API routes) ─────────────────
+
+/**
+ * Validate UUID parameter and send 400 if invalid
+ * @param {string} id - The ID to validate
+ * @param {object} res - Express response object
+ * @returns {boolean} False if invalid (response sent), true if valid
+ */
+export function validateUUIDParam(id, res) {
+  if (!isValidUUID(id)) {
+    res.status(400).json({
+      status: 'error',
+      message: 'Invalid UUID format',
+    });
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Validate tenant_id requirement and send 400 if missing
+ * @param {string} tenant_id - The tenant_id to validate
+ * @param {object} res - Express response object
+ * @returns {boolean} False if missing (response sent), true if present
+ */
+export function validateTenantId(tenant_id, res) {
+  if (!tenant_id) {
+    res.status(400).json({
+      status: 'error',
+      message: 'tenant_id is required',
+    });
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Combined validation for UUID ID and tenant_id
+ * @param {string} id - The ID to validate
+ * @param {string} tenant_id - The tenant_id to validate
+ * @param {object} res - Express response object
+ * @returns {boolean} False if any validation failed (response sent), true if all valid
+ */
+export function validateTenantScopedId(id, tenant_id, res) {
+  if (!validateUUIDParam(id, res)) return false;
+  if (!validateTenantId(tenant_id, res)) return false;
+  return true;
+}

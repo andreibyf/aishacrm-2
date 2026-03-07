@@ -1,6 +1,6 @@
 /**
  * AI Suggestions Routes - Phase 3 Autonomous Operations
- * 
+ *
  * Endpoints for managing AI-generated suggestions:
  * - GET /api/ai/suggestions - List pending suggestions
  * - GET /api/ai/suggestions/:id - Get a specific suggestion
@@ -11,7 +11,7 @@
  */
 
 import express from 'express';
-import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
+import { resolveCanonicalTenant, isUuid } from '../lib/tenantCanonicalResolver.js';
 import { triggerForTenant } from '../lib/aiTriggersWorker.js';
 import { executeBraidTool } from '../lib/braidIntegration-v2.js';
 import logger from '../lib/logger.js';
@@ -48,14 +48,14 @@ export default function createSuggestionsRoutes(pgPool) {
    */
   router.get('/', async (req, res) => {
     try {
-      const { 
-        tenant_id, 
-        status = 'pending', 
+      const {
+        tenant_id,
+        status = 'pending',
         trigger_id,
         priority,
         record_type,
         limit = 50,
-        offset = 0 
+        offset = 0,
       } = req.query;
 
       if (!tenant_id) {
@@ -125,8 +125,8 @@ export default function createSuggestionsRoutes(pgPool) {
           suggestions: result.rows,
           total,
           limit: parseInt(limit, 10),
-          offset: parseInt(offset, 10)
-        }
+          offset: parseInt(offset, 10),
+        },
       });
     } catch (error) {
       logger.error('[Suggestions] Error listing suggestions:', error);
@@ -200,7 +200,7 @@ export default function createSuggestionsRoutes(pgPool) {
 
       res.json({
         status: 'success',
-        data: { stats }
+        data: { stats },
       });
     } catch (error) {
       logger.error('[Suggestions] Error getting stats:', error);
@@ -285,7 +285,7 @@ export default function createSuggestionsRoutes(pgPool) {
       `;
 
       const metricsResult = await pgPool.query(metricsQuery, [
-        resolved.uuid, 
+        resolved.uuid,
         bucket_size,
         parseInt(days, 10),
       ]);
@@ -307,10 +307,7 @@ export default function createSuggestionsRoutes(pgPool) {
         GROUP BY trigger_type
       `;
 
-      const summaryResult = await pgPool.query(summaryQuery, [
-        resolved.uuid,
-        parseInt(days, 10),
-      ]);
+      const summaryResult = await pgPool.query(summaryQuery, [resolved.uuid, parseInt(days, 10)]);
 
       res.json({
         status: 'success',
@@ -350,10 +347,12 @@ export default function createSuggestionsRoutes(pgPool) {
       // Call the aggregation function
       const result = await pgPool.query(
         'SELECT aggregate_ai_suggestion_metrics($1, $2) as rows_updated',
-        [resolved.uuid, bucket_size]
+        [resolved.uuid, bucket_size],
       );
 
-      logger.debug(`[Suggestions] Aggregated metrics for tenant ${resolved.slug}: ${result.rows[0].rows_updated} rows`);
+      logger.debug(
+        `[Suggestions] Aggregated metrics for tenant ${resolved.slug}: ${result.rows[0].rows_updated} rows`,
+      );
 
       res.json({
         status: 'success',
@@ -417,8 +416,8 @@ export default function createSuggestionsRoutes(pgPool) {
       res.json({
         status: 'success',
         data: {
-          suggestion: result.rows[0]
-        }
+          suggestion: result.rows[0],
+        },
       });
     } catch (error) {
       logger.error('[Suggestions] Error getting suggestion:', error);
@@ -457,7 +456,7 @@ export default function createSuggestionsRoutes(pgPool) {
     try {
       const { id } = req.params;
       const { tenant_id } = req.body;
-      const userId = req.user?.id || null;
+      const userId = isUuid(req.user?.id) ? req.user.id : null;
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -474,19 +473,19 @@ export default function createSuggestionsRoutes(pgPool) {
         WHERE id = $1 AND tenant_id = $2
       `;
       const checkResult = await pgPool.query(checkQuery, [id, resolved.uuid]);
-      
+
       if (checkResult.rows.length === 0) {
-        return res.status(404).json({ 
-          status: 'error', 
-          message: 'Suggestion not found' 
+        return res.status(404).json({
+          status: 'error',
+          message: 'Suggestion not found',
         });
       }
-      
+
       const currentStatus = checkResult.rows[0].status;
       if (currentStatus !== 'pending') {
-        return res.status(400).json({ 
-          status: 'error', 
-          message: `Suggestion already processed with status: ${currentStatus}` 
+        return res.status(400).json({
+          status: 'error',
+          message: `Suggestion already processed with status: ${currentStatus}`,
         });
       }
 
@@ -504,9 +503,9 @@ export default function createSuggestionsRoutes(pgPool) {
       const result = await pgPool.query(query, [id, resolved.uuid, 'approved', userId]);
 
       if (result.rows.length === 0) {
-        return res.status(404).json({ 
-          status: 'error', 
-          message: 'Suggestion not found or update failed' 
+        return res.status(404).json({
+          status: 'error',
+          message: 'Suggestion not found or update failed',
         });
       }
 
@@ -556,7 +555,7 @@ export default function createSuggestionsRoutes(pgPool) {
     try {
       const { id } = req.params;
       const { tenant_id, reason } = req.body;
-      const userId = req.user?.id || null;
+      const userId = isUuid(req.user?.id) ? req.user.id : null;
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -573,19 +572,19 @@ export default function createSuggestionsRoutes(pgPool) {
         WHERE id = $1 AND tenant_id = $2
       `;
       const checkResult = await pgPool.query(checkQuery, [id, resolved.uuid]);
-      
+
       if (checkResult.rows.length === 0) {
-        return res.status(404).json({ 
-          status: 'error', 
-          message: 'Suggestion not found' 
+        return res.status(404).json({
+          status: 'error',
+          message: 'Suggestion not found',
         });
       }
-      
+
       const currentStatus = checkResult.rows[0].status;
       if (currentStatus !== 'pending' && currentStatus !== 'approved') {
-        return res.status(400).json({ 
-          status: 'error', 
-          message: `Suggestion already processed with status: ${currentStatus}` 
+        return res.status(400).json({
+          status: 'error',
+          message: `Suggestion already processed with status: ${currentStatus}`,
         });
       }
 
@@ -603,17 +602,17 @@ export default function createSuggestionsRoutes(pgPool) {
       `;
 
       const result = await pgPool.query(query, [
-        id, 
-        resolved.uuid, 
-        'rejected',  // status as parameter
+        id,
+        resolved.uuid,
+        'rejected', // status as parameter
         userId,
         JSON.stringify({ rejection_reason: reason || 'User rejected' }),
       ]);
 
       if (result.rows.length === 0) {
-        return res.status(404).json({ 
-          status: 'error', 
-          message: 'Suggestion not found or update failed' 
+        return res.status(404).json({
+          status: 'error',
+          message: 'Suggestion not found or update failed',
         });
       }
 
@@ -623,7 +622,7 @@ export default function createSuggestionsRoutes(pgPool) {
         status: 'success',
         data: result.rows[0],
         message: 'Suggestion rejected.',
-      })
+      });
     } catch (error) {
       logger.error('[Suggestions] Error rejecting suggestion:', error);
       res.status(500).json({ status: 'error', message: error.message });
@@ -682,9 +681,9 @@ export default function createSuggestionsRoutes(pgPool) {
       const fetchResult = await pgPool.query(fetchQuery, [id, resolved.uuid, 'approved']);
 
       if (fetchResult.rows.length === 0) {
-        return res.status(404).json({ 
-          status: 'error', 
-          message: 'Suggestion not found or not approved. Approve first before applying.' 
+        return res.status(404).json({
+          status: 'error',
+          message: 'Suggestion not found or not approved. Approve first before applying.',
         });
       }
 
@@ -692,9 +691,9 @@ export default function createSuggestionsRoutes(pgPool) {
       const action = suggestion.action;
 
       if (!action?.tool_name) {
-        return res.status(400).json({ 
-          status: 'error', 
-          message: 'Suggestion has no valid action to apply' 
+        return res.status(400).json({
+          status: 'error',
+          message: 'Suggestion has no valid action to apply',
         });
       }
 
@@ -719,7 +718,7 @@ export default function createSuggestionsRoutes(pgPool) {
           action.tool_name,
           action.tool_args || {},
           tenantRecord,
-          userEmail
+          userEmail,
         );
 
         // Check if result is an error
@@ -823,7 +822,7 @@ export default function createSuggestionsRoutes(pgPool) {
     try {
       const { id } = req.params;
       const { tenant_id, rating, comment, outcome_positive } = req.body;
-      const userId = req.user?.id || null;
+      const userId = isUuid(req.user?.id) ? req.user.id : null;
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -849,8 +848,8 @@ export default function createSuggestionsRoutes(pgPool) {
       `;
 
       const updateResult = await pgPool.query(updateQuery, [
-        id, 
-        resolved.uuid, 
+        id,
+        resolved.uuid,
         rating || null,
         comment || null,
         outcome_positive ?? null,
@@ -861,23 +860,32 @@ export default function createSuggestionsRoutes(pgPool) {
       }
 
       // Also insert into feedback events table for detailed tracking
-      const feedbackType = rating ? 'rating' : (outcome_positive !== undefined ? 'outcome' : 'comment');
-      
-      await pgPool.query(`
+      const feedbackType = rating
+        ? 'rating'
+        : outcome_positive !== undefined
+          ? 'outcome'
+          : 'comment';
+
+      await pgPool.query(
+        `
         INSERT INTO ai_suggestion_feedback 
           (tenant_id, suggestion_id, feedback_type, rating, comment, outcome_positive, user_id)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
-      `, [
-        resolved.uuid,
-        id,
-        feedbackType,
-        rating || null,
-        comment || null,
-        outcome_positive ?? null,
-        userId,
-      ]);
+      `,
+        [
+          resolved.uuid,
+          id,
+          feedbackType,
+          rating || null,
+          comment || null,
+          outcome_positive ?? null,
+          userId,
+        ],
+      );
 
-      logger.debug(`[Suggestions] Feedback recorded for ${id}: rating=${rating}, outcome=${outcome_positive}`);
+      logger.debug(
+        `[Suggestions] Feedback recorded for ${id}: rating=${rating}, outcome=${outcome_positive}`,
+      );
 
       res.json({
         status: 'success',

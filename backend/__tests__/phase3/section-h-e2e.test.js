@@ -1,9 +1,9 @@
 /**
  * Section H: End-to-End Flow Verification
- * 
+ *
  * Verifies the complete Phase 3 workflow:
  * Trigger → Suggestion → Approval → Apply → Telemetry
- * 
+ *
  * Per Phase 3 Verification Automation Spec:
  * - Tests full flow integration
  * - Validates state transitions
@@ -12,16 +12,18 @@
 
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
+import { getAuthHeaders } from '../helpers/auth.js';
 
 const API_BASE = process.env.BACKEND_URL || process.env.API_BASE_URL || 'http://localhost:3001';
 const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
-const SHOULD_RUN = process.env.CI ? (process.env.CI_BACKEND_TESTS === 'true') : true;
+const SHOULD_RUN = process.env.CI ? process.env.CI_BACKEND_TESTS === 'true' : true;
 
 // Helper to make API requests
 async function apiRequest(method, path, body = null) {
   const options = {
     method,
     headers: {
+      ...getAuthHeaders(),
       'Content-Type': 'application/json',
       'x-tenant-id': TENANT_ID,
     },
@@ -29,7 +31,7 @@ async function apiRequest(method, path, body = null) {
   if (body) {
     options.body = JSON.stringify(body);
   }
-  
+
   const response = await fetch(`${API_BASE}${path}`, options);
   const data = await response.json().catch(() => ({}));
   return { status: response.status, data, ok: response.ok };
@@ -38,11 +40,11 @@ async function apiRequest(method, path, body = null) {
 describe('Section H: End-to-End Flow Verification', { skip: !SHOULD_RUN }, () => {
   let testSuggestionId = null;
   let flowStartTime = null;
-  
+
   before(() => {
     flowStartTime = new Date().toISOString();
   });
-  
+
   after(async () => {
     // Cleanup: If we created a test suggestion, try to delete it
     if (testSuggestionId) {
@@ -58,12 +60,12 @@ describe('Section H: End-to-End Flow Verification', { skip: !SHOULD_RUN }, () =>
     it('Step 1: Trigger endpoint is accessible and returns valid response', async () => {
       // The trigger endpoint should be callable (may return empty if no triggers ready)
       const result = await apiRequest('POST', '/api/ai/suggestions/trigger');
-      
+
       // Accept either success (200/201) or "no triggers ready" (200 with empty)
       // or rate limiting (429) or validation error (400)
       assert.ok(
         [200, 201, 400, 429].includes(result.status),
-        `Trigger endpoint should respond with valid status, got ${result.status}`
+        `Trigger endpoint should respond with valid status, got ${result.status}`,
       );
     });
 
@@ -84,7 +86,7 @@ describe('Section H: End-to-End Flow Verification', { skip: !SHOULD_RUN }, () =>
       };
 
       const result = await apiRequest('POST', '/api/ai/suggestions', suggestionPayload);
-      
+
       // Should create successfully
       if (result.status === 201 || result.status === 200) {
         testSuggestionId = result.data.id || result.data.data?.id;
@@ -103,9 +105,13 @@ describe('Section H: End-to-End Flow Verification', { skip: !SHOULD_RUN }, () =>
       }
 
       const result = await apiRequest('GET', `/api/ai/suggestions/${testSuggestionId}`);
-      
+
       assert.strictEqual(result.status, 200, 'Should fetch suggestion by ID');
-      assert.strictEqual(result.data.status || result.data.data?.status, 'pending', 'Status should be pending');
+      assert.strictEqual(
+        result.data.status || result.data.data?.status,
+        'pending',
+        'Status should be pending',
+      );
     });
 
     it('Step 4: Review and approve the suggestion', async () => {
@@ -123,7 +129,7 @@ describe('Section H: End-to-End Flow Verification', { skip: !SHOULD_RUN }, () =>
       // Accept success or validation error (some fields may be required)
       assert.ok(
         [200, 201, 400].includes(result.status),
-        `Approval should respond with valid status, got ${result.status}`
+        `Approval should respond with valid status, got ${result.status}`,
       );
     });
 
@@ -139,7 +145,7 @@ describe('Section H: End-to-End Flow Verification', { skip: !SHOULD_RUN }, () =>
       // Accept success, entity-not-found (404), or validation error
       assert.ok(
         [200, 201, 400, 404, 422].includes(result.status),
-        `Apply endpoint should respond with valid status, got ${result.status}`
+        `Apply endpoint should respond with valid status, got ${result.status}`,
       );
     });
   });
@@ -158,23 +164,20 @@ describe('Section H: End-to-End Flow Verification', { skip: !SHOULD_RUN }, () =>
       };
 
       const createResult = await apiRequest('POST', '/api/ai/suggestions', suggestionPayload);
-      
+
       if (createResult.status !== 201 && createResult.status !== 200) {
         console.log('Skipping state test: Could not create suggestion');
         return;
       }
 
       const suggestionId = createResult.data.id || createResult.data.data?.id;
-      
+
       // Transition to approved
       const approveResult = await apiRequest('PATCH', `/api/ai/suggestions/${suggestionId}`, {
         status: 'approved',
       });
 
-      assert.ok(
-        [200, 201].includes(approveResult.status),
-        'Pending → Approved should succeed'
-      );
+      assert.ok([200, 201].includes(approveResult.status), 'Pending → Approved should succeed');
 
       // Cleanup
       await apiRequest('DELETE', `/api/ai/suggestions/${suggestionId}`);
@@ -192,24 +195,21 @@ describe('Section H: End-to-End Flow Verification', { skip: !SHOULD_RUN }, () =>
       };
 
       const createResult = await apiRequest('POST', '/api/ai/suggestions', suggestionPayload);
-      
+
       if (createResult.status !== 201 && createResult.status !== 200) {
         console.log('Skipping state test: Could not create suggestion');
         return;
       }
 
       const suggestionId = createResult.data.id || createResult.data.data?.id;
-      
+
       // Transition to rejected
       const rejectResult = await apiRequest('PATCH', `/api/ai/suggestions/${suggestionId}`, {
         status: 'rejected',
         rejection_reason: 'E2E test rejection',
       });
 
-      assert.ok(
-        [200, 201].includes(rejectResult.status),
-        'Pending → Rejected should succeed'
-      );
+      assert.ok([200, 201].includes(rejectResult.status), 'Pending → Rejected should succeed');
 
       // Cleanup
       await apiRequest('DELETE', `/api/ai/suggestions/${suggestionId}`);
@@ -227,14 +227,14 @@ describe('Section H: End-to-End Flow Verification', { skip: !SHOULD_RUN }, () =>
       };
 
       const createResult = await apiRequest('POST', '/api/ai/suggestions', suggestionPayload);
-      
+
       if (createResult.status !== 201 && createResult.status !== 200) {
         console.log('Skipping state test: Could not create suggestion');
         return;
       }
 
       const suggestionId = createResult.data.id || createResult.data.data?.id;
-      
+
       // First reject it
       await apiRequest('PATCH', `/api/ai/suggestions/${suggestionId}`, {
         status: 'rejected',
@@ -245,9 +245,9 @@ describe('Section H: End-to-End Flow Verification', { skip: !SHOULD_RUN }, () =>
 
       // Should either fail (400/422) or be handled gracefully
       assert.ok(
-        [400, 403, 404, 422].includes(applyResult.status) || 
-        (applyResult.data.error && applyResult.data.error.includes('rejected')),
-        'Should not allow applying a rejected suggestion'
+        [400, 403, 404, 422].includes(applyResult.status) ||
+          (applyResult.data.error && applyResult.data.error.includes('rejected')),
+        'Should not allow applying a rejected suggestion',
       );
 
       // Cleanup
@@ -259,23 +259,23 @@ describe('Section H: End-to-End Flow Verification', { skip: !SHOULD_RUN }, () =>
     it('Telemetry endpoint captures events during flow', async () => {
       // Query telemetry for events since flow started
       const result = await apiRequest('GET', `/api/telemetry?since=${flowStartTime}`);
-      
+
       // Telemetry endpoint should exist and respond
       assert.ok(
         [200, 404].includes(result.status),
-        `Telemetry query should respond, got ${result.status}`
+        `Telemetry query should respond, got ${result.status}`,
       );
-      
+
       if (result.status === 200) {
         // If telemetry is implemented, verify structure
         const events = result.data.events || result.data.data || result.data || [];
-        
+
         if (Array.isArray(events) && events.length > 0) {
           // Verify events have required fields
           const sampleEvent = events[0];
           assert.ok(
             sampleEvent.event_type || sampleEvent.type || sampleEvent.action,
-            'Events should have an event type field'
+            'Events should have an event type field',
           );
         }
       }
@@ -283,11 +283,11 @@ describe('Section H: End-to-End Flow Verification', { skip: !SHOULD_RUN }, () =>
 
     it('System logs endpoint accessible for audit trail', async () => {
       const result = await apiRequest('GET', '/api/system-logs?limit=10');
-      
+
       // Should exist and return logs or empty array
       assert.ok(
         [200, 404].includes(result.status),
-        `System logs should respond, got ${result.status}`
+        `System logs should respond, got ${result.status}`,
       );
     });
   });
@@ -302,7 +302,7 @@ describe('Section H: End-to-End Flow Verification', { skip: !SHOULD_RUN }, () =>
       // Should respond with error, not crash
       assert.ok(
         [200, 400, 422].includes(result.status),
-        `Invalid trigger should be handled gracefully, got ${result.status}`
+        `Invalid trigger should be handled gracefully, got ${result.status}`,
       );
     });
 
@@ -313,7 +313,7 @@ describe('Section H: End-to-End Flow Verification', { skip: !SHOULD_RUN }, () =>
       // Accept 404 (not found) or 400 (validation error for non-existent entity)
       assert.ok(
         [400, 404].includes(result.status),
-        `Non-existent suggestion should return 400 or 404, got ${result.status}`
+        `Non-existent suggestion should return 400 or 404, got ${result.status}`,
       );
     });
 
@@ -327,7 +327,7 @@ describe('Section H: End-to-End Flow Verification', { skip: !SHOULD_RUN }, () =>
       // Should either work with default tenant, return auth error, or validation error
       assert.ok(
         [200, 400, 401, 403].includes(response.status),
-        `Missing tenant should be handled, got ${response.status}`
+        `Missing tenant should be handled, got ${response.status}`,
       );
     });
   });
@@ -338,10 +338,7 @@ describe('Section H: End-to-End Flow Verification', { skip: !SHOULD_RUN }, () =>
       await apiRequest('POST', '/api/ai/suggestions/trigger');
       const duration = Date.now() - start;
 
-      assert.ok(
-        duration < 5000,
-        `Trigger should respond within 5s, took ${duration}ms`
-      );
+      assert.ok(duration < 5000, `Trigger should respond within 5s, took ${duration}ms`);
     });
 
     it('Suggestion list query responds within 2 seconds', async () => {
@@ -349,10 +346,7 @@ describe('Section H: End-to-End Flow Verification', { skip: !SHOULD_RUN }, () =>
       await apiRequest('GET', '/api/ai/suggestions?limit=10');
       const duration = Date.now() - start;
 
-      assert.ok(
-        duration < 2000,
-        `List query should respond within 2s, took ${duration}ms`
-      );
+      assert.ok(duration < 2000, `List query should respond within 2s, took ${duration}ms`);
     });
 
     it('Apply operation responds within 10 seconds', async () => {
@@ -368,7 +362,7 @@ describe('Section H: End-to-End Flow Verification', { skip: !SHOULD_RUN }, () =>
       };
 
       const createResult = await apiRequest('POST', '/api/ai/suggestions', suggestionPayload);
-      
+
       if (createResult.status !== 201 && createResult.status !== 200) {
         console.log('Skipping timing test: Could not create suggestion');
         return;
@@ -380,10 +374,7 @@ describe('Section H: End-to-End Flow Verification', { skip: !SHOULD_RUN }, () =>
       await apiRequest('POST', `/api/ai/suggestions/${suggestionId}/apply`);
       const duration = Date.now() - start;
 
-      assert.ok(
-        duration < 10000,
-        `Apply should complete within 10s, took ${duration}ms`
-      );
+      assert.ok(duration < 10000, `Apply should complete within 10s, took ${duration}ms`);
 
       // Cleanup
       await apiRequest('DELETE', `/api/ai/suggestions/${suggestionId}`);

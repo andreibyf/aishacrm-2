@@ -33,6 +33,7 @@
     "test:ct:ui": "playwright test -c playwright-ct.config.ts --ui",
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:report": "playwright show-report",
+    "typecheck": "tsc --noEmit",
     "braid:check": "node braid-llm-kit/tools/sync-registry.js --check",
     "braid:sync": "node braid-llm-kit/tools/sync-registry.js",
     "braid:generate": "node braid-llm-kit/tools/generate-registry.js",
@@ -41,7 +42,9 @@
     "db:check:idx:leads": "npm run -s db:exec -- backend/migrations/checks/check_idx_leads_tenant_account.sql",
     "db:show:idx:leads": "npm run -s db:exec -- backend/migrations/checks/show_idx_leads_tenant_account.sql",
     "db:list:idx:leads": "npm run -s db:exec -- backend/migrations/checks/list_idx_leads.sql",
-    "db:check:idx": "node backend/scripts/check-index.js"
+    "db:check:idx": "node backend/scripts/check-index.js",
+    "validate": "npm run lint && npm run typecheck && npm run braid:check && npm run test:run && npm run build:ci",
+    "improve:baseline": "npm run validate"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

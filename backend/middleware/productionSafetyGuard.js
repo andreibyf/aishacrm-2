@@ -1,21 +1,21 @@
 /**
  * Production Safety Guard Middleware
- * 
- * Prevents write operations (POST/PUT/PATCH/DELETE) against production/cloud 
+ *
+ * Prevents write operations (POST/PUT/PATCH/DELETE) against production/cloud
  * databases unless explicitly allowed via environment variable or special header.
- * 
- * This protects production Supabase Cloud data from accidental mutations during 
+ *
+ * This protects production Supabase Cloud data from accidental mutations during
  * E2E tests or development activities.
- * 
+ *
  * Usage:
  *   import { productionSafetyGuard } from '../middleware/productionSafetyGuard.js';
- *   
+ *
  *   // Apply globally in server.js (before routes):
  *   app.use(productionSafetyGuard());
- *   
+ *
  *   // Or per-route:
  *   router.post('/api/users', productionSafetyGuard(), async (req, res) => {...});
- * 
+ *
  * Configuration:
  *   - Set ALLOW_PRODUCTION_WRITES=true in .env to disable guard
  *   - Or send header: X-Allow-Production-Write: <secret-token>
@@ -23,39 +23,28 @@
  */
 
 import logger from '../lib/logger.js';
+import { insertSystemLog } from '../data/systemLogs.js';
 
 /**
- * Helper to log security events to system_logs table
+ * Helper to log security events to system_logs table (via data layer)
  * @param {Object} pgPool - PostgreSQL connection pool
  * @param {Object} details - Log details
  */
 async function logSecurityEvent(pgPool, details) {
-  if (!pgPool) return; // Skip if no database connection
-  
   try {
-    const query = `
-      INSERT INTO system_logs (
-        tenant_id, level, message, source, metadata, created_at
-      ) VALUES (
-        $1, $2, $3, $4, $5, NOW()
-      )
-    `;
-    
-    const values = [
-      'system', // Security events are system-level
-      details.level || 'WARN',
-      details.message,
-      'productionSafetyGuard',
-      JSON.stringify({
+    await insertSystemLog(pgPool, {
+      tenant_id: 'system',
+      level: details.level || 'WARN',
+      message: details.message,
+      source: 'productionSafetyGuard',
+      metadata: {
         method: details.method,
         path: details.path,
         bypass_method: details.bypass_method,
         ip: details.ip,
         user_agent: details.user_agent,
-      }),
-    ];
-    
-    await pgPool.query(query, values);
+      },
+    });
   } catch (error) {
     // Don't fail the request if logging fails
     logger.error('Failed to log security event:', {
@@ -73,27 +62,25 @@ async function logSecurityEvent(pgPool, details) {
  */
 function isProductionDatabase() {
   const dbUrl = process.env.DATABASE_URL || '';
-  
+
   // Check for Supabase Cloud patterns
-  const isSupabaseCloud = 
-    dbUrl.includes('.supabase.co') || 
+  const isSupabaseCloud =
+    dbUrl.includes('.supabase.co') ||
     dbUrl.includes('supabase.com') ||
     dbUrl.includes('db.supabase.io');
-  
+
   // Check for explicit production flag
   const isProduction = process.env.NODE_ENV === 'production';
-  
+
   // Check for Render.com or other cloud platforms
-  const isRenderCloud = 
-    process.env.RENDER === 'true' || 
-    process.env.RENDER_EXTERNAL_HOSTNAME;
-  
+  const isRenderCloud = process.env.RENDER === 'true' || process.env.RENDER_EXTERNAL_HOSTNAME;
+
   return isSupabaseCloud || isRenderCloud || (isProduction && !dbUrl.includes('localhost'));
 }
 
 /**
  * Middleware that blocks write operations on production databases
- * 
+ *
  * @param {Object} [opts] - Configuration options
  * @param {boolean} [opts.enabled=true] - Whether guard is active
  * @param {string[]} [opts.allowedMethods=['GET','HEAD','OPTIONS']] - Safe methods
@@ -125,7 +112,7 @@ export function productionSafetyGuard(opts = {}) {
 
     // Skip exempt paths
     const path = req.path || req.url;
-    if (exemptPaths.some(exempt => path.startsWith(exempt))) {
+    if (exemptPaths.some((exempt) => path.startsWith(exempt))) {
       return next();
     }
 
@@ -141,7 +128,7 @@ export function productionSafetyGuard(opts = {}) {
     if (process.env.ALLOW_PRODUCTION_WRITES === 'true') {
       const message = `⚠️  Production write allowed via ALLOW_PRODUCTION_WRITES: ${method} ${path}`;
       logger.warn(message);
-      
+
       // Log to system_logs table
       logSecurityEvent(pgPool, {
         level: 'WARN',
@@ -152,7 +139,7 @@ export function productionSafetyGuard(opts = {}) {
         ip: req.ip || req.connection?.remoteAddress,
         user_agent: req.headers['user-agent'],
       });
-      
+
       return next();
     }
 
@@ -160,11 +147,11 @@ export function productionSafetyGuard(opts = {}) {
     if (checkHeader) {
       const writeToken = req.headers['x-allow-production-write'];
       const expectedToken = process.env.PRODUCTION_WRITE_TOKEN;
-      
+
       if (expectedToken && writeToken === expectedToken) {
         const message = `⚠️  Production write allowed via header token: ${method} ${path}`;
         logger.warn(message);
-        
+
         // Log to system_logs table
         logSecurityEvent(pgPool, {
           level: 'WARN',
@@ -175,7 +162,7 @@ export function productionSafetyGuard(opts = {}) {
           ip: req.ip || req.connection?.remoteAddress,
           user_agent: req.headers['user-agent'],
         });
-        
+
         return next();
       }
     }
@@ -184,7 +171,7 @@ export function productionSafetyGuard(opts = {}) {
     if (process.env.E2E_TEST_MODE === 'true' && process.env.ALLOW_E2E_MUTATIONS === 'true') {
       const message = `⚠️  Production write allowed via E2E_TEST_MODE + ALLOW_E2E_MUTATIONS: ${method} ${path}`;
       logger.warn(message);
-      
+
       // Log to system_logs table
       logSecurityEvent(pgPool, {
         level: 'WARN',
@@ -195,14 +182,14 @@ export function productionSafetyGuard(opts = {}) {
         ip: req.ip || req.connection?.remoteAddress,
         user_agent: req.headers['user-agent'],
       });
-      
+
       return next();
     }
 
     // BLOCKED: No bypass mechanism provided
     const blockMessage = `🚫 Blocked production write: ${method} ${path}`;
     logger.error(blockMessage);
-    
+
     // Log blocked attempt to system_logs table
     logSecurityEvent(pgPool, {
       level: 'ERROR',
@@ -222,7 +209,7 @@ export function productionSafetyGuard(opts = {}) {
         path,
         hint: 'To enable writes, set ALLOW_PRODUCTION_WRITES=true or provide X-Allow-Production-Write header',
         database: 'production/cloud',
-      }
+      },
     });
   };
 }
