@@ -3,7 +3,7 @@ import { Lead, Account, Employee } from '@/api/entities';
 import { loadUsersSafely } from '@/components/shared/userLoader';
 import { toast } from 'sonner';
 
-// [2026-03-07 Cursor] — extracted from Leads.jsx / useLeadsData.js (PR #330)
+// Extracted from Leads.jsx into dedicated hook for leads data management (PR #330)
 
 /**
  * useLeadsData hook - Manages all data fetching for the Leads page
@@ -653,7 +653,7 @@ export function useLeadsData({
   }, []);
 
   const refreshLeads = useCallback(() => {
-    loadLeads(currentPage, pageSize);
+    return loadLeads(currentPage, pageSize);
   }, [loadLeads, currentPage, pageSize]);
 
   return {
