@@ -378,6 +378,13 @@ export default [
   {
     files: ['braid-mcp-node-server/**/*.ts', 'braid-mcp-node-server/src/braid/adapters/**/*.ts'],
     rules: {
+      ...js.configs.recommended.rules,
+      'no-undef': 'off',
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
       '@typescript-eslint/no-explicit-any': 'off',
     },
   },
