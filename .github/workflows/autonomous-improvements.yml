@@ -2,7 +2,7 @@ name: AiSHA Autonomous Improvements
 
 on:
   schedule:
-    - cron: "0 3 * * *"   # nightly
+    - cron: "0 9 * * *"   # nightly
   workflow_dispatch:
 
 jobs:
