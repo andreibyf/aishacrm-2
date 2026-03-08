@@ -11,8 +11,9 @@ import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { getAuthHeaders } from '../helpers/auth.js';
 
+import { TENANT_ID } from '../testConstants.js';
+
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
-const TENANT_ID = process.env.TEST_TENANT_ID || 'b62b764d-4f27-4e20-a8ad-8eb9b2e1055c';
 
 // Skip if not running backend tests or backend not available
 const SHOULD_RUN = process.env.CI ? process.env.CI_BACKEND_TESTS === 'true' : true;

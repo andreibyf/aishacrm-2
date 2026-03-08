@@ -7,9 +7,9 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { getAuthHeaders } from '../helpers/auth.js';
+import { TENANT_ID } from '../testConstants.js';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
-const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 const SHOULD_RUN = process.env.CI ? process.env.CI_BACKEND_TESTS === 'true' : true;
 
 // Unique subject prefix to isolate test data

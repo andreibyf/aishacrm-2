@@ -1,11 +1,11 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { getAuthHeaders } from '../helpers/auth.js';
+import { TENANT_ID } from '../testConstants.js';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
-const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 // In CI, run only if explicitly enabled
-const SHOULD_RUN = process.env.CI ? (process.env.CI_BACKEND_TESTS === 'true') : true;
+const SHOULD_RUN = process.env.CI ? process.env.CI_BACKEND_TESTS === 'true' : true;
 
 // Test data prefix for easy identification and cleanup
 const TEST_PREFIX = '[TEST-AUTO]';
@@ -17,32 +17,33 @@ async function createWorkflow(payload) {
     method: 'POST',
     headers: {
       ...getAuthHeaders(),
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ 
+    body: JSON.stringify({
       tenant_id: TENANT_ID,
       // Mark as test data for easy identification
       is_test_data: true,
       ...payload,
       // Prefix name for visibility
       name: payload.name ? `${TEST_PREFIX} ${payload.name}` : `${TEST_PREFIX} Workflow`,
-      description: payload.description ? `${TEST_PREFIX} ${payload.description}` : `${TEST_PREFIX} Auto-created by test suite`
-    })
+      description: payload.description
+        ? `${TEST_PREFIX} ${payload.description}`
+        : `${TEST_PREFIX} Auto-created by test suite`,
+    }),
   });
   const json = await res.json();
   return { status: res.status, json };
 }
 
 async function deleteWorkflow(id) {
-  const res = await fetch(`${BASE_URL}/api/workflows/${id}?tenant_id=${TENANT_ID}`, { 
+  const res = await fetch(`${BASE_URL}/api/workflows/${id}?tenant_id=${TENANT_ID}`, {
     method: 'DELETE',
-    headers: getAuthHeaders()
+    headers: getAuthHeaders(),
   });
   return res.status;
 }
 
 describe('Workflow Routes', { skip: !SHOULD_RUN }, () => {
-
   before(async () => {
     // Create test workflow with sample nodes for realistic testing
     const wf = await createWorkflow({
@@ -51,9 +52,9 @@ describe('Workflow Routes', { skip: !SHOULD_RUN }, () => {
       trigger_type: 'webhook',
       status: 'draft',
       nodes: [
-        { id: 'trigger-1', type: 'webhook_trigger', config: {}, position: { x: 400, y: 200 } }
+        { id: 'trigger-1', type: 'webhook_trigger', config: {}, position: { x: 400, y: 200 } },
       ],
-      connections: []
+      connections: [],
     });
     if (wf.status === 201) {
       const id = wf.json?.data?.id || wf.json?.data?.workflow?.id;
@@ -64,13 +65,17 @@ describe('Workflow Routes', { skip: !SHOULD_RUN }, () => {
   after(async () => {
     // Clean up all test workflows
     for (const id of createdIds.filter(Boolean)) {
-      try { await deleteWorkflow(id); } catch { /* ignore cleanup errors */ }
+      try {
+        await deleteWorkflow(id);
+      } catch {
+        /* ignore cleanup errors */
+      }
     }
   });
 
   test('GET /api/workflows returns 200 with tenant_id', async () => {
     const res = await fetch(`${BASE_URL}/api/workflows?tenant_id=${TENANT_ID}`, {
-      headers: getAuthHeaders()
+      headers: getAuthHeaders(),
     });
     assert.equal(res.status, 200, 'expected 200 from workflows list');
     const json = await res.json();
@@ -87,11 +92,15 @@ describe('Workflow Routes', { skip: !SHOULD_RUN }, () => {
       status: 'draft',
       nodes: [
         { id: 'trigger-1', type: 'webhook_trigger', config: {}, position: { x: 400, y: 100 } },
-        { id: 'action-1', type: 'create_lead', config: {}, position: { x: 400, y: 300 } }
+        { id: 'action-1', type: 'create_lead', config: {}, position: { x: 400, y: 300 } },
       ],
-      connections: [{ from: 'trigger-1', to: 'action-1' }]
+      connections: [{ from: 'trigger-1', to: 'action-1' }],
     });
-    assert.equal(result.status, 201, `expected 201, got ${result.status}: ${JSON.stringify(result.json)}`);
+    assert.equal(
+      result.status,
+      201,
+      `expected 201, got ${result.status}: ${JSON.stringify(result.json)}`,
+    );
     const id = result.json?.data?.id || result.json?.data?.workflow?.id;
     assert.ok(id, 'workflow should have an id');
     createdIds.push(id);
@@ -102,9 +111,9 @@ describe('Workflow Routes', { skip: !SHOULD_RUN }, () => {
       method: 'POST',
       headers: {
         ...getAuthHeaders(),
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ tenant_id: TENANT_ID, trigger_type: 'manual' })
+      body: JSON.stringify({ tenant_id: TENANT_ID, trigger_type: 'manual' }),
     });
     assert.ok([400, 422].includes(res.status), `expected 400 or 422, got ${res.status}`);
   });
@@ -116,7 +125,7 @@ describe('Workflow Routes', { skip: !SHOULD_RUN }, () => {
     }
     const id = createdIds[0];
     const res = await fetch(`${BASE_URL}/api/workflows/${id}?tenant_id=${TENANT_ID}`, {
-      headers: getAuthHeaders()
+      headers: getAuthHeaders(),
     });
     // May return 404 if workflow was cleaned up or not found
     assert.ok([200, 404].includes(res.status), `expected 200 or 404, got ${res.status}`);
@@ -133,12 +142,12 @@ describe('Workflow Routes', { skip: !SHOULD_RUN }, () => {
       method: 'PUT',
       headers: {
         ...getAuthHeaders(),
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         tenant_id: TENANT_ID,
-        status: 'active'
-      })
+        status: 'active',
+      }),
     });
     assert.equal(res.status, 200, 'expected 200 for update');
   });
@@ -153,17 +162,20 @@ describe('Workflow Routes', { skip: !SHOULD_RUN }, () => {
       method: 'POST',
       headers: {
         ...getAuthHeaders(),
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ tenant_id: TENANT_ID })
+      body: JSON.stringify({ tenant_id: TENANT_ID }),
     });
     // May succeed, fail validation, or 404 if workflow not found
-    assert.ok([200, 400, 404, 422].includes(res.status), `expected valid response, got ${res.status}`);
+    assert.ok(
+      [200, 400, 404, 422].includes(res.status),
+      `expected valid response, got ${res.status}`,
+    );
   });
 
   test('GET /api/workflow-executions returns execution history', async () => {
     const res = await fetch(`${BASE_URL}/api/workflowexecutions?tenant_id=${TENANT_ID}`, {
-      headers: getAuthHeaders()
+      headers: getAuthHeaders(),
     });
     assert.ok([200, 404].includes(res.status), `expected 200 or 404, got ${res.status}`);
     if (res.status === 200) {
@@ -174,7 +186,7 @@ describe('Workflow Routes', { skip: !SHOULD_RUN }, () => {
 
   test('GET /api/workflow-templates returns available templates', async () => {
     const res = await fetch(`${BASE_URL}/api/workflow-templates?tenant_id=${TENANT_ID}`, {
-      headers: getAuthHeaders()
+      headers: getAuthHeaders(),
     });
     assert.ok([200, 404].includes(res.status), `expected 200 or 404, got ${res.status}`);
   });
@@ -187,19 +199,23 @@ describe('Workflow Routes', { skip: !SHOULD_RUN }, () => {
       status: 'draft',
       nodes: [
         { id: 'trigger-1', type: 'manual_trigger', config: {}, position: { x: 400, y: 100 } },
-        { 
-          id: 'note-1', 
-          type: 'create_note', 
-          config: { 
+        {
+          id: 'note-1',
+          type: 'create_note',
+          config: {
             content: 'Test note created by workflow automation',
-            related_to: 'lead'
-          }, 
-          position: { x: 400, y: 300 } 
-        }
+            related_to: 'lead',
+          },
+          position: { x: 400, y: 300 },
+        },
       ],
-      connections: [{ from: 'trigger-1', to: 'note-1' }]
+      connections: [{ from: 'trigger-1', to: 'note-1' }],
     });
-    assert.equal(result.status, 201, `expected 201, got ${result.status}: ${JSON.stringify(result.json)}`);
+    assert.equal(
+      result.status,
+      201,
+      `expected 201, got ${result.status}: ${JSON.stringify(result.json)}`,
+    );
     const id = result.json?.data?.id || result.json?.data?.workflow?.id;
     assert.ok(id, 'workflow should have an id');
     createdIds.push(id);
@@ -213,28 +229,32 @@ describe('Workflow Routes', { skip: !SHOULD_RUN }, () => {
       status: 'draft',
       nodes: [
         { id: 'trigger-1', type: 'webhook_trigger', config: {}, position: { x: 400, y: 100 } },
-        { 
-          id: 'find-1', 
-          type: 'find_contact', 
-          config: { lookup_field: 'phone' }, 
-          position: { x: 400, y: 200 } 
+        {
+          id: 'find-1',
+          type: 'find_contact',
+          config: { lookup_field: 'phone' },
+          position: { x: 400, y: 200 },
         },
-        { 
-          id: 'sms-1', 
-          type: 'send_sms', 
-          config: { 
+        {
+          id: 'sms-1',
+          type: 'send_sms',
+          config: {
             message: 'Sorry we missed your call. How can we help you today?',
-            to_field: '{{contact.phone}}'
-          }, 
-          position: { x: 400, y: 300 } 
-        }
+            to_field: '{{contact.phone}}',
+          },
+          position: { x: 400, y: 300 },
+        },
       ],
       connections: [
         { from: 'trigger-1', to: 'find-1' },
-        { from: 'find-1', to: 'sms-1' }
-      ]
+        { from: 'find-1', to: 'sms-1' },
+      ],
     });
-    assert.equal(result.status, 201, `expected 201, got ${result.status}: ${JSON.stringify(result.json)}`);
+    assert.equal(
+      result.status,
+      201,
+      `expected 201, got ${result.status}: ${JSON.stringify(result.json)}`,
+    );
     const id = result.json?.data?.id || result.json?.data?.workflow?.id;
     assert.ok(id, 'workflow should have an id');
     createdIds.push(id);

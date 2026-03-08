@@ -16,6 +16,7 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import express from 'express';
 import { createServer } from 'node:http';
+import { TENANT_ID as MOCK_TENANT_ID } from '../testConstants.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -103,7 +104,7 @@ describe('GET /api/pep/saved-reports', () => {
   });
 
   it('returns 200 with empty array when no saved reports exist', async () => {
-    const res = await req(port, 'GET', '/api/pep/saved-reports?tenant_id=tenant-abc');
+    const res = await req(port, 'GET', `/api/pep/saved-reports?tenant_id=${MOCK_TENANT_ID}`);
     assert.strictEqual(res.status, 200);
     const json = await res.json();
     assert.strictEqual(json.status, 'success');
@@ -125,7 +126,7 @@ describe('POST /api/pep/saved-reports — validation', () => {
   });
 
   it('returns 400 when required fields are missing', async () => {
-    const res = await req(port, 'POST', '/api/pep/saved-reports', { tenant_id: 'tenant-abc' });
+    const res = await req(port, 'POST', '/api/pep/saved-reports', { tenant_id: MOCK_TENANT_ID });
     assert.strictEqual(res.status, 400);
     const json = await res.json();
     assert.ok(json.message.includes('Missing required fields'));
@@ -163,7 +164,7 @@ describe('POST /api/pep/saved-reports — duplicate', () => {
 
   it('returns 409 when report name already exists for tenant', async () => {
     const res = await req(port, 'POST', '/api/pep/saved-reports', {
-      tenant_id: 'tenant-abc',
+      tenant_id: MOCK_TENANT_ID,
       report_name: 'Duplicate Report',
       plain_english: 'Show me open leads',
       compiled_ir: { op: 'query_entity', target: 'leads', filters: [] },
@@ -196,7 +197,11 @@ describe('DELETE /api/pep/saved-reports/:id', () => {
   });
 
   it('returns 200 on successful delete', async () => {
-    const res = await req(port, 'DELETE', '/api/pep/saved-reports/some-uuid?tenant_id=tenant-abc');
+    const res = await req(
+      port,
+      'DELETE',
+      `/api/pep/saved-reports/some-uuid?tenant_id=${MOCK_TENANT_ID}`,
+    );
     assert.strictEqual(res.status, 200);
     const json = await res.json();
     assert.strictEqual(json.status, 'success');
@@ -243,7 +248,7 @@ describe('PATCH /api/pep/saved-reports/:id/run — not found', () => {
 
   it('returns 404 when saved report does not exist for tenant', async () => {
     const res = await req(port, 'PATCH', '/api/pep/saved-reports/missing-uuid/run', {
-      tenant_id: 'tenant-abc',
+      tenant_id: MOCK_TENANT_ID,
     });
     assert.strictEqual(res.status, 404);
     const json = await res.json();
@@ -263,7 +268,7 @@ describe('PATCH /api/pep/saved-reports/:id/run — success', () => {
         rpcCalled = true;
         assert.strictEqual(fnName, 'pep_increment_report_run');
         assert.strictEqual(params.p_id, 'existing-uuid');
-        assert.strictEqual(params.p_tenant_id, 'tenant-abc');
+        assert.strictEqual(params.p_tenant_id, MOCK_TENANT_ID);
         return Promise.resolve({ error: null });
       },
     };
@@ -275,7 +280,7 @@ describe('PATCH /api/pep/saved-reports/:id/run — success', () => {
 
   it('returns 200 on successful atomic increment via RPC', async () => {
     const res = await req(port, 'PATCH', '/api/pep/saved-reports/existing-uuid/run', {
-      tenant_id: 'tenant-abc',
+      tenant_id: MOCK_TENANT_ID,
     });
     assert.strictEqual(res.status, 200);
     const json = await res.json();
@@ -301,7 +306,7 @@ describe('Tenant isolation', () => {
     const res = await req(
       port,
       'DELETE',
-      '/api/pep/saved-reports/uuid-owned-by-other-tenant?tenant_id=tenant-xyz',
+      '/api/pep/saved-reports/uuid-owned-by-other-tenant?tenant_id=00000000-0000-0000-0000-000000000099',
     );
     assert.strictEqual(res.status, 200);
   });

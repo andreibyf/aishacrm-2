@@ -23,6 +23,8 @@
  *   const employee = TestFactory.employee({ role: "Sales Rep" });
  */
 
+import { TENANT_ID as DEFAULT_TENANT_ID } from '../testConstants.js';
+
 function generateTestId() {
   return Math.random().toString(36).substring(2, 11);
 }
@@ -36,7 +38,7 @@ function getTenantId(overrides) {
     overrides.tenant_id ||
     process.env.TEST_TENANT_ID ||
     process.env.STAGING_TENANT_ID ||
-    'test-tenant'
+    DEFAULT_TENANT_ID
   );
 }
 

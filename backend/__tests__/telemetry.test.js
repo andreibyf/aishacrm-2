@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { withTimeoutSkip, getTestTimeoutMs } from './helpers/timeout.js';
+import { TENANT_ID } from './testConstants.js';
 
 const timeoutTest = (name, fn) =>
   test(name, { timeout: getTestTimeoutMs() }, async (t) => {
@@ -46,14 +47,14 @@ timeoutTest('telemetryLog writes sanitized event when enabled', async () => {
   });
 
   const oversized = 'x'.repeat(3005);
-  telemetryLog({ type: 'run_started', tenant_id: 'tenant-123', extra: oversized });
+  telemetryLog({ type: 'run_started', tenant_id: TENANT_ID, extra: oversized });
 
   const events = readEvents(logPath);
   assert.equal(events.length, 1);
   const evt = events[0];
 
   assert.equal(evt.type, 'run_started');
-  assert.equal(evt.tenant_id, 'tenant-123');
+  assert.equal(evt.tenant_id, TENANT_ID);
   assert.equal(evt._telemetry, true);
   assert.ok(evt.ts, 'ts should be present');
   assert.ok(evt.extra.length <= 2001, 'extra should be truncated to capString limit');
@@ -68,7 +69,7 @@ timeoutTest('telemetryLog does nothing when disabled', async () => {
     TELEMETRY_LOG_PATH: logPath,
   });
 
-  telemetryLog({ type: 'run_started', tenant_id: 'tenant-123' });
+  telemetryLog({ type: 'run_started', tenant_id: TENANT_ID });
 
   const events = readEvents(logPath);
   assert.equal(events.length, 0);

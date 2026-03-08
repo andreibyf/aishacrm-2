@@ -13,9 +13,9 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import { getAuthHeaders } from '../helpers/auth.js';
+import { TENANT_ID, NONEXISTENT_ID } from '../testConstants.js';
 
 const API_BASE = process.env.BACKEND_URL || process.env.API_BASE_URL || 'http://localhost:3001';
-const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 const SHOULD_RUN = process.env.CI ? process.env.CI_BACKEND_TESTS === 'true' : true;
 
 // Helper to make API requests
@@ -307,8 +307,7 @@ describe('Section H: End-to-End Flow Verification', { skip: !SHOULD_RUN }, () =>
     });
 
     it('Apply on non-existent suggestion returns 404', async () => {
-      const fakeId = '00000000-0000-0000-0000-999999999999';
-      const result = await apiRequest('POST', `/api/ai/suggestions/${fakeId}/apply`);
+      const result = await apiRequest('POST', `/api/ai/suggestions/${NONEXISTENT_ID}/apply`);
 
       // Accept 404 (not found) or 400 (validation error for non-existent entity)
       assert.ok(
