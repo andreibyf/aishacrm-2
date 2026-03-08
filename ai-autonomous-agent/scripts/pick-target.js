@@ -1,4 +1,4 @@
-/* eslint-env node */
+/* global process */
 import fs from "fs"
 
 const stateDir = "ai-autonomous-agent/state"

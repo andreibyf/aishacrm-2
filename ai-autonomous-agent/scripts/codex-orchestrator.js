@@ -1,4 +1,4 @@
-/* eslint-env node */
+/* global process */
 import fs from "fs";
 import { execFileSync } from "child_process";
 
