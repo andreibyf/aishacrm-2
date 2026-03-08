@@ -285,6 +285,7 @@ export default function createAccountV2Routes(_pgPool) {
         partner: 0,
         vendor: 0,
         competitor: 0,
+        other: 0,
       };
       try {
         let statsQuery = supabase.from('accounts').select('type').eq('tenant_id', tenant_id);
@@ -357,7 +358,11 @@ export default function createAccountV2Routes(_pgPool) {
           stats.total = statsData.length;
           for (const row of statsData) {
             const t = row.type;
-            if (t && Object.prototype.hasOwnProperty.call(stats, t)) stats[t]++;
+            if (t && Object.prototype.hasOwnProperty.call(stats, t)) {
+              stats[t]++;
+            } else {
+              stats.other++;
+            }
           }
         }
       } catch (statsErr) {

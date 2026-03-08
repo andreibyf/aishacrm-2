@@ -637,6 +637,7 @@ export default function createOpportunityV2Routes(_pgPool) {
         negotiation: 0,
         closed_won: 0,
         closed_lost: 0,
+        other: 0,
       };
 
       try {
@@ -744,15 +745,19 @@ export default function createOpportunityV2Routes(_pgPool) {
           stats.negotiation = 0;
           stats.closed_won = 0;
           stats.closed_lost = 0;
+          stats.other = 0;
 
           for (const row of statsData) {
-            // Normalize legacy stage values: won → closed_won, lost → closed_lost
+            // Normalize legacy stage values
             let stageKey = row.stage;
             if (stageKey === 'won') stageKey = 'closed_won';
             else if (stageKey === 'lost') stageKey = 'closed_lost';
+            else if (stageKey === 'prospect') stageKey = 'prospecting';
 
             if (stageKey && Object.prototype.hasOwnProperty.call(stats, stageKey)) {
               stats[stageKey]++;
+            } else {
+              stats.other++;
             }
           }
         }

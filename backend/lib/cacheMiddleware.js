@@ -30,7 +30,7 @@ export function cacheList(module, ttl = 30) {
     const userId = req.user?.id || 'anon';
     const params = {
       query: req.query,
-      path: req.path,
+      path: req.baseUrl + req.path,
       userId,
     };
 
@@ -92,7 +92,7 @@ export function cacheDetail(module, ttl = 60) {
     const params = {
       id: req.params.id,
       query: req.query,
-      path: req.path,
+      path: req.baseUrl + req.path,
       userId,
     };
 
