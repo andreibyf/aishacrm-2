@@ -657,6 +657,10 @@ export const callBackendAPI = async (entityName, method, data = null, id = null)
         arr._limit = result.data.limit;
         arr._offset = result.data.offset;
       }
+      // Attach inline stats if present (e.g. leads by status, opportunities by stage)
+      if (result.data.stats && typeof result.data.stats === 'object') {
+        arr._stats = result.data.stats;
+      }
       return arr;
     }
     // For single item operations without id (edge case handling)

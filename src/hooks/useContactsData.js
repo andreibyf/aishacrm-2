@@ -350,6 +350,18 @@ export function useContactsData({
 
       setContacts(items);
 
+      // Use inline stats from list response when present (filter-scoped)
+      if (contactsResult && contactsResult._stats && typeof contactsResult._stats === 'object') {
+        setTotalStats({
+          total: contactsResult._stats.total ?? 0,
+          active: contactsResult._stats.active ?? 0,
+          inactive: contactsResult._stats.inactive ?? 0,
+          prospect: contactsResult._stats.prospect ?? 0,
+          customer: contactsResult._stats.customer ?? 0,
+          churned: contactsResult._stats.churned ?? 0,
+        });
+      }
+
       logger.info('Contacts loaded successfully.', 'ContactsPage', {
         loadedCount: items.length,
         totalCount,

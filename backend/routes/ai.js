@@ -66,11 +66,7 @@ import {
   getMemoryConfig,
 } from '../lib/aiMemory/index.js';
 // Token Budget Manager
-import {
-  applyBudgetCaps,
-  enforceToolSchemaCap,
-  logBudgetSummary,
-} from '../lib/tokenBudget.js';
+import { applyBudgetCaps, enforceToolSchemaCap, logBudgetSummary } from '../lib/tokenBudget.js';
 // AI Settings (configurable via Settings UI)
 import { loadAiSettings } from '../lib/aiSettingsLoader.js';
 // Anthropic adapter for Claude tool calling
@@ -1648,11 +1644,13 @@ ${toolContextSummary}`,
   };
 
   // Middleware to get tenant_id from request
+  // Priority: header > query > body > user's assigned tenant (body needed for POST /api/ai/chat and conversations)
   const getTenantId = (req) => {
     return (
       req.headers['x-tenant-id'] ||
       req.query?.tenant_id ||
       req.query?.tenantId ||
+      req.body?.tenant_id ||
       req.user?.tenant_id
     );
   };
@@ -2886,7 +2884,8 @@ ${toolContextSummary}`,
       if (!tenantRecord?.id) {
         return res.status(400).json({
           status: 'error',
-          message: 'Valid tenant_id required (x-tenant-id header)',
+          message:
+            'Valid tenant_id required. Provide x-tenant-id header or tenant_id in request body (e.g. when acting as superadmin, select a client from the dropdown first).',
         });
       }
 
@@ -3892,7 +3891,9 @@ ${conversationSummary}`;
       }
 
       // Remove internal-only fields from tool interactions before returning to client
-      const safeToolInteractions = toolInteractions.map(({ full_result: _full_result, ...rest }) => rest);
+      const safeToolInteractions = toolInteractions.map(
+        ({ full_result: _full_result, ...rest }) => rest,
+      );
 
       // CRITICAL: Extract UI actions from tool results for frontend event dispatch
       // This enables navigation, form opening, and other UI side effects

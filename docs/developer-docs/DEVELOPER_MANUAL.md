@@ -61,6 +61,7 @@
 - [7.4 Rate Limiting](#74-rate-limiting)
 - [7.5 Versioning](#75-versioning)
 - [7.6 API v2 (AI-Enhanced)](#76-api-v2-ai-enhanced)
+- [7.6.2 V2 Inline Stats](#762-v2-inline-stats)
 - [7.7 Deprecation Headers](#77-deprecation-headers)
 
 ### Chapter 8: Testing

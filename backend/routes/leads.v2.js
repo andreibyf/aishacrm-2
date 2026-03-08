@@ -632,9 +632,154 @@ export default function createLeadsV2Routes() {
         return expanded;
       });
 
+      // Inline stats: aggregate from full filtered dataset (same filters as main query, no pagination/search/status)
+      let stats = {
+        total: count || 0,
+        new: 0,
+        contacted: 0,
+        qualified: 0,
+        unqualified: 0,
+        converted: 0,
+        lost: 0,
+      };
+      try {
+        let statsQuery = supabase.from('leads').select('status').eq('tenant_id', tenant_id);
+
+        if (visibilityScope && !visibilityScope.bypass) {
+          if (visibilityScope.mode === 'shared' && visibilityScope.teamIds?.length > 0) {
+            // no extra filter
+          } else if (visibilityScope.employeeIds?.length > 0) {
+            const idList = visibilityScope.employeeIds.join(',');
+            statsQuery = statsQuery.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+          }
+        }
+
+        // Apply same filter object as main query (assigned_to $or, is_test_data) — do NOT apply status or text search
+        if (filter) {
+          let parsedFilter = filter;
+          if (typeof filter === 'string' && filter.startsWith('{')) {
+            try {
+              parsedFilter = JSON.parse(filter);
+            } catch {
+              // treat as literal
+            }
+          }
+          if (typeof parsedFilter === 'object') {
+            // assigned_to from filter.$or (same logic as buildBaseQuery)
+            if (parsedFilter.$or && Array.isArray(parsedFilter.$or)) {
+              const hasTextSearch = parsedFilter.$or.some(
+                (cond) =>
+                  cond &&
+                  typeof cond === 'object' &&
+                  Object.values(cond).some(
+                    (val) => val && typeof val === 'object' && '$icontains' in val,
+                  ),
+              );
+              if (!hasTextSearch) {
+                const normalizedOr = parsedFilter.$or.filter(
+                  (cond) => cond && typeof cond === 'object',
+                );
+                const hasUnassigned = normalizedOr.some((cond) => cond.assigned_to === null);
+                const orParts = [];
+                for (const condition of normalizedOr) {
+                  const val = condition.assigned_to;
+                  if (val === null || val === undefined) continue;
+                  if (typeof val === 'object' && val.$in && Array.isArray(val.$in)) {
+                    const ids = val.$in.filter((id) => typeof id === 'string' && id.trim());
+                    if (ids.length > 0) orParts.push(`assigned_to.in.(${ids.join(',')})`);
+                  } else if (typeof val === 'string' && val.trim()) {
+                    orParts.push(`assigned_to.eq.${val}`);
+                  }
+                }
+                if (hasUnassigned) orParts.push('assigned_to.is.null');
+                if (orParts.length > 0) {
+                  statsQuery = statsQuery.or(orParts.join(','));
+                }
+              }
+            }
+            if (parsedFilter.is_test_data !== undefined) {
+              if (parsedFilter.is_test_data === false) {
+                statsQuery = statsQuery.or('is_test_data.is.false,is_test_data.is.null');
+              } else {
+                statsQuery = statsQuery.eq('is_test_data', parsedFilter.is_test_data);
+              }
+            }
+          }
+        }
+
+        // Direct query params (used when no filter, or in addition to filter for some fields)
+        if (is_test_data !== undefined && !filter) {
+          const flag = String(is_test_data).toLowerCase();
+          if (flag === 'false') {
+            statsQuery = statsQuery.or('is_test_data.is.false,is_test_data.is.null');
+          } else if (flag === 'true') {
+            statsQuery = statsQuery.eq('is_test_data', true);
+          }
+        }
+
+        if (!filter && assigned_to !== undefined && assigned_to !== null && assigned_to !== '') {
+          if (assigned_to === 'unassigned' || assigned_to === 'null') {
+            statsQuery = statsQuery.is('assigned_to', null);
+          } else {
+            const safeAssignedTo = sanitizeUuidInput(assigned_to);
+            if (safeAssignedTo) {
+              statsQuery = statsQuery.eq('assigned_to', safeAssignedTo);
+            }
+          }
+        }
+
+        if (
+          assigned_to_team !== undefined &&
+          assigned_to_team !== null &&
+          assigned_to_team !== ''
+        ) {
+          const safeTeamId = sanitizeUuidInput(assigned_to_team);
+          if (safeTeamId) {
+            statsQuery = statsQuery.eq('assigned_to_team', safeTeamId);
+          }
+        }
+
+        if (source) statsQuery = statsQuery.eq('source', source);
+
+        const safeAccountIdForStats = sanitizeUuidInput(account_id);
+        if (safeAccountIdForStats) {
+          statsQuery = statsQuery.eq('account_id', safeAccountIdForStats);
+        }
+
+        if (exclude_status && typeof exclude_status === 'string') {
+          const excludeList = exclude_status
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
+          if (excludeList.length > 0) {
+            statsQuery = statsQuery.not('status', 'in', `(${excludeList.join(',')})`);
+          }
+        }
+
+        const { data: statusRows, error: statsErr } = await statsQuery;
+        if (!statsErr && statusRows && Array.isArray(statusRows)) {
+          const statusCounts = { total: statusRows.length };
+          statusRows.forEach((row) => {
+            const s = row.status || 'unknown';
+            statusCounts[s] = (statusCounts[s] || 0) + 1;
+          });
+          stats = {
+            total: statusCounts.total || 0,
+            new: statusCounts.new || 0,
+            contacted: statusCounts.contacted || 0,
+            qualified: statusCounts.qualified || 0,
+            unqualified: statusCounts.unqualified || 0,
+            converted: statusCounts.converted || 0,
+            lost: statusCounts.lost || 0,
+          };
+        }
+      } catch (statsErr) {
+        logger.warn('[V2 Leads GET] Stats aggregation failed, using defaults:', statsErr?.message);
+      }
+
       res.json({
         status: 'success',
-        data: { leads, total: count || leads.length },
+        data: { leads, total: count || leads.length, stats },
       });
     } catch (err) {
       logger.error('[Leads v2 GET] Error:', err.message);

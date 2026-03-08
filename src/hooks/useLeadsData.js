@@ -517,6 +517,18 @@ export function useLeadsData({
         setLeads(paginatedLeads);
         setTotalItems(estimatedTotal);
         setCurrentPage(page);
+        // Use inline stats from list response when present (filter-scoped: assigned_to, etc.)
+        if (response._stats && typeof response._stats === 'object') {
+          setTotalStats({
+            total: response._stats.total ?? 0,
+            new: response._stats.new ?? 0,
+            contacted: response._stats.contacted ?? 0,
+            qualified: response._stats.qualified ?? 0,
+            unqualified: response._stats.unqualified ?? 0,
+            converted: response._stats.converted ?? 0,
+            lost: response._stats.lost ?? 0,
+          });
+        }
         initialLoadDone.current = true;
         loadingToast.showSuccess(`${leadsLabel} loading! ✨`);
       } catch (error) {

@@ -652,8 +652,52 @@ export default function createOpportunityV2Routes(_pgPool) {
           }
         }
 
-        // Apply same entity filters (but NOT stage filter, NOT search, NOT pagination)
-        if (assigned_to !== undefined) {
+        // Apply same filter object as main query (assigned_to, $or, is_test_data) — no stage, no search
+        if (filter) {
+          let parsedFilter = filter;
+          if (typeof filter === 'string' && filter.startsWith('{')) {
+            try {
+              parsedFilter = JSON.parse(filter);
+            } catch {
+              // treat as literal
+            }
+          }
+          if (typeof parsedFilter === 'object') {
+            if (parsedFilter.assigned_to !== undefined) {
+              const at = parsedFilter.assigned_to;
+              if (at === null || at === '' || at === 'null') {
+                statsQuery = statsQuery.is('assigned_to', null);
+              } else {
+                statsQuery = statsQuery.eq('assigned_to', at);
+              }
+            }
+            if (parsedFilter.$or && Array.isArray(parsedFilter.$or)) {
+              const normalizedOr = parsedFilter.$or.filter((c) => c && typeof c === 'object');
+              const hasUnassigned = normalizedOr.some((c) => c.assigned_to === null);
+              const assignedOrParts = [];
+              for (const condition of normalizedOr) {
+                const val = condition.assigned_to;
+                if (val === null || val === undefined) continue;
+                if (typeof val === 'object' && val.$in && Array.isArray(val.$in)) {
+                  const ids = val.$in.filter((id) => typeof id === 'string' && id.trim());
+                  if (ids.length > 0) assignedOrParts.push(`assigned_to.in.(${ids.join(',')})`);
+                } else if (typeof val === 'string' && val.trim()) {
+                  assignedOrParts.push(`assigned_to.eq.${val}`);
+                }
+              }
+              if (hasUnassigned) assignedOrParts.push('assigned_to.is.null');
+              if (assignedOrParts.length > 0) statsQuery = statsQuery.or(assignedOrParts.join(','));
+            }
+            if (parsedFilter.is_test_data !== undefined) {
+              if (parsedFilter.is_test_data === false) {
+                statsQuery = statsQuery.or('is_test_data.is.false,is_test_data.is.null');
+              } else {
+                statsQuery = statsQuery.eq('is_test_data', parsedFilter.is_test_data);
+              }
+            }
+          }
+        }
+        if (!filter && assigned_to !== undefined) {
           if (
             assigned_to === null ||
             assigned_to === 'null' ||
@@ -675,7 +719,7 @@ export default function createOpportunityV2Routes(_pgPool) {
         if (account_id) statsQuery = statsQuery.eq('account_id', account_id);
         if (contact_id) statsQuery = statsQuery.eq('contact_id', contact_id);
         if (lead_id) statsQuery = statsQuery.eq('lead_id', lead_id);
-        if (is_test_data !== undefined) {
+        if (is_test_data !== undefined && !filter) {
           const flag = String(is_test_data).toLowerCase();
           if (flag === 'false') {
             statsQuery = statsQuery.or('is_test_data.is.false,is_test_data.is.null');

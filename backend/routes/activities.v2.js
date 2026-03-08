@@ -305,9 +305,6 @@ export default function createActivityV2Routes(_pgPool) {
       const supabase = getSupabaseClient();
       const limit = parseInt(req.query.limit || '50', 10);
       const offset = parseInt(req.query.offset || '0', 10);
-      // Enable stats when explicitly requested via query param
-      const includeStats = req.query.include_stats === 'true' || req.query.include_stats === '1';
-
       // ── Team visibility scoping ──
       let visibilityScope = null;
       if (req.user) {
@@ -568,16 +565,116 @@ export default function createActivityV2Routes(_pgPool) {
         return expanded;
       });
 
-      // Compute counts if requested
-      let counts = null;
-      if (includeStats) {
-        // Fetch all activities for this tenant to compute status counts
-        const { data: allData, error: allError } = await supabase
+      // Inline stats: same filters as list (visibility, assigned_to, assigned_to_team, is_test_data, filter) — no status, no search
+      let stats = {
+        total: count || 0,
+        scheduled: 0,
+        in_progress: 0,
+        overdue: 0,
+        completed: 0,
+        cancelled: 0,
+      };
+      try {
+        let statsQuery = supabase
           .from('activities')
           .select('status, due_date, due_time')
           .eq('tenant_id', tenant_id);
 
-        if (!allError && allData) {
+        if (visibilityScope && !visibilityScope.bypass) {
+          if (visibilityScope.employeeIds?.length > 0) {
+            const idList = visibilityScope.employeeIds.join(',');
+            statsQuery = statsQuery.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+          }
+        }
+        if (type) statsQuery = statsQuery.eq('type', type);
+        if (related_id) statsQuery = statsQuery.eq('related_id', related_id);
+        if (related_to_type) statsQuery = statsQuery.eq('related_to', related_to_type);
+        if (related_to_id) statsQuery = statsQuery.eq('related_id', related_to_id);
+        if (assigned_to) {
+          if (assigned_to === 'unassigned' || assigned_to === 'null') {
+            statsQuery = statsQuery.is('assigned_to', null);
+          } else {
+            const resolved = await resolveAssignedTo(assigned_to, tenant_id, supabase);
+            if (resolved) statsQuery = statsQuery.eq('assigned_to', resolved);
+          }
+        }
+        if (
+          assigned_to_team !== undefined &&
+          assigned_to_team !== null &&
+          assigned_to_team !== ''
+        ) {
+          statsQuery = statsQuery.eq('assigned_to_team', assigned_to_team);
+        }
+        if (is_test_data !== undefined) {
+          const flag = String(is_test_data).toLowerCase();
+          if (flag === 'false') {
+            statsQuery = statsQuery.or('is_test_data.is.false,is_test_data.is.null');
+          } else if (flag === 'true') {
+            statsQuery = statsQuery.eq('is_test_data', true);
+          }
+        }
+        if (filter) {
+          let parsed = filter;
+          if (typeof filter === 'string' && filter.startsWith('{')) {
+            try {
+              parsed = JSON.parse(filter);
+            } catch {
+              // ignore
+            }
+          }
+          if (parsed && typeof parsed === 'object') {
+            if (
+              parsed.assigned_to !== undefined &&
+              parsed.assigned_to !== null &&
+              parsed.assigned_to !== ''
+            ) {
+              const resolvedFilter = await resolveAssignedTo(
+                parsed.assigned_to,
+                tenant_id,
+                supabase,
+              );
+              if (resolvedFilter) statsQuery = statsQuery.eq('assigned_to', resolvedFilter);
+            }
+            if (parsed.$or && Array.isArray(parsed.$or)) {
+              const normalizedOr = parsed.$or.filter((c) => c && typeof c === 'object');
+              const hasRegex = normalizedOr.some((cond) =>
+                Object.values(cond).some(
+                  (val) => val && typeof val === 'object' && (val.$regex || val.$icontains),
+                ),
+              );
+              if (!hasRegex) {
+                const hasUnassigned = normalizedOr.some(
+                  (c) => c.assigned_to === null || c.assigned_to === '',
+                );
+                const orParts = [];
+                for (const condition of normalizedOr) {
+                  const val = condition.assigned_to;
+                  if (val === null || val === undefined || val === '') continue;
+                  if (typeof val === 'object' && val.$in && Array.isArray(val.$in)) {
+                    const ids = val.$in.filter((id) => typeof id === 'string' && id.trim());
+                    if (ids.length > 0) orParts.push(`assigned_to.in.(${ids.join(',')})`);
+                  } else if (typeof val === 'string' && val.trim()) {
+                    orParts.push(`assigned_to.eq.${val}`);
+                  }
+                }
+                if (hasUnassigned) orParts.push('assigned_to.is.null');
+                if (orParts.length > 0) statsQuery = statsQuery.or(orParts.join(','));
+              }
+            }
+            if (parsed.is_test_data !== undefined) {
+              if (parsed.is_test_data === false) {
+                statsQuery = statsQuery.or('is_test_data.is.false,is_test_data.is.null');
+              } else {
+                statsQuery = statsQuery.eq('is_test_data', parsed.is_test_data);
+              }
+            }
+            if (parsed.type) statsQuery = statsQuery.eq('type', parsed.type);
+            if (parsed.related_id) statsQuery = statsQuery.eq('related_id', parsed.related_id);
+          }
+        }
+
+        const { data: allData, error: allError } = await statsQuery;
+        if (!allError && allData && Array.isArray(allData)) {
           const now = new Date();
           const buildDueDateTime = (a) => {
             if (!a.due_date) return null;
@@ -600,8 +697,7 @@ export default function createActivityV2Routes(_pgPool) {
               return new Date(a.due_date);
             }
           };
-
-          counts = {
+          stats = {
             total: allData.length,
             scheduled: allData.filter((a) => a.status === 'scheduled').length,
             in_progress: allData.filter(
@@ -617,6 +713,8 @@ export default function createActivityV2Routes(_pgPool) {
             cancelled: allData.filter((a) => a.status === 'cancelled').length,
           };
         }
+      } catch (statsErr) {
+        logger.warn('[V2 Activities] Stats aggregation failed, using defaults:', statsErr?.message);
       }
 
       res.json({
@@ -626,7 +724,7 @@ export default function createActivityV2Routes(_pgPool) {
           total: count || 0,
           limit,
           offset,
-          counts,
+          stats,
         },
       });
     } catch (error) {

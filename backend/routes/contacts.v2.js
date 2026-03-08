@@ -289,6 +289,118 @@ export default function createContactV2Routes(_pgPool) {
         return expanded;
       });
 
+      // Compute inline stats via separate aggregation query (not paginated)
+      // Stats reflect full filtered dataset, not just current page
+      let stats = {
+        total: count || 0,
+        active: 0,
+        inactive: 0,
+        prospect: 0,
+        customer: 0,
+        churned: 0,
+      };
+
+      try {
+        // Build stats query with same base filters (no status filter, no pagination)
+        let statsQuery = supabase.from('contacts').select('status').eq('tenant_id', tenant_id);
+
+        // Apply same visibility scope
+        if (visibilityScope && !visibilityScope.bypass) {
+          if (visibilityScope.mode === 'shared' && visibilityScope.teamIds?.length > 0) {
+            // Shared: org-wide read, no filter
+          } else if (visibilityScope.employeeIds?.length > 0) {
+            const idList = visibilityScope.employeeIds.join(',');
+            statsQuery = statsQuery.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+          }
+        }
+
+        // Apply same filter object as main query (assigned_to $or, is_test_data, account_id) — no status, no search
+        if (filter) {
+          let parsed = filter;
+          if (typeof filter === 'string' && filter.startsWith('{')) {
+            try {
+              parsed = JSON.parse(filter);
+            } catch {
+              // ignore
+            }
+          }
+          if (parsed && typeof parsed === 'object') {
+            if (parsed.account_id) {
+              const safeAccountId = sanitizeUuidInput(parsed.account_id);
+              if (safeAccountId) statsQuery = statsQuery.eq('account_id', safeAccountId);
+            }
+            if (parsed.$or && Array.isArray(parsed.$or)) {
+              const normalizedOr = parsed.$or.filter((c) => c && typeof c === 'object');
+              const hasSearch = normalizedOr.some((cond) =>
+                Object.values(cond).some((val) => val && typeof val === 'object' && val.$icontains),
+              );
+              if (!hasSearch) {
+                const hasUnassigned = normalizedOr.some((c) => c.assigned_to === null);
+                const orParts = [];
+                for (const condition of normalizedOr) {
+                  const val = condition.assigned_to;
+                  if (val === null || val === undefined) continue;
+                  if (typeof val === 'object' && val.$in && Array.isArray(val.$in)) {
+                    const ids = val.$in.filter((id) => typeof id === 'string' && id.trim());
+                    if (ids.length > 0) orParts.push(`assigned_to.in.(${ids.join(',')})`);
+                  } else if (typeof val === 'string' && val.trim()) {
+                    orParts.push(`assigned_to.eq.${val}`);
+                  }
+                }
+                if (hasUnassigned) orParts.push('assigned_to.is.null');
+                if (orParts.length > 0) statsQuery = statsQuery.or(orParts.join(','));
+              }
+            }
+            if (parsed.is_test_data !== undefined) {
+              if (parsed.is_test_data === false) {
+                statsQuery = statsQuery.or('is_test_data.is.false,is_test_data.is.null');
+              } else {
+                statsQuery = statsQuery.eq('is_test_data', parsed.is_test_data);
+              }
+            }
+          }
+        }
+        const safeStatsAccountId = sanitizeUuidInput(account_id);
+        if (safeStatsAccountId) statsQuery = statsQuery.eq('account_id', safeStatsAccountId);
+        if (!filter && assigned_to !== undefined && assigned_to !== null && assigned_to !== '') {
+          if (assigned_to === 'unassigned' || assigned_to === 'null') {
+            statsQuery = statsQuery.is('assigned_to', null);
+          } else {
+            const safeAssignedTo = sanitizeUuidInput(assigned_to);
+            if (safeAssignedTo) statsQuery = statsQuery.eq('assigned_to', safeAssignedTo);
+          }
+        }
+        if (
+          assigned_to_team !== undefined &&
+          assigned_to_team !== null &&
+          assigned_to_team !== ''
+        ) {
+          const safeTeamId = sanitizeUuidInput(assigned_to_team);
+          if (safeTeamId) statsQuery = statsQuery.eq('assigned_to_team', safeTeamId);
+        }
+
+        const { data: statsData, error: statsError } = await statsQuery;
+        if (statsError) {
+          logger.warn('[V2 Contacts] Stats query failed, using fallback:', statsError.message);
+        } else if (statsData && Array.isArray(statsData)) {
+          stats.total = statsData.length;
+          stats.active = 0;
+          stats.inactive = 0;
+          stats.prospect = 0;
+          stats.customer = 0;
+          stats.churned = 0;
+
+          for (const row of statsData) {
+            const statusKey = row.status;
+            if (statusKey && Object.prototype.hasOwnProperty.call(stats, statusKey)) {
+              stats[statusKey]++;
+            }
+          }
+        }
+      } catch (statsErr) {
+        logger.warn('[V2 Contacts] Stats aggregation error:', statsErr.message);
+      }
+
       res.json({
         status: 'success',
         data: {
@@ -296,6 +408,7 @@ export default function createContactV2Routes(_pgPool) {
           total: count || 0,
           limit,
           offset,
+          stats,
         },
       });
     } catch (error) {

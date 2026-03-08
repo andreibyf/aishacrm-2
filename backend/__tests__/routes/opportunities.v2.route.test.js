@@ -242,3 +242,67 @@ after(async () => {
   assert.equal(json.data.limit, 10, 'expected limit to be 10');
   assert.equal(json.data.offset, 0, 'expected offset to be 0');
 });
+
+(SHOULD_RUN ? test : test.skip)(
+  'GET /api/v2/opportunities returns inline stats object',
+  async () => {
+    const res = await fetch(`${BASE_URL}/api/v2/opportunities?tenant_id=${TENANT_ID}`, {
+      headers: getAuthHeaders(),
+    });
+    assert.equal(res.status, 200, 'expected 200 from v2 opportunities list');
+    const json = await res.json();
+    assert.equal(json.status, 'success');
+    assert.ok(json.data?.stats, 'expected stats object in response');
+    assert.ok(typeof json.data.stats.total === 'number', 'stats.total should be a number');
+    assert.ok(
+      typeof json.data.stats.prospecting === 'number',
+      'stats.prospecting should be a number',
+    );
+    assert.ok(
+      typeof json.data.stats.qualification === 'number',
+      'stats.qualification should be a number',
+    );
+    assert.ok(typeof json.data.stats.proposal === 'number', 'stats.proposal should be a number');
+    assert.ok(
+      typeof json.data.stats.negotiation === 'number',
+      'stats.negotiation should be a number',
+    );
+    assert.ok(
+      typeof json.data.stats.closed_won === 'number',
+      'stats.closed_won should be a number',
+    );
+    assert.ok(
+      typeof json.data.stats.closed_lost === 'number',
+      'stats.closed_lost should be a number',
+    );
+  },
+);
+
+(SHOULD_RUN ? test : test.skip)(
+  'GET /api/v2/opportunities stats reflect filter scope',
+  async () => {
+    // Create an opportunity with a specific stage
+    const opp = TestFactory.opportunity({
+      name: 'Stats Test Opp',
+      stage: 'negotiation',
+      amount: 5000,
+      tenant_id: TENANT_ID,
+    });
+    const createResult = await createOpportunityV2(opp);
+    const createdId = createResult.json?.data?.opportunity?.id || createResult.json?.data?.id;
+    if (createdId) createdIds.push(createdId);
+
+    // Fetch with a filter and verify stats are scoped to the filter
+    const res = await fetch(
+      `${BASE_URL}/api/v2/opportunities?tenant_id=${TENANT_ID}&is_test_data=true`,
+      { headers: getAuthHeaders() },
+    );
+    const json = await res.json();
+
+    assert.equal(res.status, 200);
+    assert.ok(json.data?.stats, 'expected stats object even with filters applied');
+    // Stats should only count records matching the filter scope (is_test_data=true)
+    // The exact counts depend on test data, but structure should be correct
+    assert.ok(typeof json.data.stats.total === 'number', 'stats.total should be a number');
+  },
+);

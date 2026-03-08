@@ -14,6 +14,12 @@ function resolveTenantId() {
   }
 }
 
+// Use explicit tenant when provided (e.g. selectedTenantId from TenantContext), else localStorage
+function tenantForRequest(explicit) {
+  const id = explicit ?? resolveTenantId();
+  return id || undefined;
+}
+
 /**
  * Get authorization headers for API calls.
  * Now relies on cookie-based JWT auth (aisha_access cookie).
@@ -35,8 +41,13 @@ async function getAuthHeaders() {
  * @param {Object} options.metadata - Conversation metadata
  * @returns {Promise<Object>}
  */
-export async function createConversation({ agent_name = 'crm_assistant', metadata = {} } = {}) {
-  const tenantId = resolveTenantId();
+export async function createConversation({
+  agent_name = 'crm_assistant',
+  metadata = {},
+  tenant_id: optTenantId,
+  tenantId: optTenantId2,
+} = {}) {
+  const tenantId = tenantForRequest(optTenantId ?? optTenantId2);
   const authHeaders = await getAuthHeaders();
   // Tenant context logged without interpolating user-controlled values into format string
   console.debug('[Conversations API] Creating conversation', {
@@ -52,7 +63,7 @@ export async function createConversation({ agent_name = 'crm_assistant', metadat
       ...authHeaders,
     },
     credentials: 'include',
-    body: JSON.stringify({ agent_name, metadata }),
+    body: JSON.stringify({ agent_name, metadata, tenant_id: tenantId || undefined }),
   });
 
   if (!response.ok) {
@@ -82,8 +93,11 @@ export async function createConversation({ agent_name = 'crm_assistant', metadat
  * @param {string} conversationId - Conversation ID
  * @returns {Promise<Object>} Conversation with messages
  */
-export async function getConversation(conversationId) {
-  const tenantId = resolveTenantId();
+export async function getConversation(
+  conversationId,
+  { tenantId: optTenantId, tenant_id: optTenantId2 } = {},
+) {
+  const tenantId = tenantForRequest(optTenantId ?? optTenantId2);
   const authHeaders = await getAuthHeaders();
   console.log(`[Conversations API] Getting conversation ${conversationId} for tenant ${tenantId}`);
 
@@ -122,12 +136,18 @@ export async function getConversation(conversationId) {
  * @param {number} [options.limit]
  * @returns {Promise<Array>} Array of conversation summaries
  */
-export async function listConversations({ agent_name, limit } = {}) {
-  const tenantId = resolveTenantId();
+export async function listConversations({
+  agent_name,
+  limit,
+  tenant_id: optTenantId,
+  tenantId: optTenantId2,
+} = {}) {
+  const tenantId = tenantForRequest(optTenantId ?? optTenantId2);
   const authHeaders = await getAuthHeaders();
   const params = new URLSearchParams();
   if (agent_name) params.set('agent_name', agent_name);
   if (limit) params.set('limit', String(limit));
+  if (tenantId) params.set('tenant_id', tenantId);
 
   const url = `${BACKEND_URL}/api/ai/conversations${params.toString() ? `?${params.toString()}` : ''}`;
 
@@ -164,8 +184,11 @@ export async function listConversations({ agent_name, limit } = {}) {
  * @param {string} [updates.topic] - New topic (leads, accounts, support, general, etc.)
  * @returns {Promise<Object>} Updated conversation
  */
-export async function updateConversation(conversationId, { title, topic }) {
-  const tenantId = resolveTenantId();
+export async function updateConversation(
+  conversationId,
+  { title, topic, tenantId: optTenantId, tenant_id: optTenantId2 },
+) {
+  const tenantId = tenantForRequest(optTenantId ?? optTenantId2);
   const authHeaders = await getAuthHeaders();
   console.log(`[Conversations API] Updating conversation ${conversationId}:`, { title, topic });
 
@@ -177,7 +200,7 @@ export async function updateConversation(conversationId, { title, topic }) {
       ...authHeaders,
     },
     credentials: 'include',
-    body: JSON.stringify({ title, topic }),
+    body: JSON.stringify({ title, topic, tenant_id: tenantId || undefined }),
   });
 
   if (!response.ok) {
@@ -197,8 +220,11 @@ export async function updateConversation(conversationId, { title, topic }) {
  * @param {string} conversationId - Conversation ID to delete
  * @returns {Promise<void>}
  */
-export async function deleteConversation(conversationId) {
-  const tenantId = resolveTenantId();
+export async function deleteConversation(
+  conversationId,
+  { tenantId: optTenantId, tenant_id: optTenantId2 } = {},
+) {
+  const tenantId = tenantForRequest(optTenantId ?? optTenantId2);
   const authHeaders = await getAuthHeaders();
   console.log(`[Conversations API] Deleting conversation ${conversationId} for tenant ${tenantId}`);
 
@@ -231,12 +257,17 @@ export async function deleteConversation(conversationId) {
  * @param {Object} [user] - Current user object (for passing context to backend)
  * @returns {Promise<Object>} Created message
  */
-export async function addMessage(conversation, { role, content, file_urls = [] }, user = null) {
+export async function addMessage(
+  conversation,
+  { role, content, file_urls = [] },
+  user = null,
+  { tenantId: optTenantId, tenant_id: optTenantId2 } = {},
+) {
   const metadata = {};
   if (file_urls.length > 0) {
     metadata.file_urls = file_urls;
   }
-  const tenantId = resolveTenantId();
+  const tenantId = tenantForRequest(optTenantId ?? optTenantId2);
   const authHeaders = await getAuthHeaders();
 
   const headers = {
@@ -256,7 +287,7 @@ export async function addMessage(conversation, { role, content, file_urls = [] }
     method: 'POST',
     headers,
     credentials: 'include',
-    body: JSON.stringify({ role, content, metadata }),
+    body: JSON.stringify({ role, content, metadata, tenant_id: tenantId || undefined }),
   });
 
   if (!response.ok) {
@@ -291,10 +322,11 @@ export function getWhatsAppConnectURL(agent_name) {
  * Subscribe to conversation updates via Server-Sent Events (SSE)
  * @param {string} conversationId - Conversation ID
  * @param {Function} callback - Callback function for updates
+ * @param {{ tenantId?: string, tenant_id?: string }} [options] - Optional tenant context (e.g. selectedTenantId for superadmin)
  * @returns {Function} Unsubscribe function
  */
-export function subscribeToConversation(conversationId, callback) {
-  const tenantId = resolveTenantId();
+export function subscribeToConversation(conversationId, callback, options = {}) {
+  const tenantId = tenantForRequest(options.tenantId ?? options.tenant_id);
   const eventSource = new EventSource(
     `${BACKEND_URL}/api/ai/conversations/${conversationId}/stream?tenant_id=${tenantId}`,
   );
@@ -337,8 +369,13 @@ export function subscribeToConversation(conversationId, callback) {
  * @param {'positive'|'negative'|null} rating - Feedback rating (null to clear)
  * @returns {Promise<Object>} Updated feedback data
  */
-export async function submitFeedback(conversationId, messageId, rating) {
-  const tenantId = resolveTenantId();
+export async function submitFeedback(
+  conversationId,
+  messageId,
+  rating,
+  { tenantId: optTenantId, tenant_id: optTenantId2 } = {},
+) {
+  const tenantId = tenantForRequest(optTenantId ?? optTenantId2);
   const authHeaders = await getAuthHeaders();
   console.log(`[Conversations API] Submitting feedback for message ${messageId}: ${rating}`);
 
@@ -352,7 +389,7 @@ export async function submitFeedback(conversationId, messageId, rating) {
         ...authHeaders,
       },
       credentials: 'include',
-      body: JSON.stringify({ rating }),
+      body: JSON.stringify({ rating, tenant_id: tenantId || undefined }),
     },
   );
 
