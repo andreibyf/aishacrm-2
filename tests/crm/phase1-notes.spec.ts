@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { BACKEND_URL, TENANT_ID, createLead, createNote } from './helpers';
+import { BACKEND_URL, TENANT_ID, createLead, createNote } from '../helpers/helpers';
 
 test.describe('@phase1 Notes', () => {
   test('add qualification note to lead and verify linkage', async ({ request }) => {

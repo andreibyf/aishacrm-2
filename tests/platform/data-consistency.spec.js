@@ -12,12 +12,18 @@ test.describe('Settings - Data Consistency', () => {
     await page.goto(`${BASE_URL}/settings`, { waitUntil: 'networkidle' });
 
     // Click Data Consistency tab/nav
-    const dcTab = page.locator('a[href="/settings/data-consistency"], button:has-text("Data Consistency"), a:has-text("Data Consistency")').first();
+    const dcTab = page
+      .locator(
+        'a[href="/settings/data-consistency"], button:has-text("Data Consistency"), a:has-text("Data Consistency")',
+      )
+      .first();
     await expect(dcTab).toBeVisible({ timeout: 10000 });
     await dcTab.click();
 
     // Ensure header & button present
-    await expect(page.locator('text=Data Consistency Manager').first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=Data Consistency Manager').first()).toBeVisible({
+      timeout: 10000,
+    });
     const scanBtn = page.locator('button:has-text("Scan for Duplicates")');
     await expect(scanBtn).toBeVisible();
 
