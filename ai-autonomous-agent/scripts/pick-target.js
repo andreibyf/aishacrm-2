@@ -1,31 +1,40 @@
-/* global process */
 import fs from "fs"
+import process from "process"
 
-const stateDir = "ai-autonomous-agent/state"
-fs.mkdirSync(stateDir, { recursive: true })
+const candidatesFile=process.argv[2]
 
-const candidates = JSON.parse(
-  fs.readFileSync(process.argv[2])
+const config=JSON.parse(
+fs.readFileSync("ai-autonomous-agent/config.json")
 )
 
-if (!candidates.length) {
-  fs.writeFileSync(`${stateDir}/target.txt`, "")
-  fs.writeFileSync(`${stateDir}/subsystem.txt`, "GENERAL")
-  process.exit(0)
-}
+const maxFiles=config.max_files_per_run || 5
 
-candidates.sort((a, b) => b.score - a.score)
+const stateDir="ai-autonomous-agent/state"
+const historyFile=`${stateDir}/recent-files.json`
 
-const target = candidates[0]
+const candidates=JSON.parse(fs.readFileSync(candidatesFile))
+
+let history=[]
+
+if(fs.existsSync(historyFile))
+history=JSON.parse(fs.readFileSync(historyFile))
+
+const filtered=candidates.filter(c=>!history.includes(c.file))
+
+const targets=filtered.slice(0,maxFiles)
 
 fs.writeFileSync(
-  `${stateDir}/target.txt`,
-  target.file
+`${stateDir}/targets.json`,
+JSON.stringify(targets,null,2)
 )
+
+targets.forEach(t=>history.push(t.file))
+
+history=history.slice(-100)
 
 fs.writeFileSync(
-  `${stateDir}/subsystem.txt`,
-  target.subsystem || "GENERAL"
+historyFile,
+JSON.stringify(history,null,2)
 )
 
-console.log(target.file)
+targets.forEach(t=>console.log(t.file))

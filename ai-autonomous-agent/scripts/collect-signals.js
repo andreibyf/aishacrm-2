@@ -1,80 +1,75 @@
 import fs from "fs"
 import path from "path"
 
-const configPath = "ai-autonomous-agent/config.json"
+const config=JSON.parse(
+fs.readFileSync("ai-autonomous-agent/config.json")
+)
 
-const defaultConfig = {
-  repo_src_dir: "src",
-  braid_tools_dir: "braid-llm-kit/examples/assistant",
-  signals: {
-    large_file_bytes: 10000,
-    large_file_weight: 1,
-    todo_weight: 1
-  }
+const roots=[config.repo_src_dir,config.braid_tools_dir,"tests"]
+
+const skipDirs=["node_modules",".git","dist","build","coverage"]
+
+const skipExt=[".png",".jpg",".jpeg",".gif",".svg",".pdf"]
+
+let results=[]
+
+function walk(dir){
+
+if(!fs.existsSync(dir))return
+
+const files=fs.readdirSync(dir)
+
+for(const f of files){
+
+const full=path.join(dir,f)
+const stat=fs.statSync(full)
+
+if(stat.isDirectory()){
+
+if(skipDirs.some(d=>full.includes(d)))continue
+
+walk(full)
+continue
 }
 
-const config = fs.existsSync(configPath)
-  ? JSON.parse(fs.readFileSync(configPath))
-  : defaultConfig
+if(skipExt.some(e=>full.endsWith(e)))continue
 
-const roots = [
-  config.repo_src_dir,
-  "backend",
-  config.braid_tools_dir,
-  "tests"
-].filter(Boolean)
+if(stat.size>500000)continue
 
-let results = []
+const code=fs.readFileSync(full,"utf8")
 
-function walk(dir) {
+let score=0
 
-  if (!fs.existsSync(dir)) return
+if(stat.size>config.signals.large_file_bytes)
+score+=config.signals.large_file_weight
 
-  const files = fs.readdirSync(dir)
+if(code.includes("TODO")||code.includes("FIXME"))
+score+=config.signals.todo_weight
 
-  for (const f of files) {
+if(full.includes(config.braid_tools_dir))
+score+=config.signals.braid_tool_weight
 
-    const full = path.join(dir, f)
-    const stat = fs.statSync(full)
+const dup=code.match(/\.map\(|\.filter\(|\.reduce\(/g)
+if(dup && dup.length>10)score+=3
 
-    if (stat.isDirectory()) {
+results.push({
+file:full.replaceAll("\\","/"),
+score
+})
 
-      if (
-        !full.includes("node_modules") &&
-        !full.includes(".git")
-      ) walk(full)
+}
 
-      continue
-    }
-
-    const code = fs.readFileSync(full, "utf8")
-
-    let score = 0
-
-    if (stat.size > config.signals.large_file_bytes) {
-      score += config.signals.large_file_weight
-    }
-
-    if (code.includes("TODO") || code.includes("FIXME")) {
-      score += config.signals.todo_weight
-    }
-
-    results.push({
-      file: full.replaceAll("\\","/"),
-      score
-    })
-  }
 }
 
 roots.forEach(walk)
 
-const outputDir = "ai-autonomous-agent/state"
+results.sort((a,b)=>b.score-a.score)
 
-fs.mkdirSync(outputDir, { recursive: true })
+fs.mkdirSync("ai-autonomous-agent/state",{recursive:true})
 
 fs.writeFileSync(
-  `${outputDir}/candidates.json`,
-  JSON.stringify(results, null, 2)
+"ai-autonomous-agent/state/candidates.json",
+JSON.stringify(results,null,2)
 )
 
-console.log("Signals collected.")
+console.log("Signals collected")
