@@ -226,7 +226,7 @@ async function ensureUserTenantAssigned(page, email) {
   }
 }
 
-test.describe('CRUD Operations - End-to-End', () => {
+test.describe('[CRM] CRUD Operations - End-to-End', () => {
   // Set a reasonable test timeout - 30s per test should be plenty
   test.setTimeout(30_000);
 
@@ -309,7 +309,7 @@ test.describe('CRUD Operations - End-to-End', () => {
       );
     }
   });
-  test.describe('Activities CRUD', () => {
+  test.describe('[CRM] Activities CRUD', () => {
     test('should create a new activity', async ({ page }) => {
       // Navigate to Activities page
       await navigateTo(page, '/activities');
@@ -620,7 +620,7 @@ test.describe('CRUD Operations - End-to-End', () => {
     });
   });
 
-  test.describe('Leads CRUD', () => {
+  test.describe('[CRM] Leads CRUD', () => {
     test('should create a new lead', async ({ page }) => {
       // Navigate to Leads
       await navigateTo(page, '/leads');
@@ -776,7 +776,7 @@ test.describe('CRUD Operations - End-to-End', () => {
     });
   });
 
-  test.describe('Contacts CRUD', () => {
+  test.describe('[CRM] Contacts CRUD', () => {
     test('should create a new contact', async ({ page }) => {
       // Navigate to Contacts
       await navigateTo(page, '/contacts');
@@ -922,7 +922,7 @@ test.describe('CRUD Operations - End-to-End', () => {
     });
   });
 
-  test.describe('Opportunities CRUD', () => {
+  test.describe('[CRM] Opportunities CRUD', () => {
     test('should create a new opportunity', async ({ page }) => {
       // Navigate to Opportunities
       await navigateTo(page, '/opportunities');
@@ -1011,7 +1011,7 @@ test.describe('CRUD Operations - End-to-End', () => {
     });
   });
 
-  test.describe('System Logs CRUD', () => {
+  test.describe('[CRM] System Logs CRUD', () => {
     test('should create test log and clear all', async ({ page }) => {
       // Allow more time for logs to load and operations to complete in CI
       test.setTimeout(120_000);
@@ -1130,7 +1130,7 @@ test.describe('CRUD Operations - End-to-End', () => {
     });
   });
 
-  test.describe('Data Type Validation', () => {
+  test.describe('[CRM] Data Type Validation', () => {
     test('should enforce priority ENUM values', async ({ page }) => {
       // Navigate to Activities
       await navigateTo(page, '/activities');

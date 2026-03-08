@@ -35,7 +35,7 @@ function TestHarness() {
   );
 }
 
-describe('AiSidebar + AvatarWidget integration', () => {
+describe('[AISHA_CHAT] AiSidebar + AvatarWidget integration', () => {
   it('opens and closes the sidebar when toggled', () => {
     render(<TestHarness />);
 

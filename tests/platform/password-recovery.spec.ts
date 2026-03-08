@@ -59,7 +59,7 @@ async function generateRecoveryLink(admin: SupabaseClient) {
 // Skip early if we cannot run a real flow
 const canRun = !!(SUPABASE_URL && SERVICE_ROLE_KEY);
 
-test.describe('Password Recovery Flow (direct, no pre-auth dependency)', () => {
+test.describe('[PLATFORM] Password Recovery Flow (direct, no pre-auth dependency)', () => {
   test('user can reset password via recovery link (admin generated)', async ({ page }) => {
     test.skip(!canRun, 'Missing Supabase service role credentials; set SUPABASE_SERVICE_ROLE_KEY');
 

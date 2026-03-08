@@ -4,7 +4,7 @@ const BACKEND_URL = process.env.PLAYWRIGHT_BACKEND_URL || 'http://localhost:4001
 const TENANT_ID = process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
 const OTHER_TENANT_ID = '00000000-0000-0000-0000-000000000999'; // Non-existent / isolation check
 
-test.describe('@smoke Multitenancy', () => {
+test.describe('[PLATFORM] @smoke Multitenancy', () => {
   test('RLS prevents cross-tenant read', async ({ request }) => {
     // Create lead under valid tenant
     const leadEmail = `mt-test-${Date.now()}@isolation.test`;

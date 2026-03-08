@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseIntent } from '../intentParser';
 
-describe('intentParser', () => {
+describe('[AISHA_CHAT] intentParser', () => {
   it('detects query intent with geographic and date filters', () => {
     const result = parseIntent('Show my leads in Florida created this month');
     expect(result.intent).toBe('query');

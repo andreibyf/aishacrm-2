@@ -22,7 +22,7 @@ async function waitForBackendHealth() {
   throw new Error('Backend health check timeout after 30s');
 }
 
-test.describe('Basic CRUD Operations', () => {
+test.describe('[CRM] Basic CRUD Operations', () => {
   test.beforeAll(async () => {
     // Ensure backend is running
     await waitForBackendHealth();

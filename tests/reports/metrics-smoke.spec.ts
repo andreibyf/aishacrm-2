@@ -18,7 +18,7 @@ async function waitForBackendHealth(request: any) {
     .toBe(200);
 }
 
-test.describe('Dashboard/Reports - Metrics smoke', () => {
+test.describe('[REPORTS] Dashboard/Reports - Metrics smoke', () => {
   test.beforeAll(async ({ request }) => {
     await waitForBackendHealth(request);
   });

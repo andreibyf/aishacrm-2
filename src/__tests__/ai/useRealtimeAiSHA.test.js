@@ -6,7 +6,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('useRealtimeAiSHA helpers', () => {
+describe('[AISHA_CHAT] useRealtimeAiSHA helpers', () => {
   it('flattens deeply nested realtime payloads into readable text', () => {
     const nestedPayload = {
       content: [
@@ -33,7 +33,7 @@ describe('useRealtimeAiSHA helpers', () => {
   });
 });
 
-describe('useRealtimeAiSHA hook', () => {
+describe('[AISHA_CHAT] useRealtimeAiSHA hook', () => {
   it('surfaces channel_not_ready errors when datachannel is missing', async () => {
     const { result } = renderHook(() => useRealtimeAiSHA());
 

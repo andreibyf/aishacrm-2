@@ -37,7 +37,7 @@ import {
   updateOpportunityStage,
 } from '../helpers/helpers';
 
-test.describe('Complete Sales Cycle - BizDev to Closed Deal', () => {
+test.describe('[WORKFLOWS] Complete Sales Cycle - BizDev to Closed Deal', () => {
   
   test('full B2B sales cycle: source → lead → qualify → convert → progress → close-won', async ({ request }) => {
     const ts = Date.now();
@@ -417,7 +417,7 @@ test.describe('Complete Sales Cycle - BizDev to Closed Deal', () => {
   });
 });
 
-test.describe('Multi-Tenant Sales Isolation', () => {
+test.describe('[WORKFLOWS] Multi-Tenant Sales Isolation', () => {
   
   test('records created in one tenant not visible in another', async ({ request }) => {
     const ts = Date.now();

@@ -28,7 +28,7 @@ const createTestSchema = () => ({
   buildPayload: vi.fn((answers) => answers)
 });
 
-describe('ConversationalForm Input Interaction', () => {
+describe('[AISHA_CHAT] ConversationalForm Input Interaction', () => {
   it('renders input fields that are not disabled or readonly', () => {
     const schema = createTestSchema();
     

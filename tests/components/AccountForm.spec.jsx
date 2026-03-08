@@ -10,7 +10,7 @@ import AccountForm from '../../src/components/accounts/AccountForm';
  * useTenant() hook which needs context. Basic new-account tests work.
  */
 
-test.describe('AccountForm - Component Tests', () => {
+test.describe('[CRM] AccountForm - Component Tests', () => {
   
   test('renders form with empty fields for new account', async ({ mount }) => {
     const component = await mount(

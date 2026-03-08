@@ -40,7 +40,7 @@ beforeEach(() => {
   globalThis.fetch = vi.fn().mockResolvedValue({ ok: true });
 });
 
-describe('useRefresh', () => {
+describe('[PLATFORM] useRefresh', () => {
   it('returns refresh function and refreshing state', () => {
     const { result } = renderHook(() => useRefresh({ modules: ['leads'], onReload: vi.fn() }));
 

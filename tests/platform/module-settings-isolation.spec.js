@@ -148,7 +148,7 @@ async function cleanupModuleSetting(request, tenantId, moduleName) {
 // Test Suite: Module Settings API Tenant Isolation
 // ============================================================================
 
-test.describe('Module Settings API Tenant Isolation', () => {
+test.describe('[PLATFORM] Module Settings API Tenant Isolation', () => {
   let tenantBId;
 
   test.beforeAll(async ({ request }) => {
@@ -285,7 +285,7 @@ test.describe('Module Settings API Tenant Isolation', () => {
 // Smoke Test Suite (Quick Sanity Check)
 // ============================================================================
 
-test.describe('@smoke Module Settings Tenant Isolation', () => {
+test.describe('[PLATFORM] @smoke Module Settings Tenant Isolation', () => {
   test('toggling module for Tenant A does NOT affect Tenant B', async ({ request }) => {
     const tenantB = await getOrCreateTenantB(request);
 

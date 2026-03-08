@@ -76,7 +76,7 @@ function renderCustomQuery() {
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('CustomQuery — Phase 4 Saved Reports', () => {
+describe('[REPORTS] CustomQuery — Phase 4 Saved Reports', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Ensure localStorage is clean and we can spy on it

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { addHistoryEntry, getRecentHistory, getSuggestions, __resetSuggestionHistoryForTests } from '../suggestionEngine';
 import type { SuggestionContext } from '../suggestionEngine';
 
-describe('suggestionEngine', () => {
+describe('[AISHA_CHAT] suggestionEngine', () => {
   beforeEach(() => {
     __resetSuggestionHistoryForTests();
   });

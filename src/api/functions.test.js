@@ -4,7 +4,7 @@
  */
 import { describe, test, expect } from 'vitest';
 
-describe('functions.js exports', () => {
+describe('[PLATFORM] functions.js exports', () => {
   test('core function exports are defined via proxy', async () => {
     const functions = await import('./functions');
     

@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useSpeechInput } from '../../components/ai/useSpeechInput.js';
 
-describe('useSpeechInput', () => {
+describe('[AISHA_CHAT] useSpeechInput', () => {
   let originalAudioContext;
   
   beforeEach(() => {

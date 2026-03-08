@@ -40,7 +40,7 @@ async function fillBasicFields() {
   });
 }
 
-describe('BizDevSourceForm - Unified Submission Pattern', () => {
+describe('[CRM] BizDevSourceForm - Unified Submission Pattern', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset tenant resolver default and lead list mock per test

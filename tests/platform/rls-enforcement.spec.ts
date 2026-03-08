@@ -15,7 +15,7 @@ async function waitForBackendHealth(request: any) {
 
 function rid() { return Math.random().toString(36).slice(2); }
 
-test.describe('RLS Enforcement - Black-box', () => {
+test.describe('[PLATFORM] RLS Enforcement - Black-box', () => {
   test.beforeAll(async ({ request }) => { await waitForBackendHealth(request); });
 
   test('cannot access another tenant\'s contact by ID', async ({ request }) => {

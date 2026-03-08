@@ -74,7 +74,7 @@ async function navigateToUserManagement(page) {
   await page.waitForTimeout(1000);
 }
 
-test.describe('User Management - Permission System', () => {
+test.describe('[PLATFORM] User Management - Permission System', () => {
   test.beforeAll(async () => {
     await waitForBackendHealth();
   });
@@ -505,7 +505,7 @@ test.describe('User Management - Permission System', () => {
   });
 });
 
-test.describe('User Management - Permission Validation', () => {
+test.describe('[PLATFORM] User Management - Permission Validation', () => {
   test.beforeAll(async () => {
     await waitForBackendHealth();
   });

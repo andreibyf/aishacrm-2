@@ -287,7 +287,7 @@ const { default: ContactsPage } = await import('../Contacts.jsx');
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
-describe('Phase 0: Baseline render', () => {
+describe('[CRM] Phase 0: Baseline render', () => {
   it('renders without crashing', async () => {
     const { container } = render(<ContactsPage />);
     expect(container).toBeTruthy();
@@ -319,7 +319,7 @@ describe('Phase 0: Baseline render', () => {
   });
 });
 
-describe('Phase 1: Data hook', () => {
+describe('[CRM] Phase 1: Data hook', () => {
   it('page renders after data hook extraction', async () => {
     const { container } = render(<ContactsPage />);
     await waitFor(() => {
@@ -328,7 +328,7 @@ describe('Phase 1: Data hook', () => {
   });
 });
 
-describe('Phase 2: Bulk operations', () => {
+describe('[CRM] Phase 2: Bulk operations', () => {
   it('page renders with bulk ops extracted', async () => {
     const { container } = render(<ContactsPage />);
     await waitFor(
@@ -340,7 +340,7 @@ describe('Phase 2: Bulk operations', () => {
   });
 });
 
-describe('Phase 3: Stats cards', () => {
+describe('[CRM] Phase 3: Stats cards', () => {
   it('stats cards include Total Contacts label', async () => {
     render(<ContactsPage />);
     await waitFor(() => {
@@ -349,7 +349,7 @@ describe('Phase 3: Stats cards', () => {
   });
 });
 
-describe('Phase 4: Table view', () => {
+describe('[CRM] Phase 4: Table view', () => {
   it('table view renders in default list mode', async () => {
     const { container } = render(<ContactsPage />);
     await waitFor(
@@ -361,7 +361,7 @@ describe('Phase 4: Table view', () => {
   });
 });
 
-describe('Phase 5: Filters', () => {
+describe('[CRM] Phase 5: Filters', () => {
   it('search input present', async () => {
     render(<ContactsPage />);
     await waitFor(() => {
@@ -371,7 +371,7 @@ describe('Phase 5: Filters', () => {
   });
 });
 
-describe('Full regression', () => {
+describe('[CRM] Full regression', () => {
   it('ContactsPage renders with all child areas', async () => {
     const { container } = render(<ContactsPage />);
     await waitFor(

@@ -13,7 +13,7 @@ async function waitForBackendHealth(request: any) {
 
 function rid() { return Math.random().toString(36).slice(2); }
 
-test.describe('Notifications API', () => {
+test.describe('[CRM] Notifications API', () => {
   test.beforeAll(async ({ request }) => { await waitForBackendHealth(request); });
 
   test('create → list → mark as read', async ({ request }) => {

@@ -43,7 +43,7 @@ async function waitForBackendReady(request, { timeout = 90_000 } = {}) {
     .toBe('ready');
 }
 
-setup('authenticate as superadmin', async ({ page, request }) => {
+setup('[PLATFORM] authenticate as superadmin', async ({ page, request }) => {
   // Extend timeouts for cloud deployments where cold starts can be slow
   setup.setTimeout(180_000);
   page.setDefaultNavigationTimeout(120_000);

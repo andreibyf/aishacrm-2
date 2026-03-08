@@ -18,7 +18,7 @@ vi.mock('./schemas', () => ({
   },
 }));
 
-describe('conversationalForms/index.js', () => {
+describe('[AISHA_CHAT] conversationalForms/index.js', () => {
   test('getSchemaById returns correct schema for valid id', () => {
     const schema = getSchemaById('lead');
     expect(schema).toEqual({ id: 'lead', name: 'Lead', fields: [] });

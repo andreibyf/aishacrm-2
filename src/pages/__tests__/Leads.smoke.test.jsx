@@ -344,7 +344,7 @@ const { default: LeadsPage } = await import('../Leads.jsx');
 
 // ─── PHASE 0: Baseline — Page renders at all ────────────────────────────────
 
-describe('Phase 0: Baseline render', () => {
+describe('[CRM] Phase 0: Baseline render', () => {
   it('renders without crashing', async () => {
     const { container } = render(<LeadsPage />);
     expect(container).toBeTruthy();
@@ -413,7 +413,7 @@ describe('Phase 0: Baseline render', () => {
 
 // ─── PHASE 1: Data Hook — page loads without crash ──────────────────────────
 
-describe('Phase 1: Data hook', () => {
+describe('[CRM] Phase 1: Data hook', () => {
   it('page renders after data hook extraction', async () => {
     const { container } = render(<LeadsPage />);
     await waitFor(() => {
@@ -430,7 +430,7 @@ describe('Phase 1: Data hook', () => {
 
 // ─── PHASE 2: Bulk Operations — menu still renders ──────────────────────────
 
-describe('Phase 2: Bulk operations', () => {
+describe('[CRM] Phase 2: Bulk operations', () => {
   it('bulk actions menu present after hook extraction', async () => {
     const { container } = render(<LeadsPage />);
     await waitFor(
@@ -444,7 +444,7 @@ describe('Phase 2: Bulk operations', () => {
 
 // ─── PHASE 3: Stats Cards Component ──────────────────────────────────────────
 
-describe('Phase 3: Stats cards', () => {
+describe('[CRM] Phase 3: Stats cards', () => {
   it('stats cards section rendered', async () => {
     const { container } = render(<LeadsPage />);
     await waitFor(() => {
@@ -456,7 +456,7 @@ describe('Phase 3: Stats cards', () => {
 
 // ─── PHASE 4: Table Component ────────────────────────────────────────────────
 
-describe('Phase 4: Table view', () => {
+describe('[CRM] Phase 4: Table view', () => {
   it('table element present', async () => {
     const { container } = render(<LeadsPage />);
     await waitFor(
@@ -480,7 +480,7 @@ describe('Phase 4: Table view', () => {
 
 // ─── PHASE 5: Filters Component ──────────────────────────────────────────────
 
-describe('Phase 5: Search and filters', () => {
+describe('[CRM] Phase 5: Search and filters', () => {
   it('search input present', async () => {
     render(<LeadsPage />);
     await waitFor(() => {
@@ -500,7 +500,7 @@ describe('Phase 5: Search and filters', () => {
 
 // ─── FULL REGRESSION: Run after all phases complete ──────────────────────────
 
-describe('Full regression', () => {
+describe('[CRM] Full regression', () => {
   it('LeadsPage renders with all child areas', async () => {
     const { container } = render(<LeadsPage />);
 

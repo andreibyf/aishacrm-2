@@ -35,7 +35,7 @@ const localStorageMock = {
 };
 vi.stubGlobal('localStorage', localStorageMock);
 
-describe('entities.js', () => {
+describe('[CRM] entities.js', () => {
   beforeEach(() => {
     mockFetchCalls = [];
     mockFetch.mockClear();

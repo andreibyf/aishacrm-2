@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 const BACKEND_URL = process.env.PLAYWRIGHT_BACKEND_URL || 'http://localhost:4001';
 const TENANT_ID = process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
 
-test.describe('@smoke Assistant Chat', () => {
+test.describe('[AISHA_CHAT] @smoke Assistant Chat', () => {
   test('create conversation and post message', async ({ request }) => {
     // Create conversation - tenant_id required in body, not query
     const convRes = await request.post(`${BACKEND_URL}/api/ai/conversations`, {

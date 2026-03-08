@@ -19,7 +19,7 @@ async function waitForElement(page, locatorFn, timeoutMs = 30000) {
   throw new Error('Element not found within timeout');
 }
 
-test.describe('Calendar: view switching (and drag-drop if possible)', () => {
+test.describe('[CRM] Calendar: view switching (and drag-drop if possible)', () => {
   test('switch views between Month/Week/Day/Agenda', async ({ page, request }) => {
     // Seed one activity to ensure something renders
     const ts = Date.now();

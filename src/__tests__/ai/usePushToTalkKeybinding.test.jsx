@@ -8,7 +8,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { usePushToTalkKeybinding } from '../../hooks/usePushToTalkKeybinding.js';
 
-describe('usePushToTalkKeybinding', () => {
+describe('[AISHA_CHAT] usePushToTalkKeybinding', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });

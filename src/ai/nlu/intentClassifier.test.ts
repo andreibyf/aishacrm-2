@@ -1,7 +1,7 @@
 import { beforeAll, afterAll, describe, expect, it } from 'vitest';
 import { classifyIntent } from './intentClassifier';
 
-describe('intentClassifier', () => {
+describe('[AISHA_CHAT] intentClassifier', () => {
   beforeAll(() => { window.__DISABLE_GLOBAL_FETCH_STUB = true; });
   afterAll(() => { delete window.__DISABLE_GLOBAL_FETCH_STUB; });
   it('detects list intent for leads with timeframe', () => {
