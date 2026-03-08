@@ -365,7 +365,7 @@ after(async () => {
       ],
     };
 
-    const url = `${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&include_stats=false&filter=${encodeURIComponent(JSON.stringify(searchFilter))}`;
+    const url = `${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&filter=${encodeURIComponent(JSON.stringify(searchFilter))}`;
 
     console.log('Testing search filter with $regex. URL length:', url.length);
 
@@ -419,7 +419,7 @@ after(async () => {
     ],
   };
 
-  const url = `${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&include_stats=false&filter=${encodeURIComponent(JSON.stringify(searchFilter))}`;
+  const url = `${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&filter=${encodeURIComponent(JSON.stringify(searchFilter))}`;
 
   const res = await fetch(url, {
     headers: getAuthHeaders(),

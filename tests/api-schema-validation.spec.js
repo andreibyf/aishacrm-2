@@ -29,7 +29,11 @@ async function expectStatus(response, expected) {
 }
 
 async function safeJson(response) {
-  try { return await response.json(); } catch { return await response.text(); }
+  try {
+    return await response.json();
+  } catch {
+    return await response.text();
+  }
 }
 // Use UUID-first tenant id (fallbacks to system tenant UUID used elsewhere)
 const TEST_TENANT_ID = process.env.TEST_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
@@ -48,15 +52,13 @@ const test = base.extend({
       // Use authenticated session for API requests
       storageState: authFile,
     });
-  await inner(context);
+    await inner(context);
     await context.dispose();
   },
 });
 
 test.describe('Backend API Schema Validation', () => {
-
   test.describe('Employee API Tests', () => {
-    
     test('should accept employee with minimal required fields', async ({ apiContext }) => {
       const response = await apiContext.post('employees', {
         data: {
@@ -72,7 +74,9 @@ test.describe('Backend API Schema Validation', () => {
       expect(data.data.employee.last_name).toBe('Employee');
     });
 
-    test('should accept employee without email when CRM access disabled', async ({ apiContext }) => {
+    test('should accept employee without email when CRM access disabled', async ({
+      apiContext,
+    }) => {
       const response = await apiContext.post('employees', {
         data: {
           tenant_id: TEST_TENANT_ID,
@@ -98,7 +102,7 @@ test.describe('Backend API Schema Validation', () => {
       });
       const data = await expectOk(response);
       expect(data.status).toBe('success');
-      
+
       // Check custom fields are in metadata
       const employee = data.data.employee;
       expect(employee.metadata).toBeTruthy();
@@ -144,7 +148,6 @@ test.describe('Backend API Schema Validation', () => {
   });
 
   test.describe('Account API Tests', () => {
-    
     test('should accept account with minimal required fields', async ({ apiContext }) => {
       const response = await apiContext.post('accounts', {
         data: {
@@ -153,10 +156,10 @@ test.describe('Backend API Schema Validation', () => {
         },
       });
       const data = await expectOk(response);
-  expect(data.status).toBe('success');
-  // Account route returns the row under `data`
-  expect(data.data).toHaveProperty('id');
-  expect(data.data.name).toContain('Minimal Account');
+      expect(data.status).toBe('success');
+      // Account route returns the row under `data`
+      expect(data.data).toHaveProperty('id');
+      expect(data.data.name).toContain('Minimal Account');
     });
 
     test('should accept account without email', async ({ apiContext }) => {
@@ -183,27 +186,28 @@ test.describe('Backend API Schema Validation', () => {
   });
 
   test.describe('Contact API Tests', () => {
-    
-    test('should accept contact with first_name and last_name (both required)', async ({ apiContext }) => {
+    test('should accept contact with first_name and last_name (both required)', async ({
+      apiContext,
+    }) => {
       const response = await apiContext.post('contacts', {
         data: {
           tenant_id: TEST_TENANT_ID,
           first_name: 'FirstOnly',
-          last_name: 'LastOnly'
+          last_name: 'LastOnly',
         },
       });
       const data = await expectOk(response);
-  expect(data.status).toBe('success');
-  // Contact route returns row under `data.contact`
-  expect(data.data.contact.first_name).toBe('FirstOnly');
-  expect(data.data.contact.last_name).toBe('LastOnly');
+      expect(data.status).toBe('success');
+      // Contact route returns row under `data.contact`
+      expect(data.data.contact.first_name).toBe('FirstOnly');
+      expect(data.data.contact.last_name).toBe('LastOnly');
     });
 
     test('should reject contact missing last_name', async ({ apiContext }) => {
       const response = await apiContext.post('contacts', {
         data: {
           tenant_id: TEST_TENANT_ID,
-          first_name: 'NoLast'
+          first_name: 'NoLast',
         },
       });
       const data = await expectStatus(response, 400);
@@ -214,7 +218,7 @@ test.describe('Backend API Schema Validation', () => {
       const response = await apiContext.post('contacts', {
         data: {
           tenant_id: TEST_TENANT_ID,
-          last_name: 'NoFirst'
+          last_name: 'NoFirst',
         },
       });
       const data = await expectStatus(response, 400);
@@ -248,27 +252,28 @@ test.describe('Backend API Schema Validation', () => {
   });
 
   test.describe('Lead API Tests', () => {
-    
-    test('should accept lead with first_name and last_name (both required)', async ({ apiContext }) => {
+    test('should accept lead with first_name and last_name (both required)', async ({
+      apiContext,
+    }) => {
       const response = await apiContext.post('leads', {
         data: {
           tenant_id: TEST_TENANT_ID,
           first_name: 'LeadFirst',
-          last_name: 'LeadLast'
+          last_name: 'LeadLast',
         },
       });
       const data = await expectOk(response);
-  expect(data.status).toBe('success');
-  // Lead route returns row under `data.lead`
-  expect(data.data.lead.first_name).toBe('LeadFirst');
-  expect(data.data.lead.last_name).toBe('LeadLast');
+      expect(data.status).toBe('success');
+      // Lead route returns row under `data.lead`
+      expect(data.data.lead.first_name).toBe('LeadFirst');
+      expect(data.data.lead.last_name).toBe('LeadLast');
     });
 
     test('should reject lead missing last_name', async ({ apiContext }) => {
       const response = await apiContext.post('leads', {
         data: {
           tenant_id: TEST_TENANT_ID,
-          first_name: 'NoLast'
+          first_name: 'NoLast',
         },
       });
       const data = await expectStatus(response, 400);
@@ -279,7 +284,7 @@ test.describe('Backend API Schema Validation', () => {
       const response = await apiContext.post('leads', {
         data: {
           tenant_id: TEST_TENANT_ID,
-          last_name: 'NoFirst'
+          last_name: 'NoFirst',
         },
       });
       const data = await expectStatus(response, 400);
@@ -313,7 +318,6 @@ test.describe('Backend API Schema Validation', () => {
   });
 
   test.describe('Opportunity API Tests', () => {
-    
     test('should accept opportunity with minimal required fields', async ({ apiContext }) => {
       const response = await apiContext.post('opportunities', {
         data: {
@@ -322,10 +326,10 @@ test.describe('Backend API Schema Validation', () => {
         },
       });
       const data = await expectOk(response);
-  expect(data.status).toBe('success');
-  // Opportunity route returns row under `data`
-  expect(data.data).toHaveProperty('id');
-  expect(data.data.name).toContain('Minimal Opportunity');
+      expect(data.status).toBe('success');
+      // Opportunity route returns row under `data`
+      expect(data.data).toHaveProperty('id');
+      expect(data.data.name).toContain('Minimal Opportunity');
     });
 
     test('should accept opportunity without amount', async ({ apiContext }) => {
@@ -362,10 +366,9 @@ test.describe('Backend API Schema Validation', () => {
       const data = await expectStatus(response, 500);
       expect(data.status).toBe('error');
     });
-    });
+  });
 
   test.describe('Email Uniqueness Tests', () => {
-    
     test('should allow multiple employees with NULL email', async ({ apiContext }) => {
       const response1 = await apiContext.post('employees', {
         data: {
@@ -410,7 +413,7 @@ test.describe('Backend API Schema Validation', () => {
 
     test('should reject duplicate non-null email', async ({ apiContext }) => {
       const uniqueEmail = `duplicate${Date.now()}@test.com`;
-      
+
       const response1 = await apiContext.post('employees', {
         data: {
           tenant_id: TEST_TENANT_ID,
@@ -432,6 +435,94 @@ test.describe('Backend API Schema Validation', () => {
       expect(data2.status).toBe('error');
       expect(data2.code).toBe('EMPLOYEE_EMAIL_CONFLICT');
       expect(data2.message).toMatch(/already exists/i);
+    });
+  });
+
+  test.describe('V2 Inline Stats Tests', () => {
+    test('Opportunities v2 list returns inline stats', async ({ apiContext }) => {
+      const response = await apiContext.get(`v2/opportunities?tenant_id=${TEST_TENANT_ID}&limit=1`);
+      const json = await expectOk(response);
+
+      expect(json.data).toHaveProperty('stats');
+      expect(json.data.stats).toHaveProperty('total');
+      expect(typeof json.data.stats.total).toBe('number');
+      expect(json.data.stats).toHaveProperty('prospecting');
+      expect(json.data.stats).toHaveProperty('qualification');
+      expect(json.data.stats).toHaveProperty('proposal');
+      expect(json.data.stats).toHaveProperty('negotiation');
+      expect(json.data.stats).toHaveProperty('closed_won');
+      expect(json.data.stats).toHaveProperty('closed_lost');
+    });
+
+    test('Activities v2 list returns inline stats', async ({ apiContext }) => {
+      const response = await apiContext.get(`v2/activities?tenant_id=${TEST_TENANT_ID}&limit=1`);
+      const json = await expectOk(response);
+
+      expect(json.data).toHaveProperty('stats');
+      expect(json.data.stats).toHaveProperty('total');
+      expect(typeof json.data.stats.total).toBe('number');
+      expect(json.data.stats).toHaveProperty('scheduled');
+      expect(json.data.stats).toHaveProperty('in_progress');
+      expect(json.data.stats).toHaveProperty('overdue');
+      expect(json.data.stats).toHaveProperty('completed');
+      expect(json.data.stats).toHaveProperty('cancelled');
+    });
+
+    test('Contacts v2 list returns inline stats', async ({ apiContext }) => {
+      const response = await apiContext.get(`v2/contacts?tenant_id=${TEST_TENANT_ID}&limit=1`);
+      const json = await expectOk(response);
+
+      expect(json.data).toHaveProperty('stats');
+      expect(json.data.stats).toHaveProperty('total');
+      expect(typeof json.data.stats.total).toBe('number');
+      expect(json.data.stats).toHaveProperty('active');
+      expect(json.data.stats).toHaveProperty('inactive');
+      expect(json.data.stats).toHaveProperty('prospect');
+      expect(json.data.stats).toHaveProperty('customer');
+    });
+
+    test('Accounts v2 list returns inline stats', async ({ apiContext }) => {
+      const response = await apiContext.get(`v2/accounts?tenant_id=${TEST_TENANT_ID}&limit=1`);
+      const json = await expectOk(response);
+
+      expect(json.data).toHaveProperty('stats');
+      expect(json.data.stats).toHaveProperty('total');
+      expect(typeof json.data.stats.total).toBe('number');
+      expect(json.data.stats).toHaveProperty('customer');
+      expect(json.data.stats).toHaveProperty('prospect');
+      expect(json.data.stats).toHaveProperty('partner');
+      expect(json.data.stats).toHaveProperty('competitor');
+    });
+
+    test('Leads v2 list returns inline stats', async ({ apiContext }) => {
+      const response = await apiContext.get(`v2/leads?tenant_id=${TEST_TENANT_ID}&limit=1`);
+      const json = await expectOk(response);
+
+      expect(json.data).toHaveProperty('stats');
+      expect(json.data.stats).toHaveProperty('total');
+      expect(typeof json.data.stats.total).toBe('number');
+      expect(json.data.stats).toHaveProperty('new');
+      expect(json.data.stats).toHaveProperty('contacted');
+      expect(json.data.stats).toHaveProperty('qualified');
+      expect(json.data.stats).toHaveProperty('unqualified');
+      expect(json.data.stats).toHaveProperty('converted');
+      expect(json.data.stats).toHaveProperty('lost');
+    });
+
+    test('Opportunities stats sum equals total', async ({ apiContext }) => {
+      const response = await apiContext.get(`v2/opportunities?tenant_id=${TEST_TENANT_ID}&limit=1`);
+      const json = await expectOk(response);
+      const { stats } = json.data;
+
+      const sum =
+        stats.prospecting +
+        stats.qualification +
+        stats.proposal +
+        stats.negotiation +
+        stats.closed_won +
+        stats.closed_lost;
+
+      expect(sum).toBe(stats.total);
     });
   });
 });

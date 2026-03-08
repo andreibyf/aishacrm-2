@@ -647,6 +647,14 @@ export const callBackendAPI = async (entityName, method, data = null, id = null)
         entityKey === 'activities' &&
         (result.data.counts || typeof result.data.total === 'number')
       ) {
+        // Attach _stats to activities array for consistent inline stats access
+        if (
+          result.data.stats &&
+          typeof result.data.stats === 'object' &&
+          Array.isArray(result.data.activities)
+        ) {
+          result.data.activities._stats = result.data.stats;
+        }
         return result.data; // Preserve { activities: [...], counts, total, limit, offset }
       }
       const arr = result.data[entityKey];
@@ -656,6 +664,10 @@ export const callBackendAPI = async (entityName, method, data = null, id = null)
         arr._total = result.data.total;
         arr._limit = result.data.limit;
         arr._offset = result.data.offset;
+      }
+      // Attach inline stats if present (e.g. leads by status, opportunities by stage)
+      if (result.data.stats && typeof result.data.stats === 'object') {
+        arr._stats = result.data.stats;
       }
       return arr;
     }

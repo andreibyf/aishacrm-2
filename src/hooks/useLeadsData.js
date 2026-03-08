@@ -339,12 +339,8 @@ export function useLeadsData({
     }
   }, [user, getTenantFilter, showTestData]);
 
-  // Load total stats when dependencies change
-  useEffect(() => {
-    if (user) {
-      loadTotalStats();
-    }
-  }, [user, selectedTenantId, selectedEmail, loadTotalStats, showTestData]);
+  // Note: Stats useEffect removed — stats are now loaded inline with loadLeads via _stats
+  // loadTotalStats kept for backward compat (manual refresh calls from bulk ops, etc.)
 
   // Main data loading function with pagination and age filtering
   const loadLeads = useCallback(
@@ -517,6 +513,18 @@ export function useLeadsData({
         setLeads(paginatedLeads);
         setTotalItems(estimatedTotal);
         setCurrentPage(page);
+        // Use inline stats from list response when present (filter-scoped: assigned_to, etc.)
+        if (response._stats && typeof response._stats === 'object') {
+          setTotalStats({
+            total: response._stats.total ?? 0,
+            new: response._stats.new ?? 0,
+            contacted: response._stats.contacted ?? 0,
+            qualified: response._stats.qualified ?? 0,
+            unqualified: response._stats.unqualified ?? 0,
+            converted: response._stats.converted ?? 0,
+            lost: response._stats.lost ?? 0,
+          });
+        }
         initialLoadDone.current = true;
         loadingToast.showSuccess(`${leadsLabel} loading! ✨`);
       } catch (error) {

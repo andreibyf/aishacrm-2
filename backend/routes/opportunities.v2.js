@@ -5,6 +5,7 @@ import { buildOpportunityAiContext } from '../lib/opportunityAiContext.js';
 import { getVisibilityScope, getAccessLevel, isNotesOnlyUpdate } from '../lib/teamVisibility.js';
 import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
+import { sanitizeUuidInput } from '../lib/uuidValidator.js';
 
 // NOTE: v2 opportunities router for Phase 4.2 internal pilot.
 // This implementation is dev-focused and gated by FEATURE_OPPORTUNITIES_V2.
@@ -652,8 +653,53 @@ export default function createOpportunityV2Routes(_pgPool) {
           }
         }
 
-        // Apply same entity filters (but NOT stage filter, NOT search, NOT pagination)
-        if (assigned_to !== undefined) {
+        // Apply same filter object as main query (assigned_to, $or, is_test_data) — no stage, no search
+        if (filter) {
+          let parsedFilter = filter;
+          if (typeof filter === 'string' && filter.startsWith('{')) {
+            try {
+              parsedFilter = JSON.parse(filter);
+            } catch {
+              // treat as literal
+            }
+          }
+          if (typeof parsedFilter === 'object') {
+            if (parsedFilter.assigned_to !== undefined) {
+              const at = parsedFilter.assigned_to;
+              if (at === null || at === '' || at === 'null') {
+                statsQuery = statsQuery.is('assigned_to', null);
+              } else {
+                const safeAt = sanitizeUuidInput(at);
+                if (safeAt) statsQuery = statsQuery.eq('assigned_to', safeAt);
+              }
+            }
+            if (parsedFilter.$or && Array.isArray(parsedFilter.$or)) {
+              const normalizedOr = parsedFilter.$or.filter((c) => c && typeof c === 'object');
+              const hasUnassigned = normalizedOr.some((c) => c.assigned_to === null);
+              const assignedOrParts = [];
+              for (const condition of normalizedOr) {
+                const val = condition.assigned_to;
+                if (val === null || val === undefined) continue;
+                if (typeof val === 'object' && val.$in && Array.isArray(val.$in)) {
+                  const ids = val.$in.filter((id) => sanitizeUuidInput(id) !== null);
+                  if (ids.length > 0) assignedOrParts.push(`assigned_to.in.(${ids.join(',')})`);
+                } else if (typeof val === 'string' && sanitizeUuidInput(val) !== null) {
+                  assignedOrParts.push(`assigned_to.eq.${val}`);
+                }
+              }
+              if (hasUnassigned) assignedOrParts.push('assigned_to.is.null');
+              if (assignedOrParts.length > 0) statsQuery = statsQuery.or(assignedOrParts.join(','));
+            }
+            if (parsedFilter.is_test_data !== undefined) {
+              if (parsedFilter.is_test_data === false) {
+                statsQuery = statsQuery.or('is_test_data.is.false,is_test_data.is.null');
+              } else {
+                statsQuery = statsQuery.eq('is_test_data', parsedFilter.is_test_data);
+              }
+            }
+          }
+        }
+        if (!filter && assigned_to !== undefined) {
           if (
             assigned_to === null ||
             assigned_to === 'null' ||
@@ -662,7 +708,8 @@ export default function createOpportunityV2Routes(_pgPool) {
           ) {
             statsQuery = statsQuery.is('assigned_to', null);
           } else {
-            statsQuery = statsQuery.eq('assigned_to', assigned_to);
+            const safeAssignedTo = sanitizeUuidInput(assigned_to);
+            if (safeAssignedTo) statsQuery = statsQuery.eq('assigned_to', safeAssignedTo);
           }
         }
         if (
@@ -670,12 +717,13 @@ export default function createOpportunityV2Routes(_pgPool) {
           assigned_to_team !== null &&
           assigned_to_team !== ''
         ) {
-          statsQuery = statsQuery.eq('assigned_to_team', assigned_to_team);
+          const safeTeamId = sanitizeUuidInput(assigned_to_team);
+          if (safeTeamId) statsQuery = statsQuery.eq('assigned_to_team', safeTeamId);
         }
         if (account_id) statsQuery = statsQuery.eq('account_id', account_id);
         if (contact_id) statsQuery = statsQuery.eq('contact_id', contact_id);
         if (lead_id) statsQuery = statsQuery.eq('lead_id', lead_id);
-        if (is_test_data !== undefined) {
+        if (is_test_data !== undefined && !filter) {
           const flag = String(is_test_data).toLowerCase();
           if (flag === 'false') {
             statsQuery = statsQuery.or('is_test_data.is.false,is_test_data.is.null');

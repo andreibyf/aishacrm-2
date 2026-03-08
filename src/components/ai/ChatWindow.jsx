@@ -1,61 +1,54 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { useToast } from "@/components/ui/use-toast";
-import { 
-  Bot, 
-  Send, 
-  Paperclip, 
-  Minimize2, 
-  Maximize2, 
-  Loader2,
-  Trash2
-} from "lucide-react";
-import { cn } from "@/lib/utils";
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { useToast } from '@/components/ui/use-toast';
+import { Bot, Send, Paperclip, Minimize2, Maximize2, Loader2, Trash2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 // Replaced direct User.me() usage with global user context hook
-import { Tenant } from "@/api/entities";
-import { UploadFile } from "@/api/integrations";
-import * as conversations from "@/api/conversations";
-import MicButton from "./MicButton";
-import MessageBubble from "./MessageBubble";
-import { useUser } from "@/components/shared/useUser.js";
+import { Tenant } from '@/api/entities';
+import { UploadFile } from '@/api/integrations';
+import * as conversations from '@/api/conversations';
+import MicButton from './MicButton';
+import MessageBubble from './MessageBubble';
+import { useUser } from '@/components/shared/useUser.js';
+import { useTenant } from '@/components/shared/tenantContext';
 
 const INDUSTRY_LABELS = {
-  aerospace_and_defense: "Aerospace & Defense",
-  agriculture_and_farming: "Agriculture & Farming",
-  automotive_and_transportation: "Automotive & Transportation",
-  banking_and_financial_services: "Banking & Financial Services",
-  biotechnology_and_pharmaceuticals: "Biotechnology & Pharmaceuticals",
-  chemicals_and_materials: "Chemicals & Materials",
-  construction_and_engineering: "Construction & Engineering",
-  consumer_goods_and_retail: "Consumer Goods & Retail",
-  education_and_training: "Education & Training",
-  energy_oil_and_gas: "Energy, Oil & Gas",
-  entertainment_and_media: "Entertainment & Media",
-  environmental_services: "Environmental Services",
-  food_and_beverage: "Food & Beverage",
-  government_and_public_sector: "Government & Public Sector",
-  green_energy_and_solar: "Green Energy & Solar",
-  healthcare_and_medical_services: "Healthcare & Medical Services",
-  hospitality_and_tourism: "Hospitality & Tourism",
-  information_technology_and_software: "Information Technology & Software",
-  insurance: "Insurance",
-  legal_services: "Legal Services",
-  logistics_and_supply_chain: "Logistics & Supply Chain",
-  manufacturing_industrial: "Manufacturing (Industrial)",
-  marketing_advertising_and_pr: "Marketing, Advertising & PR",
-  mining_and_metals: "Mining & Metals",
-  nonprofit_and_ngos: "Nonprofit & NGOs",
-  real_estate_and_property_management: "Real Estate & Property Management",
-  renewable_energy: "Renewable Energy",
-  retail_and_wholesale: "Retail & Wholesale",
-  telecommunications: "Telecommunications",
-  textiles_and_apparel: "Textiles & Apparel",
-  utilities_water_and_waste: "Utilities (Water & Waste)",
-  veterinary_services: "Veterinary Services",
-  warehousing_and_distribution: "Warehousing & Distribution",
-  other: "Other"
+  aerospace_and_defense: 'Aerospace & Defense',
+  agriculture_and_farming: 'Agriculture & Farming',
+  automotive_and_transportation: 'Automotive & Transportation',
+  banking_and_financial_services: 'Banking & Financial Services',
+  biotechnology_and_pharmaceuticals: 'Biotechnology & Pharmaceuticals',
+  chemicals_and_materials: 'Chemicals & Materials',
+  construction_and_engineering: 'Construction & Engineering',
+  consumer_goods_and_retail: 'Consumer Goods & Retail',
+  education_and_training: 'Education & Training',
+  energy_oil_and_gas: 'Energy, Oil & Gas',
+  entertainment_and_media: 'Entertainment & Media',
+  environmental_services: 'Environmental Services',
+  food_and_beverage: 'Food & Beverage',
+  government_and_public_sector: 'Government & Public Sector',
+  green_energy_and_solar: 'Green Energy & Solar',
+  healthcare_and_medical_services: 'Healthcare & Medical Services',
+  hospitality_and_tourism: 'Hospitality & Tourism',
+  information_technology_and_software: 'Information Technology & Software',
+  insurance: 'Insurance',
+  legal_services: 'Legal Services',
+  logistics_and_supply_chain: 'Logistics & Supply Chain',
+  manufacturing_industrial: 'Manufacturing (Industrial)',
+  marketing_advertising_and_pr: 'Marketing, Advertising & PR',
+  mining_and_metals: 'Mining & Metals',
+  nonprofit_and_ngos: 'Nonprofit & NGOs',
+  real_estate_and_property_management: 'Real Estate & Property Management',
+  renewable_energy: 'Renewable Energy',
+  retail_and_wholesale: 'Retail & Wholesale',
+  telecommunications: 'Telecommunications',
+  textiles_and_apparel: 'Textiles & Apparel',
+  utilities_water_and_waste: 'Utilities (Water & Waste)',
+  veterinary_services: 'Veterinary Services',
+  warehousing_and_distribution: 'Warehousing & Distribution',
+  other: 'Other',
 };
 
 // Wrap messages to ensure they have the expected structure
@@ -64,25 +57,27 @@ const wrapMessage = (msg) => {
   return {
     role: msg.role || 'assistant',
     content: msg.content || '',
-    tool_calls: msg.tool_calls || []
+    tool_calls: msg.tool_calls || [],
   };
 };
 
 export default function ChatWindow() {
   const { user: currentUser } = useUser();
+  const { selectedTenantId } = useTenant();
+  const effectiveTenantId = selectedTenantId || currentUser?.tenant_id || currentUser?.tenant?.id;
   const [messages, setMessages] = useState([]);
-  const [inputValue, setInputValue] = useState("");
+  const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [conversationId, setConversationId] = useState(null);
   const [isMinimized, setIsMinimized] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [tenantInfo, setTenantInfo] = useState(null);
-  const [industryContext, setIndustryContext] = useState("");
+  const [industryContext, setIndustryContext] = useState('');
   const messagesEndRef = useRef(null);
   const { toast } = useToast();
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(() => {
@@ -95,12 +90,12 @@ export default function ChatWindow() {
       if (user?.tenant_id) {
         const tenant = await Tenant.get(user.tenant_id);
         setTenantInfo(tenant);
-        
+
         if (tenant.industry) {
           const industryLabel = INDUSTRY_LABELS[tenant.industry] || tenant.industry;
-          const businessModel = tenant.business_model || "B2B";
-          const geoFocus = tenant.geographic_focus || "North America";
-          
+          const businessModel = tenant.business_model || 'B2B';
+          const geoFocus = tenant.geographic_focus || 'North America';
+
           setIndustryContext(`
 
 **IMPORTANT CONTEXT - Your Client's Industry:**
@@ -120,7 +115,7 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
         }
       }
     } catch (error) {
-      console.error("Error loading tenant context:", error);
+      console.error('Error loading tenant context:', error);
     }
   }, [currentUser]);
 
@@ -135,11 +130,13 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
     }
     console.log(`[ChatWindow] Loading conversation ${conversationId}`);
     try {
-      const conv = await conversations.getConversation(conversationId);
+      const conv = await conversations.getConversation(conversationId, {
+        tenantId: effectiveTenantId,
+      });
       console.log(`[ChatWindow] Loaded conversation:`, conv);
       console.log(`[ChatWindow] Messages array:`, conv?.messages);
       console.log(`[ChatWindow] Messages count: ${conv?.messages?.length || 0}`);
-      
+
       if (conv?.messages) {
         const wrappedMessages = conv.messages.map(wrapMessage);
         console.log('[ChatWindow] Wrapped messages:', wrappedMessages);
@@ -149,46 +146,54 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
         console.warn('[ChatWindow] No messages in conversation');
       }
     } catch (error) {
-      console.error("[ChatWindow] Error loading conversation:", error);
+      console.error('[ChatWindow] Error loading conversation:', error);
       toast({
-        title: "Error",
-        description: "Failed to load conversation history",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to load conversation history',
+        variant: 'destructive',
       });
     }
-  }, [conversationId, toast]);
+  }, [conversationId, effectiveTenantId, toast]);
 
   useEffect(() => {
+    if (!effectiveTenantId) return; // Superadmin must select a client first
     let mounted = true;
     console.log('[ChatWindow] Initializing, creating conversation...');
     (async () => {
       try {
         const conv = await conversations.createConversation({
-          agent_name: "crm_assistant",
-          metadata: { name: "Chat Session", description: "User chat session" }
+          agent_name: 'crm_assistant',
+          metadata: { name: 'Chat Session', description: 'User chat session' },
+          tenantId: effectiveTenantId,
         });
         console.log('[ChatWindow] Conversation created:', conv);
         if (mounted && conv?.id) {
           setConversationId(conv.id);
         }
       } catch (error) {
-        console.error("[ChatWindow] Error creating conversation:", error);
+        console.error('[ChatWindow] Error creating conversation:', error);
       }
     })();
-    return () => { mounted = false; };
-  }, []);
+    return () => {
+      mounted = false;
+    };
+  }, [effectiveTenantId]);
 
   useEffect(() => {
     if (!conversationId) return;
     console.log(`[ChatWindow] Setting up subscription for conversation ${conversationId}`);
     loadConversation();
-    const unsub = conversations.subscribeToConversation(conversationId, (data) => {
-      console.log('[ChatWindow] SSE update received:', data);
-      if (data?.messages) {
-        setMessages(data.messages.map(wrapMessage));
-        setIsLoading(false);
-      }
-    });
+    const unsub = conversations.subscribeToConversation(
+      conversationId,
+      (data) => {
+        console.log('[ChatWindow] SSE update received:', data);
+        if (data?.messages) {
+          setMessages(data.messages.map(wrapMessage));
+          setIsLoading(false);
+        }
+      },
+      { tenantId: effectiveTenantId },
+    );
     return () => {
       console.log(`[ChatWindow] Cleaning up subscription for ${conversationId}`);
       unsub();
@@ -199,25 +204,29 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
     if (!inputValue.trim() || !conversationId || isLoading) return;
 
     const userMessage = inputValue.trim();
-    setInputValue("");
+    setInputValue('');
     setIsLoading(true);
 
     // Optimistically render the user's message so the UI responds immediately
     const optimisticMessage = wrapMessage({ role: 'user', content: userMessage });
-    setMessages(prev => [...prev, optimisticMessage]);
+    setMessages((prev) => [...prev, optimisticMessage]);
 
     try {
-      const conv = await conversations.getConversation(conversationId);
+      const conv = await conversations.getConversation(conversationId, {
+        tenantId: effectiveTenantId,
+      });
 
       // Add industry context to the message if it exists
-      const enhancedMessage = industryContext 
+      const enhancedMessage = industryContext
         ? `${industryContext}\n\nUser Question: ${userMessage}`
         : userMessage;
 
-      await conversations.addMessage(conv, {
-        role: "user",
-        content: enhancedMessage
-      });
+      await conversations.addMessage(
+        conv,
+        { role: 'user', content: enhancedMessage },
+        currentUser,
+        { tenantId: effectiveTenantId },
+      );
 
       // Poll for AI response with exponential backoff
       let attempts = 0;
@@ -227,12 +236,16 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
       const pollForResponse = async () => {
         attempts++;
         await loadConversation();
-        
+
         // Check if we got a response from the assistant
-        const latestMessages = await conversations.getConversation(conversationId);
+        const latestMessages = await conversations.getConversation(conversationId, {
+          tenantId: effectiveTenantId,
+        });
         const hasAssistantReply = latestMessages.messages?.some(
-          (msg, idx) => idx > 0 && msg.role === 'assistant' && 
-          latestMessages.messages[idx - 1].content === enhancedMessage
+          (msg, idx) =>
+            idx > 0 &&
+            msg.role === 'assistant' &&
+            latestMessages.messages[idx - 1].content === enhancedMessage,
         );
 
         if (hasAssistantReply || attempts >= maxAttempts) {
@@ -245,16 +258,15 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
 
       // Start polling after a brief delay
       setTimeout(pollForResponse, 1500);
-
     } catch (error) {
-      console.error("Error sending message:", error);
+      console.error('Error sending message:', error);
       setIsLoading(false);
       // Roll back optimistic message when the backend rejects the send
-      setMessages(prev => prev.filter(m => m !== optimisticMessage));
+      setMessages((prev) => prev.filter((m) => m !== optimisticMessage));
       toast({
-        title: "Error",
-        description: "Failed to send message",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to send message',
+        variant: 'destructive',
       });
       return;
     }
@@ -264,24 +276,25 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
     if (!conversationId) return;
     try {
       const newConv = await conversations.createConversation({
-        agent_name: "crm_assistant",
-        metadata: { name: "Chat Session", description: "User chat session" }
+        agent_name: 'crm_assistant',
+        metadata: { name: 'Chat Session', description: 'User chat session' },
+        tenantId: effectiveTenantId,
       });
       if (newConv?.id) {
         setConversationId(newConv.id);
         setMessages([]);
         setShowClearConfirm(false);
         toast({
-          title: "Success",
-          description: "Chat cleared successfully",
+          title: 'Success',
+          description: 'Chat cleared successfully',
         });
       }
     } catch (error) {
-      console.error("Error clearing chat:", error);
+      console.error('Error clearing chat:', error);
       toast({
-        title: "Error",
-        description: "Failed to clear chat",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to clear chat',
+        variant: 'destructive',
       });
     }
   };
@@ -294,41 +307,48 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
 
     try {
       const { file_url } = await UploadFile({ file });
-      const conv = await conversations.getConversation(conversationId);
-      
+      const conv = await conversations.getConversation(conversationId, {
+        tenantId: effectiveTenantId,
+      });
+
       // Add industry context even for file uploads
       const fileMessage = industryContext
         ? `${industryContext}\n\nUser uploaded a file for analysis.`
         : `User uploaded a file: ${file.name}`;
-      
-      await conversations.addMessage(conv, {
-        role: "user",
-        content: fileMessage,
-        file_urls: [file_url]
-      });
+
+      await conversations.addMessage(
+        conv,
+        { role: 'user', content: fileMessage, file_urls: [file_url] },
+        currentUser,
+        { tenantId: effectiveTenantId },
+      );
 
       toast({
-        title: "File uploaded",
+        title: 'File uploaded',
         description: `${file.name} has been added to the conversation`,
       });
     } catch (error) {
-      console.error("Error uploading file:", error);
+      console.error('Error uploading file:', error);
       setIsLoading(false);
       toast({
-        title: "Upload failed",
-        description: error.message || "Could not upload file",
-        variant: "destructive",
+        title: 'Upload failed',
+        description: error.message || 'Could not upload file',
+        variant: 'destructive',
       });
     }
   };
 
   return (
-    <Card className={cn(
-      "fixed bottom-4 right-4 w-96 shadow-2xl border-slate-700 bg-slate-900 flex flex-col transition-all duration-300",
-      isMinimized ? "h-16" : "h-[600px]"
-    )}>
-      <CardHeader className="flex flex-row items-center justify-between p-4 border-b border-slate-700 cursor-pointer"
-                  onClick={() => setIsMinimized(!isMinimized)}>
+    <Card
+      className={cn(
+        'fixed bottom-4 right-4 w-96 shadow-2xl border-slate-700 bg-slate-900 flex flex-col transition-all duration-300',
+        isMinimized ? 'h-16' : 'h-[600px]',
+      )}
+    >
+      <CardHeader
+        className="flex flex-row items-center justify-between p-4 border-b border-slate-700 cursor-pointer"
+        onClick={() => setIsMinimized(!isMinimized)}
+      >
         <div className="flex items-center gap-3">
           <div className="relative">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
@@ -378,13 +398,14 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
               <div className="flex flex-col items-center justify-center h-full text-center p-6">
                 <Bot className="w-16 h-16 text-slate-600 mb-4" />
                 <h4 className="text-lg font-semibold text-slate-300 mb-2">
-                  {tenantInfo?.industry ? `${INDUSTRY_LABELS[tenantInfo.industry]} AI Assistant` : 'AI Assistant'}
+                  {tenantInfo?.industry
+                    ? `${INDUSTRY_LABELS[tenantInfo.industry]} AI Assistant`
+                    : 'AI Assistant'}
                 </h4>
                 <p className="text-sm text-slate-400">
-                  {tenantInfo?.industry 
+                  {tenantInfo?.industry
                     ? `Ask me anything about ${INDUSTRY_LABELS[tenantInfo.industry]}, your CRM data, market trends, or business strategies.`
-                    : 'Ask me anything about your CRM data, market trends, or business strategies.'
-                  }
+                    : 'Ask me anything about your CRM data, market trends, or business strategies.'}
                 </p>
               </div>
             )}
@@ -405,10 +426,11 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
               <Input
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                onKeyPress={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-                placeholder={tenantInfo?.industry 
-                  ? `Ask about ${INDUSTRY_LABELS[tenantInfo.industry]}...`
-                  : "Type your message..."
+                onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
+                placeholder={
+                  tenantInfo?.industry
+                    ? `Ask about ${INDUSTRY_LABELS[tenantInfo.industry]}...`
+                    : 'Type your message...'
                 }
                 disabled={isLoading || !conversationId}
                 className="flex-1 bg-slate-800 border-slate-600 text-slate-100 placeholder:text-slate-500"
@@ -461,10 +483,7 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
                 >
                   Cancel
                 </Button>
-                <Button
-                  onClick={handleClearChat}
-                  className="bg-red-600 hover:bg-red-700"
-                >
+                <Button onClick={handleClearChat} className="bg-red-600 hover:bg-red-700">
                   Clear Chat
                 </Button>
               </div>

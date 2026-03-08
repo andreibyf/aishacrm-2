@@ -4,7 +4,16 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Alert, AlertDescription } from '../ui/alert';
 import { apiHealthMonitor } from '../../utils/apiHealthMonitor';
-import { AlertCircle, CheckCircle2, Copy, PlayCircle, Loader2, XCircle, RefreshCw, X } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  Copy,
+  PlayCircle,
+  Loader2,
+  XCircle,
+  RefreshCw,
+  X,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { BACKEND_URL } from '../../api/entities';
 import { createHealthIssue, generateAPIFixSuggestion } from '../../utils/githubIssueCreator';
@@ -19,11 +28,17 @@ const FALLBACK_TENANT_UUID = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 async function getAuthHeaders() {
   const headers = { 'Content-Type': 'application/json' };
   try {
-    const { data: { session }, error } = await supabase.auth.getSession();
-    
+    const {
+      data: { session },
+      error,
+    } = await supabase.auth.getSession();
+
     // Handle auth session missing error gracefully
     if (error) {
-      if (error.name === 'AuthSessionMissingError' || error.message?.includes('Auth session missing')) {
+      if (
+        error.name === 'AuthSessionMissingError' ||
+        error.message?.includes('Auth session missing')
+      ) {
         // Expected when user isn't logged in
         console.log('[API Health] No session available (user not logged in)');
         return headers;
@@ -31,7 +46,7 @@ async function getAuthHeaders() {
       console.warn('[API Health] Auth session error:', error.message);
       return headers;
     }
-    
+
     if (session?.access_token) {
       headers.Authorization = `Bearer ${session.access_token}`;
       console.log('[API Health] Using Supabase bearer token');
@@ -48,7 +63,7 @@ export default function ApiHealthDashboard() {
   const { selectedTenantId } = useTenant();
   // Use tenant from context, fallback to known test tenant UUID
   const testTenantId = selectedTenantId || FALLBACK_TENANT_UUID;
-  
+
   const [healthReport, setHealthReport] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -61,13 +76,13 @@ export default function ApiHealthDashboard() {
     setIsRefreshing(true);
     const report = apiHealthMonitor.getHealthReport();
     setHealthReport(report);
-    
+
     // Add visual feedback with a slight delay
     setTimeout(() => {
       setIsRefreshing(false);
       toast.success('Health report refreshed', {
         description: `${report.totalErrors} total issues tracked`,
-        duration: 2000
+        duration: 2000,
       });
     }, 300);
   };
@@ -109,11 +124,7 @@ export default function ApiHealthDashboard() {
                     </div>
                   </div>
                   {showFix && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleCopyFix(error)}
-                    >
+                    <Button size="sm" variant="outline" onClick={() => handleCopyFix(error)}>
                       <Copy className="h-4 w-4 mr-2" />
                       Copy Fix
                     </Button>
@@ -141,7 +152,7 @@ export default function ApiHealthDashboard() {
 
   useEffect(() => {
     refreshReport();
-    
+
     if (autoRefresh) {
       const interval = setInterval(refreshReport, 5000);
       return () => clearInterval(interval);
@@ -149,7 +160,9 @@ export default function ApiHealthDashboard() {
   }, [autoRefresh]);
 
   const handleCopyFix = (endpoint) => {
-    const missingEndpoint = healthReport.missingEndpoints.find(e => e.endpoint === endpoint.endpoint);
+    const missingEndpoint = healthReport.missingEndpoints.find(
+      (e) => e.endpoint === endpoint.endpoint,
+    );
     if (missingEndpoint) {
       const suggestion = apiHealthMonitor.analyzeEndpoint(missingEndpoint.endpoint);
       apiHealthMonitor.copyFixToClipboard(suggestion);
@@ -174,16 +187,29 @@ export default function ApiHealthDashboard() {
       tested: 0,
       passed: 0,
       failed: 0,
-      details: []
+      details: [],
     };
 
     // Define new endpoints to test
     const endpoints = [
       // Core CRM flows (internal readiness focus)
-      { name: 'Opportunities - List (v1)', method: 'GET', url: `${BACKEND_URL}/api/opportunities?tenant_id=${testTenantId}&limit=1` },
-      { name: 'Activities - List (v2)', method: 'GET', url: `${BACKEND_URL}/api/v2/activities?tenant_id=${testTenantId}&limit=1` },
+      {
+        name: 'Opportunities - List (v1)',
+        method: 'GET',
+        url: `${BACKEND_URL}/api/opportunities?tenant_id=${testTenantId}&limit=1`,
+      },
+      {
+        name: 'Activities - List (v2)',
+        method: 'GET',
+        url: `${BACKEND_URL}/api/v2/activities?tenant_id=${testTenantId}&limit=1`,
+      },
       // v2 pilot (behind FEATURE_OPPORTUNITIES_V2)
-      { name: 'Opportunities - List (v2)', method: 'GET', url: `${BACKEND_URL}/api/v2/opportunities?tenant_id=${testTenantId}&limit=1`, expectError: false },
+      {
+        name: 'Opportunities - List (v2)',
+        method: 'GET',
+        url: `${BACKEND_URL}/api/v2/opportunities?tenant_id=${testTenantId}&limit=1`,
+        expectError: false,
+      },
       {
         name: 'Opportunities - v2 Lifecycle (create/get/update/delete)',
         type: 'opportunity-v2-lifecycle',
@@ -216,14 +242,72 @@ export default function ApiHealthDashboard() {
         name: 'Workflows - v2 List & AI Context',
         type: 'workflows-v2-lifecycle',
       },
+      // V2 Inline Stats Tests
+      {
+        name: 'Opportunities - v2 Inline Stats',
+        type: 'opportunities-v2-inline-stats',
+      },
+      {
+        name: 'Activities - v2 Inline Stats',
+        type: 'activities-v2-inline-stats',
+      },
+      {
+        name: 'Contacts - v2 Inline Stats',
+        type: 'contacts-v2-inline-stats',
+      },
+      {
+        name: 'Accounts - v2 Inline Stats',
+        type: 'accounts-v2-inline-stats',
+      },
+      {
+        name: 'Leads - v2 Inline Stats',
+        type: 'leads-v2-inline-stats',
+      },
       // Existing AI Campaigns and Telephony checks
-      { name: 'AI Campaigns - List', method: 'GET', url: `${BACKEND_URL}/api/aicampaigns?tenant_id=${testTenantId}&limit=1` },
-      { name: 'AI Campaigns - Get', method: 'GET', url: `${BACKEND_URL}/api/aicampaigns/00000000-0000-0000-0000-000000000000?tenant_id=${testTenantId}`, expectError: true },
-      { name: 'Telephony - Inbound Webhook', method: 'POST', url: `${BACKEND_URL}/api/telephony/inbound-webhook`, body: { tenant_id: testTenantId }, expectError: true },
-      { name: 'Telephony - Outbound Webhook', method: 'POST', url: `${BACKEND_URL}/api/telephony/outbound-webhook`, body: { tenant_id: testTenantId }, expectError: true },
-      { name: 'Telephony - Prepare Call', method: 'POST', url: `${BACKEND_URL}/api/telephony/prepare-call`, body: { tenant_id: testTenantId }, expectError: true },
-      { name: 'Telephony - Twilio Webhook', method: 'POST', url: `${BACKEND_URL}/api/telephony/webhook/twilio/inbound?tenant_id=${testTenantId}`, expectError: true },
-      { name: 'Telephony - CallFluent Webhook', method: 'POST', url: `${BACKEND_URL}/api/telephony/webhook/callfluent/inbound?tenant_id=${testTenantId}`, expectError: true },
+      {
+        name: 'AI Campaigns - List',
+        method: 'GET',
+        url: `${BACKEND_URL}/api/aicampaigns?tenant_id=${testTenantId}&limit=1`,
+      },
+      {
+        name: 'AI Campaigns - Get',
+        method: 'GET',
+        url: `${BACKEND_URL}/api/aicampaigns/00000000-0000-0000-0000-000000000000?tenant_id=${testTenantId}`,
+        expectError: true,
+      },
+      {
+        name: 'Telephony - Inbound Webhook',
+        method: 'POST',
+        url: `${BACKEND_URL}/api/telephony/inbound-webhook`,
+        body: { tenant_id: testTenantId },
+        expectError: true,
+      },
+      {
+        name: 'Telephony - Outbound Webhook',
+        method: 'POST',
+        url: `${BACKEND_URL}/api/telephony/outbound-webhook`,
+        body: { tenant_id: testTenantId },
+        expectError: true,
+      },
+      {
+        name: 'Telephony - Prepare Call',
+        method: 'POST',
+        url: `${BACKEND_URL}/api/telephony/prepare-call`,
+        body: { tenant_id: testTenantId },
+        expectError: true,
+      },
+      {
+        name: 'Telephony - Twilio Webhook',
+        method: 'POST',
+        url: `${BACKEND_URL}/api/telephony/webhook/twilio/inbound?tenant_id=${testTenantId}`,
+        expectError: true,
+      },
+      {
+        name: 'Telephony - CallFluent Webhook',
+        method: 'POST',
+        url: `${BACKEND_URL}/api/telephony/webhook/callfluent/inbound?tenant_id=${testTenantId}`,
+        expectError: true,
+      },
     ];
 
     for (const endpoint of endpoints) {
@@ -318,12 +402,53 @@ export default function ApiHealthDashboard() {
           continue;
         }
 
+        // V2 Inline Stats test handlers
+        if (endpoint.type === 'opportunities-v2-inline-stats') {
+          const statsResult = await runOpportunitiesV2InlineStatsTest();
+          if (statsResult.status === 'passed') results.passed++;
+          else if (statsResult.status === 'failed') results.failed++;
+          results.details.push(statsResult);
+          continue;
+        }
+
+        if (endpoint.type === 'activities-v2-inline-stats') {
+          const statsResult = await runActivitiesV2InlineStatsTest();
+          if (statsResult.status === 'passed') results.passed++;
+          else if (statsResult.status === 'failed') results.failed++;
+          results.details.push(statsResult);
+          continue;
+        }
+
+        if (endpoint.type === 'contacts-v2-inline-stats') {
+          const statsResult = await runContactsV2InlineStatsTest();
+          if (statsResult.status === 'passed') results.passed++;
+          else if (statsResult.status === 'failed') results.failed++;
+          results.details.push(statsResult);
+          continue;
+        }
+
+        if (endpoint.type === 'accounts-v2-inline-stats') {
+          const statsResult = await runAccountsV2InlineStatsTest();
+          if (statsResult.status === 'passed') results.passed++;
+          else if (statsResult.status === 'failed') results.failed++;
+          results.details.push(statsResult);
+          continue;
+        }
+
+        if (endpoint.type === 'leads-v2-inline-stats') {
+          const statsResult = await runLeadsV2InlineStatsTest();
+          if (statsResult.status === 'passed') results.passed++;
+          else if (statsResult.status === 'failed') results.failed++;
+          results.details.push(statsResult);
+          continue;
+        }
+
         // Get auth headers for authenticated requests
         const authHeaders = await getAuthHeaders();
         const options = {
           method: endpoint.method,
           headers: authHeaders,
-          credentials: 'include'
+          credentials: 'include',
         };
 
         if (endpoint.body) {
@@ -331,7 +456,7 @@ export default function ApiHealthDashboard() {
         }
 
         const response = await fetch(endpoint.url, options);
-        
+
         // Check if this is an expected error response
         if (endpoint.expectError && (response.status === 400 || response.status === 404)) {
           // Expected error (validation, missing data, not found) means endpoint exists and is working
@@ -340,7 +465,7 @@ export default function ApiHealthDashboard() {
             name: endpoint.name,
             status: 'passed',
             message: `Endpoint exists (${response.status} expected)`,
-            statusCode: response.status
+            statusCode: response.status,
           });
         } else if (response.status === 404 && !endpoint.expectError) {
           // Unexpected 404 means endpoint route doesn't exist
@@ -349,7 +474,7 @@ export default function ApiHealthDashboard() {
             name: endpoint.name,
             status: 'failed',
             message: '404 - Endpoint not found',
-            statusCode: 404
+            statusCode: 404,
           });
         } else if (response.ok) {
           results.passed++;
@@ -357,7 +482,7 @@ export default function ApiHealthDashboard() {
             name: endpoint.name,
             status: 'passed',
             message: 'Endpoint responding correctly',
-            statusCode: response.status
+            statusCode: response.status,
           });
         } else {
           // Other errors - endpoint exists but has issues
@@ -366,7 +491,7 @@ export default function ApiHealthDashboard() {
             name: endpoint.name,
             status: 'warning',
             message: `Endpoint exists but returned ${response.status}`,
-            statusCode: response.status
+            statusCode: response.status,
           });
         }
       } catch (error) {
@@ -375,21 +500,21 @@ export default function ApiHealthDashboard() {
           name: endpoint.name,
           status: 'failed',
           message: `Network error: ${error.message}`,
-          statusCode: 0
+          statusCode: 0,
         });
       }
     }
 
     setTestResults(results);
     setIsTestingEndpoints(false);
-    
+
     if (results.failed === 0) {
       toast.success('All endpoint tests passed!', {
-        description: `${results.passed}/${results.tested} endpoints available`
+        description: `${results.passed}/${results.tested} endpoints available`,
       });
     } else {
       toast.error('Some endpoints failed', {
-        description: `${results.failed}/${results.tested} endpoints not found`
+        description: `${results.failed}/${results.tested} endpoints not found`,
       });
     }
   };
@@ -427,10 +552,13 @@ export default function ApiHealthDashboard() {
       const createdId = createJson.data.opportunity.id;
 
       // 2) Get
-      const getResp = await fetch(`${BACKEND_URL}/api/v2/opportunities/${createdId}?tenant_id=${tenantId}`, {
-        headers: authHeaders,
-        credentials: 'include',
-      });
+      const getResp = await fetch(
+        `${BACKEND_URL}/api/v2/opportunities/${createdId}?tenant_id=${tenantId}`,
+        {
+          headers: authHeaders,
+          credentials: 'include',
+        },
+      );
       const getJson = await getResp.json().catch(() => ({}));
       if (!getResp.ok || !getJson?.data?.opportunity?.id) {
         return {
@@ -463,11 +591,14 @@ export default function ApiHealthDashboard() {
       }
 
       // 4) Delete
-      const deleteResp = await fetch(`${BACKEND_URL}/api/v2/opportunities/${createdId}?tenant_id=${tenantId}`, {
-        method: 'DELETE',
-        headers: authHeaders,
-        credentials: 'include',
-      });
+      const deleteResp = await fetch(
+        `${BACKEND_URL}/api/v2/opportunities/${createdId}?tenant_id=${tenantId}`,
+        {
+          method: 'DELETE',
+          headers: authHeaders,
+          credentials: 'include',
+        },
+      );
 
       const deleteJson = await deleteResp.json().catch(() => ({}));
       if (!deleteResp.ok) {
@@ -529,10 +660,13 @@ export default function ApiHealthDashboard() {
       const createdId = createJson.data.activity.id;
 
       // 2) Get
-      const getResp = await fetch(`${BACKEND_URL}/api/v2/activities/${createdId}?tenant_id=${tenantId}`, {
-        headers: authHeaders,
-        credentials: 'include',
-      });
+      const getResp = await fetch(
+        `${BACKEND_URL}/api/v2/activities/${createdId}?tenant_id=${tenantId}`,
+        {
+          headers: authHeaders,
+          credentials: 'include',
+        },
+      );
       const getJson = await getResp.json().catch(() => ({}));
       if (!getResp.ok || !getJson?.data?.activity?.id) {
         return {
@@ -565,11 +699,14 @@ export default function ApiHealthDashboard() {
       }
 
       // 4) Delete
-      const deleteResp = await fetch(`${BACKEND_URL}/api/v2/activities/${createdId}?tenant_id=${tenantId}`, {
-        method: 'DELETE',
-        headers: authHeaders,
-        credentials: 'include',
-      });
+      const deleteResp = await fetch(
+        `${BACKEND_URL}/api/v2/activities/${createdId}?tenant_id=${tenantId}`,
+        {
+          method: 'DELETE',
+          headers: authHeaders,
+          credentials: 'include',
+        },
+      );
 
       const deleteJson = await deleteResp.json().catch(() => ({}));
       if (!deleteResp.ok) {
@@ -629,10 +766,13 @@ export default function ApiHealthDashboard() {
       const createdId = createJson.data.contact.id;
 
       // 2) Get
-      const getResp = await fetch(`${BACKEND_URL}/api/v2/contacts/${createdId}?tenant_id=${tenantId}`, {
-        headers: authHeaders,
-        credentials: 'include',
-      });
+      const getResp = await fetch(
+        `${BACKEND_URL}/api/v2/contacts/${createdId}?tenant_id=${tenantId}`,
+        {
+          headers: authHeaders,
+          credentials: 'include',
+        },
+      );
       const getJson = await getResp.json().catch(() => ({}));
       if (!getResp.ok || !getJson?.data?.contact?.id) {
         return {
@@ -665,11 +805,14 @@ export default function ApiHealthDashboard() {
       }
 
       // 4) Delete
-      const deleteResp = await fetch(`${BACKEND_URL}/api/v2/contacts/${createdId}?tenant_id=${tenantId}`, {
-        method: 'DELETE',
-        headers: authHeaders,
-        credentials: 'include',
-      });
+      const deleteResp = await fetch(
+        `${BACKEND_URL}/api/v2/contacts/${createdId}?tenant_id=${tenantId}`,
+        {
+          method: 'DELETE',
+          headers: authHeaders,
+          credentials: 'include',
+        },
+      );
 
       const deleteJson = await deleteResp.json().catch(() => ({}));
       if (!deleteResp.ok) {
@@ -728,10 +871,13 @@ export default function ApiHealthDashboard() {
       const createdId = createJson.data.account.id;
 
       // 2) Get
-      const getResp = await fetch(`${BACKEND_URL}/api/v2/accounts/${createdId}?tenant_id=${tenantId}`, {
-        headers: authHeaders,
-        credentials: 'include',
-      });
+      const getResp = await fetch(
+        `${BACKEND_URL}/api/v2/accounts/${createdId}?tenant_id=${tenantId}`,
+        {
+          headers: authHeaders,
+          credentials: 'include',
+        },
+      );
       const getJson = await getResp.json().catch(() => ({}));
       if (!getResp.ok || !getJson?.data?.account?.id) {
         return {
@@ -764,11 +910,14 @@ export default function ApiHealthDashboard() {
       }
 
       // 4) Delete
-      const deleteResp = await fetch(`${BACKEND_URL}/api/v2/accounts/${createdId}?tenant_id=${tenantId}`, {
-        method: 'DELETE',
-        headers: authHeaders,
-        credentials: 'include',
-      });
+      const deleteResp = await fetch(
+        `${BACKEND_URL}/api/v2/accounts/${createdId}?tenant_id=${tenantId}`,
+        {
+          method: 'DELETE',
+          headers: authHeaders,
+          credentials: 'include',
+        },
+      );
 
       const deleteJson = await deleteResp.json().catch(() => ({}));
       if (!deleteResp.ok) {
@@ -829,10 +978,13 @@ export default function ApiHealthDashboard() {
       }
 
       // 2) Get
-      const getResp = await fetch(`${BACKEND_URL}/api/v2/leads/${createdId}?tenant_id=${tenantId}`, {
-        headers: authHeaders,
-        credentials: 'include',
-      });
+      const getResp = await fetch(
+        `${BACKEND_URL}/api/v2/leads/${createdId}?tenant_id=${tenantId}`,
+        {
+          headers: authHeaders,
+          credentials: 'include',
+        },
+      );
       const getJson = await getResp.json().catch(() => ({}));
       const gotId = getJson?.data?.lead?.id || getJson?.data?.id;
       if (!getResp.ok || !gotId) {
@@ -866,11 +1018,14 @@ export default function ApiHealthDashboard() {
       }
 
       // 4) Delete
-      const deleteResp = await fetch(`${BACKEND_URL}/api/v2/leads/${createdId}?tenant_id=${tenantId}`, {
-        method: 'DELETE',
-        headers: authHeaders,
-        credentials: 'include',
-      });
+      const deleteResp = await fetch(
+        `${BACKEND_URL}/api/v2/leads/${createdId}?tenant_id=${tenantId}`,
+        {
+          method: 'DELETE',
+          headers: authHeaders,
+          credentials: 'include',
+        },
+      );
 
       const deleteJson = await deleteResp.json().catch(() => ({}));
       if (!deleteResp.ok) {
@@ -930,10 +1085,13 @@ export default function ApiHealthDashboard() {
       const createdId = createJson.data.document.id;
 
       // 2) Get
-      const getResp = await fetch(`${BACKEND_URL}/api/v2/documents/${createdId}?tenant_id=${tenantId}`, {
-        headers: authHeaders,
-        credentials: 'include',
-      });
+      const getResp = await fetch(
+        `${BACKEND_URL}/api/v2/documents/${createdId}?tenant_id=${tenantId}`,
+        {
+          headers: authHeaders,
+          credentials: 'include',
+        },
+      );
       const getJson = await getResp.json().catch(() => ({}));
       if (!getResp.ok || !getJson?.data?.document?.id) {
         return {
@@ -977,11 +1135,14 @@ export default function ApiHealthDashboard() {
 
       // 4) Delete (with required reason query parameter for audit trail)
       // Note: DELETE requires admin/manager role
-      const deleteResp = await fetch(`${BACKEND_URL}/api/v2/documents/${createdId}?tenant_id=${tenantId}&reason=${encodeURIComponent('API health test cleanup')}`, {
-        method: 'DELETE',
-        headers: authHeaders,
-        credentials: 'include',
-      });
+      const deleteResp = await fetch(
+        `${BACKEND_URL}/api/v2/documents/${createdId}?tenant_id=${tenantId}&reason=${encodeURIComponent('API health test cleanup')}`,
+        {
+          method: 'DELETE',
+          headers: authHeaders,
+          credentials: 'include',
+        },
+      );
 
       const deleteJson = await deleteResp.json().catch(() => ({}));
       if (!deleteResp.ok) {
@@ -990,7 +1151,8 @@ export default function ApiHealthDashboard() {
           return {
             name: 'Documents - v2 Lifecycle (create/get/update/delete)',
             status: 'passed',
-            message: 'Create, get (with AI context), and update succeeded. Delete skipped (requires admin/manager role)',
+            message:
+              'Create, get (with AI context), and update succeeded. Delete skipped (requires admin/manager role)',
             statusCode: 200,
           };
         }
@@ -1025,10 +1187,13 @@ export default function ApiHealthDashboard() {
 
     try {
       // Test dashboard-bundle endpoint (correct v2 route)
-      const statsResp = await fetch(`${BACKEND_URL}/api/v2/reports/dashboard-bundle?tenant_id=${tenantId}`, {
-        headers: authHeaders,
-        credentials: 'include',
-      });
+      const statsResp = await fetch(
+        `${BACKEND_URL}/api/v2/reports/dashboard-bundle?tenant_id=${tenantId}`,
+        {
+          headers: authHeaders,
+          credentials: 'include',
+        },
+      );
       const statsJson = await statsResp.json().catch(() => ({}));
 
       if (!statsResp.ok) {
@@ -1043,14 +1208,14 @@ export default function ApiHealthDashboard() {
       // Verify AI insights are present
       const hasAiContext = statsJson?.data?.aiContext;
       const dataKeys = statsJson?.data ? Object.keys(statsJson.data) : [];
-      
+
       if (!hasAiContext) {
         console.warn('[Dashboard Stats Test] Missing aiContext:', {
           hasData: !!statsJson?.data,
           dataKeys,
           hasAiContext: !!hasAiContext,
           responseStatus: statsResp.status,
-          fullResponse: statsJson
+          fullResponse: statsJson,
         });
         return {
           name: 'Reports - v2 Dashboard Stats',
@@ -1076,6 +1241,324 @@ export default function ApiHealthDashboard() {
     }
   }
 
+  // V2 Inline Stats Tests - verify stats object is present in list responses
+  async function runOpportunitiesV2InlineStatsTest() {
+    const tenantId = testTenantId;
+    const authHeaders = await getAuthHeaders();
+
+    try {
+      const resp = await fetch(
+        `${BACKEND_URL}/api/v2/opportunities?tenant_id=${tenantId}&limit=1`,
+        {
+          headers: authHeaders,
+          credentials: 'include',
+        },
+      );
+      const json = await resp.json().catch(() => ({}));
+
+      if (!resp.ok) {
+        return {
+          name: 'Opportunities - v2 Inline Stats',
+          status: 'failed',
+          message: `List failed (${resp.status}): ${json.message || 'no body'}`,
+          statusCode: resp.status,
+        };
+      }
+
+      const stats = json?.data?.stats;
+      if (!stats) {
+        return {
+          name: 'Opportunities - v2 Inline Stats',
+          status: 'failed',
+          message: 'List succeeded but missing inline stats object',
+          statusCode: resp.status,
+        };
+      }
+
+      // Verify all expected stats fields
+      const requiredFields = [
+        'total',
+        'prospecting',
+        'qualification',
+        'proposal',
+        'negotiation',
+        'closed_won',
+        'closed_lost',
+      ];
+      const missingFields = requiredFields.filter((f) => typeof stats[f] !== 'number');
+
+      if (missingFields.length > 0) {
+        return {
+          name: 'Opportunities - v2 Inline Stats',
+          status: 'failed',
+          message: `Stats missing fields: ${missingFields.join(', ')}`,
+          statusCode: resp.status,
+        };
+      }
+
+      return {
+        name: 'Opportunities - v2 Inline Stats',
+        status: 'passed',
+        message: `Stats present with all fields (total: ${stats.total})`,
+        statusCode: 200,
+      };
+    } catch (error) {
+      return {
+        name: 'Opportunities - v2 Inline Stats',
+        status: 'failed',
+        message: `Network error: ${error.message}`,
+        statusCode: 0,
+      };
+    }
+  }
+
+  async function runActivitiesV2InlineStatsTest() {
+    const tenantId = testTenantId;
+    const authHeaders = await getAuthHeaders();
+
+    try {
+      const resp = await fetch(`${BACKEND_URL}/api/v2/activities?tenant_id=${tenantId}&limit=1`, {
+        headers: authHeaders,
+        credentials: 'include',
+      });
+      const json = await resp.json().catch(() => ({}));
+
+      if (!resp.ok) {
+        return {
+          name: 'Activities - v2 Inline Stats',
+          status: 'failed',
+          message: `List failed (${resp.status}): ${json.message || 'no body'}`,
+          statusCode: resp.status,
+        };
+      }
+
+      const stats = json?.data?.stats;
+      if (!stats) {
+        return {
+          name: 'Activities - v2 Inline Stats',
+          status: 'failed',
+          message: 'List succeeded but missing inline stats object',
+          statusCode: resp.status,
+        };
+      }
+
+      const requiredFields = [
+        'total',
+        'scheduled',
+        'in_progress',
+        'overdue',
+        'completed',
+        'cancelled',
+      ];
+      const missingFields = requiredFields.filter((f) => typeof stats[f] !== 'number');
+
+      if (missingFields.length > 0) {
+        return {
+          name: 'Activities - v2 Inline Stats',
+          status: 'failed',
+          message: `Stats missing fields: ${missingFields.join(', ')}`,
+          statusCode: resp.status,
+        };
+      }
+
+      return {
+        name: 'Activities - v2 Inline Stats',
+        status: 'passed',
+        message: `Stats present with all fields (total: ${stats.total})`,
+        statusCode: 200,
+      };
+    } catch (error) {
+      return {
+        name: 'Activities - v2 Inline Stats',
+        status: 'failed',
+        message: `Network error: ${error.message}`,
+        statusCode: 0,
+      };
+    }
+  }
+
+  async function runContactsV2InlineStatsTest() {
+    const tenantId = testTenantId;
+    const authHeaders = await getAuthHeaders();
+
+    try {
+      const resp = await fetch(`${BACKEND_URL}/api/v2/contacts?tenant_id=${tenantId}&limit=1`, {
+        headers: authHeaders,
+        credentials: 'include',
+      });
+      const json = await resp.json().catch(() => ({}));
+
+      if (!resp.ok) {
+        return {
+          name: 'Contacts - v2 Inline Stats',
+          status: 'failed',
+          message: `List failed (${resp.status}): ${json.message || 'no body'}`,
+          statusCode: resp.status,
+        };
+      }
+
+      const stats = json?.data?.stats;
+      if (!stats) {
+        return {
+          name: 'Contacts - v2 Inline Stats',
+          status: 'failed',
+          message: 'List succeeded but missing inline stats object',
+          statusCode: resp.status,
+        };
+      }
+
+      const requiredFields = ['total', 'active', 'inactive', 'prospect', 'customer'];
+      const missingFields = requiredFields.filter((f) => typeof stats[f] !== 'number');
+
+      if (missingFields.length > 0) {
+        return {
+          name: 'Contacts - v2 Inline Stats',
+          status: 'failed',
+          message: `Stats missing fields: ${missingFields.join(', ')}`,
+          statusCode: resp.status,
+        };
+      }
+
+      return {
+        name: 'Contacts - v2 Inline Stats',
+        status: 'passed',
+        message: `Stats present with all fields (total: ${stats.total})`,
+        statusCode: 200,
+      };
+    } catch (error) {
+      return {
+        name: 'Contacts - v2 Inline Stats',
+        status: 'failed',
+        message: `Network error: ${error.message}`,
+        statusCode: 0,
+      };
+    }
+  }
+
+  async function runAccountsV2InlineStatsTest() {
+    const tenantId = testTenantId;
+    const authHeaders = await getAuthHeaders();
+
+    try {
+      const resp = await fetch(`${BACKEND_URL}/api/v2/accounts?tenant_id=${tenantId}&limit=1`, {
+        headers: authHeaders,
+        credentials: 'include',
+      });
+      const json = await resp.json().catch(() => ({}));
+
+      if (!resp.ok) {
+        return {
+          name: 'Accounts - v2 Inline Stats',
+          status: 'failed',
+          message: `List failed (${resp.status}): ${json.message || 'no body'}`,
+          statusCode: resp.status,
+        };
+      }
+
+      const stats = json?.data?.stats;
+      if (!stats) {
+        return {
+          name: 'Accounts - v2 Inline Stats',
+          status: 'failed',
+          message: 'List succeeded but missing inline stats object',
+          statusCode: resp.status,
+        };
+      }
+
+      const requiredFields = ['total', 'customer', 'prospect', 'partner', 'competitor'];
+      const missingFields = requiredFields.filter((f) => typeof stats[f] !== 'number');
+
+      if (missingFields.length > 0) {
+        return {
+          name: 'Accounts - v2 Inline Stats',
+          status: 'failed',
+          message: `Stats missing fields: ${missingFields.join(', ')}`,
+          statusCode: resp.status,
+        };
+      }
+
+      return {
+        name: 'Accounts - v2 Inline Stats',
+        status: 'passed',
+        message: `Stats present with all fields (total: ${stats.total})`,
+        statusCode: 200,
+      };
+    } catch (error) {
+      return {
+        name: 'Accounts - v2 Inline Stats',
+        status: 'failed',
+        message: `Network error: ${error.message}`,
+        statusCode: 0,
+      };
+    }
+  }
+
+  async function runLeadsV2InlineStatsTest() {
+    const tenantId = testTenantId;
+    const authHeaders = await getAuthHeaders();
+
+    try {
+      const resp = await fetch(`${BACKEND_URL}/api/v2/leads?tenant_id=${tenantId}&limit=1`, {
+        headers: authHeaders,
+        credentials: 'include',
+      });
+      const json = await resp.json().catch(() => ({}));
+
+      if (!resp.ok) {
+        return {
+          name: 'Leads - v2 Inline Stats',
+          status: 'failed',
+          message: `List failed (${resp.status}): ${json.message || 'no body'}`,
+          statusCode: resp.status,
+        };
+      }
+
+      const stats = json?.data?.stats;
+      if (!stats) {
+        return {
+          name: 'Leads - v2 Inline Stats',
+          status: 'failed',
+          message: 'List succeeded but missing inline stats object',
+          statusCode: resp.status,
+        };
+      }
+
+      const requiredFields = [
+        'total',
+        'new',
+        'contacted',
+        'qualified',
+        'unqualified',
+        'converted',
+        'lost',
+      ];
+      const missingFields = requiredFields.filter((f) => typeof stats[f] !== 'number');
+
+      if (missingFields.length > 0) {
+        return {
+          name: 'Leads - v2 Inline Stats',
+          status: 'failed',
+          message: `Stats missing fields: ${missingFields.join(', ')}`,
+          statusCode: resp.status,
+        };
+      }
+
+      return {
+        name: 'Leads - v2 Inline Stats',
+        status: 'passed',
+        message: `Stats present with all fields (total: ${stats.total})`,
+        statusCode: 200,
+      };
+    } catch (error) {
+      return {
+        name: 'Leads - v2 Inline Stats',
+        status: 'failed',
+        message: `Network error: ${error.message}`,
+        statusCode: 0,
+      };
+    }
+  }
+
   // Workflows v2 list test (v2 only has GET endpoints, no CRUD)
   async function runWorkflowsV2LifecycleTest() {
     const tenantId = testTenantId;
@@ -1083,10 +1566,13 @@ export default function ApiHealthDashboard() {
 
     try {
       // Test list endpoint
-      const listResp = await fetch(`${BACKEND_URL}/api/v2/workflows?tenant_id=${tenantId}&limit=5`, {
-        headers: authHeaders,
-        credentials: 'include',
-      });
+      const listResp = await fetch(
+        `${BACKEND_URL}/api/v2/workflows?tenant_id=${tenantId}&limit=5`,
+        {
+          headers: authHeaders,
+          credentials: 'include',
+        },
+      );
       const listJson = await listResp.json().catch(() => ({}));
 
       if (!listResp.ok) {
@@ -1138,9 +1624,7 @@ export default function ApiHealthDashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-slate-100">API Health Monitor</h1>
-          <p className="text-slate-400 mt-1">
-            Track and auto-fix missing backend endpoints
-          </p>
+          <p className="text-slate-400 mt-1">Track and auto-fix missing backend endpoints</p>
         </div>
         <div className="flex gap-2">
           <Button
@@ -1151,12 +1635,7 @@ export default function ApiHealthDashboard() {
             <RefreshCw className={`h-4 w-4 mr-2 ${autoRefresh ? 'animate-spin' : ''}`} />
             {autoRefresh ? 'Auto-Refresh On' : 'Auto-Refresh Off'}
           </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={refreshReport}
-            disabled={isRefreshing}
-          >
+          <Button variant="outline" size="sm" onClick={refreshReport} disabled={isRefreshing}>
             <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
             Refresh Now
           </Button>
@@ -1168,12 +1647,10 @@ export default function ApiHealthDashboard() {
       </div>
 
       {/* Summary Cards */}
-       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
         <Card className="bg-red-900/20 border-red-700">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-red-300">
-              Missing (404)
-            </CardTitle>
+            <CardTitle className="text-xs font-medium text-red-300">Missing (404)</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-100">
@@ -1184,9 +1661,7 @@ export default function ApiHealthDashboard() {
 
         <Card className="bg-orange-900/20 border-orange-700">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-orange-300">
-              Server (5xx)
-            </CardTitle>
+            <CardTitle className="text-xs font-medium text-orange-300">Server (5xx)</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-100">
@@ -1197,14 +1672,10 @@ export default function ApiHealthDashboard() {
 
         <Card className="bg-yellow-900/20 border-yellow-700">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-yellow-300">
-              Auth (401/403)
-            </CardTitle>
+            <CardTitle className="text-xs font-medium text-yellow-300">Auth (401/403)</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-slate-100">
-              {healthReport.totalAuthErrors}
-            </div>
+            <div className="text-2xl font-bold text-slate-100">{healthReport.totalAuthErrors}</div>
           </CardContent>
         </Card>
 
@@ -1224,24 +1695,20 @@ export default function ApiHealthDashboard() {
           </Card>
         )}
 
-         <Card className="bg-amber-900/20 border-amber-700">
-           <CardHeader className="pb-2">
-             <CardTitle className="text-xs font-medium text-amber-300">
-               Validation (400)
-             </CardTitle>
-           </CardHeader>
-           <CardContent>
-             <div className="text-2xl font-bold text-slate-100">
-               {healthReport.totalValidationErrors}
-             </div>
-           </CardContent>
-         </Card>
+        <Card className="bg-amber-900/20 border-amber-700">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-medium text-amber-300">Validation (400)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-slate-100">
+              {healthReport.totalValidationErrors}
+            </div>
+          </CardContent>
+        </Card>
 
         <Card className="bg-blue-900/20 border-blue-700">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-blue-300">
-              Rate Limit (429)
-            </CardTitle>
+            <CardTitle className="text-xs font-medium text-blue-300">Rate Limit (429)</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-100">
@@ -1252,9 +1719,7 @@ export default function ApiHealthDashboard() {
 
         <Card className="bg-purple-900/20 border-purple-700">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-purple-300">
-              Timeouts
-            </CardTitle>
+            <CardTitle className="text-xs font-medium text-purple-300">Timeouts</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-100">
@@ -1265,9 +1730,7 @@ export default function ApiHealthDashboard() {
 
         <Card className="bg-slate-900/20 border-slate-700">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-slate-300">
-              Network
-            </CardTitle>
+            <CardTitle className="text-xs font-medium text-slate-300">Network</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-100">
@@ -1281,15 +1744,11 @@ export default function ApiHealthDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="bg-slate-800 border-slate-700">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-400">
-              Total Errors
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-slate-400">Total Errors</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
-              <span className="text-3xl font-bold text-slate-100">
-                {healthReport.totalErrors}
-              </span>
+              <span className="text-3xl font-bold text-slate-100">{healthReport.totalErrors}</span>
               {healthReport.totalErrors === 0 ? (
                 <CheckCircle2 className="h-8 w-8 text-green-500" />
               ) : (
@@ -1301,9 +1760,7 @@ export default function ApiHealthDashboard() {
 
         <Card className="bg-slate-800 border-slate-700">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-400">
-              Auto-Fix Attempts
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-slate-400">Auto-Fix Attempts</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-slate-100">{healthReport.totalFixAttempts}</div>
@@ -1312,9 +1769,7 @@ export default function ApiHealthDashboard() {
 
         <Card className="bg-slate-800 border-slate-700">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-400">
-              User Notifications
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-slate-400">User Notifications</CardTitle>
           </CardHeader>
           <CardContent>
             <Button
@@ -1389,14 +1844,18 @@ export default function ApiHealthDashboard() {
                   const json = await resp.json().catch(() => ({}));
                   if (resp.ok && json?.data) {
                     setFullScanResults(json.data);
-                    toast.success('Full endpoint scan complete', { description: `${json.data.summary.passed}/${json.data.summary.total} responsive` });
-                    
+                    toast.success('Full endpoint scan complete', {
+                      description: `${json.data.summary.passed}/${json.data.summary.total} responsive`,
+                    });
+
                     // Auto-create GitHub issues for failures
                     if (json.data.summary.failed > 0 || json.data.summary.errors > 0) {
                       await createGitHubIssuesForFailures(json.data.details);
                     }
                   } else {
-                    toast.error('Full scan failed', { description: json.message || `Status ${resp.status}` });
+                    toast.error('Full scan failed', {
+                      description: json.message || `Status ${resp.status}`,
+                    });
                   }
                 } catch (err) {
                   toast.error('Full scan network error', { description: err.message });
@@ -1422,7 +1881,7 @@ export default function ApiHealthDashboard() {
             </Button>
           </div>
         </CardHeader>
-        
+
         {testResults && (
           <CardContent>
             <div className="space-y-4">
@@ -1452,8 +1911,8 @@ export default function ApiHealthDashboard() {
                       result.status === 'passed'
                         ? 'bg-green-900/20 border-green-700/50'
                         : result.status === 'warning'
-                        ? 'bg-yellow-900/20 border-yellow-700/50'
-                        : 'bg-red-900/20 border-red-700/50'
+                          ? 'bg-yellow-900/20 border-yellow-700/50'
+                          : 'bg-red-900/20 border-red-700/50'
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -1472,8 +1931,8 @@ export default function ApiHealthDashboard() {
                           result.status === 'passed'
                             ? 'bg-green-700/50 text-green-300'
                             : result.status === 'warning'
-                            ? 'bg-yellow-700/50 text-yellow-300'
-                            : 'bg-red-700/50 text-red-300'
+                              ? 'bg-yellow-700/50 text-yellow-300'
+                              : 'bg-red-700/50 text-red-300'
                         }`}
                       >
                         {result.statusCode}
@@ -1493,30 +1952,45 @@ export default function ApiHealthDashboard() {
               <div className="grid grid-cols-3 md:grid-cols-5 gap-4 mb-3">
                 <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700">
                   <div className="text-xs text-slate-400 mb-1">Total</div>
-                  <div className="text-2xl font-bold text-slate-100">{fullScanResults.summary.total}</div>
+                  <div className="text-2xl font-bold text-slate-100">
+                    {fullScanResults.summary.total}
+                  </div>
                 </div>
                 <div className="bg-green-900/20 p-3 rounded-lg border border-green-700/50">
                   <div className="text-xs text-green-400 mb-1">Passed</div>
-                  <div className="text-2xl font-bold text-green-300">{fullScanResults.summary.passed}</div>
+                  <div className="text-2xl font-bold text-green-300">
+                    {fullScanResults.summary.passed}
+                  </div>
                 </div>
                 <div className="bg-blue-900/20 p-3 rounded-lg border border-blue-700/50">
                   <div className="text-xs text-blue-400 mb-1">Protected</div>
-                  <div className="text-2xl font-bold text-blue-300">{fullScanResults.summary.protected || 0}</div>
+                  <div className="text-2xl font-bold text-blue-300">
+                    {fullScanResults.summary.protected || 0}
+                  </div>
                 </div>
                 <div className="bg-yellow-900/20 p-3 rounded-lg border border-yellow-700/50">
                   <div className="text-xs text-yellow-400 mb-1">Warnings</div>
-                  <div className="text-2xl font-bold text-yellow-300">{fullScanResults.summary.warn}</div>
+                  <div className="text-2xl font-bold text-yellow-300">
+                    {fullScanResults.summary.warn}
+                  </div>
                 </div>
                 <div className="bg-red-900/20 p-3 rounded-lg border border-red-700/50">
                   <div className="text-xs text-red-400 mb-1">Failed</div>
-                  <div className="text-2xl font-bold text-red-300">{fullScanResults.summary.failed}</div>
+                  <div className="text-2xl font-bold text-red-300">
+                    {fullScanResults.summary.failed}
+                  </div>
                 </div>
               </div>
               <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
                 {fullScanResults.results.map((r, i) => (
-                  <div key={i} className={`text-xs flex items-center justify-between px-2 py-1 rounded border ${r.classification === 'PASS' ? 'bg-green-900/15 border-green-700/40 text-green-300' : r.classification === 'PROTECTED' ? 'bg-blue-900/15 border-blue-700/40 text-blue-300' : r.classification === 'WARN' ? 'bg-yellow-900/15 border-yellow-700/40 text-yellow-300' : 'bg-red-900/15 border-red-700/40 text-red-300'}`}>
+                  <div
+                    key={i}
+                    className={`text-xs flex items-center justify-between px-2 py-1 rounded border ${r.classification === 'PASS' ? 'bg-green-900/15 border-green-700/40 text-green-300' : r.classification === 'PROTECTED' ? 'bg-blue-900/15 border-blue-700/40 text-blue-300' : r.classification === 'WARN' ? 'bg-yellow-900/15 border-yellow-700/40 text-yellow-300' : 'bg-red-900/15 border-red-700/40 text-red-300'}`}
+                  >
                     <div className="flex items-center gap-2">
-                      <code className="px-1 py-0.5 bg-slate-700 rounded text-slate-200">{r.method}</code>
+                      <code className="px-1 py-0.5 bg-slate-700 rounded text-slate-200">
+                        {r.method}
+                      </code>
                       <span className="font-mono">{r.path}</span>
                     </div>
                     <span className="font-semibold flex items-center gap-2">
@@ -1527,10 +2001,10 @@ export default function ApiHealthDashboard() {
                 ))}
               </div>
               <div className="text-[10px] text-slate-500 mt-2">
-                Scan performed at {new Date(fullScanResults.timestamp).toLocaleTimeString()} |
-                Max latency {fullScanResults.summary.max_latency_ms}ms |
-                Avg latency {fullScanResults.summary.avg_latency_ms}ms |
-                Expected statuses: {fullScanResults.summary.expected_statuses.join(', ')} |
+                Scan performed at {new Date(fullScanResults.timestamp).toLocaleTimeString()} | Max
+                latency {fullScanResults.summary.max_latency_ms}ms | Avg latency{' '}
+                {fullScanResults.summary.avg_latency_ms}ms | Expected statuses:{' '}
+                {fullScanResults.summary.expected_statuses.join(', ')} |
                 <span className="text-blue-400">Protected (401/403) = auth-required endpoints</span>
               </div>
             </div>
@@ -1544,7 +2018,7 @@ export default function ApiHealthDashboard() {
         'Missing Endpoints (404)',
         'Endpoints that do not exist. Click Copy Fix for auto-generated implementation templates.',
         'border-red-200',
-        true
+        true,
       )}
 
       {renderErrorList(
@@ -1552,7 +2026,7 @@ export default function ApiHealthDashboard() {
         'Server Errors (5xx)',
         'Backend encountered internal errors. Check server logs for stack traces.',
         'border-orange-200',
-        false
+        false,
       )}
 
       {renderErrorList(
@@ -1560,23 +2034,23 @@ export default function ApiHealthDashboard() {
         'Authentication/Authorization Errors (401/403)',
         'User lacks permissions or authentication is invalid/expired.',
         'border-yellow-200',
-        false
+        false,
       )}
 
-       {renderErrorList(
-         healthReport.validationErrors,
-         'Validation Errors (400)',
-         'Malformed requests or missing required parameters. Common causes: missing tenant_id, invalid filters, or incorrect data types.',
-         'border-amber-200',
-         false
-       )}
+      {renderErrorList(
+        healthReport.validationErrors,
+        'Validation Errors (400)',
+        'Malformed requests or missing required parameters. Common causes: missing tenant_id, invalid filters, or incorrect data types.',
+        'border-amber-200',
+        false,
+      )}
 
       {renderErrorList(
         healthReport.rateLimitErrors,
         'Rate Limit Errors (429)',
         'Too many requests sent to these endpoints. Implement request throttling.',
         'border-blue-200',
-        false
+        false,
       )}
 
       {renderErrorList(
@@ -1584,7 +2058,7 @@ export default function ApiHealthDashboard() {
         'Timeout Errors',
         'Requests took too long to complete. Check for slow queries or unresponsive services.',
         'border-purple-200',
-        false
+        false,
       )}
 
       {renderErrorList(
@@ -1592,7 +2066,7 @@ export default function ApiHealthDashboard() {
         'Network Errors',
         'Failed to connect to backend server. Check if backend is running and accessible.',
         'border-gray-200',
-        false
+        false,
       )}
 
       {/* How It Works */}
@@ -1604,11 +2078,11 @@ export default function ApiHealthDashboard() {
           <div>
             <h4 className="font-medium mb-2 text-slate-100">🔍 Detection</h4>
             <p className="text-sm text-slate-400">
-              The monitor intercepts all API calls and tracks 404 errors. When a missing endpoint
-              is detected, it&apos;s automatically logged here with context.
+              The monitor intercepts all API calls and tracks 404 errors. When a missing endpoint is
+              detected, it&apos;s automatically logged here with context.
             </p>
           </div>
-          
+
           <div>
             <h4 className="font-medium mb-2 text-slate-100">🔧 Auto-Fix Suggestions</h4>
             <p className="text-sm text-slate-400">
@@ -1616,20 +2090,20 @@ export default function ApiHealthDashboard() {
               including database migrations, route files, and server configuration.
             </p>
           </div>
-          
+
           <div>
             <h4 className="font-medium mb-2 text-slate-100">📋 Copy & Implement</h4>
             <p className="text-sm text-slate-400">
-              Click &quot;Copy Fix&quot; to get complete implementation instructions. Share with your AI assistant
-              or follow the steps manually to implement the missing endpoint.
+              Click &quot;Copy Fix&quot; to get complete implementation instructions. Share with
+              your AI assistant or follow the steps manually to implement the missing endpoint.
             </p>
           </div>
-          
+
           <div>
             <h4 className="font-medium mb-2 text-slate-100">🔔 Notifications</h4>
             <p className="text-sm text-slate-400">
-              When enabled, the monitor shows toast notifications when missing endpoints are detected.
-              Disable notifications if you&apos;re actively testing and expect 404s.
+              When enabled, the monitor shows toast notifications when missing endpoints are
+              detected. Disable notifications if you&apos;re actively testing and expect 404s.
             </p>
           </div>
         </CardContent>
@@ -1639,27 +2113,28 @@ export default function ApiHealthDashboard() {
 
   // Create GitHub issues for API endpoint failures
   async function createGitHubIssuesForFailures(details) {
-    const failures = details.filter(d => d.status !== 200 && d.status !== 201);
-    
+    const failures = details.filter((d) => d.status !== 200 && d.status !== 201);
+
     if (failures.length === 0) return;
-    
+
     toast.info(`🤖 Creating GitHub issues for ${failures.length} failure(s)...`);
-    
+
     for (const failure of failures) {
       try {
         const errorInfo = {
           type: failure.status === 404 ? '404' : failure.status >= 500 ? '500' : '4xx',
-          description: failure.message || `HTTP ${failure.status}`
+          description: failure.message || `HTTP ${failure.status}`,
         };
-        
+
         const suggestedFix = generateAPIFixSuggestion({
           endpoint: failure.endpoint,
           errorInfo,
-          context: failure
+          context: failure,
         });
-        
-        const severity = failure.status === 404 ? 'medium' : failure.status >= 500 ? 'high' : 'medium';
-        
+
+        const severity =
+          failure.status === 404 ? 'medium' : failure.status >= 500 ? 'high' : 'medium';
+
         const result = await createHealthIssue({
           type: 'api',
           title: `${errorInfo.type} Error: ${failure.endpoint}`,
@@ -1669,20 +2144,20 @@ export default function ApiHealthDashboard() {
             statusCode: failure.status,
             message: failure.message,
             timestamp: new Date().toISOString(),
-            environment: import.meta.env.MODE || 'development'
+            environment: import.meta.env.MODE || 'development',
           },
           suggestedFix,
           severity,
           component: 'backend',
-          assignCopilot: true
+          assignCopilot: true,
         });
-        
+
         if (result.success) {
           toast.success(`Issue #${result.issue.number} created for ${failure.endpoint}`, {
             action: {
               label: 'View',
-              onClick: () => window.open(result.issue.url, '_blank')
-            }
+              onClick: () => window.open(result.issue.url, '_blank'),
+            },
           });
         }
       } catch (error) {
@@ -1691,4 +2166,3 @@ export default function ApiHealthDashboard() {
     }
   }
 }
-

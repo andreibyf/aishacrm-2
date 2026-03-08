@@ -328,6 +328,18 @@ export function useAccountsData({
 
       setAccounts(items);
       setTotalItems(effectiveTotalItems);
+      // Use inline stats from list response when present (filter-scoped)
+      if (accountsResult && accountsResult._stats && typeof accountsResult._stats === 'object') {
+        setTotalStats({
+          total: accountsResult._stats.total ?? 0,
+          customer: accountsResult._stats.customer ?? 0,
+          prospect: accountsResult._stats.prospect ?? 0,
+          partner: accountsResult._stats.partner ?? 0,
+          vendor: accountsResult._stats.vendor ?? 0,
+          competitor: accountsResult._stats.competitor ?? 0,
+          inactive: accountsResult._stats.inactive ?? 0,
+        });
+      }
       loadingToast.showSuccess(`${accountsLabel} loading! ✨`);
     } catch (error) {
       console.error('[Accounts] Failed to load accounts:', error);
@@ -359,9 +371,8 @@ export function useAccountsData({
     if (supportingDataReady) loadAccounts();
   }, [loadAccounts, supportingDataReady]);
 
-  useEffect(() => {
-    if (user) loadTotalStats();
-  }, [user, selectedTenantId, selectedEmail, loadTotalStats]);
+  // Note: Stats useEffect removed — stats are now loaded inline with loadAccounts via _stats
+  // loadTotalStats kept for backward compat (manual refresh calls from bulk ops, etc.)
 
   // Reset to page 1 when filters change
   useEffect(() => {

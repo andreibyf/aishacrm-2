@@ -276,9 +276,97 @@ export default function createAccountV2Routes(_pgPool) {
         delete expanded.team;
         return expanded;
       });
+
+      // Inline stats: aggregate by type with same filters as list (no type/industry/search)
+      let stats = {
+        total: count ?? 0,
+        customer: 0,
+        prospect: 0,
+        partner: 0,
+        vendor: 0,
+        competitor: 0,
+      };
+      try {
+        let statsQuery = supabase.from('accounts').select('type').eq('tenant_id', tenant_id);
+
+        if (visibilityScope && !visibilityScope.bypass) {
+          if (visibilityScope.mode === 'shared' && visibilityScope.teamIds?.length > 0) {
+            // no filter
+          } else if (visibilityScope.employeeIds?.length > 0) {
+            const idList = visibilityScope.employeeIds.join(',');
+            statsQuery = statsQuery.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+          }
+        }
+
+        if (filter) {
+          let parsed = filter;
+          if (typeof filter === 'string' && filter.startsWith('{')) {
+            try {
+              parsed = JSON.parse(filter);
+            } catch {
+              // ignore
+            }
+          }
+          if (parsed && typeof parsed === 'object') {
+            if (parsed.is_test_data !== undefined) {
+              if (parsed.is_test_data === false) {
+                statsQuery = statsQuery.or('is_test_data.is.false,is_test_data.is.null');
+              } else {
+                statsQuery = statsQuery.eq('is_test_data', parsed.is_test_data);
+              }
+            }
+            if (parsed.$or && Array.isArray(parsed.$or)) {
+              const normalizedOr = parsed.$or.filter((c) => c && typeof c === 'object');
+              const hasUnassigned = normalizedOr.some((c) => c.assigned_to === null);
+              const orParts = [];
+              for (const condition of normalizedOr) {
+                const val = condition.assigned_to;
+                if (val === null || val === undefined) continue;
+                if (typeof val === 'object' && val.$in && Array.isArray(val.$in)) {
+                  const ids = val.$in.filter((id) => sanitizeUuidInput(id) !== null);
+                  if (ids.length > 0) orParts.push(`assigned_to.in.(${ids.join(',')})`);
+                } else if (typeof val === 'string' && sanitizeUuidInput(val) !== null) {
+                  orParts.push(`assigned_to.eq.${val}`);
+                }
+              }
+              if (hasUnassigned) orParts.push('assigned_to.is.null');
+              if (orParts.length > 0) statsQuery = statsQuery.or(orParts.join(','));
+            }
+          }
+        }
+
+        if (assigned_to !== undefined && assigned_to !== null && assigned_to !== '') {
+          if (assigned_to === 'unassigned' || assigned_to === 'null') {
+            statsQuery = statsQuery.is('assigned_to', null);
+          } else {
+            const safeAssignedTo = sanitizeUuidInput(assigned_to);
+            if (safeAssignedTo != null) statsQuery = statsQuery.eq('assigned_to', safeAssignedTo);
+          }
+        }
+        if (
+          assigned_to_team !== undefined &&
+          assigned_to_team !== null &&
+          assigned_to_team !== ''
+        ) {
+          const safeTeamId = sanitizeUuidInput(assigned_to_team);
+          if (safeTeamId != null) statsQuery = statsQuery.eq('assigned_to_team', safeTeamId);
+        }
+
+        const { data: statsData, error: statsError } = await statsQuery;
+        if (!statsError && statsData && Array.isArray(statsData)) {
+          stats.total = statsData.length;
+          for (const row of statsData) {
+            const t = row.type;
+            if (t && Object.prototype.hasOwnProperty.call(stats, t)) stats[t]++;
+          }
+        }
+      } catch (statsErr) {
+        logger.warn('[V2 Accounts] Stats aggregation failed, using defaults:', statsErr?.message);
+      }
+
       return res.json({
         status: 'success',
-        data: { accounts, total: count ?? accounts.length, limit, offset },
+        data: { accounts, total: count ?? accounts.length, limit, offset, stats },
       });
     } catch (err) {
       logger.error('[accounts.v2] List exception:', err);
