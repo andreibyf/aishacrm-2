@@ -7,9 +7,9 @@ import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { initSupabaseForTests, hasSupabaseCredentials } from '../setup.js';
 import { getAuthHeaders } from '../helpers/auth.js';
+import { TENANT_ID, ADMIN_USER_ANDRE } from '../testConstants.js';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
-import { TENANT_ID, ADMIN_USER_ANDRE } from '../testConstants.js';
 const SHOULD_RUN = process.env.CI ? process.env.CI_BACKEND_TESTS === 'true' : true;
 
 // Test data tracking for cleanup

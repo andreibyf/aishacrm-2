@@ -16,7 +16,7 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import express from 'express';
 import { createServer } from 'node:http';
-import { TENANT_ID as MOCK_TENANT_ID } from '../testConstants.js';
+import { TENANT_ID as MOCK_TENANT_ID, OTHER_TENANT_ID } from '../testConstants.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -306,7 +306,7 @@ describe('Tenant isolation', () => {
     const res = await req(
       port,
       'DELETE',
-      '/api/pep/saved-reports/uuid-owned-by-other-tenant?tenant_id=00000000-0000-0000-0000-000000000099',
+      `/api/pep/saved-reports/uuid-owned-by-other-tenant?tenant_id=${OTHER_TENANT_ID}`,
     );
     assert.strictEqual(res.status, 200);
   });
