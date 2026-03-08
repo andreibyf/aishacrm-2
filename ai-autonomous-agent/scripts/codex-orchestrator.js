@@ -36,4 +36,8 @@ console.log("Running Codex analysis...");
 execFileSync("codex", ["exec", prompt], { stdio: "inherit" });
 
 console.log("Launching Aider...");
-execFileSync("aider", [target, "--auto-commits", "--yes"], { stdio: "inherit" });
+const aiderArgs = [target];
+if (process.env.AISHA_AIDER_AUTOCOMMIT === "1") {
+  aiderArgs.push("--auto-commits", "--yes");
+}
+execFileSync("aider", aiderArgs, { stdio: "inherit" });

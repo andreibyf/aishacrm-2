@@ -4,6 +4,11 @@ set -euo pipefail
 BASE="ai-autonomous-agent"
 CONFIG="$BASE/config.json"
 
+if [ ! -f "$CONFIG" ]; then
+  echo "Missing $CONFIG — copy config.example.json and adjust settings."
+  exit 1
+fi
+
 MODEL=$(jq -r .model $CONFIG)
 SLEEP=$(jq -r .sleep_seconds $CONFIG)
 MAX=$(jq -r .max_iterations $CONFIG)
@@ -76,7 +81,12 @@ do
     echo "Tests passed"
   else
     echo "Tests failed. Reverting..."
-    git reset --hard
+    if [ -z "$(git status --porcelain)" ]; then
+      echo "Working tree already clean — nothing to revert."
+    else
+      git stash push -m "aisha-agent-revert-iter-$ITER"
+      echo "Changes stashed as aisha-agent-revert-iter-$ITER"
+    fi
   fi
 
   echo "Sleeping $SLEEP seconds"

@@ -1,12 +1,15 @@
 import fs from "fs"
 
+const stateDir = "ai-autonomous-agent/state"
+fs.mkdirSync(stateDir, { recursive: true })
+
 const candidates = JSON.parse(
   fs.readFileSync(process.argv[2])
 )
 
 if (!candidates.length) {
-  fs.writeFileSync("ai-autonomous-agent/state/target.txt", "")
-  fs.writeFileSync("ai-autonomous-agent/state/subsystem.txt", "GENERAL")
+  fs.writeFileSync(`${stateDir}/target.txt`, "")
+  fs.writeFileSync(`${stateDir}/subsystem.txt`, "GENERAL")
   process.exit(0)
 }
 
@@ -15,12 +18,12 @@ candidates.sort((a, b) => b.score - a.score)
 const target = candidates[0]
 
 fs.writeFileSync(
-  "ai-autonomous-agent/state/target.txt",
+  `${stateDir}/target.txt`,
   target.file
 )
 
 fs.writeFileSync(
-  "ai-autonomous-agent/state/subsystem.txt",
+  `${stateDir}/subsystem.txt`,
   target.subsystem || "GENERAL"
 )
 

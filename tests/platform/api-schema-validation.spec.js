@@ -35,8 +35,8 @@ async function safeJson(response) {
     return await response.text();
   }
 }
-// Use UUID-first tenant id (fallbacks to system tenant UUID used elsewhere)
-const TEST_TENANT_ID = process.env.TEST_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
+// Use UUID-first tenant id — standardized on E2E_TENANT_ID like other specs
+const TEST_TENANT_ID = process.env.E2E_TENANT_ID || process.env.TEST_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
 const authFile = 'playwright/.auth/superadmin.json';
 
 // Extend test with API context

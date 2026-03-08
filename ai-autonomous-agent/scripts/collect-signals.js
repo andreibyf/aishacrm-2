@@ -1,9 +1,15 @@
 import fs from "fs"
 import path from "path"
 
-const config = JSON.parse(
-  fs.readFileSync("ai-autonomous-agent/config.json")
-)
+const configPath = "ai-autonomous-agent/config.json"
+const defaultConfig = {
+  repo_src_dir: "src",
+  braid_tools_dir: "braid-llm-kit/examples/assistant",
+  signals: { large_file_bytes: 10000, large_file_weight: 1, todo_weight: 1 }
+}
+const config = fs.existsSync(configPath)
+  ? JSON.parse(fs.readFileSync(configPath))
+  : defaultConfig
 
 const roots = [config.repo_src_dir, "backend", config.braid_tools_dir, "tests"]
   .filter(Boolean)
@@ -92,8 +98,11 @@ function walk(dir) {
 
 roots.forEach(walk)
 
+const outputDir = "ai-autonomous-agent/state"
+fs.mkdirSync(outputDir, { recursive: true })
+
 fs.writeFileSync(
-  "ai-autonomous-agent/state/candidates.json",
+  path.join(outputDir, "candidates.json"),
   JSON.stringify(results, null, 2)
 )
 

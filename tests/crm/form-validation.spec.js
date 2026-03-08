@@ -7,21 +7,22 @@ import { test, expect } from '@playwright/test';
 
 // Test configuration
 const BASE_URL = process.env.PLAYWRIGHT_FRONTEND_URL || 'http://localhost:4000';
+const TENANT_ID = process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
 
 test.describe('[CRM] Form Schema Validation Tests', () => {
   // Use E2E test mode to bypass real authentication
   test.beforeEach(async ({ page }) => {
     // Enable E2E test mode before navigation
-    await page.addInitScript(() => {
+    await page.addInitScript((tenantId) => {
       localStorage.setItem('E2E_TEST_MODE', 'true');
       window.__e2eUser = {
         id: 'e2e-test-user-id',
         email: 'e2e-test@aishacrm.com',
         role: 'superadmin',
-        tenant_id: process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69',
+        tenant_id: tenantId,
         permissions: ['*']
       };
-    });
+    }, TENANT_ID);
     
     await page.goto(`${BASE_URL}/`);
     

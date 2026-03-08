@@ -9,6 +9,23 @@ const __dirname = dirname(__filename);
 // Load environment variables from backend/.env
 dotenv.config({ path: resolve(__dirname, '../../backend/.env') });
 
+// ── Safety guards ────────────────────────────────────────────────────
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY — aborting.');
+  process.exit(1);
+}
+
+if (process.env.ALLOW_TEST_DATA_CLEANUP !== '1') {
+  console.error('Set ALLOW_TEST_DATA_CLEANUP=1 to run this script.');
+  process.exit(1);
+}
+
+const url = new URL(process.env.SUPABASE_URL);
+if (!url.hostname.endsWith('.supabase.co') && !url.hostname.startsWith('localhost') && !url.hostname.startsWith('127.')) {
+  console.error(`Unexpected SUPABASE_URL hostname "${url.hostname}" — aborting to prevent accidental production wipe.`);
+  process.exit(1);
+}
+
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 /**
