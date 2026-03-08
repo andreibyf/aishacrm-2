@@ -341,9 +341,9 @@ export default function createContactV2Routes(_pgPool) {
                   const val = condition.assigned_to;
                   if (val === null || val === undefined) continue;
                   if (typeof val === 'object' && val.$in && Array.isArray(val.$in)) {
-                    const ids = val.$in.filter((id) => typeof id === 'string' && id.trim());
+                    const ids = val.$in.filter((id) => sanitizeUuidInput(id) !== null);
                     if (ids.length > 0) orParts.push(`assigned_to.in.(${ids.join(',')})`);
-                  } else if (typeof val === 'string' && val.trim()) {
+                  } else if (typeof val === 'string' && sanitizeUuidInput(val) !== null) {
                     orParts.push(`assigned_to.eq.${val}`);
                   }
                 }

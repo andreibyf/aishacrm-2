@@ -20,6 +20,11 @@ function tenantForRequest(explicit) {
   return id || undefined;
 }
 
+// Build tenant header only when tenantId is truthy (avoids sending literal "undefined")
+function tenantHeaders(tenantId) {
+  return tenantId ? { 'x-tenant-id': tenantId } : {};
+}
+
 /**
  * Get authorization headers for API calls.
  * Now relies on cookie-based JWT auth (aisha_access cookie).
@@ -59,7 +64,7 @@ export async function createConversation({
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-tenant-id': tenantId,
+      ...tenantHeaders(tenantId),
       ...authHeaders,
     },
     credentials: 'include',
@@ -103,7 +108,7 @@ export async function getConversation(
 
   const response = await fetch(`${BACKEND_URL}/api/ai/conversations/${conversationId}`, {
     headers: {
-      'x-tenant-id': tenantId,
+      ...tenantHeaders(tenantId),
       ...authHeaders,
     },
     credentials: 'include',
@@ -153,7 +158,7 @@ export async function listConversations({
 
   const response = await fetch(url, {
     headers: {
-      'x-tenant-id': tenantId,
+      ...tenantHeaders(tenantId),
       ...authHeaders,
     },
     credentials: 'include',
@@ -196,7 +201,7 @@ export async function updateConversation(
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
-      'x-tenant-id': tenantId,
+      ...tenantHeaders(tenantId),
       ...authHeaders,
     },
     credentials: 'include',
@@ -231,7 +236,7 @@ export async function deleteConversation(
   const response = await fetch(`${BACKEND_URL}/api/ai/conversations/${conversationId}`, {
     method: 'DELETE',
     headers: {
-      'x-tenant-id': tenantId,
+      ...tenantHeaders(tenantId),
       ...authHeaders,
     },
     credentials: 'include',
@@ -272,7 +277,7 @@ export async function addMessage(
 
   const headers = {
     'Content-Type': 'application/json',
-    'x-tenant-id': tenantId,
+    ...tenantHeaders(tenantId),
     ...authHeaders,
   };
 
@@ -385,7 +390,7 @@ export async function submitFeedback(
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        'x-tenant-id': tenantId,
+        ...tenantHeaders(tenantId),
         ...authHeaders,
       },
       credentials: 'include',

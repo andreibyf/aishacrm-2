@@ -441,8 +441,7 @@ test.describe('Backend API Schema Validation', () => {
   test.describe('V2 Inline Stats Tests', () => {
     test('Opportunities v2 list returns inline stats', async ({ apiContext }) => {
       const response = await apiContext.get(`v2/opportunities?tenant_id=${TEST_TENANT_ID}&limit=1`);
-      await expectOk(response);
-      const json = await response.json();
+      const json = await expectOk(response);
 
       expect(json.data).toHaveProperty('stats');
       expect(json.data.stats).toHaveProperty('total');
@@ -457,8 +456,7 @@ test.describe('Backend API Schema Validation', () => {
 
     test('Activities v2 list returns inline stats', async ({ apiContext }) => {
       const response = await apiContext.get(`v2/activities?tenant_id=${TEST_TENANT_ID}&limit=1`);
-      await expectOk(response);
-      const json = await response.json();
+      const json = await expectOk(response);
 
       expect(json.data).toHaveProperty('stats');
       expect(json.data.stats).toHaveProperty('total');
@@ -472,8 +470,7 @@ test.describe('Backend API Schema Validation', () => {
 
     test('Contacts v2 list returns inline stats', async ({ apiContext }) => {
       const response = await apiContext.get(`v2/contacts?tenant_id=${TEST_TENANT_ID}&limit=1`);
-      await expectOk(response);
-      const json = await response.json();
+      const json = await expectOk(response);
 
       expect(json.data).toHaveProperty('stats');
       expect(json.data.stats).toHaveProperty('total');
@@ -486,8 +483,7 @@ test.describe('Backend API Schema Validation', () => {
 
     test('Accounts v2 list returns inline stats', async ({ apiContext }) => {
       const response = await apiContext.get(`v2/accounts?tenant_id=${TEST_TENANT_ID}&limit=1`);
-      await expectOk(response);
-      const json = await response.json();
+      const json = await expectOk(response);
 
       expect(json.data).toHaveProperty('stats');
       expect(json.data.stats).toHaveProperty('total');
@@ -500,8 +496,7 @@ test.describe('Backend API Schema Validation', () => {
 
     test('Leads v2 list returns inline stats', async ({ apiContext }) => {
       const response = await apiContext.get(`v2/leads?tenant_id=${TEST_TENANT_ID}&limit=1`);
-      await expectOk(response);
-      const json = await response.json();
+      const json = await expectOk(response);
 
       expect(json.data).toHaveProperty('stats');
       expect(json.data.stats).toHaveProperty('total');
@@ -516,8 +511,7 @@ test.describe('Backend API Schema Validation', () => {
 
     test('Opportunities stats sum equals total', async ({ apiContext }) => {
       const response = await apiContext.get(`v2/opportunities?tenant_id=${TEST_TENANT_ID}&limit=1`);
-      await expectOk(response);
-      const json = await response.json();
+      const json = await expectOk(response);
       const { stats } = json.data;
 
       const sum =

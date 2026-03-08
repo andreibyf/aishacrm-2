@@ -339,12 +339,8 @@ export function useLeadsData({
     }
   }, [user, getTenantFilter, showTestData]);
 
-  // Load total stats when dependencies change
-  useEffect(() => {
-    if (user) {
-      loadTotalStats();
-    }
-  }, [user, selectedTenantId, selectedEmail, loadTotalStats, showTestData]);
+  // Note: Stats useEffect removed — stats are now loaded inline with loadLeads via _stats
+  // loadTotalStats kept for backward compat (manual refresh calls from bulk ops, etc.)
 
   // Main data loading function with pagination and age filtering
   const loadLeads = useCallback(

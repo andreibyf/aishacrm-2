@@ -404,9 +404,8 @@ export function useContactsData({
     loadContacts();
   }, [loadContacts]);
 
-  useEffect(() => {
-    if (user) loadTotalStats();
-  }, [user, selectedTenantId, selectedEmail, loadTotalStats]);
+  // Note: Stats useEffect removed — stats are now loaded inline with loadContacts via _stats
+  // loadTotalStats kept for backward compat (manual refresh calls from bulk ops, etc.)
 
   // Reset to page 1 when filters change
   useEffect(() => {

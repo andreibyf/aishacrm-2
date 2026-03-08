@@ -319,18 +319,16 @@ export function useActivitiesData({
         setTotalItems(totalCount);
 
         // Use inline stats from list response when present (filter-scoped: assigned_to, etc.)
-        if (
-          activitiesResult &&
-          activitiesResult._stats &&
-          typeof activitiesResult._stats === 'object'
-        ) {
+        // Activities returns a full object { activities, stats, ... } so stats is at activitiesResult.stats
+        const inlineStats = activitiesResult?.stats || activitiesResult?._stats;
+        if (inlineStats && typeof inlineStats === 'object') {
           setTotalStats({
-            total: activitiesResult._stats.total ?? 0,
-            scheduled: activitiesResult._stats.scheduled ?? 0,
-            in_progress: activitiesResult._stats.in_progress ?? 0,
-            overdue: activitiesResult._stats.overdue ?? 0,
-            completed: activitiesResult._stats.completed ?? 0,
-            cancelled: activitiesResult._stats.cancelled ?? 0,
+            total: inlineStats.total ?? 0,
+            scheduled: inlineStats.scheduled ?? 0,
+            in_progress: inlineStats.in_progress ?? 0,
+            overdue: inlineStats.overdue ?? 0,
+            completed: inlineStats.completed ?? 0,
+            cancelled: inlineStats.cancelled ?? 0,
           });
         } else {
           loadStats();

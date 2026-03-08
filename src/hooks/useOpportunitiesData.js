@@ -211,8 +211,11 @@ export function useOpportunitiesData({
     supportingDataReloadKey,
   ]);
 
-  // Load total stats for ALL opportunities
+  // Note: Stats are now loaded inline with opportunities data (returned from GET /api/v2/opportunities)
+  // The loadTotalStats useEffect is removed — stats are updated in loadOpportunities via _stats
+  // loadTotalStats is kept for backward compatibility (manual refresh, bulk ops callbacks)
   const loadTotalStats = useCallback(async () => {
+    // Stats are now loaded inline — this is only for backward compat / manual refresh
     if (!user) return;
 
     try {
@@ -241,12 +244,8 @@ export function useOpportunitiesData({
     }
   }, [user, getTenantFilter]);
 
-  // Load total stats when dependencies change
-  useEffect(() => {
-    if (user && supportingDataReady) {
-      loadTotalStats();
-    }
-  }, [user, selectedTenantId, selectedEmail, loadTotalStats, showTestData, supportingDataReady]);
+  // Note: Stats useEffect removed — stats are now loaded inline with loadOpportunities
+  // This reduces API calls and ensures stats always reflect the current filter state
 
   // Main data loading function with proper pagination
   const loadOpportunities = useCallback(

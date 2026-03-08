@@ -5,6 +5,7 @@ import { buildOpportunityAiContext } from '../lib/opportunityAiContext.js';
 import { getVisibilityScope, getAccessLevel, isNotesOnlyUpdate } from '../lib/teamVisibility.js';
 import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
+import { sanitizeUuidInput } from '../lib/uuidValidator.js';
 
 // NOTE: v2 opportunities router for Phase 4.2 internal pilot.
 // This implementation is dev-focused and gated by FEATURE_OPPORTUNITIES_V2.
@@ -668,7 +669,8 @@ export default function createOpportunityV2Routes(_pgPool) {
               if (at === null || at === '' || at === 'null') {
                 statsQuery = statsQuery.is('assigned_to', null);
               } else {
-                statsQuery = statsQuery.eq('assigned_to', at);
+                const safeAt = sanitizeUuidInput(at);
+                if (safeAt) statsQuery = statsQuery.eq('assigned_to', safeAt);
               }
             }
             if (parsedFilter.$or && Array.isArray(parsedFilter.$or)) {
@@ -679,9 +681,9 @@ export default function createOpportunityV2Routes(_pgPool) {
                 const val = condition.assigned_to;
                 if (val === null || val === undefined) continue;
                 if (typeof val === 'object' && val.$in && Array.isArray(val.$in)) {
-                  const ids = val.$in.filter((id) => typeof id === 'string' && id.trim());
+                  const ids = val.$in.filter((id) => sanitizeUuidInput(id) !== null);
                   if (ids.length > 0) assignedOrParts.push(`assigned_to.in.(${ids.join(',')})`);
-                } else if (typeof val === 'string' && val.trim()) {
+                } else if (typeof val === 'string' && sanitizeUuidInput(val) !== null) {
                   assignedOrParts.push(`assigned_to.eq.${val}`);
                 }
               }
@@ -706,7 +708,8 @@ export default function createOpportunityV2Routes(_pgPool) {
           ) {
             statsQuery = statsQuery.is('assigned_to', null);
           } else {
-            statsQuery = statsQuery.eq('assigned_to', assigned_to);
+            const safeAssignedTo = sanitizeUuidInput(assigned_to);
+            if (safeAssignedTo) statsQuery = statsQuery.eq('assigned_to', safeAssignedTo);
           }
         }
         if (
@@ -714,7 +717,8 @@ export default function createOpportunityV2Routes(_pgPool) {
           assigned_to_team !== null &&
           assigned_to_team !== ''
         ) {
-          statsQuery = statsQuery.eq('assigned_to_team', assigned_to_team);
+          const safeTeamId = sanitizeUuidInput(assigned_to_team);
+          if (safeTeamId) statsQuery = statsQuery.eq('assigned_to_team', safeTeamId);
         }
         if (account_id) statsQuery = statsQuery.eq('account_id', account_id);
         if (contact_id) statsQuery = statsQuery.eq('contact_id', contact_id);
