@@ -17,7 +17,7 @@ async function waitForBackendHealth() {
     } catch {
       // Backend not ready yet
     }
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
   }
   throw new Error('Backend health check timeout after 30s');
 }
@@ -31,7 +31,7 @@ test.describe('Basic CRUD Operations', () => {
   test.beforeEach(async ({ page }) => {
     // Navigate to app
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    
+
     // Wait for main content to appear
     await page.waitForSelector('body', { timeout: 10000 });
     await page.waitForTimeout(2000); // Give React time to hydrate
@@ -41,7 +41,7 @@ test.describe('Basic CRUD Operations', () => {
     // Just verify the page loaded (URL may have tenant query param)
     const currentUrl = page.url();
     expect(currentUrl).toContain(BASE_URL);
-    
+
     // Check for any content
     const body = await page.locator('body').textContent();
     expect(body.length).toBeGreaterThan(0);
@@ -50,10 +50,10 @@ test.describe('Basic CRUD Operations', () => {
   test('should navigate to Activities page', async ({ page }) => {
     // Try to navigate to activities
     await page.goto(`${BASE_URL}/activities`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    
+
     // Wait for content
     await page.waitForTimeout(2000);
-    
+
     // Verify we're on the right page
     await expect(page).toHaveURL(/activities/);
   });
@@ -79,16 +79,18 @@ test.describe('Basic CRUD Operations', () => {
   test('backend health check should return success', async ({ request }) => {
     const response = await request.get(`${BACKEND_URL}/api/system/status`);
     expect(response.ok()).toBe(true);
-    
+
     const data = await response.json();
     expect(data.status).toBe('success');
     expect(data.data.server).toBe('running');
   });
 
   test('should fetch opportunities from backend', async ({ request }) => {
-    const response = await request.get(`${BACKEND_URL}/api/opportunities?tenant_id=6cb4c008-4847-426a-9a2e-918ad70e7b69`);
+    const response = await request.get(
+      `${BACKEND_URL}/api/opportunities?tenant_id=6cb4c008-4847-426a-9a2e-918ad70e7b69`,
+    );
     expect(response.ok()).toBe(true);
-    
+
     const data = await response.json();
     expect(data.status).toBe('success');
     expect(Array.isArray(data.data.opportunities)).toBe(true);

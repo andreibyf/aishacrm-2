@@ -15,8 +15,9 @@ import { authGet, authPost, authPut, authDelete } from '../helpers/auth.js';
 // Inside Docker: CRM_BACKEND_URL=http://backend:3001 or use localhost:3001
 // Outside Docker: BACKEND_URL=http://localhost:4001 (set by run-tests-safe.sh)
 // Always run via: npm run test:safe — never call node --test directly
+import { TENANT_ID } from '../testConstants.js';
+
 const BASE_URL = process.env.CRM_BACKEND_URL || process.env.BACKEND_URL || 'http://localhost:4001';
-const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 const SHOULD_RUN = process.env.CI ? process.env.CI_BACKEND_TESTS === 'true' : true;
 
 describe('Braid Tool Execution', { skip: !SHOULD_RUN }, () => {

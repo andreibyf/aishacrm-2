@@ -30,7 +30,7 @@ export default defineConfig({
       }
     },
     onConsoleLog: () => true,
-    exclude: ["backend/test/**", "backend/tests/**", "tests/e2e/**"],
+    exclude: ["backend/test/**", "backend/tests/**", "tests/**"],
     include: ["src/**/*.test.{js,jsx,ts,tsx}", "src/**/__tests__/**/*.{js,jsx,ts,tsx}"]
   },
   resolve: {

@@ -298,6 +298,7 @@ export default function createContactV2Routes(_pgPool) {
         prospect: 0,
         customer: 0,
         churned: 0,
+        other: 0,
       };
 
       try {
@@ -389,11 +390,14 @@ export default function createContactV2Routes(_pgPool) {
           stats.prospect = 0;
           stats.customer = 0;
           stats.churned = 0;
+          stats.other = 0;
 
           for (const row of statsData) {
             const statusKey = row.status;
             if (statusKey && Object.prototype.hasOwnProperty.call(stats, statusKey)) {
               stats[statusKey]++;
+            } else {
+              stats.other++;
             }
           }
         }

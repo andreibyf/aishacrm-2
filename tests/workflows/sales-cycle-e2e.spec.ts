@@ -35,7 +35,7 @@ import {
   createActivity,
   updateActivityStatus,
   updateOpportunityStage,
-} from './helpers';
+} from '../helpers/helpers';
 
 test.describe('Complete Sales Cycle - BizDev to Closed Deal', () => {
   

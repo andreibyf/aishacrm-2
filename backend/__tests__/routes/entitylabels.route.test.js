@@ -1,14 +1,13 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { TENANT_ID as TENANT_UUID, NONEXISTENT_ID } from '../testConstants.js';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
-const TENANT_UUID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 const TENANT_SLUG = process.env.TEST_TENANT_SLUG || 'labor-depot';
 // In CI, run only if explicitly enabled
-const SHOULD_RUN = process.env.CI ? (process.env.CI_BACKEND_TESTS === 'true') : true;
+const SHOULD_RUN = process.env.CI ? process.env.CI_BACKEND_TESTS === 'true' : true;
 
 describe('Entity Labels Routes', { skip: !SHOULD_RUN }, () => {
-
   // Default labels expected from the API
   const DEFAULT_LABELS = {
     leads: { plural: 'Leads', singular: 'Lead' },
@@ -42,8 +41,7 @@ describe('Entity Labels Routes', { skip: !SHOULD_RUN }, () => {
   });
 
   test('GET /api/entity-labels/:tenant_id returns defaults for non-existent tenant', async () => {
-    const fakeUuid = '00000000-0000-0000-0000-000000000000';
-    const res = await fetch(`${BASE_URL}/api/entity-labels/${fakeUuid}`);
+    const res = await fetch(`${BASE_URL}/api/entity-labels/${NONEXISTENT_ID}`);
     assert.equal(res.status, 200, 'expected 200 with defaults for non-existent tenant');
     const json = await res.json();
     assert.equal(json.status, 'success');
@@ -66,22 +64,28 @@ describe('Entity Labels Routes', { skip: !SHOULD_RUN }, () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         labels: {
-          leads: { plural: 'Prospects', singular: 'Prospect' }
-        }
-      })
+          leads: { plural: 'Prospects', singular: 'Prospect' },
+        },
+      }),
     });
     // In production: requires superadmin auth - expect 401 or 403
     // In development: middleware auto-creates mock superadmin, so 200 is acceptable
-    assert.ok([200, 401, 403].includes(res.status), `expected 200/401/403 for PUT, got ${res.status}`);
+    assert.ok(
+      [200, 401, 403].includes(res.status),
+      `expected 200/401/403 for PUT, got ${res.status}`,
+    );
   });
 
   test('DELETE /api/entity-labels/:tenant_id requires authentication (or dev mode)', async () => {
     const res = await fetch(`${BASE_URL}/api/entity-labels/${TENANT_UUID}`, {
-      method: 'DELETE'
+      method: 'DELETE',
     });
     // In production: requires superadmin auth - expect 401 or 403
     // In development: middleware auto-creates mock superadmin, so 200 is acceptable
-    assert.ok([200, 401, 403].includes(res.status), `expected 200/401/403 for DELETE, got ${res.status}`);
+    assert.ok(
+      [200, 401, 403].includes(res.status),
+      `expected 200/401/403 for DELETE, got ${res.status}`,
+    );
   });
 
   test('Entity label response includes customized array', async () => {
@@ -95,7 +99,7 @@ describe('Entity Labels Routes', { skip: !SHOULD_RUN }, () => {
     const res = await fetch(`${BASE_URL}/api/entity-labels/${TENANT_UUID}`);
     assert.equal(res.status, 200);
     const json = await res.json();
-    
+
     // Each label should have plural and singular
     for (const [key, label] of Object.entries(json.data.labels)) {
       assert.ok(label.plural, `expected ${key} to have plural`);
@@ -104,5 +108,4 @@ describe('Entity Labels Routes', { skip: !SHOULD_RUN }, () => {
       assert.equal(typeof label.singular, 'string', `${key}.singular should be string`);
     }
   });
-
 });

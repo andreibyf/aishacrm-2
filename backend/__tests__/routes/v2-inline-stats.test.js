@@ -24,9 +24,9 @@
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { getAuthHeaders } from '../helpers/auth.js';
+import { TENANT_ID } from '../testConstants.js';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
-const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 const SHOULD_RUN = process.env.CI ? process.env.CI_BACKEND_TESTS === 'true' : true;
 
 const cleanupIds = {
@@ -86,7 +86,8 @@ describe('Opportunities V2 Inline Stats', { skip: !SHOULD_RUN }, () => {
       stats.proposal +
       stats.negotiation +
       stats.closed_won +
-      stats.closed_lost;
+      stats.closed_lost +
+      (stats.other || 0);
 
     // Sum of stages should equal total (all opportunities have a stage)
     assert.equal(sum, stats.total, 'Sum of stages should equal total');
@@ -118,7 +119,8 @@ describe('Opportunities V2 Inline Stats', { skip: !SHOULD_RUN }, () => {
       stats.proposal +
       stats.negotiation +
       stats.closed_won +
-      stats.closed_lost;
+      stats.closed_lost +
+      (stats.other || 0);
     assert.equal(stageSum, stats.total, 'Stats should count all stages regardless of stage filter');
   });
 });
@@ -255,7 +257,8 @@ describe('Accounts V2 Inline Stats', { skip: !SHOULD_RUN }, () => {
       (stats.prospect || 0) +
       (stats.partner || 0) +
       (stats.vendor || 0) +
-      (stats.competitor || 0);
+      (stats.competitor || 0) +
+      (stats.other || 0);
     assert.equal(typeSum, stats.total, 'Sum of type counts should equal total');
   });
 });

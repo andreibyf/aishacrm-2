@@ -8,6 +8,7 @@
 
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert';
+import { TENANT_ID } from './testConstants.js';
 
 // Test configuration
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
@@ -23,15 +24,15 @@ let testTenantId = null;
 async function makeAuthRequest(path, options = {}) {
   const url = `${BACKEND_URL}${path}`;
   const headers = {
-    'Accept': 'application/json',
-    'Cookie': authCookie || '',
-    ...options.headers
+    Accept: 'application/json',
+    Cookie: authCookie || '',
+    ...options.headers,
   };
 
   const response = await fetch(url, {
     ...options,
     headers,
-    credentials: 'include'
+    credentials: 'include',
   });
 
   return response;
@@ -48,8 +49,8 @@ async function setupAuth() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       email: process.env.TEST_USER_EMAIL || 'test@example.com',
-      password: process.env.TEST_USER_PASSWORD || 'testpassword123'
-    })
+      password: process.env.TEST_USER_PASSWORD || 'testpassword123',
+    }),
   });
 
   if (loginResponse.ok) {
@@ -61,9 +62,9 @@ async function setupAuth() {
     testTenantId = data.user?.tenant_id || process.env.TEST_TENANT_ID;
   }
 
-  // If login fails, try to get from environment
+  // If login fails, use env or shared test constant
   if (!testTenantId) {
-    testTenantId = process.env.TEST_TENANT_ID;
+    testTenantId = process.env.TEST_TENANT_ID || TENANT_ID;
   }
 
   console.log('[Test Setup] Auth cookie:', authCookie ? 'Set' : 'Not set');
@@ -77,11 +78,13 @@ describe('Bundle API Endpoints', { timeout: TEST_TIMEOUT }, () => {
 
   describe('GET /api/bundles/leads', () => {
     it('should require authentication', async () => {
-      const response = await fetch(`${BACKEND_URL}/api/bundles/leads?tenant_id=${testTenantId || 'test-uuid'}`);
+      const response = await fetch(`${BACKEND_URL}/api/bundles/leads?tenant_id=${testTenantId}`);
 
       // Should return 401 or redirect without auth cookie
-      assert.ok(response.status === 401 || response.status === 302 || response.status === 403,
-        `Expected 401/302/403 without auth, got ${response.status}`);
+      assert.ok(
+        response.status === 401 || response.status === 302 || response.status === 403,
+        `Expected 401/302/403 without auth, got ${response.status}`,
+      );
     });
 
     it('should require tenant_id parameter', async () => {
@@ -157,7 +160,7 @@ describe('Bundle API Endpoints', { timeout: TEST_TIMEOUT }, () => {
       }
 
       const response = await makeAuthRequest(
-        `/api/bundles/leads?tenant_id=${testTenantId}&page=1&page_size=10`
+        `/api/bundles/leads?tenant_id=${testTenantId}&page=1&page_size=10`,
       );
 
       assert.strictEqual(response.status, 200);
@@ -177,7 +180,7 @@ describe('Bundle API Endpoints', { timeout: TEST_TIMEOUT }, () => {
       }
 
       const response = await makeAuthRequest(
-        `/api/bundles/leads?tenant_id=${testTenantId}&search=test`
+        `/api/bundles/leads?tenant_id=${testTenantId}&search=test`,
       );
 
       assert.strictEqual(response.status, 200);
@@ -192,7 +195,7 @@ describe('Bundle API Endpoints', { timeout: TEST_TIMEOUT }, () => {
       }
 
       const response = await makeAuthRequest(
-        `/api/bundles/leads?tenant_id=${testTenantId}&status=new`
+        `/api/bundles/leads?tenant_id=${testTenantId}&status=new`,
       );
 
       assert.strictEqual(response.status, 200);
@@ -201,7 +204,7 @@ describe('Bundle API Endpoints', { timeout: TEST_TIMEOUT }, () => {
 
       // Verify all returned leads have status 'new' (if any)
       if (bundle.leads.length > 0) {
-        bundle.leads.forEach(lead => {
+        bundle.leads.forEach((lead) => {
           assert.strictEqual(lead.status, 'new', 'All leads should have status "new"');
         });
       }
@@ -210,10 +213,12 @@ describe('Bundle API Endpoints', { timeout: TEST_TIMEOUT }, () => {
 
   describe('GET /api/bundles/contacts', () => {
     it('should require authentication', async () => {
-      const response = await fetch(`${BACKEND_URL}/api/bundles/contacts?tenant_id=${testTenantId || 'test-uuid'}`);
+      const response = await fetch(`${BACKEND_URL}/api/bundles/contacts?tenant_id=${testTenantId}`);
 
-      assert.ok(response.status === 401 || response.status === 302 || response.status === 403,
-        `Expected 401/302/403 without auth, got ${response.status}`);
+      assert.ok(
+        response.status === 401 || response.status === 302 || response.status === 403,
+        `Expected 401/302/403 without auth, got ${response.status}`,
+      );
     });
 
     it('should return bundle with correct structure', async () => {
@@ -251,10 +256,14 @@ describe('Bundle API Endpoints', { timeout: TEST_TIMEOUT }, () => {
 
   describe('GET /api/bundles/opportunities', () => {
     it('should require authentication', async () => {
-      const response = await fetch(`${BACKEND_URL}/api/bundles/opportunities?tenant_id=${testTenantId || 'test-uuid'}`);
+      const response = await fetch(
+        `${BACKEND_URL}/api/bundles/opportunities?tenant_id=${testTenantId}`,
+      );
 
-      assert.ok(response.status === 401 || response.status === 302 || response.status === 403,
-        `Expected 401/302/403 without auth, got ${response.status}`);
+      assert.ok(
+        response.status === 401 || response.status === 302 || response.status === 403,
+        `Expected 401/302/403 without auth, got ${response.status}`,
+      );
     });
 
     it('should return bundle with correct structure', async () => {
@@ -263,7 +272,9 @@ describe('Bundle API Endpoints', { timeout: TEST_TIMEOUT }, () => {
         return;
       }
 
-      const response = await makeAuthRequest(`/api/bundles/opportunities?tenant_id=${testTenantId}`);
+      const response = await makeAuthRequest(
+        `/api/bundles/opportunities?tenant_id=${testTenantId}`,
+      );
 
       assert.strictEqual(response.status, 200);
 
@@ -300,7 +311,7 @@ describe('Bundle API Endpoints', { timeout: TEST_TIMEOUT }, () => {
       }
 
       const response = await makeAuthRequest(
-        `/api/bundles/opportunities?tenant_id=${testTenantId}&stage=prospecting`
+        `/api/bundles/opportunities?tenant_id=${testTenantId}&stage=prospecting`,
       );
 
       assert.strictEqual(response.status, 200);
@@ -309,8 +320,12 @@ describe('Bundle API Endpoints', { timeout: TEST_TIMEOUT }, () => {
 
       // Verify all returned opportunities have stage 'prospecting' (if any)
       if (bundle.opportunities.length > 0) {
-        bundle.opportunities.forEach(opp => {
-          assert.strictEqual(opp.stage, 'prospecting', 'All opportunities should have stage "prospecting"');
+        bundle.opportunities.forEach((opp) => {
+          assert.strictEqual(
+            opp.stage,
+            'prospecting',
+            'All opportunities should have stage "prospecting"',
+          );
         });
       }
     });
@@ -356,7 +371,9 @@ describe('Bundle API Endpoints', { timeout: TEST_TIMEOUT }, () => {
       }
 
       const startTime = Date.now();
-      const response = await makeAuthRequest(`/api/bundles/opportunities?tenant_id=${testTenantId}`);
+      const response = await makeAuthRequest(
+        `/api/bundles/opportunities?tenant_id=${testTenantId}`,
+      );
       const elapsed = Date.now() - startTime;
 
       assert.strictEqual(response.status, 200);

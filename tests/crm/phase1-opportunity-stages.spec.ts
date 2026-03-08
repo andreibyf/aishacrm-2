@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createLead, convertLead, updateOpportunityStage, BACKEND_URL, TENANT_ID, navigate, initE2EUi } from './helpers';
+import { createLead, convertLead, updateOpportunityStage, BACKEND_URL, TENANT_ID, navigate, initE2EUi } from '../helpers/helpers';
 
 test.describe('@phase1 Opportunity Stages', () => {
   test('progress stages and verify persistence and UI reflection', async ({ request, page }) => {

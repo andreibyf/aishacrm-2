@@ -14,9 +14,9 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import { initSupabaseForTests } from '../setup.js';
 import { getSupabaseClient } from '../../lib/supabase-db.js';
+import { TENANT_ID as TEST_TENANT_ID, EMP_MIKE } from '../testConstants.js';
 
 let supabaseReady = false;
-const TEST_TENANT_ID = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 
 // We'll look up a real employee from the test tenant for assignment tests
 let testEmployeeId = null;
@@ -51,7 +51,7 @@ async function createTestApp(routePath, routeFactory, port) {
     req.tenantId = req.headers['x-tenant-id'] || TEST_TENANT_ID;
     req.tenant = { id: req.tenantId };
     req.user = {
-      id: testEmployeeId || 'test-user-id',
+      id: testEmployeeId || EMP_MIKE,
       role: 'admin',
       tenant_id: req.tenantId,
     };

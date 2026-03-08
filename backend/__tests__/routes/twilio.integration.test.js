@@ -9,12 +9,12 @@
 
 import { describe, test, expect } from 'vitest';
 
+import { TENANT_ID } from '../testConstants.js';
+
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:4001';
-const TENANT_ID = process.env.TEST_TENANT_ID || '550e8400-e29b-41d4-a716-446655440000';
 const SHOULD_RUN = process.env.RUN_INTEGRATION_TESTS === 'true' || process.env.CI;
 
 describe('Twilio Integration', { skip: !SHOULD_RUN }, () => {
-
   // ── send-sms ──
 
   test('POST /api/integrations/twilio/send-sms returns 400 without tenant_id', async () => {

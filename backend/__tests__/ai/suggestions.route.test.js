@@ -7,9 +7,9 @@ import { test, describe, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { initSupabaseForTests, hasSupabaseCredentials } from '../setup.js';
 import { getAuthHeaders } from '../helpers/auth.js';
+import { TENANT_ID, NONEXISTENT_ID, ADMIN_USER_ANDRE } from '../testConstants.js';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
-const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 const SHOULD_RUN = process.env.CI ? process.env.CI_BACKEND_TESTS === 'true' : true;
 
 describe('Suggestions Routes', { skip: !SHOULD_RUN }, () => {
@@ -177,7 +177,7 @@ describe('Suggestion Actions', { skip: !SHOULD_RUN }, () => {
       const res = await fetch(`${BASE_URL}/api/ai/suggestions/${id}/approve`, {
         method: 'POST',
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: 'test-user-123' }),
+        body: JSON.stringify({ user_id: ADMIN_USER_ANDRE }),
       });
 
       // Should succeed or return not found if already processed
@@ -200,7 +200,7 @@ describe('Suggestion Actions', { skip: !SHOULD_RUN }, () => {
         method: 'POST',
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: 'test-user-123',
+          user_id: ADMIN_USER_ANDRE,
           rejection_reason: 'Test rejection from unit tests',
         }),
       });
@@ -224,7 +224,7 @@ describe('Suggestion Actions', { skip: !SHOULD_RUN }, () => {
       const res = await fetch(`${BASE_URL}/api/ai/suggestions/${id}/apply`, {
         method: 'POST',
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: 'test-user-123' }),
+        body: JSON.stringify({ user_id: ADMIN_USER_ANDRE }),
       });
 
       // Should succeed or return not found if already applied
@@ -233,12 +233,10 @@ describe('Suggestion Actions', { skip: !SHOULD_RUN }, () => {
   });
 
   test('POST /api/ai/suggestions/:id/approve returns 404 for invalid ID', async () => {
-    const fakeId = '00000000-0000-0000-0000-000000000000';
-
-    const res = await fetch(`${BASE_URL}/api/ai/suggestions/${fakeId}/approve`, {
+    const res = await fetch(`${BASE_URL}/api/ai/suggestions/${NONEXISTENT_ID}/approve`, {
       method: 'POST',
       headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tenant_id: TENANT_ID, user_id: 'test-user' }),
+      body: JSON.stringify({ tenant_id: TENANT_ID, user_id: ADMIN_USER_ANDRE }),
     });
 
     // Returns 400 (validation) or 404 (not found) when suggestion doesn't exist

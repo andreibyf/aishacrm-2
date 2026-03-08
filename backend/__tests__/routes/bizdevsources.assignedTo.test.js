@@ -13,12 +13,12 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import { initSupabaseForTests } from '../setup.js';
+import { TENANT_ID as TEST_TENANT_ID } from '../testConstants.js';
 
 let app;
 let server;
 const port = 3150;
 let supabaseInitialized = false;
-const TEST_TENANT_ID = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 const createdBizDevIds = [];
 
 async function req(method, path, body, headers = {}) {

@@ -7,9 +7,9 @@ import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { initSupabaseForTests, hasSupabaseCredentials } from '../setup.js';
 import { getAuthHeaders } from '../helpers/auth.js';
+import { TENANT_ID, ADMIN_USER_ANDRE } from '../testConstants.js';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
-const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 const SHOULD_RUN = process.env.CI ? process.env.CI_BACKEND_TESTS === 'true' : true;
 
 // Test data tracking for cleanup
@@ -303,7 +303,7 @@ describe('Suggestion Actions', { skip: !SHOULD_RUN }, () => {
     const res = await fetch(`${BASE_URL}/api/ai/suggestions/${testSuggestionId}/approve`, {
       method: 'POST',
       headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tenant_id: TENANT_ID, user_id: 'test-user' }),
+      body: JSON.stringify({ tenant_id: TENANT_ID, user_id: ADMIN_USER_ANDRE }),
     });
 
     // 200 = approved, 404 = not found, 400 = already processed (not pending)
@@ -325,7 +325,7 @@ describe('Suggestion Actions', { skip: !SHOULD_RUN }, () => {
       headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({
         tenant_id: TENANT_ID,
-        user_id: 'test-user',
+        user_id: ADMIN_USER_ANDRE,
         rejection_reason: 'Test rejection',
       }),
     });

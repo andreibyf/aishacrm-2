@@ -12,7 +12,9 @@ test.describe('Settings - Security', () => {
     await page.goto(`${BASE_URL}/settings`, { waitUntil: 'networkidle' });
 
     // Click Security tab/nav
-    const securityTab = page.locator('a[href="/settings/security"], button:has-text("Security"), a:has-text("Security")').first();
+    const securityTab = page
+      .locator('a[href="/settings/security"], button:has-text("Security"), a:has-text("Security")')
+      .first();
     await expect(securityTab).toBeVisible({ timeout: 10000 });
     await securityTab.click();
 
@@ -24,7 +26,7 @@ test.describe('Settings - Security', () => {
     await expect(page.locator('text=Rate Limiting')).toBeVisible();
     await expect(page.locator('text=CORS Security')).toBeVisible();
     await expect(page.locator('text=Row-Level Security').first()).toBeVisible();
-  await expect(page.locator('text=Active API Keys').first()).toBeVisible();
+    await expect(page.locator('text=Active API Keys').first()).toBeVisible();
 
     // Use Refresh
     const refreshBtn = page.locator('button:has-text("Refresh")').first();

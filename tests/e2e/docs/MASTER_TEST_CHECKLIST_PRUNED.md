@@ -3,12 +3,14 @@
 This checklist removes items not currently detected in the codebase (e.g. Flowise, Pabbly, HeyGen, SMS-IT) and tags each retained area with IMPLEMENTED, PARTIAL, or PLANNED based on route presence and code references.
 
 Legend:
+
 - ✅ IMPLEMENTED: Core routes / functions exist
 - 🟡 PARTIAL: Some structures exist; extended behavior (metrics, complex UI) not verified
 - 🔴 PLANNED: Not found; future feature
 
 ## Phase 0 – Foundational Smoke (High ROI First)
-- ✅ Auth: Login (valid/invalid), logout, session persistence, protected route access (`backend/routes/users.js`, `auth.setup.js` flow).  (Skip lockout for now – not detected.)
+
+- ✅ Auth: Login (valid/invalid), logout, session persistence, protected route access (`backend/routes/users.js`, `auth.setup.js` flow). (Skip lockout for now – not detected.)
 - ✅ Multi-Tenancy: Tenant isolation & UUID usage (`tenants`, `tenant-integrations`, RLS docs). Add test to confirm cross-tenant data denial.
 - ✅ Core CRUD: Leads, Contacts, Accounts, Opportunities, Activities, Notes (routes present). Cover create + read + basic update.
 - ✅ Lead Conversion: Already covered in `complete-user-workflow.spec.ts`.
@@ -19,6 +21,7 @@ Legend:
 - ✅ Stripe Webhook & Connection (mock mode): `handleStripeWebhook`, `testStripeConnection` present – add minimal success test.
 
 ## Phase 1 – Core Business Depth
+
 - 🟡 Dashboard Metrics: Routes for `metrics` exist; need validation of counts (Contacts, Leads, Opportunities, Won Deals, Pipeline Value). Some aggregation code not yet verified visually.
 - 🟡 Reports: `backend/routes/reports.js` including calendar feed. Add test for `/api/reports/calendar` returning activities mapping.
 - ✅ Calendar Feed: Activity-based calendar route present; UI navigation includes Calendar; implement feed verification.
@@ -30,6 +33,7 @@ Legend:
 - 🟡 Permissions / RBAC: `permissions` routes exist; add test ensuring restricted endpoint returns 403 for non-superadmin (need user role fixture).
 
 ## Phase 2 – Extended Feature Coverage
+
 - 🟡 Bulk Operations: Some endpoints may accept arrays (not yet inventoried). Add lead bulk delete/update if supported.
 - 🟡 Duplicate Detection: `validation` routes present; test duplicate lead detection with same email.
 - 🟡 Notifications: `notifications` routes; test list + marking read.
@@ -41,6 +45,7 @@ Legend:
 - 🟡 Employee Performance Metrics: Pending – mark PLANNED unless metric endpoints found.
 
 ## Phase 3 – Performance, Security & Resilience
+
 - 🟡 Performance: Page load <3s (requires Playwright timings). API latency sampling (<200ms) – gather baseline.
 - ✅ Rate Limiting: Confirm 429 on burst requests (if middleware present).
 - ✅ Security Headers: Verify Helmet sets standard headers (Playwright fetch to root, inspect). XSS/CSRF unit simulation TBD.
@@ -50,6 +55,7 @@ Legend:
 - 🟡 Concurrent Edit Conflict: Not detected – PLANNED.
 
 ## Removed (Not Detected / Deferred)
+
 - 🔴 Flowise AI integration (no code references)
 - 🔴 Pabbly Connect integration (no code references)
 - 🔴 HeyGen integration (no code references)
@@ -62,6 +68,7 @@ Legend:
 - 🔴 Data Anonymization / GDPR tooling (route not obvious)
 
 ## Immediate Next Test Additions (Recommended Order)
+
 1. Auth negative/positive + protected route smoke
 2. Multi-tenant isolation (attempt cross-tenant fetch)
 3. AI Assistant simple conversation test
@@ -73,6 +80,7 @@ Legend:
 9. Permissions: restricted endpoint returns 403 for regular user
 
 ## Suggested File & Structure
+
 - `tests/e2e/auth.spec.ts` – login/logout/protected route
 - `tests/e2e/multitenancy.spec.ts` – isolation assertions
 - `tests/e2e/assistant-chat.spec.ts` – conversation lifecycle
@@ -84,16 +92,19 @@ Legend:
 - `tests/e2e/elevenlabs.spec.ts` – speech generation
 
 ## Automation Strategy
+
 - Start with focused spec files for each domain (fast feedback).
 - Promote stable specs into nightly suite.
 - Add tagging: `@smoke`, `@core`, `@integration`, `@security` in test titles for selective runs.
 
 ## Open Questions (For Clarification Before Expanding)
+
 - Do we have defined non-superadmin user fixtures for RBAC tests?
 - Expected behavior when external keys (OpenAI, ElevenLabs, Stripe) absent – standardized error message contract?
 - Bulk operation endpoints: confirm patterns (query params vs body arrays)?
 - Any existing import/export endpoints hidden behind feature flags?
 
 ---
+
 Generated: Based on code search on current branch `main` (date: 2025-11-17).
 Feel free to request implementation of Phase 0 specs next.

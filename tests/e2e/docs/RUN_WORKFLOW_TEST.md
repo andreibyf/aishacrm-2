@@ -18,45 +18,55 @@ npx playwright test tests/e2e/complete-user-workflow.spec.ts --headed --slow-mo=
 ## 🚀 Different Run Modes
 
 ### 1. **Headed Mode (Watch It Run)**
+
 ```powershell
 npx playwright test tests/e2e/complete-user-workflow.spec.ts --headed
 ```
+
 - Opens real browser window
 - See each action as it happens
 - Built-in 800ms pauses between major actions
 - Console logs show progress
 
 ### 2. **Slow Motion Mode (Super Observable)**
+
 ```powershell
 npx playwright test tests/e2e/complete-user-workflow.spec.ts --headed --slow-mo=2000
 ```
+
 - Slows EVERY action by 2000ms (2 seconds)
 - Perfect for presentations or learning
 - Very detailed observation
 
 ### 3. **Debug Mode (Step Through)**
+
 ```powershell
 npx playwright test tests/e2e/complete-user-workflow.spec.ts --debug
 ```
+
 - Opens Playwright Inspector
 - Step through each action manually
 - Inspect elements, view console, examine network
 - Full control over execution speed
 
 ### 4. **Headless Mode (Fast, No UI)**
+
 ```powershell
 npx playwright test tests/e2e/complete-user-workflow.spec.ts
 ```
+
 - Runs in background (no browser window)
 - Fastest execution
 - Good for CI/CD pipelines
 - Console output only
 
 ### 5. **With HTML Report**
+
 ```powershell
 npx playwright test tests/e2e/complete-user-workflow.spec.ts --reporter=html
 npx playwright show-report
 ```
+
 - Generates detailed HTML report
 - Screenshots on failure
 - Execution timeline
@@ -65,12 +75,14 @@ npx playwright show-report
 ## 📋 Before Running
 
 ### Prerequisites:
+
 1. **Backend running:** `http://localhost:4001`
 2. **Frontend running:** `http://localhost:4000`
 3. **SuperAdmin auth configured:** `.env` has credentials
 4. **Database accessible:** Supabase connection working
 
 ### Quick Start Services:
+
 ```powershell
 # From project root
 docker-compose up -d
@@ -82,6 +94,7 @@ docker-compose up -d
 ## 🎯 What You'll See
 
 The test will:
+
 1. Navigate to Leads page → Search for lead
 2. Navigate to Activities page → View scheduled call
 3. Navigate to Accounts page → Search for converted account
@@ -89,6 +102,7 @@ The test will:
 5. Return to Activities page → View complete timeline
 
 **Visual Indicators:**
+
 - 🌐 Navigation events
 - 🔍 Search operations
 - ✅ Successful verifications
@@ -97,6 +111,7 @@ The test will:
 ## 📊 Understanding the Output
 
 ### Console Output:
+
 ```
 🚀 Starting complete user workflow test...
 👁️  Running in observable mode - actions will be slowed for visibility
@@ -120,24 +135,28 @@ The test will:
 ## 🐛 Troubleshooting
 
 ### Browser doesn't open:
+
 ```powershell
 # Install browsers
 npx playwright install chromium
 ```
 
 ### Test times out:
+
 ```powershell
 # Increase timeout
 npx playwright test tests/e2e/complete-user-workflow.spec.ts --headed --timeout=600000
 ```
 
 ### Want to see network calls:
+
 ```powershell
 # Run with debug mode and open Network tab in Inspector
 npx playwright test tests/e2e/complete-user-workflow.spec.ts --debug
 ```
 
 ### Services not running:
+
 ```powershell
 # Check Docker containers
 docker ps
@@ -162,6 +181,7 @@ Videos save to `test-results/` directory.
 ## 📝 Review Checklist
 
 After running the test, review:
+
 - [ ] `WORKFLOW_TEST_CHECKLIST.md` - Mark completed items
 - [ ] Identify any gaps in coverage
 - [ ] Note any UI issues observed
@@ -172,12 +192,12 @@ After running the test, review:
 
 The test has built-in pauses for observation:
 
-| Action | Default Pause | Location |
-|--------|---------------|----------|
-| After navigation | 800ms | `navigateAndWaitForLoad()` |
-| After search | 1500ms | Search operations |
-| After verification | 1000ms | UI checks |
-| Final timeline | 2000ms | End of test |
+| Action             | Default Pause | Location                   |
+| ------------------ | ------------- | -------------------------- |
+| After navigation   | 800ms         | `navigateAndWaitForLoad()` |
+| After search       | 1500ms        | Search operations          |
+| After verification | 1000ms        | UI checks                  |
+| Final timeline     | 2000ms        | End of test                |
 
 To adjust, edit the `page.waitForTimeout()` values in `complete-user-workflow.spec.ts`.
 
