@@ -9,9 +9,9 @@ if [ ! -f "$CONFIG" ]; then
   exit 1
 fi
 
-MODEL=$(jq -r .model $CONFIG)
-SLEEP=$(jq -r .sleep_seconds $CONFIG)
-MAX=$(jq -r .max_iterations $CONFIG)
+MODEL=$(jq -r .model "$CONFIG")
+SLEEP=$(jq -r .sleep_seconds "$CONFIG")
+MAX=$(jq -r .max_iterations "$CONFIG")
 
 echo "Starting AiSHA autonomous improvement loop"
 echo "Model: $MODEL"
@@ -21,6 +21,7 @@ ITER=0
 while true
 do
   ITER=$((ITER+1))
+
   if [ "$ITER" -gt "$MAX" ]; then
     echo "Reached max iterations"
     exit 0
@@ -29,6 +30,7 @@ do
   echo ""
   echo "Iteration $ITER"
 
+  # Collect signals and choose target
   node $BASE/scripts/collect-signals.js
   node $BASE/scripts/pick-target.js $BASE/state/candidates.json >/dev/null
 
@@ -37,16 +39,29 @@ do
 
   if [ -z "$TARGET" ]; then
     echo "No target found."
-    sleep $SLEEP
+    sleep "$SLEEP"
     continue
   fi
 
   echo "Target file:"
   echo "$TARGET"
   echo "Subsystem detected: $SUBSYSTEM"
+
+  # Run safety scan
+  node $BASE/scripts/risk-scan.js
+
+  # Save clean state before edits
+  git add -A
+  git commit -m "agent-pre-run-$ITER" >/dev/null 2>&1 || true
+
   echo "Running Codex orchestration..."
 
-  node $BASE/scripts/codex-orchestrator.js
+  if ! node $BASE/scripts/codex-orchestrator.js; then
+    echo "Codex/Aider failed. Reverting..."
+    git reset --hard HEAD
+    sleep "$SLEEP"
+    continue
+  fi
 
   echo "Running tests..."
 
@@ -79,18 +94,21 @@ do
 
   if eval "$TEST_COMMAND"; then
     echo "Tests passed"
-  else
-    echo "Tests failed. Reverting..."
-    if [ -z "$(git status --porcelain)" ]; then
-      echo "Working tree already clean — nothing to revert."
+
+    if [ -n "$(git status --porcelain)" ]; then
+      git add -A
+      git commit -m "aisha-autonomous-refactor ($SUBSYSTEM) iter-$ITER"
+      echo "Committed autonomous improvement"
     else
-      git stash push -m "aisha-agent-revert-iter-$ITER"
-      echo "Changes stashed as aisha-agent-revert-iter-$ITER"
+      echo "No changes detected"
     fi
+
+  else
+    echo "Tests failed — reverting..."
+    git reset --hard HEAD
   fi
 
   echo "Sleeping $SLEEP seconds"
-  sleep $SLEEP
+  sleep "$SLEEP"
 
 done
-
