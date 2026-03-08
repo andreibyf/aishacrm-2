@@ -23,7 +23,7 @@ vi.mock('../../shared/tenantContext', () => ({
   useTenant: () => ({ _selectedTenantId: 'test-tenant-id' }),
 }));
 
-describe('EmployeeForm - Unified Submission Pattern', () => {
+describe('[CRM] EmployeeForm - Unified Submission Pattern', () => {
   const mockOnSubmit = vi.fn();
   const mockOnCancel = vi.fn();
   const testTenantId = 'tenant-123';

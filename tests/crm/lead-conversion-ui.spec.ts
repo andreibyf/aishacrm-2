@@ -76,7 +76,7 @@ async function expectLeadStatus(page: any, email: string, status: string) {
 }
 
 // Main E2E
-test.describe('Lead conversion - UI list reflects conversion', () => {
+test.describe('[CRM] Lead conversion - UI list reflects conversion', () => {
   test('create lead (API) -> convert (API) -> see converted in UI', async ({ page, request }) => {
     // Unique test data
     const now = Date.now();

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { createLead, createActivity, updateActivityStatus, navigate, initE2EUi } from '../helpers/helpers';
 
-test.describe('@phase1 Activities', () => {
+test.describe('[CRM] @phase1 Activities', () => {
   test('create call/meeting/email linked properly and visible in Activities list', async ({ request, page }) => {
     const ts = Date.now();
     const email = `lead.activities.${ts}@acmecorp.test`;

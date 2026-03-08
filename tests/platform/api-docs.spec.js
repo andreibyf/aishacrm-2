@@ -7,7 +7,7 @@ import { test, expect } from '@playwright/test';
 const BASE_URL = process.env.PLAYWRIGHT_FRONTEND_URL || 'http://localhost:4000';
 const BACKEND_URL = process.env.PLAYWRIGHT_BACKEND_URL || 'http://localhost:4001';
 
-test.describe('Settings - API Documentation', () => {
+test.describe('[PLATFORM] Settings - API Documentation', () => {
   test('should load Swagger UI iframe and render operations', async ({ page }) => {
     // Go directly to the API Docs tab via query param to avoid tab click flakiness
     await page.goto(`${BASE_URL}/settings?tab=api-docs`, { waitUntil: 'networkidle' });

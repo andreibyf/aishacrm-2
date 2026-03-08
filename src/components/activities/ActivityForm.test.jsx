@@ -84,7 +84,7 @@ import { useTimezone } from '../shared/TimezoneContext';
 import { getCurrentTimezoneOffset } from '../shared/timezoneUtils';
 import { useStatusCardPreferences } from '@/hooks/useStatusCardPreferences';
 
-describe('ActivityForm', () => {
+describe('[CRM] ActivityForm', () => {
   const mockUser = { id: '1', email: 'user@example.com', role: 'user' };
   const mockTenantId = 'tenant-123';
   const mockOnSave = vi.fn();

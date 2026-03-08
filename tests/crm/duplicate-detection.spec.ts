@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 const BACKEND_URL = process.env.PLAYWRIGHT_BACKEND_URL || 'http://localhost:4001';
 const TENANT_ID = process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
 
-test.describe('@smoke Duplicate Detection', () => {
+test.describe('[CRM] @smoke Duplicate Detection', () => {
   test('find duplicates endpoint returns none for unique lead', async ({ request }) => {
     const email = `dup-test-${Date.now()}@unique.test`;
     // Check duplicates BEFORE creating - should find none

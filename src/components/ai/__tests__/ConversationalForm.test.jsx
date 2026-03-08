@@ -58,7 +58,7 @@ const createTestSchema = (steps = 1) => ({
   buildPayload: vi.fn((answers) => answers)
 });
 
-describe('ConversationalForm', () => {
+describe('[AISHA_CHAT] ConversationalForm', () => {
   it('returns null when schema is not provided', () => {
     const { container } = render(<ConversationalForm />);
     expect(container.firstChild).toBeNull();

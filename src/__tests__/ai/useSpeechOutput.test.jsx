@@ -80,7 +80,7 @@ afterEach(() => {
   }
 });
 
-describe('useSpeechOutput', () => {
+describe('[AISHA_CHAT] useSpeechOutput', () => {
   it('plays assistant messages via TTS and tracks playback state', async () => {
     const { result } = renderHook(() => useSpeechOutput());
 

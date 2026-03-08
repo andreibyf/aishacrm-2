@@ -5,7 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-describe('UploadFile', () => {
+describe('[INTEGRATIONS] UploadFile', () => {
   let originalFetch;
   let mockFile;
 

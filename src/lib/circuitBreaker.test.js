@@ -12,13 +12,13 @@ import {
   metrics,
 } from './circuitBreaker';
 
-describe('Circuit Breaker Utility', () => {
+describe('[INTEGRATIONS] Circuit Breaker Utility', () => {
   beforeEach(() => {
     // Clear all metrics before each test
     metrics.breakers.clear();
   });
 
-  describe('calculateBackoff', () => {
+  describe('[INTEGRATIONS] calculateBackoff', () => {
     it('should calculate exponential backoff', () => {
       expect(calculateBackoff(0, 1000)).toBeGreaterThanOrEqual(1000);
       expect(calculateBackoff(0, 1000)).toBeLessThanOrEqual(1300); // 1000 + 30% jitter
@@ -36,7 +36,7 @@ describe('Circuit Breaker Utility', () => {
     });
   });
 
-  describe('createCircuitBreaker', () => {
+  describe('[INTEGRATIONS] createCircuitBreaker', () => {
     it('should create a circuit breaker', () => {
       const fn = vi.fn().mockResolvedValue('success');
       const breaker = createCircuitBreaker(fn, { name: 'test-breaker' });
@@ -98,7 +98,7 @@ describe('Circuit Breaker Utility', () => {
     }, 15000);
   });
 
-  describe('createCircuitBreakerWithFallback', () => {
+  describe('[INTEGRATIONS] createCircuitBreakerWithFallback', () => {
     it('should use fallback on failure', async () => {
       const primaryFn = vi.fn().mockRejectedValue(new Error('primary failed'));
       const fallbackFn = vi.fn().mockResolvedValue('fallback success');
@@ -150,7 +150,7 @@ describe('Circuit Breaker Utility', () => {
     });
   });
 
-  describe('getCircuitBreakerHealth', () => {
+  describe('[INTEGRATIONS] getCircuitBreakerHealth', () => {
     it('should return health status', () => {
       const fn = vi.fn().mockResolvedValue('success');
       createCircuitBreaker(fn, { name: 'health-test-1' });
@@ -193,7 +193,7 @@ describe('Circuit Breaker Utility', () => {
     });
   });
 
-  describe('resetCircuitBreaker', () => {
+  describe('[INTEGRATIONS] resetCircuitBreaker', () => {
     it('should reset circuit breaker metrics', async () => {
       const fn = vi.fn().mockResolvedValue('success');
       const breaker = createCircuitBreaker(fn, { name: 'reset-test' });
@@ -216,7 +216,7 @@ describe('Circuit Breaker Utility', () => {
     });
   });
 
-  describe('CircuitBreakerMetrics', () => {
+  describe('[INTEGRATIONS] CircuitBreakerMetrics', () => {
     it('should calculate error rate correctly', () => {
       const stats = {
         successes: 7,
@@ -246,7 +246,7 @@ describe('Circuit Breaker Utility', () => {
     });
   });
 
-  describe('Retry Logic', () => {
+  describe('[INTEGRATIONS] Retry Logic', () => {
     it('should retry on failure', async () => {
       let attempts = 0;
       const retryFn = vi.fn().mockImplementation(() => {

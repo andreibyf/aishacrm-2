@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 const BACKEND_URL = process.env.PLAYWRIGHT_BACKEND_URL || 'http://localhost:4001';
 const TENANT_ID = '6cb4c008-4847-426a-9a2e-918ad70e7b69';
 
-test.describe('@smoke Telephony Webhook', () => {
+test.describe('[INTEGRATIONS] @smoke Telephony Webhook', () => {
   test('Twilio inbound webhook normalization', async ({ request }) => {
     const payload = {
       tenant_id: TENANT_ID,

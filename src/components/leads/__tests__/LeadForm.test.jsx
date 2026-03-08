@@ -84,7 +84,7 @@ beforeAll(() => {
   }
 });
 
-describe('LeadForm - Unified Submission Pattern', () => {
+describe('[CRM] LeadForm - Unified Submission Pattern', () => {
   const baseUser = { email: 'rep@example.com', role: 'employee', tenant_id: 'tenant-1' };
   const managerUser = { email: 'manager@example.com', role: 'manager', tenant_id: 'tenant-1' };
 

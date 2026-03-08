@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { BACKEND_URL, TENANT_ID, createLead, convertLead } from '../helpers/helpers';
 
-test.describe('@phase1 Lead Conversion', () => {
+test.describe('[CRM] @phase1 Lead Conversion', () => {
   test('convert lead creates account/contact/opportunity and marks lead converted', async ({ request }) => {
     const ts = Date.now();
     const email = `lead.convert.${ts}@acmecorp.test`;

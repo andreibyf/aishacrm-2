@@ -286,7 +286,7 @@ const { default: LayoutWrapper } = await import('../Layout.jsx');
 
 // ─── PHASE 0: Baseline — Layout renders at all ──────────────────────────────
 
-describe('Phase 0: Baseline render', () => {
+describe('[PLATFORM] Phase 0: Baseline render', () => {
   it('renders without crashing', async () => {
     const { container } = render(
       <LayoutWrapper currentPageName="Dashboard">
@@ -321,7 +321,7 @@ describe('Phase 0: Baseline render', () => {
 
 // ─── PHASE 1: CSS Extraction — structural elements remain ───────────────────
 
-describe('Phase 1: CSS extraction', () => {
+describe('[PLATFORM] Phase 1: CSS extraction', () => {
   it('main content area exists', async () => {
     const { container } = render(
       <LayoutWrapper currentPageName="Dashboard">
@@ -361,7 +361,7 @@ describe('Phase 1: CSS extraction', () => {
 // to the Claude Code task brief. The render tests here verify the integrated
 // behavior still works.
 
-describe('Phase 2: Permissions', () => {
+describe('[PLATFORM] Phase 2: Permissions', () => {
   it('superadmin Layout renders (has access)', async () => {
     render(
       <LayoutWrapper currentPageName="Dashboard">
@@ -414,7 +414,7 @@ describe('Phase 2: Permissions', () => {
 
 // ─── PHASE 3: SidebarContent renders ─────────────────────────────────────────
 
-describe('Phase 3: SidebarContent', () => {
+describe('[PLATFORM] Phase 3: SidebarContent', () => {
   it('sidebar header is present', async () => {
     render(
       <LayoutWrapper currentPageName="Dashboard">
@@ -440,7 +440,7 @@ describe('Phase 3: SidebarContent', () => {
 
 // ─── PHASE 4: Branding CSS variables applied ─────────────────────────────────
 
-describe('Phase 4: Branding', () => {
+describe('[PLATFORM] Phase 4: Branding', () => {
   it('brand-scope class is present on root', async () => {
     const { container } = render(
       <LayoutWrapper currentPageName="Dashboard">
@@ -470,7 +470,7 @@ describe('Phase 4: Branding', () => {
 
 // ─── PHASE 5: AI Avatar positioning doesn't crash ────────────────────────────
 
-describe('Phase 5: AI Avatar positioning', () => {
+describe('[PLATFORM] Phase 5: AI Avatar positioning', () => {
   it('renders without errors from avatar hook', async () => {
     render(
       <LayoutWrapper currentPageName="Dashboard">
@@ -485,7 +485,7 @@ describe('Phase 5: AI Avatar positioning', () => {
 
 // ─── PHASE 6: Nav DnD still works ───────────────────────────────────────────
 
-describe('Phase 6: Nav drag and drop', () => {
+describe('[PLATFORM] Phase 6: Nav drag and drop', () => {
   it('sidebar renders with DnD context', async () => {
     render(
       <LayoutWrapper currentPageName="Dashboard">
@@ -500,7 +500,7 @@ describe('Phase 6: Nav drag and drop', () => {
 
 // ─── FULL REGRESSION: Run after all phases complete ──────────────────────────
 
-describe('Full regression', () => {
+describe('[PLATFORM] Full regression', () => {
   it('Layout renders with all child areas', async () => {
     const { container } = render(
       <LayoutWrapper currentPageName="Leads">

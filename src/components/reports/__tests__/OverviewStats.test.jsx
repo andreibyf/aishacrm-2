@@ -22,7 +22,7 @@ vi.mock('@/api/backendUrl', () => ({
 
 const { Lead, Opportunity, Account } = await import('@/api/entities');
 
-describe('OverviewStats', () => {
+describe('[REPORTS] OverviewStats', () => {
   // Setup ResizeObserver mock for chart components
   beforeAll(() => {
     if (!globalThis.ResizeObserver) {

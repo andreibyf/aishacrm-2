@@ -48,7 +48,7 @@ beforeEach(() => {
 
 // ========= TESTS =========
 
-describe("processChatCommand - Scheduling Flow", () => {
+describe("[AISHA_CHAT] processChatCommand - Scheduling Flow", () => {
   it("creates a pending schedule action and asks for confirmation", async () => {
     vi.mocked(extractDateTimeAndLead).mockReturnValue({
       leadName: "Jennifer Martinez",

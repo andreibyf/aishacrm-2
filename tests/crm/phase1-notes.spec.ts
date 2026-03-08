@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { BACKEND_URL, TENANT_ID, createLead, createNote } from '../helpers/helpers';
 
-test.describe('@phase1 Notes', () => {
+test.describe('[CRM] @phase1 Notes', () => {
   test('add qualification note to lead and verify linkage', async ({ request }) => {
     const ts = Date.now();
     const email = `lead.notes.${ts}@acmecorp.test`;

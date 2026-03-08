@@ -6,7 +6,7 @@ import { test, expect } from '@playwright/test';
 
 const BASE_URL = process.env.PLAYWRIGHT_FRONTEND_URL || 'http://localhost:4000';
 
-test.describe('Settings - Data Consistency', () => {
+test.describe('[PLATFORM] Settings - Data Consistency', () => {
   test('should scan for duplicates and show a result state', async ({ page }) => {
     // Go to settings
     await page.goto(`${BASE_URL}/settings`, { waitUntil: 'networkidle' });

@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 const BACKEND_URL = process.env.PLAYWRIGHT_BACKEND_URL || process.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
 const TENANT_ID = process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
 
-test.describe('AI Assistant: conversations CRUD', () => {
+test.describe('[AISHA_CHAT] AI Assistant: conversations CRUD', () => {
   test('@smoke create, update, list, delete conversation', async ({ request }) => {
     // Create conversation
     const create = await request.post(`${BACKEND_URL}/api/ai/conversations`, {

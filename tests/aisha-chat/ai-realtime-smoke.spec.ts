@@ -99,7 +99,7 @@ const mockSupportInitScript = () => {
   (window as any).__e2eUser = { id: 'realtime-e2e', email: 'realtime@spec.test', role: 'superadmin', tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69' };
 };
 
-test.describe('@smoke Realtime voice toggle', () => {
+test.describe('[AISHA_CHAT] @smoke Realtime voice toggle', () => {
   test('enables realtime mode, calls token endpoint, and shows LIVE indicator', async ({ page }) => {
     await initE2EUi(page);
     await page.addInitScript(mockSupportInitScript);

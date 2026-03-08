@@ -19,7 +19,7 @@ async function getAnyTenantId(request: any) {
   return ids.length ? ids : ['a11dfb63-4b18-4eb8-872e-747af2e37c46'];
 }
 
-test('tenant switching persists and scopes data', async ({ page, request }) => {
+test('[PLATFORM] tenant switching persists and scopes data', async ({ page, request }) => {
   // Discover 1-2 tenants
   const ids = await getAnyTenantId(request);
   const a = ids[0];

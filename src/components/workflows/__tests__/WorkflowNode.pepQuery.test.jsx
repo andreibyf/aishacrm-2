@@ -30,7 +30,7 @@ vi.mock('@/components/ui/button', () => ({
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
-describe('WorkflowNode — PEP Query', () => {
+describe('[WORKFLOWS] WorkflowNode — PEP Query', () => {
   const baseProps = {
     isSelected: false,
     isConnecting: false,

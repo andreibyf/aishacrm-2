@@ -122,7 +122,7 @@ vi.mock('@/hooks/usePushToTalkKeybinding.js', () => ({
   usePushToTalkKeybinding: vi.fn()
 }));
 
-describe('AiSidebar voice', () => {
+describe('[AISHA_CHAT] AiSidebar voice', () => {
   beforeEach(() => {
     mockSendMessage.mockReset();
     speechState.transcript = '';

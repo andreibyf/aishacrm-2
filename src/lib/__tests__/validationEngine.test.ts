@@ -25,8 +25,8 @@ import {
 // ─────────────────────────────────────────────────────────────────────────────
 // Core validation engine tests
 // ─────────────────────────────────────────────────────────────────────────────
-describe('validationEngine – core rules', () => {
-  describe('required rule', () => {
+describe('[CRM] validationEngine – core rules', () => {
+  describe('[CRM] required rule', () => {
     it('marks required field as invalid when missing', () => {
       const rules: ValidationRule[] = [
         { field: 'name', required: true },
@@ -64,7 +64,7 @@ describe('validationEngine – core rules', () => {
     });
   });
 
-  describe('email type', () => {
+  describe('[CRM] email type', () => {
     it('accepts a valid email', () => {
       const rules: ValidationRule[] = [
         { field: 'email', required: true, type: 'email' },
@@ -93,7 +93,7 @@ describe('validationEngine – core rules', () => {
     });
   });
 
-  describe('phone type', () => {
+  describe('[CRM] phone type', () => {
     it('accepts valid phone numbers', () => {
       const rules: ValidationRule[] = [
         { field: 'phone', type: 'phone' },
@@ -119,7 +119,7 @@ describe('validationEngine – core rules', () => {
     });
   });
 
-  describe('number and currency types', () => {
+  describe('[CRM] number and currency types', () => {
     it('accepts valid numbers', () => {
       const rules: ValidationRule[] = [
         { field: 'amount', type: 'number' },
@@ -140,7 +140,7 @@ describe('validationEngine – core rules', () => {
     });
   });
 
-  describe('date type', () => {
+  describe('[CRM] date type', () => {
     it('accepts valid date formats', () => {
       const rules: ValidationRule[] = [
         { field: 'due_date', type: 'date' },
@@ -165,7 +165,7 @@ describe('validationEngine – core rules', () => {
     });
   });
 
-  describe('minLength and maxLength', () => {
+  describe('[CRM] minLength and maxLength', () => {
     it('enforces minLength on string fields', () => {
       const rules: ValidationRule[] = [
         { field: 'code', minLength: 3 },
@@ -195,7 +195,7 @@ describe('validationEngine – core rules', () => {
     });
   });
 
-  describe('pattern rule', () => {
+  describe('[CRM] pattern rule', () => {
     it('validates against regex pattern', () => {
       const rules: ValidationRule[] = [
         { field: 'zip', pattern: /^\d{5}$/ },
@@ -222,7 +222,7 @@ describe('validationEngine – core rules', () => {
     });
   });
 
-  describe('enum rule', () => {
+  describe('[CRM] enum rule', () => {
     it('validates enum values', () => {
       const rules: ValidationRule[] = [
         {
@@ -254,7 +254,7 @@ describe('validationEngine – core rules', () => {
     });
   });
 
-  describe('custom validator', () => {
+  describe('[CRM] custom validator', () => {
     it('runs custom validators for cross-field logic', () => {
       const rules: ValidationRule[] = [
         {
@@ -306,7 +306,7 @@ describe('validationEngine – core rules', () => {
     });
   });
 
-  describe('validateField helper', () => {
+  describe('[CRM] validateField helper', () => {
     it('validates a single field', () => {
       const rule: ValidationRule = { field: 'email', required: true, type: 'email' };
 
@@ -325,7 +325,7 @@ describe('validationEngine – core rules', () => {
     });
   });
 
-  describe('options', () => {
+  describe('[CRM] options', () => {
     it('stopAtFirstFieldError stops after first field with errors', () => {
       const rules: ValidationRule[] = [
         { field: 'a', required: true },
@@ -345,8 +345,8 @@ describe('validationEngine – core rules', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Entity validation schema tests
 // ─────────────────────────────────────────────────────────────────────────────
-describe('validationSchemas – entity helpers', () => {
-  describe('validateLead', () => {
+describe('[CRM] validationSchemas – entity helpers', () => {
+  describe('[CRM] validateLead', () => {
     it('requires first_name, last_name, and valid email', () => {
       const missing = validateLead({});
 
@@ -391,7 +391,7 @@ describe('validationSchemas – entity helpers', () => {
     });
   });
 
-  describe('validateAccount', () => {
+  describe('[CRM] validateAccount', () => {
     it('requires name with minimum length', () => {
       const missing = validateAccount({});
 
@@ -419,7 +419,7 @@ describe('validationSchemas – entity helpers', () => {
     });
   });
 
-  describe('validateContact', () => {
+  describe('[CRM] validateContact', () => {
     it('requires first_name, last_name, and email', () => {
       const missing = validateContact({});
 
@@ -441,7 +441,7 @@ describe('validationSchemas – entity helpers', () => {
     });
   });
 
-  describe('validateOpportunity', () => {
+  describe('[CRM] validateOpportunity', () => {
     it('enforces positive amount and valid stage', () => {
       const bad = validateOpportunity({
         name: 'X', // too short (minLength: 2)
@@ -479,7 +479,7 @@ describe('validationSchemas – entity helpers', () => {
     });
   });
 
-  describe('validateActivity', () => {
+  describe('[CRM] validateActivity', () => {
     it('requires type and subject', () => {
       const missing = validateActivity({});
 
@@ -509,7 +509,7 @@ describe('validationSchemas – entity helpers', () => {
     });
   });
 
-  describe('validateEntity helper', () => {
+  describe('[CRM] validateEntity helper', () => {
     it('validates entity by name', () => {
       const result = validateEntity('lead', {
         first_name: 'Test',

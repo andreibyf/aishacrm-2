@@ -7,8 +7,8 @@
 import { describe, it, expect } from 'vitest';
 import packageJson from '../../package.json';
 
-describe('package.json validation', () => {
-  describe('backend dependencies should not be in frontend', () => {
+describe('[PLATFORM] package.json validation', () => {
+  describe('[PLATFORM] backend dependencies should not be in frontend', () => {
     const backendOnlyPackages = [
       'bull',           // Redis queue manager
       'pg',             // PostgreSQL driver
@@ -38,7 +38,7 @@ describe('package.json validation', () => {
     });
   });
 
-  describe('frontend dependencies should be present', () => {
+  describe('[PLATFORM] frontend dependencies should be present', () => {
     const requiredFrontendPackages = [
       'react',
       'react-dom',

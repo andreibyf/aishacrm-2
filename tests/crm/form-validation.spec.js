@@ -7,21 +7,22 @@ import { test, expect } from '@playwright/test';
 
 // Test configuration
 const BASE_URL = process.env.PLAYWRIGHT_FRONTEND_URL || 'http://localhost:4000';
+const TENANT_ID = process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
 
-test.describe('Form Schema Validation Tests', () => {
+test.describe('[CRM] Form Schema Validation Tests', () => {
   // Use E2E test mode to bypass real authentication
   test.beforeEach(async ({ page }) => {
     // Enable E2E test mode before navigation
-    await page.addInitScript(() => {
+    await page.addInitScript((tenantId) => {
       localStorage.setItem('E2E_TEST_MODE', 'true');
       window.__e2eUser = {
         id: 'e2e-test-user-id',
         email: 'e2e-test@aishacrm.com',
         role: 'superadmin',
-        tenant_id: process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69',
+        tenant_id: tenantId,
         permissions: ['*']
       };
-    });
+    }, TENANT_ID);
     
     await page.goto(`${BASE_URL}/`);
     
@@ -30,7 +31,7 @@ test.describe('Form Schema Validation Tests', () => {
     await expect(sidebar.first()).toBeVisible({ timeout: 15000 });
   });
 
-  test.describe('Employee Form Tests', () => {
+  test.describe('[CRM] Employee Form Tests', () => {
     
     test('should create employee with only required fields (first_name, last_name)', async ({ page }) => {
   await page.goto(`${BASE_URL}/Employees`);
@@ -114,7 +115,7 @@ test.describe('Form Schema Validation Tests', () => {
     });
   });
 
-  test.describe('Account Form Tests', () => {
+  test.describe('[CRM] Account Form Tests', () => {
     
     test('should create account with only required field (name)', async ({ page }) => {
   await page.goto(`${BASE_URL}/Accounts`);
@@ -157,7 +158,7 @@ test.describe('Form Schema Validation Tests', () => {
     });
   });
 
-  test.describe('Contact Form Tests', () => {
+  test.describe('[CRM] Contact Form Tests', () => {
     
     test('should create contact with only first_name', async ({ page }) => {
   await page.goto(`${BASE_URL}/Contacts`);
@@ -214,7 +215,7 @@ test.describe('Form Schema Validation Tests', () => {
     });
   });
 
-  test.describe('Lead Form Tests', () => {
+  test.describe('[CRM] Lead Form Tests', () => {
     
     test('should create lead with only first_name', async ({ page }) => {
   await page.goto(`${BASE_URL}/Leads`);
@@ -271,7 +272,7 @@ test.describe('Form Schema Validation Tests', () => {
     });
   });
 
-  test.describe('Opportunity Form Tests', () => {
+  test.describe('[CRM] Opportunity Form Tests', () => {
     
     test('should create opportunity with only name', async ({ page }) => {
   await page.goto(`${BASE_URL}/Opportunities`);
@@ -327,7 +328,7 @@ test.describe('Form Schema Validation Tests', () => {
     });
   });
 
-  test.describe('Visual Indicator Tests', () => {
+  test.describe('[CRM] Visual Indicator Tests', () => {
     
     test('should show red asterisk (*) on required fields - Employee', async ({ page }) => {
   await page.goto(`${BASE_URL}/Employees`);

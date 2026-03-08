@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 const FRONTEND_URL = process.env.PLAYWRIGHT_FRONTEND_URL || process.env.VITE_AISHACRM_FRONTEND_URL || 'http://localhost:4000';
 
-test.describe('Dashboard: widget preference persistence', () => {
+test.describe('[CRM] Dashboard: widget preference persistence', () => {
   test('toggling a widget off persists after reload, and can be restored', async ({ page }) => {
     // Navigate to dashboard
     await page.goto(`${FRONTEND_URL}/`, { waitUntil: 'domcontentloaded', timeout: 30000 });

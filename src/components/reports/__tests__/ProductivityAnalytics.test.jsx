@@ -14,7 +14,7 @@ vi.mock('@/api/entities', () => ({
 
 const { Activity, Employee } = await import('@/api/entities');
 
-describe('ProductivityAnalytics', () => {
+describe('[REPORTS] ProductivityAnalytics', () => {
   // Setup ResizeObserver mock for chart components
   beforeAll(() => {
     if (!globalThis.ResizeObserver) {

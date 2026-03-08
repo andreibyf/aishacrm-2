@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { createLead, convertLead, navigate, initE2EUi } from '../helpers/helpers';
 
-test.describe('@phase1 ACO UI', () => {
+test.describe('[CRM] @phase1 ACO UI', () => {
   test('accounts/contacts/opportunities appear in UI and are searchable', async ({ request, page }) => {
     const ts = Date.now();
     const email = `aco.ui.${ts}@acmecorp.test`;

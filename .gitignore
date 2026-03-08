@@ -180,7 +180,17 @@ vitest-results.json
 # Claude Code temp files
 tmpclaude-*
 
-# Local AI agent scripts
-ai-autonomous-agent/
+# Local AI agent runtime state and machine-local tooling
+.aider.chat.history.md
+.aider.input.history
+.aider.tags.cache.v4/
+ai-autonomous-agent/state/
+ai-autonomous-agent/state/*.txt
+ai-autonomous-agent/state/*.json
+ai-autonomous-agent/state/*.md
 setup-aisha-agent.sh
-ai-autonomous-agent*/
+
+# Local planning notes
+Instructions.txt
+Aider-Codex Orchestration.md
+

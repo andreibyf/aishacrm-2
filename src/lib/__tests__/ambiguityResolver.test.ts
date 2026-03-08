@@ -11,8 +11,8 @@ import {
 } from '../ambiguityResolver';
 import { parseIntent } from '../intentParser';
 
-describe('resolveAmbiguity', () => {
-  describe('empty input', () => {
+describe('[AISHA_CHAT] resolveAmbiguity', () => {
+  describe('[AISHA_CHAT] empty input', () => {
     it('returns ambiguous for empty string', () => {
       const result = resolveAmbiguity(null, '');
       expect(result.isAmbiguous).toBe(true);
@@ -27,7 +27,7 @@ describe('resolveAmbiguity', () => {
     });
   });
 
-  describe('vague requests', () => {
+  describe('[AISHA_CHAT] vague requests', () => {
     it('detects "do the thing" as vague', () => {
       const parsed = parseIntent('do it');
       const result = resolveAmbiguity(parsed, 'do it');
@@ -46,7 +46,7 @@ describe('resolveAmbiguity', () => {
     });
   });
 
-  describe('missing details', () => {
+  describe('[AISHA_CHAT] missing details', () => {
     it('detects incomplete "show" command', () => {
       const parsed = parseIntent('show');
       const result = resolveAmbiguity(parsed, 'show');
@@ -66,7 +66,7 @@ describe('resolveAmbiguity', () => {
     });
   });
 
-  describe('destructive commands', () => {
+  describe('[AISHA_CHAT] destructive commands', () => {
     // Note: Commands with CRM keywords (like "contacts") and length >= 8 chars
     // are passed to backend AI for handling. The backend enforces destructive
     // command blocking. Testing resolver's handling of short destructive commands.
@@ -78,7 +78,7 @@ describe('resolveAmbiguity', () => {
     });
   });
 
-  describe('valid commands', () => {
+  describe('[AISHA_CHAT] valid commands', () => {
     it('passes clear query command', () => {
       const parsed = parseIntent('show me all leads from California');
       const result = resolveAmbiguity(parsed, 'show me all leads from California');
@@ -99,7 +99,7 @@ describe('resolveAmbiguity', () => {
     });
   });
 
-  describe('low confidence', () => {
+  describe('[AISHA_CHAT] low confidence', () => {
     it('flags low confidence intent as ambiguous', () => {
       // Create a mock parsed intent with low confidence
       const mockParsed = {
@@ -119,7 +119,7 @@ describe('resolveAmbiguity', () => {
     });
   });
 
-  describe('voice origin', () => {
+  describe('[AISHA_CHAT] voice origin', () => {
     it('provides voice-specific message for unclear voice input', () => {
       const result = resolveAmbiguity(null, 'uh', { origin: 'voice' });
       expect(result.isAmbiguous).toBe(true);
@@ -128,7 +128,7 @@ describe('resolveAmbiguity', () => {
   });
 });
 
-describe('getContextualExamples', () => {
+describe('[AISHA_CHAT] getContextualExamples', () => {
   it('returns lead examples for leads entity', () => {
     const examples = getContextualExamples('leads');
     expect(examples.length).toBeGreaterThan(0);
@@ -147,7 +147,7 @@ describe('getContextualExamples', () => {
   });
 });
 
-describe('buildFallbackMessage', () => {
+describe('[AISHA_CHAT] buildFallbackMessage', () => {
   it('returns basic fallback for first failure', () => {
     const parsed = parseIntent('blah blah');
     const result = buildFallbackMessage(parsed, 'blah blah', 0);
@@ -169,7 +169,7 @@ describe('buildFallbackMessage', () => {
   });
 });
 
-describe('isLikelyVoiceGarble', () => {
+describe('[AISHA_CHAT] isLikelyVoiceGarble', () => {
   it('detects very short input as garble', () => {
     expect(isLikelyVoiceGarble('a')).toBe(true);
     expect(isLikelyVoiceGarble('um')).toBe(true);

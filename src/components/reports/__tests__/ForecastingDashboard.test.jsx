@@ -27,7 +27,7 @@ vi.mock('../shared/tenantContext', () => ({
 
 const { Opportunity, Lead } = await import('@/api/entities');
 
-describe('ForecastingDashboard', () => {
+describe('[REPORTS] ForecastingDashboard', () => {
   // Setup ResizeObserver mock for chart components
   beforeAll(() => {
     if (!globalThis.ResizeObserver) {

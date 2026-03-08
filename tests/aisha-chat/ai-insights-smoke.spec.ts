@@ -12,7 +12,7 @@ async function pickTenantWithIndustry(request: any) {
   return withIndustry || list[0];
 }
 
-test.describe('AI Market Insights smoke', () => {
+test.describe('[AISHA_CHAT] AI Market Insights smoke', () => {
   test('superadmin generates insights for selected tenant', async ({ page, request }) => {
     // Discover a tenant and select it in localStorage prior to navigation
     const tenant = await pickTenantWithIndustry(request);

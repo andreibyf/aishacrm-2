@@ -6,7 +6,7 @@ import { describe, test, expect } from 'vitest';
 import { buildPrompt } from './promptBuilder';
 import type { IntentClassification } from '@/ai/nlu/intentClassifier';
 
-describe('promptBuilder.ts', () => {
+describe('[AISHA_CHAT] promptBuilder.ts', () => {
   test('buildPrompt creates valid PromptPayload structure', () => {
     const classification: IntentClassification = {
       rawText: 'Show me new leads from today',

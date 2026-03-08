@@ -21,7 +21,7 @@ const basePrompt = {
   summary: 'summary'
 };
 
-describe('commandRouter', () => {
+describe('[AISHA_CHAT] commandRouter', () => {
   beforeAll(() => { window.__DISABLE_GLOBAL_FETCH_STUB = true; });
   afterAll(() => { delete window.__DISABLE_GLOBAL_FETCH_STUB; });
   it('routes list intent to chat when local actions disabled', async () => {

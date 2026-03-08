@@ -161,7 +161,7 @@ beforeEach(() => {
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 // 1. Team dropdown rendering
-describe('AssignmentField — team dropdown', () => {
+describe('[CRM] AssignmentField — team dropdown', () => {
   it('renders team selector when teams exist', () => {
     setupHooks({ bypass: true });
     render(
@@ -216,7 +216,7 @@ describe('AssignmentField — team dropdown', () => {
 });
 
 // 2. Person auto-assigns team (cascade: person → team)
-describe('AssignmentField — person→team cascade', () => {
+describe('[CRM] AssignmentField — person→team cascade', () => {
   it('auto-sets team when single-team employee is selected', () => {
     setupHooks();
     const onTeamChange = vi.fn();
@@ -291,7 +291,7 @@ describe('AssignmentField — person→team cascade', () => {
 });
 
 // 3. Team change clears incompatible person
-describe('AssignmentField — team→person cascade', () => {
+describe('[CRM] AssignmentField — team→person cascade', () => {
   it('clears person when switched to team they are not on', () => {
     setupHooks({ bypass: true });
     const onChange = vi.fn();
@@ -371,7 +371,7 @@ describe('AssignmentField — team→person cascade', () => {
 });
 
 // 4. Admin bypass
-describe('AssignmentField — admin bypass', () => {
+describe('[CRM] AssignmentField — admin bypass', () => {
   it('passes null allowedIds for admin (no employee filtering)', () => {
     setupHooks({ bypass: true, allowedIds: null });
     render(
@@ -394,7 +394,7 @@ describe('AssignmentField — admin bypass', () => {
 });
 
 // 5. Manager scoping
-describe('AssignmentField — manager scoping', () => {
+describe('[CRM] AssignmentField — manager scoping', () => {
   it('filters teams to only manager own teams', () => {
     setupHooks({
       highestRole: 'manager',
@@ -423,7 +423,7 @@ describe('AssignmentField — manager scoping', () => {
 });
 
 // 6. Member WITH team — gets employee dropdown (scoped to teammates)
-describe('AssignmentField — member with team membership', () => {
+describe('[CRM] AssignmentField — member with team membership', () => {
   it('shows employee dropdown (not claim/unassign) for team members', () => {
     setupHooks({ highestRole: 'member', teamIds: [TEAM_A_ID], allowedIds: [EMP_MIKE, EMP_SARAH] });
     render(
@@ -467,7 +467,7 @@ describe('AssignmentField — member with team membership', () => {
 });
 
 // 7. Member WITHOUT team — claim/unassign only
-describe('AssignmentField — member without team (no membership)', () => {
+describe('[CRM] AssignmentField — member without team (no membership)', () => {
   it('shows "Assign to me" button when unassigned', () => {
     setupHooks({ highestRole: 'member', teamIds: [], allowedIds: [] });
     render(
@@ -544,7 +544,7 @@ describe('AssignmentField — member without team (no membership)', () => {
 });
 
 // 7. Labels
-describe('AssignmentField — labels', () => {
+describe('[CRM] AssignmentField — labels', () => {
   it('renders custom label prop', () => {
     setupHooks();
     render(
@@ -599,7 +599,7 @@ describe('AssignmentField — labels', () => {
 });
 
 // 8. Assignment history
-describe('AssignmentField — assignment history', () => {
+describe('[CRM] AssignmentField — assignment history', () => {
   it('renders assignment history when entityId and tenantId provided', () => {
     setupHooks();
     render(

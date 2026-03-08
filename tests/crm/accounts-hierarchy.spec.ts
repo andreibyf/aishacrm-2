@@ -19,7 +19,7 @@ async function waitForElement(page, locatorFn, timeoutMs = 30000) {
   throw new Error('Element not found within timeout');
 }
 
-test.describe('Accounts: hierarchy and relationships', () => {
+test.describe('[CRM] Accounts: hierarchy and relationships', () => {
   test('create parent/child accounts and link via metadata', async ({ request, page }) => {
     const ts = Date.now();
     const parentName = `ParentCo ${ts}`;

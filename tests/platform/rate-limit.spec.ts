@@ -6,7 +6,7 @@ const BACKEND_URL = process.env.PLAYWRIGHT_BACKEND_URL || 'http://localhost:4001
 const shouldSkip = process.env.RATE_LIMIT_SKIP === '1';
 
 const testFn = shouldSkip ? test.skip : test;
-testFn('Rate limiting returns 429 after threshold', async ({ request }) => {
+testFn('[PLATFORM] Rate limiting returns 429 after threshold', async ({ request }) => {
   // Send a burst of requests to a public API endpoint subject to rate limiting
   // /api/metrics/performance doesn't require auth and is not in the rateSkip exemption list
   // Backend default: RATE_LIMIT_MAX=120, so we need 121+ requests to trigger 429

@@ -87,7 +87,7 @@ test.beforeAll(async () => {
   await waitForBackendHealth();
 });
 
-test.describe('User Management - Basic CRUD Operations', () => {
+test.describe('[PLATFORM] User Management - Basic CRUD Operations', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsUser(page, SUPERADMIN_EMAIL, SUPERADMIN_PASSWORD);
   });

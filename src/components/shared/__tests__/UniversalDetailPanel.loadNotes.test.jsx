@@ -10,7 +10,7 @@ vi.mock('sonner', () => ({
 
 import { toast } from 'sonner';
 
-describe('UniversalDetailPanel - loadNotes error handling', () => {
+describe('[CRM] UniversalDetailPanel - loadNotes error handling', () => {
   let originalFetch;
   let consoleErrorSpy;
   let consoleLogSpy;

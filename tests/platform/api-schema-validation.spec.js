@@ -35,8 +35,8 @@ async function safeJson(response) {
     return await response.text();
   }
 }
-// Use UUID-first tenant id (fallbacks to system tenant UUID used elsewhere)
-const TEST_TENANT_ID = process.env.TEST_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
+// Use UUID-first tenant id — standardized on E2E_TENANT_ID like other specs
+const TEST_TENANT_ID = process.env.E2E_TENANT_ID || process.env.TEST_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
 const authFile = 'playwright/.auth/superadmin.json';
 
 // Extend test with API context
@@ -57,8 +57,8 @@ const test = base.extend({
   },
 });
 
-test.describe('Backend API Schema Validation', () => {
-  test.describe('Employee API Tests', () => {
+test.describe('[PLATFORM] Backend API Schema Validation', () => {
+  test.describe('[PLATFORM] Employee API Tests', () => {
     test('should accept employee with minimal required fields', async ({ apiContext }) => {
       const response = await apiContext.post('employees', {
         data: {
@@ -147,7 +147,7 @@ test.describe('Backend API Schema Validation', () => {
     });
   });
 
-  test.describe('Account API Tests', () => {
+  test.describe('[PLATFORM] Account API Tests', () => {
     test('should accept account with minimal required fields', async ({ apiContext }) => {
       const response = await apiContext.post('accounts', {
         data: {
@@ -185,7 +185,7 @@ test.describe('Backend API Schema Validation', () => {
     });
   });
 
-  test.describe('Contact API Tests', () => {
+  test.describe('[PLATFORM] Contact API Tests', () => {
     test('should accept contact with first_name and last_name (both required)', async ({
       apiContext,
     }) => {
@@ -251,7 +251,7 @@ test.describe('Backend API Schema Validation', () => {
     });
   });
 
-  test.describe('Lead API Tests', () => {
+  test.describe('[PLATFORM] Lead API Tests', () => {
     test('should accept lead with first_name and last_name (both required)', async ({
       apiContext,
     }) => {
@@ -317,7 +317,7 @@ test.describe('Backend API Schema Validation', () => {
     });
   });
 
-  test.describe('Opportunity API Tests', () => {
+  test.describe('[PLATFORM] Opportunity API Tests', () => {
     test('should accept opportunity with minimal required fields', async ({ apiContext }) => {
       const response = await apiContext.post('opportunities', {
         data: {
@@ -368,7 +368,7 @@ test.describe('Backend API Schema Validation', () => {
     });
   });
 
-  test.describe('Email Uniqueness Tests', () => {
+  test.describe('[PLATFORM] Email Uniqueness Tests', () => {
     test('should allow multiple employees with NULL email', async ({ apiContext }) => {
       const response1 = await apiContext.post('employees', {
         data: {
@@ -438,7 +438,7 @@ test.describe('Backend API Schema Validation', () => {
     });
   });
 
-  test.describe('V2 Inline Stats Tests', () => {
+  test.describe('[PLATFORM] V2 Inline Stats Tests', () => {
     test('Opportunities v2 list returns inline stats', async ({ apiContext }) => {
       const response = await apiContext.get(`v2/opportunities?tenant_id=${TEST_TENANT_ID}&limit=1`);
       const json = await expectOk(response);

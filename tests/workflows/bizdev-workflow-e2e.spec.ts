@@ -155,7 +155,7 @@ async function initE2EUi(page: Page) {
 
 // ============== TEST SUITES ==============
 
-test.describe('BizDev → Lead → Contact Workflow (B2B)', () => {
+test.describe('[WORKFLOWS] BizDev → Lead → Contact Workflow (B2B)', () => {
   
   test('complete B2B workflow: BizDev Source → Lead → Contact + Account + Opportunity', async ({ request, page: _page }) => {
     const ts = Date.now();
@@ -333,7 +333,7 @@ test.describe('BizDev → Lead → Contact Workflow (B2B)', () => {
   });
 });
 
-test.describe('BizDev → Lead → Contact Workflow (B2C)', () => {
+test.describe('[WORKFLOWS] BizDev → Lead → Contact Workflow (B2C)', () => {
   
   test('complete B2C workflow: BizDev Source → Lead → Contact (person-first)', async ({ request }) => {
     const ts = Date.now();
@@ -412,7 +412,7 @@ test.describe('BizDev → Lead → Contact Workflow (B2C)', () => {
   });
 });
 
-test.describe('Workflow UI Verification', () => {
+test.describe('[WORKFLOWS] Workflow UI Verification', () => {
   
   // Skip flaky UI tests - they depend on page load timing which varies
   test.skip('UI reflects BizDev Source promotion status change', async ({ request, page }) => {
@@ -537,7 +537,7 @@ test.describe('Workflow UI Verification', () => {
   });
 });
 
-test.describe('Error Handling & Edge Cases', () => {
+test.describe('[WORKFLOWS] Error Handling & Edge Cases', () => {
   
   test('cannot promote already-promoted BizDev source', async ({ request }) => {
     const ts = Date.now();
@@ -604,7 +604,7 @@ test.describe('Error Handling & Edge Cases', () => {
   });
 });
 
-test.describe('Stats & Counts Verification', () => {
+test.describe('[WORKFLOWS] Stats & Counts Verification', () => {
   
   // Skip flaky stats test - depends on UI timing and complex state
   test.skip('stats update correctly through workflow stages', async ({ request, page }) => {

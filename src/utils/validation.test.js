@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { sanitizeString } from './validation.js';
 
-describe('sanitizeString', () => {
+describe('[PLATFORM] sanitizeString', () => {
   it('returns empty string for falsy input', () => {
     expect(sanitizeString(null)).toBe('');
     expect(sanitizeString(undefined)).toBe('');

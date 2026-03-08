@@ -7,7 +7,7 @@ import {
   clearRealtimeTelemetry
 } from '../../utils/realtimeTelemetry.js';
 
-describe('realtimeTelemetry utilities', () => {
+describe('[AISHA_CHAT] realtimeTelemetry utilities', () => {
   beforeEach(() => {
     clearRealtimeTelemetry();
   });

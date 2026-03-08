@@ -52,7 +52,7 @@ beforeEach(() => {
   getSuggestions.mockReturnValue([]);
 });
 
-describe('useAiSidebarState', () => {
+describe('[AISHA_CHAT] useAiSidebarState', () => {
   it('routes voice-originated messages through processChatCommand and tags metadata', async () => {
     const wrapper = ({ children }) => <AiSidebarProvider>{children}</AiSidebarProvider>;
     const { result } = renderHook(() => useAiSidebarState(), { wrapper });

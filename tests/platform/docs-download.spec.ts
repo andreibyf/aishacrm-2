@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('Documentation PDF Download', () => {
+test.describe('[PLATFORM] Documentation PDF Download', () => {
   test('Download PDF Guide triggers a PDF download', async ({ page }) => {
     // Navigate to Documentation and trigger the download
     await page.goto('/Documentation');

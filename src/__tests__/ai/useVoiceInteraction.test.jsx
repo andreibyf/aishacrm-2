@@ -42,7 +42,7 @@ vi.mock('@/hooks/useRealtimeAiSHA.js', () => ({
   })),
 }));
 
-describe('useVoiceInteraction', () => {
+describe('[AISHA_CHAT] useVoiceInteraction', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });

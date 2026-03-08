@@ -6,7 +6,7 @@ import { test, expect } from '@playwright/test';
 
 const BASE_URL = process.env.PLAYWRIGHT_FRONTEND_URL || 'http://localhost:4000';
 
-test.describe('Settings - Security', () => {
+test.describe('[PLATFORM] Settings - Security', () => {
   test('should render Security metrics and allow refresh', async ({ page }) => {
     // Go to settings
     await page.goto(`${BASE_URL}/settings`, { waitUntil: 'networkidle' });

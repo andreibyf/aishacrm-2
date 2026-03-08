@@ -17,7 +17,7 @@ vi.mock('@/api/entities', () => ({
 
 const { Contact, Lead, Opportunity } = await import('@/api/entities');
 
-describe('HistoricalTrends', () => {
+describe('[REPORTS] HistoricalTrends', () => {
   // Setup ResizeObserver mock for chart components
   beforeAll(() => {
     if (!globalThis.ResizeObserver) {

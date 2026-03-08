@@ -4,7 +4,7 @@ const FRONTEND_URL = process.env.PLAYWRIGHT_FRONTEND_URL || 'http://localhost:40
 const BACKEND_URL = process.env.PLAYWRIGHT_BACKEND_URL || 'http://localhost:4001';
 
 // Basic auth smoke: validates existing authenticated storage state from setup and negative unauthenticated access
-test.describe('@smoke Auth', () => {
+test.describe('[PLATFORM] @smoke Auth', () => {
   // Removed UI test - smoke suite should focus on API functionality
   // UI component tests belong in component-specific test files
   
