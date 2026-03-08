@@ -1,6 +1,6 @@
 import { test } from '@playwright/test';
 
-test.skip(!process.env.CI === undefined, 'env-check only runs locally');
+test.skip(process.env.CI !== undefined, 'env-check only runs locally');
 
 test('[PLATFORM] print env', async () => {
   console.log('--- ENV CHECK ---');
