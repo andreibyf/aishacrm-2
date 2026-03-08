@@ -179,3 +179,8 @@ vitest-results.json
 
 # Claude Code temp files
 tmpclaude-*
+
+# Local AI agent scripts
+ai-autonomous-agent/
+setup-aisha-agent.sh
+ai-autonomous-agent*/
