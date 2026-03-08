@@ -188,7 +188,12 @@ ai-autonomous-agent/state/
 ai-autonomous-agent/state/*.txt
 ai-autonomous-agent/state/*.json
 ai-autonomous-agent/state/*.md
+ai-autonomous-agent/config.json
+ai-autonomous-agent/README.md
+ai-autonomous-agent/prompts/
+ai-autonomous-agent/scripts/
 setup-aisha-agent.sh
+AGENTS.md
 
 # Local planning notes
 Instructions.txt
