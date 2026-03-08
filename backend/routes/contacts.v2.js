@@ -700,16 +700,27 @@ export default function createContactV2Routes(_pgPool) {
         return res.status(401).json({ status: 'error', message: 'Authentication required' });
       }
       const requestTenantId = req.tenant?.id;
-      if (!requestTenantId) {
+      const userTenantId = req.user.tenant_id || req.user.tenant_uuid;
+      const { ids, assigned_to, tenant_id, override_team } = req.body || {};
+
+      // Determine effective tenant: prefer middleware-set tenant, then body, then user's tenant
+      const effectiveTenantId = requestTenantId || tenant_id || userTenantId;
+      if (!effectiveTenantId) {
         return res.status(400).json({ status: 'error', message: 'Tenant context is missing' });
       }
-      const { ids, assigned_to, tenant_id, override_team } = req.body || {};
-      if (tenant_id && tenant_id !== requestTenantId) {
-        return res
-          .status(403)
-          .json({ status: 'error', message: 'tenant_id does not match authenticated tenant' });
+
+      // Security check: if body tenant_id is provided, verify it matches the authenticated context
+      // Non-superadmin users can only operate on their own tenant
+      const isSuperadmin = req.user.role === 'superadmin' || req.user.is_superadmin;
+      if (tenant_id && !isSuperadmin) {
+        // User is not superadmin: body tenant must match their tenant or middleware tenant
+        const allowedTenant = requestTenantId || userTenantId;
+        if (allowedTenant && tenant_id !== allowedTenant) {
+          return res
+            .status(403)
+            .json({ status: 'error', message: 'tenant_id does not match authenticated tenant' });
+        }
       }
-      const effectiveTenantId = tenant_id || requestTenantId;
       const result = await bulkAssign({
         table: 'contacts',
         entityLabel: 'Contact',

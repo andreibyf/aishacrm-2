@@ -1,6 +1,6 @@
 /**
  * LLM Activity Logger
- * 
+ *
  * Captures all LLM calls for real-time monitoring in Settings.
  * Stores entries in memory with a rolling buffer (last N entries).
  * Also outputs structured JSON logs for log aggregation (Loki, CloudWatch, etc.)
@@ -14,12 +14,12 @@ const activityLog = [];
  * Useful for distinguishing between multiple MCP worker containers.
  */
 export function getNodeId() {
-  return process.env.MCP_NODE_ID || process.env.HOSTNAME || "backend";
+  return process.env.MCP_NODE_ID || process.env.HOSTNAME || 'backend';
 }
 
 /**
  * Log an LLM activity entry.
- * 
+ *
  * @param {Object} entry
  * @param {string} entry.tenantId - Tenant UUID
  * @param {string} entry.capability - The capability used (chat_tools, json_strict, etc.)
@@ -39,22 +39,22 @@ export function getNodeId() {
  */
 export function logLLMActivity(entry) {
   const containerId = getNodeId();
-  
+
   const logEntry = {
     id: `llm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     timestamp: new Date().toISOString(),
     containerId,
-    tenantId: entry.tenantId || "unknown",
-    capability: entry.capability || "unknown",
-    provider: entry.provider || "unknown",
-    model: entry.model || "unknown",
+    tenantId: entry.tenantId || 'unknown',
+    capability: entry.capability || 'unknown',
+    provider: entry.provider || 'unknown',
+    model: entry.model || 'unknown',
     nodeId: entry.nodeId || null,
-    status: entry.status || "success",
+    status: entry.status || 'success',
     durationMs: entry.durationMs || null,
     error: entry.error || null,
     usage: entry.usage || null,
-    attempt: entry.attempt || null,
-    totalAttempts: entry.totalAttempts || null,
+    attempt: entry.attempt ?? null,
+    totalAttempts: entry.totalAttempts ?? null,
     toolsCalled: entry.toolsCalled || null,
     intent: entry.intent || null,
     taskId: entry.taskId || null,
@@ -69,34 +69,38 @@ export function logLLMActivity(entry) {
   }
 
   // Structured JSON log for log aggregation tools (Loki, CloudWatch, etc.)
-  const logTag = logEntry.status === "success" 
-    ? "[AIEngine][LLM_CALL_SUCCESS]" 
-    : logEntry.status === "failover" 
-    ? "[AIEngine][LLM_CALL_FAILOVER]"
-    : "[AIEngine][LLM_CALL_ERROR]";
-  
-  console.log(logTag, JSON.stringify({
-    containerId: logEntry.containerId,
-    nodeId: logEntry.nodeId,
-    tenantId: logEntry.tenantId,
-    capability: logEntry.capability,
-    provider: logEntry.provider,
-    model: logEntry.model,
-    status: logEntry.status,
-    durationMs: logEntry.durationMs,
-    attempt: logEntry.attempt,
-    totalAttempts: logEntry.totalAttempts,
-    usage: logEntry.usage,
-    toolsCalled: logEntry.toolsCalled,
-    taskId: logEntry.taskId,
-    requestId: logEntry.requestId,
-    error: logEntry.error,
-  }));
+  const logTag =
+    logEntry.status === 'success'
+      ? '[AIEngine][LLM_CALL_SUCCESS]'
+      : logEntry.status === 'failover'
+        ? '[AIEngine][LLM_CALL_FAILOVER]'
+        : '[AIEngine][LLM_CALL_ERROR]';
+
+  console.log(
+    logTag,
+    JSON.stringify({
+      containerId: logEntry.containerId,
+      nodeId: logEntry.nodeId,
+      tenantId: logEntry.tenantId,
+      capability: logEntry.capability,
+      provider: logEntry.provider,
+      model: logEntry.model,
+      status: logEntry.status,
+      durationMs: logEntry.durationMs,
+      attempt: logEntry.attempt,
+      totalAttempts: logEntry.totalAttempts,
+      usage: logEntry.usage,
+      toolsCalled: logEntry.toolsCalled,
+      taskId: logEntry.taskId,
+      requestId: logEntry.requestId,
+      error: logEntry.error,
+    }),
+  );
 }
 
 /**
  * Get recent LLM activity entries.
- * 
+ *
  * @param {Object} [options]
  * @param {number} [options.limit=100] - Max entries to return
  * @param {string} [options.tenantId] - Filter by tenant
@@ -134,7 +138,7 @@ export function getLLMActivity(options = {}) {
 
 /**
  * Get activity summary stats.
- * 
+ *
  * @returns {Object} Summary statistics
  */
 export function getLLMActivityStats() {
@@ -142,13 +146,9 @@ export function getLLMActivityStats() {
   const oneMinuteAgo = now - 60 * 1000;
   const fiveMinutesAgo = now - 5 * 60 * 1000;
 
-  const recentEntries = activityLog.filter(
-    (e) => new Date(e.timestamp).getTime() > fiveMinutesAgo
-  );
+  const recentEntries = activityLog.filter((e) => new Date(e.timestamp).getTime() > fiveMinutesAgo);
 
-  const lastMinute = activityLog.filter(
-    (e) => new Date(e.timestamp).getTime() > oneMinuteAgo
-  );
+  const lastMinute = activityLog.filter((e) => new Date(e.timestamp).getTime() > oneMinuteAgo);
 
   // Count by provider
   const byProvider = {};
@@ -163,9 +163,10 @@ export function getLLMActivityStats() {
 
   // Calculate average duration
   const durations = recentEntries.filter((e) => e.durationMs).map((e) => e.durationMs);
-  const avgDuration = durations.length > 0
-    ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
-    : null;
+  const avgDuration =
+    durations.length > 0
+      ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
+      : null;
 
   // Calculate token usage
   let totalPromptTokens = 0;
@@ -178,7 +179,8 @@ export function getLLMActivityStats() {
       entriesWithUsage++;
       totalPromptTokens += entry.usage.prompt_tokens || 0;
       totalCompletionTokens += entry.usage.completion_tokens || 0;
-      totalTokens += entry.usage.total_tokens || 
+      totalTokens +=
+        entry.usage.total_tokens ||
         (entry.usage.prompt_tokens || 0) + (entry.usage.completion_tokens || 0);
     }
   }
@@ -187,7 +189,8 @@ export function getLLMActivityStats() {
   let allTimeTokens = 0;
   for (const entry of activityLog) {
     if (entry.usage) {
-      allTimeTokens += entry.usage.total_tokens || 
+      allTimeTokens +=
+        entry.usage.total_tokens ||
         (entry.usage.prompt_tokens || 0) + (entry.usage.completion_tokens || 0);
     }
   }

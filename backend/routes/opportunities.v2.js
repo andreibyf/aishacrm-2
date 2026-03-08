@@ -132,7 +132,11 @@ export default function createOpportunityV2Routes(_pgPool) {
 
       if (data && Array.isArray(data)) {
         data.forEach((opp) => {
-          const stageKey = opp.stage;
+          // Normalize legacy stage values: won → closed_won, lost → closed_lost
+          let stageKey = opp.stage;
+          if (stageKey === 'won') stageKey = 'closed_won';
+          else if (stageKey === 'lost') stageKey = 'closed_lost';
+
           if (stageKey && Object.prototype.hasOwnProperty.call(stats, stageKey)) {
             stats[stageKey]++;
           }
@@ -622,6 +626,93 @@ export default function createOpportunityV2Routes(_pgPool) {
         return expanded;
       });
 
+      // Compute inline stats via a separate aggregation query (not paginated)
+      // This ensures stats reflect the FULL filtered dataset, not just the current page
+      let stats = {
+        total: count || 0,
+        prospecting: 0,
+        qualification: 0,
+        proposal: 0,
+        negotiation: 0,
+        closed_won: 0,
+        closed_lost: 0,
+      };
+
+      try {
+        // Build stats query with same base filters as main query (no stage/search/pagination)
+        let statsQuery = supabase.from('opportunities').select('stage').eq('tenant_id', tenant_id);
+
+        // Apply same visibility scope
+        if (visibilityScope && !visibilityScope.bypass) {
+          if (visibilityScope.mode === 'shared' && visibilityScope.teamIds?.length > 0) {
+            // Shared: org-wide read, no filter
+          } else if (visibilityScope.employeeIds?.length > 0) {
+            const idList = visibilityScope.employeeIds.join(',');
+            statsQuery = statsQuery.or(`assigned_to.in.(${idList}),assigned_to.is.null`);
+          }
+        }
+
+        // Apply same entity filters (but NOT stage filter, NOT search, NOT pagination)
+        if (assigned_to !== undefined) {
+          if (
+            assigned_to === null ||
+            assigned_to === 'null' ||
+            assigned_to === '' ||
+            assigned_to === 'unassigned'
+          ) {
+            statsQuery = statsQuery.is('assigned_to', null);
+          } else {
+            statsQuery = statsQuery.eq('assigned_to', assigned_to);
+          }
+        }
+        if (
+          assigned_to_team !== undefined &&
+          assigned_to_team !== null &&
+          assigned_to_team !== ''
+        ) {
+          statsQuery = statsQuery.eq('assigned_to_team', assigned_to_team);
+        }
+        if (account_id) statsQuery = statsQuery.eq('account_id', account_id);
+        if (contact_id) statsQuery = statsQuery.eq('contact_id', contact_id);
+        if (lead_id) statsQuery = statsQuery.eq('lead_id', lead_id);
+        if (is_test_data !== undefined) {
+          const flag = String(is_test_data).toLowerCase();
+          if (flag === 'false') {
+            statsQuery = statsQuery.or('is_test_data.is.false,is_test_data.is.null');
+          } else if (flag === 'true') {
+            statsQuery = statsQuery.eq('is_test_data', true);
+          }
+        }
+
+        const { data: statsData, error: statsError } = await statsQuery;
+        if (statsError) {
+          logger.warn('[V2 Opportunities] Stats query failed, using fallback:', statsError.message);
+        } else if (statsData && Array.isArray(statsData)) {
+          // Reset stats from query results
+          stats.total = statsData.length;
+          stats.prospecting = 0;
+          stats.qualification = 0;
+          stats.proposal = 0;
+          stats.negotiation = 0;
+          stats.closed_won = 0;
+          stats.closed_lost = 0;
+
+          for (const row of statsData) {
+            // Normalize legacy stage values: won → closed_won, lost → closed_lost
+            let stageKey = row.stage;
+            if (stageKey === 'won') stageKey = 'closed_won';
+            else if (stageKey === 'lost') stageKey = 'closed_lost';
+
+            if (stageKey && Object.prototype.hasOwnProperty.call(stats, stageKey)) {
+              stats[stageKey]++;
+            }
+          }
+        }
+      } catch (statsErr) {
+        logger.warn('[V2 Opportunities] Stats aggregation error:', statsErr.message);
+        // Keep default stats with count from main query
+      }
+
       res.json({
         status: 'success',
         data: {
@@ -629,6 +720,7 @@ export default function createOpportunityV2Routes(_pgPool) {
           total: count || 0,
           limit,
           offset,
+          stats,
         },
       });
     } catch (error) {
