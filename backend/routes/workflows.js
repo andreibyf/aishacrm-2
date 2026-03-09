@@ -156,7 +156,11 @@ function normalizeWorkflow(row) {
   );
 
   // Log if nodes are missing but expected (debugging)
-  if ((!meta.nodes || meta.nodes.length === 0) && row.name) {
+  const hasNodes = meta.nodes && meta.nodes.length > 0;
+  const nodeCount = meta.nodes?.length || 0;
+  const connectionCount = meta.connections?.length || 0;
+
+  if (!hasNodes && row.name) {
     logger.debug(
       `[normalizeWorkflow] Workflow "${row.name}" (id: ${row.id}) has no nodes in metadata. Raw metadata type: ${typeof row.metadata}`,
     );
@@ -166,7 +170,7 @@ function normalizeWorkflow(row) {
     );
   } else {
     logger.debug(
-      `[normalizeWorkflow] Workflow "${row.name}" (id: ${row.id}) has ${meta.nodes?.length || 0} nodes, ${meta.connections?.length || 0} connections`,
+      `[normalizeWorkflow] Workflow "${row.name}" (id: ${row.id}) has ${nodeCount} nodes, ${connectionCount} connections`,
     );
   }
 

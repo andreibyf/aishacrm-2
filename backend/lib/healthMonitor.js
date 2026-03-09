@@ -1,9 +1,9 @@
 /**
  * Developer AI Health Monitoring System
- * 
+ *
  * Autonomous issue detection for proactive system maintenance.
  * Runs periodic health checks and creates alerts when issues are detected.
- * 
+ *
  * @module backend/lib/healthMonitor
  */
 
@@ -11,7 +11,9 @@ import { getSupabaseClient } from './supabase-db.js';
 import fs from 'fs/promises';
 
 // Health check interval (15 minutes in production, 5 minutes in dev)
-const CHECK_INTERVAL_MS = process.env.HEALTH_CHECK_INTERVAL_MS || (process.env.NODE_ENV === 'production' ? 15 * 60 * 1000 : 5 * 60 * 1000);
+const CHECK_INTERVAL_MS =
+  process.env.HEALTH_CHECK_INTERVAL_MS ||
+  (process.env.NODE_ENV === 'production' ? 15 * 60 * 1000 : 5 * 60 * 1000);
 
 // Error spike thresholds
 const ERROR_SPIKE_THRESHOLD = 10; // More than 10 errors in window triggers alert
@@ -31,13 +33,13 @@ async function cleanupStaleAlerts() {
     // Note: Only update resolved_at, not resolution_notes (column doesn't exist)
     const { data, error } = await supabase
       .from('devai_health_alerts')
-      .update({ 
-        resolved_at: new Date().toISOString()
+      .update({
+        resolved_at: new Date().toISOString(),
       })
       .is('resolved_at', null)
       .lt('created_at', STARTUP_TIMESTAMP)
       .select('id');
-    
+
     if (error) {
       console.warn('[Health Monitor] Failed to cleanup stale alerts:', error.message);
     } else if (data?.length > 0) {
@@ -57,22 +59,24 @@ export function startHealthMonitoring() {
     return;
   }
 
-  console.log(`[Health Monitor] Starting autonomous health checks (interval: ${CHECK_INTERVAL_MS / 1000}s)`);
-  
+  console.log(
+    `[Health Monitor] Starting autonomous health checks (interval: ${CHECK_INTERVAL_MS / 1000}s)`,
+  );
+
   // Clean up stale alerts from previous container runs
   cleanupStaleAlerts();
-  
+
   // Run initial check after 60 seconds (let server fully stabilize first)
   // 30s was too early - API self-check was failing because server wasn't ready
   setTimeout(() => {
-    runHealthChecks().catch(err => {
+    runHealthChecks().catch((err) => {
       console.error('[Health Monitor] Initial check failed:', err.message);
     });
   }, 60000);
 
   // Schedule recurring checks
   monitoringInterval = setInterval(() => {
-    runHealthChecks().catch(err => {
+    runHealthChecks().catch((err) => {
       console.error('[Health Monitor] Recurring check failed:', err.message);
     });
   }, CHECK_INTERVAL_MS);
@@ -109,8 +113,8 @@ async function runHealthChecks() {
 
   const results = await Promise.allSettled(checks);
   const issues = results
-    .filter(r => r.status === 'fulfilled' && r.value)
-    .map(r => r.value)
+    .filter((r) => r.status === 'fulfilled' && r.value)
+    .map((r) => r.value)
     .filter(Boolean);
 
   // Create alerts for detected issues (with deduplication)
@@ -119,10 +123,8 @@ async function runHealthChecks() {
   }
 
   const duration = Date.now() - startTime;
-  const status = issues.length > 0 
-    ? `Found ${issues.length} issue(s)` 
-    : 'All systems healthy';
-  
+  const status = issues.length > 0 ? `Found ${issues.length} issue(s)` : 'All systems healthy';
+
   console.log(`[Health Monitor] Check complete in ${duration}ms - ${status}`);
 }
 
@@ -130,16 +132,19 @@ async function runHealthChecks() {
  * Check application logs for error spikes
  */
 async function checkErrorLogs() {
+  const ERROR_SPIKE_THRESHOLD = parseInt(process.env.ERROR_SPIKE_THRESHOLD || '20', 10);
+  const ERROR_SPIKE_WINDOW_MINUTES = parseInt(process.env.ERROR_SPIKE_WINDOW_MINUTES || '15', 10);
+
   try {
     const logPath = '/app/backend/logs/error.log';
-    
+
     try {
       const content = await fs.readFile(logPath, 'utf-8');
-      const lines = content.split('\n').filter(line => line.trim());
-      
+      const lines = content.split('\n').filter((line) => line.trim());
+
       // Get recent errors (last 15 minutes)
-      const cutoffTime = Date.now() - (ERROR_SPIKE_WINDOW_MINUTES * 60 * 1000);
-      const recentErrors = lines.filter(line => {
+      const cutoffTime = Date.now() - ERROR_SPIKE_WINDOW_MINUTES * 60 * 1000;
+      const recentErrors = lines.filter((line) => {
         // Try to extract timestamp (common formats: ISO8601, timestamp at start)
         const timestampMatch = line.match(/(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})/);
         if (timestampMatch) {
@@ -152,7 +157,7 @@ async function checkErrorLogs() {
       if (recentErrors.length > ERROR_SPIKE_THRESHOLD) {
         // Extract error patterns
         const errorPatterns = {};
-        recentErrors.forEach(line => {
+        recentErrors.forEach((line) => {
           // Extract error type/message (simplified pattern matching)
           const errorMatch = line.match(/Error:?\s*(.+?)(?:\n|$)/i);
           if (errorMatch) {
@@ -166,7 +171,8 @@ async function checkErrorLogs() {
           .slice(0, 5);
 
         return {
-          severity: recentErrors.length > 50 ? 'critical' : recentErrors.length > 25 ? 'high' : 'medium',
+          severity:
+            recentErrors.length > 50 ? 'critical' : recentErrors.length > 25 ? 'high' : 'medium',
           category: 'error_spike',
           title: `Error spike detected: ${recentErrors.length} errors in ${ERROR_SPIKE_WINDOW_MINUTES} minutes`,
           summary: `Backend error log shows abnormal error rate (threshold: ${ERROR_SPIKE_THRESHOLD})`,
@@ -177,7 +183,8 @@ async function checkErrorLogs() {
             log_path: logPath,
           },
           error_count: recentErrors.length,
-          recommendation: 'Check error.log for details. Common causes: API failures, database issues, uncaught exceptions.',
+          recommendation:
+            'Check error.log for details. Common causes: API failures, database issues, uncaught exceptions.',
         };
       }
     } catch (fileErr) {
@@ -194,7 +201,7 @@ async function checkErrorLogs() {
 
 /**
  * Check API health endpoints
- * 
+ *
  * NOTE: In Docker, the backend listens on port 3001 internally but is exposed on 4001 externally.
  * For in-container self-checks, we use the internal port.
  */
@@ -204,12 +211,10 @@ async function checkAPIHealth() {
     // External port (4001) is for host/external access only
     const internalPort = process.env.PORT || 3001;
     const internalUrl = `http://localhost:${internalPort}`;
-    const endpoints = [
-      '/health',
-    ];
+    const endpoints = ['/health'];
 
     const failedEndpoints = [];
-    
+
     for (const endpoint of endpoints) {
       try {
         const controller = new AbortController();
@@ -218,7 +223,7 @@ async function checkAPIHealth() {
         const response = await fetch(`${internalUrl}${endpoint}`, {
           signal: controller.signal,
         });
-        
+
         clearTimeout(timeout);
 
         if (!response.ok) {
@@ -249,8 +254,9 @@ async function checkAPIHealth() {
           failed_endpoints: failedEndpoints,
           internal_url: internalUrl,
         },
-        affected_endpoints: failedEndpoints.map(e => e.endpoint),
-        recommendation: 'Check backend server status. Verify services are running with `docker ps`.',
+        affected_endpoints: failedEndpoints.map((e) => e.endpoint),
+        recommendation:
+          'Check backend server status. Verify services are running with `docker ps`.',
       };
     }
   } catch (err) {
@@ -265,7 +271,7 @@ async function checkAPIHealth() {
 async function checkDatabaseHealth() {
   try {
     const supa = getSupabaseClient();
-    
+
     // Test query with timeout
     const startTime = Date.now();
     const { error } = await supa
@@ -287,7 +293,8 @@ async function checkDatabaseHealth() {
           error_code: error.code,
           query_time_ms: queryTime,
         },
-        recommendation: 'Check Supabase connection. Verify DATABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set correctly.',
+        recommendation:
+          'Check Supabase connection. Verify DATABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set correctly.',
       };
     }
 
@@ -302,7 +309,8 @@ async function checkDatabaseHealth() {
           query_time_ms: queryTime,
           threshold_ms: 2000,
         },
-        recommendation: 'Check database load, connection pool, or network latency. Review slow query logs.',
+        recommendation:
+          'Check database load, connection pool, or network latency. Review slow query logs.',
       };
     }
   } catch (err) {
@@ -327,7 +335,7 @@ async function checkDatabaseHealth() {
 async function checkDockerContainers() {
   try {
     // Only run in Docker environment
-    if (!process.env.DOCKER_CONTAINER && !await isRunningInDocker()) {
+    if (!process.env.DOCKER_CONTAINER && !(await isRunningInDocker())) {
       return null;
     }
 
@@ -340,12 +348,12 @@ async function checkDockerContainers() {
     try {
       const { stdout } = await execAsync('docker ps --format "{{.Names}},{{.Status}}"');
       const containers = stdout.split('\n').filter(Boolean);
-      
+
       const issues = [];
       const requiredContainers = ['aishacrm-backend', 'aishacrm-frontend'];
-      
+
       for (const required of requiredContainers) {
-        const found = containers.some(c => c.includes(required));
+        const found = containers.some((c) => c.includes(required));
         if (!found) {
           issues.push(required);
         }
@@ -372,7 +380,9 @@ async function checkDockerContainers() {
         console.warn('[Health Monitor] Docker check failed:', msg);
       }
       // Debug log for visibility without noise
-      console.debug('[Health Monitor] Docker check skipped (docker CLI not available in container)');
+      console.debug(
+        '[Health Monitor] Docker check skipped (docker CLI not available in container)',
+      );
     }
   } catch (err) {
     console.error('[Health Monitor] checkDockerContainers failed:', err.message);
@@ -382,7 +392,7 @@ async function checkDockerContainers() {
 
 /**
  * Check memory usage
- * 
+ *
  * NOTE: We check heap usage relative to TOTAL SYSTEM MEMORY, not just allocated heap.
  * Using heapUsed/heapTotal would give misleading results (e.g., 44MB/48MB = 91%)
  * because Node.js dynamically grows its heap. Instead, we alert when:
@@ -394,7 +404,7 @@ async function checkMemoryUsage() {
     const memUsage = process.memoryUsage();
     const heapUsedMB = memUsage.heapUsed / 1024 / 1024;
     const rssMB = memUsage.rss / 1024 / 1024; // Resident Set Size - actual memory usage
-    
+
     // Use RSS (actual memory usage) which is more meaningful than heap
     // Only alert if using > 500MB RSS (a reasonable threshold for a Node.js backend)
     const MEMORY_THRESHOLD_MB = 500;
@@ -413,7 +423,8 @@ async function checkMemoryUsage() {
           external_mb: Math.round(memUsage.external / 1024 / 1024),
           threshold_mb: MEMORY_THRESHOLD_MB,
         },
-        recommendation: 'Consider restarting backend service. Check for memory leaks or large cache sizes.',
+        recommendation:
+          'Consider restarting backend service. Check for memory leaks or large cache sizes.',
       };
     }
   } catch (err) {
@@ -428,7 +439,7 @@ async function checkMemoryUsage() {
 async function checkBraidMetrics() {
   try {
     const supa = getSupabaseClient();
-    
+
     // Check for recent tool failures in braid_audit_log
     // Note: Uses result_tag column ('Ok' or 'Err'), not 'status'
     const { data: recentFailures, error } = await supa
@@ -451,7 +462,7 @@ async function checkBraidMetrics() {
     if (recentFailures && recentFailures.length > 10) {
       // Count failures by tool
       const failuresByTool = {};
-      recentFailures.forEach(f => {
+      recentFailures.forEach((f) => {
         failuresByTool[f.tool_name] = (failuresByTool[f.tool_name] || 0) + 1;
       });
 
@@ -469,7 +480,8 @@ async function checkBraidMetrics() {
           window_minutes: 15,
           top_failing_tools: topFailingTools.map(([tool, count]) => ({ tool, count })),
         },
-        recommendation: 'Check braid_audit_log for error details. Verify Supabase connection and tool configurations.',
+        recommendation:
+          'Check braid_audit_log for error details. Verify Supabase connection and tool configurations.',
       };
     }
   } catch (err) {
@@ -486,12 +498,11 @@ async function createHealthAlert(issue) {
     const supa = getSupabaseClient();
 
     // Check for duplicates (within 60 minutes)
-    const { data: isDuplicate } = await supa
-      .rpc('devai_check_duplicate_alert', {
-        p_category: issue.category,
-        p_title: issue.title,
-        p_time_window_minutes: 60,
-      });
+    const { data: isDuplicate } = await supa.rpc('devai_check_duplicate_alert', {
+      p_category: issue.category,
+      p_title: issue.title,
+      p_time_window_minutes: 60,
+    });
 
     if (isDuplicate) {
       console.log(`[Health Monitor] Skipping duplicate alert: ${issue.title}`);
@@ -517,7 +528,9 @@ async function createHealthAlert(issue) {
     if (error) {
       console.error('[Health Monitor] Failed to create alert:', error.message);
     } else {
-      console.log(`[Health Monitor] 🚨 Alert created [${issue.severity.toUpperCase()}]: ${issue.title}`);
+      console.log(
+        `[Health Monitor] 🚨 Alert created [${issue.severity.toUpperCase()}]: ${issue.title}`,
+      );
     }
   } catch (err) {
     console.error('[Health Monitor] createHealthAlert failed:', err.message);
@@ -557,10 +570,7 @@ export async function getHealthStats() {
       alerts_1h: stats?.alerts_1h ?? 0,
       last_alert_time: stats?.last_alert_time ?? null,
     });
-    const { data, error } = await supa
-      .from('devai_health_stats')
-      .select('*')
-      .maybeSingle();
+    const { data, error } = await supa.from('devai_health_stats').select('*').maybeSingle();
 
     if (!error && data) {
       return normalizeStats(data);
@@ -581,19 +591,20 @@ export async function getHealthStats() {
     }
 
     const rows = alerts || [];
-    const activeAlerts = rows.filter(row => !row.resolved_at);
+    const activeAlerts = rows.filter((row) => !row.resolved_at);
     const now = Date.now();
     const oneHourAgo = now - 60 * 60 * 1000;
     const dayAgo = now - 24 * 60 * 60 * 1000;
 
-    const lastAlertTime = rows
-      .map(row => row.detected_at)
-      .filter(Boolean)
-      .sort()
-      .slice(-1)[0] || null;
+    const lastAlertTime =
+      rows
+        .map((row) => row.detected_at)
+        .filter(Boolean)
+        .sort()
+        .slice(-1)[0] || null;
 
     const countBySeverity = (severity) =>
-      activeAlerts.filter(row => row.severity === severity).length;
+      activeAlerts.filter((row) => row.severity === severity).length;
 
     return normalizeStats({
       active_alerts: activeAlerts.length,
@@ -601,8 +612,12 @@ export async function getHealthStats() {
       high_alerts: countBySeverity('high'),
       medium_alerts: countBySeverity('medium'),
       low_alerts: countBySeverity('low'),
-      alerts_24h: rows.filter(row => row.detected_at && new Date(row.detected_at).getTime() >= dayAgo).length,
-      alerts_1h: rows.filter(row => row.detected_at && new Date(row.detected_at).getTime() >= oneHourAgo).length,
+      alerts_24h: rows.filter(
+        (row) => row.detected_at && new Date(row.detected_at).getTime() >= dayAgo,
+      ).length,
+      alerts_1h: rows.filter(
+        (row) => row.detected_at && new Date(row.detected_at).getTime() >= oneHourAgo,
+      ).length,
       last_alert_time: lastAlertTime,
     });
   } catch (err) {
