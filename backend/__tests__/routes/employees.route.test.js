@@ -123,4 +123,17 @@ describe('Employee Routes', { skip: !SHOULD_RUN }, () => {
     const res = await fetch(`${BASE_URL}/api/employees/${fakeId}?tenant_id=${TENANT_ID}`);
     assert.equal(res.status, 404, 'expected 404 for non-existent employee');
   });
+
+  test('GET /api/employees with non-numeric limit/offset does not 500', async () => {
+    const res = await fetch(
+      `${BASE_URL}/api/employees?tenant_id=${TENANT_ID}&limit=abc&offset=xyz`,
+    );
+    assert.equal(
+      res.status,
+      200,
+      'expected 200 with fallback defaults for non-numeric limit/offset',
+    );
+    const json = await res.json();
+    assert.equal(json.status, 'success');
+  });
 });

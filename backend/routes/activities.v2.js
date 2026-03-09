@@ -11,9 +11,9 @@ import { sanitizeUuidInput } from '../lib/uuidValidator.js';
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Look up the name and email for a related entity (lead, contact, account, opportunity)
+ * Look up the name and email for a related entity (lead, contact, account, opportunity, bizdev_source)
  * @param {object} supabase - Supabase client
- * @param {string} relatedTo - Entity type ('lead', 'contact', 'account', 'opportunity')
+ * @param {string} relatedTo - Entity type ('lead', 'contact', 'account', 'opportunity', 'bizdev_source')
  * @param {string} relatedId - Entity UUID
  * @returns {Promise<{name: string|null, email: string|null}>}
  */
@@ -220,13 +220,14 @@ export default function createActivityV2Routes(_pgPool) {
 
     // If it looks like an email, try to look up the user/employee
     if (assignedTo.includes('@')) {
+      const normalizedEmail = assignedTo.toLowerCase().trim();
       try {
         // Try employees table first (for CRM-specific employee records)
         const { data: employee } = await supabase
           .from('employees')
           .select('id')
           .eq('tenant_id', tenantId)
-          .eq('email', assignedTo)
+          .eq('email', normalizedEmail)
           .limit(1)
           .maybeSingle();
 
@@ -236,7 +237,7 @@ export default function createActivityV2Routes(_pgPool) {
         const { data: user } = await supabase
           .from('users')
           .select('id')
-          .eq('email', assignedTo)
+          .eq('email', normalizedEmail)
           .limit(1)
           .maybeSingle();
 

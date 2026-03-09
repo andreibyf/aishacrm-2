@@ -142,7 +142,7 @@ export default function createSystemLogRoutes(_pgPool) {
 
   // BULK INSERT endpoint to reduce per-log network overhead (client batches)
   // Accepts: { entries: [ { tenant_id, level, message, source, user_email, metadata, user_agent, url, stack_trace } ] }
-  // Returns: { inserted: count }
+  // Returns: { status: 'success', data: { inserted_count: N } }
 
   // Explicit OPTIONS handler for /bulk to ensure CORS preflight works
   // While app.options('/api/*') handles most routes, this ensures the specific
@@ -308,11 +308,14 @@ export default function createSystemLogRoutes(_pgPool) {
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
+      const lim = parseInt(limit, 10) || 100;
+      const off = parseInt(offset, 10) || 0;
+
       let q = supabase
         .from('system_logs')
         .select('*')
         .order('created_at', { ascending: false })
-        .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
+        .range(off, off + lim - 1);
 
       // Handle tenant_id filtering - 'system' alias maps to NULL (system-wide logs)
       if (tenant_id) {
@@ -326,8 +329,11 @@ export default function createSystemLogRoutes(_pgPool) {
       }
       if (level) q = q.eq('level', level);
       if (hours) {
-        const since = new Date(Date.now() - parseInt(hours) * 60 * 60 * 1000).toISOString();
-        q = q.gt('created_at', since);
+        const parsedHours = parseInt(hours, 10);
+        if (Number.isFinite(parsedHours) && parsedHours > 0) {
+          const since = new Date(Date.now() - parsedHours * 60 * 60 * 1000).toISOString();
+          q = q.gt('created_at', since);
+        }
       }
 
       const { data, error } = await q;
@@ -340,8 +346,8 @@ export default function createSystemLogRoutes(_pgPool) {
         data: {
           'system-logs': systemLogs,
           total: systemLogs.length,
-          limit: parseInt(limit),
-          offset: parseInt(offset),
+          limit: lim,
+          offset: off,
         },
       });
     } catch (error) {
@@ -477,14 +483,18 @@ export default function createSystemLogRoutes(_pgPool) {
       }
       if (level) del = del.eq('level', level);
       if (hours) {
-        const since = new Date(Date.now() - parseInt(hours) * 60 * 60 * 1000).toISOString();
-        del = del.lt('created_at', new Date().toISOString()).gte('created_at', since); // Delete logs within time range
+        const parsedHours = parseInt(hours, 10);
+        if (Number.isFinite(parsedHours) && parsedHours > 0) {
+          const since = new Date(Date.now() - parsedHours * 60 * 60 * 1000).toISOString();
+          del = del.lt('created_at', new Date().toISOString()).gte('created_at', since);
+        }
       }
       if (older_than_days) {
-        const before = new Date(
-          Date.now() - parseInt(older_than_days) * 24 * 60 * 60 * 1000,
-        ).toISOString();
-        del = del.lt('created_at', before);
+        const parsedDays = parseInt(older_than_days, 10);
+        if (Number.isFinite(parsedDays) && parsedDays > 0) {
+          const before = new Date(Date.now() - parsedDays * 24 * 60 * 60 * 1000).toISOString();
+          del = del.lt('created_at', before);
+        }
       }
 
       const { data, error } = await del.select('id');

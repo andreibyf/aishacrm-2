@@ -15,7 +15,7 @@ describe('System Logs Routes', { timeout: 15000 }, () => {
   before(async () => {
     // Initialize Supabase if credentials are available
     supabaseInitialized = await initSupabaseForTests();
-    
+
     const express = (await import('express')).default;
     const createSystemLogRoutes = (await import('../../routes/system-logs.js')).default;
 
@@ -45,7 +45,14 @@ describe('System Logs Routes', { timeout: 15000 }, () => {
     const res = await fetch(`http://localhost:${port}/api/system-logs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tenant_id: 't1', level: 'INFO', message: 'hello', source: 'ui', user_email: 'x@y', extra: 'z' })
+      body: JSON.stringify({
+        tenant_id: 't1',
+        level: 'INFO',
+        message: 'hello',
+        source: 'ui',
+        user_email: 'x@y',
+        extra: 'z',
+      }),
     });
     // Accept 201 (success) or 500 (network error in CI)
     assert.ok([201, 500].includes(res.status), `Expected 201 or 500, got ${res.status}`);
@@ -60,7 +67,9 @@ describe('System Logs Routes', { timeout: 15000 }, () => {
       // Skip this test if Supabase not initialized
       return;
     }
-    const res = await fetch(`http://localhost:${port}/api/system-logs?tenant_id=t1&limit=1&offset=0`);
+    const res = await fetch(
+      `http://localhost:${port}/api/system-logs?tenant_id=t1&limit=1&offset=0`,
+    );
     // Accept 200 (success) or 500 (network error in CI)
     assert.ok([200, 500].includes(res.status), `Expected 200 or 500, got ${res.status}`);
     if (res.status === 200) {
@@ -78,9 +87,12 @@ describe('System Logs Routes', { timeout: 15000 }, () => {
     const createResp = await fetch(`http://localhost:${port}/api/system-logs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tenant_id: 't1', level: 'INFO', message: 'to-delete', source: 'ui' })
+      body: JSON.stringify({ tenant_id: 't1', level: 'INFO', message: 'to-delete', source: 'ui' }),
     });
-    assert.ok([201,500].includes(createResp.status), `Expected 201 or 500 on create, got ${createResp.status}`);
+    assert.ok(
+      [201, 500].includes(createResp.status),
+      `Expected 201 or 500 on create, got ${createResp.status}`,
+    );
     if (createResp.status !== 201) {
       // Cannot reliably proceed; treat as skipped
       return;
@@ -89,9 +101,14 @@ describe('System Logs Routes', { timeout: 15000 }, () => {
     const createdId = createdJson?.data?.id;
     assert.ok(createdId, 'Created log should have id');
 
-    const delResp = await fetch(`http://localhost:${port}/api/system-logs/${createdId}`, { method: 'DELETE' });
+    const delResp = await fetch(`http://localhost:${port}/api/system-logs/${createdId}`, {
+      method: 'DELETE',
+    });
     // Accept 200 (deleted) or 404 (already missing / RLS blocked); 500 indicates network/setup issue.
-    assert.ok([200,404,500].includes(delResp.status), `Expected 200, 404 or 500, got ${delResp.status}`);
+    assert.ok(
+      [200, 404, 500].includes(delResp.status),
+      `Expected 200, 404 or 500, got ${delResp.status}`,
+    );
     if (delResp.status === 200) {
       const delJson = await delResp.json();
       assert.strictEqual(delJson.status, 'success');
@@ -108,7 +125,9 @@ describe('System Logs Routes', { timeout: 15000 }, () => {
       // Skip this test if Supabase not initialized
       return;
     }
-    const res = await fetch(`http://localhost:${port}/api/system-logs?hours=24`, { method: 'DELETE' });
+    const res = await fetch(`http://localhost:${port}/api/system-logs?hours=24`, {
+      method: 'DELETE',
+    });
     // Accept 200 (success) or 500 (network error in CI)
     assert.ok([200, 500].includes(res.status), `Expected 200 or 500, got ${res.status}`);
     if (res.status === 200) {
@@ -135,7 +154,7 @@ describe('System Logs Routes', { timeout: 15000 }, () => {
     const res = await fetch(`http://localhost:${port}/api/system-logs/bulk`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({})
+      body: JSON.stringify({}),
     });
     assert.strictEqual(res.status, 400);
     const json = await res.json();
@@ -147,7 +166,7 @@ describe('System Logs Routes', { timeout: 15000 }, () => {
     const res = await fetch(`http://localhost:${port}/api/system-logs/bulk`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entries: 'not-an-array' })
+      body: JSON.stringify({ entries: 'not-an-array' }),
     });
     assert.strictEqual(res.status, 400);
     const json = await res.json();
@@ -159,7 +178,7 @@ describe('System Logs Routes', { timeout: 15000 }, () => {
     const res = await fetch(`http://localhost:${port}/api/system-logs/bulk`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entries: [] })
+      body: JSON.stringify({ entries: [] }),
     });
     assert.strictEqual(res.status, 200);
     const json = await res.json();
@@ -174,12 +193,12 @@ describe('System Logs Routes', { timeout: 15000 }, () => {
     const entries = [
       { level: 'INFO', message: 'Test log 1', source: 'test' },
       { level: 'WARNING', message: 'Test log 2', source: 'test' },
-      { level: 'ERROR', message: 'Test log 3', source: 'test', stack_trace: 'Error stack' }
+      { level: 'ERROR', message: 'Test log 3', source: 'test', stack_trace: 'Error stack' },
     ];
     const res = await fetch(`http://localhost:${port}/api/system-logs/bulk`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entries })
+      body: JSON.stringify({ entries }),
     });
     // Accept 201 (success) or 500 (network error in CI)
     assert.ok([201, 500].includes(res.status), `Expected 201 or 500, got ${res.status}`);
@@ -198,12 +217,12 @@ describe('System Logs Routes', { timeout: 15000 }, () => {
     const entries = Array.from({ length: 250 }, (_, i) => ({
       level: 'INFO',
       message: `Batch test log ${i}`,
-      source: 'test'
+      source: 'test',
     }));
     const res = await fetch(`http://localhost:${port}/api/system-logs/bulk`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entries })
+      body: JSON.stringify({ entries }),
     });
     // Accept 201 (success) or 500 (network error in CI)
     assert.ok([201, 500].includes(res.status), `Expected 201 or 500, got ${res.status}`);
@@ -220,5 +239,23 @@ describe('System Logs Routes', { timeout: 15000 }, () => {
       method: 'OPTIONS',
     });
     assert.strictEqual(res.status, 204);
+  });
+
+  it('GET / with non-numeric limit/offset does not 500', async () => {
+    const res = await fetch(`http://localhost:${port}/api/system-logs?limit=abc&offset=xyz`);
+    // Should fallback to defaults, not crash
+    assert.ok([200, 500].includes(res.status), `Expected 200 or 500, got ${res.status}`);
+    if (res.status === 200) {
+      const json = await res.json();
+      assert.strictEqual(json.status, 'success');
+    }
+  });
+
+  it('DELETE / with non-numeric hours does not 500', async () => {
+    const res = await fetch(`http://localhost:${port}/api/system-logs?hours=abc`, {
+      method: 'DELETE',
+    });
+    // Should ignore invalid hours filter, not crash
+    assert.ok([200, 500].includes(res.status), `Expected 200 or 500, got ${res.status}`);
   });
 });
