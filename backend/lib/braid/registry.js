@@ -64,6 +64,13 @@ export const TOOL_CACHE_TTL = {
  * @returns {string} Cache key
  */
 export function generateBraidCacheKey(toolName, tenantId, args) {
+  if (typeof tenantId !== 'string' || tenantId.length === 0) {
+    throw new Error('Invalid tenantId: must be a non-empty string');
+  }
+  if (typeof args !== 'object' || args === null) {
+    throw new Error('Invalid args: must be a valid object');
+  }
+
   // Create a hash of the args to keep key length manageable
   const argsHash = crypto
     .createHash('sha256')
@@ -178,6 +185,33 @@ export const TOOL_REGISTRY = {
     file: 'bizdev-sources.braid',
     function: 'archiveBizDevSources',
     policy: 'WRITE_OPERATIONS',
+  },
+
+  // Cashflow
+  list_cash_flow_transactions: {
+    file: 'cashflow.braid',
+    function: 'listCashFlowTransactions',
+    policy: 'READ_ONLY',
+  },
+  get_cash_flow_transaction: {
+    file: 'cashflow.braid',
+    function: 'getCashFlowTransaction',
+    policy: 'READ_ONLY',
+  },
+  create_cash_flow_transaction: {
+    file: 'cashflow.braid',
+    function: 'createCashFlowTransaction',
+    policy: 'WRITE_OPERATIONS',
+  },
+  update_cash_flow_transaction: {
+    file: 'cashflow.braid',
+    function: 'updateCashFlowTransaction',
+    policy: 'WRITE_OPERATIONS',
+  },
+  get_cash_flow_summary: {
+    file: 'cashflow.braid',
+    function: 'getCashFlowSummary',
+    policy: 'READ_ONLY',
   },
 
   // Contacts
@@ -389,8 +423,7 @@ export const TOOL_REGISTRY = {
     function: 'getLeadConversionReport',
     policy: 'READ_ONLY',
   },
-  // get_revenue_forecasts: { file: 'revenues.braid', function: 'getRevenueForecasts', policy: 'READ_ONLY' },
-  // TODO: revenues.braid not yet implemented — re-enable when created [2026-02-24 Claude]
+  // get_revenue_forecasts: { file: 'reports.braid', function: 'getRevenueForecasts', policy: 'READ_ONLY' }, // TODO: revenues.braid not yet implemented — re-enable when created [2026-02-24 Claude]
   clear_report_cache: { file: 'reports.braid', function: 'clearReportCache', policy: 'READ_ONLY' },
 
   // Snapshot

@@ -42,13 +42,15 @@ export async function createCalendarEvent(
 /**
  * Find the next available time slot after the given datetime
  */
+const SLOT_INCREMENT_MINUTES = 30;
+
 export async function findNextAvailableSlot(
   tenantId: string,
   afterDatetime: string
 ): Promise<string> {
   // TODO: Implement actual slot finding logic
-  // For now, add 30 minutes to the requested time
+  // For now, add SLOT_INCREMENT_MINUTES to the requested time
   const date = new Date(afterDatetime);
-  date.setMinutes(date.getMinutes() + 30);
+  date.setMinutes(date.getMinutes() + SLOT_INCREMENT_MINUTES);
   return date.toISOString();
 }

@@ -3,7 +3,7 @@
 /**
  * Braid Registry Sync
  *
- * Generates tool registry from .braid files and updates braidIntegration-v2.js
+ * Generates tool registry from .braid files and updates backend/lib/braid/registry.js
  * Run this after modifying .braid files to keep the registry in sync.
  *
  * Usage:
@@ -25,7 +25,8 @@ const INTEGRATION_FILE = path.join(
   '..',
   'backend',
   'lib',
-  'braidIntegration-v2.js',
+  'braid',
+  'registry.js',
 );
 
 /**
@@ -162,7 +163,7 @@ function main() {
   const currentParamOrder = extractCurrentParamOrder(currentSource);
 
   if (!currentRegistry) {
-    console.error('❌ Could not find TOOL_REGISTRY in braidIntegration-v2.js');
+    console.error('❌ Could not find TOOL_REGISTRY in backend/lib/braid/registry.js');
     process.exit(1);
   }
 
@@ -200,7 +201,7 @@ function main() {
   }
 
   // Update the file
-  console.log('\n📝 Updating braidIntegration-v2.js...');
+  console.log('\n📝 Updating backend/lib/braid/registry.js...');
 
   let updatedSource = currentSource.replace(
     /export const TOOL_REGISTRY = \{[\s\S]*?\n\};/,

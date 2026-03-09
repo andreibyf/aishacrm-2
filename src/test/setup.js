@@ -6,24 +6,53 @@
 // the built-in exposes an object whose methods fail as "not a function".
 // Patching early guarantees all downstream code (devLogger, etc.) works.
 (() => {
-  if (typeof globalThis.localStorage === 'undefined') return;            // nothing to fix
-  if (typeof globalThis.localStorage.getItem === 'function') return;     // already OK (jsdom)
+  if (typeof globalThis.localStorage === 'undefined') return; // nothing to fix
+  if (typeof globalThis.localStorage.getItem === 'function') return; // already OK (jsdom)
 
   const store = new Map();
   const ls = {
-    getItem:    (k) => (store.has(k) ? store.get(k) : null),
-    setItem:    (k, v) => store.set(k, String(v)),
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, String(v)),
     removeItem: (k) => store.delete(k),
-    clear:      () => store.clear(),
-    get length() { return store.size; },
-    key:        (i) => [...store.keys()][i] ?? null,
+    clear: () => store.clear(),
+    get length() {
+      return store.size;
+    },
+    key: (i) => [...store.keys()][i] ?? null,
   };
-  Object.defineProperty(globalThis, 'localStorage', { value: ls, writable: true, configurable: true });
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: ls,
+    writable: true,
+    configurable: true,
+  });
 })();
 
 import '@testing-library/jest-dom';
 import { cleanup } from '@testing-library/react';
 import { afterEach, vi } from 'vitest';
+
+// ── Mock TenantContext so hooks using useTenant() work outside TenantProvider ──
+vi.mock('@/components/shared/tenantContext', () => ({
+  useTenant: vi.fn(() => ({
+    selectedTenantId: 'test-tenant-id',
+    setSelectedTenantId: vi.fn(),
+  })),
+  TenantProvider: ({ children }) => children,
+  default: { useTenant: vi.fn(), TenantProvider: ({ children }) => children },
+}));
+
+// ── Mock local dev mode so tests don't pick up real dev tenant UUIDs ───────
+// isLocalDevMode() returns true in dev, which causes createMockUser() to inject
+// the real local dev tenant UUID (6cb4c008-...) into API calls.
+vi.mock('@/api/mockData', () => ({
+  isLocalDevMode: vi.fn(() => false),
+  createMockUser: vi.fn(() => ({
+    id: 'test-user-id',
+    email: 'test@example.com',
+    tenant_id: 'test-tenant-id',
+    role: 'admin',
+  })),
+}));
 
 // ── Global Supabase client mock ──────────────────────────────────────
 // Prevents `storage.getItem is not a function` crashes when any test
@@ -61,29 +90,46 @@ vi.mock('@/lib/supabase', () => {
 afterEach(() => {
   cleanup();
   // Reset browser storage to avoid cross-test leakage
-  try { localStorage.clear(); } catch { }
-  try { sessionStorage.clear(); } catch { }
+  try {
+    localStorage.clear();
+  } catch {}
+  try {
+    sessionStorage.clear();
+  } catch {}
 });
 
 // Lightweight auth and fetch stubs for stability in full runs
 // Provide a faux Supabase session where code reads from storage
 try {
   const mockSession = {
-    user: { id: 'test-user-id', email: 'test@example.com', role: 'admin', tenant_id: '00000000-0000-0000-0000-000000000000' },
+    user: {
+      id: 'test-user-id',
+      email: 'test@example.com',
+      role: 'admin',
+      tenant_id: '00000000-0000-0000-0000-000000000000',
+    },
     access_token: 'test-token',
   };
   sessionStorage.setItem('supabase:auth', JSON.stringify(mockSession));
-} catch { }
+} catch {}
 
 // Allow test suites to opt-out by setting window.__DISABLE_GLOBAL_FETCH_STUB = true
 if (typeof window !== 'undefined' && !window.__DISABLE_GLOBAL_FETCH_STUB) {
   const realFetch = global.fetch;
   global.fetch = async (input, init = {}) => {
-    const url = typeof input === 'string' ? input : (input?.url || '');
+    const url = typeof input === 'string' ? input : input?.url || '';
     const method = (init.method || 'GET').toUpperCase();
 
     // Allow AI endpoints and explicit test targets to hit the real fetch when needed
     const allowList = [/\/api\/ai\/chat/i, /\/api\/ai\/brain-test/i, /\/health$/i];
+
+    // Return a fake audio response for TTS so tests don't log fallback warnings
+    if (/\/api\/ai\/tts/i.test(url)) {
+      return new Response(new Uint8Array([0]).buffer, {
+        status: 200,
+        headers: { 'Content-Type': 'audio/mpeg' },
+      });
+    }
     if (allowList.some((re) => re.test(url))) {
       return realFetch(input, init);
     }
