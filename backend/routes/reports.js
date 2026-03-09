@@ -18,79 +18,57 @@ async function safeCount(_pgPool, table, tenantId, filterBuilder, options = {}) 
   const supabase = getSupabaseClient();
   const includeTestData = options.includeTestData !== false;
   const countMode = options.countMode || 'planned';
-  const confirmSmall = options.confirmSmallCounts !== false; // default true
+  const confirmSmall = options.confirmSmallCounts !== false;
 
-  // Whitelist of allowed table names
   const allowedTables = ['contacts', 'accounts', 'leads', 'opportunities', 'activities'];
   if (!allowedTables.includes(table)) {
-    return 0; // Invalid table name, prevent SQL injection
+    return 0;
   }
 
-  try {
-    // Build base query
-    let query = supabase.from(table).select('*', { count: countMode, head: true });
+  const applyFilters = (query) => {
     if (tenantId) {
       try {
         query = query.eq('tenant_id', tenantId);
       } catch {
-        /* ignore: table may not have tenant_id */ void 0;
+        void 0;
       }
     }
     if (!includeTestData) {
       try {
-        // When toggle OFF: exclude test data (show only real data)
         query = query.or('is_test_data.is.false,is_test_data.is.null');
       } catch {
-        /* ignore: table may not have is_test_data */ void 0;
+        void 0;
       }
     }
-    // When includeTestData is true, no filter applied (show all data)
-    // Apply additional filters (e.g., status not in ...)
     if (typeof filterBuilder === 'function') {
       try {
         query = filterBuilder(query) || query;
       } catch {
-        // ignore filter builder errors; keep base query
+        void 0;
       }
     }
+    return query;
+  };
+
+  try {
+    let query = supabase.from(table).select('*', { count: countMode, head: true });
+    query = applyFilters(query);
     const { count } = await query;
     const plannedCount = count ?? 0;
 
-    // If using planned estimates, and the estimate is tiny, confirm with exact to avoid false positives on empty sets
     if (countMode === 'planned' && confirmSmall && plannedCount <= 5) {
       try {
         let exact = supabase.from(table).select('*', { count: 'exact', head: true });
-        if (tenantId) {
-          try {
-            exact = exact.eq('tenant_id', tenantId);
-          } catch {
-            /* ignore */ void 0;
-          }
-        }
-        if (!includeTestData) {
-          try {
-            exact = exact.or('is_test_data.is.false,is_test_data.is.null');
-          } catch {
-            /* ignore */ void 0;
-          }
-        }
-        if (typeof filterBuilder === 'function') {
-          try {
-            exact = filterBuilder(exact) || exact;
-          } catch {
-            /* ignore */ void 0;
-          }
-        }
+        exact = applyFilters(exact);
         const { count: exactCount } = await exact;
         return exactCount ?? plannedCount;
       } catch {
-        // fall back to planned on error
         return plannedCount;
       }
     }
     return plannedCount;
   } catch {
-    return 0; // table might not exist yet; return 0 as a safe default
+    return 0;
   }
 }
 
