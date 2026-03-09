@@ -132,8 +132,12 @@ async function runHealthChecks() {
  * Check application logs for error spikes
  */
 async function checkErrorLogs() {
-  const ERROR_SPIKE_THRESHOLD = parseInt(process.env.ERROR_SPIKE_THRESHOLD || '20', 10);
-  const ERROR_SPIKE_WINDOW_MINUTES = parseInt(process.env.ERROR_SPIKE_WINDOW_MINUTES || '15', 10);
+  const rawThreshold = parseInt(process.env.ERROR_SPIKE_THRESHOLD, 10);
+  const threshold =
+    !isNaN(rawThreshold) && rawThreshold >= 1 ? rawThreshold : ERROR_SPIKE_THRESHOLD;
+  const rawWindow = parseInt(process.env.ERROR_SPIKE_WINDOW_MINUTES, 10);
+  const windowMinutes =
+    !isNaN(rawWindow) && rawWindow >= 1 ? rawWindow : ERROR_SPIKE_WINDOW_MINUTES;
 
   try {
     const logPath = '/app/backend/logs/error.log';
@@ -143,7 +147,7 @@ async function checkErrorLogs() {
       const lines = content.split('\n').filter((line) => line.trim());
 
       // Get recent errors (last 15 minutes)
-      const cutoffTime = Date.now() - ERROR_SPIKE_WINDOW_MINUTES * 60 * 1000;
+      const cutoffTime = Date.now() - windowMinutes * 60 * 1000;
       const recentErrors = lines.filter((line) => {
         // Try to extract timestamp (common formats: ISO8601, timestamp at start)
         const timestampMatch = line.match(/(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})/);
@@ -154,7 +158,7 @@ async function checkErrorLogs() {
         return false; // If no timestamp, assume old
       });
 
-      if (recentErrors.length > ERROR_SPIKE_THRESHOLD) {
+      if (recentErrors.length > threshold) {
         // Extract error patterns
         const errorPatterns = {};
         recentErrors.forEach((line) => {
@@ -174,11 +178,11 @@ async function checkErrorLogs() {
           severity:
             recentErrors.length > 50 ? 'critical' : recentErrors.length > 25 ? 'high' : 'medium',
           category: 'error_spike',
-          title: `Error spike detected: ${recentErrors.length} errors in ${ERROR_SPIKE_WINDOW_MINUTES} minutes`,
-          summary: `Backend error log shows abnormal error rate (threshold: ${ERROR_SPIKE_THRESHOLD})`,
+          title: `Error spike detected: ${recentErrors.length} errors in ${windowMinutes} minutes`,
+          summary: `Backend error log shows abnormal error rate (threshold: ${threshold})`,
           details: {
             error_count: recentErrors.length,
-            window_minutes: ERROR_SPIKE_WINDOW_MINUTES,
+            window_minutes: windowMinutes,
             top_errors: topErrors.map(([msg, count]) => ({ message: msg, count })),
             log_path: logPath,
           },

@@ -1,9 +1,15 @@
 import React from 'react';
 import { render as rtlRender } from '@testing-library/react';
-import { TenantProvider } from '../src/components/shared/tenantContext';
+import { vi } from 'vitest';
+import TenantContext from '../src/components/shared/tenantContext';
+
+const testTenantValue = {
+  selectedTenantId: 'test-tenant-id',
+  setSelectedTenantId: vi.fn(),
+};
 
 function AllProviders({ children }) {
-  return <TenantProvider value={{ tenantId: 'test-tenant' }}>{children}</TenantProvider>;
+  return <TenantContext.Provider value={testTenantValue}>{children}</TenantContext.Provider>;
 }
 
 function render(ui, options = {}) {

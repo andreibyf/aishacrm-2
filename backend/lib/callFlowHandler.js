@@ -1433,7 +1433,7 @@ function extractBasicPatterns(transcript) {
 
   // Extract follow-up requests
   if (SEND_TRIGGERS.some((trigger) => lowerTranscript.includes(trigger))) {
-    const prefixMatch = transcript.match(/send(?:ing)?\s+(?:me\s+)?/i);
+    const prefixMatch = transcript.match(/(?:send(?:ing)?|email(?:ing)?)\s+(?:me\s+)?/i);
     if (prefixMatch) {
       const afterSend = transcript.substring(prefixMatch.index + prefixMatch[0].length);
       const punctIdx = afterSend.search(/[.,?]/);

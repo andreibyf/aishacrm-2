@@ -34,10 +34,8 @@ import { afterEach, vi } from 'vitest';
 // ── Mock TenantContext so hooks using useTenant() work outside TenantProvider ──
 vi.mock('@/components/shared/tenantContext', () => ({
   useTenant: vi.fn(() => ({
-    tenantId: 'test-tenant-id',
-    tenant: { id: 'test-tenant-id', name: 'Test Tenant' },
-    loading: false,
-    error: null,
+    selectedTenantId: 'test-tenant-id',
+    setSelectedTenantId: vi.fn(),
   })),
   TenantProvider: ({ children }) => children,
   default: { useTenant: vi.fn(), TenantProvider: ({ children }) => children },
