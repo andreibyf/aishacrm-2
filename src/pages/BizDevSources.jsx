@@ -1219,6 +1219,7 @@ export default function BizDevSourcesPage() {
             accounts={accounts}
             businessModel={businessModel}
             entityLabel={bizdevSourceLabel}
+            user={user}
             onClose={() => {
               setShowDetailPanel(false);
               setSelectedSource(null);

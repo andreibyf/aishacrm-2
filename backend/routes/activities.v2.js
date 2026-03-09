@@ -805,7 +805,7 @@ export default function createActivityV2Routes(_pgPool) {
 
       // Lookup related entity name/email if related_to and related_id are provided
       // Only valid entity types should be looked up
-      const VALID_ENTITY_TYPES = ['lead', 'contact', 'account', 'opportunity'];
+      const VALID_ENTITY_TYPES = ['lead', 'contact', 'account', 'opportunity', 'bizdev_source'];
       const relatedTo = VALID_ENTITY_TYPES.includes(payload.related_to) ? payload.related_to : null;
       const relatedId = validRelatedId;
       const { name: relatedName, email: relatedEmail } = await lookupRelatedEntity(

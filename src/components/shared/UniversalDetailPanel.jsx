@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTenant } from '@/components/shared/tenantContext';
+import EntityAiSummaryCard from '@/components/crm/EntityAiSummaryCard';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -48,6 +49,7 @@ import {
 import { format } from 'date-fns';
 import { Note, Activity, Contact } from '@/api/entities'; // Added Contact
 import { toast } from 'sonner';
+import { getBackendUrl } from '@/api/backendUrl';
 
 /**
  * Universal Detail Panel - Consolidates all entity detail panels
@@ -88,17 +90,22 @@ export default function UniversalDetailPanel({
   const [relatedContacts, setRelatedContacts] = useState([]);
   const [relatedDataLoading, setRelatedDataLoading] = useState(false);
 
+  // AI Summary state
+  const [aiSummary, setAiSummary] = useState(null);
+  const [aiSummaryUpdatedAt, setAiSummaryUpdatedAt] = useState(null);
+  const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
+  const aiSummaryFetchedRef = useRef(null); // track entity id we last fetched for
+
+  // Map entityType to the related_type used in the DB (bizdev → bizdev_source)
+  const relatedTypeForDb = entityType === 'bizdev' ? 'bizdev_source' : entityType?.toLowerCase();
+
   const loadNotes = useCallback(async () => {
     if (!entity) return;
     try {
-      const relatedType = entityType.toLowerCase();
+      const relatedType = relatedTypeForDb;
       const tenantId = selectedTenantId || user?.tenant_id || entity.tenant_id;
 
-      // Use consistent backend URL pattern (same as loadActivities)
-      const backendUrl =
-        import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-        (typeof window !== 'undefined' && window._env_?.VITE_AISHACRM_BACKEND_URL) ||
-        'http://localhost:4001';
+      const backendUrl = getBackendUrl();
 
       const notesUrl = `${backendUrl}/api/notes?tenant_id=${tenantId}&related_type=${relatedType}&related_id=${entity.id}`;
 
@@ -151,19 +158,15 @@ export default function UniversalDetailPanel({
       toast.error(`Failed to load notes: ${error?.message || 'Network error'}`);
       setNotes([]);
     }
-  }, [entity, entityType, user?.tenant_id]);
+  }, [entity, relatedTypeForDb, user?.tenant_id]);
 
   const loadActivities = useCallback(async () => {
     if (!entity) return;
     try {
-      const relatedTo = entityType.toLowerCase();
+      const relatedTo = relatedTypeForDb;
       const tenantId = selectedTenantId || user?.tenant_id || entity.tenant_id;
 
-      // Use v2 API with proper filtering
-      const backendUrl =
-        import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-        (typeof window !== 'undefined' && window._env_?.VITE_AISHACRM_BACKEND_URL) ||
-        'http://localhost:4001';
+      const backendUrl = getBackendUrl();
 
       // Fetch activities directly linked to this entity
       const url = `${backendUrl}/api/v2/activities?tenant_id=${tenantId}&related_to_type=${relatedTo}&related_to_id=${entity.id}&limit=10`;
@@ -233,7 +236,7 @@ export default function UniversalDetailPanel({
       console.error('Failed to load activities:', error);
       toast.error('Failed to load activities');
     }
-  }, [entity, entityType, selectedTenantId, user?.tenant_id]);
+  }, [entity, relatedTypeForDb, selectedTenantId, user?.tenant_id]);
 
   // Load notes and activities when panel opens or entity changes
   useEffect(() => {
@@ -241,7 +244,84 @@ export default function UniversalDetailPanel({
       loadNotes();
       loadActivities();
     }
-  }, [open, entity, loadNotes, loadActivities]);
+    // Reset AI summary state when entity changes (including switching entities while open)
+    setAiSummary(null);
+    setAiSummaryUpdatedAt(null);
+    setAiSummaryLoading(false);
+    aiSummaryFetchedRef.current = null;
+  }, [open, entity?.id, loadNotes, loadActivities]);
+
+  // Load AI summary when panel opens (skip for activity entity type — no profile)
+  useEffect(() => {
+    if (!open || !entity?.id || entityType === 'activity') return;
+    // Avoid re-fetching for the same entity
+    if (aiSummaryFetchedRef.current === entity.id) return;
+
+    const tenantId = selectedTenantId || user?.tenant_id || entity.tenant_id;
+    if (!tenantId) return;
+
+    // Map entityType to the profile route segment
+    const profileTypeMap = {
+      lead: 'lead',
+      contact: 'contact',
+      account: 'account',
+      bizdev: 'bizdev',
+      opportunity: null, // opportunities don't have a person profile
+    };
+    const profileType = profileTypeMap[entityType];
+    if (!profileType) return;
+
+    // Mark fetched only after all validations pass
+    aiSummaryFetchedRef.current = entity.id;
+
+    const backendUrl = getBackendUrl();
+
+    fetch(`${backendUrl}/api/profile/${profileType}/${entity.id}?tenant_id=${tenantId}`, {
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+    })
+      .then((r) => r.json())
+      .then((json) => {
+        if (!json?.data?.entity) return;
+        const existingSummary = json.data.entity.ai_summary || null;
+        const existingUpdatedAt = json.data.entity.ai_summary_updated_at || null;
+        setAiSummary(existingSummary);
+        setAiSummaryUpdatedAt(existingUpdatedAt);
+
+        if (!existingSummary) {
+          setAiSummaryLoading(true);
+          fetch(`${backendUrl}/api/ai/summarize-person-profile`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              person_id: entity.id,
+              person_type: profileType,
+              tenant_id: tenantId,
+              profile_data: { ...entity, ...json.data.entity },
+            }),
+          })
+            .then((r) => r.json())
+            .then((summaryJson) => {
+              if (summaryJson?.ai_summary) {
+                const s = Array.isArray(summaryJson.ai_summary)
+                  ? summaryJson.ai_summary.join(' ')
+                  : summaryJson.ai_summary;
+                setAiSummary(s);
+                setAiSummaryUpdatedAt(new Date().toISOString());
+              }
+            })
+            .catch(() => {
+              // LLM unavailable — show placeholder, non-critical
+              setAiSummary(null);
+            })
+            .finally(() => setAiSummaryLoading(false));
+        }
+      })
+      .catch(() => {
+        // Profile fetch failed — skip summary silently
+      });
+  }, [open, entity?.id, entityType, selectedTenantId, user?.tenant_id, entity?.tenant_id]);
 
   // Effect to load related contacts for accounts
   useEffect(() => {
@@ -314,7 +394,7 @@ export default function UniversalDetailPanel({
 
     setIsSavingNote(true);
     try {
-      const relatedTo = entityType.toLowerCase();
+      const relatedTo = relatedTypeForDb;
       const entityName = getEntityName(entity); // Pre-calculate for activity
       // For SuperAdmin users, tenant_id may be null; use entity's tenant_id as fallback
       const effectiveTenantId = user?.tenant_id || entity.tenant_id;
@@ -487,6 +567,8 @@ export default function UniversalDetailPanel({
         return <DollarSign className="w-5 h-5" />;
       case 'activity':
         return <Calendar className="w-5 h-5" />;
+      case 'bizdev':
+        return <Building2 className="w-5 h-5" />;
       default:
         return null;
     }
@@ -511,6 +593,8 @@ export default function UniversalDetailPanel({
         return entity.name;
       case 'activity':
         return entity.subject;
+      case 'bizdev':
+        return entity.name || entity.company_name || entity.contact_person || 'BizDev Source';
       default:
         return 'Details';
     }
@@ -1087,6 +1171,20 @@ export default function UniversalDetailPanel({
                 </div>
               ))}
             </div>
+          )}
+
+          {/* AI Summary Section - shown for all entities with a profile (not activity) */}
+          {entityType !== 'activity' && (aiSummary || aiSummaryLoading) && (
+            <EntityAiSummaryCard
+              entityType={entityType}
+              entityId={entity.id}
+              entityLabel={getTitle()}
+              aiSummary={aiSummary}
+              aiSummaryLoading={aiSummaryLoading}
+              lastUpdated={aiSummaryUpdatedAt}
+              profile={entity}
+              tenantId={selectedTenantId || user?.tenant_id || entity.tenant_id}
+            />
           )}
 
           {/* Notes & Activity Section - Replaced old NotesSection with new implementation */}
