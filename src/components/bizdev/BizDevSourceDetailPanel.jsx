@@ -23,7 +23,6 @@ import { BizDevSource, Opportunity, Activity, Lead } from '@/api/entities';
 import { createPageUrl } from '@/utils';
 import { Link } from 'react-router-dom';
 import UniversalDetailPanel from '@/components/shared/UniversalDetailPanel';
-import { useTenant } from '@/components/shared/tenantContext';
 
 export default function BizDevSourceDetailPanel({
   bizDevSource,
@@ -37,7 +36,6 @@ export default function BizDevSourceDetailPanel({
   entityLabel = 'Potential Lead',
   user,
 }) {
-  const { selectedTenantId } = useTenant();
   const [promoting, setPromoting] = useState(false);
   const [showPromoteConfirm, setShowPromoteConfirm] = useState(false);
   const [linkedLeads, setLinkedLeads] = useState([]);
@@ -726,7 +724,7 @@ export default function BizDevSourceDetailPanel({
     // Name for header
     name: displayName,
     // description → use notes field if present (bizdev doesn't have separate description)
-    description: currentSource.description || undefined,
+    description: currentSource.description || currentSource.notes || undefined,
   };
 
   return (
