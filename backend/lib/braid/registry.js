@@ -88,231 +88,86 @@ export const TOOL_REGISTRY = {
   // Accounts
   create_account: { file: 'accounts.braid', function: 'createAccount', policy: 'WRITE_OPERATIONS' },
   update_account: { file: 'accounts.braid', function: 'updateAccount', policy: 'WRITE_OPERATIONS' },
-  get_account_details: {
-    file: 'accounts.braid',
-    function: 'getAccountDetails',
-    policy: 'READ_ONLY',
-  },
+  get_account_details: { file: 'accounts.braid', function: 'getAccountDetails', policy: 'READ_ONLY' },
   list_accounts: { file: 'accounts.braid', function: 'listAccounts', policy: 'READ_ONLY' },
   search_accounts: { file: 'accounts.braid', function: 'searchAccounts', policy: 'READ_ONLY' },
-  search_accounts_by_status: {
-    file: 'accounts.braid',
-    function: 'searchAccountsByStatus',
-    policy: 'READ_ONLY',
-  },
+  search_accounts_by_status: { file: 'accounts.braid', function: 'searchAccountsByStatus', policy: 'READ_ONLY' },
   delete_account: { file: 'accounts.braid', function: 'deleteAccount', policy: 'WRITE_OPERATIONS' },
 
   // Activities
-  create_activity: {
-    file: 'activities.braid',
-    function: 'createActivity',
-    policy: 'WRITE_OPERATIONS',
-  },
-  update_activity: {
-    file: 'activities.braid',
-    function: 'updateActivity',
-    policy: 'WRITE_OPERATIONS',
-  },
-  mark_activity_complete: {
-    file: 'activities.braid',
-    function: 'markActivityComplete',
-    policy: 'WRITE_OPERATIONS',
-  },
-  get_upcoming_activities: {
-    file: 'activities.braid',
-    function: 'getUpcomingActivities',
-    policy: 'READ_ONLY',
-  },
-  schedule_meeting: {
-    file: 'activities.braid',
-    function: 'scheduleMeeting',
-    policy: 'WRITE_OPERATIONS',
-  },
-  delete_activity: {
-    file: 'activities.braid',
-    function: 'deleteActivity',
-    policy: 'WRITE_OPERATIONS',
-  },
+  create_activity: { file: 'activities.braid', function: 'createActivity', policy: 'WRITE_OPERATIONS' },
+  update_activity: { file: 'activities.braid', function: 'updateActivity', policy: 'WRITE_OPERATIONS' },
+  mark_activity_complete: { file: 'activities.braid', function: 'markActivityComplete', policy: 'WRITE_OPERATIONS' },
+  get_upcoming_activities: { file: 'activities.braid', function: 'getUpcomingActivities', policy: 'READ_ONLY' },
+  schedule_meeting: { file: 'activities.braid', function: 'scheduleMeeting', policy: 'WRITE_OPERATIONS' },
+  delete_activity: { file: 'activities.braid', function: 'deleteActivity', policy: 'WRITE_OPERATIONS' },
   list_activities: { file: 'activities.braid', function: 'listActivities', policy: 'READ_ONLY' },
-  get_activity_details: {
-    file: 'activities.braid',
-    function: 'getActivityDetails',
-    policy: 'READ_ONLY',
-  },
-  search_activities: {
-    file: 'activities.braid',
-    function: 'searchActivities',
-    policy: 'READ_ONLY',
-  },
+  get_activity_details: { file: 'activities.braid', function: 'getActivityDetails', policy: 'READ_ONLY' },
+  search_activities: { file: 'activities.braid', function: 'searchActivities', policy: 'READ_ONLY' },
 
   // Bizdev Sources
-  create_bizdev_source: {
-    file: 'bizdev-sources.braid',
-    function: 'createBizDevSource',
-    policy: 'WRITE_OPERATIONS',
-  },
-  update_bizdev_source: {
-    file: 'bizdev-sources.braid',
-    function: 'updateBizDevSource',
-    policy: 'WRITE_OPERATIONS',
-  },
-  get_bizdev_source_details: {
-    file: 'bizdev-sources.braid',
-    function: 'getBizDevSourceDetails',
-    policy: 'READ_ONLY',
-  },
-  list_bizdev_sources: {
-    file: 'bizdev-sources.braid',
-    function: 'listBizDevSources',
-    policy: 'READ_ONLY',
-  },
-  search_bizdev_sources: {
-    file: 'bizdev-sources.braid',
-    function: 'searchBizDevSources',
-    policy: 'READ_ONLY',
-  },
-  promote_bizdev_source_to_lead: {
-    file: 'bizdev-sources.braid',
-    function: 'promoteBizDevSourceToLead',
-    policy: 'WRITE_OPERATIONS',
-  },
-  delete_bizdev_source: {
-    file: 'bizdev-sources.braid',
-    function: 'deleteBizDevSource',
-    policy: 'WRITE_OPERATIONS',
-  },
-  archive_bizdev_sources: {
-    file: 'bizdev-sources.braid',
-    function: 'archiveBizDevSources',
-    policy: 'WRITE_OPERATIONS',
-  },
+  create_bizdev_source: { file: 'bizdev-sources.braid', function: 'createBizDevSource', policy: 'WRITE_OPERATIONS' },
+  update_bizdev_source: { file: 'bizdev-sources.braid', function: 'updateBizDevSource', policy: 'WRITE_OPERATIONS' },
+  get_bizdev_source_details: { file: 'bizdev-sources.braid', function: 'getBizDevSourceDetails', policy: 'READ_ONLY' },
+  list_bizdev_sources: { file: 'bizdev-sources.braid', function: 'listBizDevSources', policy: 'READ_ONLY' },
+  search_bizdev_sources: { file: 'bizdev-sources.braid', function: 'searchBizDevSources', policy: 'READ_ONLY' },
+  promote_bizdev_source_to_lead: { file: 'bizdev-sources.braid', function: 'promoteBizDevSourceToLead', policy: 'WRITE_OPERATIONS' },
+  delete_bizdev_source: { file: 'bizdev-sources.braid', function: 'deleteBizDevSource', policy: 'WRITE_OPERATIONS' },
+  archive_bizdev_sources: { file: 'bizdev-sources.braid', function: 'archiveBizDevSources', policy: 'WRITE_OPERATIONS' },
+
+  // Cashflow
+  list_cash_flow_transactions: { file: 'cashflow.braid', function: 'listCashFlowTransactions', policy: 'READ_ONLY' },
+  get_cash_flow_transaction: { file: 'cashflow.braid', function: 'getCashFlowTransaction', policy: 'READ_ONLY' },
+  create_cash_flow_transaction: { file: 'cashflow.braid', function: 'createCashFlowTransaction', policy: 'WRITE_OPERATIONS' },
+  update_cash_flow_transaction: { file: 'cashflow.braid', function: 'updateCashFlowTransaction', policy: 'WRITE_OPERATIONS' },
+  get_cash_flow_summary: { file: 'cashflow.braid', function: 'getCashFlowSummary', policy: 'READ_ONLY' },
 
   // Contacts
   create_contact: { file: 'contacts.braid', function: 'createContact', policy: 'WRITE_OPERATIONS' },
   update_contact: { file: 'contacts.braid', function: 'updateContact', policy: 'WRITE_OPERATIONS' },
-  list_contacts_for_account: {
-    file: 'contacts.braid',
-    function: 'listContactsForAccount',
-    policy: 'READ_ONLY',
-  },
+  list_contacts_for_account: { file: 'contacts.braid', function: 'listContactsForAccount', policy: 'READ_ONLY' },
   search_contacts: { file: 'contacts.braid', function: 'searchContacts', policy: 'READ_ONLY' },
-  get_contact_by_name: {
-    file: 'contacts.braid',
-    function: 'getContactByName',
-    policy: 'READ_ONLY',
-  },
+  get_contact_by_name: { file: 'contacts.braid', function: 'getContactByName', policy: 'READ_ONLY' },
   list_all_contacts: { file: 'contacts.braid', function: 'listAllContacts', policy: 'READ_ONLY' },
-  search_contacts_by_status: {
-    file: 'contacts.braid',
-    function: 'searchContactsByStatus',
-    policy: 'READ_ONLY',
-  },
+  search_contacts_by_status: { file: 'contacts.braid', function: 'searchContactsByStatus', policy: 'READ_ONLY' },
   delete_contact: { file: 'contacts.braid', function: 'deleteContact', policy: 'WRITE_OPERATIONS' },
-  get_contact_details: {
-    file: 'contacts.braid',
-    function: 'getContactDetails',
-    policy: 'READ_ONLY',
-  },
+  get_contact_details: { file: 'contacts.braid', function: 'getContactDetails', policy: 'READ_ONLY' },
 
   // Documents
   list_documents: { file: 'documents.braid', function: 'listDocuments', policy: 'READ_ONLY' },
-  get_document_details: {
-    file: 'documents.braid',
-    function: 'getDocumentDetails',
-    policy: 'READ_ONLY',
-  },
-  create_document: {
-    file: 'documents.braid',
-    function: 'createDocument',
-    policy: 'WRITE_OPERATIONS',
-  },
-  update_document: {
-    file: 'documents.braid',
-    function: 'updateDocument',
-    policy: 'WRITE_OPERATIONS',
-  },
-  delete_document: {
-    file: 'documents.braid',
-    function: 'deleteDocument',
-    policy: 'WRITE_OPERATIONS',
-  },
+  get_document_details: { file: 'documents.braid', function: 'getDocumentDetails', policy: 'READ_ONLY' },
+  create_document: { file: 'documents.braid', function: 'createDocument', policy: 'WRITE_OPERATIONS' },
+  update_document: { file: 'documents.braid', function: 'updateDocument', policy: 'WRITE_OPERATIONS' },
+  delete_document: { file: 'documents.braid', function: 'deleteDocument', policy: 'WRITE_OPERATIONS' },
   analyze_document: { file: 'documents.braid', function: 'analyzeDocument', policy: 'READ_ONLY' },
   search_documents: { file: 'documents.braid', function: 'searchDocuments', policy: 'READ_ONLY' },
 
   // Employees
   list_employees: { file: 'employees.braid', function: 'listEmployees', policy: 'READ_ONLY' },
-  get_employee_details: {
-    file: 'employees.braid',
-    function: 'getEmployeeDetails',
-    policy: 'READ_ONLY',
-  },
-  create_employee: {
-    file: 'employees.braid',
-    function: 'createEmployee',
-    policy: 'WRITE_OPERATIONS',
-  },
-  update_employee: {
-    file: 'employees.braid',
-    function: 'updateEmployee',
-    policy: 'WRITE_OPERATIONS',
-  },
-  delete_employee: {
-    file: 'employees.braid',
-    function: 'deleteEmployee',
-    policy: 'WRITE_OPERATIONS',
-  },
+  get_employee_details: { file: 'employees.braid', function: 'getEmployeeDetails', policy: 'READ_ONLY' },
+  create_employee: { file: 'employees.braid', function: 'createEmployee', policy: 'WRITE_OPERATIONS' },
+  update_employee: { file: 'employees.braid', function: 'updateEmployee', policy: 'WRITE_OPERATIONS' },
+  delete_employee: { file: 'employees.braid', function: 'deleteEmployee', policy: 'WRITE_OPERATIONS' },
   search_employees: { file: 'employees.braid', function: 'searchEmployees', policy: 'READ_ONLY' },
-  get_employee_assignments: {
-    file: 'employees.braid',
-    function: 'getEmployeeAssignments',
-    policy: 'READ_ONLY',
-  },
+  get_employee_assignments: { file: 'employees.braid', function: 'getEmployeeAssignments', policy: 'READ_ONLY' },
 
   // Leads
   create_lead: { file: 'leads.braid', function: 'createLead', policy: 'WRITE_OPERATIONS' },
   delete_lead: { file: 'leads.braid', function: 'deleteLead', policy: 'WRITE_OPERATIONS' },
   qualify_lead: { file: 'leads.braid', function: 'qualifyLead', policy: 'WRITE_OPERATIONS' },
   update_lead: { file: 'leads.braid', function: 'updateLead', policy: 'WRITE_OPERATIONS' },
-  convert_lead_to_account: {
-    file: 'leads.braid',
-    function: 'convertLeadToAccount',
-    policy: 'WRITE_OPERATIONS',
-  },
+  convert_lead_to_account: { file: 'leads.braid', function: 'convertLeadToAccount', policy: 'WRITE_OPERATIONS' },
   list_leads: { file: 'leads.braid', function: 'listLeads', policy: 'READ_ONLY' },
   get_lead_details: { file: 'leads.braid', function: 'getLeadDetails', policy: 'READ_ONLY' },
   search_leads: { file: 'leads.braid', function: 'searchLeads', policy: 'READ_ONLY' },
-  search_leads_by_status: {
-    file: 'leads.braid',
-    function: 'searchLeadsByStatus',
-    policy: 'READ_ONLY',
-  },
+  search_leads_by_status: { file: 'leads.braid', function: 'searchLeadsByStatus', policy: 'READ_ONLY' },
 
   // Lifecycle
-  advance_to_lead: {
-    file: 'lifecycle.braid',
-    function: 'advanceToLead',
-    policy: 'WRITE_OPERATIONS',
-  },
-  advance_to_qualified: {
-    file: 'lifecycle.braid',
-    function: 'advanceToQualified',
-    policy: 'WRITE_OPERATIONS',
-  },
-  advance_to_account: {
-    file: 'lifecycle.braid',
-    function: 'advanceToAccount',
-    policy: 'WRITE_OPERATIONS',
-  },
-  advance_opportunity_stage: {
-    file: 'lifecycle.braid',
-    function: 'advanceOpportunityStage',
-    policy: 'WRITE_OPERATIONS',
-  },
-  full_lifecycle_advance: {
-    file: 'lifecycle.braid',
-    function: 'fullLifecycleAdvance',
-    policy: 'READ_ONLY',
-  },
+  advance_to_lead: { file: 'lifecycle.braid', function: 'advanceToLead', policy: 'WRITE_OPERATIONS' },
+  advance_to_qualified: { file: 'lifecycle.braid', function: 'advanceToQualified', policy: 'WRITE_OPERATIONS' },
+  advance_to_account: { file: 'lifecycle.braid', function: 'advanceToAccount', policy: 'WRITE_OPERATIONS' },
+  advance_opportunity_stage: { file: 'lifecycle.braid', function: 'advanceOpportunityStage', policy: 'WRITE_OPERATIONS' },
+  full_lifecycle_advance: { file: 'lifecycle.braid', function: 'fullLifecycleAdvance', policy: 'READ_ONLY' },
 
   // Navigation
   navigate_to_page: { file: 'navigation.braid', function: 'navigateTo', policy: 'READ_ONLY' },
@@ -327,77 +182,24 @@ export const TOOL_REGISTRY = {
   delete_note: { file: 'notes.braid', function: 'deleteNote', policy: 'WRITE_OPERATIONS' },
 
   // Opportunities
-  create_opportunity: {
-    file: 'opportunities.braid',
-    function: 'createOpportunity',
-    policy: 'WRITE_OPERATIONS',
-  },
-  delete_opportunity: {
-    file: 'opportunities.braid',
-    function: 'deleteOpportunity',
-    policy: 'WRITE_OPERATIONS',
-  },
-  update_opportunity: {
-    file: 'opportunities.braid',
-    function: 'updateOpportunity',
-    policy: 'WRITE_OPERATIONS',
-  },
-  list_opportunities_by_stage: {
-    file: 'opportunities.braid',
-    function: 'listOpportunitiesByStage',
-    policy: 'READ_ONLY',
-  },
-  get_opportunity_details: {
-    file: 'opportunities.braid',
-    function: 'getOpportunityDetails',
-    policy: 'READ_ONLY',
-  },
-  search_opportunities: {
-    file: 'opportunities.braid',
-    function: 'searchOpportunities',
-    policy: 'READ_ONLY',
-  },
-  search_opportunities_by_stage: {
-    file: 'opportunities.braid',
-    function: 'searchOpportunitiesByStage',
-    policy: 'READ_ONLY',
-  },
-  get_opportunity_forecast: {
-    file: 'opportunities.braid',
-    function: 'getOpportunityForecast',
-    policy: 'READ_ONLY',
-  },
-  mark_opportunity_won: {
-    file: 'opportunities.braid',
-    function: 'markOpportunityWon',
-    policy: 'WRITE_OPERATIONS',
-  },
+  create_opportunity: { file: 'opportunities.braid', function: 'createOpportunity', policy: 'WRITE_OPERATIONS' },
+  delete_opportunity: { file: 'opportunities.braid', function: 'deleteOpportunity', policy: 'WRITE_OPERATIONS' },
+  update_opportunity: { file: 'opportunities.braid', function: 'updateOpportunity', policy: 'WRITE_OPERATIONS' },
+  list_opportunities_by_stage: { file: 'opportunities.braid', function: 'listOpportunitiesByStage', policy: 'READ_ONLY' },
+  get_opportunity_details: { file: 'opportunities.braid', function: 'getOpportunityDetails', policy: 'READ_ONLY' },
+  search_opportunities: { file: 'opportunities.braid', function: 'searchOpportunities', policy: 'READ_ONLY' },
+  search_opportunities_by_stage: { file: 'opportunities.braid', function: 'searchOpportunitiesByStage', policy: 'READ_ONLY' },
+  get_opportunity_forecast: { file: 'opportunities.braid', function: 'getOpportunityForecast', policy: 'READ_ONLY' },
+  mark_opportunity_won: { file: 'opportunities.braid', function: 'markOpportunityWon', policy: 'WRITE_OPERATIONS' },
 
   // Reports
-  get_dashboard_bundle: {
-    file: 'reports.braid',
-    function: 'getDashboardBundle',
-    policy: 'READ_ONLY',
-  },
+  get_dashboard_bundle: { file: 'reports.braid', function: 'getDashboardBundle', policy: 'READ_ONLY' },
   get_health_summary: { file: 'reports.braid', function: 'getHealthSummary', policy: 'READ_ONLY' },
   get_sales_report: { file: 'reports.braid', function: 'getSalesReport', policy: 'READ_ONLY' },
-  get_pipeline_report: {
-    file: 'reports.braid',
-    function: 'getPipelineReport',
-    policy: 'READ_ONLY',
-  },
-  get_activity_report: {
-    file: 'reports.braid',
-    function: 'getActivityReport',
-    policy: 'READ_ONLY',
-  },
-  get_lead_conversion_report: {
-    file: 'reports.braid',
-    function: 'getLeadConversionReport',
-    policy: 'READ_ONLY',
-  },
-  // get_revenue_forecasts: { file: 'revenues.braid', function: 'getRevenueForecasts', policy: 'READ_ONLY' },
-  // TODO: revenues.braid not yet implemented — re-enable when created [2026-02-24 Claude]
+  get_pipeline_report: { file: 'reports.braid', function: 'getPipelineReport', policy: 'READ_ONLY' },
+  get_activity_report: { file: 'reports.braid', function: 'getActivityReport', policy: 'READ_ONLY' },
+  get_lead_conversion_report: { file: 'reports.braid', function: 'getLeadConversionReport', policy: 'READ_ONLY' },
+  get_revenue_forecasts: { file: 'reports.braid', function: 'getRevenueForecasts', policy: 'READ_ONLY' },
   clear_report_cache: { file: 'reports.braid', function: 'clearReportCache', policy: 'READ_ONLY' },
 
   // Snapshot
@@ -405,67 +207,27 @@ export const TOOL_REGISTRY = {
   debug_probe: { file: 'snapshot.braid', function: 'probe', policy: 'READ_ONLY' },
 
   // Suggest Next Actions
-  suggest_next_actions: {
-    file: 'suggest-next-actions.braid',
-    function: 'suggestNextActions',
-    policy: 'READ_ONLY',
-  },
+  suggest_next_actions: { file: 'suggest-next-actions.braid', function: 'suggestNextActions', policy: 'READ_ONLY' },
 
   // Suggestions
   list_suggestions: { file: 'suggestions.braid', function: 'listSuggestions', policy: 'READ_ONLY' },
-  get_suggestion_details: {
-    file: 'suggestions.braid',
-    function: 'getSuggestionDetails',
-    policy: 'READ_ONLY',
-  },
-  get_suggestion_stats: {
-    file: 'suggestions.braid',
-    function: 'getSuggestionStats',
-    policy: 'READ_ONLY',
-  },
-  approve_suggestion: {
-    file: 'suggestions.braid',
-    function: 'approveSuggestion',
-    policy: 'WRITE_OPERATIONS',
-  },
-  reject_suggestion: {
-    file: 'suggestions.braid',
-    function: 'rejectSuggestion',
-    policy: 'WRITE_OPERATIONS',
-  },
-  apply_suggestion: {
-    file: 'suggestions.braid',
-    function: 'applySuggestion',
-    policy: 'WRITE_OPERATIONS',
-  },
-  trigger_suggestion_generation: {
-    file: 'suggestions.braid',
-    function: 'triggerSuggestionGeneration',
-    policy: 'WRITE_OPERATIONS',
-  },
+  get_suggestion_details: { file: 'suggestions.braid', function: 'getSuggestionDetails', policy: 'READ_ONLY' },
+  get_suggestion_stats: { file: 'suggestions.braid', function: 'getSuggestionStats', policy: 'READ_ONLY' },
+  approve_suggestion: { file: 'suggestions.braid', function: 'approveSuggestion', policy: 'WRITE_OPERATIONS' },
+  reject_suggestion: { file: 'suggestions.braid', function: 'rejectSuggestion', policy: 'WRITE_OPERATIONS' },
+  apply_suggestion: { file: 'suggestions.braid', function: 'applySuggestion', policy: 'WRITE_OPERATIONS' },
+  trigger_suggestion_generation: { file: 'suggestions.braid', function: 'triggerSuggestionGeneration', policy: 'WRITE_OPERATIONS' },
 
   // Telephony
   initiate_call: { file: 'telephony.braid', function: 'initiateCall', policy: 'READ_ONLY' },
   call_contact: { file: 'telephony.braid', function: 'callContact', policy: 'READ_ONLY' },
-  check_calling_provider: {
-    file: 'telephony.braid',
-    function: 'checkCallingProvider',
-    policy: 'READ_ONLY',
-  },
-  get_calling_agents: {
-    file: 'telephony.braid',
-    function: 'getCallingAgents',
-    policy: 'READ_ONLY',
-  },
+  check_calling_provider: { file: 'telephony.braid', function: 'checkCallingProvider', policy: 'READ_ONLY' },
+  get_calling_agents: { file: 'telephony.braid', function: 'getCallingAgents', policy: 'READ_ONLY' },
 
   // Users
   list_users: { file: 'users.braid', function: 'listUsers', policy: 'READ_ONLY' },
   get_user_details: { file: 'users.braid', function: 'getUserDetails', policy: 'READ_ONLY' },
-  get_current_user_profile: {
-    file: 'users.braid',
-    function: 'getCurrentUserProfile',
-    policy: 'READ_ONLY',
-  },
+  get_current_user_profile: { file: 'users.braid', function: 'getCurrentUserProfile', policy: 'READ_ONLY' },
   get_user_profiles: { file: 'users.braid', function: 'getUserProfiles', policy: 'READ_ONLY' },
   create_user: { file: 'users.braid', function: 'createUser', policy: 'WRITE_OPERATIONS' },
   update_user: { file: 'users.braid', function: 'updateUser', policy: 'WRITE_OPERATIONS' },
@@ -476,50 +238,19 @@ export const TOOL_REGISTRY = {
   // Web Research
   search_web: { file: 'web-research.braid', function: 'searchWeb', policy: 'READ_ONLY' },
   fetch_web_page: { file: 'web-research.braid', function: 'fetchWebPage', policy: 'READ_ONLY' },
-  lookup_company_info: {
-    file: 'web-research.braid',
-    function: 'lookupCompanyInfo',
-    policy: 'READ_ONLY',
-  },
+  lookup_company_info: { file: 'web-research.braid', function: 'lookupCompanyInfo', policy: 'READ_ONLY' },
 
   // Workflow Delegation
-  trigger_workflow_by_name: {
-    file: 'workflow-delegation.braid',
-    function: 'triggerWorkflowByName',
-    policy: 'WRITE_OPERATIONS',
-  },
-  get_workflow_progress: {
-    file: 'workflow-delegation.braid',
-    function: 'getWorkflowProgress',
-    policy: 'READ_ONLY',
-  },
-  list_active_workflows: {
-    file: 'workflow-delegation.braid',
-    function: 'listActiveWorkflows',
-    policy: 'READ_ONLY',
-  },
-  get_workflow_notes: {
-    file: 'workflow-delegation.braid',
-    function: 'getWorkflowNotes',
-    policy: 'READ_ONLY',
-  },
+  trigger_workflow_by_name: { file: 'workflow-delegation.braid', function: 'triggerWorkflowByName', policy: 'WRITE_OPERATIONS' },
+  get_workflow_progress: { file: 'workflow-delegation.braid', function: 'getWorkflowProgress', policy: 'READ_ONLY' },
+  list_active_workflows: { file: 'workflow-delegation.braid', function: 'listActiveWorkflows', policy: 'READ_ONLY' },
+  get_workflow_notes: { file: 'workflow-delegation.braid', function: 'getWorkflowNotes', policy: 'READ_ONLY' },
 
   // Workflows
-  list_workflow_templates: {
-    file: 'workflows.braid',
-    function: 'listWorkflowTemplates',
-    policy: 'READ_ONLY',
-  },
-  get_workflow_template: {
-    file: 'workflows.braid',
-    function: 'getWorkflowTemplate',
-    policy: 'READ_ONLY',
-  },
-  instantiate_workflow_template: {
-    file: 'workflows.braid',
-    function: 'instantiateWorkflowTemplate',
-    policy: 'READ_ONLY',
-  },
+  list_workflow_templates: { file: 'workflows.braid', function: 'listWorkflowTemplates', policy: 'READ_ONLY' },
+  get_workflow_template: { file: 'workflows.braid', function: 'getWorkflowTemplate', policy: 'READ_ONLY' },
+  instantiate_workflow_template: { file: 'workflows.braid', function: 'instantiateWorkflowTemplate', policy: 'READ_ONLY' },
+
 };
 
 /**
