@@ -72,6 +72,9 @@ export async function validateTenantAccess(req, res, next) {
   // Superadmins have special privileges:
   // - READ operations: can access ANY tenant's data (cross-tenant read access)
   // - WRITE operations: must specify a valid tenant_id (no global writes)
+  //
+  // Exception: superadmin-only tool routes that don't operate on tenant data
+  // (Developer AI, approvals, health alerts) are exempt from the tenant_id requirement.
   if (user.role === 'superadmin') {
     const isReadOperation =
       req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS';
@@ -81,7 +84,17 @@ export async function validateTenantAccess(req, res, next) {
       return next();
     }
 
-    // For write operations (POST, PUT, PATCH, DELETE), require a tenant_id
+    // Superadmin-only routes that are tenant-agnostic (no DB tenant writes)
+    const tenantExemptPaths = [
+      '/developer', // Developer AI chat, stream, approve, reject
+      '/summarize-person-profile', // AI summary — handles own tenant scoping internally
+    ];
+    const isTenantExempt = tenantExemptPaths.some((p) => req.path.startsWith(p));
+    if (isTenantExempt) {
+      return next();
+    }
+
+    // For all other write operations (POST, PUT, PATCH, DELETE), require a tenant_id
     if (!requestedTenantId) {
       return res.status(400).json({
         status: 'error',

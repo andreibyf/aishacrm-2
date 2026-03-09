@@ -909,6 +909,19 @@ export default function LeadProfilePage() {
                     {activities.length}
                   </span>
                 )}
+                {t.id === 'notes' && notes.length > 0 && (
+                  <span
+                    style={{
+                      marginLeft: 6,
+                      fontSize: 10,
+                      background: '#334155',
+                      padding: '1px 6px',
+                      borderRadius: 8,
+                    }}
+                  >
+                    {notes.length}
+                  </span>
+                )}
                 {t.id === 'deals' && opportunities.length > 0 && (
                   <span
                     style={{
