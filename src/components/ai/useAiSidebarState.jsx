@@ -43,31 +43,26 @@ const welcomeMessage = {
   timestamp: Date.now(),
 };
 
+const getLocalStorageItem = (key) => {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return undefined;
+  }
+};
+
 const resolveTenantContext = (user = null) => {
   if (typeof window === 'undefined') {
     return {};
   }
   const context = {};
-  try {
-    // Priority: 1. Authenticated user's assigned tenant_id (most authoritative)
-    //           2. localStorage selected_tenant_id (superadmin manual selection)
-    //           3. localStorage tenant_id (legacy fallback)
-    if (user?.tenant_id) {
-      context.tenantId = user.tenant_id;
-    } else {
-      context.tenantId =
-        localStorage.getItem('selected_tenant_id') ||
-        localStorage.getItem('tenant_id') ||
-        undefined;
-    }
-  } catch {
-    context.tenantId = undefined;
+  if (user?.tenant_id) {
+    context.tenantId = user.tenant_id;
+  } else {
+    context.tenantId =
+      getLocalStorageItem('selected_tenant_id') || getLocalStorageItem('tenant_id') || undefined;
   }
-  try {
-    context.tenantName = localStorage.getItem('selected_tenant_name') || undefined;
-  } catch {
-    context.tenantName = undefined;
-  }
+  context.tenantName = getLocalStorageItem('selected_tenant_name') || undefined;
   context.currentPath = window.location?.pathname;
   const routeMeta = deriveRouteContext(context.currentPath || '/');
   context.routeName = routeMeta.routeName;
