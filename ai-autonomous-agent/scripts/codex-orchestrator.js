@@ -41,17 +41,23 @@ ${target}
 
 fs.writeFileSync(`${baseStateDir}/codex-prompt.txt`,prompt)
 
-const result=spawnSync(
-"bash",
-["-c",`cat ${baseStateDir}/codex-prompt.txt | codex exec`],
-{
-stdio:"inherit",
-timeout:600000
-}
+const result = spawnSync(
+  "bash",
+  ["-c", `cat ${baseStateDir}/codex-prompt.txt | codex exec`],
+  {
+    encoding: "utf8",
+    timeout: 600000
+  }
 )
+
+fs.writeFileSync(`${baseStateDir}/codex-output.txt`, result.stdout ?? "")
 
 if(result.status!==0){
 process.exit(1)
 }
 
-execFileSync("aider",[target],{stdio:"inherit"})
+execFileSync(
+  "aider",
+  ["--message-file", `${baseStateDir}/codex-output.txt`, target],
+  { stdio:"inherit" }
+)
