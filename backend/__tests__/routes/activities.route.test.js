@@ -120,3 +120,16 @@ after(async () => {
   const json = await res.json();
   assert.equal(json.status, 'error');
 });
+
+(SHOULD_RUN ? test : test.skip)(
+  'GET /api/v2/activities with non-resolvable assigned_to email does not 500',
+  async () => {
+    const res = await fetch(
+      `${API_BASE}?tenant_id=${TENANT_ID}&assigned_to=nonexistent-user@example.com`,
+      { headers: getAuthHeaders() },
+    );
+    assert.equal(res.status, 200, 'expected 200 even when email cannot be resolved');
+    const json = await res.json();
+    assert.equal(json.status, 'success');
+  },
+);

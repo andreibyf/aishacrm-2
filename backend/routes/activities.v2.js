@@ -11,9 +11,9 @@ import { sanitizeUuidInput } from '../lib/uuidValidator.js';
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Look up the name and email for a related entity (lead, contact, account, opportunity)
+ * Look up the name and email for a related entity (lead, contact, account, opportunity, bizdev_source)
  * @param {object} supabase - Supabase client
- * @param {string} relatedTo - Entity type ('lead', 'contact', 'account', 'opportunity')
+ * @param {string} relatedTo - Entity type ('lead', 'contact', 'account', 'opportunity', 'bizdev_source')
  * @param {string} relatedId - Entity UUID
  * @returns {Promise<{name: string|null, email: string|null}>}
  */
@@ -26,6 +26,10 @@ async function lookupRelatedEntity(supabase, relatedTo, relatedId) {
     contact: { table: 'contacts', select: 'company, first_name, last_name, email' },
     account: { table: 'accounts', select: 'name, email, phone' },
     opportunity: { table: 'opportunities', select: 'name' },
+    bizdev_source: {
+      table: 'bizdev_sources',
+      select: 'company_name, first_name, last_name, email',
+    },
   };
 
   const config = entityConfig[relatedTo];
@@ -49,13 +53,14 @@ async function lookupRelatedEntity(supabase, relatedTo, relatedId) {
 
     // Build name based on entity type (B2B: show company + contact for leads)
     let name = null;
-    if (relatedTo === 'lead') {
-      // B2B Leads: "Company Name (Contact Name)" format
+    if (relatedTo === 'lead' || relatedTo === 'bizdev_source') {
+      // B2B Leads/BizDev: "Company Name (Contact Name)" format
       const personName = `${data.first_name || ''} ${data.last_name || ''}`.trim();
-      if (data.company && personName) {
-        name = `${data.company} (${personName})`;
+      const companyField = data.company || data.company_name;
+      if (companyField && personName) {
+        name = `${companyField} (${personName})`;
       } else {
-        name = data.company || personName || null;
+        name = companyField || personName || null;
       }
     } else if (relatedTo === 'contact') {
       // Contacts: full name, fall back to company
@@ -215,26 +220,35 @@ export default function createActivityV2Routes(_pgPool) {
 
     // If it looks like an email, try to look up the user/employee
     if (assignedTo.includes('@')) {
-      // Try employees table first (for CRM-specific employee records)
-      const { data: employee } = await supabase
-        .from('employees')
-        .select('id')
-        .eq('tenant_id', tenantId)
-        .eq('email', assignedTo)
-        .limit(1)
-        .maybeSingle();
+      const normalizedEmail = assignedTo.toLowerCase().trim();
+      try {
+        // Try employees table first (for CRM-specific employee records)
+        const { data: employee } = await supabase
+          .from('employees')
+          .select('id')
+          .eq('tenant_id', tenantId)
+          .eq('email', normalizedEmail)
+          .limit(1)
+          .maybeSingle();
 
-      if (employee?.id) return employee.id;
+        if (employee?.id) return employee.id;
 
-      // Fallback: try users table
-      const { data: user } = await supabase
-        .from('users')
-        .select('id')
-        .eq('email', assignedTo)
-        .limit(1)
-        .maybeSingle();
+        // Fallback: try users table
+        const { data: user } = await supabase
+          .from('users')
+          .select('id')
+          .eq('email', normalizedEmail)
+          .limit(1)
+          .maybeSingle();
 
-      if (user?.id) return user.id;
+        if (user?.id) return user.id;
+      } catch (err) {
+        logger.warn('[Activities] resolveAssignedTo lookup failed:', {
+          assignedTo,
+          error: err.message,
+        });
+        return null;
+      }
     }
 
     return null; // Not resolvable
