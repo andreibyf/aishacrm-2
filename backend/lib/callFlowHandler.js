@@ -1411,24 +1411,28 @@ function extractBasicPatterns(transcript) {
 
   const lowerTranscript = transcript.toLowerCase();
 
-  // Detect sentiment from common phrases
-  if (
-    lowerTranscript.includes('great') ||
-    lowerTranscript.includes('excellent') ||
-    lowerTranscript.includes('thank you')
-  ) {
+  // Pattern definitions
+  const POSITIVE_PHRASES = ['great', 'excellent', 'thank you'];
+  const NEGATIVE_PHRASES = ['disappointed', 'frustrated', 'issue'];
+  const SEND_TRIGGERS = ['send me', 'email me'];
+  const CALLBACK_TRIGGERS = ['call me back', 'follow up'];
+  const MEETING_TRIGGERS = ['schedule', 'meeting', 'appointment'];
+  const COMMITMENT_TRIGGERS = ['i will', 'we will', "i'll"];
+  const SENT_TRIGGERS = ['i sent', 'sent you', 'emailed you'];
+  const SCHEDULED_TRIGGERS = ['scheduled', 'booked', 'set up the meeting'];
+  const FOLLOWUP_TRIGGERS = ['following up', 'as promised'];
+  const PROPOSAL_TRIGGERS = ['sent the proposal', 'sent the quote'];
+  const QUESTION_TRIGGERS = ['can you', 'could you'];
+
+  // Detect sentiment
+  if (POSITIVE_PHRASES.some((phrase) => lowerTranscript.includes(phrase))) {
     sentiment = 'positive';
-  } else if (
-    lowerTranscript.includes('disappointed') ||
-    lowerTranscript.includes('frustrated') ||
-    lowerTranscript.includes('issue')
-  ) {
+  } else if (NEGATIVE_PHRASES.some((phrase) => lowerTranscript.includes(phrase))) {
     sentiment = 'negative';
   }
 
   // Extract follow-up requests
-  // Avoids nested quantifiers (CodeQL ReDoS) by using string ops instead of a single regex.
-  if (lowerTranscript.includes('send me') || lowerTranscript.includes('email me')) {
+  if (SEND_TRIGGERS.some((trigger) => lowerTranscript.includes(trigger))) {
     const prefixMatch = transcript.match(/send(?:ing)?\s+(?:me\s+)?/i);
     if (prefixMatch) {
       const afterSend = transcript.substring(prefixMatch.index + prefixMatch[0].length);
@@ -1448,7 +1452,7 @@ function extractBasicPatterns(transcript) {
   }
 
   // Extract callback requests
-  if (lowerTranscript.includes('call me back') || lowerTranscript.includes('follow up')) {
+  if (CALLBACK_TRIGGERS.some((trigger) => lowerTranscript.includes(trigger))) {
     actionItems.push({
       task: 'Follow up call',
       priority: 'medium',
@@ -1458,11 +1462,7 @@ function extractBasicPatterns(transcript) {
   }
 
   // Extract meeting/appointment requests
-  if (
-    lowerTranscript.includes('schedule') ||
-    lowerTranscript.includes('meeting') ||
-    lowerTranscript.includes('appointment')
-  ) {
+  if (MEETING_TRIGGERS.some((trigger) => lowerTranscript.includes(trigger))) {
     actionItems.push({
       task: 'Schedule meeting',
       priority: 'high',
@@ -1472,12 +1472,8 @@ function extractBasicPatterns(transcript) {
     customerRequests.push('Requested meeting/appointment');
   }
 
-  // Extract commitments (what was promised)
-  if (
-    lowerTranscript.includes('i will') ||
-    lowerTranscript.includes('we will') ||
-    lowerTranscript.includes("i'll")
-  ) {
+  // Extract commitments
+  if (COMMITMENT_TRIGGERS.some((trigger) => lowerTranscript.includes(trigger))) {
     const commitmentMatch = transcript.match(/(?:i will|we will|i'll|we'll)\s+([^.!?]+)/gi);
     if (commitmentMatch) {
       commitmentMatch.forEach((commit) => {
@@ -1486,39 +1482,27 @@ function extractBasicPatterns(transcript) {
     }
   }
 
-  // Detect fulfilled actions (past tense = already done)
+  // Detect fulfilled actions
   const fulfilledActions = [];
 
-  // Sent email/information
-  if (
-    lowerTranscript.includes('i sent') ||
-    lowerTranscript.includes('sent you') ||
-    lowerTranscript.includes('emailed you')
-  ) {
+  if (SENT_TRIGGERS.some((trigger) => lowerTranscript.includes(trigger))) {
     fulfilledActions.push({ type: 'email', action: 'sent information' });
   }
 
-  // Scheduled meeting
-  if (
-    lowerTranscript.includes('scheduled') ||
-    lowerTranscript.includes('booked') ||
-    lowerTranscript.includes('set up the meeting')
-  ) {
+  if (SCHEDULED_TRIGGERS.some((trigger) => lowerTranscript.includes(trigger))) {
     fulfilledActions.push({ type: 'meeting', action: 'scheduled meeting' });
   }
 
-  // Completed follow-up
-  if (lowerTranscript.includes('following up') || lowerTranscript.includes('as promised')) {
+  if (FOLLOWUP_TRIGGERS.some((trigger) => lowerTranscript.includes(trigger))) {
     fulfilledActions.push({ type: 'call', action: 'follow-up call completed' });
   }
 
-  // Sent proposal/quote
-  if (lowerTranscript.includes('sent the proposal') || lowerTranscript.includes('sent the quote')) {
+  if (PROPOSAL_TRIGGERS.some((trigger) => lowerTranscript.includes(trigger))) {
     fulfilledActions.push({ type: 'email', action: 'sent proposal' });
   }
 
-  // Extract questions to be answered
-  if (lowerTranscript.includes('can you') || lowerTranscript.includes('could you')) {
+  // Extract questions
+  if (QUESTION_TRIGGERS.some((trigger) => lowerTranscript.includes(trigger))) {
     const questionMatch = transcript.match(/(?:can you|could you)\s+([^.!?]+)/gi);
     if (questionMatch) {
       questionMatch.forEach((q) => {
@@ -1527,7 +1511,7 @@ function extractBasicPatterns(transcript) {
     }
   }
 
-  // Default action items if none found
+  // Default action item if none found
   if (actionItems.length === 0) {
     actionItems.push({
       task: 'Follow up with customer',

@@ -64,6 +64,13 @@ export const TOOL_CACHE_TTL = {
  * @returns {string} Cache key
  */
 export function generateBraidCacheKey(toolName, tenantId, args) {
+  if (typeof tenantId !== 'string' || tenantId.length === 0) {
+    throw new Error('Invalid tenantId: must be a non-empty string');
+  }
+  if (typeof args !== 'object' || args === null) {
+    throw new Error('Invalid args: must be a valid object');
+  }
+
   // Create a hash of the args to keep key length manageable
   const argsHash = crypto
     .createHash('sha256')
