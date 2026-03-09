@@ -141,8 +141,8 @@ export default function createEmployeeRoutes(_pgPool) {
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
-      const lim = parseInt(limit);
-      const off = parseInt(offset);
+      const lim = parseInt(limit, 10) || 50;
+      const off = parseInt(offset, 10) || 0;
       const from = off;
       const to = off + lim - 1;
 
@@ -419,10 +419,14 @@ export default function createEmployeeRoutes(_pgPool) {
               .update({ metadata: linkMeta })
               .eq('id', data.id)
               .eq('tenant_id', tenant_id);
-            logger.info(`[EmployeeRoutes] Linked employee ${data.id} to existing user ${linkedUser.id} (${linkedUser.email})`);
+            logger.info(
+              `[EmployeeRoutes] Linked employee ${data.id} to existing user ${linkedUser.id} (${linkedUser.email})`,
+            );
             invitation_sent = true; // Already has auth access via linked user
           } else {
-            logger.warn(`[EmployeeRoutes] linked_user_id ${linkedUserId} not found, falling through`);
+            logger.warn(
+              `[EmployeeRoutes] linked_user_id ${linkedUserId} not found, falling through`,
+            );
           }
         } catch (linkErr) {
           logger.error('[EmployeeRoutes] Link-existing-user error:', linkErr);

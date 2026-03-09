@@ -1,5 +1,5 @@
-import express from "express";
-import { sanitizeUuidInput } from "../lib/uuidValidator.js";
+import express from 'express';
+import { sanitizeUuidInput } from '../lib/uuidValidator.js';
 import { cacheList, invalidateTenantCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 
@@ -55,7 +55,7 @@ export default function createSystemLogRoutes(_pgPool) {
    *             schema:
    *               $ref: '#/components/schemas/Success'
    */
-  router.post("/", async (req, res) => {
+  router.post('/', async (req, res) => {
     try {
       const {
         tenant_id,
@@ -76,7 +76,7 @@ export default function createSystemLogRoutes(_pgPool) {
       if (!effectiveTenantId && req.user?.tenant_id) {
         effectiveTenantId = req.user.tenant_id; // Use authenticated user's tenant
       }
-      
+
       // Sanitize to handle 'system' alias → NULL for UUID columns
       effectiveTenantId = sanitizeUuidInput(effectiveTenantId);
 
@@ -92,16 +92,35 @@ export default function createSystemLogRoutes(_pgPool) {
       if (url) combinedMetadata.url = url;
 
       // Ensure message is a non-empty string
-      const safeMessage = (typeof message === 'string' && message.trim() !== '')
-        ? message
-        : (message == null ? '(no message)' : (() => { try { return JSON.stringify(message); } catch { return String(message); } })());
+      const safeMessage =
+        typeof message === 'string' && message.trim() !== ''
+          ? message
+          : message == null
+            ? '(no message)'
+            : (() => {
+                try {
+                  return JSON.stringify(message);
+                } catch {
+                  return String(message);
+                }
+              })();
 
       const nowIso = new Date().toISOString();
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
         .from('system_logs')
-        .insert([{ tenant_id: effectiveTenantId, level: level || 'INFO', message: safeMessage, source, metadata: combinedMetadata, stack_trace, created_at: nowIso }])
+        .insert([
+          {
+            tenant_id: effectiveTenantId,
+            level: level || 'INFO',
+            message: safeMessage,
+            source,
+            metadata: combinedMetadata,
+            stack_trace,
+            created_at: nowIso,
+          },
+        ])
         .select('*')
         .single();
       if (error) throw new Error(error.message);
@@ -109,13 +128,13 @@ export default function createSystemLogRoutes(_pgPool) {
       const systemLog = expandMetadata(data);
 
       res.status(201).json({
-        status: "success",
+        status: 'success',
         data: systemLog,
       });
     } catch (error) {
-      logger.error("Error creating system log:", error);
+      logger.error('Error creating system log:', error);
       res.status(500).json({
-        status: "error",
+        status: 'error',
         message: error.message,
       });
     }
@@ -124,7 +143,7 @@ export default function createSystemLogRoutes(_pgPool) {
   // BULK INSERT endpoint to reduce per-log network overhead (client batches)
   // Accepts: { entries: [ { tenant_id, level, message, source, user_email, metadata, user_agent, url, stack_trace } ] }
   // Returns: { inserted: count }
-  
+
   // Explicit OPTIONS handler for /bulk to ensure CORS preflight works
   // While app.options('/api/*') handles most routes, this ensures the specific
   // /bulk endpoint responds properly to preflight requests from browsers
@@ -137,36 +156,38 @@ export default function createSystemLogRoutes(_pgPool) {
       // express.json() behavior: sets req.body to {} for empty/no body, or parsed JSON
       // Using || {} defensive pattern to handle edge cases
       const { entries } = req.body || {};
-      
+
       // Validate entries array
       if (!entries) {
         logger.warn('[System Logs Bulk] Request received with no entries field');
         return res.status(400).json({ status: 'error', message: 'entries field is required' });
       }
-      
+
       if (!Array.isArray(entries)) {
         logger.warn('[System Logs Bulk] entries field is not an array:', typeof entries);
         return res.status(400).json({ status: 'error', message: 'entries must be an array' });
       }
-      
+
       if (entries.length === 0) {
         logger.debug('[System Logs Bulk] Empty entries array received');
-        return res.status(200).json({ 
-          status: 'success', 
+        return res.status(200).json({
+          status: 'success',
           data: { inserted_count: 0 },
-          message: 'No entries to insert'
+          message: 'No entries to insert',
         });
       }
 
       // Cap batch size defensively to avoid oversized payloads
       const slice = entries.slice(0, MAX_BULK_BATCH_SIZE);
-      
+
       if (entries.length > MAX_BULK_BATCH_SIZE) {
-        logger.warn(`[System Logs Bulk] Batch size ${entries.length} exceeds max ${MAX_BULK_BATCH_SIZE}, truncating`);
+        logger.warn(
+          `[System Logs Bulk] Batch size ${entries.length} exceeds max ${MAX_BULK_BATCH_SIZE}, truncating`,
+        );
       }
 
       const nowIso = new Date().toISOString();
-      const rows = slice.map(e => {
+      const rows = slice.map((e) => {
         const {
           tenant_id,
           level,
@@ -185,17 +206,26 @@ export default function createSystemLogRoutes(_pgPool) {
         if (!effectiveTenantId && req.user?.tenant_id) {
           effectiveTenantId = req.user.tenant_id; // Use authenticated user's tenant
         }
-        
+
         // Sanitize to handle 'system' alias → NULL for UUID columns
         effectiveTenantId = sanitizeUuidInput(effectiveTenantId);
-        
+
         const combinedMetadata = { ...(metadata || {}), ...otherFields };
         if (user_email) combinedMetadata.user_email = user_email;
         if (user_agent) combinedMetadata.user_agent = user_agent;
         if (url) combinedMetadata.url = url;
-        const safeMessage = (typeof message === 'string' && message.trim() !== '')
-          ? message
-          : (message == null ? '(no message)' : (() => { try { return JSON.stringify(message); } catch { return String(message); } })());
+        const safeMessage =
+          typeof message === 'string' && message.trim() !== ''
+            ? message
+            : message == null
+              ? '(no message)'
+              : (() => {
+                  try {
+                    return JSON.stringify(message);
+                  } catch {
+                    return String(message);
+                  }
+                })();
         return {
           tenant_id: effectiveTenantId,
           level: level || 'INFO',
@@ -209,13 +239,13 @@ export default function createSystemLogRoutes(_pgPool) {
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
-      const { data, error } = await supabase.from('system_logs').insert(rows).select('id');
+      const { error, count } = await supabase.from('system_logs').insert(rows, { count: 'exact' });
       if (error) {
         logger.error('[System Logs Bulk] Supabase error:', error.message);
         throw new Error(error.message);
       }
 
-      const insertedCount = data?.length || 0;
+      const insertedCount = count ?? rows.length;
       logger.debug(`[System Logs Bulk] Successfully inserted ${insertedCount} log entries`);
 
       res.status(201).json({
@@ -225,11 +255,11 @@ export default function createSystemLogRoutes(_pgPool) {
     } catch (err) {
       logger.error('[System Logs Bulk] Error inserting logs:', err);
       // Ensure we always return a valid JSON response
-      res.status(500).json({ 
-        status: 'error', 
+      res.status(500).json({
+        status: 'error',
         message: err.message || 'Internal server error',
         // Don't expose stack traces in production
-        ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+        ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
       });
     }
   });
@@ -272,7 +302,7 @@ export default function createSystemLogRoutes(_pgPool) {
    *             schema:
    *               $ref: '#/components/schemas/Success'
    */
-  router.get("/", cacheList('system_logs', 120), async (req, res) => {
+  router.get('/', cacheList('system_logs', 120), async (req, res) => {
     try {
       const { tenant_id, level, limit = 100, offset = 0, hours } = req.query;
 
@@ -306,18 +336,18 @@ export default function createSystemLogRoutes(_pgPool) {
       const systemLogs = (data || []).map(expandMetadata);
 
       res.json({
-        status: "success",
+        status: 'success',
         data: {
-          "system-logs": systemLogs,
+          'system-logs': systemLogs,
           total: systemLogs.length,
           limit: parseInt(limit),
           offset: parseInt(offset),
         },
       });
     } catch (error) {
-      logger.error("Error fetching system logs:", error);
+      logger.error('Error fetching system logs:', error);
       res.status(500).json({
-        status: "error",
+        status: 'error',
         message: error.message,
       });
     }
@@ -350,7 +380,7 @@ export default function createSystemLogRoutes(_pgPool) {
    *             schema:
    *               $ref: '#/components/schemas/Error'
    */
-  router.delete("/:id", async (req, res) => {
+  router.delete('/:id', async (req, res) => {
     try {
       const { id } = req.params;
 
@@ -366,8 +396,8 @@ export default function createSystemLogRoutes(_pgPool) {
 
       if (!data) {
         return res.status(404).json({
-          status: "error",
-          message: "System log not found",
+          status: 'error',
+          message: 'System log not found',
         });
       }
 
@@ -380,14 +410,14 @@ export default function createSystemLogRoutes(_pgPool) {
       await invalidateTenantCache(null, 'system_logs');
 
       res.json({
-        status: "success",
-        message: "System log deleted",
+        status: 'success',
+        message: 'System log deleted',
         data,
       });
     } catch (error) {
-      logger.error("Error deleting system log:", error);
+      logger.error('Error deleting system log:', error);
       res.status(500).json({
-        status: "error",
+        status: 'error',
         message: error.message,
       });
     }
@@ -426,7 +456,7 @@ export default function createSystemLogRoutes(_pgPool) {
    *             schema:
    *               $ref: '#/components/schemas/Success'
    */
-  router.delete("/", async (req, res) => {
+  router.delete('/', async (req, res) => {
     try {
       const { tenant_id, level, older_than_days, hours } = req.query;
 
@@ -434,7 +464,7 @@ export default function createSystemLogRoutes(_pgPool) {
       const supabase = getSupabaseClient();
 
       let del = supabase.from('system_logs').delete();
-      
+
       // Handle tenant_id filtering - 'system' alias maps to NULL (system-wide logs)
       if (tenant_id) {
         const sanitizedTenantId = sanitizeUuidInput(tenant_id);
@@ -451,7 +481,9 @@ export default function createSystemLogRoutes(_pgPool) {
         del = del.lt('created_at', new Date().toISOString()).gte('created_at', since); // Delete logs within time range
       }
       if (older_than_days) {
-        const before = new Date(Date.now() - parseInt(older_than_days) * 24 * 60 * 60 * 1000).toISOString();
+        const before = new Date(
+          Date.now() - parseInt(older_than_days) * 24 * 60 * 60 * 1000,
+        ).toISOString();
         del = del.lt('created_at', before);
       }
 
@@ -459,7 +491,9 @@ export default function createSystemLogRoutes(_pgPool) {
       if (error) throw new Error(error.message);
 
       const deletedCount = (data || []).length;
-      logger.debug(`[System Logs] Deleted ${deletedCount} system log(s) for tenant: ${tenant_id || 'all'}`);
+      logger.debug(
+        `[System Logs] Deleted ${deletedCount} system log(s) for tenant: ${tenant_id || 'all'}`,
+      );
 
       // Invalidate cache after bulk delete
       const sanitizedTenantId = tenant_id ? sanitizeUuidInput(tenant_id) : null;
@@ -470,16 +504,16 @@ export default function createSystemLogRoutes(_pgPool) {
       await invalidateTenantCache(null, 'system_logs');
 
       res.json({
-        status: "success",
+        status: 'success',
         message: `Deleted ${deletedCount} system log(s)`,
         data: {
           deleted_count: deletedCount,
         },
       });
     } catch (error) {
-      logger.error("Error clearing system logs:", error);
+      logger.error('Error clearing system logs:', error);
       res.status(500).json({
-        status: "error",
+        status: 'error',
         message: error.message,
       });
     }
