@@ -73,8 +73,8 @@ export async function validateTenantAccess(req, res, next) {
   // - READ operations: can access ANY tenant's data (cross-tenant read access)
   // - WRITE operations: must specify a valid tenant_id (no global writes)
   //
-  // Exception: superadmin-only tool routes that don't operate on tenant data
-  // (Developer AI, approvals, health alerts) are exempt from the tenant_id requirement.
+  // Exception: certain superadmin routes that handle tenant scoping internally
+  // (Developer AI, AI profile summary) are exempt from the tenant_id requirement.
   if (user.role === 'superadmin') {
     const isReadOperation =
       req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS';
