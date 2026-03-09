@@ -184,14 +184,7 @@ tmpclaude-*
 .aider.chat.history.md
 .aider.input.history
 .aider.tags.cache.v4/
-ai-autonomous-agent/state/
-ai-autonomous-agent/state/*.txt
-ai-autonomous-agent/state/*.json
-ai-autonomous-agent/state/*.md
-ai-autonomous-agent/config.json
-ai-autonomous-agent/README.md
-ai-autonomous-agent/prompts/
-ai-autonomous-agent/scripts/
+ai-autonomous-agent/
 setup-aisha-agent.sh
 AGENTS.md
 
