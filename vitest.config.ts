@@ -28,12 +28,11 @@ const sharedConfig = {
   hookTimeout: 30000,
   teardownTimeout: 10000,
   passWithNoTests: true,
-  pool: "forks" as const,
+  pool: "threads" as const,
   poolOptions: {
-    forks: {
-      singleFork: false,
+    threads: {
+      singleThread: false,
       isolate: true,
-      execArgv: ["--no-warnings=ExperimentalWarning"],
     },
   },
   onConsoleLog: () => true,
@@ -55,6 +54,7 @@ export default defineConfig({
       {
         // AiSHA chat, voice, NLU, AI engine — anything under src/ai/ or src/__tests__/ai/
         name: "aisha",
+        plugins: [react()],
         test: {
           ...sharedConfig,
           include: [
@@ -69,6 +69,7 @@ export default defineConfig({
       {
         // CRM entities: leads, contacts, accounts, opportunities, activities, bizdev
         name: "crm",
+        plugins: [react()],
         test: {
           ...sharedConfig,
           include: [
@@ -95,6 +96,7 @@ export default defineConfig({
       {
         // Reports, analytics, forecasting, PEP query
         name: "reports",
+        plugins: [react()],
         test: {
           ...sharedConfig,
           include: [
@@ -108,6 +110,7 @@ export default defineConfig({
       {
         // Workflows and automation
         name: "workflows",
+        plugins: [react()],
         test: {
           ...sharedConfig,
           include: [
@@ -124,6 +127,7 @@ export default defineConfig({
       {
         // Integrations (file upload, WhatsApp, webhooks, etc.)
         name: "integrations",
+        plugins: [react()],
         test: {
           ...sharedConfig,
           include: [
@@ -136,6 +140,7 @@ export default defineConfig({
       {
         // Platform-level: shared components, hooks, utils, lib, settings
         name: "platform",
+        plugins: [react()],
         test: {
           ...sharedConfig,
           include: [

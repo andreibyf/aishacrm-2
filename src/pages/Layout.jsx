@@ -1,10 +1,6 @@
 import '@/styles/layout-theme.css';
 import { logDev } from '@/utils/devLogger';
-import {
-  isSuperAdmin,
-  isAdminOrSuperAdmin,
-  hasPageAccess,
-} from '@/utils/permissions';
+import { isSuperAdmin, isAdminOrSuperAdmin, hasPageAccess } from '@/utils/permissions';
 import SidebarContent from '@/components/layout/SidebarContent';
 import { useBranding } from '@/hooks/useBranding';
 import { useAiAvatarPositioning } from '@/hooks/useAiAvatarPositioning';
@@ -15,15 +11,8 @@ import { createPageUrl } from '@/utils';
 import PasswordChangeModal from '@/components/auth/PasswordChangeModal';
 import EnvironmentBanner from '@/components/shared/EnvironmentBanner';
 import { getBackendUrl } from '@/api/backendUrl';
-import {
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from '@dnd-kit/core';
-import {
-  sortableKeyboardCoordinates,
-} from '@dnd-kit/sortable';
+import { KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { usePrimaryNavOrder, useSecondaryNavOrder } from '@/hooks/useNavOrder';
 import { EntityLabelsProvider } from '@/components/shared/EntityLabelsContext';
 import { useEntityLabels } from '@/components/shared/entityLabelsHooks';
@@ -154,7 +143,7 @@ const secondaryNavItems = [
   }, // NEW: Added Client Requirements
 ];
 
-const UserNav = ({ user, handleLogout, createPageUrl }) => {
+const UserNav = ({ user, handleLogout, createPageUrl, compact = false }) => {
   const getUserDisplayName = () => {
     if (user?.display_name) return user.display_name;
     if (user?.full_name) return user.full_name;
@@ -176,13 +165,18 @@ const UserNav = ({ user, handleLogout, createPageUrl }) => {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="flex items-center gap-2 p-1.5 hover:bg-slate-700">
+        <Button
+          variant="ghost"
+          className={`flex items-center hover:bg-slate-700 ${compact ? 'gap-0 p-1' : 'gap-2 p-1.5'}`}
+        >
           <div className="w-8 h-8 bg-slate-200 rounded-full flex items-center justify-center">
             <span className="text-sm font-medium text-slate-600">
               {displayName?.charAt(0)?.toUpperCase() || 'A'}
             </span>
           </div>
-          <span className="text-sm font-semibold leading-6 text-slate-200">{displayName}</span>
+          {!compact && (
+            <span className="text-sm font-semibold leading-6 text-slate-200">{displayName}</span>
+          )}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="bg-slate-800 border-slate-700">
@@ -1760,20 +1754,21 @@ function Layout({ children, currentPageName }) {
 
           {/* 3D Network Globe & Subdued Halo */}
           <div className="absolute top-1/2 left-1/2 lg:left-[70%] -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] pointer-events-auto">
-             {/* Subdued Halo Background */}
-             <div
-               className="absolute inset-0"
-               style={{
-                 background: 'radial-gradient(circle at center, rgba(34,211,238,0.04) 0%, rgba(163,230,53,0.015) 45%, transparent 70%)',
-                 filter: 'blur(20px)',
-                 borderRadius: '50%',
-               }}
-             />
-             
-             {/* The Globe Canvas layer */}
-             <div className="absolute inset-0 opacity-90 mix-blend-screen overflow-visible">
-                 <NetworkGlobe logoUrl={displayedLogoUrl || '/assets/Ai-SHA-logo-2.png'} />
-             </div>
+            {/* Subdued Halo Background */}
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  'radial-gradient(circle at center, rgba(34,211,238,0.04) 0%, rgba(163,230,53,0.015) 45%, transparent 70%)',
+                filter: 'blur(20px)',
+                borderRadius: '50%',
+              }}
+            />
+
+            {/* The Globe Canvas layer */}
+            <div className="absolute inset-0 opacity-90 mix-blend-screen overflow-visible">
+              <NetworkGlobe logoUrl={displayedLogoUrl || '/assets/Ai-SHA-logo-2.png'} />
+            </div>
           </div>
         </div>
 
@@ -1794,273 +1789,295 @@ function Layout({ children, currentPageName }) {
             }}
           >
             {/* Accent gradient strip */}
-          <div
-            className="h-1 w-full"
-            style={{ background: 'linear-gradient(90deg, #22d3ee, #0284c7, #a3e635)' }}
-          />
+            <div
+              className="h-1 w-full"
+              style={{ background: 'linear-gradient(90deg, #22d3ee, #0284c7, #a3e635)' }}
+            />
 
-          <div className="p-8">
-            {/* Badge */}
-            <div className="flex justify-center mb-5">
-              <span
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold tracking-[0.15em] uppercase"
-                style={{
-                  background: 'rgba(34, 211, 238, 0.1)',
-                  border: '1px solid rgba(34, 211, 238, 0.25)',
-                  color: '#22d3ee',
-                }}
-              >
-                ✦ Cognitive Relationship Management
-              </span>
-            </div>
-
-            {/* Logo + heading */}
-            <div className="text-center mb-6">
-              <h2 className="text-2xl font-bold text-white mb-1">
-                Welcome to{' '}
+            <div className="p-8">
+              {/* Badge */}
+              <div className="flex justify-center mb-5">
                 <span
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold tracking-[0.15em] uppercase"
                   style={{
-                    background: 'linear-gradient(90deg, #a3e635, #22d3ee)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
+                    background: 'rgba(34, 211, 238, 0.1)',
+                    border: '1px solid rgba(34, 211, 238, 0.25)',
+                    color: '#22d3ee',
                   }}
                 >
-                  Ai-SHA
+                  ✦ Cognitive Relationship Management
                 </span>
-              </h2>
-              <p className="text-slate-400 text-sm">Sign in to your executive assistant</p>
+              </div>
 
-              {/* Environment indicator on login page */}
-              {(() => {
-                const backendUrl =
-                  window._env_?.VITE_AISHACRM_BACKEND_URL ||
-                  import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-                  '';
-                const supabaseUrl =
-                  window._env_?.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
-                const isDev = backendUrl.includes('localhost') || backendUrl.includes('127.0.0.1');
-                const isDevDb = supabaseUrl.includes('efzqxjpfewkrgpdootte');
-                const isProdDb = supabaseUrl.includes('ehjlenywplgyiahgxkfj');
+              {/* Logo + heading */}
+              <div className="text-center mb-6">
+                <h2 className="text-2xl font-bold text-white mb-1">
+                  Welcome to{' '}
+                  <span
+                    style={{
+                      background: 'linear-gradient(90deg, #a3e635, #22d3ee)',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                    }}
+                  >
+                    Ai-SHA
+                  </span>
+                </h2>
+                <p className="text-slate-400 text-sm">Sign in to your executive assistant</p>
 
-                let envLabel = null;
-                let envStyle = {};
-
-                if (isDev && isDevDb) {
-                  envLabel = '🔵 DEVELOPMENT ENVIRONMENT';
-                  envStyle = { background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)', color: '#93c5fd' };
-                } else if (isDev && isProdDb) {
-                  envLabel = '⚠️ LOCAL + PRODUCTION DATABASE';
-                  envStyle = { background: 'rgba(249,115,22,0.1)', border: '1px solid rgba(249,115,22,0.3)', color: '#fdba74' };
-                } else if (!isDev && isDevDb) {
-                  envLabel = '🟡 STAGING ENVIRONMENT';
-                  envStyle = { background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.3)', color: '#fde047' };
-                }
-
-                return envLabel ? (
-                  <div className="mt-4 p-3 rounded-lg" style={envStyle}>
-                    <p className="text-sm font-bold text-center">{envLabel}</p>
-                  </div>
-                ) : null;
-              })()}
-
-              {/* Password reset success message */}
-              {new URLSearchParams(window.location.search).get('reset') === 'success' && (
-                <div
-                  className="mt-4 p-3 rounded-lg"
-                  style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)' }}
-                >
-                  <p className="text-sm text-center" style={{ color: '#86efac' }}>
-                    ✓ Password updated successfully! Please sign in with your new password.
-                  </p>
-                </div>
-              )}
-
-              {/* Session expired message */}
-              {new URLSearchParams(window.location.search).get('session_expired') === 'true' && (
-                <div
-                  className="mt-4 p-3 rounded-lg"
-                  style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)' }}
-                >
-                  <p className="text-sm text-center" style={{ color: '#fcd34d' }}>
-                    ⚠️ Your session has expired. Please sign in again.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                const email = e.target.email.value;
-                const password = e.target.password.value;
-
-                try {
-                  logDev('[Login] Attempting Supabase auth login:', email);
-                  const { error } = await supabase.auth.signInWithPassword({
-                    email,
-                    password,
-                  });
-                  if (error) {
-                    throw error;
-                  }
-                  logDev('[Login] Supabase auth successful, calling backend login...');
-
+                {/* Environment indicator on login page */}
+                {(() => {
                   const backendUrl =
                     window._env_?.VITE_AISHACRM_BACKEND_URL ||
                     import.meta.env.VITE_AISHACRM_BACKEND_URL ||
                     '';
-                  const loginResponse = await fetch(`${backendUrl}/api/auth/login`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify({ email, password }),
-                  });
+                  const supabaseUrl =
+                    window._env_?.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+                  const isDev =
+                    backendUrl.includes('localhost') || backendUrl.includes('127.0.0.1');
+                  const isDevDb = supabaseUrl.includes('efzqxjpfewkrgpdootte');
+                  const isProdDb = supabaseUrl.includes('ehjlenywplgyiahgxkfj');
 
-                  if (!loginResponse.ok) {
-                    throw new Error(`Backend login failed: ${loginResponse.status}`);
+                  let envLabel = null;
+                  let envStyle = {};
+
+                  if (isDev && isDevDb) {
+                    envLabel = '🔵 DEVELOPMENT ENVIRONMENT';
+                    envStyle = {
+                      background: 'rgba(59,130,246,0.1)',
+                      border: '1px solid rgba(59,130,246,0.3)',
+                      color: '#93c5fd',
+                    };
+                  } else if (isDev && isProdDb) {
+                    envLabel = '⚠️ LOCAL + PRODUCTION DATABASE';
+                    envStyle = {
+                      background: 'rgba(249,115,22,0.1)',
+                      border: '1px solid rgba(249,115,22,0.3)',
+                      color: '#fdba74',
+                    };
+                  } else if (!isDev && isDevDb) {
+                    envLabel = '🟡 STAGING ENVIRONMENT';
+                    envStyle = {
+                      background: 'rgba(234,179,8,0.1)',
+                      border: '1px solid rgba(234,179,8,0.3)',
+                      color: '#fde047',
+                    };
                   }
 
-                  const loginData = await loginResponse.json();
-                  const tenant_id = loginData.data?.user?.tenant_id;
+                  return envLabel ? (
+                    <div className="mt-4 p-3 rounded-lg" style={envStyle}>
+                      <p className="text-sm font-bold text-center">{envLabel}</p>
+                    </div>
+                  ) : null;
+                })()}
 
-                  logDev('[Login] Login response data:', {
-                    tenant_id,
-                    hasUser: !!loginData.data?.user,
-                    userKeys: Object.keys(loginData.data?.user || {}),
-                  });
+                {/* Password reset success message */}
+                {new URLSearchParams(window.location.search).get('reset') === 'success' && (
+                  <div
+                    className="mt-4 p-3 rounded-lg"
+                    style={{
+                      background: 'rgba(34,197,94,0.1)',
+                      border: '1px solid rgba(34,197,94,0.3)',
+                    }}
+                  >
+                    <p className="text-sm text-center" style={{ color: '#86efac' }}>
+                      ✓ Password updated successfully! Please sign in with your new password.
+                    </p>
+                  </div>
+                )}
 
-                  if (tenant_id) {
-                    try {
-                      const cacheResponse = await fetch(`${backendUrl}/api/reports/clear-cache`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        credentials: 'include',
-                        body: JSON.stringify({ tenant_id }),
-                      });
-                      const cacheResult = await cacheResponse.json();
-                      logDev('[Login] Dashboard cache cleared:', cacheResult);
-                    } catch (cacheErr) {
-                      console.warn('[Login] Failed to clear cache (non-critical):', cacheErr);
+                {/* Session expired message */}
+                {new URLSearchParams(window.location.search).get('session_expired') === 'true' && (
+                  <div
+                    className="mt-4 p-3 rounded-lg"
+                    style={{
+                      background: 'rgba(245,158,11,0.1)',
+                      border: '1px solid rgba(245,158,11,0.3)',
+                    }}
+                  >
+                    <p className="text-sm text-center" style={{ color: '#fcd34d' }}>
+                      ⚠️ Your session has expired. Please sign in again.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const email = e.target.email.value;
+                  const password = e.target.password.value;
+
+                  try {
+                    logDev('[Login] Attempting Supabase auth login:', email);
+                    const { error } = await supabase.auth.signInWithPassword({
+                      email,
+                      password,
+                    });
+                    if (error) {
+                      throw error;
                     }
-                  } else {
-                    console.warn(
-                      '[Login] No tenant_id found in login response, skipping cache clear',
-                    );
+                    logDev('[Login] Supabase auth successful, calling backend login...');
+
+                    const backendUrl =
+                      window._env_?.VITE_AISHACRM_BACKEND_URL ||
+                      import.meta.env.VITE_AISHACRM_BACKEND_URL ||
+                      '';
+                    const loginResponse = await fetch(`${backendUrl}/api/auth/login`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      credentials: 'include',
+                      body: JSON.stringify({ email, password }),
+                    });
+
+                    if (!loginResponse.ok) {
+                      throw new Error(`Backend login failed: ${loginResponse.status}`);
+                    }
+
+                    const loginData = await loginResponse.json();
+                    const tenant_id = loginData.data?.user?.tenant_id;
+
+                    logDev('[Login] Login response data:', {
+                      tenant_id,
+                      hasUser: !!loginData.data?.user,
+                      userKeys: Object.keys(loginData.data?.user || {}),
+                    });
+
+                    if (tenant_id) {
+                      try {
+                        const cacheResponse = await fetch(`${backendUrl}/api/reports/clear-cache`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          credentials: 'include',
+                          body: JSON.stringify({ tenant_id }),
+                        });
+                        const cacheResult = await cacheResponse.json();
+                        logDev('[Login] Dashboard cache cleared:', cacheResult);
+                      } catch (cacheErr) {
+                        console.warn('[Login] Failed to clear cache (non-critical):', cacheErr);
+                      }
+                    } else {
+                      console.warn(
+                        '[Login] No tenant_id found in login response, skipping cache clear',
+                      );
+                    }
+
+                    logDev('[Login] Backend login successful, reloading...');
+                    window.location.reload();
+                  } catch (error) {
+                    console.error('[Login] Login failed:', error);
+                    alert('Login failed: ' + (error?.message || 'Unknown error'));
                   }
-
-                  logDev('[Login] Backend login successful, reloading...');
-                  window.location.reload();
-                } catch (error) {
-                  console.error('[Login] Login failed:', error);
-                  alert('Login failed: ' + (error?.message || 'Unknown error'));
-                }
-              }}
-            >
-              <div className="mb-4">
-                <label className="block text-slate-300 text-sm font-medium mb-2" htmlFor="email">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  id="email"
-                  name="email"
-                  required
-                  autoComplete="email"
-                  autoFocus
-                  className="w-full px-4 py-3 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 transition-colors"
-                  style={{
-                    background: 'rgba(30, 41, 59, 0.6)',
-                    border: '1px solid rgba(100, 116, 139, 0.3)',
-                    '--tw-ring-color': '#22d3ee',
-                  }}
-                  placeholder="your-email@example.com"
-                />
-              </div>
-
-              <div className="mb-6">
-                <label className="block text-slate-300 text-sm font-medium mb-2" htmlFor="password">
-                  Password
-                </label>
-                <input
-                  type="password"
-                  id="password"
-                  name="password"
-                  required
-                  autoComplete="current-password"
-                  className="w-full px-4 py-3 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 transition-colors"
-                  style={{
-                    background: 'rgba(30, 41, 59, 0.6)',
-                    border: '1px solid rgba(100, 116, 139, 0.3)',
-                    '--tw-ring-color': '#22d3ee',
-                  }}
-                  placeholder="Enter your password"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full text-white px-4 py-3 rounded-lg transition-all font-semibold text-base hover:brightness-110 hover:shadow-lg"
-                style={{
-                  background: 'linear-gradient(90deg, #22d3ee, #0284c7)',
-                  boxShadow: '0 4px 20px rgba(34, 211, 238, 0.3)',
                 }}
               >
-                Sign In
-              </button>
+                <div className="mb-4">
+                  <label className="block text-slate-300 text-sm font-medium mb-2" htmlFor="email">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    required
+                    autoComplete="email"
+                    autoFocus
+                    className="w-full px-4 py-3 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 transition-colors"
+                    style={{
+                      background: 'rgba(30, 41, 59, 0.6)',
+                      border: '1px solid rgba(100, 116, 139, 0.3)',
+                      '--tw-ring-color': '#22d3ee',
+                    }}
+                    placeholder="your-email@example.com"
+                  />
+                </div>
 
-              <div className="mt-3 text-center">
+                <div className="mb-6">
+                  <label
+                    className="block text-slate-300 text-sm font-medium mb-2"
+                    htmlFor="password"
+                  >
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    id="password"
+                    name="password"
+                    required
+                    autoComplete="current-password"
+                    className="w-full px-4 py-3 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 transition-colors"
+                    style={{
+                      background: 'rgba(30, 41, 59, 0.6)',
+                      border: '1px solid rgba(100, 116, 139, 0.3)',
+                      '--tw-ring-color': '#22d3ee',
+                    }}
+                    placeholder="Enter your password"
+                  />
+                </div>
+
                 <button
-                  type="button"
-                  onClick={async (e) => {
-                    e.preventDefault();
-                    const emailInput = document.getElementById('email');
-                    const email = emailInput?.value?.trim();
-                    if (!email) {
-                      alert('Enter your email above first.');
-                      emailInput?.focus();
-                      return;
-                    }
-                    try {
-                      const backendUrl = getBackendUrl();
-                      const response = await fetch(`${backendUrl}/api/users/reset-password`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ email }),
-                      });
-                      const result = await response.json();
-                      if (!response.ok) {
-                        const isRateLimit =
-                          response.status === 429 ||
-                          (result.message &&
-                            (result.message.includes('rate limit') ||
-                              result.message.includes('over_email_send_rate_limit')));
-
-                        if (isRateLimit) {
-                          throw new Error(
-                            'Too many password reset attempts. Please wait 60 seconds and try again.',
-                          );
-                        }
-                        throw new Error(result.message || 'Failed to send reset email');
-                      }
-                      alert('Reset email sent. Check your inbox (and spam).');
-                    } catch (err) {
-                      alert('Failed to send reset email: ' + (err?.message || 'Unknown error'));
-                    }
+                  type="submit"
+                  className="w-full text-white px-4 py-3 rounded-lg transition-all font-semibold text-base hover:brightness-110 hover:shadow-lg"
+                  style={{
+                    background: 'linear-gradient(90deg, #22d3ee, #0284c7)',
+                    boxShadow: '0 4px 20px rgba(34, 211, 238, 0.3)',
                   }}
-                  className="text-xs font-medium hover:underline transition-colors"
-                  style={{ color: '#94a3b8' }}
                 >
-                  Forgot password?
+                  Sign In
                 </button>
-              </div>
-            </form>
 
-            {/* Footer brand line */}
-            <p className="mt-6 text-center text-xs text-slate-600">
-              AiSHA CRM &mdash; AI-Native Executive Assistant
-            </p>
+                <div className="mt-3 text-center">
+                  <button
+                    type="button"
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      const emailInput = document.getElementById('email');
+                      const email = emailInput?.value?.trim();
+                      if (!email) {
+                        alert('Enter your email above first.');
+                        emailInput?.focus();
+                        return;
+                      }
+                      try {
+                        const backendUrl = getBackendUrl();
+                        const response = await fetch(`${backendUrl}/api/users/reset-password`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ email }),
+                        });
+                        const result = await response.json();
+                        if (!response.ok) {
+                          const isRateLimit =
+                            response.status === 429 ||
+                            (result.message &&
+                              (result.message.includes('rate limit') ||
+                                result.message.includes('over_email_send_rate_limit')));
+
+                          if (isRateLimit) {
+                            throw new Error(
+                              'Too many password reset attempts. Please wait 60 seconds and try again.',
+                            );
+                          }
+                          throw new Error(result.message || 'Failed to send reset email');
+                        }
+                        alert('Reset email sent. Check your inbox (and spam).');
+                      } catch (err) {
+                        alert('Failed to send reset email: ' + (err?.message || 'Unknown error'));
+                      }
+                    }}
+                    className="text-xs font-medium hover:underline transition-colors"
+                    style={{ color: '#94a3b8' }}
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+              </form>
+
+              {/* Footer brand line */}
+              <p className="mt-6 text-center text-xs text-slate-600">
+                AiSHA CRM &mdash; AI-Native Executive Assistant
+              </p>
+            </div>
           </div>
-        </div>
         </div>
       </div>
     );
@@ -2156,7 +2173,7 @@ function Layout({ children, currentPageName }) {
           </SheetContent>
         </Sheet>
         <div className="font-bold text-lg text-slate-100">{companyName}</div>
-        <UserNav user={user} handleLogout={handleLogout} createPageUrl={createPageUrl} />
+        <UserNav user={user} handleLogout={handleLogout} createPageUrl={createPageUrl} compact />
       </div>
 
       <aside className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-50 lg:block lg:w-64 lg:overflow-y-auto lg:border-r lg:border-slate-800">
@@ -2188,10 +2205,10 @@ function Layout({ children, currentPageName }) {
       <div className="lg:pl-64">
         <header
           data-testid="app-header"
-          className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-x-4 border-b border-slate-800 bg-slate-900/95 backdrop-blur-sm px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8"
+          className="sticky top-0 z-40 flex min-h-14 shrink-0 items-center border-b border-slate-800 bg-slate-900/95 backdrop-blur-sm px-3 py-2 shadow-sm sm:px-6 lg:px-8"
         >
-          <div className="flex flex-1 items-center justify-end gap-3 lg:gap-4">
-            <div className="flex max-w-[520px] items-center justify-center gap-2 rounded-2xl border border-white/10 bg-slate-900/70 px-2.5 py-1 shadow-inner shadow-slate-950/30">
+          <div className="flex w-full items-center justify-end gap-2 sm:gap-3 lg:gap-4">
+            <div className="flex min-w-0 flex-1 items-center justify-start gap-2 overflow-x-auto rounded-2xl border border-white/10 bg-slate-900/70 px-2.5 py-1 shadow-inner shadow-slate-950/30 sm:max-w-[520px] sm:flex-none sm:justify-center sm:overflow-visible">
               <AiAssistantLauncher
                 isOpen={isAiSidebarOpen}
                 onToggle={handleAssistantLauncherClick}
@@ -2200,13 +2217,13 @@ function Layout({ children, currentPageName }) {
               />
               {/* Only superadmins can switch tenants - admins are locked to their assigned tenant */}
               {user?.role === 'superadmin' && (
-                <div className="flex items-center">
+                <div className="hidden items-center sm:flex">
                   <TenantSwitcher user={user} />
                 </div>
               )}
 
               {showEmployeeScope && (
-                <div className="flex items-center">
+                <div className="hidden items-center md:flex">
                   <EmployeeScopeFilter user={user} selectedTenantId={selectedTenantId} />
                 </div>
               )}
@@ -2218,7 +2235,9 @@ function Layout({ children, currentPageName }) {
             ) : null}
 
             {/* DEFERRED: mount notifications after initial load to reduce rate-limit hits */}
-            {showNotificationsWidget ? <NotificationPanel user={user} /> : null}
+            <div className="hidden sm:block">
+              {showNotificationsWidget ? <NotificationPanel user={user} /> : null}
+            </div>
 
             {/* THEME TOGGLE BUTTON */}
             <TooltipProvider>
@@ -2241,7 +2260,17 @@ function Layout({ children, currentPageName }) {
             </TooltipProvider>
 
             <div className="hidden lg:block lg:h-6 lg:w-px lg:bg-slate-700" aria-hidden="true" />
-            <UserNav user={user} handleLogout={handleLogout} createPageUrl={createPageUrl} />
+            <div className="sm:hidden">
+              <UserNav
+                user={user}
+                handleLogout={handleLogout}
+                createPageUrl={createPageUrl}
+                compact
+              />
+            </div>
+            <div className="hidden sm:block">
+              <UserNav user={user} handleLogout={handleLogout} createPageUrl={createPageUrl} />
+            </div>
           </div>
         </header>
 

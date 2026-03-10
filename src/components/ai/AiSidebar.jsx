@@ -2,9 +2,32 @@
 // This file has been thoroughly tested and is core to AI sidebar functionality
 // Last verified: 2026-01-31
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { AlertCircle, Building2, CheckSquare, ChevronRight, Loader2, Send, Sparkles, Target, TrendingUp, Users, X, Mic, Volume2, Trash2, ClipboardList, BarChart3, ListTodo, Ear, Briefcase, Code, ThumbsUp, ThumbsDown } from 'lucide-react';
+import {
+  AlertCircle,
+  Building2,
+  CheckSquare,
+  ChevronRight,
+  Loader2,
+  Send,
+  Sparkles,
+  Target,
+  TrendingUp,
+  Users,
+  X,
+  Mic,
+  Volume2,
+  Trash2,
+  ClipboardList,
+  BarChart3,
+  ListTodo,
+  Ear,
+  Briefcase,
+  Code,
+  ThumbsUp,
+  ThumbsDown,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useAiSidebarState } from './useAiSidebarState.jsx';
@@ -15,7 +38,11 @@ import { usePushToTalkKeybinding } from '@/hooks/usePushToTalkKeybinding.js';
 import { useWakeWordDetection } from '@/hooks/useWakeWordDetection.js';
 import { useConfirmDialog } from '@/components/shared/ConfirmDialog.jsx';
 import RealtimeIndicator from './RealtimeIndicator.jsx';
-import { trackRealtimeEvent, subscribeToRealtimeTelemetry, getRealtimeTelemetrySnapshot } from '@/utils/realtimeTelemetry.js';
+import {
+  trackRealtimeEvent,
+  subscribeToRealtimeTelemetry,
+  getRealtimeTelemetrySnapshot,
+} from '@/utils/realtimeTelemetry.js';
 import ConversationalForm from '@/components/ai/ConversationalForm.jsx';
 import { listConversationalSchemas, getSchemaById } from '@/components/ai/conversationalForms';
 import { Account, Activity, Contact, Lead, Opportunity, BizDevSource } from '@/api/entities';
@@ -28,8 +55,12 @@ const AISHA_EXECUTIVE_PORTRAIT = '/assets/aisha-executive-portrait.jpg';
 
 const QUICK_ACTIONS = [
   { label: 'Show leads', prompt: 'Show me all open leads updated today', icon: ClipboardList },
-  { label: 'View pipeline', prompt: 'Give me the pipeline forecast for this month', icon: BarChart3 },
-  { label: 'My tasks', prompt: 'List my tasks due today', icon: ListTodo }
+  {
+    label: 'View pipeline',
+    prompt: 'Give me the pipeline forecast for this month',
+    icon: BarChart3,
+  },
+  { label: 'My tasks', prompt: 'List my tasks due today', icon: ListTodo },
 ];
 
 // Labels for Guided Creations - friendly display names
@@ -61,7 +92,7 @@ const AI_SIGNOFF_PHRASES = [
   'goodbye',
   'bye for now',
   'talk to you later',
-  "let me know if you need anything else",
+  'let me know if you need anything else',
   "i'll be here if you need me",
 ];
 
@@ -79,7 +110,7 @@ const DANGEROUS_VOICE_PHRASES = [
   'truncate table',
   'format disk',
   'remove all records',
-  'erase every record'
+  'erase every record',
 ];
 
 const containsDestructiveVoiceCommand = (text) => {
@@ -95,26 +126,32 @@ const conversationalFormHandlers = {
       const company = record?.company_name || 'BizDev Source';
       const priority = record?.priority ? ` (${record.priority} priority)` : '';
       return `Created BizDev source: ${company}${priority} — ready for promotion to Lead`;
-    }
+    },
   },
   lead: {
     create: (payload) => Lead.create(payload),
     success: (record) => {
-      const fullName = [record?.first_name, record?.last_name].filter(Boolean).join(' ').trim() || record?.name || 'lead';
+      const fullName =
+        [record?.first_name, record?.last_name].filter(Boolean).join(' ').trim() ||
+        record?.name ||
+        'lead';
       const status = record?.status || 'new';
       return `Created lead: ${fullName} (${status})`;
-    }
+    },
   },
   account: {
     create: (payload) => Account.create(payload),
-    success: (record) => `Created account: ${record?.name || 'New account'}`
+    success: (record) => `Created account: ${record?.name || 'New account'}`,
   },
   contact: {
     create: (payload) => Contact.create(payload),
     success: (record) => {
-      const fullName = [record?.first_name, record?.last_name].filter(Boolean).join(' ').trim() || record?.name || 'contact';
+      const fullName =
+        [record?.first_name, record?.last_name].filter(Boolean).join(' ').trim() ||
+        record?.name ||
+        'contact';
       return `Created contact: ${fullName}`;
-    }
+    },
   },
   opportunity: {
     create: (payload) => Opportunity.create(payload),
@@ -122,15 +159,15 @@ const conversationalFormHandlers = {
       const name = record?.name || 'Opportunity';
       const stage = record?.stage ? ` – ${record.stage}` : '';
       return `Created opportunity: ${name}${stage}`;
-    }
+    },
   },
   activity: {
     create: (payload) => Activity.create(payload),
     success: (record) => {
       const subject = record?.subject || 'Activity';
       return `Logged activity: ${subject}`;
-    }
-  }
+    },
+  },
 };
 
 const extractTextFromRealtimeContent = (content) => {
@@ -195,9 +232,7 @@ const buildRealtimeTelemetryContext = () => {
   }
   try {
     context.tenantId =
-      localStorage.getItem('selected_tenant_id') ||
-      localStorage.getItem('tenant_id') ||
-      undefined;
+      localStorage.getItem('selected_tenant_id') || localStorage.getItem('tenant_id') || undefined;
   } catch {
     context.tenantId = undefined;
   }
@@ -207,7 +242,8 @@ const buildRealtimeTelemetryContext = () => {
     context.tenantName = undefined;
   }
   try {
-    context.userId = localStorage.getItem('user_id') || localStorage.getItem('user_email') || undefined;
+    context.userId =
+      localStorage.getItem('user_id') || localStorage.getItem('user_email') || undefined;
   } catch {
     context.userId = undefined;
   }
@@ -234,10 +270,10 @@ function MessageBubble({ message, isWelcomeCard = false, conversationId }) {
 
   const handleFeedback = async (rating) => {
     if (isSubmitting || !message.id || !conversationId) return;
-    
+
     // Toggle off if clicking the same rating
     const newRating = feedbackState === rating ? null : rating;
-    
+
     setIsSubmitting(true);
     try {
       await submitFeedback(conversationId, message.id, newRating);
@@ -261,8 +297,8 @@ function MessageBubble({ message, isWelcomeCard = false, conversationId }) {
         <button
           type="button"
           className={`h-6 w-6 rounded-full flex items-center justify-center transition-colors ${
-            feedbackState === 'positive' 
-              ? 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-400' 
+            feedbackState === 'positive'
+              ? 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-400'
               : 'text-slate-400 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30'
           }`}
           onClick={() => handleFeedback('positive')}
@@ -274,8 +310,8 @@ function MessageBubble({ message, isWelcomeCard = false, conversationId }) {
         <button
           type="button"
           className={`h-6 w-6 rounded-full flex items-center justify-center transition-colors ${
-            feedbackState === 'negative' 
-              ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400' 
+            feedbackState === 'negative'
+              ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400'
               : 'text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30'
           }`}
           onClick={() => handleFeedback('negative')}
@@ -305,18 +341,30 @@ function MessageBubble({ message, isWelcomeCard = false, conversationId }) {
           </div>
           {/* Message content */}
           <div className="flex-1 rounded-2xl rounded-tl-sm border border-slate-200 bg-gradient-to-br from-white to-slate-50 px-4 py-3 shadow-md dark:border-slate-700/70 dark:from-slate-900/90 dark:to-slate-800/80">
-            <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">AiSHA Assistant</p>
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+              AiSHA Assistant
+            </p>
             <div className="prose prose-base max-w-none text-slate-700 dark:text-slate-200">
               <ReactMarkdown
                 components={{
-                  p: ({ children }) => <p className="mb-2 last:mb-0 break-words leading-relaxed text-base">{children}</p>,
-                  ul: ({ children }) => <ul className="mb-2 last:mb-0 ml-4 list-disc">{children}</ul>,
-                  ol: ({ children }) => <ol className="mb-2 last:mb-0 ml-4 list-decimal">{children}</ol>,
+                  p: ({ children }) => (
+                    <p className="mb-2 last:mb-0 break-words leading-relaxed text-base">
+                      {children}
+                    </p>
+                  ),
+                  ul: ({ children }) => (
+                    <ul className="mb-2 last:mb-0 ml-4 list-disc">{children}</ul>
+                  ),
+                  ol: ({ children }) => (
+                    <ol className="mb-2 last:mb-0 ml-4 list-decimal">{children}</ol>
+                  ),
                   li: ({ children }) => <li className="mb-1 leading-6 text-base">{children}</li>,
                   strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
                   code: ({ children }) => (
-                    <code className="rounded bg-slate-800/80 px-1.5 py-0.5 text-xs text-slate-100">{children}</code>
-                  )
+                    <code className="rounded bg-slate-800/80 px-1.5 py-0.5 text-xs text-slate-100">
+                      {children}
+                    </code>
+                  ),
                 }}
               >
                 {sanitizeMessageText(message.content)}
@@ -339,14 +387,18 @@ function MessageBubble({ message, isWelcomeCard = false, conversationId }) {
           <div className="prose prose-base prose-invert max-w-none">
             <ReactMarkdown
               components={{
-                p: ({ children }) => <p className="mb-2 last:mb-0 break-words text-base leading-relaxed">{children}</p>,
+                p: ({ children }) => (
+                  <p className="mb-2 last:mb-0 break-words text-base leading-relaxed">{children}</p>
+                ),
                 ul: ({ children }) => <ul className="mb-2 last:mb-0 ml-4 list-disc">{children}</ul>,
-                ol: ({ children }) => <ol className="mb-2 last:mb-0 ml-4 list-decimal">{children}</ol>,
+                ol: ({ children }) => (
+                  <ol className="mb-2 last:mb-0 ml-4 list-decimal">{children}</ol>
+                ),
                 li: ({ children }) => <li className="mb-1 leading-6">{children}</li>,
                 strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
                 code: ({ children }) => (
                   <code className="rounded bg-white/20 px-1.5 py-0.5 text-xs">{children}</code>
-                )
+                ),
               }}
             >
               {sanitizeMessageText(message.content)}
@@ -371,7 +423,11 @@ function MessageBubble({ message, isWelcomeCard = false, conversationId }) {
             <div className="prose prose-base max-w-none text-rose-900 dark:text-rose-100">
               <ReactMarkdown
                 components={{
-                  p: ({ children }) => <p className="mb-2 last:mb-0 break-words leading-relaxed text-base">{children}</p>,
+                  p: ({ children }) => (
+                    <p className="mb-2 last:mb-0 break-words leading-relaxed text-base">
+                      {children}
+                    </p>
+                  ),
                 }}
               >
                 {sanitizeMessageText(message.content)}
@@ -400,21 +456,31 @@ function MessageBubble({ message, isWelcomeCard = false, conversationId }) {
         </div>
         {/* Message bubble */}
         <div className="flex-1">
-          <div 
+          <div
             className="relative rounded-2xl rounded-tl-sm border border-slate-200 bg-gradient-to-br from-white to-slate-50 px-4 py-3 shadow-md dark:border-slate-700/70 dark:from-slate-900/90 dark:to-slate-800/80"
             style={{ borderLeftColor: 'var(--accent-color, #6366f1)', borderLeftWidth: '3px' }}
           >
             <div className="prose prose-base max-w-none text-slate-700 dark:text-slate-200">
               <ReactMarkdown
                 components={{
-                  p: ({ children }) => <p className="mb-2 last:mb-0 break-words leading-relaxed text-base">{children}</p>,
-                  ul: ({ children }) => <ul className="mb-2 last:mb-0 ml-4 list-disc">{children}</ul>,
-                  ol: ({ children }) => <ol className="mb-2 last:mb-0 ml-4 list-decimal">{children}</ol>,
+                  p: ({ children }) => (
+                    <p className="mb-2 last:mb-0 break-words leading-relaxed text-base">
+                      {children}
+                    </p>
+                  ),
+                  ul: ({ children }) => (
+                    <ul className="mb-2 last:mb-0 ml-4 list-disc">{children}</ul>
+                  ),
+                  ol: ({ children }) => (
+                    <ol className="mb-2 last:mb-0 ml-4 list-decimal">{children}</ol>
+                  ),
                   li: ({ children }) => <li className="mb-1 leading-6 text-base">{children}</li>,
                   strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
                   code: ({ children }) => (
-                    <code className="rounded bg-slate-800/80 px-1.5 py-0.5 text-xs text-slate-100">{children}</code>
-                  )
+                    <code className="rounded bg-slate-800/80 px-1.5 py-0.5 text-xs text-slate-100">
+                      {children}
+                    </code>
+                  ),
                 }}
               >
                 {sanitizeMessageText(message.content)}
@@ -460,7 +526,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     applySuggestion,
     isDeveloperMode,
     setIsDeveloperMode,
-    conversationId
+    conversationId,
   } = useAiSidebarState();
   const [draft, setDraft] = useState('');
   const [draftOrigin, setDraftOrigin] = useState('text');
@@ -476,9 +542,15 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
   const [realtimeError, setRealtimeError] = useState(null);
   const [realtimeErrorDetails, setRealtimeErrorDetails] = useState(null);
   const [activeFormId, setActiveFormId] = useState(null);
-  const [formSubmissionState, setFormSubmissionState] = useState({ isSubmitting: false, error: null });
+  const [formSubmissionState, setFormSubmissionState] = useState({
+    isSubmitting: false,
+    error: null,
+  });
   const conversationalSchemaOptions = useMemo(() => listConversationalSchemas(), []);
-  const activeFormSchema = useMemo(() => (activeFormId ? getSchemaById(activeFormId) : null), [activeFormId]);
+  const activeFormSchema = useMemo(
+    () => (activeFormId ? getSchemaById(activeFormId) : null),
+    [activeFormId],
+  );
   const realtimeBufferRef = useRef('');
   const wakeWordModeRef = useRef(false); // Track wake word mode for sign-off detection
   const pendingSignoffRef = useRef(false); // Track if we should end session after AI sign-off
@@ -491,7 +563,8 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
   const tenantId = user?.tenant_id || telemetryContext.tenantId;
   const userId = user?.email || telemetryContext.userId;
   const canUseConversationalForms = Boolean(tenantId);
-  const tenantName = user?.branding_settings?.companyName || telemetryContext.tenantName || user?.display_name;
+  const tenantName =
+    user?.branding_settings?.companyName || telemetryContext.tenantName || user?.display_name;
   const tenantDisplayName = tenantName || 'No tenant selected';
   const tenantBadgeSubtitle = tenantId
     ? `Tenant ID • ${tenantId.slice(0, 8)}${tenantId.length > 8 ? '…' : ''}`
@@ -536,7 +609,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
       }
       setFormSubmissionState({ isSubmitting: false, error: null });
     },
-    [tenantId, activeFormId]
+    [tenantId, activeFormId],
   );
 
   const handleConversationalCancel = useCallback(() => {
@@ -555,25 +628,28 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
       setFormSubmissionState({ isSubmitting: true, error: null });
       try {
         const result = await handler.create(payload);
-        const successMessage = handler.success ? handler.success(result) : `Created ${activeFormSchema.label}`;
+        const successMessage = handler.success
+          ? handler.success(result)
+          : `Created ${activeFormSchema.label}`;
         addRealtimeMessage({
           role: 'assistant',
           content: successMessage,
           metadata: {
             origin: 'conversational-form',
-            entity: activeFormSchema.entity
-          }
+            entity: activeFormSchema.entity,
+          },
         });
         toast.success(successMessage);
         setActiveFormId(null);
         setFormSubmissionState({ isSubmitting: false, error: null });
       } catch (err) {
-        const errorMessage = err?.message || `Unable to create ${activeFormSchema.label.toLowerCase()}.`;
+        const errorMessage =
+          err?.message || `Unable to create ${activeFormSchema.label.toLowerCase()}.`;
         setFormSubmissionState({ isSubmitting: false, error: errorMessage });
         toast.error(errorMessage);
       }
     },
-    [activeFormSchema, addRealtimeMessage]
+    [activeFormSchema, addRealtimeMessage],
   );
 
   const clearRealtimeErrors = useCallback(() => {
@@ -586,15 +662,20 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     return subscribeToRealtimeTelemetry(setTelemetryEntries);
   }, [showTelemetryDebug]);
 
-  const logUiTelemetry = useCallback((event, payload = undefined, severity = 'info') => {
-    trackRealtimeEvent({
-      event,
-      payload,
-      severity,
-      context: telemetryContext,
-    });
-  }, [telemetryContext]);
-  const latestTelemetry = telemetryEntries.length ? telemetryEntries[telemetryEntries.length - 1] : null;
+  const logUiTelemetry = useCallback(
+    (event, payload = undefined, severity = 'info') => {
+      trackRealtimeEvent({
+        event,
+        payload,
+        severity,
+        context: telemetryContext,
+      });
+    },
+    [telemetryContext],
+  );
+  const latestTelemetry = telemetryEntries.length
+    ? telemetryEntries[telemetryEntries.length - 1]
+    : null;
 
   const handleRealtimeEvent = useCallback(
     (event) => {
@@ -606,7 +687,8 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
       }
 
       if (event.type === 'response.output_text.delta') {
-        const deltaText = extractRealtimeDeltaText(event.delta || event.text || event.content) || '';
+        const deltaText =
+          extractRealtimeDeltaText(event.delta || event.text || event.content) || '';
         if (deltaText) {
           realtimeBufferRef.current += deltaText;
         }
@@ -651,18 +733,23 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
         const details = {
           code: event.error?.code || 'stream_error',
           message,
-          hint: event.error?.hint || 'Toggle Realtime Voice off and back on to refresh the session.',
+          hint:
+            event.error?.hint || 'Toggle Realtime Voice off and back on to refresh the session.',
           suggestions: event.error?.suggestions || [],
         };
         setRealtimeError(message);
         setRealtimeErrorDetails(details);
-        logUiTelemetry('ui.realtime.stream.error', {
-          message,
-          code: details.code,
-        }, 'error');
+        logUiTelemetry(
+          'ui.realtime.stream.error',
+          {
+            message,
+            code: details.code,
+          },
+          'error',
+        );
       }
     },
-    [addRealtimeMessage, logUiTelemetry]
+    [addRealtimeMessage, logUiTelemetry],
   );
 
   const realtimeHookState = useRealtimeAiSHA({ onEvent: handleRealtimeEvent, telemetryContext });
@@ -693,74 +780,105 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     if (realtimeHookErrorDetails) {
       setRealtimeError(realtimeHookErrorDetails.message);
       setRealtimeErrorDetails(realtimeHookErrorDetails);
-      logUiTelemetry('ui.realtime.error', {
-        source: 'hook',
-        message: realtimeHookErrorDetails.message,
-        code: realtimeHookErrorDetails.code,
-      }, 'error');
+      logUiTelemetry(
+        'ui.realtime.error',
+        {
+          source: 'hook',
+          message: realtimeHookErrorDetails.message,
+          code: realtimeHookErrorDetails.code,
+        },
+        'error',
+      );
       return;
     }
 
     if (realtimeStateError && !realtimeHookErrorDetails) {
       setRealtimeError(realtimeStateError);
       setRealtimeErrorDetails(null);
-      logUiTelemetry('ui.realtime.error', {
-        source: 'hook',
-        message: realtimeStateError,
-      }, 'error');
+      logUiTelemetry(
+        'ui.realtime.error',
+        {
+          source: 'hook',
+          message: realtimeStateError,
+        },
+        'error',
+      );
     }
   }, [realtimeHookErrorDetails, realtimeStateError, logUiTelemetry]);
 
   const isRealtimeActive = isRealtimeEnabled && (realtimeLiveFlag || isRealtimeConnected);
-  const isRealtimeIndicatorActive = isRealtimeEnabled && (realtimeLiveFlag || (isRealtimeConnected && isRealtimeListening));
+  const isRealtimeIndicatorActive =
+    isRealtimeEnabled && (realtimeLiveFlag || (isRealtimeConnected && isRealtimeListening));
   const assistantStatusHeadline = isRealtimeFeatureAvailable
-    ? (isRealtimeActive ? 'Live voice + chat' : 'Chat ready • Voice on standby')
+    ? isRealtimeActive
+      ? 'Live voice + chat'
+      : 'Chat ready • Voice on standby'
     : 'Chat-only assistant';
   const assistantStatusSubcopy = isRealtimeFeatureAvailable
     ? 'Realtime insights with enterprise guardrails.'
     : 'Voice channel disabled by current tenant policies.';
   const assistantStatusDotClass = isRealtimeFeatureAvailable
-    ? (isRealtimeActive ? 'bg-emerald-400' : 'bg-sky-400')
+    ? isRealtimeActive
+      ? 'bg-emerald-400'
+      : 'bg-sky-400'
     : 'bg-amber-500';
 
   // enableRealtime now accepts options: { startMuted: boolean }
   // - startMuted: true = PTT mode (mic starts muted, user holds button to speak)
   // - startMuted: false = Continuous mode (mic always on, hands-free conversation)
-  const enableRealtime = useCallback(async (options = {}) => {
-    const { startMuted = false } = options;
+  const enableRealtime = useCallback(
+    async (options = {}) => {
+      const { startMuted = false } = options;
 
-    if (!isRealtimeSupported) {
-      const message = 'Realtime voice is not supported in this browser.';
-      setRealtimeError(message);
-      setRealtimeErrorDetails({
-        code: 'unsupported',
-        message,
-        hint: 'Use a Chromium-based browser with microphone access to try again.',
-        suggestions: ['Chrome 120+ or Edge 120+ recommended.', 'Ensure microphone permissions are granted.'],
-      });
-      logUiTelemetry('ui.realtime.toggle', { enabled: true, reason: 'unsupported' }, 'warn');
-      return;
-    }
-    logUiTelemetry('ui.realtime.toggle', { enabled: true, phase: 'request', startMuted });
-    try {
-      clearRealtimeErrors();
-      // Pass startMuted option to connectRealtime
-      await startRealtimeSession({ startMuted });
-      setRealtimeEnabled(true);
-      setRealtimeMode(true);
-      logUiTelemetry('ui.realtime.toggle', { enabled: true, phase: 'success', pttMode: startMuted });
-      console.log(`[AiSidebar] Realtime enabled - ${startMuted ? 'PTT mode (mic muted)' : 'Continuous mode (mic unmuted)'}`);
-    } catch (err) {
-      setRealtimeEnabled(false);
-      setRealtimeMode(false);
-      const message = err?.message || 'Unable to start realtime session.';
-      setRealtimeError(message);
-      if (err?.__realtimeDetails) {
-        setRealtimeErrorDetails(err.__realtimeDetails);
+      if (!isRealtimeSupported) {
+        const message = 'Realtime voice is not supported in this browser.';
+        setRealtimeError(message);
+        setRealtimeErrorDetails({
+          code: 'unsupported',
+          message,
+          hint: 'Use a Chromium-based browser with microphone access to try again.',
+          suggestions: [
+            'Chrome 120+ or Edge 120+ recommended.',
+            'Ensure microphone permissions are granted.',
+          ],
+        });
+        logUiTelemetry('ui.realtime.toggle', { enabled: true, reason: 'unsupported' }, 'warn');
+        return;
       }
-      logUiTelemetry('ui.realtime.toggle', { enabled: true, phase: 'error', message }, 'error');
-    }
-  }, [clearRealtimeErrors, isRealtimeSupported, logUiTelemetry, setRealtimeMode, startRealtimeSession]);
+      logUiTelemetry('ui.realtime.toggle', { enabled: true, phase: 'request', startMuted });
+      try {
+        clearRealtimeErrors();
+        // Pass startMuted option to connectRealtime
+        await startRealtimeSession({ startMuted });
+        setRealtimeEnabled(true);
+        setRealtimeMode(true);
+        logUiTelemetry('ui.realtime.toggle', {
+          enabled: true,
+          phase: 'success',
+          pttMode: startMuted,
+        });
+        console.log(
+          `[AiSidebar] Realtime enabled - ${startMuted ? 'PTT mode (mic muted)' : 'Continuous mode (mic unmuted)'}`,
+        );
+      } catch (err) {
+        setRealtimeEnabled(false);
+        setRealtimeMode(false);
+        const message = err?.message || 'Unable to start realtime session.';
+        setRealtimeError(message);
+        if (err?.__realtimeDetails) {
+          setRealtimeErrorDetails(err.__realtimeDetails);
+        }
+        logUiTelemetry('ui.realtime.toggle', { enabled: true, phase: 'error', message }, 'error');
+      }
+    },
+    [
+      clearRealtimeErrors,
+      isRealtimeSupported,
+      logUiTelemetry,
+      setRealtimeMode,
+      startRealtimeSession,
+    ],
+  );
 
   const disableRealtime = useCallback(() => {
     logUiTelemetry('ui.realtime.toggle', { enabled: false, phase: 'request' });
@@ -808,7 +926,13 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
         toast.error('Failed to activate voice. Try again.');
       }
     }
-  }, [enableRealtime, isRealtimeEnabled, isRealtimeFeatureAvailable, isRealtimeSupported, logUiTelemetry]);
+  }, [
+    enableRealtime,
+    isRealtimeEnabled,
+    isRealtimeFeatureAvailable,
+    isRealtimeSupported,
+    logUiTelemetry,
+  ]);
 
   // Trigger AI greeting when realtime becomes connected (after wake word activation)
   useEffect(() => {
@@ -888,7 +1012,8 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     if (isRealtimeEnabled) {
       const confirmed = await confirm({
         title: 'Disable Realtime Voice?',
-        description: 'AiSHA will stop streaming audio. You can re-enable Realtime Voice at any time.',
+        description:
+          'AiSHA will stop streaming audio. You can re-enable Realtime Voice at any time.',
         confirmText: 'Disable',
         variant: 'destructive',
       });
@@ -901,66 +1026,98 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     }
     // Realtime Voice button = continuous mode (hands-free, mic always on)
     await enableRealtime({ startMuted: false });
-  }, [confirm, disableRealtime, enableRealtime, isRealtimeEnabled, isRealtimeFeatureAvailable, logUiTelemetry]);
+  }, [
+    confirm,
+    disableRealtime,
+    enableRealtime,
+    isRealtimeEnabled,
+    isRealtimeFeatureAvailable,
+    logUiTelemetry,
+  ]);
 
-  const sendViaRealtime = useCallback(async (text) => {
-    const safeText = (text || '').trim();
-    if (!safeText) return;
-    if (!isRealtimeConnected || !isRealtimeListening) {
-      const details = {
-        code: 'channel_not_ready',
-        message: 'Realtime connection is not ready yet.',
-        hint: 'Wait for the LIVE indicator before sending another message.',
-      };
-      setRealtimeError(details.message);
-      setRealtimeErrorDetails(details);
-      logUiTelemetry('ui.realtime.message_rejected', { reason: 'connection_not_ready' }, 'warn');
-      return;
-    }
-    try {
-      await sendRealtimeUserMessage(safeText);
-      addRealtimeMessage({ role: 'user', content: safeText });
-      logUiTelemetry('ui.realtime.message_sent', { length: safeText.length });
-    } catch (err) {
-      const message = err?.message || 'Unable to send realtime message.';
-      setRealtimeError(message);
-      if (err?.__realtimeDetails) {
-        setRealtimeErrorDetails(err.__realtimeDetails);
+  const sendViaRealtime = useCallback(
+    async (text) => {
+      const safeText = (text || '').trim();
+      if (!safeText) return;
+      if (!isRealtimeConnected || !isRealtimeListening) {
+        const details = {
+          code: 'channel_not_ready',
+          message: 'Realtime connection is not ready yet.',
+          hint: 'Wait for the LIVE indicator before sending another message.',
+        };
+        setRealtimeError(details.message);
+        setRealtimeErrorDetails(details);
+        logUiTelemetry('ui.realtime.message_rejected', { reason: 'connection_not_ready' }, 'warn');
+        return;
       }
-      logUiTelemetry('ui.realtime.message_error', { message }, 'error');
-    }
-  }, [addRealtimeMessage, isRealtimeConnected, isRealtimeListening, logUiTelemetry, sendRealtimeUserMessage]);
-  const handleVoiceTranscript = useCallback((text) => {
-    const safeText = sanitizeMessageText(text || '').trim();
-    if (!safeText) return;
+      try {
+        await sendRealtimeUserMessage(safeText);
+        addRealtimeMessage({ role: 'user', content: safeText });
+        logUiTelemetry('ui.realtime.message_sent', { length: safeText.length });
+      } catch (err) {
+        const message = err?.message || 'Unable to send realtime message.';
+        setRealtimeError(message);
+        if (err?.__realtimeDetails) {
+          setRealtimeErrorDetails(err.__realtimeDetails);
+        }
+        logUiTelemetry('ui.realtime.message_error', { message }, 'error');
+      }
+    },
+    [
+      addRealtimeMessage,
+      isRealtimeConnected,
+      isRealtimeListening,
+      logUiTelemetry,
+      sendRealtimeUserMessage,
+    ],
+  );
+  const handleVoiceTranscript = useCallback(
+    (text) => {
+      const safeText = sanitizeMessageText(text || '').trim();
+      if (!safeText) return;
 
-    // Check for garbled/foreign script voice transcription
-    if (isLikelyVoiceGarble(safeText)) {
-      setVoiceWarning('Voice not recognized clearly. Please try again or type your request.');
-      logUiTelemetry('ui.voice.blocked', { reason: 'garbled_transcript', textLength: safeText.length }, 'warn');
-      return;
-    }
+      // Check for garbled/foreign script voice transcription
+      if (isLikelyVoiceGarble(safeText)) {
+        setVoiceWarning('Voice not recognized clearly. Please try again or type your request.');
+        logUiTelemetry(
+          'ui.voice.blocked',
+          { reason: 'garbled_transcript', textLength: safeText.length },
+          'warn',
+        );
+        return;
+      }
 
-    // Destructive commands go to draft for manual review, not auto-sent
-    if (containsDestructiveVoiceCommand(safeText)) {
-      setDraft(safeText);
-      setDraftOrigin('voice');
-      setVoiceWarning('This sounds like a destructive command. Please review and send manually if intended.');
-      logUiTelemetry('ui.voice.blocked', { reason: 'dangerous_phrase', textLength: safeText.length }, 'warn');
-      return;
-    }
+      // Destructive commands go to draft for manual review, not auto-sent
+      if (containsDestructiveVoiceCommand(safeText)) {
+        setDraft(safeText);
+        setDraftOrigin('voice');
+        setVoiceWarning(
+          'This sounds like a destructive command. Please review and send manually if intended.',
+        );
+        logUiTelemetry(
+          'ui.voice.blocked',
+          { reason: 'dangerous_phrase', textLength: safeText.length },
+          'warn',
+        );
+        return;
+      }
 
-    setVoiceWarning(null);
-    if (isRealtimeActive) {
-      logUiTelemetry('ui.voice.forwarded', { destination: 'realtime', textLength: safeText.length });
-      void sendViaRealtime(safeText);
-      return;
-    }
-    
-    // Auto-send: voice transcript goes directly to chat, not to input field
-    logUiTelemetry('ui.voice.auto_send', { destination: 'chat', textLength: safeText.length });
-    void sendMessage(safeText, { origin: 'voice', autoSend: true });
-  }, [isRealtimeActive, logUiTelemetry, sendMessage, sendViaRealtime]);
+      setVoiceWarning(null);
+      if (isRealtimeActive) {
+        logUiTelemetry('ui.voice.forwarded', {
+          destination: 'realtime',
+          textLength: safeText.length,
+        });
+        void sendViaRealtime(safeText);
+        return;
+      }
+
+      // Auto-send: voice transcript goes directly to chat, not to input field
+      logUiTelemetry('ui.voice.auto_send', { destination: 'chat', textLength: safeText.length });
+      void sendMessage(safeText, { origin: 'voice', autoSend: true });
+    },
+    [isRealtimeActive, logUiTelemetry, sendMessage, sendViaRealtime],
+  );
 
   // Speech output - must be defined BEFORE useSpeechInput to use isSpeechPlaying for pause detection
   const handleSpeechEnded = useCallback(() => {
@@ -973,7 +1130,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     stopPlayback,
     isLoading: isSpeechLoading,
     isPlaying: isSpeechPlaying,
-    error: speechPlaybackError
+    error: speechPlaybackError,
   } = useSpeechOutput({ onEnded: handleSpeechEnded });
   const [_activeSpeechMessageId, setActiveSpeechMessageId] = useState(null);
   const [autoPlayMessageId, setAutoPlayMessageId] = useState(null);
@@ -981,18 +1138,18 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
   // Continuous listening mode - pause when AI is speaking or sending
   const shouldPauseListening = isSending || isSpeechPlaying;
 
-  const { 
-    isListening, 
-    isRecording, 
-    isTranscribing: _isTranscribing, 
-    error: speechError, 
-    startListening, 
+  const {
+    isListening,
+    isRecording,
+    isTranscribing: _isTranscribing,
+    error: speechError,
+    startListening,
     stopListening,
-    toggleListening: _toggleListening 
+    toggleListening: _toggleListening,
   } = useSpeechInput({
     onFinalTranscript: handleVoiceTranscript,
-    continuousMode: true,  // Always use continuous mode internally
-    pauseListening: shouldPauseListening,  // Auto-pause during AI response
+    continuousMode: true, // Always use continuous mode internally
+    pauseListening: shouldPauseListening, // Auto-pause during AI response
   });
 
   // Legacy aliases for compatibility
@@ -1057,11 +1214,11 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
   const handleVoiceModeToggle = useCallback(async () => {
     const newVoiceModeActive = !voiceModeActive;
     setVoiceModeActive(newVoiceModeActive);
-    
+
     if (newVoiceModeActive) {
       // Entering PTT voice mode
       setVoiceWarning(null);
-      
+
       // Use Realtime API if available for true streaming
       if (isRealtimeSupported && isRealtimeFeatureAvailable) {
         console.log('[AiSidebar] PTT mode: starting Realtime API with mic muted');
@@ -1082,7 +1239,10 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
         if (isContinuousMode && !isRecording && !isSending) {
           startRecording();
         }
-        logUiTelemetry('ui.voice_mode.enabled', { mode: 'legacy', continuousMode: isContinuousMode });
+        logUiTelemetry('ui.voice_mode.enabled', {
+          mode: 'legacy',
+          continuousMode: isContinuousMode,
+        });
       }
     } else {
       // Exiting voice mode: stop realtime or recording
@@ -1097,7 +1257,21 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
       setVoiceWarning(null);
       logUiTelemetry('ui.voice_mode.disabled');
     }
-  }, [voiceModeActive, isContinuousMode, isRecording, isSending, isRealtimeActive, isRealtimeSupported, isRealtimeFeatureAvailable, startRecording, stopRecording, stopPlayback, enableRealtime, disableRealtime, logUiTelemetry]);
+  }, [
+    voiceModeActive,
+    isContinuousMode,
+    isRecording,
+    isSending,
+    isRealtimeActive,
+    isRealtimeSupported,
+    isRealtimeFeatureAvailable,
+    startRecording,
+    stopRecording,
+    stopPlayback,
+    enableRealtime,
+    disableRealtime,
+    logUiTelemetry,
+  ]);
 
   const handleQuickAction = useCallback(
     (promptText) => {
@@ -1111,7 +1285,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
       }
       void sendMessage(promptText, { origin: 'text' });
     },
-    [isRealtimeActive, isSending, sendMessage, sendViaRealtime]
+    [isRealtimeActive, isSending, sendMessage, sendViaRealtime],
   );
 
   useEffect(() => {
@@ -1177,7 +1351,10 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     if (activeContext && draft.trim().toLowerCase() === 'generate next steps') {
       try {
         addRealtimeMessage({ role: 'user', content: draft });
-        addRealtimeMessage({ role: 'assistant', content: `Creating task for ${activeContext.title || activeContext.entity_type}...` });
+        addRealtimeMessage({
+          role: 'assistant',
+          content: `Creating task for ${activeContext.title || activeContext.entity_type}...`,
+        });
 
         const res = await fetch('/api/tasks/from-intent', {
           method: 'POST',
@@ -1186,8 +1363,8 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
             description: draft,
             entity_type: activeContext.entity_type,
             entity_id: activeContext.entity_id,
-            tenant_id: tenantId
-          })
+            tenant_id: tenantId,
+          }),
         });
 
         if (!res.ok) {
@@ -1215,17 +1392,30 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     setTimeout(() => {
       draftInputRef.current?.focus();
     }, 10);
-  }, [draft, draftOrigin, isRealtimeActive, isSending, sendMessage, sendViaRealtime, activeContext, addRealtimeMessage, tenantId]);
-  const speakMessage = useCallback(async (msg) => {
-    const text = (msg?.content || '').slice(0, 4000);
-    if (!text) return;
-    setActiveSpeechMessageId(msg.id);
-    try {
-      await playSpeech(text);
-    } catch {
-      // Error state handled in hook; UI message below
-    }
-  }, [playSpeech]);
+  }, [
+    draft,
+    draftOrigin,
+    isRealtimeActive,
+    isSending,
+    sendMessage,
+    sendViaRealtime,
+    activeContext,
+    addRealtimeMessage,
+    tenantId,
+  ]);
+  const speakMessage = useCallback(
+    async (msg) => {
+      const text = (msg?.content || '').slice(0, 4000);
+      if (!text) return;
+      setActiveSpeechMessageId(msg.id);
+      try {
+        await playSpeech(text);
+      } catch {
+        // Error state handled in hook; UI message below
+      }
+    },
+    [playSpeech],
+  );
 
   // Reserved for future UI button to stop speech playback
   const _stopSpeechPlayback = useCallback(() => {
@@ -1245,10 +1435,10 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
       draftInputRef.current?.focus();
       logUiTelemetry('ui.suggestion.applied', {
         suggestionId,
-        source: suggestionMeta?.source
+        source: suggestionMeta?.source,
       });
     },
-    [applySuggestion, logUiTelemetry, suggestions]
+    [applySuggestion, logUiTelemetry, suggestions],
   );
 
   useEffect(() => {
@@ -1285,59 +1475,74 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     await submitDraft();
   };
 
-  const handlePressToTalkStart = useCallback((event) => {
-    if (event) {
-      event.preventDefault();
-      event.stopPropagation();
-    }
-    if (isRealtimeActive || isSending || isRecording) return;
-    pressToTalkActiveRef.current = true;
-    setVoiceWarning(null);
-    startRecording();
-  }, [isRealtimeActive, isRecording, isSending, startRecording]);
+  const handlePressToTalkStart = useCallback(
+    (event) => {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      if (isRealtimeActive || isSending || isRecording) return;
+      pressToTalkActiveRef.current = true;
+      setVoiceWarning(null);
+      startRecording();
+    },
+    [isRealtimeActive, isRecording, isSending, startRecording],
+  );
 
-  const handlePressToTalkEnd = useCallback((event) => {
-    if (event) {
-      event.preventDefault();
-      event.stopPropagation();
-    }
-    if (isRealtimeActive) return;
-    if (pressToTalkActiveRef.current) {
-      pressToTalkActiveRef.current = false;
-      stopRecording();
-      return;
-    }
-    if (isRecording) {
-      stopRecording();
-    }
-  }, [isRealtimeActive, isRecording, stopRecording]);
+  const handlePressToTalkEnd = useCallback(
+    (event) => {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      if (isRealtimeActive) return;
+      if (pressToTalkActiveRef.current) {
+        pressToTalkActiveRef.current = false;
+        stopRecording();
+        return;
+      }
+      if (isRecording) {
+        stopRecording();
+      }
+    },
+    [isRealtimeActive, isRecording, stopRecording],
+  );
 
   // Reserved for future cancel gesture on PTT
-  const _handlePressToTalkCancel = useCallback((event) => {
-    if (event) {
-      event.preventDefault();
-      event.stopPropagation();
-    }
-    if (isRealtimeActive) return;
-    if (!pressToTalkActiveRef.current && !isRecording) return;
-    pressToTalkActiveRef.current = false;
-    stopRecording();
-  }, [isRealtimeActive, isRecording, stopRecording]);
+  const _handlePressToTalkCancel = useCallback(
+    (event) => {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      if (isRealtimeActive) return;
+      if (!pressToTalkActiveRef.current && !isRecording) return;
+      pressToTalkActiveRef.current = false;
+      stopRecording();
+    },
+    [isRealtimeActive, isRecording, stopRecording],
+  );
 
   // Reserved for future keyboard PTT support
-  const _handleVoiceKeyDown = useCallback((event) => {
-    if (isRealtimeActive) return;
-    if (event.code !== 'Space' && event.code !== 'Enter') return;
-    if (pressToTalkActiveRef.current) return;
-    handlePressToTalkStart(event);
-  }, [handlePressToTalkStart, isRealtimeActive]);
+  const _handleVoiceKeyDown = useCallback(
+    (event) => {
+      if (isRealtimeActive) return;
+      if (event.code !== 'Space' && event.code !== 'Enter') return;
+      if (pressToTalkActiveRef.current) return;
+      handlePressToTalkStart(event);
+    },
+    [handlePressToTalkStart, isRealtimeActive],
+  );
 
   // Reserved for future keyboard PTT support
-  const _handleVoiceKeyUp = useCallback((event) => {
-    if (isRealtimeActive) return;
-    if (event.code !== 'Space' && event.code !== 'Enter') return;
-    handlePressToTalkEnd(event);
-  }, [handlePressToTalkEnd, isRealtimeActive]);
+  const _handleVoiceKeyUp = useCallback(
+    (event) => {
+      if (isRealtimeActive) return;
+      if (event.code !== 'Space' && event.code !== 'Enter') return;
+      handlePressToTalkEnd(event);
+    },
+    [handlePressToTalkEnd, isRealtimeActive],
+  );
 
   // Toggle mic - uses Realtime API for true streaming transcription
   // When mic is clicked, it enables Realtime Voice for live streaming
@@ -1346,9 +1551,9 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
       isRealtimeActive,
       isRealtimeSupported,
       isRealtimeFeatureAvailable,
-      isListening
+      isListening,
     });
-    
+
     // If realtime is already active, stop it
     if (isRealtimeActive) {
       console.log('[AiSidebar] Stopping realtime (already active)');
@@ -1356,7 +1561,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
       disableRealtime();
       return;
     }
-    
+
     // Start realtime session for streaming transcription
     if (isRealtimeSupported && isRealtimeFeatureAvailable) {
       console.log('[AiSidebar] Starting realtime voice...');
@@ -1376,7 +1581,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     } else {
       console.log('[AiSidebar] Realtime not available, using fallback STT', {
         isRealtimeSupported,
-        isRealtimeFeatureAvailable
+        isRealtimeFeatureAvailable,
       });
       // Fallback: use non-realtime STT if realtime not available
       if (isListening) {
@@ -1388,7 +1593,17 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
         logUiTelemetry('ui.voice.listening_started', { fallback: true });
       }
     }
-  }, [isRealtimeActive, isRealtimeSupported, isRealtimeFeatureAvailable, isListening, startListening, stopListening, enableRealtime, disableRealtime, logUiTelemetry]);
+  }, [
+    isRealtimeActive,
+    isRealtimeSupported,
+    isRealtimeFeatureAvailable,
+    isListening,
+    startListening,
+    stopListening,
+    enableRealtime,
+    disableRealtime,
+    logUiTelemetry,
+  ]);
 
   const handleKeyDown = (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -1398,7 +1613,9 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
   };
 
   // Reserved for future send button state refinement
-  const _sendButtonDisabled = !draft.trim() || (isRealtimeActive ? !isRealtimeConnected || isRealtimeInitializing : isSending);
+  const _sendButtonDisabled =
+    !draft.trim() ||
+    (isRealtimeActive ? !isRealtimeConnected || isRealtimeInitializing : isSending);
   const _isSendLoading = isRealtimeActive ? isRealtimeInitializing : isSending;
 
   useEffect(() => {
@@ -1439,7 +1656,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     logUiTelemetry,
     realtimeLiveFlag,
     setRealtimeMode,
-    stopRealtimeSession
+    stopRealtimeSession,
   ]);
 
   return (
@@ -1451,24 +1668,36 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
         data-testid="ai-sidebar-root"
       >
         <style>{`
-        .aisha-sidebar { position: fixed; top: 0; right: 0; height: 100%; width: 0; overflow: hidden; z-index: 2000; transition: width 0.25s ease; }
+        .aisha-sidebar { position: fixed; top: 0; right: 0; height: 100dvh; width: 0; overflow: hidden; z-index: 2000; transition: width 0.25s ease; }
         .aisha-sidebar.open { width: 540px; }
-        .aisha-sidebar .sidebar-panel { position: absolute; right: 0; top: 0; width: 540px; height: 100%; display: flex; flex-direction: column; background: #ffffff; color: #0f172a; border-left: 1px solid rgba(15,23,42,0.08); box-shadow: -12px 0 35px rgba(15,23,42,0.12); }
+        .aisha-sidebar .sidebar-panel { position: absolute; right: 0; top: 0; width: 540px; height: 100dvh; display: flex; flex-direction: column; background: #ffffff; color: #0f172a; border-left: 1px solid rgba(15,23,42,0.08); box-shadow: -12px 0 35px rgba(15,23,42,0.12); }
         .theme-dark .aisha-sidebar .sidebar-panel { background: #0b0f19; color: #f8fafc; border-left: 1px solid rgba(255,255,255,0.05); box-shadow: -12px 0 35px rgba(0,0,0,0.65); }
-        .aisha-sidebar .sidebar-backdrop { position: fixed; top: 0; left: 0; width: calc(100% - 540px); height: 100%; background: rgba(15,23,42,0.2); backdrop-filter: blur(2px); z-index: 1999; }
+        .aisha-sidebar .sidebar-backdrop { position: fixed; top: 0; left: 0; width: calc(100% - 540px); height: 100dvh; background: rgba(15,23,42,0.2); backdrop-filter: blur(2px); z-index: 1999; }
         .theme-dark .aisha-sidebar .sidebar-backdrop { background: rgba(2,6,23,0.35); }
         .aisha-sidebar .sidebar-header { position: relative; z-index: 10; pointer-events: auto; }
         .aisha-sidebar .sidebar-close-btn { position: relative; z-index: 20; cursor: pointer; }
         .aisha-message.assistant .prose, .aisha-message.assistant .prose p, .aisha-message.assistant .prose li, .aisha-message.assistant .prose code, .aisha-message.assistant .prose strong, .aisha-message.assistant .prose em { color: #111827; }
         .theme-dark .aisha-message.assistant .prose, .theme-dark .aisha-message.assistant .prose p, .theme-dark .aisha-message.assistant .prose li, .theme-dark .aisha-message.assistant .prose code, .theme-dark .aisha-message.assistant .prose strong, .theme-dark .aisha-message.assistant .prose em { color: #f8fafc; }
+        @media (max-width: 1023px) {
+          .aisha-sidebar.open { width: 100vw; }
+          .aisha-sidebar .sidebar-panel {
+            width: 100vw;
+            max-width: 100vw;
+            border-left: 0;
+            box-shadow: none;
+          }
+          .aisha-sidebar .sidebar-backdrop {
+            width: 100vw;
+          }
+        }
         `}</style>
-      <aside
-        className="sidebar-panel"
-        role="dialog"
-        aria-modal="true"
-        aria-label="AiSHA Assistant"
-      >
-          <header className="sidebar-header flex items-center justify-between border-b border-slate-200 px-5 py-4 text-slate-900 dark:border-slate-800/70 dark:text-slate-100">
+        <aside
+          className="sidebar-panel"
+          role="dialog"
+          aria-modal="true"
+          aria-label="AiSHA Assistant"
+        >
+          <header className="sidebar-header flex items-center justify-between border-b border-slate-200 px-3 py-3 text-slate-900 dark:border-slate-800/70 dark:text-slate-100 sm:px-5 sm:py-4">
             <div className="flex items-center gap-3">
               {/* Close button moved to left side as text */}
               <button
@@ -1493,24 +1722,28 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
               <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-600/90 shadow-md shadow-indigo-500/20">
                 <Sparkles className="h-4.5 w-4.5 text-white" />
-            </div>
+              </div>
               <div className="space-y-0.5">
-                <p className="text-[15px] font-semibold leading-tight">{isDeveloperMode ? 'Developer AI' : 'AiSHA Assistant'}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{isDeveloperMode ? 'Claude • Code analysis' : 'CRM operations & automation'}</p>
+                <p className="text-[15px] font-semibold leading-tight">
+                  {isDeveloperMode ? 'Developer AI' : 'AiSHA Assistant'}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {isDeveloperMode ? 'Claude • Code analysis' : 'CRM operations & automation'}
+                </p>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={resetThread}
-              className="text-slate-500 hover:text-red-600 dark:text-slate-300 dark:hover:text-red-400"
-              title="Clear chat"
-              aria-label="Clear chat"
-              type="button"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={resetThread}
+                className="text-slate-500 hover:text-red-600 dark:text-slate-300 dark:hover:text-red-400"
+                title="Clear chat"
+                aria-label="Clear chat"
+                type="button"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
               {/* Developer Mode Toggle - Superadmin Only */}
               {user?.role === 'superadmin' && (
                 <Button
@@ -1528,10 +1761,10 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                   <Code className="h-4 w-4" />
                 </Button>
               )}
-          </div>
-        </header>
+            </div>
+          </header>
 
-          <div className="flex-1 overflow-y-auto px-5 py-6">
+          <div className="flex-1 overflow-y-auto px-3 py-4 sm:px-5 sm:py-6">
             <div className="flex flex-col gap-6 pb-2">
               <section className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-indigo-50/70 to-slate-50 px-6 py-6 shadow-lg dark:border-slate-700/60 dark:from-slate-900/70 dark:via-slate-900/40 dark:to-slate-950">
                 <div className="flex flex-col gap-5 lg:flex-row lg:items-center">
@@ -1543,16 +1776,27 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                       Precision briefings, revenue intelligence, and voice-ready coaching.
                     </p>
                     <p className="text-sm text-slate-500 dark:text-slate-300">
-                      Human-level partner for scheduling, deal rooms, and decision prep across every customer you manage.
+                      Human-level partner for scheduling, deal rooms, and decision prep across every
+                      customer you manage.
                     </p>
                     <div className="mt-1 inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200">
-                      <span className={`h-2 w-2 rounded-full ${assistantStatusDotClass}`} aria-hidden="true" />
+                      <span
+                        className={`h-2 w-2 rounded-full ${assistantStatusDotClass}`}
+                        aria-hidden="true"
+                      />
                       Voice ready • Live support
                     </div>
                   </div>
                   <div className="flex flex-shrink-0 justify-center lg:justify-end">
                     <div className="relative">
-                      <div className="absolute inset-0 translate-y-6 blur-3xl opacity-70" style={{ background: 'radial-gradient(circle, rgba(99,102,241,0.35), transparent 60%)' }} aria-hidden="true" />
+                      <div
+                        className="absolute inset-0 translate-y-6 blur-3xl opacity-70"
+                        style={{
+                          background:
+                            'radial-gradient(circle, rgba(99,102,241,0.35), transparent 60%)',
+                        }}
+                        aria-hidden="true"
+                      />
                       <img
                         src={AISHA_EXECUTIVE_PORTRAIT}
                         alt="AiSHA Executive Assistant portrait"
@@ -1569,28 +1813,44 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                 </div>
                 <div className="mt-5 grid gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3 text-xs dark:border-slate-700/70 dark:bg-slate-900/40 sm:grid-cols-2">
                   <div className="space-y-1">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Workspace</p>
-                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{tenantDisplayName}</p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">{tenantBadgeSubtitle}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      Workspace
+                    </p>
+                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      {tenantDisplayName}
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {tenantBadgeSubtitle}
+                    </p>
                     <span
-                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${hasTenantSelected
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                        hasTenantSelected
                           ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'
                           : 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200'
-                        }`}
+                      }`}
                     >
                       {hasTenantSelected ? 'Active tenant' : 'Tenant required'}
                     </span>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">{tenantRoleLabel}</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {tenantRoleLabel}
+                    </p>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Assistant status</p>
-                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{assistantStatusHeadline}</p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">{assistantStatusSubcopy}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      Assistant status
+                    </p>
+                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      {assistantStatusHeadline}
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {assistantStatusSubcopy}
+                    </p>
                   </div>
                 </div>
                 {!hasTenantSelected && (
                   <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                    Select a tenant from the global header to unlock guided forms, personalized data briefs, and secure actions.
+                    Select a tenant from the global header to unlock guided forms, personalized data
+                    briefs, and secure actions.
                   </p>
                 )}
               </section>
@@ -1599,7 +1859,9 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                 <div className="flex items-center justify-between gap-4 mb-4">
                   <div className="flex items-center gap-2">
                     <div className="h-5 w-1 rounded-full bg-indigo-500" aria-hidden="true" />
-                    <p className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">Quick actions</p>
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                      Quick actions
+                    </p>
                   </div>
                   <span className="text-[10px] text-slate-400 dark:text-slate-500">Tap to run</span>
                 </div>
@@ -1624,7 +1886,10 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                 </div>
               </section>
 
-              <section className="rounded-2xl border border-slate-200 bg-white/90 px-5 py-5 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/70" data-testid="conversational-form-launchers">
+              <section
+                className="rounded-2xl border border-slate-200 bg-white/90 px-5 py-5 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/70"
+                data-testid="conversational-form-launchers"
+              >
                 <div className="mb-4 flex items-center justify-between gap-4">
                   <div className="flex items-center gap-2">
                     <div className="h-5 w-1 rounded-full bg-emerald-500" aria-hidden="true" />
@@ -1634,28 +1899,36 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                     </div>
                   </div>
                   {!canUseConversationalForms && (
-                    <span className="text-[10px] text-amber-600 dark:text-amber-300">Select tenant</span>
+                    <span className="text-[10px] text-amber-600 dark:text-amber-300">
+                      Select tenant
+                    </span>
                   )}
                 </div>
                 <div className="grid grid-cols-5 gap-3">
                   {conversationalSchemaOptions.map((schema) => {
                     const isActive = activeFormId === schema.id;
                     const IconComponent = ENTITY_ICONS[schema.id] || Sparkles;
-                    const entityLabel = ENTITY_LABELS[schema.id] || schema.label.replace('New ', '');
+                    const entityLabel =
+                      ENTITY_LABELS[schema.id] || schema.label.replace('New ', '');
                     return (
                       <button
                         key={schema.id}
                         type="button"
                         onClick={() => handleFormChipClick(schema.id)}
                         title={schema.label}
-                        className={`group relative flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 transition-all duration-200 ${isActive
-                          ? 'border-emerald-500 bg-emerald-600 text-white shadow-lg shadow-emerald-500/30'
-                          : 'border-slate-200 bg-gradient-to-b from-white to-slate-50 text-slate-600 hover:border-emerald-400 hover:from-emerald-50 hover:to-white hover:text-emerald-600 hover:shadow-md dark:border-slate-700 dark:from-slate-900/60 dark:to-slate-900/40 dark:text-slate-300 dark:hover:border-emerald-500/60 dark:hover:from-emerald-950/40 dark:hover:to-slate-900/40 dark:hover:text-emerald-300'
-                          } ${!canUseConversationalForms ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        className={`group relative flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 transition-all duration-200 ${
+                          isActive
+                            ? 'border-emerald-500 bg-emerald-600 text-white shadow-lg shadow-emerald-500/30'
+                            : 'border-slate-200 bg-gradient-to-b from-white to-slate-50 text-slate-600 hover:border-emerald-400 hover:from-emerald-50 hover:to-white hover:text-emerald-600 hover:shadow-md dark:border-slate-700 dark:from-slate-900/60 dark:to-slate-900/40 dark:text-slate-300 dark:hover:border-emerald-500/60 dark:hover:from-emerald-950/40 dark:hover:to-slate-900/40 dark:hover:text-emerald-300'
+                        } ${!canUseConversationalForms ? 'opacity-50 cursor-not-allowed' : ''}`}
                         disabled={!canUseConversationalForms || formSubmissionState.isSubmitting}
                       >
-                        <IconComponent className={`h-5 w-5 flex-shrink-0 ${isActive ? '' : 'text-emerald-500 dark:text-emerald-400'}`} />
-                        <span className={`text-[10px] font-semibold ${isActive ? 'text-white' : 'text-slate-500 dark:text-slate-400'}`}>
+                        <IconComponent
+                          className={`h-5 w-5 flex-shrink-0 ${isActive ? '' : 'text-emerald-500 dark:text-emerald-400'}`}
+                        />
+                        <span
+                          className={`text-[10px] font-semibold ${isActive ? 'text-white' : 'text-slate-500 dark:text-slate-400'}`}
+                        >
                           {entityLabel}
                         </span>
                       </button>
@@ -1665,7 +1938,10 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
               </section>
 
               {suggestions.length > 0 && (
-                <section className="rounded-2xl border border-slate-200 bg-white/90 px-5 py-5 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/70" data-testid="ai-suggestions">
+                <section
+                  className="rounded-2xl border border-slate-200 bg-white/90 px-5 py-5 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/70"
+                  data-testid="ai-suggestions"
+                >
                   <div className="mb-4 flex items-center gap-2">
                     <div className="h-5 w-1 rounded-full bg-indigo-500" aria-hidden="true" />
                     <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">
@@ -1691,7 +1967,10 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
               )}
 
               {activeFormSchema && (
-                <section className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-4 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/70" data-testid="conversational-form-panel">
+                <section
+                  className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-4 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/70"
+                  data-testid="conversational-form-panel"
+                >
                   <div className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-100">
                     Guided {activeFormSchema.label}
                   </div>
@@ -1740,88 +2019,139 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                 </div>
               </section>
             </div>
-        </div>
+          </div>
 
-          <div className="border-t border-slate-200 bg-slate-50/80 px-5 py-4 dark:border-slate-800/60 dark:bg-slate-950/70">
+          <div className="border-t border-slate-200 bg-slate-50/80 px-3 py-3 dark:border-slate-800/60 dark:bg-slate-950/70 sm:px-5 sm:py-4">
             {activeContext && (
               <div className="mb-3 flex items-center justify-between rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-900 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-100">
                 <div className="flex items-center gap-2">
                   <Target className="h-4 w-4" />
-                  <span>Working on: <strong>{activeContext.title || activeContext.entity_type}</strong></span>
+                  <span>
+                    Working on: <strong>{activeContext.title || activeContext.entity_type}</strong>
+                  </span>
                 </div>
-                <button type="button" onClick={() => setActiveContext(null)} className="hover:text-indigo-700 dark:hover:text-indigo-300">
+                <button
+                  type="button"
+                  onClick={() => setActiveContext(null)}
+                  className="hover:text-indigo-700 dark:hover:text-indigo-300"
+                >
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
             )}
             <form onSubmit={handleSubmit} className="space-y-3">
-            {voiceWarning && (
+              {voiceWarning && (
                 <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
-                {voiceWarning}
-              </div>
-            )}
-            {showTelemetryDebug && latestTelemetry && (
-              <div className="rounded border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] text-blue-900 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-100">
-                <span className="font-semibold">Realtime telemetry</span>
-                <span className="ml-2">{latestTelemetry.event}</span>
-                {latestTelemetry.timestamp && (
-                  <span className="ml-2">{new Date(latestTelemetry.timestamp).toLocaleTimeString()}</span>
-                )}
-              </div>
-            )}
+                  {voiceWarning}
+                </div>
+              )}
+              {showTelemetryDebug && latestTelemetry && (
+                <div className="rounded border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] text-blue-900 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-100">
+                  <span className="font-semibold">Realtime telemetry</span>
+                  <span className="ml-2">{latestTelemetry.event}</span>
+                  {latestTelemetry.timestamp && (
+                    <span className="ml-2">
+                      {new Date(latestTelemetry.timestamp).toLocaleTimeString()}
+                    </span>
+                  )}
+                </div>
+              )}
 
               {/* Voice status indicators - show contextually */}
-            {isRealtimeFeatureAvailable && isRealtimeActive && (
-                <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs ${
-                isRealtimeSpeaking
-                  ? 'border-blue-300 bg-blue-50 text-blue-900 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-100'
-                  : 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100'
-                  }`}>
+              {isRealtimeFeatureAvailable && isRealtimeActive && (
+                <div
+                  className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs ${
+                    isRealtimeSpeaking
+                      ? 'border-blue-300 bg-blue-50 text-blue-900 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-100'
+                      : 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100'
+                  }`}
+                >
                   {isRealtimeSpeaking ? (
                     <>
                       <Volume2 className="h-4 w-4 animate-pulse text-blue-600 dark:text-blue-400" />
-                      <span><strong>AI Speaking</strong> — Mic muted to prevent feedback</span>
+                      <span>
+                        <strong>AI Speaking</strong> — Mic muted to prevent feedback
+                      </span>
                     </>
                   ) : (
                     <>
                       <div className="flex items-center gap-0.5">
-                        <span className="inline-block h-3 w-0.5 animate-pulse rounded-full bg-emerald-500" style={{ animationDelay: '0ms' }} />
-                        <span className="inline-block h-4 w-0.5 animate-pulse rounded-full bg-emerald-500" style={{ animationDelay: '150ms' }} />
-                        <span className="inline-block h-2 w-0.5 animate-pulse rounded-full bg-emerald-500" style={{ animationDelay: '300ms' }} />
-                        <span className="inline-block h-5 w-0.5 animate-pulse rounded-full bg-emerald-500" style={{ animationDelay: '450ms' }} />
-                        <span className="inline-block h-3 w-0.5 animate-pulse rounded-full bg-emerald-500" style={{ animationDelay: '600ms' }} />
+                        <span
+                          className="inline-block h-3 w-0.5 animate-pulse rounded-full bg-emerald-500"
+                          style={{ animationDelay: '0ms' }}
+                        />
+                        <span
+                          className="inline-block h-4 w-0.5 animate-pulse rounded-full bg-emerald-500"
+                          style={{ animationDelay: '150ms' }}
+                        />
+                        <span
+                          className="inline-block h-2 w-0.5 animate-pulse rounded-full bg-emerald-500"
+                          style={{ animationDelay: '300ms' }}
+                        />
+                        <span
+                          className="inline-block h-5 w-0.5 animate-pulse rounded-full bg-emerald-500"
+                          style={{ animationDelay: '450ms' }}
+                        />
+                        <span
+                          className="inline-block h-3 w-0.5 animate-pulse rounded-full bg-emerald-500"
+                          style={{ animationDelay: '600ms' }}
+                        />
                       </div>
-                      <span><strong>Live Voice</strong> — Speak naturally</span>
+                      <span>
+                        <strong>Live Voice</strong> — Speak naturally
+                      </span>
                     </>
                   )}
-              </div>
-            )}
+                </div>
+              )}
 
               {/* Continuous listening status - only when NOT in realtime mode */}
-            {isListening && !isRealtimeActive && (
-                <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs ${
-                isRecording 
-                  ? 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100'
-                  : isSending
-                    ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100'
-                    : isSpeechPlaying
-                      ? 'border-blue-300 bg-blue-50 text-blue-900 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-100'
-                      : 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300'
-              }`}>
+              {isListening && !isRealtimeActive && (
+                <div
+                  className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs ${
+                    isRecording
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100'
+                      : isSending
+                        ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100'
+                        : isSpeechPlaying
+                          ? 'border-blue-300 bg-blue-50 text-blue-900 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-100'
+                          : 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300'
+                  }`}
+                >
                   {isRecording ? (
                     <>
                       <div className="flex items-center gap-0.5">
-                        <span className="inline-block h-3 w-0.5 animate-pulse rounded-full bg-emerald-500" style={{ animationDelay: '0ms' }} />
-                        <span className="inline-block h-4 w-0.5 animate-pulse rounded-full bg-emerald-500" style={{ animationDelay: '150ms' }} />
-                        <span className="inline-block h-2 w-0.5 animate-pulse rounded-full bg-emerald-500" style={{ animationDelay: '300ms' }} />
-                        <span className="inline-block h-5 w-0.5 animate-pulse rounded-full bg-emerald-500" style={{ animationDelay: '600ms' }} />
+                        <span
+                          className="inline-block h-3 w-0.5 animate-pulse rounded-full bg-emerald-500"
+                          style={{ animationDelay: '0ms' }}
+                        />
+                        <span
+                          className="inline-block h-4 w-0.5 animate-pulse rounded-full bg-emerald-500"
+                          style={{ animationDelay: '150ms' }}
+                        />
+                        <span
+                          className="inline-block h-2 w-0.5 animate-pulse rounded-full bg-emerald-500"
+                          style={{ animationDelay: '300ms' }}
+                        />
+                        <span
+                          className="inline-block h-5 w-0.5 animate-pulse rounded-full bg-emerald-500"
+                          style={{ animationDelay: '600ms' }}
+                        />
                       </div>
-                      <span><strong>Listening...</strong></span>
+                      <span>
+                        <strong>Listening...</strong>
+                      </span>
                     </>
                   ) : (
                     <>
                       <Mic className="h-4 w-4" />
-                      <span>{isSending ? 'Sending...' : isSpeechPlaying ? 'AI Speaking...' : 'Processing...'}</span>
+                      <span>
+                        {isSending
+                          ? 'Sending...'
+                          : isSpeechPlaying
+                            ? 'AI Speaking...'
+                            : 'Processing...'}
+                      </span>
                     </>
                   )}
                 </div>
@@ -1833,7 +2163,9 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                   <div className="flex items-start gap-2">
                     <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-rose-500" />
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold">{realtimeErrorDetails?.message || realtimeError}</p>
+                      <p className="font-semibold">
+                        {realtimeErrorDetails?.message || realtimeError}
+                      </p>
                       {realtimeErrorDetails?.hint && (
                         <p className="mt-1 text-[11px] opacity-80">{realtimeErrorDetails.hint}</p>
                       )}
@@ -1842,20 +2174,22 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                       type="button"
                       onClick={() => {
                         clearRealtimeErrors();
-                        logUiTelemetry('ui.realtime.error.dismissed', { code: realtimeErrorDetails?.code });
+                        logUiTelemetry('ui.realtime.error.dismissed', {
+                          code: realtimeErrorDetails?.code,
+                        });
                       }}
                       className="text-[11px] font-semibold text-rose-700 hover:underline dark:text-rose-200"
                     >
                       Dismiss
                     </button>
                   </div>
-              </div>
-            )}
+                </div>
+              )}
 
               {/* Text input with inline send */}
               <div className="relative">
                 <Textarea
-                ref={draftInputRef}
+                  ref={draftInputRef}
                   value={draft}
                   onChange={handleDraftChange}
                   onKeyDown={handleKeyDown}
@@ -1881,55 +2215,70 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
               </div>
 
               {/* Compact control toolbar */}
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {/* Voice mode controls */}
                 {isRealtimeActive && voiceModeActive ? (
                   /* PTT Button - active voice mode */
                   <button
-                  type="button"
-                    className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all ${isPTTActive
-                      ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
-                  }`}
+                    type="button"
+                    className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all ${
+                      isPTTActive
+                        ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                    }`}
                     onMouseDown={handleRealtimePTTStart}
                     onMouseUp={handleRealtimePTTEnd}
                     onMouseLeave={handleRealtimePTTEnd}
                     onTouchStart={handleRealtimePTTStart}
                     onTouchEnd={handleRealtimePTTEnd}
-                  disabled={isRealtimeInitializing}
+                    disabled={isRealtimeInitializing}
                     title="Hold to talk, release to send"
                     data-testid="ptt-button"
-                >
+                  >
                     {isPTTActive ? (
                       <>
                         <div className="flex items-center gap-0.5">
-                          <span className="inline-block h-2.5 w-0.5 animate-pulse rounded-full bg-white" style={{ animationDelay: '0ms' }} />
-                          <span className="inline-block h-3.5 w-0.5 animate-pulse rounded-full bg-white" style={{ animationDelay: '150ms' }} />
-                          <span className="inline-block h-2 w-0.5 animate-pulse rounded-full bg-white" style={{ animationDelay: '300ms' }} />
-                          <span className="inline-block h-4 w-0.5 animate-pulse rounded-full bg-white" style={{ animationDelay: '450ms' }} />
+                          <span
+                            className="inline-block h-2.5 w-0.5 animate-pulse rounded-full bg-white"
+                            style={{ animationDelay: '0ms' }}
+                          />
+                          <span
+                            className="inline-block h-3.5 w-0.5 animate-pulse rounded-full bg-white"
+                            style={{ animationDelay: '150ms' }}
+                          />
+                          <span
+                            className="inline-block h-2 w-0.5 animate-pulse rounded-full bg-white"
+                            style={{ animationDelay: '300ms' }}
+                          />
+                          <span
+                            className="inline-block h-4 w-0.5 animate-pulse rounded-full bg-white"
+                            style={{ animationDelay: '450ms' }}
+                          />
                         </div>
                         <span>Release to Send</span>
                       </>
                     ) : isRealtimeSpeaking ? (
                       <>
-                          <Volume2 className="h-4 w-4 animate-pulse" />
-                          <span>AI Speaking</span>
-                        </>
-                      ) : (
-                        <>
+                        <Volume2 className="h-4 w-4 animate-pulse" />
+                        <span>AI Speaking</span>
+                      </>
+                    ) : (
+                      <>
                         <Mic className="h-4 w-4" />
                         <span>Hold to Talk</span>
                       </>
                     )}
                   </button>
-                ) : !isRealtimeActive && (
-                  /* PTT Mode Toggle - click to enable */
-                  <button
-                    type="button"
-                      className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all ${voiceModeActive
-                        ? 'bg-emerald-500 text-white shadow-md'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
-                        }`}
+                ) : (
+                  !isRealtimeActive && (
+                    /* PTT Mode Toggle - click to enable */
+                    <button
+                      type="button"
+                      className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all ${
+                        voiceModeActive
+                          ? 'bg-emerald-500 text-white shadow-md'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                      }`}
                       onClick={handleVoiceModeToggle}
                       disabled={isRealtimeInitializing || !isRealtimeFeatureAvailable}
                       title={voiceModeActive ? 'Click to stop PTT' : 'Enable Push-to-Talk'}
@@ -1942,30 +2291,41 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                         </>
                       ) : voiceModeActive ? (
                         <>
-                        <div className="flex items-center gap-0.5">
-                          <span className="inline-block h-2.5 w-0.5 animate-pulse rounded-full bg-white" style={{ animationDelay: '0ms' }} />
-                          <span className="inline-block h-3.5 w-0.5 animate-pulse rounded-full bg-white" style={{ animationDelay: '150ms' }} />
-                          <span className="inline-block h-2 w-0.5 animate-pulse rounded-full bg-white" style={{ animationDelay: '300ms' }} />
-                        </div>
-                        <span>Voice On</span>
-                      </>
-                    ) : (
-                      <>
-                        <Mic className="h-4 w-4" />
-                        <span>Voice</span>
-                      </>
-                    )}
-                  </button>
+                          <div className="flex items-center gap-0.5">
+                            <span
+                              className="inline-block h-2.5 w-0.5 animate-pulse rounded-full bg-white"
+                              style={{ animationDelay: '0ms' }}
+                            />
+                            <span
+                              className="inline-block h-3.5 w-0.5 animate-pulse rounded-full bg-white"
+                              style={{ animationDelay: '150ms' }}
+                            />
+                            <span
+                              className="inline-block h-2 w-0.5 animate-pulse rounded-full bg-white"
+                              style={{ animationDelay: '300ms' }}
+                            />
+                          </div>
+                          <span>Voice On</span>
+                        </>
+                      ) : (
+                        <>
+                          <Mic className="h-4 w-4" />
+                          <span>Voice</span>
+                        </>
+                      )}
+                    </button>
+                  )
                 )}
 
                 {/* Realtime voice toggle */}
                 {isRealtimeFeatureAvailable && (
                   <button
                     type="button"
-                    className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-all ${isRealtimeActive
-                      ? 'bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:hover:bg-rose-900/50'
-                      : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:hover:bg-indigo-900/50'
-                      }`}
+                    className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-all ${
+                      isRealtimeActive
+                        ? 'bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:hover:bg-rose-900/50'
+                        : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:hover:bg-indigo-900/50'
+                    }`}
                     onClick={() => void handleRealtimeToggle()}
                     disabled={!isRealtimeSupported || isRealtimeInitializing}
                   >
@@ -1987,16 +2347,29 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                 {isRealtimeFeatureAvailable && !isRealtimeActive && (
                   <button
                     type="button"
-                    className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-all ${isWakeWordModeEnabled
-                      ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:hover:bg-emerald-900/50'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
-                      }`}
+                    className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-all ${
+                      isWakeWordModeEnabled
+                        ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:hover:bg-emerald-900/50'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+                    }`}
                     onClick={handleWakeWordModeToggle}
                     disabled={!isRealtimeSupported}
-                    title={isWakeWordModeEnabled ? 'Wake word listening active - say "Aisha" to activate' : 'Enable wake word detection - say "Aisha" to start'}
+                    title={
+                      isWakeWordModeEnabled
+                        ? 'Wake word listening active - say "Aisha" to activate'
+                        : 'Enable wake word detection - say "Aisha" to start'
+                    }
                   >
-                    <Ear className={`h-3.5 w-3.5 ${isWakeWordModeEnabled && wakeWordStatus === 'listening' ? 'animate-pulse' : ''}`} />
-                    <span>{isWakeWordModeEnabled ? (wakeWordStatus === 'listening' ? 'Listening...' : 'Wake Word On') : 'Wake Word'}</span>
+                    <Ear
+                      className={`h-3.5 w-3.5 ${isWakeWordModeEnabled && wakeWordStatus === 'listening' ? 'animate-pulse' : ''}`}
+                    />
+                    <span>
+                      {isWakeWordModeEnabled
+                        ? wakeWordStatus === 'listening'
+                          ? 'Listening...'
+                          : 'Wake Word On'
+                        : 'Wake Word'}
+                    </span>
                   </button>
                 )}
 
@@ -2017,7 +2390,11 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                 {(speechError || speechPlaybackError) && (
                   <div className="ml-auto text-[10px] text-amber-600 dark:text-amber-300">
                     {speechError && <span>Mic: {String(speechError.message || speechError)}</span>}
-                    {speechPlaybackError && <span>Audio: {String(speechPlaybackError.message || speechPlaybackError)}</span>}
+                    {speechPlaybackError && (
+                      <span>
+                        Audio: {String(speechPlaybackError.message || speechPlaybackError)}
+                      </span>
+                    )}
                   </div>
                 )}
 
@@ -2031,12 +2408,15 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                 {/* Wake word status indicator */}
                 {isWakeWordModeEnabled && !isRealtimeActive && (
                   <div className="ml-auto flex items-center gap-1.5 text-xs">
-                    <span className={`h-2 w-2 rounded-full ${wakeWordStatus === 'listening'
-                        ? 'bg-emerald-500 animate-pulse'
-                        : wakeWordStatus === 'awake'
-                          ? 'bg-amber-500'
-                          : 'bg-slate-400'
-                      }`} />
+                    <span
+                      className={`h-2 w-2 rounded-full ${
+                        wakeWordStatus === 'listening'
+                          ? 'bg-emerald-500 animate-pulse'
+                          : wakeWordStatus === 'awake'
+                            ? 'bg-amber-500'
+                            : 'bg-slate-400'
+                      }`}
+                    />
                     <span className="text-slate-500 dark:text-slate-400">
                       {wakeWordStatus === 'listening' && 'Say "Aisha"'}
                       {wakeWordStatus === 'awake' && 'Listening...'}
@@ -2052,12 +2432,12 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                   Voice features disabled by administrator
                 </p>
               )}
-          </form>
-        </div>
+            </form>
+          </div>
         </aside>
         {isOpen && (
-          <div 
-            className="sidebar-backdrop" 
+          <div
+            className="sidebar-backdrop"
             onMouseDown={(e) => {
               // Use mousedown to close before click event reaches Sheet overlay
               e.stopPropagation();
@@ -2069,7 +2449,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
               e.stopPropagation();
               e.preventDefault();
             }}
-            aria-hidden="true" 
+            aria-hidden="true"
           />
         )}
       </div>

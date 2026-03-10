@@ -1,3 +1,4 @@
+import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import AiSidebar from '../../components/ai/AiSidebar.jsx';
@@ -13,7 +14,7 @@ const speechState = {
   toggleListening: vi.fn(),
   // Legacy aliases for backward compatibility
   startRecording: vi.fn(),
-  stopRecording: vi.fn()
+  stopRecording: vi.fn(),
 };
 let triggerFinalTranscript = null;
 let mockSidebarState;
@@ -38,7 +39,7 @@ vi.mock('@/components/shared/ConfirmDialog.jsx', () => ({
 }));
 
 vi.mock('@/hooks/useRealtimeAiSHA.js', () => ({
-  useRealtimeAiSHA: () => realtimeHookState
+  useRealtimeAiSHA: () => realtimeHookState,
 }));
 
 vi.mock('@/utils/realtimeTelemetry.js', () => ({
@@ -47,7 +48,7 @@ vi.mock('@/utils/realtimeTelemetry.js', () => ({
     mockSubscribeTelemetry(listener);
     return () => mockUnsubscribe(listener);
   },
-  getRealtimeTelemetrySnapshot: () => telemetrySnapshot
+  getRealtimeTelemetrySnapshot: () => telemetrySnapshot,
 }));
 
 if (!HTMLElement.prototype.scrollIntoView) {
@@ -58,9 +59,7 @@ const buildSidebarState = (overrides = {}) => ({
   isOpen: true,
   closeSidebar: vi.fn(),
   resetThread: vi.fn(),
-  messages: [
-    { id: 'welcome', role: 'assistant', content: 'Hello from AiSHA' }
-  ],
+  messages: [{ id: 'welcome', role: 'assistant', content: 'Hello from AiSHA' }],
   isSending: false,
   error: null,
   clearError: vi.fn(),
@@ -68,18 +67,18 @@ const buildSidebarState = (overrides = {}) => ({
   setRealtimeMode: vi.fn(),
   suggestions: [],
   applySuggestion: vi.fn(() => ''),
-  ...overrides
+  ...overrides,
 });
 
 vi.mock('../../components/ai/useAiSidebarState.jsx', () => ({
-  useAiSidebarState: () => mockSidebarState
+  useAiSidebarState: () => mockSidebarState,
 }));
 
 vi.mock('../../components/ai/useSpeechInput.js', () => ({
   useSpeechInput: (options = {}) => {
     triggerFinalTranscript = options?.onFinalTranscript || null;
     return speechState;
-  }
+  },
 }));
 
 vi.mock('../../components/ai/useSpeechOutput.js', () => ({
@@ -88,8 +87,8 @@ vi.mock('../../components/ai/useSpeechOutput.js', () => ({
     stopPlayback: mockStopPlayback,
     isLoading: false,
     isPlaying: false,
-    error: null
-  })
+    error: null,
+  }),
 }));
 
 // Mock the new voice interaction hooks
@@ -115,11 +114,11 @@ vi.mock('@/hooks/useVoiceInteraction.js', () => ({
     stopRecording: vi.fn(),
     sendTextMessage: vi.fn(),
     reset: vi.fn(),
-  })
+  }),
 }));
 
 vi.mock('@/hooks/usePushToTalkKeybinding.js', () => ({
-  usePushToTalkKeybinding: vi.fn()
+  usePushToTalkKeybinding: vi.fn(),
 }));
 
 describe('[AISHA_CHAT] AiSidebar voice', () => {
@@ -173,7 +172,7 @@ describe('[AISHA_CHAT] AiSidebar voice', () => {
     await waitFor(() => {
       expect(mockSendMessage).toHaveBeenCalledWith('show me my leads', {
         origin: 'voice',
-        autoSend: true
+        autoSend: true,
       });
     });
   });
@@ -196,14 +195,14 @@ describe('[AISHA_CHAT] AiSidebar voice', () => {
           id: 'user-voice',
           role: 'user',
           content: 'What are my leads?',
-          metadata: { origin: 'voice' }
+          metadata: { origin: 'voice' },
         },
         {
           id: 'assistant-reply',
           role: 'assistant',
-          content: 'You have 12 open leads.'
-        }
-      ]
+          content: 'You have 12 open leads.',
+        },
+      ],
     });
 
     render(<AiSidebar />);
@@ -221,7 +220,7 @@ describe('[AISHA_CHAT] AiSidebar voice', () => {
     await act(async () => {
       fireEvent.click(voiceButton);
     });
-    
+
     // Should connect to realtime, not legacy STT
     await waitFor(() => {
       expect(mockConnectRealtime).toHaveBeenCalled();
@@ -243,9 +242,11 @@ describe('[AISHA_CHAT] AiSidebar voice', () => {
       expect(mockConnectRealtime).toHaveBeenCalled();
     });
 
-    expect(mockTrackRealtimeEvent).toHaveBeenCalledWith(expect.objectContaining({
-      event: 'ui.voice_mode.enabled',
-    }));
+    expect(mockTrackRealtimeEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'ui.voice_mode.enabled',
+      }),
+    );
 
     // Click the explicit "End Session" button (has confirmation dialog)
     const disableButton = await screen.findByRole('button', { name: /End Session/i });
@@ -257,10 +258,12 @@ describe('[AISHA_CHAT] AiSidebar voice', () => {
     await waitFor(() => {
       expect(mockDisconnectRealtime).toHaveBeenCalled();
     });
-    expect(mockTrackRealtimeEvent).toHaveBeenCalledWith(expect.objectContaining({
-      event: 'ui.realtime.toggle',
-      payload: expect.objectContaining({ enabled: false, phase: 'success' })
-    }));
+    expect(mockTrackRealtimeEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'ui.realtime.toggle',
+        payload: expect.objectContaining({ enabled: false, phase: 'success' }),
+      }),
+    );
   });
 
   it('logs telemetry when destructive voice commands are blocked', async () => {
@@ -271,10 +274,12 @@ describe('[AISHA_CHAT] AiSidebar voice', () => {
     });
 
     await waitFor(() => expect(screen.getByText(/destructive command/i)).toBeInTheDocument());
-    expect(mockTrackRealtimeEvent).toHaveBeenCalledWith(expect.objectContaining({
-      event: 'ui.voice.blocked',
-      payload: expect.objectContaining({ reason: 'dangerous_phrase' })
-    }));
+    expect(mockTrackRealtimeEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'ui.voice.blocked',
+        payload: expect.objectContaining({ reason: 'dangerous_phrase' }),
+      }),
+    );
   });
 
   it('renders actionable realtime error hints from hook details', async () => {
@@ -293,7 +298,9 @@ describe('[AISHA_CHAT] AiSidebar voice', () => {
 
     // UI displays the message and hint, but not individual suggestions
     expect(await screen.findByText('Microphone access was blocked.')).toBeInTheDocument();
-    expect(screen.getByText('Allow microphone access from the browser toolbar.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Allow microphone access from the browser toolbar.'),
+    ).toBeInTheDocument();
   });
 
   it('requires confirmation before disabling realtime voice', async () => {
@@ -393,7 +400,9 @@ describe('[AISHA_CHAT] AiSidebar voice', () => {
       fireEvent.submit(textarea.closest('form'));
     });
 
-    await waitFor(() => expect(mockRealtimeSend).toHaveBeenCalledWith('Show me my quarterly pipeline.'));
+    await waitFor(() =>
+      expect(mockRealtimeSend).toHaveBeenCalledWith('Show me my quarterly pipeline.'),
+    );
     expect(mockSendMessage).not.toHaveBeenCalled();
   });
 
@@ -422,9 +431,11 @@ describe('[AISHA_CHAT] AiSidebar voice', () => {
     });
 
     // Check telemetry was logged
-    expect(mockTrackRealtimeEvent).toHaveBeenCalledWith(expect.objectContaining({
-      event: 'ui.voice_mode.enabled',
-    }));
+    expect(mockTrackRealtimeEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'ui.voice_mode.enabled',
+      }),
+    );
   });
 
   it('shows PTT button after realtime session starts', async () => {

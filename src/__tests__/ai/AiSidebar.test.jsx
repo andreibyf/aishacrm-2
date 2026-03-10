@@ -1,3 +1,4 @@
+import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import AiSidebar from '../../components/ai/AiSidebar';
@@ -21,8 +22,8 @@ function TestHarness() {
   const userContextValue = {
     user: { tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69', email: 'tester@example.com' },
     loading: false,
-    reloadUser: () => { },
-    refetch: () => { }
+    reloadUser: () => {},
+    refetch: () => {},
   };
 
   return (

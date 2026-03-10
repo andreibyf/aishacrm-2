@@ -51,10 +51,11 @@ export default function AiAssistantLauncher({
     <button
       type="button"
       onClick={onToggle}
-      className={`group flex h-11 items-center gap-3 rounded-2xl border px-3 py-2 text-left shadow-lg backdrop-blur transition-all duration-200 ${isOpen
+      className={`group flex h-11 items-center gap-2 rounded-2xl border px-2 py-2 text-left shadow-lg backdrop-blur transition-all duration-200 sm:gap-3 sm:px-3 ${
+        isOpen
           ? 'border-indigo-500/50 bg-indigo-950/80 shadow-indigo-500/20'
           : 'border-white/15 bg-slate-900/80 shadow-slate-950/40 hover:-translate-y-0.5 hover:border-indigo-400/60 hover:bg-slate-900/90 hover:shadow-xl'
-        } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500`}
+      } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500`}
       aria-pressed={isOpen}
       aria-label="Toggle AiSHA assistant"
     >
@@ -72,7 +73,7 @@ export default function AiAssistantLauncher({
       </div>
 
       {/* Text content */}
-      <div className="flex min-w-0 flex-col justify-center">
+      <div className="hidden min-w-0 flex-col justify-center sm:flex">
         <div className="flex items-center gap-1.5">
           <Sparkles className="h-3 w-3 text-indigo-400" />
           <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-300">
@@ -84,7 +85,10 @@ export default function AiAssistantLauncher({
             {SUBHEADLINE_TEXT}
           </span>
           <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-400">
-            <span className={`inline-flex h-1.5 w-1.5 rounded-full ${badge.dotClass}`} aria-hidden="true" />
+            <span
+              className={`inline-flex h-1.5 w-1.5 rounded-full ${badge.dotClass}`}
+              aria-hidden="true"
+            />
             {statusText}
           </span>
         </div>
@@ -92,4 +96,3 @@ export default function AiAssistantLauncher({
     </button>
   );
 }
-
