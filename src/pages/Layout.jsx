@@ -107,6 +107,7 @@ import PortalRootManager from '../components/shared/PortalRootManager';
 import ModalHost from '../components/shared/ModalHost';
 import { ErrorLogProvider } from '../components/shared/ErrorLogger';
 import { LoggerProvider } from '../components/shared/Logger';
+import { NetworkGlobe } from '../components/shared/NetworkGlobe';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ApiOptimizerProvider } from '../components/shared/ApiOptimizer';
@@ -1499,7 +1500,7 @@ function Layout({ children, currentPageName }) {
     } catch (e) {
       console.warn('Failed to apply branding variables at root:', e);
     }
-  }, [primaryColor, accentColor, onPrimaryText, onAccentText]);
+  }, [primaryColor, accentColor, onPrimaryText, onAccentText, hexToHsl]);
 
   const handleLogout = async () => {
     try {
@@ -1706,28 +1707,17 @@ function Layout({ children, currentPageName }) {
   if (!user) {
     return (
       <div
-        className="relative min-h-screen flex items-center justify-center overflow-hidden"
+        className="relative min-h-screen flex items-center overflow-hidden"
         style={{ background: '#080c15' }}
       >
         {/* Neural network background effect */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
-          {/* Radial glow — globe effect */}
-          <div
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
-            style={{
-              width: '800px',
-              height: '800px',
-              background:
-                'radial-gradient(circle, rgba(20,184,166,0.07) 0%, rgba(6,182,212,0.04) 35%, transparent 65%)',
-              borderRadius: '50%',
-            }}
-          />
           {/* Grid lines (subtle) */}
           <div
             className="absolute inset-0 opacity-[0.04]"
             style={{
               backgroundImage:
-                'linear-gradient(rgba(20,184,166,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(20,184,166,0.5) 1px, transparent 1px)',
+                'linear-gradient(rgba(34,211,238,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(34,211,238,0.5) 1px, transparent 1px)',
               backgroundSize: '60px 60px',
             }}
           />
@@ -1738,18 +1728,18 @@ function Layout({ children, currentPageName }) {
             .aisha-dot{position:absolute;border-radius:50%;animation:aishaFloat var(--dur,7s) ease-in-out infinite,aishaPulse var(--pulse,4s) ease-in-out infinite;animation-delay:var(--delay,0s)}
           `}</style>
           {[
-            { t: '12%', l: '8%', s: 4, c: '#14b8a6', d: '0s', dur: '7s', p: '4s' },
-            { t: '22%', l: '82%', s: 3, c: '#22c55e', d: '1.2s', dur: '8s', p: '5s' },
-            { t: '45%', l: '15%', s: 5, c: '#06b6d4', d: '0.5s', dur: '9s', p: '3.5s' },
-            { t: '65%', l: '75%', s: 3, c: '#14b8a6', d: '2s', dur: '6s', p: '4.5s' },
-            { t: '80%', l: '25%', s: 4, c: '#22c55e', d: '1.5s', dur: '7.5s', p: '5s' },
-            { t: '35%', l: '90%', s: 3, c: '#06b6d4', d: '0.8s', dur: '8.5s', p: '3s' },
-            { t: '55%', l: '5%', s: 3, c: '#14b8a6', d: '2.5s', dur: '7s', p: '4s' },
-            { t: '8%', l: '50%', s: 4, c: '#22c55e', d: '1s', dur: '9s', p: '5.5s' },
-            { t: '90%', l: '60%', s: 3, c: '#06b6d4', d: '0.3s', dur: '6.5s', p: '3.5s' },
-            { t: '70%', l: '45%', s: 5, c: '#14b8a6', d: '1.8s', dur: '8s', p: '4s' },
-            { t: '28%', l: '35%', s: 3, c: '#22c55e', d: '2.2s', dur: '7s', p: '5s' },
-            { t: '50%', l: '55%', s: 4, c: '#06b6d4', d: '0.7s', dur: '9.5s', p: '3s' },
+            { t: '12%', l: '8%', s: 4, c: '#22d3ee', d: '0s', dur: '7s', p: '4s' },
+            { t: '22%', l: '82%', s: 3, c: '#a3e635', d: '1.2s', dur: '8s', p: '5s' },
+            { t: '45%', l: '15%', s: 5, c: '#22d3ee', d: '0.5s', dur: '9s', p: '3.5s' },
+            { t: '65%', l: '75%', s: 3, c: '#a3e635', d: '2s', dur: '6s', p: '4.5s' },
+            { t: '80%', l: '25%', s: 4, c: '#a3e635', d: '1.5s', dur: '7.5s', p: '5s' },
+            { t: '35%', l: '90%', s: 3, c: '#22d3ee', d: '0.8s', dur: '8.5s', p: '3s' },
+            { t: '55%', l: '5%', s: 3, c: '#22d3ee', d: '2.5s', dur: '7s', p: '4s' },
+            { t: '8%', l: '50%', s: 4, c: '#a3e635', d: '1s', dur: '9s', p: '5.5s' },
+            { t: '90%', l: '60%', s: 3, c: '#22d3ee', d: '0.3s', dur: '6.5s', p: '3.5s' },
+            { t: '70%', l: '45%', s: 5, c: '#22d3ee', d: '1.8s', dur: '8s', p: '4s' },
+            { t: '28%', l: '35%', s: 3, c: '#a3e635', d: '2.2s', dur: '7s', p: '5s' },
+            { t: '50%', l: '55%', s: 4, c: '#22d3ee', d: '0.7s', dur: '9.5s', p: '3s' },
           ].map((dot, i) => (
             <div
               key={i}
@@ -1767,24 +1757,46 @@ function Layout({ children, currentPageName }) {
               }}
             />
           ))}
+
+          {/* 3D Network Globe & Subdued Halo */}
+          <div className="absolute top-1/2 left-1/2 lg:left-[70%] -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] pointer-events-auto">
+             {/* Subdued Halo Background */}
+             <div
+               className="absolute inset-0"
+               style={{
+                 background: 'radial-gradient(circle at center, rgba(34,211,238,0.04) 0%, rgba(163,230,53,0.015) 45%, transparent 70%)',
+                 filter: 'blur(20px)',
+                 borderRadius: '50%',
+               }}
+             />
+             
+             {/* The Globe Canvas layer */}
+             <div className="absolute inset-0 opacity-90 mix-blend-screen overflow-visible">
+                 <NetworkGlobe logoUrl={displayedLogoUrl || '/assets/Ai-SHA-logo-2.png'} />
+             </div>
+          </div>
         </div>
 
-        {/* Login card — glassmorphism dark */}
-        <div
-          className="relative z-10 w-full max-w-md mx-4 overflow-hidden"
-          style={{
-            background: 'rgba(15, 23, 42, 0.8)',
-            backdropFilter: 'blur(24px)',
-            WebkitBackdropFilter: 'blur(24px)',
-            border: '1px solid rgba(20, 184, 166, 0.15)',
-            borderRadius: '16px',
-            boxShadow: '0 0 60px rgba(6, 182, 212, 0.08), 0 25px 50px rgba(0, 0, 0, 0.4)',
-          }}
-        >
-          {/* Accent gradient strip */}
+        {/* Login form layout wrapper */}
+        <div className="relative z-10 w-full flex justify-center lg:justify-start lg:pl-[12vw] px-4 py-8">
+          {/* Login card — glassmorphism dark */}
+          <div
+            className="overflow-hidden"
+            style={{
+              width: '100%',
+              maxWidth: '380px',
+              background: 'rgba(15, 23, 42, 0.85)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              border: '1px solid rgba(255, 255, 255, 0.05)',
+              borderRadius: '16px',
+              boxShadow: '0 0 60px rgba(34, 211, 238, 0.08), 0 25px 50px rgba(0, 0, 0, 0.4)',
+            }}
+          >
+            {/* Accent gradient strip */}
           <div
             className="h-1 w-full"
-            style={{ background: 'linear-gradient(90deg, #14b8a6, #06b6d4, #22c55e)' }}
+            style={{ background: 'linear-gradient(90deg, #22d3ee, #0284c7, #a3e635)' }}
           />
 
           <div className="p-8">
@@ -1793,27 +1805,22 @@ function Layout({ children, currentPageName }) {
               <span
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold tracking-[0.15em] uppercase"
                 style={{
-                  background: 'rgba(20, 184, 166, 0.1)',
-                  border: '1px solid rgba(20, 184, 166, 0.25)',
-                  color: '#5eead4',
+                  background: 'rgba(34, 211, 238, 0.1)',
+                  border: '1px solid rgba(34, 211, 238, 0.25)',
+                  color: '#22d3ee',
                 }}
               >
-                ✦ Cognitive CRM Intelligence
+                ✦ Cognitive Relationship Management
               </span>
             </div>
 
             {/* Logo + heading */}
             <div className="text-center mb-6">
-              <img
-                src={displayedLogoUrl || '/assets/Ai-SHA-logo-2.png'}
-                alt="AI-SHA CRM"
-                className="max-h-14 w-auto object-contain mx-auto mb-4"
-              />
               <h2 className="text-2xl font-bold text-white mb-1">
                 Welcome to{' '}
                 <span
                   style={{
-                    background: 'linear-gradient(90deg, #22c55e, #14b8a6)',
+                    background: 'linear-gradient(90deg, #a3e635, #22d3ee)',
                     WebkitBackgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
                   }}
@@ -1964,7 +1971,7 @@ function Layout({ children, currentPageName }) {
                   style={{
                     background: 'rgba(30, 41, 59, 0.6)',
                     border: '1px solid rgba(100, 116, 139, 0.3)',
-                    '--tw-ring-color': '#14b8a6',
+                    '--tw-ring-color': '#22d3ee',
                   }}
                   placeholder="your-email@example.com"
                 />
@@ -1984,7 +1991,7 @@ function Layout({ children, currentPageName }) {
                   style={{
                     background: 'rgba(30, 41, 59, 0.6)',
                     border: '1px solid rgba(100, 116, 139, 0.3)',
-                    '--tw-ring-color': '#14b8a6',
+                    '--tw-ring-color': '#22d3ee',
                   }}
                   placeholder="Enter your password"
                 />
@@ -1994,8 +2001,8 @@ function Layout({ children, currentPageName }) {
                 type="submit"
                 className="w-full text-white px-4 py-3 rounded-lg transition-all font-semibold text-base hover:brightness-110 hover:shadow-lg"
                 style={{
-                  background: 'linear-gradient(90deg, #14b8a6, #06b6d4)',
-                  boxShadow: '0 4px 20px rgba(20, 184, 166, 0.3)',
+                  background: 'linear-gradient(90deg, #22d3ee, #0284c7)',
+                  boxShadow: '0 4px 20px rgba(34, 211, 238, 0.3)',
                 }}
               >
                 Sign In
@@ -2053,6 +2060,7 @@ function Layout({ children, currentPageName }) {
               AiSHA CRM &mdash; AI-Native Executive Assistant
             </p>
           </div>
+        </div>
         </div>
       </div>
     );
