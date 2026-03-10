@@ -1707,274 +1707,352 @@ function Layout({ children, currentPageName }) {
     return (
       <div
         className="relative min-h-screen flex items-center justify-center overflow-hidden"
-        style={{
-          background: `linear-gradient(135deg, ${primaryColor}, ${accentColor})`,
-        }}
+        style={{ background: '#080c15' }}
       >
-        {/* Subtle brand watermark behind the card */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 -z-10 opacity-10"
-          style={{
-            backgroundImage: `url(${logoUrl || '/assets/Ai-SHA-logo-2.png'})`,
-            backgroundSize: 'min(70vmin, 720px)',
-            backgroundRepeat: 'no-repeat',
-            backgroundPosition: 'center',
-            filter: 'blur(6px)',
-          }}
-        />
-        {/* 4V Data Consulting logo watermark (top left) */}
-        <img
-          src="/assets/uploads/ai360logo.png"
-          alt="4V Data Consulting Logo"
-          style={{
-            position: 'absolute',
-            top: 24,
-            left: 24,
-            width: 80,
-            height: 'auto',
-            opacity: 0.13,
-            filter: 'grayscale(100%) blur(0.5px)',
-            zIndex: 2,
-            pointerEvents: 'none',
-          }}
-        />
-        <div
-          className="relative bg-white border rounded-xl max-w-md w-full shadow-2xl overflow-hidden"
-          style={{ borderColor: primaryColor }}
-        >
-          {/* Colored top accent strip */}
+        {/* Neural network background effect */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+          {/* Radial glow — globe effect */}
           <div
-            className="h-1.5 w-full"
-            style={{ background: `linear-gradient(90deg, ${primaryColor}, ${accentColor})` }}
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+            style={{
+              width: '800px',
+              height: '800px',
+              background:
+                'radial-gradient(circle, rgba(20,184,166,0.07) 0%, rgba(6,182,212,0.04) 35%, transparent 65%)',
+              borderRadius: '50%',
+            }}
           />
+          {/* Grid lines (subtle) */}
+          <div
+            className="absolute inset-0 opacity-[0.04]"
+            style={{
+              backgroundImage:
+                'linear-gradient(rgba(20,184,166,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(20,184,166,0.5) 1px, transparent 1px)',
+              backgroundSize: '60px 60px',
+            }}
+          />
+          {/* Floating dots */}
+          <style>{`
+            @keyframes aishaFloat { 0%,100%{transform:translateY(0) scale(1)} 50%{transform:translateY(-18px) scale(1.1)} }
+            @keyframes aishaPulse { 0%,100%{opacity:0.3} 50%{opacity:0.8} }
+            .aisha-dot{position:absolute;border-radius:50%;animation:aishaFloat var(--dur,7s) ease-in-out infinite,aishaPulse var(--pulse,4s) ease-in-out infinite;animation-delay:var(--delay,0s)}
+          `}</style>
+          {[
+            { t: '12%', l: '8%', s: 4, c: '#14b8a6', d: '0s', dur: '7s', p: '4s' },
+            { t: '22%', l: '82%', s: 3, c: '#22c55e', d: '1.2s', dur: '8s', p: '5s' },
+            { t: '45%', l: '15%', s: 5, c: '#06b6d4', d: '0.5s', dur: '9s', p: '3.5s' },
+            { t: '65%', l: '75%', s: 3, c: '#14b8a6', d: '2s', dur: '6s', p: '4.5s' },
+            { t: '80%', l: '25%', s: 4, c: '#22c55e', d: '1.5s', dur: '7.5s', p: '5s' },
+            { t: '35%', l: '90%', s: 3, c: '#06b6d4', d: '0.8s', dur: '8.5s', p: '3s' },
+            { t: '55%', l: '5%', s: 3, c: '#14b8a6', d: '2.5s', dur: '7s', p: '4s' },
+            { t: '8%', l: '50%', s: 4, c: '#22c55e', d: '1s', dur: '9s', p: '5.5s' },
+            { t: '90%', l: '60%', s: 3, c: '#06b6d4', d: '0.3s', dur: '6.5s', p: '3.5s' },
+            { t: '70%', l: '45%', s: 5, c: '#14b8a6', d: '1.8s', dur: '8s', p: '4s' },
+            { t: '28%', l: '35%', s: 3, c: '#22c55e', d: '2.2s', dur: '7s', p: '5s' },
+            { t: '50%', l: '55%', s: 4, c: '#06b6d4', d: '0.7s', dur: '9.5s', p: '3s' },
+          ].map((dot, i) => (
+            <div
+              key={i}
+              className="aisha-dot"
+              style={{
+                top: dot.t,
+                left: dot.l,
+                width: dot.s,
+                height: dot.s,
+                backgroundColor: dot.c,
+                boxShadow: `0 0 ${dot.s * 3}px ${dot.c}40`,
+                '--delay': dot.d,
+                '--dur': dot.dur,
+                '--pulse': dot.p,
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Login card — glassmorphism dark */}
+        <div
+          className="relative z-10 w-full max-w-md mx-4 overflow-hidden"
+          style={{
+            background: 'rgba(15, 23, 42, 0.8)',
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+            border: '1px solid rgba(20, 184, 166, 0.15)',
+            borderRadius: '16px',
+            boxShadow: '0 0 60px rgba(6, 182, 212, 0.08), 0 25px 50px rgba(0, 0, 0, 0.4)',
+          }}
+        >
+          {/* Accent gradient strip */}
+          <div
+            className="h-1 w-full"
+            style={{ background: 'linear-gradient(90deg, #14b8a6, #06b6d4, #22c55e)' }}
+          />
+
           <div className="p-8">
-          <div className="text-center mb-6">
-            <img src={displayedLogoUrl || '/assets/Ai-SHA-logo-2.png'} alt="AI-SHA CRM" className="max-h-16 w-auto object-contain mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-slate-800 mb-2">Welcome to AI-SHA CRM</h2>
-            <p className="text-slate-600">Sign in to access your account</p>
+            {/* Badge */}
+            <div className="flex justify-center mb-5">
+              <span
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold tracking-[0.15em] uppercase"
+                style={{
+                  background: 'rgba(20, 184, 166, 0.1)',
+                  border: '1px solid rgba(20, 184, 166, 0.25)',
+                  color: '#5eead4',
+                }}
+              >
+                ✦ Cognitive CRM Intelligence
+              </span>
+            </div>
 
-            {/* Environment indicator on login page */}
-            {(() => {
-              // Use runtime window._env_ (injected by entrypoint) with fallback to build-time import.meta.env
-              const backendUrl =
-                window._env_?.VITE_AISHACRM_BACKEND_URL ||
-                import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-                '';
-              const supabaseUrl =
-                window._env_?.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
-              const isDev = backendUrl.includes('localhost') || backendUrl.includes('127.0.0.1');
-              const isDevDb = supabaseUrl.includes('efzqxjpfewkrgpdootte');
-              const isProdDb = supabaseUrl.includes('ehjlenywplgyiahgxkfj');
+            {/* Logo + heading */}
+            <div className="text-center mb-6">
+              <img
+                src={displayedLogoUrl || '/assets/Ai-SHA-logo-2.png'}
+                alt="AI-SHA CRM"
+                className="max-h-14 w-auto object-contain mx-auto mb-4"
+              />
+              <h2 className="text-2xl font-bold text-white mb-1">
+                Welcome to{' '}
+                <span
+                  style={{
+                    background: 'linear-gradient(90deg, #22c55e, #14b8a6)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                  }}
+                >
+                  Ai-SHA
+                </span>
+              </h2>
+              <p className="text-slate-400 text-sm">Sign in to your executive assistant</p>
 
-              let envLabel = null;
-              let bgColor = '';
-
-              if (isDev && isDevDb) {
-                envLabel = '🔵 DEVELOPMENT ENVIRONMENT';
-                bgColor = 'bg-blue-100 border-blue-300 text-blue-800';
-              } else if (isDev && isProdDb) {
-                envLabel = '⚠️ LOCAL + PRODUCTION DATABASE';
-                bgColor = 'bg-orange-100 border-orange-300 text-orange-800';
-              } else if (!isDev && isDevDb) {
-                envLabel = '🟡 STAGING ENVIRONMENT';
-                bgColor = 'bg-yellow-100 border-yellow-300 text-yellow-800';
-              }
-
-              return envLabel ? (
-                <div className={`mt-4 p-3 border rounded-md ${bgColor}`}>
-                  <p className="text-sm font-bold text-center">{envLabel}</p>
-                </div>
-              ) : null;
-            })()}
-
-            {/* Password reset success message */}
-            {new URLSearchParams(window.location.search).get('reset') === 'success' && (
-              <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
-                <p className="text-sm text-green-700 text-center">
-                  ✓ Password updated successfully! Please sign in with your new password.
-                </p>
-              </div>
-            )}
-
-            {/* Session expired message */}
-            {new URLSearchParams(window.location.search).get('session_expired') === 'true' && (
-              <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-md">
-                <p className="text-sm text-amber-700 text-center">
-                  ⚠️ Your session has expired. Please sign in again.
-                </p>
-              </div>
-            )}
-          </div>
-
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              const email = e.target.email.value;
-              const password = e.target.password.value;
-
-              try {
-                logDev('[Login] Attempting Supabase auth login:', email);
-                const { error } = await supabase.auth.signInWithPassword({
-                  email,
-                  password,
-                });
-                if (error) {
-                  throw error;
-                }
-                logDev('[Login] Supabase auth successful, calling backend login...');
-
-                // Call backend /api/auth/login to get JWT cookies
-                // Use runtime env (window._env_) with fallback to build-time env
+              {/* Environment indicator on login page */}
+              {(() => {
                 const backendUrl =
                   window._env_?.VITE_AISHACRM_BACKEND_URL ||
                   import.meta.env.VITE_AISHACRM_BACKEND_URL ||
                   '';
-                const loginResponse = await fetch(`${backendUrl}/api/auth/login`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  credentials: 'include', // Important: include cookies
-                  body: JSON.stringify({ email, password }),
-                });
+                const supabaseUrl =
+                  window._env_?.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+                const isDev = backendUrl.includes('localhost') || backendUrl.includes('127.0.0.1');
+                const isDevDb = supabaseUrl.includes('efzqxjpfewkrgpdootte');
+                const isProdDb = supabaseUrl.includes('ehjlenywplgyiahgxkfj');
 
-                if (!loginResponse.ok) {
-                  throw new Error(`Backend login failed: ${loginResponse.status}`);
+                let envLabel = null;
+                let envStyle = {};
+
+                if (isDev && isDevDb) {
+                  envLabel = '🔵 DEVELOPMENT ENVIRONMENT';
+                  envStyle = { background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)', color: '#93c5fd' };
+                } else if (isDev && isProdDb) {
+                  envLabel = '⚠️ LOCAL + PRODUCTION DATABASE';
+                  envStyle = { background: 'rgba(249,115,22,0.1)', border: '1px solid rgba(249,115,22,0.3)', color: '#fdba74' };
+                } else if (!isDev && isDevDb) {
+                  envLabel = '🟡 STAGING ENVIRONMENT';
+                  envStyle = { background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.3)', color: '#fde047' };
                 }
 
-                const loginData = await loginResponse.json();
-                const tenant_id = loginData.data?.user?.tenant_id;
+                return envLabel ? (
+                  <div className="mt-4 p-3 rounded-lg" style={envStyle}>
+                    <p className="text-sm font-bold text-center">{envLabel}</p>
+                  </div>
+                ) : null;
+              })()}
 
-                logDev('[Login] Login response data:', {
-                  tenant_id,
-                  hasUser: !!loginData.data?.user,
-                  userKeys: Object.keys(loginData.data?.user || {}),
-                });
+              {/* Password reset success message */}
+              {new URLSearchParams(window.location.search).get('reset') === 'success' && (
+                <div
+                  className="mt-4 p-3 rounded-lg"
+                  style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)' }}
+                >
+                  <p className="text-sm text-center" style={{ color: '#86efac' }}>
+                    ✓ Password updated successfully! Please sign in with your new password.
+                  </p>
+                </div>
+              )}
 
-                // Clear backend dashboard cache to ensure fresh data after login
-                if (tenant_id) {
-                  try {
-                    const cacheResponse = await fetch(`${backendUrl}/api/reports/clear-cache`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      credentials: 'include',
-                      body: JSON.stringify({ tenant_id }),
-                    });
-                    const cacheResult = await cacheResponse.json();
-                    logDev('[Login] Dashboard cache cleared:', cacheResult);
-                  } catch (cacheErr) {
-                    console.warn('[Login] Failed to clear cache (non-critical):', cacheErr);
+              {/* Session expired message */}
+              {new URLSearchParams(window.location.search).get('session_expired') === 'true' && (
+                <div
+                  className="mt-4 p-3 rounded-lg"
+                  style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)' }}
+                >
+                  <p className="text-sm text-center" style={{ color: '#fcd34d' }}>
+                    ⚠️ Your session has expired. Please sign in again.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const email = e.target.email.value;
+                const password = e.target.password.value;
+
+                try {
+                  logDev('[Login] Attempting Supabase auth login:', email);
+                  const { error } = await supabase.auth.signInWithPassword({
+                    email,
+                    password,
+                  });
+                  if (error) {
+                    throw error;
                   }
-                } else {
-                  console.warn(
-                    '[Login] No tenant_id found in login response, skipping cache clear',
-                  );
+                  logDev('[Login] Supabase auth successful, calling backend login...');
+
+                  const backendUrl =
+                    window._env_?.VITE_AISHACRM_BACKEND_URL ||
+                    import.meta.env.VITE_AISHACRM_BACKEND_URL ||
+                    '';
+                  const loginResponse = await fetch(`${backendUrl}/api/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ email, password }),
+                  });
+
+                  if (!loginResponse.ok) {
+                    throw new Error(`Backend login failed: ${loginResponse.status}`);
+                  }
+
+                  const loginData = await loginResponse.json();
+                  const tenant_id = loginData.data?.user?.tenant_id;
+
+                  logDev('[Login] Login response data:', {
+                    tenant_id,
+                    hasUser: !!loginData.data?.user,
+                    userKeys: Object.keys(loginData.data?.user || {}),
+                  });
+
+                  if (tenant_id) {
+                    try {
+                      const cacheResponse = await fetch(`${backendUrl}/api/reports/clear-cache`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ tenant_id }),
+                      });
+                      const cacheResult = await cacheResponse.json();
+                      logDev('[Login] Dashboard cache cleared:', cacheResult);
+                    } catch (cacheErr) {
+                      console.warn('[Login] Failed to clear cache (non-critical):', cacheErr);
+                    }
+                  } else {
+                    console.warn(
+                      '[Login] No tenant_id found in login response, skipping cache clear',
+                    );
+                  }
+
+                  logDev('[Login] Backend login successful, reloading...');
+                  window.location.reload();
+                } catch (error) {
+                  console.error('[Login] Login failed:', error);
+                  alert('Login failed: ' + (error?.message || 'Unknown error'));
                 }
-
-                logDev('[Login] Backend login successful, reloading...');
-                window.location.reload();
-              } catch (error) {
-                console.error('[Login] Login failed:', error);
-                alert('Login failed: ' + (error?.message || 'Unknown error'));
-              }
-            }}
-          >
-            <div className="mb-4">
-              <label className="block text-slate-800 text-sm font-semibold mb-2" htmlFor="email">
-                Email
-              </label>
-              <input
-                type="email"
-                id="email"
-                name="email"
-                required
-                autoComplete="email"
-                autoFocus
-                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 bg-white text-slate-900"
-                style={{ '--tw-ring-color': accentColor }}
-                placeholder="your-email@example.com"
-              />
-            </div>
-
-            <div className="mb-4">
-              <label className="block text-slate-800 text-sm font-semibold mb-2" htmlFor="password">
-                Password
-              </label>
-              <input
-                type="password"
-                id="password"
-                name="password"
-                required
-                autoComplete="current-password"
-                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 bg-white text-slate-900"
-                style={{ '--tw-ring-color': accentColor }}
-                placeholder="Enter your password"
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="w-full text-white px-4 py-3 rounded-lg transition-all font-semibold shadow-lg hover:brightness-110 text-base"
-              style={{
-                background: `linear-gradient(90deg, ${primaryColor}, ${accentColor})`,
               }}
             >
-              Sign In
-            </button>
+              <div className="mb-4">
+                <label className="block text-slate-300 text-sm font-medium mb-2" htmlFor="email">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  id="email"
+                  name="email"
+                  required
+                  autoComplete="email"
+                  autoFocus
+                  className="w-full px-4 py-3 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 transition-colors"
+                  style={{
+                    background: 'rgba(30, 41, 59, 0.6)',
+                    border: '1px solid rgba(100, 116, 139, 0.3)',
+                    '--tw-ring-color': '#14b8a6',
+                  }}
+                  placeholder="your-email@example.com"
+                />
+              </div>
 
-            <div className="mt-3 text-center">
+              <div className="mb-6">
+                <label className="block text-slate-300 text-sm font-medium mb-2" htmlFor="password">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  id="password"
+                  name="password"
+                  required
+                  autoComplete="current-password"
+                  className="w-full px-4 py-3 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 transition-colors"
+                  style={{
+                    background: 'rgba(30, 41, 59, 0.6)',
+                    border: '1px solid rgba(100, 116, 139, 0.3)',
+                    '--tw-ring-color': '#14b8a6',
+                  }}
+                  placeholder="Enter your password"
+                />
+              </div>
+
               <button
-                type="button"
-                onClick={async (e) => {
-                  e.preventDefault();
-                  const emailInput = document.getElementById('email');
-                  const email = emailInput?.value?.trim();
-                  if (!email) {
-                    alert('Enter your email above first.');
-                    emailInput?.focus();
-                    return;
-                  }
-                  try {
-                    // Use backend proxy to avoid CORS issues
-                    // Get backend URL from runtime config (window._env_) or build-time env
-                    const backendUrl = getBackendUrl();
-                    const response = await fetch(`${backendUrl}/api/users/reset-password`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ email }),
-                    });
-                    const result = await response.json();
-                    if (!response.ok) {
-                      // Detect Supabase rate limit error (429 or rate_limit in message)
-                      const isRateLimit =
-                        response.status === 429 ||
-                        (result.message &&
-                          (result.message.includes('rate limit') ||
-                            result.message.includes('over_email_send_rate_limit')));
-
-                      if (isRateLimit) {
-                        throw new Error(
-                          'Too many password reset attempts. Please wait 60 seconds and try again.',
-                        );
-                      }
-                      throw new Error(result.message || 'Failed to send reset email');
-                    }
-                    alert('Reset email sent. Check your inbox (and spam).');
-                  } catch (err) {
-                    alert('Failed to send reset email: ' + (err?.message || 'Unknown error'));
-                  }
+                type="submit"
+                className="w-full text-white px-4 py-3 rounded-lg transition-all font-semibold text-base hover:brightness-110 hover:shadow-lg"
+                style={{
+                  background: 'linear-gradient(90deg, #14b8a6, #06b6d4)',
+                  boxShadow: '0 4px 20px rgba(20, 184, 166, 0.3)',
                 }}
-                className="text-xs font-medium text-slate-600 hover:text-slate-800 hover:underline"
               >
-                Forgot password?
+                Sign In
               </button>
-            </div>
-          </form>
 
-          {/* Footer brand line */}
-          <p className="mt-6 text-center text-xs text-slate-400">
-            AiSHA CRM &mdash; AI-Native Executive Assistant
-          </p>
-          </div>{/* end p-8 */}
+              <div className="mt-3 text-center">
+                <button
+                  type="button"
+                  onClick={async (e) => {
+                    e.preventDefault();
+                    const emailInput = document.getElementById('email');
+                    const email = emailInput?.value?.trim();
+                    if (!email) {
+                      alert('Enter your email above first.');
+                      emailInput?.focus();
+                      return;
+                    }
+                    try {
+                      const backendUrl = getBackendUrl();
+                      const response = await fetch(`${backendUrl}/api/users/reset-password`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email }),
+                      });
+                      const result = await response.json();
+                      if (!response.ok) {
+                        const isRateLimit =
+                          response.status === 429 ||
+                          (result.message &&
+                            (result.message.includes('rate limit') ||
+                              result.message.includes('over_email_send_rate_limit')));
+
+                        if (isRateLimit) {
+                          throw new Error(
+                            'Too many password reset attempts. Please wait 60 seconds and try again.',
+                          );
+                        }
+                        throw new Error(result.message || 'Failed to send reset email');
+                      }
+                      alert('Reset email sent. Check your inbox (and spam).');
+                    } catch (err) {
+                      alert('Failed to send reset email: ' + (err?.message || 'Unknown error'));
+                    }
+                  }}
+                  className="text-xs font-medium hover:underline transition-colors"
+                  style={{ color: '#94a3b8' }}
+                >
+                  Forgot password?
+                </button>
+              </div>
+            </form>
+
+            {/* Footer brand line */}
+            <p className="mt-6 text-center text-xs text-slate-600">
+              AiSHA CRM &mdash; AI-Native Executive Assistant
+            </p>
+          </div>
         </div>
       </div>
     );
