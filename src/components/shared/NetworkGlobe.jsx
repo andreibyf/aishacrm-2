@@ -25,14 +25,16 @@ export const NetworkGlobe = ({ logoUrl }) => {
     let width = canvas.width;
     let height = canvas.height;
     
-    // Setup resize handler
+    // Setup resize handler (HiDPI-aware)
     const resizeCanvas = () => {
       const parent = canvas.parentElement;
       if (parent && parent.clientWidth > 0 && parent.clientHeight > 0) {
-        canvas.width = parent.clientWidth;
-        canvas.height = parent.clientHeight;
-        width = canvas.width;
-        height = canvas.height;
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = parent.clientWidth * dpr;
+        canvas.height = parent.clientHeight * dpr;
+        width = parent.clientWidth;
+        height = parent.clientHeight;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       }
     };
     
