@@ -1,5 +1,4 @@
 name = "Braid"
-grammar = "braid"
 path_suffixes = ["braid"]
 line_comments = ["// "]
 block_comment = { start = "/*", end = "*/" }
