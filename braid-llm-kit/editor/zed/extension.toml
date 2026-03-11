@@ -6,11 +6,12 @@ schema_version = 1
 authors = ["AiSHA CRM"]
 repository = "https://github.com/andreibyf/aishacrm-2"
 
-[grammars.braid]
+[[grammars]]
+name = "braid"
 repository = "https://github.com/andreibyf/aishacrm-2"
 commit = "main"
 
-[languages.braid]
+[[languages]]
 name = "Braid"
 grammar = "braid"
 path_suffixes = ["braid"]
