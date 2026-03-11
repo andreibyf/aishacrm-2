@@ -7,5 +7,5 @@ authors = ["AiSHA CRM"]
 repository = "https://github.com/andreibyf/aishacrm-2"
 
 [grammars.braid]
-repository = "file://./grammars/braid"
-rev = "08d60b084bde51a8a419f9aed6960a4344efb94e"
+repository = "file:///C:/Users/andre/Documents/GitHub/aishacrm-2/braid-llm-kit/editor/zed/grammars/braid"
+rev = "fc45579332b78b547a5d931bd06edc5fe27de49a"
