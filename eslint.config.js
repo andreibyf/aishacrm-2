@@ -16,6 +16,8 @@ export default [
       'n8n-nodes-mcp/**',
       'logseq/**',
       'scripts/**',
+      // Zed editor extension: tree-sitter grammar uses non-standard globals
+      'braid-llm-kit/editor/zed/**',
       'backend/node_modules/**',
       'src/functions/**',
       'src/functions.archived/**',

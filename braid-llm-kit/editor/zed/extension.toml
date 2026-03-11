@@ -1,0 +1,18 @@
+id = "braid-language"
+name = "Braid"
+description = "Syntax highlighting and language support for Braid - the AI-native DSL for LLM tool definitions"
+version = "0.7.0"
+schema_version = 1
+authors = ["AiSHA CRM"]
+repository = "https://github.com/andreibyf/aishacrm-2"
+
+[grammars.braid]
+repository = "https://github.com/andreibyf/aishacrm-2"
+commit = "main"
+
+[languages.braid]
+name = "Braid"
+grammar = "braid"
+path_suffixes = ["braid"]
+line_comments = ["// "]
+block_comment = { start = "/*", end = "*/" }

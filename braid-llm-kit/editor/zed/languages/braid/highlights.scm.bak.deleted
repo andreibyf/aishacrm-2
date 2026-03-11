@@ -1,0 +1,2 @@
+; Zed uses Tree-sitter for highlighting, but we'll ship the tmLanguage grammar
+; This file satisfies the languages/braid directory requirement
