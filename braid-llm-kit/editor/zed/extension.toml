@@ -1,7 +1,14 @@
 id = "braid-language"
 name = "Braid"
-description = "Syntax highlighting and language support for Braid - the AI-native DSL for LLM tool definitions"
 version = "0.7.0"
 schema_version = 1
-authors = ["AiSHA CRM"]
+description = "Syntax highlighting and language support for Braid - the AI-native DSL for LLM tool definitions"
 repository = "https://github.com/andreibyf/aishacrm-2"
+authors = ["AiSHA CRM"]
+themes = []
+icon_themes = []
+languages = ["languages/braid"]
+capabilities = []
+
+[grammars.braid]
+path = "grammars/braid"
