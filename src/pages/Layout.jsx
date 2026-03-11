@@ -445,15 +445,26 @@ function Layout({ children, currentPageName }) {
 
   // NEW: Auto-select tenant from user profile on login
   React.useEffect(() => {
-    // Only auto-select if:
-    // 1. User is logged in and has a tenant_id
-    // 2. No tenant is currently selected in context
-    // 3. User is not a global super admin (tenant_id=null for global access)
-    if (user?.tenant_id && selectedTenantId === null && setSelectedTenantId) {
-      logDev('[Layout] Auto-selecting tenant from user profile:', user.tenant_id);
-      setSelectedTenantId(user.tenant_id);
+    if (!user?.tenant_id || !setSelectedTenantId) return;
+    const isAdminLike = user.role === 'admin' || user.role === 'superadmin';
+    if (isAdminLike) {
+      // Admins can freely switch tenants — only auto-select if nothing chosen yet
+      if (selectedTenantId === null) {
+        logDev('[Layout] Admin auto-selecting tenant from user profile:', user.tenant_id);
+        setSelectedTenantId(user.tenant_id);
+      }
+    } else {
+      // Non-admins are locked to their assigned tenant.
+      // If localStorage has a stale/wrong tenant ID, correct it.
+      if (selectedTenantId !== user.tenant_id) {
+        logDev('[Layout] Correcting tenant selection for non-admin user:', {
+          was: selectedTenantId,
+          correctedTo: user.tenant_id,
+        });
+        setSelectedTenantId(user.tenant_id);
+      }
     }
-  }, [user?.tenant_id, selectedTenantId, setSelectedTenantId]);
+  }, [user?.tenant_id, user?.role, selectedTenantId, setSelectedTenantId]);
 
   // NEW: Reset failed tenants when user changes
   React.useEffect(() => {
