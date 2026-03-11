@@ -6,14 +6,6 @@ schema_version = 1
 authors = ["AiSHA CRM"]
 repository = "https://github.com/andreibyf/aishacrm-2"
 
-[[grammars]]
-name = "braid"
+[grammars.braid]
 repository = "https://github.com/andreibyf/aishacrm-2"
-commit = "main"
-
-[[languages]]
-name = "Braid"
-grammar = "braid"
-path_suffixes = ["braid"]
-line_comments = ["// "]
-block_comment = { start = "/*", end = "*/" }
+rev = "main"
