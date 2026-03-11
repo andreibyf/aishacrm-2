@@ -1687,7 +1687,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
             box-shadow: none;
           }
           .aisha-sidebar .sidebar-backdrop {
-            width: 100vw;
+            display: none;
           }
         }
         `}</style>
