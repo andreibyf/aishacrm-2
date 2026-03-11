@@ -20,7 +20,16 @@ module.exports = grammar({
 
   word: ($) => $.identifier,
 
-  conflicts: ($) => [[$.type_generic, $.comparison_expression]],
+  conflicts: ($) => [
+    [$.type_generic, $.type_union_inline],
+    [$.union_variant, $.type_expression],
+    [$.union_type, $.type_expression],
+    [$.expression, $.object_literal],
+    [$.call_expression, $.member_expression],
+    [$.result_constructor, $.null_literal],
+    [$.expression, $.string],
+    [$.block, $.expression_statement],
+  ],
 
   rules: {
     // ── Top-level ──────────────────────────────────────────────────────────────
@@ -175,7 +184,8 @@ module.exports = grammar({
     function_type: ($) =>
       seq('fn', '(', optional(commaSep1($.type_expression)), ')', '->', $.type_expression),
 
-    type_union_inline: ($) => seq($.type_expression, repeat1(seq('|', $.type_expression))),
+    type_union_inline: ($) =>
+      prec.left(1, seq($.type_expression, repeat1(seq('|', $.type_expression)))),
 
     primitive_type: (_) =>
       choice(
@@ -197,7 +207,7 @@ module.exports = grammar({
       ),
 
     // ── Blocks and statements ──────────────────────────────────────────────────
-    block: ($) => seq('{', repeat($.statement), optional($.expression), '}'),
+    block: ($) => prec(1, seq('{', repeat($.statement), optional($.expression), '}')),
 
     statement: ($) =>
       choice($.let_statement, $.return_statement, $.expression_statement, $.comment),
@@ -230,7 +240,6 @@ module.exports = grammar({
         $.index_expression,
         $.object_literal,
         $.array_literal,
-        $.template_string,
         $.string,
         $.number,
         $.boolean,
@@ -343,7 +352,13 @@ module.exports = grammar({
     spread_expression: ($) => seq('...', $.expression),
 
     result_constructor: ($) =>
-      seq(field('tag', choice('Ok', 'Err', 'Some', 'None')), optional(seq('(', $.expression, ')'))),
+      prec.right(
+        1,
+        seq(
+          field('tag', choice('Ok', 'Err', 'Some', 'None')),
+          optional(seq('(', $.expression, ')')),
+        ),
+      ),
 
     // ── Strings ───────────────────────────────────────────────────────────────
     string: ($) => choice($.double_quoted_string, $.template_string),
@@ -369,7 +384,7 @@ module.exports = grammar({
     // ── Booleans / null ───────────────────────────────────────────────────────
     boolean: (_) => choice('true', 'false'),
 
-    null_literal: (_) => choice('null', 'None', 'undefined'),
+    null_literal: (_) => choice('null', 'undefined'),
 
     // ── Identifiers ───────────────────────────────────────────────────────────
     identifier: (_) => token(/[a-z_][a-zA-Z0-9_]*/),

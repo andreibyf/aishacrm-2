@@ -9,7 +9,7 @@
     "test": ".\\node_modules\\.bin\\tree-sitter test"
   },
   "devDependencies": {
-    "tree-sitter-cli": "^0.22.0"
+    "tree-sitter-cli": "^0.26.6"
   },
   "tree-sitter": [
     {
