@@ -485,6 +485,33 @@ export default function createEmployeeRoutes(_pgPool) {
             .maybeSingle();
 
           if (!existingUser) {
+            // Build default navigation_permissions for manager or employee role
+            const defaultNavPerms =
+              crmRole === 'manager'
+                ? {
+                    dashboard: true,
+                    leads: true,
+                    contacts: true,
+                    accounts: true,
+                    opportunities: true,
+                    activities: true,
+                    employees: true,
+                    reports: true,
+                    settings: true,
+                    bizdev_sources: true,
+                  }
+                : {
+                    dashboard: true,
+                    leads: true,
+                    contacts: true,
+                    accounts: true,
+                    opportunities: true,
+                    activities: true,
+                    employees: false,
+                    reports: false,
+                    settings: false,
+                    bizdev_sources: true,
+                  };
             const { error: userInsertErr } = await supabase.from('users').insert({
               email: email.toLowerCase(),
               first_name,
@@ -501,6 +528,8 @@ export default function createEmployeeRoutes(_pgPool) {
                 employee_id: data.id,
                 requested_access: 'read_write',
                 created_via: 'employee_form',
+                navigation_permissions: defaultNavPerms,
+                permissions: { intended_role: 'user' },
               },
             });
             if (userInsertErr) {
@@ -756,6 +785,33 @@ export default function createEmployeeRoutes(_pgPool) {
             .maybeSingle();
 
           if (!existingUser) {
+            // Build default navigation_permissions for manager or employee role
+            const defaultNavPermsToggle =
+              crmRole === 'manager'
+                ? {
+                    dashboard: true,
+                    leads: true,
+                    contacts: true,
+                    accounts: true,
+                    opportunities: true,
+                    activities: true,
+                    employees: true,
+                    reports: true,
+                    settings: true,
+                    bizdev_sources: true,
+                  }
+                : {
+                    dashboard: true,
+                    leads: true,
+                    contacts: true,
+                    accounts: true,
+                    opportunities: true,
+                    activities: true,
+                    employees: false,
+                    reports: false,
+                    settings: false,
+                    bizdev_sources: true,
+                  };
             const { error: userInsertErr } = await supabase.from('users').insert({
               email: employeeEmail.toLowerCase(),
               first_name: data.first_name,
@@ -772,6 +828,8 @@ export default function createEmployeeRoutes(_pgPool) {
                 employee_id: data.id,
                 requested_access: 'read_write',
                 created_via: 'employee_crm_toggle',
+                navigation_permissions: defaultNavPermsToggle,
+                permissions: { intended_role: 'user' },
               },
             });
             if (userInsertErr) {
