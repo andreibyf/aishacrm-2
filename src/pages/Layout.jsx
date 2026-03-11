@@ -2105,7 +2105,7 @@ function Layout({ children, currentPageName }) {
 
   return (
     <div
-      className={`brand-scope ${theme === 'light' ? 'theme-light' : 'theme-dark'}`}
+      className={`brand-scope w-full overflow-x-hidden ${theme === 'light' ? 'theme-light' : 'theme-dark'}`}
       style={{
         /* Inject brand CSS variables so mappings resolve everywhere */
         '--primary-color': primaryColor,
@@ -2202,7 +2202,7 @@ function Layout({ children, currentPageName }) {
         />
       </aside>
 
-      <div className="lg:pl-64">
+      <div className="lg:pl-64 min-w-0 overflow-x-hidden">
         <header
           data-testid="app-header"
           className="sticky top-0 z-40 flex min-h-14 shrink-0 items-center border-b border-slate-800 bg-slate-900/95 backdrop-blur-sm px-3 py-2 shadow-sm sm:px-6 lg:px-8"
@@ -2230,9 +2230,11 @@ function Layout({ children, currentPageName }) {
             </div>
 
             {/* AI Suggestions Badge - Phase 3 Autonomous Operations */}
-            {showNotificationsWidget && selectedTenantId ? (
-              <SuggestionBadge tenantId={selectedTenantId} />
-            ) : null}
+            <div className="hidden sm:block">
+              {showNotificationsWidget && selectedTenantId ? (
+                <SuggestionBadge tenantId={selectedTenantId} />
+              ) : null}
+            </div>
 
             {/* DEFERRED: mount notifications after initial load to reduce rate-limit hits */}
             <div className="hidden sm:block">
