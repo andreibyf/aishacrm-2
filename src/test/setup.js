@@ -86,6 +86,28 @@ vi.mock('@/lib/supabase', () => {
   };
 });
 
+// ── Mock conversations API so createConversation returns a valid object ──────
+// Without this the fetch stub returns { status: 'ok', mocked: true } which has
+// no .data property, causing result.data to be undefined and crashing on .id
+vi.mock('@/api/conversations', () => ({
+  createConversation: vi
+    .fn()
+    .mockResolvedValue({ id: 'test-conversation-id', agent_name: 'aisha_sidebar' }),
+  getConversation: vi.fn().mockResolvedValue({ id: 'test-conversation-id', messages: [] }),
+  listConversations: vi.fn().mockResolvedValue([]),
+  updateConversation: vi.fn().mockResolvedValue({ id: 'test-conversation-id' }),
+  deleteConversation: vi.fn().mockResolvedValue(undefined),
+  addMessage: vi.fn().mockResolvedValue({ id: 'test-message-id' }),
+  subscribeToConversation: vi.fn().mockReturnValue(() => {}),
+  submitFeedback: vi.fn().mockResolvedValue({}),
+  getWhatsAppConnectURL: vi.fn().mockReturnValue(null),
+  default: {
+    createConversation: vi.fn().mockResolvedValue({ id: 'test-conversation-id' }),
+    getConversation: vi.fn().mockResolvedValue({ id: 'test-conversation-id', messages: [] }),
+    listConversations: vi.fn().mockResolvedValue([]),
+  },
+}));
+
 // Cleanup after each test
 afterEach(() => {
   cleanup();
