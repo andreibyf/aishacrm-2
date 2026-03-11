@@ -222,6 +222,7 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel, moduleSet
   const [formData, setFormData] = useState({
     full_name: user?.display_name || user?.full_name || '',
     tenant_id: user?.tenant_id || 'no-client',
+    platform_role: user?.role || 'user', // Platform role: user / admin (superadmin-only field)
     employee_role: user?.employee_role || 'employee', // SIMPLIFIED: Only manager or employee
     is_active: user?.is_active !== false,
     tags: user?.tags || [],
@@ -244,6 +245,7 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel, moduleSet
     setFormData({
       full_name: user?.display_name || user?.full_name || '',
       tenant_id: user?.tenant_id || 'no-client',
+      platform_role: user?.role || 'user', // Platform role sync on re-open
       employee_role: user?.employee_role || 'employee',
       is_active: user?.is_active !== false,
       tags: user?.tags || [],
@@ -443,6 +445,49 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel, moduleSet
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+
+          {/* Platform Role — superadmin can promote/demote a user to/from tenant admin */}
+          {currentUser?.role === 'superadmin' && user?.role?.toLowerCase() !== 'superadmin' && (
+            <div>
+              <Label htmlFor="platform_role" className="text-slate-200">
+                Platform Role
+              </Label>
+              <Select
+                value={formData.platform_role || 'user'}
+                onValueChange={(value) =>
+                  setFormData((prev) => ({ ...prev, platform_role: value }))
+                }
+              >
+                <SelectTrigger
+                  id="platform_role"
+                  className="bg-slate-700 border-slate-600 text-slate-200"
+                >
+                  <SelectValue placeholder="Select platform role" />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectItem value="user">
+                    <div className="flex flex-col">
+                      <span className="font-semibold">User</span>
+                      <span className="text-xs text-slate-400">
+                        Standard CRM employee/manager access
+                      </span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="admin">
+                    <div className="flex flex-col">
+                      <span className="font-semibold">Tenant Admin</span>
+                      <span className="text-xs text-slate-400">
+                        Can manage users and settings for their tenant
+                      </span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-slate-500 mt-1">
+                Tenant Admin gives full management access within the assigned client.
+              </p>
             </div>
           )}
 
@@ -969,6 +1014,13 @@ export default function EnhancedUserManagement() {
         permissionsToSave.intended_role = 'user';
       }
 
+      // Include platform role change if superadmin changed it
+      const platformRoleChanged =
+        currentUser?.role === 'superadmin' &&
+        cleanedData.platform_role &&
+        cleanedData.platform_role !== userBeingEdited.role &&
+        userBeingEdited.role !== 'superadmin'; // Never demote a superadmin via this UI
+
       const finalUpdateData = {
         tenant_id: cleanedData.tenant_id,
         first_name: cleanedData.first_name,
@@ -979,6 +1031,7 @@ export default function EnhancedUserManagement() {
         employee_role: cleanedData.employee_role,
         permissions: permissionsToSave,
         navigation_permissions: cleanedData.navigation_permissions, // Top-level is the source of truth
+        ...(platformRoleChanged && { role: cleanedData.platform_role }),
       };
 
       console.log(
