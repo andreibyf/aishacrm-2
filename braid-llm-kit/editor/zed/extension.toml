@@ -5,7 +5,3 @@ version = "0.7.0"
 schema_version = 1
 authors = ["AiSHA CRM"]
 repository = "https://github.com/andreibyf/aishacrm-2"
-
-[grammars.braid]
-repository = "file:///C:/Users/andre/Documents/GitHub/aishacrm-2/braid-llm-kit/editor/zed/grammars/braid"
-rev = "fc45579332b78b547a5d931bd06edc5fe27de49a"
