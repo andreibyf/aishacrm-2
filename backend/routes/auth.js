@@ -18,13 +18,13 @@ function getAnonSupabase() {
   });
 }
 
-function signAccess(payload) {
+function signAccess(payload, expiresIn = '15m') {
   // Use HS256 explicitly - must match verification in authenticate.js
   const secret = process.env.JWT_SECRET;
   if (!secret) {
     logger.warn('[Auth] JWT_SECRET not set, using insecure fallback');
   }
-  return jwt.sign(payload, secret || 'change-me-access', { algorithm: 'HS256', expiresIn: '15m' });
+  return jwt.sign(payload, secret || 'change-me-access', { algorithm: 'HS256', expiresIn });
 }
 
 function signRefresh(payload) {
@@ -1014,6 +1014,241 @@ export default function createAuthRoutes(_pgPool) {
       return res.json({ status: 'success', message: 'Invite acceptance synced' });
     } catch (e) {
       logger.error('[Auth.invite-accepted] error', e);
+      return res.status(500).json({ status: 'error', message: 'Internal error' });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // IMPERSONATION - Superadmin only
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * POST /api/auth/impersonate
+   * Start impersonating another user. Superadmin only.
+   * Stores original admin identity and creates a new session as the target user.
+   */
+  router.post('/impersonate', async (req, res) => {
+    try {
+      const { user_id } = req.body || {};
+      if (!user_id) {
+        return res.status(400).json({ status: 'error', message: 'user_id required' });
+      }
+
+      // Verify current user is superadmin
+      const token = req.cookies?.aisha_access;
+      if (!token) {
+        return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+      }
+
+      const secret = process.env.JWT_SECRET || 'change-me-access';
+      let currentUser;
+      try {
+        currentUser = jwt.verify(token, secret, { algorithms: ['HS256'] });
+      } catch {
+        return res.status(401).json({ status: 'error', message: 'Invalid token' });
+      }
+
+      if (currentUser.role !== 'superadmin') {
+        logger.warn('[Auth.impersonate] Non-superadmin attempted impersonation:', {
+          email: currentUser.email,
+          role: currentUser.role,
+          targetUserId: user_id,
+        });
+        return res
+          .status(403)
+          .json({ status: 'error', message: 'Only superadmins can impersonate users' });
+      }
+
+      // Don't allow impersonating if already impersonating
+      if (currentUser.impersonating) {
+        return res
+          .status(400)
+          .json({ status: 'error', message: 'Already impersonating. Stop current session first.' });
+      }
+
+      // Fetch target user
+      const supabase = getSupabaseClient();
+      const { data: targetUser, error: targetErr } = await supabase
+        .from('users')
+        .select('id, email, first_name, last_name, role, tenant_id, tenant_uuid, status, metadata')
+        .eq('id', user_id)
+        .single();
+
+      if (targetErr || !targetUser) {
+        return res.status(404).json({ status: 'error', message: 'User not found' });
+      }
+
+      // Don't allow impersonating other superadmins
+      if (targetUser.role === 'superadmin') {
+        return res
+          .status(403)
+          .json({ status: 'error', message: 'Cannot impersonate other superadmins' });
+      }
+
+      // Check target account status
+      const meta = targetUser.metadata || {};
+      const accountStatus = String(meta.account_status || targetUser.status || '').toLowerCase();
+      if (accountStatus === 'inactive' || (targetUser.status || '').toLowerCase() === 'inactive') {
+        return res
+          .status(403)
+          .json({ status: 'error', message: 'Cannot impersonate inactive account' });
+      }
+
+      // Create impersonation token (1 hour max)
+      const impersonationPayload = {
+        sub: targetUser.id,
+        email: targetUser.email,
+        role: targetUser.role,
+        tenant_id: targetUser.tenant_id || null,
+        tenant_uuid: targetUser.tenant_uuid || null,
+        table: 'users',
+        // Impersonation metadata
+        impersonating: true,
+        original_user: {
+          id: currentUser.sub,
+          email: currentUser.email,
+          role: currentUser.role,
+        },
+      };
+
+      const impersonationToken = signAccess(impersonationPayload, '1h');
+
+      // Store original token so we can restore later
+      res.cookie('aisha_original', token, cookieOpts(60 * 60 * 1000)); // 1 hour
+      res.cookie('aisha_access', impersonationToken, cookieOpts(60 * 60 * 1000));
+
+      // Audit log
+      logger.info('[Auth.impersonate] Impersonation started:', {
+        admin: currentUser.email,
+        target: targetUser.email,
+        targetId: targetUser.id,
+        targetTenant: targetUser.tenant_id,
+      });
+
+      return res.json({
+        status: 'success',
+        message:
+          `Now impersonating ${targetUser.first_name || ''} ${targetUser.last_name || ''} (${targetUser.email})`.trim(),
+        data: {
+          impersonating: {
+            id: targetUser.id,
+            email: targetUser.email,
+            first_name: targetUser.first_name,
+            last_name: targetUser.last_name,
+            role: targetUser.role,
+            tenant_id: targetUser.tenant_id,
+          },
+        },
+      });
+    } catch (err) {
+      logger.error('[Auth.impersonate] error:', err);
+      return res.status(500).json({ status: 'error', message: 'Internal error' });
+    }
+  });
+
+  /**
+   * POST /api/auth/stop-impersonate
+   * Stop impersonating and restore original superadmin session.
+   */
+  router.post('/stop-impersonate', async (req, res) => {
+    try {
+      const originalToken = req.cookies?.aisha_original;
+      const currentToken = req.cookies?.aisha_access;
+
+      if (!originalToken) {
+        return res
+          .status(400)
+          .json({ status: 'error', message: 'No impersonation session active' });
+      }
+
+      // Verify current token has impersonating flag
+      const secret = process.env.JWT_SECRET || 'change-me-access';
+      let currentPayload;
+      try {
+        currentPayload = jwt.verify(currentToken, secret, { algorithms: ['HS256'] });
+      } catch {
+        // Token expired or invalid, but we have original - restore it
+      }
+
+      // Verify original token is still valid
+      let originalPayload;
+      try {
+        originalPayload = jwt.verify(originalToken, secret, { algorithms: ['HS256'] });
+      } catch {
+        // Original token expired, need to re-login
+        res.clearCookie('aisha_original', { path: '/' });
+        res.clearCookie('aisha_access', { path: '/' });
+        return res
+          .status(401)
+          .json({ status: 'error', message: 'Session expired. Please login again.' });
+      }
+
+      // Restore original token
+      res.cookie('aisha_access', originalToken, cookieOpts(15 * 60 * 1000));
+      res.clearCookie('aisha_original', { path: '/' });
+
+      // Audit log
+      logger.info('[Auth.stop-impersonate] Impersonation ended:', {
+        admin: originalPayload.email,
+        was_impersonating: currentPayload?.email || 'unknown',
+      });
+
+      return res.json({
+        status: 'success',
+        message: 'Impersonation ended. Restored to your account.',
+        data: {
+          user: {
+            id: originalPayload.sub,
+            email: originalPayload.email,
+            role: originalPayload.role,
+          },
+        },
+      });
+    } catch (err) {
+      logger.error('[Auth.stop-impersonate] error:', err);
+      return res.status(500).json({ status: 'error', message: 'Internal error' });
+    }
+  });
+
+  /**
+   * GET /api/auth/impersonation-status
+   * Check if current session is an impersonation session.
+   */
+  router.get('/impersonation-status', (req, res) => {
+    try {
+      const token = req.cookies?.aisha_access;
+      const hasOriginal = !!req.cookies?.aisha_original;
+
+      if (!token) {
+        return res.json({ status: 'success', data: { impersonating: false } });
+      }
+
+      const secret = process.env.JWT_SECRET || 'change-me-access';
+      let payload;
+      try {
+        payload = jwt.verify(token, secret, { algorithms: ['HS256'] });
+      } catch {
+        return res.json({ status: 'success', data: { impersonating: false } });
+      }
+
+      if (payload.impersonating && payload.original_user) {
+        return res.json({
+          status: 'success',
+          data: {
+            impersonating: true,
+            as: {
+              id: payload.sub,
+              email: payload.email,
+              role: payload.role,
+            },
+            original: payload.original_user,
+          },
+        });
+      }
+
+      return res.json({ status: 'success', data: { impersonating: false, hasOriginal } });
+    } catch (err) {
+      logger.error('[Auth.impersonation-status] error:', err);
       return res.status(500).json({ status: 'error', message: 'Internal error' });
     }
   });
