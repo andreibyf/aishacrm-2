@@ -44,6 +44,7 @@ async function createTestApp(port, userOverride = {}) {
       role: 'admin',
       tenant_id: TEST_TENANT_ID,
       email: 'admin@test.com',
+      perm_settings: true, // grants bypass=true in getVisibilityScope
     };
     req.user = { ...defaultUser, ...userOverride };
     req.tenant = { id: TEST_TENANT_ID };
