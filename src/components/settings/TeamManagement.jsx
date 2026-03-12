@@ -162,29 +162,12 @@ export default function TeamManagement() {
 
   const loadEmployees = useCallback(async () => {
     if (!tenantId) return;
-
-    // Best-effort scope check; don't let failures here block employee loading
-    apiFetch(`/api/v2/teams/scope`).catch((err) => {
-      console.warn('Failed to load team scope (non-blocking):', err);
-    });
-
     try {
-      // Load employee list for the selector
+      await apiFetch(`/api/v2/teams/scope`);
+      // Also load employee list for the selector
       const empRes = await apiFetch(`/api/employees?tenant_id=${tenantId}&limit=200`);
       const empList = empRes.data?.employees || empRes.employees || [];
-      // Align with app-wide active filter: employment_status is authoritative when present,
-      // otherwise fall back to is_active (treat undefined as active)
-      setEmployees(
-        empList.filter((e) => {
-          if (typeof e.employment_status === 'string' && e.employment_status.trim() !== '') {
-            return e.employment_status === 'active';
-          }
-          if (typeof e.is_active === 'boolean') {
-            return e.is_active;
-          }
-          return true;
-        }),
-      );
+      setEmployees(empList.filter((e) => e.is_active !== false));
     } catch (err) {
       console.warn('Failed to load employees:', err);
     }
@@ -967,8 +950,6 @@ export default function TeamManagement() {
                             className="h-8 bg-green-600 hover:bg-green-700"
                             onClick={() => handleAddMember(team.id)}
                             disabled={!newMemberEmployeeId}
-                            aria-label="Confirm add member"
-                            title="Confirm add member"
                           >
                             <Check className="w-4 h-4" />
                           </Button>
@@ -980,8 +961,6 @@ export default function TeamManagement() {
                               setAddingMemberTeamId(null);
                               setNewMemberEmployeeId('');
                             }}
-                            aria-label="Cancel add member"
-                            title="Cancel add member"
                           >
                             <X className="w-4 h-4" />
                           </Button>

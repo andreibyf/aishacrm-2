@@ -78,7 +78,8 @@ export default function BizDevSourceCard({
       })
       .catch(() => {
         if (!cancelled) {
-          setAssignedName('Assigned');
+          // Don't show raw UUID - show loading state until resolved
+          setAssignedName(null);
           setFailedLookup(source.assigned_to);
         }
       });
@@ -572,7 +573,7 @@ export default function BizDevSourceCard({
               className={`flex items-center gap-1 text-xs ${assignedName ? 'text-slate-300' : 'text-slate-500 italic'}`}
             >
               <User className="w-3 h-3 text-slate-400" />
-              {assignedName || 'Unassigned'}
+              {assignedName || (source.assigned_to ? <span>Updating<span className="animate-ellipsis"></span></span> : 'Unassigned')}
             </span>
             {source.batch_id && (
               <>

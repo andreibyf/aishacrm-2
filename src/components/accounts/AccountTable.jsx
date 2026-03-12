@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { Edit, Eye, Globe, Trash2 } from 'lucide-react';
 import { formatIndustry } from '@/utils/industryUtils';
+import AssignedToDisplay from '../shared/AssignedToDisplay';
 
 const typeBadgeColors = {
   prospect: 'bg-blue-900/20 text-blue-300 border-blue-700',
@@ -89,9 +90,12 @@ export default function AccountTable({
                   {formatIndustry(account.industry) || <span className="text-slate-500">—</span>}
                 </td>
                 <td className="px-4 py-3 text-base text-slate-300">
-                  {assignedToMap[account.assigned_to] || account.assigned_to || (
-                    <span className="text-slate-500">Unassigned</span>
-                  )}
+                  <AssignedToDisplay
+                    assignedToName={account.assigned_to_name}
+                    assignedTo={account.assigned_to}
+                    employeesMap={assignedToMap}
+                    className="text-base"
+                  />
                 </td>
                 <td className="cursor-pointer p-3" onClick={() => handleViewDetails(account)}>
                   <Badge
