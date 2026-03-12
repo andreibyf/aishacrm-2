@@ -21,10 +21,10 @@ const BACKEND_URL = getBackendUrl();
 
 /**
  * EmployeeForm - HR-focused employee record form
- * 
+ *
  * This form manages HR data only (name, phone, department, job title, etc.)
  * CRM access and team assignments are managed via User Management.
- * 
+ *
  * If the employee is linked to a CRM user (via email match), their team
  * assignments are displayed as read-only badges.
  */
@@ -38,7 +38,7 @@ export default function EmployeeForm({
 }) {
   const employee = initialData || legacyEmployee || null;
   const isEdit = !!(employee && employee.id);
-  const { _selectedTenantId } = useTenant();
+  useTenant(); // imported for tenant context; resolved via tenantId prop
 
   // HR fields only - no CRM access management
   const [formData, setFormData] = useState(() => ({
@@ -67,12 +67,12 @@ export default function EmployeeForm({
   }));
 
   const [saving, setSaving] = useState(false);
-  
+
   // Team assignments from linked user (read-only display)
   const [linkedUserInfo, setLinkedUserInfo] = useState(null);
   const [teamAssignments, setTeamAssignments] = useState([]);
   const [loadingTeams, setLoadingTeams] = useState(false);
-  
+
   // Available employees for "Reports To" dropdown
   const [employeeOptions, setEmployeeOptions] = useState([]);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
@@ -84,16 +84,28 @@ export default function EmployeeForm({
     const fetchEmployees = async () => {
       setLoadingEmployees(true);
       try {
-        const res = await fetch(
-          `${BACKEND_URL}/api/employees?tenant_id=${tenantId}&employment_status=active`,
-          { credentials: 'include' }
-        );
+        const res = await fetch(`${BACKEND_URL}/api/employees?tenant_id=${tenantId}`, {
+          credentials: 'include',
+        });
         if (res.ok) {
-          const data = await res.json();
-          // Filter out current employee (can't report to self)
-          const employees = (data.data || data || []).filter(
-            (e) => e.id !== employee?.id
-          );
+          const payload = await res.json();
+          // API response shapes:
+          // - Tenant listing: { status, data: { employees: [...] } }
+          // - Email lookup variant: { status, data: [] }
+          let allEmployees = [];
+          if (Array.isArray(payload?.data?.employees)) {
+            allEmployees = payload.data.employees;
+          } else if (Array.isArray(payload?.data)) {
+            allEmployees = payload.data;
+          } else if (Array.isArray(payload)) {
+            allEmployees = payload;
+          }
+          // Filter to active employees only, then exclude self (can't report to yourself)
+          const employees = allEmployees
+            .filter((e) =>
+              e.employment_status ? e.employment_status === 'active' : e.is_active !== false,
+            )
+            .filter((e) => e.id !== employee?.id);
           setEmployeeOptions(employees);
         }
       } catch (err) {
@@ -114,27 +126,31 @@ export default function EmployeeForm({
       setLoadingTeams(true);
       try {
         // First, find if there's a user with matching email
-        const userRes = await fetch(
-          `${BACKEND_URL}/api/users/profiles?tenant_id=${tenantId}`,
-          { credentials: 'include' }
-        );
-        
+        const userRes = await fetch(`${BACKEND_URL}/api/users/profiles?tenant_id=${tenantId}`, {
+          credentials: 'include',
+        });
+
         if (userRes.ok) {
           const userData = await userRes.json();
-          const users = userData.data || userData || [];
+          // API returns { status, data: { users: [...] } } or { status, data: [...] }
+          const users =
+            (Array.isArray(userData?.data?.users) && userData.data.users) ||
+            (Array.isArray(userData?.data) && userData.data) ||
+            (Array.isArray(userData) && userData) ||
+            [];
           const linkedUser = users.find(
-            (u) => u.email?.toLowerCase() === employee.email?.toLowerCase()
+            (u) => u.email?.toLowerCase() === employee.email?.toLowerCase(),
           );
-          
+
           if (linkedUser) {
             setLinkedUserInfo(linkedUser);
-            
+
             // Fetch team memberships for this user
             const teamsRes = await fetch(
               `${BACKEND_URL}/api/v2/teams/user-memberships?user_id=${linkedUser.id || linkedUser.user_id}`,
-              { credentials: 'include' }
+              { credentials: 'include' },
             );
-            
+
             if (teamsRes.ok) {
               const teamsData = await teamsRes.json();
               setTeamAssignments(teamsData.data || []);
@@ -198,7 +214,7 @@ export default function EmployeeForm({
         notes: formData.notes || null,
         tags: formData.tags,
         is_active: formData.is_active,
-        tenant_id: tenantId || null,
+        ...(tenantId ? { tenant_id: tenantId } : {}),
       };
 
       let result;
@@ -229,10 +245,14 @@ export default function EmployeeForm({
 
   const getAccessLevelLabel = (level) => {
     switch (level) {
-      case 'manage_team': return 'Manager';
-      case 'view_team': return 'View Team';
-      case 'view_own': return 'View Own';
-      default: return level;
+      case 'manage_team':
+        return 'Manager';
+      case 'view_team':
+        return 'View Team';
+      case 'view_own':
+        return 'View Own';
+      default:
+        return level;
     }
   };
 
@@ -328,8 +348,8 @@ export default function EmployeeForm({
           </div>
           <div>
             <Label className="text-slate-200">Reports To</Label>
-            <Select 
-              value={formData.reports_to || '_none'} 
+            <Select
+              value={formData.reports_to || '_none'}
               onValueChange={(v) => onChange('reports_to', v === '_none' ? null : v)}
               disabled={loadingEmployees}
             >
@@ -350,14 +370,12 @@ export default function EmployeeForm({
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-slate-500 mt-1">
-              This employee&apos;s direct supervisor
-            </p>
+            <p className="text-xs text-slate-500 mt-1">This employee&apos;s direct supervisor</p>
           </div>
           <div>
             <Label className="text-slate-200">Employment Status</Label>
-            <Select 
-              value={formData.employment_status} 
+            <Select
+              value={formData.employment_status}
               onValueChange={(v) => onChange('employment_status', v)}
             >
               <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-100">
@@ -373,8 +391,8 @@ export default function EmployeeForm({
           </div>
           <div>
             <Label className="text-slate-200">Employment Type</Label>
-            <Select 
-              value={formData.employment_type} 
+            <Select
+              value={formData.employment_type}
               onValueChange={(v) => onChange('employment_type', v)}
             >
               <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-100">
@@ -430,7 +448,7 @@ export default function EmployeeForm({
                     Linked to CRM user: <strong>{linkedUserInfo.email}</strong>
                   </span>
                 </div>
-                
+
                 {teamAssignments.length > 0 ? (
                   <div>
                     <p className="text-xs text-slate-400 mb-2">Team Assignments:</p>
@@ -441,7 +459,7 @@ export default function EmployeeForm({
                           variant="outline"
                           className="bg-slate-700/50 text-slate-200 border-slate-600"
                         >
-                          {tm.teams?.name || 'Unknown Team'} 
+                          {tm.teams?.name || 'Unknown Team'}
                           <span className="ml-1 text-slate-400">
                             ({getAccessLevelLabel(tm.access_level)})
                           </span>

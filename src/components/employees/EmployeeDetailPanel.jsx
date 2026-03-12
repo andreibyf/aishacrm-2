@@ -82,7 +82,7 @@ export default function EmployeeDetailPanel({
         // Otherwise fall back to employee_id
         const res = await fetch(
           `${BACKEND_URL}/api/v2/teams/employee-memberships?employee_id=${employee.id}`,
-          { credentials: 'include' }
+          { credentials: 'include' },
         );
         if (res.ok) {
           const data = await res.json();
@@ -112,10 +112,11 @@ export default function EmployeeDetailPanel({
     const fetchManager = async () => {
       setLoadingReportsTo(true);
       try {
-        const res = await fetch(
-          `${BACKEND_URL}/api/employees/${employee.reports_to}`,
-          { credentials: 'include' }
-        );
+        const tenantId = employee?.tenant_id;
+        const url = tenantId
+          ? `${BACKEND_URL}/api/employees/${employee.reports_to}?tenant_id=${tenantId}`
+          : `${BACKEND_URL}/api/employees/${employee.reports_to}`;
+        const res = await fetch(url, { credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
           if (mounted) setReportsToEmployee(data.data || data);
@@ -141,8 +142,6 @@ export default function EmployeeDetailPanel({
     }
     return __currentUser.employee_role === 'manager';
   }, [__currentUser]);
-
-
 
   // New function as per outline
   const handleSyncPermissions = async () => {
@@ -399,24 +398,31 @@ export default function EmployeeDetailPanel({
               ) : teamMemberships.length > 0 ? (
                 <div className="space-y-2">
                   {teamMemberships.map((tm) => (
-                    <div key={tm.team_id} className="flex items-center justify-between bg-slate-700/50 rounded-lg px-3 py-2">
+                    <div
+                      key={tm.team_id}
+                      className="flex items-center justify-between bg-slate-700/50 rounded-lg px-3 py-2"
+                    >
                       <div className="flex items-center gap-2">
                         <Users className="w-4 h-4 text-slate-400" />
-                        <span className="text-sm text-slate-200">{tm.team_name || 'Unknown Team'}</span>
+                        <span className="text-sm text-slate-200">
+                          {tm.team_name || 'Unknown Team'}
+                        </span>
                       </div>
-                      <Badge 
-                        variant="outline" 
+                      <Badge
+                        variant="outline"
                         className={
-                          tm.access_level === 'manage_team' 
-                            ? 'bg-green-900/30 text-green-300 border-green-700' 
+                          tm.access_level === 'manage_team'
+                            ? 'bg-green-900/30 text-green-300 border-green-700'
                             : tm.access_level === 'view_team'
-                            ? 'bg-blue-900/30 text-blue-300 border-blue-700'
-                            : 'bg-slate-700 text-slate-300 border-slate-600'
+                              ? 'bg-blue-900/30 text-blue-300 border-blue-700'
+                              : 'bg-slate-700 text-slate-300 border-slate-600'
                         }
                       >
-                        {tm.access_level === 'manage_team' ? 'Manager' 
-                          : tm.access_level === 'view_team' ? 'View Team' 
-                          : 'View Own'}
+                        {tm.access_level === 'manage_team'
+                          ? 'Manager'
+                          : tm.access_level === 'view_team'
+                            ? 'View Team'
+                            : 'View Own'}
                       </Badge>
                     </div>
                   ))}
@@ -474,7 +480,9 @@ export default function EmployeeDetailPanel({
                         {reportsToEmployee.first_name} {reportsToEmployee.last_name}
                       </span>
                       {reportsToEmployee.job_title && (
-                        <span className="text-xs text-slate-500">({reportsToEmployee.job_title})</span>
+                        <span className="text-xs text-slate-500">
+                          ({reportsToEmployee.job_title})
+                        </span>
                       )}
                     </div>
                   ) : (
@@ -491,7 +499,12 @@ export default function EmployeeDetailPanel({
               <div className="grid grid-cols-3 gap-2 items-center">
                 <span className="text-sm text-slate-400">Hourly Rate:</span>
                 <span className="col-span-2 text-sm text-slate-200">
-                  {employee.hourly_rate ? `${employee.hourly_rate}/hr` : 'N/A'}
+                  {employee.hourly_rate
+                    ? `$${Number(employee.hourly_rate).toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}/hr`
+                    : 'N/A'}
                 </span>
               </div>
             </CardContent>
