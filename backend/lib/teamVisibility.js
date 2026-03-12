@@ -185,16 +185,14 @@ export async function getVisibilityScope(user, supabase) {
   if (cached) return cached;
 
   try {
-    // Fetch visibility mode
-    const mode = await _getVisibilityMode(tenantId, supabase);
-
-    // Fetch team memberships - check BOTH user_id and employee_id columns
-    // user.id is the auth user ID; we also need to check if they're linked via employee_id
-    // access_level: 'view_own' | 'view_team' | 'manage_team' (new granular permission)
-    const { data: memberships, error: memErr } = await supabase
-      .from('team_members')
-      .select('team_id, role, access_level, user_id, employee_id')
-      .or(`user_id.eq.${user.id},employee_id.eq.${user.id}`);
+    // Fetch visibility mode and team memberships in parallel
+    const [mode, { data: memberships, error: memErr }] = await Promise.all([
+      _getVisibilityMode(tenantId, supabase),
+      supabase
+        .from('team_members')
+        .select('team_id, role, access_level, user_id, employee_id')
+        .or(`user_id.eq.${user.id},employee_id.eq.${user.id}`),
+    ]);
 
     if (memErr) {
       logger.error('[TeamVisibility] Failed to fetch memberships:', memErr.message);

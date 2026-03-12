@@ -61,7 +61,7 @@ jobs:
         if: steps.changed-files.outputs.has_changes == 'true'
         run: |
           echo "Checking formatting for changed files..."
-          npx prettier --check ${{ steps.changed-files.outputs.files }} || true
+          npx prettier --check ${{ steps.changed-files.outputs.files }}
         continue-on-error: true
 
       - name: ESLint check (changed files only)

@@ -139,6 +139,29 @@ describe('teamVisibility — getVisibilityScope', () => {
       assert.strictEqual(scope.bypass, false);
       assert.deepStrictEqual(scope.employeeIds, ['u1']);
     });
+
+    it('user found via user_id match (no employee_id) gets team scope', async () => {
+      // Regression test for the .or() fix: membership row has user_id set but
+      // employee_id points to a different ID — user must still be found.
+      const user = { id: 'auth-user-id', role: 'employee', tenant_id: 't1' };
+      const sb = mockSupabase({
+        modulesettings: { data: { settings: { visibility_mode: 'hierarchical' } }, error: null },
+        team_members: [
+          {
+            data: [{ team_id: 'team1', role: 'member', access_level: 'view_own', user_id: 'auth-user-id', employee_id: 'emp-different-id' }],
+            error: null,
+          },
+          {
+            data: [{ employee_id: 'auth-user-id' }, { employee_id: 'emp-different-id' }],
+            error: null,
+          },
+        ],
+      });
+
+      const scope = await getVisibilityScope(user, sb);
+      assert.strictEqual(scope.bypass, false);
+      assert.ok(scope.teamIds.includes('team1'), 'user_id match should grant team membership');
+    });
   });
 
   // ── Shared mode ────────────────────────────────────────────────────────
