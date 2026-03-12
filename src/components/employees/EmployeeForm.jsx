@@ -116,7 +116,7 @@ export default function EmployeeForm({
     };
 
     fetchEmployees();
-  }, [tenantId, employee?.id]);
+  }, [tenantId, employee?.id, employee?.tenant_id]);
 
   // Fetch linked user info and team assignments
   useEffect(() => {
