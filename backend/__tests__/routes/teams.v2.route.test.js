@@ -753,14 +753,22 @@ describe('Teams v2 — membership query endpoints', () => {
   it('GET /employee-memberships rejects non-admin (403)', async () => {
     if (!supabaseReady) return;
 
-    const res = await req(EMPLOYEE_PORT, 'GET', `/api/v2/teams/employee-memberships?employee_id=some-id&tenant_id=${TEST_TENANT_ID}`);
+    const res = await req(
+      EMPLOYEE_PORT,
+      'GET',
+      `/api/v2/teams/employee-memberships?employee_id=some-id&tenant_id=${TEST_TENANT_ID}`,
+    );
     assert.strictEqual(res.status, 403);
   });
 
   it('GET /employee-memberships returns 400 when employee_id is missing', async () => {
     if (!supabaseReady) return;
 
-    const res = await req(ADMIN_PORT, 'GET', `/api/v2/teams/employee-memberships?tenant_id=${TEST_TENANT_ID}`);
+    const res = await req(
+      ADMIN_PORT,
+      'GET',
+      `/api/v2/teams/employee-memberships?tenant_id=${TEST_TENANT_ID}`,
+    );
     assert.strictEqual(res.status, 400);
     const json = await res.json();
     assert.match(json.message, /employee_id/i);
@@ -770,7 +778,11 @@ describe('Teams v2 — membership query endpoints', () => {
     if (!supabaseReady) return;
 
     // Use a valid UUID format (but non-existent) so PostgREST accepts it
-    const res = await req(ADMIN_PORT, 'GET', `/api/v2/teams/employee-memberships?employee_id=00000000-0000-0000-0000-000000000000&tenant_id=${TEST_TENANT_ID}`);
+    const res = await req(
+      ADMIN_PORT,
+      'GET',
+      `/api/v2/teams/employee-memberships?employee_id=00000000-0000-0000-0000-000000000000&tenant_id=${TEST_TENANT_ID}`,
+    );
     assert.strictEqual(res.status, 200);
     const json = await res.json();
     assert.strictEqual(json.status, 'success');
@@ -782,14 +794,22 @@ describe('Teams v2 — membership query endpoints', () => {
   it('GET /user-memberships rejects non-admin (403)', async () => {
     if (!supabaseReady) return;
 
-    const res = await req(EMPLOYEE_PORT, 'GET', `/api/v2/teams/user-memberships?user_id=some-id&tenant_id=${TEST_TENANT_ID}`);
+    const res = await req(
+      EMPLOYEE_PORT,
+      'GET',
+      `/api/v2/teams/user-memberships?user_id=some-id&tenant_id=${TEST_TENANT_ID}`,
+    );
     assert.strictEqual(res.status, 403);
   });
 
   it('GET /user-memberships returns 400 when user_id is missing', async () => {
     if (!supabaseReady) return;
 
-    const res = await req(ADMIN_PORT, 'GET', `/api/v2/teams/user-memberships?tenant_id=${TEST_TENANT_ID}`);
+    const res = await req(
+      ADMIN_PORT,
+      'GET',
+      `/api/v2/teams/user-memberships?tenant_id=${TEST_TENANT_ID}`,
+    );
     assert.strictEqual(res.status, 400);
     const json = await res.json();
     assert.match(json.message, /user_id/i);
@@ -799,7 +819,11 @@ describe('Teams v2 — membership query endpoints', () => {
     if (!supabaseReady) return;
 
     // Use a valid UUID format (but non-existent) so PostgREST accepts it
-    const res = await req(ADMIN_PORT, 'GET', `/api/v2/teams/user-memberships?user_id=00000000-0000-0000-0000-000000000000&tenant_id=${TEST_TENANT_ID}`);
+    const res = await req(
+      ADMIN_PORT,
+      'GET',
+      `/api/v2/teams/user-memberships?user_id=00000000-0000-0000-0000-000000000000&tenant_id=${TEST_TENANT_ID}`,
+    );
     assert.strictEqual(res.status, 200);
     const json = await res.json();
     assert.strictEqual(json.status, 'success');
@@ -839,7 +863,9 @@ describe('Teams v2 — membership query endpoints', () => {
       tenant_id: TEST_TENANT_ID,
       memberships: [],
     });
-    // 404 = user not found for this tenant; 500 = unexpected error
-    assert.ok([404, 500].includes(res.status), `Expected 404 or 500, got ${res.status}`);
+    // 404 = user not found for this tenant (handler uses maybeSingle + explicit 404 check)
+    assert.strictEqual(res.status, 404);
+    const json = await res.json();
+    assert.match(json.message, /not found|user/i);
   });
 });

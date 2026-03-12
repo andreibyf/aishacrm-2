@@ -40,9 +40,23 @@ jobs:
             # For push, compare against previous commit
             BASE_SHA=${{ github.event.before }}
           fi
+
+          # On push events, github.event.before can be the all-zero SHA (first push to a new branch
+          # or after a force-push). Fall back to the previous commit or the root commit.
+          ALL_ZERO_SHA="0000000000000000000000000000000000000000"
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "$ALL_ZERO_SHA" ] || ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+              if git rev-parse HEAD^ >/dev/null 2>&1; then
+                BASE_SHA="$(git rev-parse HEAD^)"
+              else
+                # Single-commit repository: use the root commit as base
+                BASE_SHA="$(git rev-list --max-parents=0 HEAD | tail -n 1)"
+              fi
+            fi
+          fi
           
           # Get changed JS/JSX/TS/TSX files (exclude node_modules)
-          CHANGED_FILES=$(git diff --name-only --diff-filter=ACMRT $BASE_SHA ${{ github.sha }} | grep -E '\.(js|jsx|ts|tsx|mjs|cjs)$' | grep -v node_modules || true)
+          CHANGED_FILES=$(git diff --name-only --diff-filter=ACMRT "$BASE_SHA" ${{ github.sha }} | grep -E '\.(js|jsx|ts|tsx|mjs|cjs)$' | grep -v node_modules || true)
           
           if [ -z "$CHANGED_FILES" ]; then
             echo "No JS/TS files changed"
@@ -120,7 +134,7 @@ jobs:
                 console.log('| Warnings | ' + warnings + ' |');
                 console.log('| Auto-fixable | ' + fixable + ' |');
                 console.log('');
-                console.log('💡 Run \\\`npm run lint:fix\\\` to auto-fix issues');
+                console.log('💡 Run \`npm run lint:fix\` to auto-fix issues');
               }
             " >> $GITHUB_STEP_SUMMARY
           fi

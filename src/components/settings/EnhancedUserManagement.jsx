@@ -1213,6 +1213,7 @@ export default function EnhancedUserManagement() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               user_id: userId,
+              tenant_id: cleanedData.tenant_id,
               memberships: cleanedData.team_memberships,
             }),
           });

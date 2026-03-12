@@ -876,7 +876,8 @@ export default function createTeamsV2Routes(_pgPool) {
       // Fetch team memberships with team details, scoped to tenant
       const { data: memberships, error } = await supabase
         .from('team_members')
-        .select(`
+        .select(
+          `
           id,
           team_id,
           employee_id,
@@ -890,7 +891,8 @@ export default function createTeamsV2Routes(_pgPool) {
             description,
             is_active
           )
-        `)
+        `,
+        )
         .eq('employee_id', employee_id)
         .in('team_id', tenantTeamIds);
 
@@ -949,7 +951,8 @@ export default function createTeamsV2Routes(_pgPool) {
       // Fetch team memberships with team details, scoped to tenant
       const { data: memberships, error } = await supabase
         .from('team_members')
-        .select(`
+        .select(
+          `
           id,
           team_id,
           employee_id,
@@ -963,7 +966,8 @@ export default function createTeamsV2Routes(_pgPool) {
             description,
             is_active
           )
-        `)
+        `,
+        )
         .eq('user_id', user_id)
         .in('team_id', tenantTeamIds);
 
@@ -1018,7 +1022,10 @@ export default function createTeamsV2Routes(_pgPool) {
         .maybeSingle();
 
       if (userError) {
-        logger.error('[Teams v2 POST /sync-user-memberships] Error fetching user record:', userError.message);
+        logger.error(
+          '[Teams v2 POST /sync-user-memberships] Error fetching user record:',
+          userError.message,
+        );
         return res.status(500).json({ status: 'error', message: 'Failed to load user record' });
       }
 
@@ -1036,8 +1043,13 @@ export default function createTeamsV2Routes(_pgPool) {
           .eq('tenant_id', tenantId)
           .maybeSingle();
         if (empError) {
-          logger.error('[Teams v2 POST /sync-user-memberships] Error fetching employee record:', empError.message);
-          return res.status(500).json({ status: 'error', message: 'Failed to load employee record' });
+          logger.error(
+            '[Teams v2 POST /sync-user-memberships] Error fetching employee record:',
+            empError.message,
+          );
+          return res
+            .status(500)
+            .json({ status: 'error', message: 'Failed to load employee record' });
         }
         employee_id = empRecord?.id ?? null;
       }
@@ -1064,11 +1076,23 @@ export default function createTeamsV2Routes(_pgPool) {
         }
       }
 
-      // Delete existing memberships for this user
-      await supabase
-        .from('team_members')
-        .delete()
-        .eq('user_id', user_id);
+      // Fetch all team IDs in this tenant for a scoped, safe delete
+      const { data: allTenantTeams, error: allTeamsErr } = await supabase
+        .from('teams')
+        .select('id')
+        .eq('tenant_id', tenantId);
+      if (allTeamsErr) throw new Error(allTeamsErr.message);
+      const allTenantTeamIds = (allTenantTeams || []).map((t) => t.id);
+
+      // Delete existing memberships scoped to this tenant's teams only
+      if (allTenantTeamIds.length > 0) {
+        const { error: deleteErr } = await supabase
+          .from('team_members')
+          .delete()
+          .eq('user_id', user_id)
+          .in('team_id', allTenantTeamIds);
+        if (deleteErr) throw new Error(deleteErr.message);
+      }
 
       // Insert new memberships
       if (memberships && memberships.length > 0) {
@@ -1080,9 +1104,7 @@ export default function createTeamsV2Routes(_pgPool) {
           role: m.access_level === 'manage_team' ? 'manager' : 'member',
         }));
 
-        const { error: insertErr } = await supabase
-          .from('team_members')
-          .insert(inserts);
+        const { error: insertErr } = await supabase.from('team_members').insert(inserts);
 
         if (insertErr) throw new Error(insertErr.message);
       }
@@ -1093,8 +1115,13 @@ export default function createTeamsV2Routes(_pgPool) {
         clearVisibilityCache(employee_id);
       }
 
-      logger.info(`[Teams v2] Synced ${memberships?.length || 0} team memberships for user ${user_id}`);
-      res.json({ status: 'success', message: `Synced ${memberships?.length || 0} team memberships` });
+      logger.info(
+        `[Teams v2] Synced ${memberships?.length || 0} team memberships for user ${user_id}`,
+      );
+      res.json({
+        status: 'success',
+        message: `Synced ${memberships?.length || 0} team memberships`,
+      });
     } catch (err) {
       logger.error('[Teams v2 POST /sync-user-memberships] Error:', err.message);
       res.status(500).json({ status: 'error', message: err.message });
