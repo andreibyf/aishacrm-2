@@ -1113,8 +1113,14 @@ export default function createAuthRoutes(_pgPool) {
 
       const impersonationToken = signAccess(impersonationPayload, '1h');
 
-      // Store original token so we can restore later
+      // Store original tokens so we can fully restore the session later
       res.cookie('aisha_original', token, cookieOpts(60 * 60 * 1000)); // 1 hour
+      if (req.cookies?.aisha_refresh) {
+        // Park the admin's refresh token so /api/auth/refresh cannot silently
+        // override the impersonation session by re-minting the original access token.
+        res.cookie('aisha_original_refresh', req.cookies.aisha_refresh, cookieOpts(60 * 60 * 1000));
+        res.clearCookie('aisha_refresh', { path: '/' });
+      }
       res.cookie('aisha_access', impersonationToken, cookieOpts(60 * 60 * 1000));
 
       // Audit log
@@ -1175,17 +1181,34 @@ export default function createAuthRoutes(_pgPool) {
       try {
         originalPayload = jwt.verify(originalToken, secret, { algorithms: ['HS256'] });
       } catch {
-        // Original token expired, need to re-login
-        res.clearCookie('aisha_original', { path: '/' });
-        res.clearCookie('aisha_access', { path: '/' });
-        return res
-          .status(401)
-          .json({ status: 'error', message: 'Session expired. Please login again.' });
+        // Original access token expired during the impersonation window.
+        // Re-mint a fresh admin token from the identity stored in the impersonation token.
+        if (currentPayload?.impersonating && currentPayload.original_user) {
+          originalPayload = currentPayload.original_user;
+          const adminSub = originalPayload.id || originalPayload.sub;
+          originalToken = signAccess({
+            sub: adminSub,
+            email: originalPayload.email,
+            role: originalPayload.role,
+            table: 'users',
+          });
+        } else {
+          // No trustworthy identity to restore — require re-login.
+          res.clearCookie('aisha_original', { path: '/' });
+          res.clearCookie('aisha_access', { path: '/' });
+          return res
+            .status(401)
+            .json({ status: 'error', message: 'Session expired. Please login again.' });
+        }
       }
 
-      // Restore original token
+      // Restore original tokens
       res.cookie('aisha_access', originalToken, cookieOpts(15 * 60 * 1000));
       res.clearCookie('aisha_original', { path: '/' });
+      if (req.cookies?.aisha_original_refresh) {
+        res.cookie('aisha_refresh', req.cookies.aisha_original_refresh, cookieOpts(7 * 24 * 60 * 60 * 1000));
+        res.clearCookie('aisha_original_refresh', { path: '/' });
+      }
 
       // Audit log
       logger.info('[Auth.stop-impersonate] Impersonation ended:', {

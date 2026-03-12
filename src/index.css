@@ -109,25 +109,21 @@
 }
 
 /* Animated ellipsis for loading states */
+/* Uses width-based animation — content is not animatable in CSS */
 @keyframes ellipsis {
-  0% {
-    content: '';
+  from {
+    width: 0ch;
   }
-  25% {
-    content: '.';
-  }
-  50% {
-    content: '..';
-  }
-  75% {
-    content: '...';
-  }
-  100% {
-    content: '';
+  to {
+    width: 3ch;
   }
 }
 
 .animate-ellipsis::after {
-  content: '';
-  animation: ellipsis 1.2s infinite steps(1);
+  content: '...';
+  display: inline-block;
+  overflow: hidden;
+  width: 0ch;
+  vertical-align: bottom;
+  animation: ellipsis 1.2s steps(4, end) infinite;
 }

@@ -1318,7 +1318,23 @@ export default function EnhancedUserManagement() {
         credentials: 'include',
         body: JSON.stringify({ user_id: user.id }),
       });
-      const result = await response.json();
+
+      let result = {};
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        try {
+          result = await response.json();
+        } catch (parseError) {
+          console.error('Failed to parse impersonate response as JSON:', parseError);
+        }
+      } else {
+        try {
+          const text = await response.text();
+          console.error('Received non-JSON response from impersonate endpoint:', text);
+        } catch {
+          // ignore read error
+        }
+      }
 
       if (response.ok && result.status === 'success') {
         toast.success(result.message || `Now viewing as ${user.email}`);
