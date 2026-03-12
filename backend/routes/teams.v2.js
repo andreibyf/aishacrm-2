@@ -845,12 +845,13 @@ export default function createTeamsV2Routes(_pgPool) {
   // ═══════════════════════════════════════════════════════════════════════════════
 
   /**
-   * GET /api/v2/teams/employee-memberships?employee_id=xxx
+   * POST /api/v2/teams/employee-memberships
    * Returns all team memberships for a specific employee. Admin only.
+   * Body: { employee_id }
    */
-  router.get('/employee-memberships', requireAdminRole, async (req, res) => {
+  router.post('/employee-memberships', requireAdminRole, async (req, res) => {
     try {
-      const { employee_id } = req.query;
+      const { employee_id } = req.body;
       if (!employee_id) {
         return res.status(400).json({ status: 'error', message: 'employee_id is required' });
       }
@@ -914,7 +915,7 @@ export default function createTeamsV2Routes(_pgPool) {
 
       res.json({ status: 'success', data: result });
     } catch (err) {
-      logger.error('[Teams v2 GET /employee-memberships] Error:', err.message);
+      logger.error('[Teams v2 POST /employee-memberships] Error:', err.message);
       res.status(500).json({ status: 'error', message: err.message });
     }
   });

@@ -750,39 +750,35 @@ describe('Teams v2 — membership query endpoints', () => {
 
   // ── /employee-memberships ──────────────────────────────────────────────
 
-  it('GET /employee-memberships rejects non-admin (403)', async () => {
+  it('POST /employee-memberships rejects non-admin (403)', async () => {
     if (!supabaseReady) return;
 
-    const res = await req(
-      EMPLOYEE_PORT,
-      'GET',
-      `/api/v2/teams/employee-memberships?employee_id=some-id&tenant_id=${TEST_TENANT_ID}`,
-    );
+    const res = await req(EMPLOYEE_PORT, 'POST', '/api/v2/teams/employee-memberships', {
+      employee_id: 'some-id',
+      tenant_id: TEST_TENANT_ID,
+    });
     assert.strictEqual(res.status, 403);
   });
 
-  it('GET /employee-memberships returns 400 when employee_id is missing', async () => {
+  it('POST /employee-memberships returns 400 when employee_id is missing', async () => {
     if (!supabaseReady) return;
 
-    const res = await req(
-      ADMIN_PORT,
-      'GET',
-      `/api/v2/teams/employee-memberships?tenant_id=${TEST_TENANT_ID}`,
-    );
+    const res = await req(ADMIN_PORT, 'POST', '/api/v2/teams/employee-memberships', {
+      tenant_id: TEST_TENANT_ID,
+    });
     assert.strictEqual(res.status, 400);
     const json = await res.json();
     assert.match(json.message, /employee_id/i);
   });
 
-  it('GET /employee-memberships returns success shape for admin', async () => {
+  it('POST /employee-memberships returns success shape for admin', async () => {
     if (!supabaseReady) return;
 
     // Use a valid UUID format (but non-existent) so PostgREST accepts it
-    const res = await req(
-      ADMIN_PORT,
-      'GET',
-      `/api/v2/teams/employee-memberships?employee_id=00000000-0000-0000-0000-000000000000&tenant_id=${TEST_TENANT_ID}`,
-    );
+    const res = await req(ADMIN_PORT, 'POST', '/api/v2/teams/employee-memberships', {
+      employee_id: '00000000-0000-0000-0000-000000000000',
+      tenant_id: TEST_TENANT_ID,
+    });
     assert.strictEqual(res.status, 200);
     const json = await res.json();
     assert.strictEqual(json.status, 'success');
