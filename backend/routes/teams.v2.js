@@ -3,17 +3,22 @@
  * CRUD for teams, team membership, and visibility mode configuration.
  *
  * Endpoints:
- *   GET    /api/v2/teams                       — list teams for tenant
- *   POST   /api/v2/teams                       — create team
- *   PUT    /api/v2/teams/:id                   — update team
- *   DELETE /api/v2/teams/:id                   — deactivate team (soft delete)
- *   GET    /api/v2/teams/:id/members           — list members with employee details
- *   POST   /api/v2/teams/:id/members           — add member
- *   PUT    /api/v2/teams/:id/members/:memberId — change member role
- *   DELETE /api/v2/teams/:id/members/:memberId — remove member
- *   GET    /api/v2/teams/visibility-mode       — get tenant visibility mode
- *   PUT    /api/v2/teams/visibility-mode       — set tenant visibility mode
- *   GET    /api/v2/teams/scope                 — generic team-scope for current user
+ *   GET    /api/v2/teams                              — list teams for tenant
+ *   POST   /api/v2/teams                              — create team
+ *   PUT    /api/v2/teams/:id                          — update team
+ *   DELETE /api/v2/teams/:id                          — deactivate team (soft delete)
+ *   GET    /api/v2/teams/:id/members                  — list members with employee details
+ *   POST   /api/v2/teams/:id/members                  — add member
+ *   PUT    /api/v2/teams/:id/members/:memberId        — change member role
+ *   DELETE /api/v2/teams/:id/members/:memberId        — remove member
+ *   GET    /api/v2/teams/visibility-mode              — get tenant visibility mode
+ *   PUT    /api/v2/teams/visibility-mode              — set tenant visibility mode
+ *   GET    /api/v2/teams/scope                        — generic team-scope for current user
+ *
+ * Deprecated (kept for backwards compatibility):
+ *   GET    /api/v2/teams/employee-memberships         — memberships by employee_id
+ *   GET    /api/v2/teams/user-memberships             — memberships by user_id
+ *   POST   /api/v2/teams/sync-user-memberships        — replace all memberships for a user
  */
 
 import express from 'express';
@@ -836,6 +841,177 @@ export default function createTeamsV2Routes(_pgPool) {
       res.json({ status: 'success', message: 'Member removed from team' });
     } catch (err) {
       logger.error('[Teams v2 DELETE /:id/members/:memberId] Error:', err.message);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
+  // =============================================================================
+  // DEPRECATED: User-centric membership endpoints
+  // Kept for backwards compatibility with EmployeeDetailPanel, EmployeeForm,
+  // EnhancedUserManagement, and UserFormWizard. Do not add new consumers.
+  // =============================================================================
+
+  /**
+   * @deprecated Use GET /api/v2/teams/:id/members instead.
+   * GET /api/v2/teams/employee-memberships?employee_id=...
+   * Returns all team memberships for an employee, with team details.
+   */
+  router.get('/employee-memberships', async (req, res) => {
+    try {
+      const { employee_id } = req.query;
+      if (!employee_id) {
+        return res.status(400).json({ status: 'error', message: 'employee_id is required' });
+      }
+
+      const supabase = getSupabaseClient();
+
+      const { data, error } = await supabase
+        .from('team_members')
+        .select(
+          `
+          id,
+          team_id,
+          user_id,
+          employee_id,
+          role,
+          access_level,
+          teams:team_id (id, name, description)
+        `,
+        )
+        .eq('employee_id', employee_id);
+
+      if (error) throw new Error(error.message);
+
+      const memberships = (data || []).map((m) => ({
+        team_id: m.team_id,
+        team_name: m.teams?.name || 'Unknown Team',
+        team_description: m.teams?.description || '',
+        role: m.role,
+        access_level: m.access_level || 'view_own',
+      }));
+
+      res.json({ status: 'success', memberships });
+    } catch (err) {
+      logger.error('[Teams v2 GET /employee-memberships] Error:', err.message);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
+  /**
+   * @deprecated Use GET /api/v2/teams/:id/members instead.
+   * GET /api/v2/teams/user-memberships?user_id=...
+   * Returns all team memberships for a user, with team details.
+   */
+  router.get('/user-memberships', async (req, res) => {
+    try {
+      const { user_id } = req.query;
+      if (!user_id) {
+        return res.status(400).json({ status: 'error', message: 'user_id is required' });
+      }
+
+      const supabase = getSupabaseClient();
+
+      const { data, error } = await supabase
+        .from('team_members')
+        .select(
+          `
+          id,
+          team_id,
+          user_id,
+          employee_id,
+          role,
+          access_level,
+          teams:team_id (id, name, description)
+        `,
+        )
+        .eq('user_id', user_id);
+
+      if (error) throw new Error(error.message);
+
+      res.json({ status: 'success', data: data || [] });
+    } catch (err) {
+      logger.error('[Teams v2 GET /user-memberships] Error:', err.message);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
+  /**
+   * @deprecated Use POST/PUT/DELETE /api/v2/teams/:id/members instead.
+   * POST /api/v2/teams/sync-user-memberships
+   * Replaces all team memberships for a user atomically.
+   * Body: { user_id: string, memberships: [{ team_id, access_level }] }
+   */
+  router.post('/sync-user-memberships', requireAdminRole, async (req, res) => {
+    try {
+      const { user_id, memberships = [] } = req.body;
+
+      if (!user_id) {
+        return res.status(400).json({ status: 'error', message: 'user_id is required' });
+      }
+
+      const supabase = getSupabaseClient();
+
+      const { data: existing, error: fetchError } = await supabase
+        .from('team_members')
+        .select('id, team_id')
+        .eq('user_id', user_id);
+
+      if (fetchError) throw new Error(fetchError.message);
+
+      const existingTeamIds = new Set((existing || []).map((m) => m.team_id));
+      const newTeamIds = new Set(memberships.map((m) => m.team_id));
+
+      const toRemove = (existing || []).filter((m) => !newTeamIds.has(m.team_id));
+      const toAdd = memberships.filter((m) => !existingTeamIds.has(m.team_id));
+      const toUpdate = memberships.filter((m) => existingTeamIds.has(m.team_id));
+
+      if (toRemove.length > 0) {
+        const removeIds = toRemove.map((m) => m.id);
+        const { error: delError } = await supabase
+          .from('team_members')
+          .delete()
+          .in('id', removeIds);
+        if (delError) logger.warn('[Teams v2 sync] Delete error:', delError.message);
+      }
+
+      if (toAdd.length > 0) {
+        const inserts = toAdd.map((m) => ({
+          user_id,
+          team_id: m.team_id,
+          access_level: m.access_level || 'view_own',
+          role: m.access_level === 'manage_team' ? 'manager' : 'member',
+        }));
+        const { error: insError } = await supabase.from('team_members').insert(inserts);
+        if (insError) logger.warn('[Teams v2 sync] Insert error:', insError.message);
+      }
+
+      for (const m of toUpdate) {
+        const existingMember = (existing || []).find((e) => e.team_id === m.team_id);
+        if (existingMember) {
+          const { error: updError } = await supabase
+            .from('team_members')
+            .update({
+              access_level: m.access_level || 'view_own',
+              role: m.access_level === 'manage_team' ? 'manager' : 'member',
+            })
+            .eq('id', existingMember.id);
+          if (updError) logger.warn('[Teams v2 sync] Update error:', updError.message);
+        }
+      }
+
+      clearVisibilityCache(user_id);
+
+      res.json({
+        status: 'success',
+        message: 'Team memberships synced',
+        summary: {
+          added: toAdd.length,
+          updated: toUpdate.length,
+          removed: toRemove.length,
+        },
+      });
+    } catch (err) {
+      logger.error('[Teams v2 POST /sync-user-memberships] Error:', err.message);
       res.status(500).json({ status: 'error', message: err.message });
     }
   });
