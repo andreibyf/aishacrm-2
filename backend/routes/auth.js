@@ -326,7 +326,7 @@ export default function createAuthRoutes(_pgPool) {
       let table = 'users';
       let { data: uRows, error: uError } = await supabase
         .from('users')
-        .select('id, tenant_id, tenant_uuid, email, first_name, last_name, role, metadata')
+        .select('id, tenant_id, email, first_name, last_name, role, metadata')
         .eq('email', normalizedEmail)
         .limit(1);
 
@@ -342,7 +342,6 @@ export default function createAuthRoutes(_pgPool) {
           id: user.id,
           role: user.role,
           tenant_id: user.tenant_id,
-          tenant_uuid: user.tenant_uuid,
         });
       } else {
         table = 'employees';
@@ -572,7 +571,7 @@ export default function createAuthRoutes(_pgPool) {
         email: user.email,
         role: user.role,
         tenant_id: user.tenant_id || null,
-        tenant_uuid: user.tenant_uuid || null,
+
         table,
       };
       const access = signAccess(payload);
@@ -729,10 +728,7 @@ export default function createAuthRoutes(_pgPool) {
 
       const tbl = table === 'employees' ? 'employees' : 'users';
       logger.debug('[Auth.refresh] Looking up user:', { sub, table: tbl });
-      const selectFields =
-        tbl === 'users'
-          ? 'id, email, role, tenant_id, tenant_uuid, status, metadata'
-          : 'id, email, role, tenant_id, status, metadata';
+      const selectFields = 'id, email, role, tenant_id, status, metadata';
 
       const { data: rows, error: lookupErr } = await supabase
         .from(tbl)
@@ -1070,7 +1066,7 @@ export default function createAuthRoutes(_pgPool) {
       const supabase = getSupabaseClient();
       const { data: targetUser, error: targetErr } = await supabase
         .from('users')
-        .select('id, email, first_name, last_name, role, tenant_id, tenant_uuid, status, metadata')
+        .select('id, email, first_name, last_name, role, tenant_id, status, metadata')
         .eq('id', user_id)
         .single();
 
@@ -1100,7 +1096,7 @@ export default function createAuthRoutes(_pgPool) {
         email: targetUser.email,
         role: targetUser.role,
         tenant_id: targetUser.tenant_id || null,
-        tenant_uuid: targetUser.tenant_uuid || null,
+
         table: 'users',
         // Impersonation metadata
         impersonating: true,
@@ -1206,7 +1202,11 @@ export default function createAuthRoutes(_pgPool) {
       res.cookie('aisha_access', originalToken, cookieOpts(15 * 60 * 1000));
       res.clearCookie('aisha_original', { path: '/' });
       if (req.cookies?.aisha_original_refresh) {
-        res.cookie('aisha_refresh', req.cookies.aisha_original_refresh, cookieOpts(7 * 24 * 60 * 60 * 1000));
+        res.cookie(
+          'aisha_refresh',
+          req.cookies.aisha_original_refresh,
+          cookieOpts(7 * 24 * 60 * 60 * 1000),
+        );
         res.clearCookie('aisha_original_refresh', { path: '/' });
       }
 
