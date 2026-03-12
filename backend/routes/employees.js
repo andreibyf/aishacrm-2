@@ -6,7 +6,9 @@
 import express from 'express';
 import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
+import { requireAuth } from '../middleware/authenticate.js';
 import { inviteUserByEmail, getAuthUserByEmail } from '../lib/supabaseAuth.js';
+import { getEmployeeMap, resolveEmployeeNames, invalidateEmployeeCache } from '../lib/employeeCache.js';
 
 export default function createEmployeeRoutes(_pgPool) {
   const router = express.Router();
@@ -211,6 +213,68 @@ export default function createEmployeeRoutes(_pgPool) {
    *             schema:
    *               $ref: '#/components/schemas/Error'
    */
+
+  /**
+   * @openapi
+   * /api/employees/lookup:
+   *   get:
+   *     summary: Get employee ID to name mapping (cached)
+   *     description: Returns a map of employee UUIDs to display names. Uses Redis cache for fast lookups.
+   *     tags: [employees]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *       - in: query
+   *         name: ids
+   *         schema:
+   *           type: string
+   *         description: Comma-separated list of employee IDs to resolve (optional - returns all if omitted)
+   *     responses:
+   *       200:
+   *         description: Employee lookup map
+   */
+  router.get('/lookup', requireAuth, async (req, res) => {
+    try {
+      const { tenant_id, ids } = req.query;
+
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      // Non-superadmin users may only query their own tenant
+      if (req.user.role !== 'superadmin' && req.user.tenant_id !== tenant_id) {
+        return res.status(403).json({ status: 'error', message: 'Access denied: tenant mismatch' });
+      }
+
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+
+      let employeeMap;
+
+      if (ids) {
+        // Resolve specific IDs
+        const idArray = ids.split(',').map(id => id.trim()).filter(Boolean);
+        employeeMap = await resolveEmployeeNames(supabase, tenant_id, idArray);
+      } else {
+        // Return full tenant map
+        employeeMap = await getEmployeeMap(supabase, tenant_id);
+      }
+
+      res.json({
+        status: 'success',
+        data: employeeMap,
+        cached: true, // Response may be from cache
+      });
+    } catch (error) {
+      logger.error('[Employees GET /lookup] Error:', error.message);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   // GET /api/employees/:id - Get single employee
   router.get('/:id', async (req, res) => {
     try {
@@ -560,6 +624,9 @@ export default function createEmployeeRoutes(_pgPool) {
           logger.error('[EmployeeRoutes] Users table sync error:', userSyncErr);
         }
       }
+
+      // Invalidate employee lookup cache
+      await invalidateEmployeeCache(tenant_id);
 
       res.status(201).json({
         status: invitation_error ? 'partial' : 'success',
@@ -925,6 +992,9 @@ export default function createEmployeeRoutes(_pgPool) {
         }
       }
 
+      // Invalidate employee lookup cache
+      await invalidateEmployeeCache(tenant_id);
+
       res.json({
         status: invitation_error ? 'partial' : 'success',
         message: invitation_error
@@ -1198,6 +1268,9 @@ export default function createEmployeeRoutes(_pgPool) {
       }
 
       const employee = expandMetadata(data);
+
+      // Invalidate employee lookup cache
+      await invalidateEmployeeCache(tenant_id);
 
       res.json({
         status: 'success',

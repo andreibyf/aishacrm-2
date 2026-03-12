@@ -11,6 +11,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Edit, Eye, Trash2 } from 'lucide-react';
+import AssignedToDisplay from '../shared/AssignedToDisplay';
 
 const statusColors = {
   scheduled: 'bg-blue-900/20 text-blue-300 border-blue-700',
@@ -135,42 +136,12 @@ export default function ActivityTable({
                   className="text-slate-300 cursor-pointer p-3"
                   onClick={() => handleViewDetails(activity)}
                 >
-                  {(() => {
-                    if (!activity.assigned_to) {
-                      return <span className="text-slate-500">Unassigned</span>;
-                    }
-
-                    const employeeName = employeesMap[activity.assigned_to];
-                    if (employeeName) return employeeName;
-
-                    const userName = usersMap[activity.assigned_to];
-                    if (userName) return userName;
-
-                    if (activity.assigned_to_name) return activity.assigned_to_name;
-
-                    if (import.meta.env.DEV) {
-                      console.log('[ActivityTable] Missing employee lookup:', {
-                        activityId: activity.id,
-                        assigned_to: activity.assigned_to,
-                      });
-                    }
-
-                    const assignedValue = String(activity.assigned_to);
-                    if (assignedValue.includes('@')) {
-                      return (
-                        <span className="text-amber-400 text-xs" title={assignedValue}>
-                          {assignedValue}
-                        </span>
-                      );
-                    } else if (assignedValue.length > 20) {
-                      return (
-                        <span className="text-amber-400 text-xs" title={assignedValue}>
-                          {assignedValue.substring(0, 8)}...
-                        </span>
-                      );
-                    }
-                    return <span className="text-amber-400 text-xs">{assignedValue}</span>;
-                  })()}
+                  <AssignedToDisplay
+                    assignedToName={activity.assigned_to_name}
+                    assignedTo={activity.assigned_to}
+                    employeesMap={employeesMap}
+                    usersMap={usersMap}
+                  />
                 </TableCell>
                 <TableCell className="p-3">
                   <div className="flex items-center gap-1">

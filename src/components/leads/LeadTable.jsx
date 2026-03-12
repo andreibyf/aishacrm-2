@@ -3,6 +3,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Edit, Eye, Globe, Trash2, UserCheck } from 'lucide-react';
+import AssignedToDisplay from '@/components/shared/AssignedToDisplay';
 
 const statusColors = {
   new: 'bg-blue-900/20 text-blue-300 border-blue-700',
@@ -187,21 +188,12 @@ export default function LeadTable({
                       )}
                     </td>
                     <td className="px-4 py-3 text-base text-slate-300">
-                      {(() => {
-                        const assignedToName = lead.assigned_to_name;
-                        const assignedTo = lead.assigned_to || lead.metadata?.assigned_to;
-
-                        if (!assignedToName && !assignedTo) {
-                          return <span className="text-slate-500">Unassigned</span>;
-                        }
-
-                        const displayName =
-                          assignedToName ||
-                          employeesMap[assignedTo] ||
-                          usersMap[assignedTo] ||
-                          assignedTo;
-                        return displayName;
-                      })()}
+                      <AssignedToDisplay
+                        assignedToName={lead.assigned_to_name}
+                        assignedTo={lead.assigned_to || lead.metadata?.assigned_to}
+                        employeesMap={employeesMap}
+                        usersMap={usersMap}
+                      />
                     </td>
                     <td
                       className="px-4 py-3 cursor-pointer"

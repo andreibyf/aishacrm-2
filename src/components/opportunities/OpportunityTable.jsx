@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { Edit, Eye, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
-import { logDev } from '@/utils/devLogger';
+import AssignedToDisplay from '../shared/AssignedToDisplay';
 
 const stageColors = {
   prospecting: 'bg-blue-900/20 text-blue-300 border-blue-700',
@@ -156,47 +156,12 @@ export default function OpportunityTable({
                   className="text-center text-slate-300 cursor-pointer p-3"
                   onClick={() => handleViewDetails(opp)}
                 >
-                  {(() => {
-                    // Prefer assigned_to_name first, then lookup maps
-                    const assignedToName = opp.assigned_to_name;
-                    const assignedTo = opp.assigned_to;
-
-                    if (!assignedToName && !assignedTo) {
-                      return <span className="text-slate-500">Unassigned</span>;
-                    }
-
-                    if (assignedToName) return assignedToName;
-
-                    const employeeName = employeesMap[assignedTo];
-                    if (employeeName) return employeeName;
-
-                    const userName = usersMap[assignedTo];
-                    if (userName) return userName;
-
-                    if (import.meta.env.DEV) {
-                      logDev('[OpportunityTable] Missing employee lookup:', {
-                        opportunityId: opp.id,
-                        assigned_to: assignedTo,
-                      });
-                    }
-
-                    // Fallback display
-                    const assignedValue = String(assignedTo);
-                    if (assignedValue.includes('@')) {
-                      return (
-                        <span className="text-amber-400 text-xs" title={assignedValue}>
-                          {assignedValue}
-                        </span>
-                      );
-                    } else if (assignedValue.length > 20) {
-                      return (
-                        <span className="text-amber-400 text-xs" title={assignedValue}>
-                          {assignedValue.substring(0, 8)}...
-                        </span>
-                      );
-                    }
-                    return <span className="text-amber-400 text-xs">{assignedValue}</span>;
-                  })()}
+                  <AssignedToDisplay
+                    assignedToName={opp.assigned_to_name}
+                    assignedTo={opp.assigned_to}
+                    employeesMap={employeesMap}
+                    usersMap={usersMap}
+                  />
                 </TableCell>
                 <TableCell className="p-3 text-center">
                   <div className="flex items-center justify-center gap-1">

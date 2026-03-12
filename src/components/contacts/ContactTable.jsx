@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Edit, Eye, Globe, Trash2 } from 'lucide-react';
 import PhoneDisplay from '../shared/PhoneDisplay';
+import AssignedToDisplay from '../shared/AssignedToDisplay';
 
 const statusBadgeColors = {
   active: 'bg-green-900/20 text-green-300 border-green-700',
@@ -64,12 +65,6 @@ export default function ContactTable({
           <tbody className="divide-y divide-slate-700">
             {contacts.map((contact) => {
               const account = accountMap.get(contact.account_id);
-              const assignedUser = userMap.get(contact.assigned_to);
-              const assignedEmployee = employeeMap.get(contact.assigned_to);
-              const assignedName =
-                assignedEmployee?.first_name && assignedEmployee?.last_name
-                  ? `${assignedEmployee.first_name} ${assignedEmployee.last_name}`
-                  : assignedUser?.full_name || contact.assigned_to_name || null;
 
               return (
                 <tr key={contact.id} className="hover:bg-slate-700/30 transition-colors">
@@ -131,11 +126,13 @@ export default function ContactTable({
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    {assignedName ? (
-                      <span className="text-slate-300 text-base">{assignedName}</span>
-                    ) : (
-                      <span className="text-slate-500 text-base">-</span>
-                    )}
+                    <AssignedToDisplay
+                      assignedToName={contact.assigned_to_name}
+                      assignedTo={contact.assigned_to}
+                      employeesMap={employeeMap}
+                      usersMap={userMap}
+                      className="text-base"
+                    />
                   </td>
                   <td className="px-4 py-3">
                     <Badge
