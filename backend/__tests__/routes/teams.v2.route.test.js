@@ -720,3 +720,148 @@ describe('Teams v2 — superadmin access', () => {
     assert.strictEqual(json.data.bypass, true, 'Superadmin should bypass visibility');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 7. MEMBERSHIP QUERY ENDPOINTS — /employee-memberships, /user-memberships, /sync-user-memberships
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('Teams v2 — membership query endpoints', () => {
+  let adminServer;
+  let employeeServer;
+  const ADMIN_PORT = 3307;
+  const EMPLOYEE_PORT = 3308;
+
+  before(async () => {
+    if (!supabaseReady) return;
+    ({ server: adminServer } = await createTestApp(ADMIN_PORT, {
+      role: 'admin',
+      perm_settings: true,
+    }));
+    ({ server: employeeServer } = await createTestApp(EMPLOYEE_PORT, {
+      role: 'employee',
+      perm_settings: false,
+    }));
+  });
+
+  after(async () => {
+    if (adminServer) await new Promise((r) => adminServer.close(r));
+    if (employeeServer) await new Promise((r) => employeeServer.close(r));
+  });
+
+  // ── /employee-memberships ──────────────────────────────────────────────
+
+  it('POST /employee-memberships rejects non-admin (403)', async () => {
+    if (!supabaseReady) return;
+
+    const res = await req(EMPLOYEE_PORT, 'POST', '/api/v2/teams/employee-memberships', {
+      employee_id: 'some-id',
+      tenant_id: TEST_TENANT_ID,
+    });
+    assert.strictEqual(res.status, 403);
+  });
+
+  it('POST /employee-memberships returns 400 when employee_id is missing', async () => {
+    if (!supabaseReady) return;
+
+    const res = await req(ADMIN_PORT, 'POST', '/api/v2/teams/employee-memberships', {
+      tenant_id: TEST_TENANT_ID,
+    });
+    assert.strictEqual(res.status, 400);
+    const json = await res.json();
+    assert.match(json.message, /employee_id/i);
+  });
+
+  it('POST /employee-memberships returns success shape for admin', async () => {
+    if (!supabaseReady) return;
+
+    // Use a valid UUID format (but non-existent) so PostgREST accepts it
+    const res = await req(ADMIN_PORT, 'POST', '/api/v2/teams/employee-memberships', {
+      employee_id: '00000000-0000-0000-0000-000000000000',
+      tenant_id: TEST_TENANT_ID,
+    });
+    assert.strictEqual(res.status, 200);
+    const json = await res.json();
+    assert.strictEqual(json.status, 'success');
+    assert.ok(Array.isArray(json.data), 'data should be an array');
+  });
+
+  // ── /user-memberships ──────────────────────────────────────────────────
+
+  it('GET /user-memberships rejects non-admin (403)', async () => {
+    if (!supabaseReady) return;
+
+    const res = await req(
+      EMPLOYEE_PORT,
+      'GET',
+      `/api/v2/teams/user-memberships?user_id=some-id&tenant_id=${TEST_TENANT_ID}`,
+    );
+    assert.strictEqual(res.status, 403);
+  });
+
+  it('GET /user-memberships returns 400 when user_id is missing', async () => {
+    if (!supabaseReady) return;
+
+    const res = await req(
+      ADMIN_PORT,
+      'GET',
+      `/api/v2/teams/user-memberships?tenant_id=${TEST_TENANT_ID}`,
+    );
+    assert.strictEqual(res.status, 400);
+    const json = await res.json();
+    assert.match(json.message, /user_id/i);
+  });
+
+  it('GET /user-memberships returns success shape for admin', async () => {
+    if (!supabaseReady) return;
+
+    // Use a valid UUID format (but non-existent) so PostgREST accepts it
+    const res = await req(
+      ADMIN_PORT,
+      'GET',
+      `/api/v2/teams/user-memberships?user_id=00000000-0000-0000-0000-000000000000&tenant_id=${TEST_TENANT_ID}`,
+    );
+    assert.strictEqual(res.status, 200);
+    const json = await res.json();
+    assert.strictEqual(json.status, 'success');
+    assert.ok(Array.isArray(json.data), 'data should be an array');
+  });
+
+  // ── /sync-user-memberships ─────────────────────────────────────────────
+
+  it('POST /sync-user-memberships rejects non-admin (403)', async () => {
+    if (!supabaseReady) return;
+
+    const res = await req(EMPLOYEE_PORT, 'POST', '/api/v2/teams/sync-user-memberships', {
+      user_id: 'some-id',
+      tenant_id: TEST_TENANT_ID,
+      memberships: [],
+    });
+    assert.strictEqual(res.status, 403);
+  });
+
+  it('POST /sync-user-memberships returns 400 when user_id is missing', async () => {
+    if (!supabaseReady) return;
+
+    const res = await req(ADMIN_PORT, 'POST', '/api/v2/teams/sync-user-memberships', {
+      tenant_id: TEST_TENANT_ID,
+      memberships: [],
+    });
+    assert.strictEqual(res.status, 400);
+    const json = await res.json();
+    assert.match(json.message, /user_id/i);
+  });
+
+  it('POST /sync-user-memberships returns 404 for user not in tenant', async () => {
+    if (!supabaseReady) return;
+
+    const res = await req(ADMIN_PORT, 'POST', '/api/v2/teams/sync-user-memberships', {
+      user_id: '00000000-0000-0000-0000-000000000000',
+      tenant_id: TEST_TENANT_ID,
+      memberships: [],
+    });
+    // 404 = user not found for this tenant (handler uses maybeSingle + explicit 404 check)
+    assert.strictEqual(res.status, 404);
+    const json = await res.json();
+    assert.match(json.message, /not found|user/i);
+  });
+});

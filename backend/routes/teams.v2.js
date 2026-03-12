@@ -840,23 +840,293 @@ export default function createTeamsV2Routes(_pgPool) {
     }
   });
 
-  // ---------------------------------------------------------------------------
-  // Backward-compat shims for removed endpoints that the legacy frontend may
-  // still call. Return empty-success so callers degrade gracefully.
-  // ---------------------------------------------------------------------------
-  router.get('/employee-memberships', (req, res) => {
-    logger.warn('[Teams v2] Deprecated /employee-memberships called — returning empty list');
-    res.json({ status: 'success', data: [] });
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // USER/EMPLOYEE MEMBERSHIP QUERIES (for Employee Detail Panel and User Wizard)
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * POST /api/v2/teams/employee-memberships
+   * Returns all team memberships for a specific employee. Admin only.
+   * Body: { employee_id }
+   */
+  router.post('/employee-memberships', requireAdminRole, async (req, res) => {
+    try {
+      const { employee_id } = req.body;
+      if (!employee_id) {
+        return res.status(400).json({ status: 'error', message: 'employee_id is required' });
+      }
+
+      const tenantId = getTenantId(req);
+      if (!tenantId) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      const supabase = getSupabaseClient();
+
+      // Get team IDs scoped to this tenant
+      const { data: tenantTeams, error: teamsErr } = await supabase
+        .from('teams')
+        .select('id')
+        .eq('tenant_id', tenantId);
+      if (teamsErr) throw new Error(teamsErr.message);
+      const tenantTeamIds = (tenantTeams || []).map((t) => t.id);
+      if (tenantTeamIds.length === 0) {
+        return res.json({ status: 'success', data: [] });
+      }
+
+      // Fetch team memberships with team details, scoped to tenant
+      const { data: memberships, error } = await supabase
+        .from('team_members')
+        .select(
+          `
+          id,
+          team_id,
+          employee_id,
+          user_id,
+          role,
+          access_level,
+          created_at,
+          teams:team_id (
+            id,
+            name,
+            description,
+            is_active
+          )
+        `,
+        )
+        .eq('employee_id', employee_id)
+        .in('team_id', tenantTeamIds);
+
+      if (error) throw new Error(error.message);
+
+      // Flatten the response
+      const result = (memberships || []).map((m) => ({
+        id: m.id,
+        team_id: m.team_id,
+        team_name: m.teams?.name || null,
+        team_description: m.teams?.description || null,
+        team_is_active: m.teams?.is_active ?? true,
+        employee_id: m.employee_id,
+        user_id: m.user_id,
+        role: m.role,
+        access_level: m.access_level,
+        created_at: m.created_at,
+      }));
+
+      res.json({ status: 'success', data: result });
+    } catch (err) {
+      logger.error('[Teams v2 POST /employee-memberships] Error:', err.message);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
   });
 
-  router.get('/user-memberships', (req, res) => {
-    logger.warn('[Teams v2] Deprecated /user-memberships called — returning empty list');
-    res.json({ status: 'success', data: [] });
+  /**
+   * GET /api/v2/teams/user-memberships?user_id=xxx
+   * Returns all team memberships for a specific user (by user_id). Admin only.
+   */
+  router.get('/user-memberships', requireAdminRole, async (req, res) => {
+    try {
+      const { user_id } = req.query;
+      if (!user_id) {
+        return res.status(400).json({ status: 'error', message: 'user_id is required' });
+      }
+
+      const tenantId = getTenantId(req);
+      if (!tenantId) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      const supabase = getSupabaseClient();
+
+      // Get team IDs scoped to this tenant
+      const { data: tenantTeams, error: teamsErr } = await supabase
+        .from('teams')
+        .select('id')
+        .eq('tenant_id', tenantId);
+      if (teamsErr) throw new Error(teamsErr.message);
+      const tenantTeamIds = (tenantTeams || []).map((t) => t.id);
+      if (tenantTeamIds.length === 0) {
+        return res.json({ status: 'success', data: [] });
+      }
+
+      // Fetch team memberships with team details, scoped to tenant
+      const { data: memberships, error } = await supabase
+        .from('team_members')
+        .select(
+          `
+          id,
+          team_id,
+          employee_id,
+          user_id,
+          role,
+          access_level,
+          created_at,
+          teams:team_id (
+            id,
+            name,
+            description,
+            is_active
+          )
+        `,
+        )
+        .eq('user_id', user_id)
+        .in('team_id', tenantTeamIds);
+
+      if (error) throw new Error(error.message);
+
+      // Flatten the response
+      const result = (memberships || []).map((m) => ({
+        id: m.id,
+        team_id: m.team_id,
+        team_name: m.teams?.name || null,
+        team_description: m.teams?.description || null,
+        team_is_active: m.teams?.is_active ?? true,
+        employee_id: m.employee_id,
+        user_id: m.user_id,
+        role: m.role,
+        access_level: m.access_level,
+        created_at: m.created_at,
+      }));
+
+      res.json({ status: 'success', data: result });
+    } catch (err) {
+      logger.error('[Teams v2 GET /user-memberships] Error:', err.message);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
   });
 
-  router.post('/sync-user-memberships', (req, res) => {
-    logger.warn('[Teams v2] Deprecated /sync-user-memberships called — no-op');
-    res.json({ status: 'success', message: 'No-op: use the new team membership APIs.' });
+  /**
+   * POST /api/v2/teams/sync-user-memberships
+   * Syncs a user's team memberships (replaces all existing with new set). Admin only.
+   * Body: { user_id, memberships: [{ team_id, access_level }] }
+   */
+  router.post('/sync-user-memberships', requireAdminRole, async (req, res) => {
+    try {
+      const { user_id, memberships } = req.body;
+      if (!user_id) {
+        return res.status(400).json({ status: 'error', message: 'user_id is required' });
+      }
+
+      const tenantId = getTenantId(req);
+      if (!tenantId) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      const supabase = getSupabaseClient();
+
+      // Fetch user record with email, verifying it belongs to this tenant
+      const { data: userRecord, error: userError } = await supabase
+        .from('users')
+        .select('id, tenant_id, email')
+        .eq('id', user_id)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+
+      if (userError) {
+        logger.error(
+          '[Teams v2 POST /sync-user-memberships] Error fetching user record:',
+          userError.message,
+        );
+        return res.status(500).json({ status: 'error', message: 'Failed to load user record' });
+      }
+
+      if (!userRecord) {
+        return res.status(404).json({ status: 'error', message: 'User not found for this tenant' });
+      }
+
+      // Try to find linked employee within the same tenant
+      let employee_id = null;
+      if (userRecord.email) {
+        const { data: empRecord, error: empError } = await supabase
+          .from('employees')
+          .select('id')
+          .eq('email', userRecord.email)
+          .eq('tenant_id', tenantId)
+          .maybeSingle();
+        if (empError) {
+          logger.error(
+            '[Teams v2 POST /sync-user-memberships] Error fetching employee record:',
+            empError.message,
+          );
+          return res
+            .status(500)
+            .json({ status: 'error', message: 'Failed to load employee record' });
+        }
+        employee_id = empRecord?.id ?? null;
+      }
+
+      // Validate that all requested team_ids belong to this tenant
+      if (memberships && memberships.length > 0) {
+        const teamIds = [...new Set(memberships.map((m) => m.team_id).filter(Boolean))];
+        if (teamIds.length > 0) {
+          const { data: validTeams, error: teamsErr } = await supabase
+            .from('teams')
+            .select('id')
+            .eq('tenant_id', tenantId)
+            .in('id', teamIds);
+          if (teamsErr) throw new Error(teamsErr.message);
+          const validTeamIdSet = new Set((validTeams || []).map((t) => t.id));
+          const invalidTeamIds = teamIds.filter((id) => !validTeamIdSet.has(id));
+          if (invalidTeamIds.length > 0) {
+            return res.status(400).json({
+              status: 'error',
+              message: 'One or more team_ids are invalid for this tenant',
+              invalid_team_ids: invalidTeamIds,
+            });
+          }
+        }
+      }
+
+      // Fetch all team IDs in this tenant for a scoped, safe delete
+      const { data: allTenantTeams, error: allTeamsErr } = await supabase
+        .from('teams')
+        .select('id')
+        .eq('tenant_id', tenantId);
+      if (allTeamsErr) throw new Error(allTeamsErr.message);
+      const allTenantTeamIds = (allTenantTeams || []).map((t) => t.id);
+
+      // Delete existing memberships scoped to this tenant's teams only
+      if (allTenantTeamIds.length > 0) {
+        const { error: deleteErr } = await supabase
+          .from('team_members')
+          .delete()
+          .eq('user_id', user_id)
+          .in('team_id', allTenantTeamIds);
+        if (deleteErr) throw new Error(deleteErr.message);
+      }
+
+      // Insert new memberships
+      if (memberships && memberships.length > 0) {
+        const inserts = memberships.map((m) => ({
+          team_id: m.team_id,
+          user_id,
+          employee_id,
+          access_level: m.access_level || 'view_own',
+          role: m.access_level === 'manage_team' ? 'manager' : 'member',
+        }));
+
+        const { error: insertErr } = await supabase.from('team_members').insert(inserts);
+
+        if (insertErr) throw new Error(insertErr.message);
+      }
+
+      // Invalidate visibility cache only for the affected user/employee
+      clearVisibilityCache(user_id);
+      if (employee_id && employee_id !== user_id) {
+        clearVisibilityCache(employee_id);
+      }
+
+      logger.info(
+        `[Teams v2] Synced ${memberships?.length || 0} team memberships for user ${user_id}`,
+      );
+      res.json({
+        status: 'success',
+        message: `Synced ${memberships?.length || 0} team memberships`,
+      });
+    } catch (err) {
+      logger.error('[Teams v2 POST /sync-user-memberships] Error:', err.message);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
   });
 
   return router;

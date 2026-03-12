@@ -186,13 +186,13 @@ export async function getVisibilityScope(user, supabase) {
 
   try {
     // Fetch visibility mode and team memberships in parallel
-    // access_level: 'view_own' | 'view_team' | 'manage_team' (new granular permission)
-    const [mode, membershipsResult] = await Promise.all([
+    const [mode, { data: memberships, error: memErr }] = await Promise.all([
       _getVisibilityMode(tenantId, supabase),
-      supabase.from('team_members').select('team_id, role, access_level').eq('employee_id', user.id),
+      supabase
+        .from('team_members')
+        .select('team_id, role, access_level, user_id, employee_id')
+        .or(`user_id.eq.${user.id},employee_id.eq.${user.id}`),
     ]);
-
-    const { data: memberships, error: memErr } = membershipsResult;
 
     if (memErr) {
       logger.error('[TeamVisibility] Failed to fetch memberships:', memErr.message);
@@ -238,7 +238,7 @@ export async function getVisibilityScope(user, supabase) {
 
     // Full access teams: only where access_level = 'manage_team'
     // Fallback to old role-based logic if access_level is null (migration transition)
-    const fullAccessTeamIds = memberships
+    let fullAccessTeamIds = memberships
       .filter((m) => {
         if (m.access_level) {
           return m.access_level === 'manage_team';

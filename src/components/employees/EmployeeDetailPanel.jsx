@@ -81,8 +81,13 @@ export default function EmployeeDetailPanel({
         // Try to fetch via user_id first (if employee has linked CRM user)
         // Otherwise fall back to employee_id
         const res = await fetch(
-          `${BACKEND_URL}/api/v2/teams/employee-memberships?employee_id=${employee.id}`,
-          { credentials: 'include' },
+          `${BACKEND_URL}/api/v2/teams/employee-memberships`,
+          {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ employee_id: employee.id }),
+          },
         );
         if (res.ok) {
           const data = await res.json();

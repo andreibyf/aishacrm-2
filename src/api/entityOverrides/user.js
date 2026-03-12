@@ -105,7 +105,8 @@ export const User = {
             can_manage_users: userData.metadata?.can_manage_users || false,
             can_manage_settings: userData.metadata?.can_manage_settings || false,
             crm_access: true,
-            navigation_permissions: userData.navigation_permissions || {},
+            // nav_permissions is the actual DB column; navigation_permissions was the old metadata key
+            navigation_permissions: userData.nav_permissions || userData.navigation_permissions || {},
           }),
         };
       }
@@ -341,7 +342,9 @@ export const User = {
             can_manage_users: userData.metadata?.can_manage_users || false,
             can_manage_settings: userData.metadata?.can_manage_settings || false,
             crm_access: true, // Grant CRM access to authenticated users with records
-            navigation_permissions: userData.navigation_permissions || {}, // CRITICAL: Include navigation_permissions from backend
+            // nav_permissions is the actual DB column; navigation_permissions was the old metadata key
+            // Support both for backwards compatibility, preferring nav_permissions
+            navigation_permissions: userData.nav_permissions || userData.navigation_permissions || {},
           }),
         };
       } catch (err) {
@@ -599,7 +602,8 @@ export const User = {
         params.append('_t', Date.now());
       }
 
-      const url = `${BACKEND_URL}/api/users${params.toString() ? `?${params.toString()}` : ''}`;
+      // Use /profiles endpoint which queries user_profile_view and includes tenant_name
+      const url = `${BACKEND_URL}/api/users/profiles${params.toString() ? `?${params.toString()}` : ''}`;
       const response = await fetch(url, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },

@@ -1192,7 +1192,8 @@ export default function EnhancedUserManagement() {
         tags: cleanedData.tags,
         employee_role: cleanedData.employee_role,
         permissions: permissionsToSave,
-        navigation_permissions: cleanedData.navigation_permissions, // Top-level is the source of truth
+        // Support both field names: nav_permissions (from UserFormWizard) and navigation_permissions (legacy UserFormModal)
+        nav_permissions: cleanedData.nav_permissions || cleanedData.navigation_permissions,
         ...(platformRoleChanged && { role: cleanedData.platform_role }),
       };
 
@@ -1212,6 +1213,7 @@ export default function EnhancedUserManagement() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               user_id: userId,
+              tenant_id: cleanedData.tenant_id,
               memberships: cleanedData.team_memberships,
             }),
           });
