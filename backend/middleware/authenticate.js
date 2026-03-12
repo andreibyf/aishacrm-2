@@ -107,7 +107,9 @@ export async function authenticateRequest(req, _res, next) {
             const [{ data: uRows, error: uErr }, { data: eRows, error: eErr }] = await Promise.all([
               supa
                 .from('users')
-                .select('first_name, last_name, metadata, employee_role, perm_notes_anywhere, perm_all_records, perm_reports, perm_employees, perm_settings, nav_permissions')
+                .select(
+                  'first_name, last_name, metadata, employee_role, perm_notes_anywhere, perm_all_records, perm_reports, perm_employees, perm_settings, nav_permissions',
+                )
                 .eq('email', email)
                 .maybeSingle(),
               supa
@@ -169,6 +171,9 @@ export async function authenticateRequest(req, _res, next) {
           perm_employees: userPerms.perm_employees ?? false,
           perm_settings: userPerms.perm_settings ?? false,
           nav_permissions: userPerms.nav_permissions ?? {},
+          // Impersonation context (if present)
+          impersonating: payload.impersonating || false,
+          original_user: payload.original_user || null,
         };
         if (process.env.AUTH_DEBUG === 'true') {
           logger.debug('[Auth Debug] Cookie JWT verified (HS256):', {
@@ -308,10 +313,12 @@ export async function authenticateRequest(req, _res, next) {
           // Lookup user by email to get full user record with tenant_id, tenant_uuid, role, and name
           // Note: users table stores display_name in metadata JSONB
           const [usersResult, employeesResult] = await Promise.all([
-          supa
-          .from('users')
-          .select('id, role, tenant_id, tenant_uuid, first_name, last_name, metadata, employee_role, perm_notes_anywhere, perm_all_records, perm_reports, perm_employees, perm_settings, nav_permissions')
-          .eq('email', email),
+            supa
+              .from('users')
+              .select(
+                'id, role, tenant_id, tenant_uuid, first_name, last_name, metadata, employee_role, perm_notes_anywhere, perm_all_records, perm_reports, perm_employees, perm_settings, nav_permissions',
+              )
+              .eq('email', email),
             supa
               .from('employees')
               .select('id, role, tenant_id, tenant_uuid, first_name, last_name')
@@ -337,25 +344,25 @@ export async function authenticateRequest(req, _res, next) {
 
           const row = (uRows && uRows[0]) || (eRows && eRows[0]) || null;
           if (row) {
-          // Build display name from available fields
-          // Note: users table stores display_name in metadata JSONB
-          const metadataDisplayName = row.metadata?.display_name;
-          const displayName =
-          metadataDisplayName ||
-          [row.first_name, row.last_name].filter(Boolean).join(' ') ||
-          email;
-          req.user = {
-          id: row.id,
-          email,
-          name: displayName,
-          first_name: row.first_name || null,
-          last_name: row.last_name || null,
-          role: row.role || 'employee',
-          tenant_id: row.tenant_id ?? null,
-          tenant_uuid: row.tenant_uuid ?? null,
-            // Employee role (CRM visibility level - now on users table)
-            employee_role: row.employee_role ?? 'employee',
-            // Granular permissions (from users table, fallback to role-based defaults)
+            // Build display name from available fields
+            // Note: users table stores display_name in metadata JSONB
+            const metadataDisplayName = row.metadata?.display_name;
+            const displayName =
+              metadataDisplayName ||
+              [row.first_name, row.last_name].filter(Boolean).join(' ') ||
+              email;
+            req.user = {
+              id: row.id,
+              email,
+              name: displayName,
+              first_name: row.first_name || null,
+              last_name: row.last_name || null,
+              role: row.role || 'employee',
+              tenant_id: row.tenant_id ?? null,
+              tenant_uuid: row.tenant_uuid ?? null,
+              // Employee role (CRM visibility level - now on users table)
+              employee_role: row.employee_role ?? 'employee',
+              // Granular permissions (from users table, fallback to role-based defaults)
               perm_notes_anywhere: row.perm_notes_anywhere ?? true,
               perm_all_records: row.perm_all_records ?? false,
               perm_reports: row.perm_reports ?? false,

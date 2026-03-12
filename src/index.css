@@ -108,3 +108,22 @@
   border-radius: 4px;
 }
 
+/* Animated ellipsis for loading states */
+/* Uses width-based animation — content is not animatable in CSS */
+@keyframes ellipsis {
+  from {
+    width: 0ch;
+  }
+  to {
+    width: 3ch;
+  }
+}
+
+.animate-ellipsis::after {
+  content: '...';
+  display: inline-block;
+  overflow: hidden;
+  width: 0ch;
+  vertical-align: bottom;
+  animation: ellipsis 1.2s steps(4, end) infinite;
+}

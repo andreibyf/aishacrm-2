@@ -39,6 +39,7 @@ import {
   Copy,
   Mail,
   AlertCircle,
+  Eye,
 } from 'lucide-react';
 // Reserved for future use: Users, AlertTriangle
 import { Checkbox } from '@/components/ui/checkbox';
@@ -751,13 +752,19 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel, moduleSet
           </div>
           {/* Granular Permission Columns (perm_* on users table) */}
           <div className="mt-4 p-4 bg-slate-900/50 rounded-lg border border-slate-700">
-            <Label className="mb-3 block text-slate-200 font-semibold">Organization-wide Powers</Label>
-            <p className="text-xs text-slate-400 mb-4">These permissions apply beyond their team assignments</p>
+            <Label className="mb-3 block text-slate-200 font-semibold">
+              Organization-wide Powers
+            </Label>
+            <p className="text-xs text-slate-400 mb-4">
+              These permissions apply beyond their team assignments
+            </p>
             <div className="space-y-3">
               <div className="flex items-center justify-between px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700">
                 <div>
                   <span className="text-sm text-slate-200">Add notes anywhere</span>
-                  <p className="text-xs text-slate-500">Can add notes to any record they can view</p>
+                  <p className="text-xs text-slate-500">
+                    Can add notes to any record they can view
+                  </p>
                 </div>
                 <Switch
                   id="perm_notes_anywhere"
@@ -771,7 +778,9 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel, moduleSet
               <div className="flex items-center justify-between px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700">
                 <div>
                   <span className="text-sm text-slate-200">View all records</span>
-                  <p className="text-xs text-slate-500">Can see records from all teams, not just their assigned teams</p>
+                  <p className="text-xs text-slate-500">
+                    Can see records from all teams, not just their assigned teams
+                  </p>
                 </div>
                 <Switch
                   id="perm_all_records"
@@ -785,7 +794,9 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel, moduleSet
               <div className="flex items-center justify-between px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700">
                 <div>
                   <span className="text-sm text-slate-200">Access reports & analytics</span>
-                  <p className="text-xs text-slate-500">Can view dashboards, run reports, and export data</p>
+                  <p className="text-xs text-slate-500">
+                    Can view dashboards, run reports, and export data
+                  </p>
                 </div>
                 <Switch
                   id="perm_reports"
@@ -799,7 +810,9 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel, moduleSet
               <div className="flex items-center justify-between px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700">
                 <div>
                   <span className="text-sm text-slate-200">Manage employees</span>
-                  <p className="text-xs text-slate-500">Can add/edit employee records, manage team assignments</p>
+                  <p className="text-xs text-slate-500">
+                    Can add/edit employee records, manage team assignments
+                  </p>
                 </div>
                 <Switch
                   id="perm_employees"
@@ -813,7 +826,9 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel, moduleSet
               <div className="flex items-center justify-between px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700">
                 <div>
                   <span className="text-sm text-slate-200">System settings</span>
-                  <p className="text-xs text-slate-500">Can configure tenant settings, integrations, and workflows</p>
+                  <p className="text-xs text-slate-500">
+                    Can configure tenant settings, integrations, and workflows
+                  </p>
                 </div>
                 <Switch
                   id="perm_settings"
@@ -826,7 +841,9 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel, moduleSet
               </div>
             </div>
             {!canEditPermissions && (
-              <p className="text-xs text-slate-500 mt-2">Only Admin can change these permissions.</p>
+              <p className="text-xs text-slate-500 mt-2">
+                Only Admin can change these permissions.
+              </p>
             )}
           </div>
 
@@ -923,7 +940,17 @@ export default function EnhancedUserManagement() {
   // Track effective tenant — initialized from URL, updated via tenant-changed events.
   // Uses local state + event listener instead of useTenant() to avoid re-render
   // cascade that caused tenant switching when clicking Edit (PR #295 bug fix)
-  const [effectiveTenantId, setEffectiveTenantId] = useState(urlTenantId);
+  // For non-superadmins, fall back to their own tenant_id if no URL param
+  const initialTenantId =
+    urlTenantId || (currentUser?.role !== 'superadmin' ? currentUser?.tenant_id : null);
+  const [effectiveTenantId, setEffectiveTenantId] = useState(initialTenantId);
+
+  // Update effectiveTenantId when currentUser loads (handles initial page load race condition)
+  useEffect(() => {
+    if (!effectiveTenantId && currentUser?.role !== 'superadmin' && currentUser?.tenant_id) {
+      setEffectiveTenantId(currentUser.tenant_id);
+    }
+  }, [currentUser?.tenant_id, currentUser?.role, effectiveTenantId]);
 
   // Fetch teams for the effective tenant (used in UserFormWizard)
   const { teams: availableTeams } = useTeams(effectiveTenantId);
@@ -943,7 +970,7 @@ export default function EnhancedUserManagement() {
       try {
         const res = await fetch(
           `${BACKEND_URL}/api/v2/teams/user-memberships?user_id=${editingUser.id}`,
-          { credentials: 'include' }
+          { credentials: 'include' },
         );
         if (res.ok) {
           const json = await res.json();
@@ -1274,6 +1301,54 @@ export default function EnhancedUserManagement() {
     }
   };
 
+  // Handler for impersonating a user (superadmin only)
+  const handleImpersonate = async (user) => {
+    if (currentUser?.role !== 'superadmin') {
+      toast.error('Only superadmins can impersonate users');
+      return;
+    }
+    if (user.role === 'superadmin') {
+      toast.error('Cannot impersonate other superadmins');
+      return;
+    }
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/auth/impersonate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ user_id: user.id }),
+      });
+
+      let result = {};
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        try {
+          result = await response.json();
+        } catch (parseError) {
+          console.error('Failed to parse impersonate response as JSON:', parseError);
+        }
+      } else {
+        try {
+          const text = await response.text();
+          console.error('Received non-JSON response from impersonate endpoint:', text);
+        } catch {
+          // ignore read error
+        }
+      }
+
+      if (response.ok && result.status === 'success') {
+        toast.success(result.message || `Now viewing as ${user.email}`);
+        // Force full page reload to reset all state with new user context
+        window.location.href = '/';
+      } else {
+        toast.error(result.message || 'Failed to impersonate user');
+      }
+    } catch (error) {
+      console.error('Error impersonating user:', error);
+      toast.error(`Failed to impersonate: ${error.message}`);
+    }
+  };
+
   // --- Bulk selection ---
   const toggleSelection = (id) => {
     const next = new Set(selectedUsers);
@@ -1566,7 +1641,9 @@ export default function EnhancedUserManagement() {
                   </TableRow>
                 ) : (
                   filteredUsers.map((user) => {
-                    const tenant = allTenants.find((t) => t.id === user.tenant_id) || (user.tenant_name ? { name: user.tenant_name } : null);
+                    const tenant =
+                      allTenants.find((t) => t.id === user.tenant_id) ||
+                      (user.tenant_name ? { name: user.tenant_name } : null);
                     const isCreator =
                       currentUser && user.id === currentUser.id && user.role === 'superadmin';
 
@@ -1751,6 +1828,20 @@ export default function EnhancedUserManagement() {
                               <Edit className="w-4 h-4 mr-1" />
                               Edit
                             </Button>
+                            {/* Impersonate button - superadmin only, not for other superadmins */}
+                            {currentUser?.role === 'superadmin' && user.role !== 'superadmin' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                type="button"
+                                onClick={() => handleImpersonate(user)}
+                                className="bg-amber-700 border-amber-600 text-amber-100 hover:bg-amber-600"
+                                title={`View app as ${user.email}`}
+                              >
+                                <Eye className="w-4 h-4 mr-1" />
+                                Login As
+                              </Button>
+                            )}
                             <Button
                               variant="outline"
                               size="sm"

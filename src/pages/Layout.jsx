@@ -10,6 +10,7 @@ import { Link, useNavigate } from 'react-router-dom'; // Import useNavigate
 import { createPageUrl } from '@/utils';
 import PasswordChangeModal from '@/components/auth/PasswordChangeModal';
 import EnvironmentBanner from '@/components/shared/EnvironmentBanner';
+import ImpersonationBanner from '@/components/shared/ImpersonationBanner';
 import { getBackendUrl } from '@/api/backendUrl';
 import { KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
@@ -2133,6 +2134,8 @@ function Layout({ children, currentPageName }) {
       {/* Global DOM safety patches (runs once) */}
       <GlobalDomPatches />
       <SvgDefs />
+      {/* Impersonation Banner - Shows when superadmin is viewing as another user */}
+      <ImpersonationBanner />
       {/* Environment Banner - Shows dev/staging indicators */}
       <EnvironmentBanner />
       {/* Always-visible effective tenant badge in the top-right */}
