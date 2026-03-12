@@ -3,17 +3,22 @@
  * CRUD for teams, team membership, and visibility mode configuration.
  *
  * Endpoints:
- *   GET    /api/v2/teams                       — list teams for tenant
- *   POST   /api/v2/teams                       — create team
- *   PUT    /api/v2/teams/:id                   — update team
- *   DELETE /api/v2/teams/:id                   — deactivate team (soft delete)
- *   GET    /api/v2/teams/:id/members           — list members with employee details
- *   POST   /api/v2/teams/:id/members           — add member
- *   PUT    /api/v2/teams/:id/members/:memberId — change member role
- *   DELETE /api/v2/teams/:id/members/:memberId — remove member
- *   GET    /api/v2/teams/visibility-mode       — get tenant visibility mode
- *   PUT    /api/v2/teams/visibility-mode       — set tenant visibility mode
- *   GET    /api/v2/teams/scope                 — generic team-scope for current user
+ *   GET    /api/v2/teams                              — list teams for tenant
+ *   POST   /api/v2/teams                              — create team
+ *   PUT    /api/v2/teams/:id                          — update team
+ *   DELETE /api/v2/teams/:id                          — deactivate team (soft delete)
+ *   GET    /api/v2/teams/:id/members                  — list members with employee details
+ *   POST   /api/v2/teams/:id/members                  — add member
+ *   PUT    /api/v2/teams/:id/members/:memberId        — change member role
+ *   DELETE /api/v2/teams/:id/members/:memberId        — remove member
+ *   GET    /api/v2/teams/visibility-mode              — get tenant visibility mode
+ *   PUT    /api/v2/teams/visibility-mode              — set tenant visibility mode
+ *   GET    /api/v2/teams/scope                        — generic team-scope for current user
+ *
+ * Deprecated (kept for backwards compatibility):
+ *   GET    /api/v2/teams/employee-memberships         — memberships by employee_id
+ *   GET    /api/v2/teams/user-memberships             — memberships by user_id
+ *   POST   /api/v2/teams/sync-user-memberships        — replace all memberships for a user
  */
 
 import express from 'express';
@@ -841,13 +846,15 @@ export default function createTeamsV2Routes(_pgPool) {
   });
 
   // =============================================================================
-  // USER-CENTRIC TEAM MEMBERSHIP ENDPOINTS (for User Management wizard)
+  // DEPRECATED: User-centric membership endpoints
+  // Kept for backwards compatibility with EmployeeDetailPanel, EmployeeForm,
+  // EnhancedUserManagement, and UserFormWizard. Do not add new consumers.
   // =============================================================================
 
   /**
-   * GET /api/v2/teams/employee-memberships?employee_id=... — Get all team memberships for an employee.
-   * Used by Employee Detail Panel to show team assignments.
-   * Looks up memberships via employee_id in team_members table.
+   * @deprecated Use GET /api/v2/teams/:id/members instead.
+   * GET /api/v2/teams/employee-memberships?employee_id=...
+   * Returns all team memberships for an employee, with team details.
    */
   router.get('/employee-memberships', async (req, res) => {
     try {
@@ -858,10 +865,10 @@ export default function createTeamsV2Routes(_pgPool) {
 
       const supabase = getSupabaseClient();
 
-      // Get memberships with team details via employee_id
       const { data, error } = await supabase
         .from('team_members')
-        .select(`
+        .select(
+          `
           id,
           team_id,
           user_id,
@@ -869,12 +876,12 @@ export default function createTeamsV2Routes(_pgPool) {
           role,
           access_level,
           teams:team_id (id, name, description)
-        `)
+        `,
+        )
         .eq('employee_id', employee_id);
 
       if (error) throw new Error(error.message);
 
-      // Format response with team names at top level
       const memberships = (data || []).map((m) => ({
         team_id: m.team_id,
         team_name: m.teams?.name || 'Unknown Team',
@@ -891,8 +898,9 @@ export default function createTeamsV2Routes(_pgPool) {
   });
 
   /**
-   * GET /api/v2/teams/user-memberships?user_id=... — Get all team memberships for a user.
-   * Used by User Management wizard to populate existing team selections.
+   * @deprecated Use GET /api/v2/teams/:id/members instead.
+   * GET /api/v2/teams/user-memberships?user_id=...
+   * Returns all team memberships for a user, with team details.
    */
   router.get('/user-memberships', async (req, res) => {
     try {
@@ -903,10 +911,10 @@ export default function createTeamsV2Routes(_pgPool) {
 
       const supabase = getSupabaseClient();
 
-      // Get memberships with team details
       const { data, error } = await supabase
         .from('team_members')
-        .select(`
+        .select(
+          `
           id,
           team_id,
           user_id,
@@ -914,7 +922,8 @@ export default function createTeamsV2Routes(_pgPool) {
           role,
           access_level,
           teams:team_id (id, name, description)
-        `)
+        `,
+        )
         .eq('user_id', user_id);
 
       if (error) throw new Error(error.message);
@@ -927,8 +936,9 @@ export default function createTeamsV2Routes(_pgPool) {
   });
 
   /**
-   * POST /api/v2/teams/sync-user-memberships — Sync all team memberships for a user.
-   * Replaces all existing memberships with the provided list.
+   * @deprecated Use POST/PUT/DELETE /api/v2/teams/:id/members instead.
+   * POST /api/v2/teams/sync-user-memberships
+   * Replaces all team memberships for a user atomically.
    * Body: { user_id: string, memberships: [{ team_id, access_level }] }
    */
   router.post('/sync-user-memberships', requireAdminRole, async (req, res) => {
@@ -941,7 +951,6 @@ export default function createTeamsV2Routes(_pgPool) {
 
       const supabase = getSupabaseClient();
 
-      // Get current memberships to find what to delete
       const { data: existing, error: fetchError } = await supabase
         .from('team_members')
         .select('id, team_id')
@@ -952,14 +961,10 @@ export default function createTeamsV2Routes(_pgPool) {
       const existingTeamIds = new Set((existing || []).map((m) => m.team_id));
       const newTeamIds = new Set(memberships.map((m) => m.team_id));
 
-      // Teams to remove
       const toRemove = (existing || []).filter((m) => !newTeamIds.has(m.team_id));
-      // Teams to add
       const toAdd = memberships.filter((m) => !existingTeamIds.has(m.team_id));
-      // Teams to update (access_level changed)
       const toUpdate = memberships.filter((m) => existingTeamIds.has(m.team_id));
 
-      // Delete removed memberships
       if (toRemove.length > 0) {
         const removeIds = toRemove.map((m) => m.id);
         const { error: delError } = await supabase
@@ -969,7 +974,6 @@ export default function createTeamsV2Routes(_pgPool) {
         if (delError) logger.warn('[Teams v2 sync] Delete error:', delError.message);
       }
 
-      // Insert new memberships
       if (toAdd.length > 0) {
         const inserts = toAdd.map((m) => ({
           user_id,
@@ -981,7 +985,6 @@ export default function createTeamsV2Routes(_pgPool) {
         if (insError) logger.warn('[Teams v2 sync] Insert error:', insError.message);
       }
 
-      // Update existing memberships
       for (const m of toUpdate) {
         const existingMember = (existing || []).find((e) => e.team_id === m.team_id);
         if (existingMember) {
@@ -996,7 +999,6 @@ export default function createTeamsV2Routes(_pgPool) {
         }
       }
 
-      // Clear visibility cache for this user
       clearVisibilityCache(user_id);
 
       res.json({

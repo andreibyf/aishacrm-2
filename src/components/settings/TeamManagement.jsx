@@ -1,10 +1,10 @@
 /**
- * TeamManagement — Admin UI for managing teams and visibility mode.
+ * TeamManagement — Admin UI for managing teams, members, and visibility mode.
  *
  * Sections:
  *  1. Visibility mode toggle (shared vs hierarchical)
- *  2. Teams list with CRUD (create, edit, delete teams)
- *  3. Read-only member list (editing members done in User Management)
+ *  2. Teams list with CRUD
+ *  3. Per-team member management (inline expandable)
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -27,6 +27,7 @@ import {
   Trash2,
   ChevronDown,
   ChevronRight,
+  UserPlus,
   ShieldCheck,
   Eye,
   EyeOff,
@@ -35,7 +36,6 @@ import {
   Check,
   X,
   Tags,
-  ExternalLink,
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
@@ -77,18 +77,12 @@ async function apiFetch(path, options = {}) {
   return json;
 }
 
-// ─── Access level labels ────────────────────────────────────────────────────
+// ─── Role badge colors ──────────────────────────────────────────────────────
 
-const ACCESS_LEVEL_LABELS = {
-  view_own: 'View Own',
-  view_team: 'View Team',
-  manage_team: 'Manager',
-};
-
-const ACCESS_LEVEL_COLORS = {
-  view_own: 'bg-slate-600/20 text-slate-300 border-slate-600/30',
-  view_team: 'bg-blue-600/20 text-blue-300 border-blue-600/30',
-  manage_team: 'bg-purple-600/20 text-purple-300 border-purple-600/30',
+const ROLE_COLORS = {
+  director: 'bg-purple-600/20 text-purple-300 border-purple-600/30',
+  manager: 'bg-blue-600/20 text-blue-300 border-blue-600/30',
+  member: 'bg-slate-600/20 text-slate-300 border-slate-600/30',
 };
 
 const DEFAULT_ROLE_LABELS = { member: 'Member', manager: 'Manager', director: 'Director' };
@@ -115,6 +109,7 @@ export default function TeamManagement() {
   const [expandedTeamId, setExpandedTeamId] = useState(null);
   const [members, setMembers] = useState({}); // { teamId: [...members] }
   const [loadingMembers, setLoadingMembers] = useState({});
+  const [employees, setEmployees] = useState([]);
 
   // Create team form
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -128,6 +123,11 @@ export default function TeamManagement() {
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
   const [editParent, setEditParent] = useState('');
+
+  // Add member form
+  const [addingMemberTeamId, setAddingMemberTeamId] = useState(null);
+  const [newMemberEmployeeId, setNewMemberEmployeeId] = useState('');
+  const [newMemberRole, setNewMemberRole] = useState('member');
 
   const tenantId = selectedTenantId;
 
@@ -160,6 +160,36 @@ export default function TeamManagement() {
     }
   }, [tenantId]);
 
+  const loadEmployees = useCallback(async () => {
+    if (!tenantId) return;
+
+    // Best-effort scope check; don't let failures here block employee loading
+    apiFetch(`/api/v2/teams/scope`).catch((err) => {
+      console.warn('Failed to load team scope (non-blocking):', err);
+    });
+
+    try {
+      // Load employee list for the selector
+      const empRes = await apiFetch(`/api/employees?tenant_id=${tenantId}&limit=200`);
+      const empList = empRes.data?.employees || empRes.employees || [];
+      // Align with app-wide active filter: employment_status is authoritative when present,
+      // otherwise fall back to is_active (treat undefined as active)
+      setEmployees(
+        empList.filter((e) => {
+          if (typeof e.employment_status === 'string' && e.employment_status.trim() !== '') {
+            return e.employment_status === 'active';
+          }
+          if (typeof e.is_active === 'boolean') {
+            return e.is_active;
+          }
+          return true;
+        }),
+      );
+    } catch (err) {
+      console.warn('Failed to load employees:', err);
+    }
+  }, [tenantId]);
+
   const loadMembers = useCallback(
     async (teamId) => {
       setLoadingMembers((prev) => ({ ...prev, [teamId]: true }));
@@ -179,8 +209,10 @@ export default function TeamManagement() {
   useEffect(() => {
     if (!tenantId) return;
     setLoading(true);
-    Promise.all([loadVisibilityMode(), loadTeams()]).finally(() => setLoading(false));
-  }, [tenantId, loadVisibilityMode, loadTeams]);
+    Promise.all([loadVisibilityMode(), loadTeams(), loadEmployees()]).finally(() =>
+      setLoading(false),
+    );
+  }, [tenantId, loadVisibilityMode, loadTeams, loadEmployees]);
 
   // ─── Visibility mode ────────────────────────────────────────────────────
 
@@ -227,6 +259,13 @@ export default function TeamManagement() {
     }
   };
 
+  // Build role options dynamically from labels
+  const ROLE_OPTIONS = [
+    { value: 'member', label: roleLabels.member },
+    { value: 'manager', label: roleLabels.manager },
+    { value: 'director', label: roleLabels.director },
+  ];
+
   // ─── Team CRUD ───────────────────────────────────────────────────────────
 
   const handleCreateTeam = async () => {
@@ -262,6 +301,7 @@ export default function TeamManagement() {
         name: editName.trim(),
         parent_team_id: editParent && editParent !== 'none' ? editParent : null,
       };
+      // Only send description if it was explicitly changed (no edit UI yet, preserve existing)
       if (editDesc.trim()) {
         updatePayload.description = editDesc.trim();
       }
@@ -279,7 +319,7 @@ export default function TeamManagement() {
 
   const handleDeleteTeam = async (team) => {
     if (team.member_count > 0) {
-      toast.error('Remove all members from User Management before deleting a team');
+      toast.error('Remove all members before deleting a team');
       return;
     }
     if (!window.confirm(`Permanently delete "${team.name}"? This cannot be undone.`)) return;
@@ -312,7 +352,7 @@ export default function TeamManagement() {
     }
   };
 
-  // ─── Expand team to show members (read-only) ────────────────────────────
+  // ─── Member management ──────────────────────────────────────────────────
 
   const handleExpandTeam = async (teamId) => {
     if (expandedTeamId === teamId) {
@@ -325,10 +365,65 @@ export default function TeamManagement() {
     }
   };
 
+  const handleAddMember = async (teamId) => {
+    if (!newMemberEmployeeId) return;
+    try {
+      await apiFetch(`/api/v2/teams/${teamId}/members`, {
+        method: 'POST',
+        body: JSON.stringify({
+          tenant_id: tenantId,
+          employee_id: newMemberEmployeeId,
+          role: newMemberRole,
+        }),
+      });
+      toast.success('Member added');
+      setAddingMemberTeamId(null);
+      setNewMemberEmployeeId('');
+      setNewMemberRole('member');
+      await loadMembers(teamId);
+      await loadTeams(); // refresh member counts
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleUpdateMemberRole = async (teamId, memberId, newRole) => {
+    try {
+      await apiFetch(`/api/v2/teams/${teamId}/members/${memberId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ tenant_id: tenantId, role: newRole }),
+      });
+      toast.success('Role updated');
+      await loadMembers(teamId);
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleRemoveMember = async (teamId, memberId, empName) => {
+    try {
+      await apiFetch(`/api/v2/teams/${teamId}/members/${memberId}?tenant_id=${tenantId}`, {
+        method: 'DELETE',
+      });
+      toast.success(`${empName || 'Member'} removed from team`);
+      await loadMembers(teamId);
+      await loadTeams(); // refresh member counts
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
   // ─── Helpers ─────────────────────────────────────────────────────────────
 
   const activeTeams = teams.filter((t) => t.is_active);
   const getTeamName = (id) => teams.find((t) => t.id === id)?.name || '';
+
+  // Employees not already in a specific team
+  const getAvailableEmployees = (teamId) => {
+    const teamMembers = members[teamId] || [];
+    const memberEmpIds = new Set(teamMembers.map((m) => m.employee_id));
+    return employees.filter((e) => !memberEmpIds.has(e.id));
+  };
 
   // ─── Render ──────────────────────────────────────────────────────────────
 
@@ -509,11 +604,7 @@ export default function TeamManagement() {
                 <span className="text-xs text-slate-500 font-medium">Roles</span>
                 <div className="flex gap-2 mt-1">
                   {['director', 'manager', 'member'].map((key) => (
-                    <Badge
-                      key={key}
-                      variant="outline"
-                      className={`text-xs ${ACCESS_LEVEL_COLORS[key === 'director' ? 'manage_team' : key === 'manager' ? 'view_team' : 'view_own']}`}
-                    >
+                    <Badge key={key} variant="outline" className={ROLE_COLORS[key] + ' text-xs'}>
                       {roleLabels[key]}
                     </Badge>
                   ))}
@@ -774,7 +865,7 @@ export default function TeamManagement() {
                 )}
               </div>
 
-              {/* Expanded: read-only member list */}
+              {/* Expanded: member list */}
               {expandedTeamId === team.id && (
                 <div className="border-t border-slate-600/50 p-3 space-y-2">
                   {loadingMembers[team.id] ? (
@@ -783,49 +874,129 @@ export default function TeamManagement() {
                     </div>
                   ) : (
                     <>
-                      {(members[team.id] || []).length === 0 ? (
-                        <div className="text-center py-4">
-                          <p className="text-sm text-slate-500">No members assigned to this team.</p>
-                          <a
-                            href="/settings?tab=users"
-                            className="text-sm text-blue-400 hover:text-blue-300 flex items-center justify-center gap-1 mt-2"
+                      {(members[team.id] || []).length === 0 && (
+                        <p className="text-sm text-slate-500 py-2">No members yet.</p>
+                      )}
+
+                      {(members[team.id] || []).map((m) => (
+                        <div
+                          key={m.id}
+                          className="flex items-center gap-3 py-1.5 px-2 rounded hover:bg-slate-700/30"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm text-slate-200">
+                              {m.employee_name || 'Unknown'}
+                            </span>
+                            {m.employee_email && (
+                              <span className="text-xs text-slate-500 ml-2">
+                                {m.employee_email}
+                              </span>
+                            )}
+                          </div>
+                          <Select
+                            value={m.role}
+                            onValueChange={(val) => handleUpdateMemberRole(team.id, m.id, val)}
                           >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                            Assign members in User Management
-                          </a>
+                            <SelectTrigger className="h-7 w-28 text-xs bg-transparent border-slate-600">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-slate-800 border-slate-700">
+                              {ROLE_OPTIONS.map((r) => (
+                                <SelectItem
+                                  key={r.value}
+                                  value={r.value}
+                                  className="text-slate-200 text-xs"
+                                >
+                                  {r.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 w-7 p-0 text-slate-400 hover:text-red-400"
+                            title="Remove member"
+                            onClick={() => handleRemoveMember(team.id, m.id, m.employee_name)}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      ))}
+
+                      {/* Add member form */}
+                      {addingMemberTeamId === team.id ? (
+                        <div className="flex items-center gap-2 pt-2 border-t border-slate-600/30">
+                          <Select
+                            value={newMemberEmployeeId}
+                            onValueChange={setNewMemberEmployeeId}
+                          >
+                            <SelectTrigger className="h-8 flex-1 bg-slate-700 border-slate-600 text-slate-200 text-sm">
+                              <SelectValue placeholder="Select employee..." />
+                            </SelectTrigger>
+                            <SelectContent className="bg-slate-800 border-slate-700 max-h-48">
+                              {getAvailableEmployees(team.id).map((e) => (
+                                <SelectItem
+                                  key={e.id}
+                                  value={e.id}
+                                  className="text-slate-200 text-sm"
+                                >
+                                  {`${e.first_name || ''} ${e.last_name || ''}`.trim() || e.email}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Select value={newMemberRole} onValueChange={setNewMemberRole}>
+                            <SelectTrigger className="h-8 w-28 bg-slate-700 border-slate-600 text-slate-200 text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-slate-800 border-slate-700">
+                              {ROLE_OPTIONS.map((r) => (
+                                <SelectItem
+                                  key={r.value}
+                                  value={r.value}
+                                  className="text-slate-200 text-sm"
+                                >
+                                  {r.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            size="sm"
+                            className="h-8 bg-green-600 hover:bg-green-700"
+                            onClick={() => handleAddMember(team.id)}
+                            disabled={!newMemberEmployeeId}
+                            aria-label="Confirm add member"
+                            title="Confirm add member"
+                          >
+                            <Check className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8"
+                            onClick={() => {
+                              setAddingMemberTeamId(null);
+                              setNewMemberEmployeeId('');
+                            }}
+                            aria-label="Cancel add member"
+                            title="Cancel add member"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
                         </div>
                       ) : (
-                        <>
-                          {/* Member badges - read only */}
-                          <div className="flex flex-wrap gap-2">
-                            {(members[team.id] || []).map((m) => (
-                              <Badge
-                                key={m.id}
-                                variant="outline"
-                                className={`${ACCESS_LEVEL_COLORS[m.access_level] || ACCESS_LEVEL_COLORS.view_own} px-3 py-1`}
-                              >
-                                <span className="font-medium">
-                                  {m.employee_name || m.user_name || 'Unknown'}
-                                </span>
-                                <span className="mx-1.5 text-slate-500">·</span>
-                                <span className="text-xs opacity-80">
-                                  {ACCESS_LEVEL_LABELS[m.access_level] || m.role || 'Member'}
-                                </span>
-                              </Badge>
-                            ))}
-                          </div>
-                          
-                          {/* Link to User Management */}
-                          <div className="pt-2 border-t border-slate-600/30">
-                            <a
-                              href={`/settings?tab=users&team=${team.id}`}
-                              className="text-sm text-blue-400 hover:text-blue-300 flex items-center gap-1"
-                            >
-                              <ExternalLink className="w-3.5 h-3.5" />
-                              Manage members in User Settings
-                            </a>
-                          </div>
-                        </>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="mt-1 text-blue-400 hover:text-blue-300"
+                          onClick={() => setAddingMemberTeamId(team.id)}
+                          disabled={!team.is_active}
+                        >
+                          <UserPlus className="w-4 h-4 mr-1" />
+                          Add Member
+                        </Button>
                       )}
                     </>
                   )}
