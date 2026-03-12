@@ -78,8 +78,8 @@ export default function BizDevSourceCard({
       })
       .catch(() => {
         if (!cancelled) {
-          // Don't show raw UUID - show loading state until resolved
-          setAssignedName(null);
+          // Use a stable fallback so the UI exits the loading/updating state
+          setAssignedName('Unknown assignee');
           setFailedLookup(source.assigned_to);
         }
       });

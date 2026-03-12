@@ -12,7 +12,6 @@ import {
 } from '@/components/ui/table';
 import { Edit, Eye, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
-import { logDev } from '@/utils/devLogger';
 import AssignedToDisplay from '../shared/AssignedToDisplay';
 
 const stageColors = {

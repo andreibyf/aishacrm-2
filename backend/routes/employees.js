@@ -6,6 +6,7 @@
 import express from 'express';
 import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
+import { requireAuth } from '../middleware/authenticate.js';
 import { inviteUserByEmail, getAuthUserByEmail } from '../lib/supabaseAuth.js';
 import { getEmployeeMap, resolveEmployeeNames, invalidateEmployeeCache } from '../lib/employeeCache.js';
 
@@ -236,12 +237,17 @@ export default function createEmployeeRoutes(_pgPool) {
    *       200:
    *         description: Employee lookup map
    */
-  router.get('/lookup', async (req, res) => {
+  router.get('/lookup', requireAuth, async (req, res) => {
     try {
       const { tenant_id, ids } = req.query;
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      // Non-superadmin users may only query their own tenant
+      if (req.user.role !== 'superadmin' && req.user.tenant_id !== tenant_id) {
+        return res.status(403).json({ status: 'error', message: 'Access denied: tenant mismatch' });
       }
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');

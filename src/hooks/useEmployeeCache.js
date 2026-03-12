@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useAuth } from './useAuth';
-import api from '@/api/api';
+import { useUser } from '@/components/shared/useUser';
+import { getBackendUrl } from '@/api/backendUrl';
+
+const BACKEND_URL = getBackendUrl();
 
 /**
  * useEmployeeCache - Hook for fast employee ID → name lookups
@@ -11,14 +13,16 @@ import api from '@/api/api';
  * @returns {Object} { employeeMap, loading, error, refresh }
  */
 export function useEmployeeCache() {
-  const { user } = useAuth();
+  const currentUser = useUser();
+  const tenantId = currentUser?.tenant_id;
   const [employeeMap, setEmployeeMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const fetchedRef = useRef(false);
+  // Track which tenant we last fetched for so a tenant switch triggers a reload
+  const fetchedForTenantRef = useRef(null);
 
-  const fetchEmployeeMap = useCallback(async () => {
-    if (!user?.tenant_id) {
+  const fetchEmployeeMap = useCallback(async (tid) => {
+    if (!tid) {
       setLoading(false);
       return;
     }
@@ -26,15 +30,17 @@ export function useEmployeeCache() {
     try {
       setLoading(true);
       setError(null);
-      
-      const response = await api.get('/api/employees/lookup', {
-        params: { tenant_id: user.tenant_id },
-      });
 
-      if (response.data?.status === 'success') {
-        setEmployeeMap(response.data.data || {});
+      const res = await fetch(
+        `${BACKEND_URL}/api/employees/lookup?tenant_id=${encodeURIComponent(tid)}`,
+        { credentials: 'include' },
+      );
+      const data = await res.json();
+
+      if (res.ok && data?.status === 'success') {
+        setEmployeeMap(data.data || {});
       } else {
-        throw new Error(response.data?.message || 'Failed to fetch employee map');
+        throw new Error(data?.message || 'Failed to fetch employee map');
       }
     } catch (err) {
       console.error('[useEmployeeCache] Error:', err);
@@ -43,21 +49,21 @@ export function useEmployeeCache() {
     } finally {
       setLoading(false);
     }
-  }, [user?.tenant_id]);
+  }, []);
 
-  // Fetch on mount
+  // Fetch when tenant becomes available or changes
   useEffect(() => {
-    if (!fetchedRef.current && user?.tenant_id) {
-      fetchedRef.current = true;
-      fetchEmployeeMap();
+    if (tenantId && fetchedForTenantRef.current !== tenantId) {
+      fetchedForTenantRef.current = tenantId;
+      fetchEmployeeMap(tenantId);
     }
-  }, [user?.tenant_id, fetchEmployeeMap]);
+  }, [tenantId, fetchEmployeeMap]);
 
-  // Manual refresh function
+  // Manual refresh function — resets cache and refetches
   const refresh = useCallback(() => {
-    fetchedRef.current = false;
-    return fetchEmployeeMap();
-  }, [fetchEmployeeMap]);
+    fetchedForTenantRef.current = null;
+    if (tenantId) fetchEmployeeMap(tenantId);
+  }, [tenantId, fetchEmployeeMap]);
 
   return {
     employeeMap,

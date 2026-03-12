@@ -840,5 +840,24 @@ export default function createTeamsV2Routes(_pgPool) {
     }
   });
 
+  // ---------------------------------------------------------------------------
+  // Backward-compat shims for removed endpoints that the legacy frontend may
+  // still call. Return empty-success so callers degrade gracefully.
+  // ---------------------------------------------------------------------------
+  router.get('/employee-memberships', (req, res) => {
+    logger.warn('[Teams v2] Deprecated /employee-memberships called — returning empty list');
+    res.json({ status: 'success', data: [] });
+  });
+
+  router.get('/user-memberships', (req, res) => {
+    logger.warn('[Teams v2] Deprecated /user-memberships called — returning empty list');
+    res.json({ status: 'success', data: [] });
+  });
+
+  router.post('/sync-user-memberships', (req, res) => {
+    logger.warn('[Teams v2] Deprecated /sync-user-memberships called — no-op');
+    res.json({ status: 'success', message: 'No-op: use the new team membership APIs.' });
+  });
+
   return router;
 }

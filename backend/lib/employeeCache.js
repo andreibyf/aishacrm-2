@@ -10,8 +10,9 @@ import logger from './logger.js';
 // Cache TTL: 1 hour - employees don't change frequently
 const EMPLOYEE_CACHE_TTL = 3600;
 
-// Key prefix for employee lookups
-const CACHE_PREFIX = 'employee:lookup';
+// Key prefix for employee lookups.
+// Format: employeeCache:tenant:<uuid> — use KEYS employeeCache:* to inspect.
+const CACHE_PREFIX = 'employeeCache';
 
 /**
  * Generate cache key for tenant's employee map
@@ -21,6 +22,7 @@ const CACHE_PREFIX = 'employee:lookup';
 function getTenantKey(tenantId) {
   return `${CACHE_PREFIX}:tenant:${tenantId}`;
 }
+// Resulting key shape: employeeCache:tenant:<uuid>
 
 /**
  * Get cached employee map for a tenant
@@ -93,11 +95,12 @@ export async function invalidateEmployeeCache(tenantId) {
  */
 export async function buildAndCacheEmployeeMap(supabase, tenantId) {
   try {
+    // Fetch ALL employees (including inactive/terminated) so historical
+    // assigned_to references still resolve to a name.
     const { data: employees, error } = await supabase
       .from('employees')
       .select('id, first_name, last_name, email')
-      .eq('tenant_id', tenantId)
-      .eq('status', 'active');
+      .eq('tenant_id', tenantId);
 
     if (error) {
       logger.error({ err: error, tenantId }, '[EmployeeCache] Failed to fetch employees');

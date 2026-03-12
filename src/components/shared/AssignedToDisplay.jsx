@@ -45,8 +45,8 @@ export default function AssignedToDisplay({
   // Never fall back to showing raw UUID
   if (!resolvedName && assignedTo) {
     return (
-      <span className={`text-slate-400 ${className}`}>
-        Updating<span className="animate-ellipsis"></span>
+      <span className={`text-slate-400 animate-pulse ${className}`}>
+        Updating&hellip;
       </span>
     );
   }
