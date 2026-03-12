@@ -728,10 +728,7 @@ export default function createAuthRoutes(_pgPool) {
 
       const tbl = table === 'employees' ? 'employees' : 'users';
       logger.debug('[Auth.refresh] Looking up user:', { sub, table: tbl });
-      const selectFields =
-        tbl === 'users'
-          ? 'id, email, role, tenant_id, status, metadata'
-          : 'id, email, role, tenant_id, status, metadata';
+      const selectFields = 'id, email, role, tenant_id, status, metadata';
 
       const { data: rows, error: lookupErr } = await supabase
         .from(tbl)
