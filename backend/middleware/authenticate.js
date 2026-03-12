@@ -72,7 +72,6 @@ export async function authenticateRequest(req, _res, next) {
         name: 'Service Role',
         role: 'superadmin',
         tenant_id: null, // Service role has access to all tenants
-        tenant_uuid: null,
         service_role: true,
       };
       if (process.env.AUTH_DEBUG === 'true') {
@@ -161,7 +160,6 @@ export async function authenticateRequest(req, _res, next) {
           last_name: lastName,
           role: payload.role,
           tenant_id: payload.tenant_id || null,
-          tenant_uuid: payload.tenant_uuid || null,
           // Employee role (CRM visibility level - now on users table)
           employee_role: userPerms.employee_role ?? 'employee',
           // Granular permissions (from users table, fallback to role-based defaults)
@@ -231,7 +229,6 @@ export async function authenticateRequest(req, _res, next) {
               email: internalPayload.email || 'internal-service',
               role: effectiveRole,
               tenant_id: internalPayload.tenant_id || null,
-              tenant_uuid: internalPayload.tenant_uuid || null,
               internal: true,
             };
             if (process.env.AUTH_DEBUG === 'true') {
@@ -316,12 +313,12 @@ export async function authenticateRequest(req, _res, next) {
             supa
               .from('users')
               .select(
-                'id, role, tenant_id, tenant_uuid, first_name, last_name, metadata, employee_role, perm_notes_anywhere, perm_all_records, perm_reports, perm_employees, perm_settings, nav_permissions',
+                'id, role, tenant_id, first_name, last_name, metadata, employee_role, perm_notes_anywhere, perm_all_records, perm_reports, perm_employees, perm_settings, nav_permissions',
               )
               .eq('email', email),
             supa
               .from('employees')
-              .select('id, role, tenant_id, tenant_uuid, first_name, last_name')
+              .select('id, role, tenant_id, first_name, last_name')
               .eq('email', email),
           ]);
           const { data: uRows, error: uErr } = usersResult;
@@ -359,7 +356,6 @@ export async function authenticateRequest(req, _res, next) {
               last_name: row.last_name || null,
               role: row.role || 'employee',
               tenant_id: row.tenant_id ?? null,
-              tenant_uuid: row.tenant_uuid ?? null,
               // Employee role (CRM visibility level - now on users table)
               employee_role: row.employee_role ?? 'employee',
               // Granular permissions (from users table, fallback to role-based defaults)
