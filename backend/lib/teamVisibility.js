@@ -238,7 +238,7 @@ export async function getVisibilityScope(user, supabase) {
 
     // Full access teams: only where access_level = 'manage_team'
     // Fallback to old role-based logic if access_level is null (migration transition)
-    const fullAccessTeamIds = memberships
+    let fullAccessTeamIds = memberships
       .filter((m) => {
         if (m.access_level) {
           return m.access_level === 'manage_team';
