@@ -8,7 +8,7 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write  # Add permission for PR comments
+  pull-requests: write
 
 jobs:
   lint:
@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed to get the base commit for diff
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -28,17 +30,52 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Prettier format check
+      - name: Get changed files
+        id: changed-files
+        run: |
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            # For PRs, compare against base branch
+            BASE_SHA=${{ github.event.pull_request.base.sha }}
+          else
+            # For push, compare against previous commit
+            BASE_SHA=${{ github.event.before }}
+          fi
+          
+          # Get changed JS/JSX/TS/TSX files (exclude node_modules)
+          CHANGED_FILES=$(git diff --name-only --diff-filter=ACMRT $BASE_SHA ${{ github.sha }} | grep -E '\.(js|jsx|ts|tsx|mjs|cjs)$' | grep -v node_modules || true)
+          
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "No JS/TS files changed"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "Changed files:"
+            echo "$CHANGED_FILES"
+            # Convert to space-separated for eslint
+            FILES_LIST=$(echo "$CHANGED_FILES" | tr '\n' ' ')
+            echo "files=$FILES_LIST" >> $GITHUB_OUTPUT
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Prettier format check (changed files only)
         id: prettier
-        run: npm run format:check
+        if: steps.changed-files.outputs.has_changes == 'true'
+        run: |
+          echo "Checking formatting for changed files..."
+          npx prettier --check ${{ steps.changed-files.outputs.files }} || true
         continue-on-error: true
 
-      - name: ESLint check
+      - name: ESLint check (changed files only)
         id: eslint
+        if: steps.changed-files.outputs.has_changes == 'true'
         run: |
-          npx eslint . --format json --output-file eslint-report.json || true
-          npx eslint . || true
+          echo "Linting changed files..."
+          npx eslint ${{ steps.changed-files.outputs.files }} --format json --output-file eslint-report.json || true
+          npx eslint ${{ steps.changed-files.outputs.files }} || true
         continue-on-error: true
+
+      - name: Skip lint (no changes)
+        if: steps.changed-files.outputs.has_changes == 'false'
+        run: echo "No JS/TS files changed - skipping lint"
 
       - name: Generate lint summary
         if: always()
@@ -46,9 +83,16 @@ jobs:
           echo "## 🔍 Lint Check Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
+          if [ "${{ steps.changed-files.outputs.has_changes }}" == "false" ]; then
+            echo "ℹ️ No JS/TS files changed - lint skipped" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+          
           # Prettier status
           if [ "${{ steps.prettier.outcome }}" == "success" ]; then
-            echo "✅ **Prettier**: All files formatted correctly" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **Prettier**: All changed files formatted correctly" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.prettier.outcome }}" == "skipped" ]; then
+            echo "⏭️ **Prettier**: Skipped (no changes)" >> $GITHUB_STEP_SUMMARY
           else
             echo "⚠️ **Prettier**: Formatting issues found (non-blocking)" >> $GITHUB_STEP_SUMMARY
           fi
@@ -62,29 +106,31 @@ jobs:
               const errors = report.reduce((sum, f) => sum + f.errorCount, 0);
               const warnings = report.reduce((sum, f) => sum + f.warningCount, 0);
               const fixable = report.reduce((sum, f) => sum + f.fixableErrorCount + f.fixableWarningCount, 0);
+              const fileCount = report.length;
               
               if (errors === 0 && warnings === 0) {
-                console.log('✅ **ESLint**: No issues found');
+                console.log('✅ **ESLint**: No issues in ' + fileCount + ' changed file(s)');
               } else {
                 console.log('⚠️ **ESLint Results** (non-blocking):');
                 console.log('');
                 console.log('| Type | Count |');
                 console.log('|------|-------|');
+                console.log('| Files checked | ' + fileCount + ' |');
                 console.log('| Errors | ' + errors + ' |');
                 console.log('| Warnings | ' + warnings + ' |');
                 console.log('| Auto-fixable | ' + fixable + ' |');
                 console.log('');
-                console.log('💡 Run \`npm run lint:fix\` to auto-fix issues');
+                console.log('💡 Run \\\`npm run lint:fix\\\` to auto-fix issues');
               }
             " >> $GITHUB_STEP_SUMMARY
           fi
           
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY
-          echo "ℹ️ *Lint checks are non-blocking. Please fix issues when convenient.*" >> $GITHUB_STEP_SUMMARY
+          echo "ℹ️ *Lint checks only run on changed files. Issues are non-blocking.*" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload ESLint report
-        if: always()
+        if: always() && steps.changed-files.outputs.has_changes == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: eslint-report

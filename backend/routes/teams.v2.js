@@ -840,23 +840,187 @@ export default function createTeamsV2Routes(_pgPool) {
     }
   });
 
-  // ---------------------------------------------------------------------------
-  // Backward-compat shims for removed endpoints that the legacy frontend may
-  // still call. Return empty-success so callers degrade gracefully.
-  // ---------------------------------------------------------------------------
-  router.get('/employee-memberships', (req, res) => {
-    logger.warn('[Teams v2] Deprecated /employee-memberships called — returning empty list');
-    res.json({ status: 'success', data: [] });
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // USER/EMPLOYEE MEMBERSHIP QUERIES (for Employee Detail Panel and User Wizard)
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * GET /api/v2/teams/employee-memberships?employee_id=xxx
+   * Returns all team memberships for a specific employee.
+   */
+  router.get('/employee-memberships', async (req, res) => {
+    try {
+      const { employee_id } = req.query;
+      if (!employee_id) {
+        return res.status(400).json({ status: 'error', message: 'employee_id is required' });
+      }
+
+      const supabase = getSupabaseClient();
+
+      // Fetch team memberships with team details
+      const { data: memberships, error } = await supabase
+        .from('team_members')
+        .select(`
+          id,
+          team_id,
+          employee_id,
+          user_id,
+          role,
+          access_level,
+          created_at,
+          teams:team_id (
+            id,
+            name,
+            description,
+            is_active
+          )
+        `)
+        .eq('employee_id', employee_id);
+
+      if (error) throw new Error(error.message);
+
+      // Flatten the response
+      const result = (memberships || []).map((m) => ({
+        id: m.id,
+        team_id: m.team_id,
+        team_name: m.teams?.name || null,
+        team_description: m.teams?.description || null,
+        team_is_active: m.teams?.is_active ?? true,
+        employee_id: m.employee_id,
+        user_id: m.user_id,
+        role: m.role,
+        access_level: m.access_level,
+        created_at: m.created_at,
+      }));
+
+      res.json({ status: 'success', data: result });
+    } catch (err) {
+      logger.error('[Teams v2 GET /employee-memberships] Error:', err.message);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
   });
 
-  router.get('/user-memberships', (req, res) => {
-    logger.warn('[Teams v2] Deprecated /user-memberships called — returning empty list');
-    res.json({ status: 'success', data: [] });
+  /**
+   * GET /api/v2/teams/user-memberships?user_id=xxx
+   * Returns all team memberships for a specific user (by user_id).
+   */
+  router.get('/user-memberships', async (req, res) => {
+    try {
+      const { user_id } = req.query;
+      if (!user_id) {
+        return res.status(400).json({ status: 'error', message: 'user_id is required' });
+      }
+
+      const supabase = getSupabaseClient();
+
+      // Fetch team memberships with team details
+      const { data: memberships, error } = await supabase
+        .from('team_members')
+        .select(`
+          id,
+          team_id,
+          employee_id,
+          user_id,
+          role,
+          access_level,
+          created_at,
+          teams:team_id (
+            id,
+            name,
+            description,
+            is_active
+          )
+        `)
+        .eq('user_id', user_id);
+
+      if (error) throw new Error(error.message);
+
+      // Flatten the response
+      const result = (memberships || []).map((m) => ({
+        id: m.id,
+        team_id: m.team_id,
+        team_name: m.teams?.name || null,
+        team_description: m.teams?.description || null,
+        team_is_active: m.teams?.is_active ?? true,
+        employee_id: m.employee_id,
+        user_id: m.user_id,
+        role: m.role,
+        access_level: m.access_level,
+        created_at: m.created_at,
+      }));
+
+      res.json({ status: 'success', data: result });
+    } catch (err) {
+      logger.error('[Teams v2 GET /user-memberships] Error:', err.message);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
   });
 
-  router.post('/sync-user-memberships', (req, res) => {
-    logger.warn('[Teams v2] Deprecated /sync-user-memberships called — no-op');
-    res.json({ status: 'success', message: 'No-op: use the new team membership APIs.' });
+  /**
+   * POST /api/v2/teams/sync-user-memberships
+   * Syncs a user's team memberships (replaces all existing with new set).
+   * Body: { user_id, memberships: [{ team_id, access_level }] }
+   */
+  router.post('/sync-user-memberships', async (req, res) => {
+    try {
+      const { user_id, memberships } = req.body;
+      if (!user_id) {
+        return res.status(400).json({ status: 'error', message: 'user_id is required' });
+      }
+
+      const supabase = getSupabaseClient();
+
+      // Get user's employee_id (if they have one)
+      const { data: userRecord } = await supabase
+        .from('users')
+        .select('id, tenant_id')
+        .eq('id', user_id)
+        .maybeSingle();
+
+      // Try to find linked employee
+      let employee_id = null;
+      if (userRecord) {
+        const { data: empRecord } = await supabase
+          .from('employees')
+          .select('id')
+          .eq('email', (await supabase.from('users').select('email').eq('id', user_id).single()).data?.email)
+          .eq('tenant_id', userRecord.tenant_id)
+          .maybeSingle();
+        employee_id = empRecord?.id || null;
+      }
+
+      // Delete existing memberships for this user
+      await supabase
+        .from('team_members')
+        .delete()
+        .eq('user_id', user_id);
+
+      // Insert new memberships
+      if (memberships && memberships.length > 0) {
+        const inserts = memberships.map((m) => ({
+          team_id: m.team_id,
+          user_id,
+          employee_id,
+          access_level: m.access_level || 'view_own',
+          role: m.access_level === 'manage_team' ? 'manager' : 'member',
+        }));
+
+        const { error: insertErr } = await supabase
+          .from('team_members')
+          .insert(inserts);
+
+        if (insertErr) throw new Error(insertErr.message);
+      }
+
+      // Invalidate visibility cache
+      clearVisibilityCache();
+
+      logger.info(`[Teams v2] Synced ${memberships?.length || 0} team memberships for user ${user_id}`);
+      res.json({ status: 'success', message: `Synced ${memberships?.length || 0} team memberships` });
+    } catch (err) {
+      logger.error('[Teams v2 POST /sync-user-memberships] Error:', err.message);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
   });
 
   return router;
