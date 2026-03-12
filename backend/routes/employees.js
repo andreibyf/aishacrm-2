@@ -881,6 +881,50 @@ export default function createEmployeeRoutes(_pgPool) {
         }
       }
 
+      // SYNC: Whenever CRM access is active, keep users table role + metadata in sync
+      // with the employee record. This prevents the "revert" issue between the two forms.
+      if (newCrmAccess && employeeEmail) {
+        try {
+          const { data: linkedUser } = await supabase
+            .from('users')
+            .select('id, metadata, role')
+            .eq('email', employeeEmail.toLowerCase())
+            .limit(1)
+            .maybeSingle();
+
+          if (linkedUser) {
+            const currentUserMeta = linkedUser.metadata || {};
+            const syncedMeta = {
+              ...currentUserMeta,
+              employee_role: crmRole,
+              employee_id: data.id,
+              crm_user_email: employeeEmail.toLowerCase(),
+            };
+            // Also sync dashboard_scope if it changed in the employee record
+            if (updatedMetadata.dashboard_scope !== undefined) {
+              syncedMeta.permissions = {
+                ...(currentUserMeta.permissions || {}),
+                dashboard_scope: updatedMetadata.dashboard_scope,
+              };
+            }
+            await supabase
+              .from('users')
+              .update({
+                role: crmRole === 'manager' ? 'manager' : linkedUser.role,
+                metadata: syncedMeta,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', linkedUser.id);
+            logger.debug(
+              `[EmployeeRoutes] Synced role/metadata to users record for ${employeeEmail}: ${crmRole}`,
+            );
+          }
+        } catch (syncErr) {
+          logger.error('[EmployeeRoutes] Role sync to users table failed:', syncErr.message);
+          // Non-fatal
+        }
+      }
+
       res.json({
         status: invitation_error ? 'partial' : 'success',
         message: invitation_error

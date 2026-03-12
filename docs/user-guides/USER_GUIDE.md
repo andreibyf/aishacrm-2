@@ -1,6 +1,6 @@
 # Aisha CRM User Guide
 
-**Version 2.0** | **Updated: November 2025**
+**Version 3.0** | **Updated: March 2026**
 
 ---
 
