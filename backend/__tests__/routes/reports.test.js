@@ -8,7 +8,7 @@ import { initSupabaseForTests, hasSupabaseCredentials } from '../setup.js';
 
 let app;
 let server;
-const port = 3108;
+const port = 3110;
 
 async function request(method, path) {
   const res = await fetch(`http://localhost:${port}${path}`, { method });
